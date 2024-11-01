@@ -20,7 +20,7 @@
 #
 # --------------------------------------------------------------------------- #
 
-# bats file_tags=build-env
+# bats file_tags=realise
 
 load setup_suite.bash
 
@@ -53,7 +53,6 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=single,binaries
@@ -61,9 +60,12 @@ setup_file() {
   run "$PKGDB_BIN" realise \
     "$LOCKFILES/single-package/manifest.lock"
   assert_success
+
+
+
   # The [1] realised package for this environment is the hello package.
-  assert_equal "${#lines[@]}" 1 # 1 result
-  store_path="${lines[0]}"
+  assert_equal "$(jq length <(echo "${lines[@]}"))" 1 # 1 result
+  store_path="$(jq -r '.[0]' <(echo "${lines[@]}"))"
   assert "$TEST" -x "${store_path}/bin/vim"
 }
 
@@ -75,11 +77,10 @@ setup_file() {
     "$GENERATED_DATA/envs/hello/manifest.lock"
   assert_success
   # The [1] realised package for this environment is the hello package.
-  assert_equal "${#lines[@]}" 1 # 1 result
-  store_path="${lines[0]}"
+  assert_equal "$(jq length <(echo "${lines[@]}"))" 1 # 1 result
+  store_path="$(jq -r '.[0]' <(echo "${lines[@]}"))"
   assert "$TEST" -x "${store_path}/bin/hello"
 }
-
 
 # ---------------------------------------------------------------------------- #
 
@@ -88,12 +89,13 @@ setup_file() {
   run --separate-stderr "$PKGDB_BIN" realise \
     "${TESTS_DIR?}"/data/realise/manual-lockfiles/flake/manifest.lock
   assert_success
+
+
   # The [1] realised package for this environment is the hello package.
-  assert_equal "${#lines[@]}" 1 # 1 result
-  store_path="${lines[0]}"
+  assert_equal "$(jq 'length' <(echo "${lines[@]}"))" 1 # 1 result
+  store_path="$(jq -r '.[0]' <(echo "${lines[@]}"))"
   assert "$TEST" -x "${store_path}/bin/hello"
 }
-
 
 # ---------------------------------------------------------------------------- #
 #
