@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context};
 use clap::Parser;
-use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_rust_sdk::flox::FLOX_VERSION_STRING;
 use flox_rust_sdk::models::env_registry::{
     acquire_env_registry_lock,
     read_environment_registry,
@@ -18,7 +18,6 @@ use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
 use logger::{init_logger, spawn_gc_logs, spawn_heartbeat_log};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
-use once_cell::sync::Lazy;
 use process::{PidWatcher, WaitResult};
 use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
@@ -39,7 +38,7 @@ when the final activation of an environment has terminated. This cleanup can
 be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
 
 #[derive(Debug, Parser)]
-#[command(version = Lazy::get(&FLOX_VERSION).map(|v| v.as_ref()).unwrap_or("0.0.0"))]
+#[command(version = &*FLOX_VERSION_STRING.as_str())]
 #[command(about = SHORT_HELP, long_about = LONG_HELP)]
 pub struct Cli {
     /// The PID of the initial activation to store in the environment registry

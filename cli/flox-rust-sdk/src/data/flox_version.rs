@@ -144,12 +144,6 @@ impl FromStr for FloxVersion {
     }
 }
 
-impl AsRef<str> for FloxVersion {
-    fn as_ref(&self) -> &str {
-        Box::leak(self.to_string().into_boxed_str())
-    }
-}
-
 impl PartialOrd for FloxVersion {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         // Compare major, minor, and patch versions
