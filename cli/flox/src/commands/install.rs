@@ -1,15 +1,17 @@
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
-use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
+use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     Environment,
     EnvironmentError,
     InstallationAttempt,
+    PathPointer,
 };
 use flox_rust_sdk::models::lockfile::{
     LockedManifestError,
@@ -23,6 +25,11 @@ use flox_rust_sdk::models::manifest::{
     CatalogPackage,
     PackageToInstall,
 };
+use flox_rust_sdk::models::user_state::{
+    lock_and_read_user_state_file,
+    user_state_path,
+    write_user_state_file,
+};
 use flox_rust_sdk::providers::catalog::{
     MsgAttrPathNotFoundNotFoundForAllSystems,
     MsgAttrPathNotFoundNotInCatalog,
@@ -34,9 +41,14 @@ use tracing::{instrument, warn};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{environment_select, EnvironmentSelect};
-use crate::commands::{ensure_floxhub_token, environment_description, EnvironmentSelectError};
+use crate::commands::{
+    ensure_floxhub_token,
+    environment_description,
+    ConcreteEnvironment,
+    EnvironmentSelectError,
+};
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Spinner};
+use crate::utils::dialog::{Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_error};
 use crate::utils::message;
@@ -91,36 +103,6 @@ impl Install {
             ensure_floxhub_token(&mut flox).await?;
         }
 
-        let concrete_environment = match self
-            .environment
-            .detect_concrete_environment(&flox, "Install to")
-        {
-            Ok(concrete_environment) => concrete_environment,
-            Err(EnvironmentSelectError::EnvironmentError(
-                ref e @ EnvironmentError::DotFloxNotFound(ref dir),
-            )) => {
-                let parent = dir.parent().unwrap_or(dir).display();
-                bail!(formatdoc! {"
-                {e}
-
-                Create an environment with 'flox init --dir {parent}'"
-                })
-            },
-            Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
-                // TODO: prompt for initialization here
-                bail!(formatdoc! {"
-                {e}
-
-                Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
-                self.packages.join(" ")})
-            },
-            Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
-            Err(e) => Err(e)?,
-        };
-        let description = environment_description(&concrete_environment)?;
-
-        let mut environment = concrete_environment.into_dyn_environment();
-
         let mut packages_to_install = self
             .packages
             .iter()
@@ -141,6 +123,74 @@ impl Install {
         if packages_to_install.is_empty() {
             bail!("Must specify at least one package");
         }
+
+        let concrete_environment = match self
+            .environment
+            .detect_concrete_environment(&flox, "Install to")
+        {
+            Ok(concrete_environment) => concrete_environment,
+            Err(EnvironmentSelectError::EnvironmentError(
+                ref e @ EnvironmentError::DotFloxNotFound(ref dir),
+            )) => {
+                let parent = dir.parent().unwrap_or(dir).display();
+                bail!(formatdoc! {"
+                {e}
+
+                Create an environment with 'flox init --dir {parent}'"
+                })
+            },
+            Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
+                let bail_message = formatdoc! {"
+                    {e}
+
+                    Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
+                self.packages.join(" ")};
+                if !Dialog::can_prompt() {
+                    bail!(bail_message);
+                }
+                let user_state_path = user_state_path(&flox);
+                let (lock, mut user_state) = lock_and_read_user_state_file(&user_state_path)?;
+                if user_state.confirmed_create_default_env.is_some() {
+                    bail!(bail_message);
+                }
+                let msg = formatdoc! {"
+                    Packages must be installed into a Flox environment, which can be
+                    a user 'default' environment or attached to a directory.
+                "};
+                message::plain(msg);
+                let package_list = package_list_for_prompt(&packages_to_install)
+                    .context("must specify at least one package to install")?;
+                let (choice_idx, _) = Dialog {
+                    message: &format!(
+                        "Would you like to install {package_list} to the 'default' environment?"
+                    ),
+                    help_message: None,
+                    typed: Select {
+                        options: vec!["Yes", "No"],
+                    },
+                }
+                .raw_prompt()?;
+                let should_install_to_default_env = choice_idx == 0;
+                if !should_install_to_default_env {
+                    user_state.confirmed_create_default_env = Some(false);
+                    write_user_state_file(&user_state, &user_state_path, lock)
+                        .context("failed to save default environment choice")?;
+                    let msg = format!("Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'", self.packages.join(" "));
+                    message::plain(msg);
+                    return Ok(());
+                }
+                let env = create_default_env(&flox)?;
+                user_state.confirmed_create_default_env = Some(should_install_to_default_env);
+                write_user_state_file(&user_state, &user_state_path, lock)
+                    .context("failed to save default environment choice")?;
+                ConcreteEnvironment::Path(env)
+            },
+            Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
+            Err(e) => Err(e)?,
+        };
+        let description = environment_description(&concrete_environment)?;
+
+        let mut environment = concrete_environment.into_dyn_environment();
 
         // We don't know the contents of the packages field when the span is created
         sentry_set_tag(
@@ -385,14 +435,44 @@ impl Install {
     }
 }
 
+/// Returns a formatted string representing a possibly truncated list of
+/// packages to install.
+fn package_list_for_prompt(packages: &[PackageToInstall]) -> Option<String> {
+    match packages {
+        [] => None,
+        [p] => Some(format!("'{}'", p.id())),
+        [first, second] => Some(format!("'{}, {}'", first.id(), second.id())),
+        [first, second, ..] => Some(format!("'{}, {}, ...'", first.id(), second.id())),
+    }
+}
+
+/// Creates a default environment for the user, skipping checks for init
+/// customizations and skipping the normal `init` output.
+fn create_default_env(flox: &Flox) -> Result<PathEnvironment, anyhow::Error> {
+    let home_dir = dirs::home_dir().context("user must have a home directory")?;
+    let customization = InitCustomization::default();
+    PathEnvironment::init(
+        PathPointer::new(
+            EnvironmentName::from_str(DEFAULT_NAME)
+                .context("'default' is a known-valid environment name")?,
+        ),
+        &home_dir,
+        &customization,
+        flox,
+    )
+    .context("failed to initialize default environment")
+}
+
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
-    use flox_rust_sdk::models::manifest::CatalogPackage;
+    use flox_rust_sdk::models::manifest::{CatalogPackage, PackageToInstall};
     use flox_rust_sdk::providers::catalog::SystemEnum;
 
-    use crate::commands::install::Install;
+    use crate::commands::install::{package_list_for_prompt, Install};
 
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
     #[test]
@@ -498,6 +578,27 @@ mod tests {
             vec![format!(
                 "The package '{foo_iid}' is marked as broken, it may not behave as expected during runtime."
             )]
+        );
+    }
+
+    #[test]
+    fn package_list_for_prompt_is_formatted_correctly() {
+        let packages = vec![
+            PackageToInstall::from_str("hello").unwrap(),
+            PackageToInstall::from_str("ripgrep").unwrap(),
+            PackageToInstall::from_str("bpftrace").unwrap(),
+        ];
+        assert_eq!(
+            format!("'hello'"),
+            package_list_for_prompt(&packages[0..1]).unwrap()
+        );
+        assert_eq!(
+            format!("'hello, ripgrep'"),
+            package_list_for_prompt(&packages[0..2]).unwrap()
+        );
+        assert_eq!(
+            format!("'hello, ripgrep, ...'"),
+            package_list_for_prompt(&packages).unwrap()
         );
     }
 }
