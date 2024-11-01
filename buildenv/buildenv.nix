@@ -86,9 +86,15 @@ let
       # [hook] section
       (
         if (builtins.hasAttr "on-activate" hook) then
-          ''
-            cp ${builtins.toFile "hook-on-activate" hook."on-activate"} $out/activate.d/hook-on-activate
-          ''
+          let
+            v = builtins.getAttr "on-activate" hook;
+          in
+          if (v != null) then
+            ''
+              cp ${builtins.toFile "hook-on-activate" v} $out/activate.d/hook-on-activate
+            ''
+          else
+            ""
         else
           ""
       )
@@ -98,7 +104,7 @@ let
           ""
         else
           ''
-            cp ${/. + serviceConfigYaml} $out/activate.d/service-config.yaml
+            cp ${/. + serviceConfigYaml} $out/service-config.yaml
           ''
       )
     ]
@@ -109,14 +115,21 @@ let
           i:
           if (builtins.hasAttr i profile) then
             let
-              f = builtins.toFile "profile-${i}" (builtins.getAttr i profile);
+              v = builtins.getAttr i profile;
             in
-            "cp ${f} $out/activate.d/profile-${i}\n"
+            if (v != null) then
+              let
+                f = builtins.toFile "profile-${i}" v;
+              in
+              "cp ${f} $out/activate.d/profile-${i}\n"
+            else
+              ""
           else
             ""
         )
         [
           "bash"
+          "common"
           "fish"
           "tcsh"
           "zsh"
@@ -131,15 +144,21 @@ let
         in
         (
           if (builtins.hasAttr "command" b) then
-            (
-              let
-                f = builtins.toFile "build-${i}" (builtins.getAttr "command" b);
-              in
-              ''
-                mkdir -p $out/package-builds.d
-                cp ${f} $out/package-builds.d/${i}
-              ''
-            )
+            let
+              v = builtins.getAttr "command" b;
+            in
+            if (v != null) then
+              (
+                let
+                  f = builtins.toFile "build-${i}" v;
+                in
+                ''
+                  mkdir -p $out/package-builds.d
+                  cp ${f} $out/package-builds.d/${i}
+                ''
+              )
+            else
+              ""
           else
             ""
         )
