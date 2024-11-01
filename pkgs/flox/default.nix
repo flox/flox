@@ -2,8 +2,10 @@
   inputs,
   self,
   lib,
+  nix,
   symlinkJoin,
   makeBinaryWrapper,
+  flox-buildenv,
   flox-pkgdb,
   flox-watchdog,
   flox-cli,
@@ -42,11 +44,13 @@ symlinkJoin {
     wrapProgram $out/bin/flox \
       ${lib.optionalString (SENTRY_DSN != null) "--set FLOX_SENTRY_DSN \"${SENTRY_DSN}\" "} \
       ${lib.optionalString (SENTRY_ENV != null) "--set FLOX_SENTRY_ENV \"${SENTRY_ENV}\" "} \
-      --set PKGDB_BIN       "${flox-pkgdb}/bin/pkgdb" \
-      --set FLOX_BIN        "${flox-cli}/bin/flox" \
-      --set WATCHDOG_BIN    "${flox-watchdog}/libexec/flox-watchdog" \
+      --set NIX_BIN             "${nix}/bin/nix" \
+      --set BUILDENV_NIX        "${flox-buildenv}/lib/buildenv.nix" \
+      --set PKGDB_BIN           "${flox-pkgdb}/bin/pkgdb" \
+      --set FLOX_BIN            "${flox-cli}/bin/flox" \
+      --set WATCHDOG_BIN        "${flox-watchdog}/libexec/flox-watchdog" \
       --set PROCESS_COMPOSE_BIN "${process-compose}/bin/process-compose" \
-      --set FLOX_VERSION    "${version}"
+      --set FLOX_VERSION        "${version}"
   '';
   passthru = {
     inherit pkgsFor;
