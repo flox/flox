@@ -1515,12 +1515,14 @@ pub(crate) mod tests {
 
     use catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use catalog::{
+        CatalogClientError,
         MsgAttrPathNotFoundSystemsNotOnSamePage,
         MsgGeneral,
         MsgUnknown,
         ResolutionMessage,
         ResolveError,
         SearchError,
+        UserBuildInfo,
         VersionsError,
     };
     use catalog_api_v1::types::{Output, ResolvedPackageDescriptor};
@@ -1559,6 +1561,30 @@ pub(crate) mod tests {
             _: impl AsRef<str> + Send + Sync,
         ) -> Result<SearchResults, VersionsError> {
             unreachable!("package_versions should not be called");
+        }
+
+        async fn create_catalog(
+            &self,
+            _catalog_name: impl AsRef<str> + Send + Sync,
+        ) -> Result<(), CatalogClientError> {
+            unreachable!("catalog service should not be called");
+        }
+
+        async fn create_package(
+            &self,
+            _catalog_name: impl AsRef<str> + Send + Sync,
+            _package_name: impl AsRef<str> + Send + Sync,
+        ) -> Result<(), CatalogClientError> {
+            unreachable!("catalog service should not be called");
+        }
+
+        async fn publish_build(
+            &self,
+            _catalog_name: impl AsRef<str> + Send + Sync,
+            _package_name: impl AsRef<str> + Send + Sync,
+            _build_info: &UserBuildInfo,
+        ) -> Result<(), CatalogClientError> {
+            unreachable!("catalog service should not be called");
         }
     }
 

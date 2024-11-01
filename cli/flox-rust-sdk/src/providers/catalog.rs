@@ -280,6 +280,9 @@ impl MockClient {
     }
 }
 
+pub type UserBuildInfo = api_types::UserBuildInput;
+pub type UserDerivationInfo = api_types::UserDerivationInput;
+
 #[enum_dispatch]
 #[allow(async_fn_in_trait)]
 pub trait ClientTrait {
@@ -303,6 +306,27 @@ pub trait ClientTrait {
         &self,
         attr_path: impl AsRef<str> + Send + Sync,
     ) -> Result<SearchResults, VersionsError>;
+
+    /// Create a user catalog
+    async fn create_catalog(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<(), CatalogClientError>;
+
+    /// Create a package within a user catalog
+    async fn create_package(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+        _package_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<(), CatalogClientError>;
+
+    /// Publish a build of a user package
+    async fn publish_build(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+        _package_name: impl AsRef<str> + Send + Sync,
+        _build_info: &UserBuildInfo,
+    ) -> Result<(), CatalogClientError>;
 }
 
 impl ClientTrait for CatalogClient {
@@ -455,6 +479,30 @@ impl ClientTrait for CatalogClient {
         Self::maybe_dump_shim_response(&search_results);
 
         Ok(search_results)
+    }
+
+    async fn create_catalog(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<(), CatalogClientError> {
+        Ok(())
+    }
+
+    async fn create_package(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+        _package_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<(), CatalogClientError> {
+        Ok(())
+    }
+
+    async fn publish_build(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+        _package_name: impl AsRef<str> + Send + Sync,
+        _build_info: &UserBuildInfo,
+    ) -> Result<(), CatalogClientError> {
+        Ok(())
     }
 }
 
@@ -619,6 +667,30 @@ impl ClientTrait for MockClient {
                 panic!("expected mock response, found nothing");
             },
         }
+    }
+
+    async fn create_catalog(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<(), CatalogClientError> {
+        Ok(())
+    }
+
+    async fn create_package(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+        _package_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<(), CatalogClientError> {
+        Ok(())
+    }
+
+    async fn publish_build(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+        _package_name: impl AsRef<str> + Send + Sync,
+        _build_info: &UserBuildInfo,
+    ) -> Result<(), CatalogClientError> {
+        Ok(())
     }
 }
 

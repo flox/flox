@@ -225,6 +225,30 @@ pub mod test_helpers {
     use super::*;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
+    pub fn create_test_token(handle: &str) -> Result<FloxhubToken, FloxhubTokenError> {
+        #[derive(Debug, Clone, Deserialize, Serialize)]
+        struct MyClaims {
+            #[serde(rename = "https://flox.dev/handle")]
+            handle: String,
+            exp: usize,
+        }
+        let my_claims = MyClaims {
+            handle: handle.to_owned(),
+            exp: 9999999999,
+        };
+
+        // my_claims is a struct that implements Serialize
+        // This will create a JWT using HS256 as algorithm
+        let token = jsonwebtoken::encode(
+            &jsonwebtoken::Header::default(),
+            &my_claims,
+            &jsonwebtoken::EncodingKey::from_secret("secret".as_ref()),
+        )
+        .unwrap();
+
+        FloxhubToken::from_str(&token)
+    }
+
     pub fn flox_instance() -> (Flox, TempDir) {
         flox_instance_with_optional_floxhub(None)
     }
