@@ -117,7 +117,7 @@ where
             PublishEnvironment::Managed(_env) => return Err(PublishError::UnsupportedEnvironment),
             PublishEnvironment::Path(env) => (
                 check_environment_metadata(flox, &env)?,
-                check_builder_metadata(&env, package)?,
+                check_build_metadata(&env, package)?,
             ),
         };
 
@@ -138,7 +138,7 @@ where
     }
 }
 
-fn check_builder_metadata(
+fn check_build_metadata(
     env: &PathEnvironment,
     pkg: &str,
 ) -> Result<CheckedBuildMetadata, PublishError> {
@@ -148,8 +148,7 @@ fn check_builder_metadata(
 
     let result_dir = env
         .parent_path()
-        .map_err(|e| PublishError::UnsupportEnvironmentState(Box::new(e)))
-        .unwrap()
+        .map_err(|e| PublishError::UnsupportEnvironmentState(Box::new(e)))?
         .join(format!("result-{pkg}"));
     let store_dir = result_dir
         .read_link()
@@ -298,12 +297,6 @@ pub mod tests {
         (tempdir_handle, repo, remote_uri)
     }
 
-    // fn example_builder(flox: &Flox, env: &mut PathEnvironment, package_name: &str) -> impl ManifestBuilder {
-    //     let builder = FloxBuildMk;
-
-    //     return builder;
-    // }
-
     fn example_path_environment(
         flox: &Flox,
         remote: Option<&String>,
@@ -378,7 +371,7 @@ pub mod tests {
         // Do the build to ensure it's been run.  We just want to find the outputs
         assert_build_status(&flox, &mut env, EXAMPLE_PACKAGE_NAME, true);
 
-        let meta = check_builder_metadata(&env, EXAMPLE_PACKAGE_NAME).unwrap();
+        let meta = check_build_metadata(&env, EXAMPLE_PACKAGE_NAME).unwrap();
         assert_eq!(meta.outputs.is_some(), true);
         assert_eq!(meta.outputs.unwrap()[0].starts_with("/nix/store/"), true);
     }
