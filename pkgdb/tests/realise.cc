@@ -6,8 +6,6 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include "flox/buildenv/realise.hh"
-#include "flox/buildenv/buildenv-lockfile.hh"
 #include "flox/core/util.hh"
 #include "test.hh"
 #include <fstream>
@@ -21,7 +19,7 @@ cursorForPackageName( nix::ref<nix::EvalState> & state,
                       const std::string &        system,
                       const std::string &        name )
 {
-  auto flakeRef = nix::parseFlakeRef( nixpkgsRef );
+  auto flakeRef = nix::parseFlakeRef( state.fetchSettings, nixpkgsRef );
   auto lockedRef
     = nix::flake::lockFlake( *state, flakeRef, nix::flake::LockFlags {} );
   std::vector<std::string> attrPath = { "legacyPackages", system, name };

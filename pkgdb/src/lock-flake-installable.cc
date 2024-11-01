@@ -68,11 +68,14 @@ LockFlakeInstallableCommand::run()
  * parsed
  */
 static std::tuple<nix::FlakeRef, std::string, nix::ExtendedOutputsSpec>
-parseInstallable( const std::string & installableStr )
+parseInstallable( const nix::ref<nix::EvalState> & state,
+                  const std::string &              installableStr )
 {
+
   try
     {
       return nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec(
+        state.fetchSettings,
         installableStr,
         nix::absPath( "." ) );
     }
@@ -173,7 +176,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 {
   debugLog( nix::fmt( "original installable: %s", installableStr ) );
 
-  auto parsed = parseInstallable( installableStr );
+  auto parsed = parseInstallable( state, installableStr );
 
   nix::FlakeRef            flakeRef            = std::get<0>( parsed );
   std::string              fragment            = std::get<1>( parsed );

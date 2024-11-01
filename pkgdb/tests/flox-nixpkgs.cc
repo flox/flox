@@ -46,13 +46,16 @@ test_URLRoundtrip()
 bool
 test_inputFromAttrs()
 {
-  nix::fetchers::Attrs      attrs = { { "version", (uint64_t) 0 },
-                                      { "type", "flox-nixpkgs" },
-                                      { "owner", "NixOS" },
-                                      { "rev", nixpkgsRev } };
+  flox::NixState            nixState;
+  nix::ref<nix::EvalState>  state    = nixState.getState();
+  nix::Settings             settings = state->settings;
+  nix::fetchers::Attrs      attrs    = { { "version", (uint64_t) 0 },
+                                         { "type", "flox-nixpkgs" },
+                                         { "owner", "NixOS" },
+                                         { "rev", nixpkgsRev } };
   WrappedNixpkgsInputScheme inputScheme;
-  auto                      url   = "flox-nixpkgs:v0/NixOS/" + nixpkgsRev;
-  auto                      input = inputScheme.inputFromAttrs( attrs );
+  auto                      url = "flox-nixpkgs:v0/NixOS/" + nixpkgsRev;
+  auto input                    = inputScheme.inputFromAttrs( settings, attrs );
   EXPECT( input.has_value() );
   EXPECT_EQ( inputScheme.toURL( *input ).to_string(), url );
   return true;
@@ -90,13 +93,16 @@ test_lockedFromUrl( nix::ref<nix::EvalState> & state )
 bool
 test_lockedRepresentation( nix::ref<nix::EvalState> & state )
 {
-  nix::fetchers::Attrs      attrs = { { "version", (uint64_t) 0 },
-                                      { "type", "flox-nixpkgs" },
-                                      { "owner", "NixOS" },
-                                      { "rev", nixpkgsRev } };
+  flox::NixState            nixState;
+  nix::ref<nix::EvalState>  state    = nixState.getState();
+  nix::Settings             settings = state->settings;
+  nix::fetchers::Attrs      attrs    = { { "version", (uint64_t) 0 },
+                                         { "type", "flox-nixpkgs" },
+                                         { "owner", "NixOS" },
+                                         { "rev", nixpkgsRev } };
   WrappedNixpkgsInputScheme inputScheme;
-  auto                      url   = "flox-nixpkgs:v0/NixOS/" + nixpkgsRev;
-  auto                      input = inputScheme.inputFromAttrs( attrs );
+  auto                      url = "flox-nixpkgs:v0/NixOS/" + nixpkgsRev;
+  auto input                    = inputScheme.inputFromAttrs( settings, attrs );
   EXPECT( input.has_value() );
   auto locked = inputScheme.fetch( state->store, *input ).second;
   EXPECT( locked.toAttrs() == attrs );

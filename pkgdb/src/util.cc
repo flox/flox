@@ -95,11 +95,13 @@ isSQLError( int rcode )
 /* -------------------------------------------------------------------------- */
 
 nix::FlakeRef
-parseFlakeRef( const std::string & flakeRef )
+parseFlakeRef( const nix::fetchers::Settings & fetchSettings,
+               const std::string &             flakeRef )
 {
   return ( flakeRef.find( '{' ) == std::string::npos )
-           ? nix::parseFlakeRef( flakeRef )
+           ? nix::parseFlakeRef( fetchSettings, flakeRef )
            : nix::FlakeRef::fromAttrs(
+             fetchSettings,
              nix::fetchers::jsonToAttrs( nlohmann::json::parse( flakeRef ) ) );
 }
 

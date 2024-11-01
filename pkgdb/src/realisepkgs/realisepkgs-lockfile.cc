@@ -41,7 +41,9 @@ RealisepkgsLockfile::load_from_content( const nlohmann::json & jfrom )
 void
 RealisepkgsLockfile::from_v0_content( const nlohmann::json & jfrom )
 {
-  resolver::LockfileRaw lockfileRaw = resolver::LockfileRaw();
+  flox::NixState           nixState;
+  nix::ref<nix::EvalState> state       = nixState.getState();
+  resolver::LockfileRaw    lockfileRaw = resolver::LockfileRaw();
   jfrom.get_to( lockfileRaw );
   this->manifest = lockfileRaw.manifest;
   for ( auto [system, systemPackages] : lockfileRaw.packages )
@@ -53,7 +55,9 @@ RealisepkgsLockfile::from_v0_content( const nlohmann::json & jfrom )
               resolver::LockedInputRaw input = resolver::LockedInputRaw();
               input.attrs = flox::githubAttrsToFloxNixpkgsAttrs(
                 lockedPackage->input.attrs );
-              input.url = nix::FlakeRef::fromAttrs( input.attrs ).to_string();
+              input.url
+                = nix::FlakeRef::fromAttrs( state->fetchSettings, input.attrs )
+                    .to_string();
 
               this->packages.emplace_back(
                 RealisepkgsLockedPackage { system,
@@ -77,6 +81,8 @@ RealisepkgsLockfile::from_v0_content( const nlohmann::json & jfrom )
 resolver::LockedInputRaw
 nixpkgsHttpsToGithubInput( std::string locked_url )
 {
+  flox::NixState           nixState;
+  nix::ref<nix::EvalState> state       = nixState.getState();
   resolver::LockedInputRaw githubInput = resolver::LockedInputRaw();
 
   if ( std::string supportedUrl = "https://github.com/flox/nixpkgs";
@@ -87,7 +93,8 @@ nixpkgsHttpsToGithubInput( std::string locked_url )
         "must begin with " + supportedUrl );
     }
   /* Copy rev and ref if they exist */
-  auto httpsAttrs = nix::parseFlakeRef( locked_url ).toAttrs();
+  auto httpsAttrs
+    = nix::parseFlakeRef( state->fetchSettings, locked_url ).toAttrs();
   if ( auto rev = nix::fetchers::maybeGetStrAttr( httpsAttrs, "rev" ) )
     {
       githubInput.attrs["rev"] = rev;
@@ -117,7 +124,9 @@ nixpkgsHttpsToGithubInput( std::string locked_url )
         + "' contains attributes other than 'url', 'ref', and 'rev'" );
     }
 
-  githubInput.url = nix::FlakeRef::fromAttrs( githubInput.attrs ).to_string();
+  githubInput.url
+    = nix::FlakeRef::fromAttrs( state->fetchSettings, githubInput.attrs )
+        .to_string();
 
   return githubInput;
 }
@@ -131,8 +140,10 @@ realisepkgsPackageFromV1Descriptor( const nlohmann::json &     jfrom,
                                     std::string &&             system,
                                     RealisepkgsLockedPackage & pkg )
 {
-  pkg.installId = installId;
-  pkg.system    = system;
+  flox::NixState           nixState;
+  nix::ref<nix::EvalState> state = nixState.getState();
+  pkg.installId                  = installId;
+  pkg.system                     = system;
 
   // Catalog packages don't come from a flake context so only have attr-path.
   // Flake packages will always have locked-flake-attr-path.
@@ -141,12 +152,13 @@ realisepkgsPackageFromV1Descriptor( const nlohmann::json &     jfrom,
     {
       LockedInstallable lockedInstallable = LockedInstallable();
       jfrom.get_to( lockedInstallable );
-      pkg.attrPath  = splitAttrPath( lockedInstallable.lockedFlakeAttrPath );
-      pkg.priority  = jfrom["priority"];
-      pkg.input     = resolver::LockedInputRaw();
-      pkg.input.url = lockedInstallable.lockedUrl;
-      pkg.input.attrs
-        = nix::parseFlakeRef( lockedInstallable.lockedUrl ).toAttrs();
+      pkg.attrPath    = splitAttrPath( lockedInstallable.lockedFlakeAttrPath );
+      pkg.priority    = jfrom["priority"];
+      pkg.input       = resolver::LockedInputRaw();
+      pkg.input.url   = lockedInstallable.lockedUrl;
+      pkg.input.attrs = nix::parseFlakeRef( state->fetchSettings,
+                                            lockedInstallable.lockedUrl )
+                          .toAttrs();
     }
   else
     {
@@ -167,7 +179,9 @@ realisepkgsPackageFromV1Descriptor( const nlohmann::json &     jfrom,
       // TODO: do this in one hop instead of two
       pkg.input       = nixpkgsHttpsToGithubInput( locked_url );
       pkg.input.attrs = flox::githubAttrsToFloxNixpkgsAttrs( pkg.input.attrs );
-      pkg.input.url   = nix::FlakeRef::fromAttrs( pkg.input.attrs ).to_string();
+      pkg.input.url
+        = nix::FlakeRef::fromAttrs( state->fetchSettings, pkg.input.attrs )
+            .to_string();
     }
 }
 

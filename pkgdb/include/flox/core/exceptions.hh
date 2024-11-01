@@ -10,7 +10,15 @@
 
 #pragma once
 
+#define NIX_VERSION_MAJOR 2
+#define NIX_VERSION_MINOR 24
+
 #include <nix/nixexpr.hh>
+
+#if NIX_VERSION_MAJOR >= 2 && NIX_VERSION_MINOR >= 24
+#  include <nix/terminal.hh>
+#endif
+
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <stdexcept>

@@ -367,25 +367,6 @@ else
 	$(NIX) build --print-out-paths .#flox-activation-scripts > $@
 endif
 
-# Rebuild realise.o whenever the activation scripts package changes.
-src/buildenv/realise.o: .ACTIVATION_SCRIPTS_PACKAGE_DIR
-
-src/buildenv/realise.o: CXXFLAGS +=               \
-	'-DACTIVATION_SCRIPTS_PACKAGE_DIR="$(file <.ACTIVATION_SCRIPTS_PACKAGE_DIR)"'
-
-src/buildenv/realise.o: CXXFLAGS +=               \
-	'-DCONTAINER_BUILDER_PATH="$(CONTAINER_BUILDER_PATH)"'
-
-src/buildenv/realise.o: CXXFLAGS +=               \
-	'-DCOMMON_NIXPKGS_URL="$(COMMON_NIXPKGS_URL)"'
-
-src/buildenv/realise.o: CXXFLAGS +=                 \
-	'-DFLOX_BASH_PKG="$(FLOX_BASH_PKG)"'            \
-	'-DFLOX_CACERT_PKG="$(FLOX_CACERT_PKG)"'        \
-	'-DFLOX_LOCALE_ARCHIVE="$(LOCALE_ARCHIVE)"'     \
-	'-DFLOX_PATH_LOCALE="$(PATH_LOCALE)"'           \
-	'-DFLOX_NIX_COREFOUNDATION_RPATH="$(NIX_COREFOUNDATION_RPATH)"'
-
 # Only needed for main.cc
 CXXFLAGS += '-DNIXPKGS_CACERT_BUNDLE_CRT="$(NIXPKGS_CACERT_BUNDLE_CRT)"'
 

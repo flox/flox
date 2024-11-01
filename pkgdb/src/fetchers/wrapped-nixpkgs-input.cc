@@ -24,6 +24,7 @@
 
 #include <nix/attrs.hh>
 #include <nix/cache.hh>
+#include <nix/command.hh>
 #include <nix/error.hh>
 #include <nix/fetchers.hh>
 #include <nix/flake/flake.hh>
@@ -96,8 +97,10 @@ createWrappedFlakeDirV0( const nix::FlakeRef & nixpkgsRef )
    * "Added input ..." message. */
   flox::NixState           nixState;
   nix::ref<nix::EvalState> state = nixState.getState();
-  nix::FlakeRef wrappedRef = nix::parseFlakeRef( "path:" + tmpDir.string() );
-  auto          _locked    = nix::flake::lockFlake( *state, wrappedRef, {} );
+  nix::FlakeRef            wrappedRef
+    = nix::parseFlakeRef( state->fetchSettings, "path:" + tmpDir.string() );
+  auto _locked
+    = nix::flake::lockFlake( nix::flakeSettings, *state, wrappedRef, {} );
   debugLog( "locked flake template" );
 
   return tmpDir;
@@ -240,6 +243,7 @@ githubAttrsToFloxNixpkgsAttrs( const nix::fetchers::Attrs & attrs )
 
 std::optional<nix::fetchers::Input>
 WrappedNixpkgsInputScheme::inputFromAttrs(
+  const nix::Settings &        settings,
   const nix::fetchers::Attrs & attrs ) const
 {
   if ( nix::fetchers::maybeGetStrAttr( attrs, "type" ) != "flox-nixpkgs" )

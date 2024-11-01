@@ -71,7 +71,10 @@ struct LockedInputRaw
 
   explicit operator nix::FlakeRef() const
   {
+    flox::NixState           nixState;
+    nix::ref<nix::EvalState> state = nixState.getState();
     return nix::FlakeRef::fromAttrs(
+      state->fetchSettings,
       nix::fetchers::jsonToAttrs( this->attrs ) );
   }
 
