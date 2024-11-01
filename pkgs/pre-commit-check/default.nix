@@ -50,8 +50,14 @@ pre-commit-hooks.lib.${system}.run {
         enable = true;
         entry = lib.mkForce "${wrapper}/bin/cargo-fmt fmt --all --manifest-path 'cli/Cargo.toml' -- --color always";
       };
-    clippy.enable = true;
-    clippy.settings.denyWarnings = true;
+    clippy = {
+      enable = true;
+      settings = {
+        denyWarnings = true;
+        # ensure that #[cfg(test)] is linted as well
+        extraArgs = "--tests";
+      };
+    };
     commitizen = {
       stages = [ "commit-msg" ];
       enable = true;
