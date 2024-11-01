@@ -320,9 +320,9 @@ mod test {
         let proc2 = start_process();
         let (terminate_flag, cleanup_flag) = shutdown_flags();
         let path_hash = "abc";
-        let reg_path = path_for_registry_with_entry(&path_hash);
-        register_activation(&reg_path, &path_hash, pid1).unwrap();
-        let mut watcher = PidWatcher::new(&reg_path, &path_hash, terminate_flag, cleanup_flag);
+        let reg_path = path_for_registry_with_entry(path_hash);
+        register_activation(&reg_path, path_hash, pid1).unwrap();
+        let mut watcher = PidWatcher::new(&reg_path, path_hash, terminate_flag, cleanup_flag);
         let barrier = Arc::new(std::sync::Barrier::new(2));
         let wait_result = std::thread::scope(move |s| {
             let b_clone = barrier.clone();
@@ -346,11 +346,11 @@ mod test {
         let pid = ActivationPid::from(proc.id() as i32);
         let (terminate_flag, cleanup_flag) = shutdown_flags();
         let path_hash = "abc";
-        let reg_path = path_for_registry_with_entry(&path_hash);
-        register_activation(&reg_path, &path_hash, pid).unwrap();
+        let reg_path = path_for_registry_with_entry(path_hash);
+        register_activation(&reg_path, path_hash, pid).unwrap();
         let mut watcher = PidWatcher::new(
             &reg_path,
-            &path_hash,
+            path_hash,
             terminate_flag.clone(),
             cleanup_flag.clone(),
         );
@@ -377,11 +377,11 @@ mod test {
         let pid = ActivationPid::from(proc.id() as i32);
         let (terminate_flag, cleanup_flag) = shutdown_flags();
         let path_hash = "abc";
-        let reg_path = path_for_registry_with_entry(&path_hash);
-        register_activation(&reg_path, &path_hash, pid).unwrap();
+        let reg_path = path_for_registry_with_entry(path_hash);
+        register_activation(&reg_path, path_hash, pid).unwrap();
         let mut watcher = PidWatcher::new(
             &reg_path,
-            &path_hash,
+            path_hash,
             terminate_flag.clone(),
             cleanup_flag.clone(),
         );

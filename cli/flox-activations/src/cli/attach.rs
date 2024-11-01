@@ -111,7 +111,7 @@ mod test {
             },
         };
 
-        args.handle(&runtime_dir.path().to_path_buf()).unwrap();
+        args.handle(runtime_dir.path()).unwrap();
 
         let activation = read_activations(&runtime_dir, &flox_env, |activations| {
             activations.activation_for_id_ref(id).unwrap().clone()
@@ -149,7 +149,7 @@ mod test {
             },
         };
 
-        args.handle(&runtime_dir.path().to_path_buf()).unwrap();
+        args.handle(runtime_dir.path()).unwrap();
 
         let activation = read_activations(&runtime_dir, &flox_env, |activations| {
             activations.activation_for_id_ref(id).unwrap().clone()
