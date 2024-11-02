@@ -365,7 +365,15 @@ if ($manifest) {
                     $package->{"outputs_to_install"} = $package->{"outputs-to-install"};
                 }
                 foreach my $output (keys %{$package->{"outputs"}}) {
-                    next unless grep { $_ eq $output } @{$package->{"outputs_to_install"}};
+                    # Unfortunately, due to pkgdb limitations in the 1.0 release we
+                    # adopted the convention of installing all outputs for every
+                    # package, so for the _short_ term while we migrate to the new
+                    # buildenv we will continue this practice to keep the experience
+                    # consistent for users. However, it won't be long before we
+                    # switch over to the more correct strategy of honoring
+                    # outputs_to_install, and when we do we can uncomment the
+                    # following line.
+                    # next unless grep { $_ eq $output } @{$package->{"outputs_to_install"}};
                     push @storePaths, $package->{"outputs"}{$output};
                 }
                 next unless scalar @storePaths;
