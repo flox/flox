@@ -79,7 +79,7 @@ pub struct CheckedEnvironmentMetadata {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckedBuildMetadata {
     // Define metadata coming from the build, e.g. outpaths
-    pub outputs: Option<Vec<String>>,
+    pub outputs: Vec<String>,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
@@ -138,6 +138,7 @@ where
     }
 }
 
+/// Collect metadata needed for publishing that is obtained from the build output
 fn check_build_metadata(
     env: &PathEnvironment,
     pkg: &str,
@@ -169,7 +170,7 @@ fn check_build_metadata(
     }
 
     Ok(CheckedBuildMetadata {
-        outputs: Some(outputs),
+        outputs,
         _private: (),
     })
 }
@@ -372,8 +373,8 @@ pub mod tests {
         assert_build_status(&flox, &mut env, EXAMPLE_PACKAGE_NAME, true);
 
         let meta = check_build_metadata(&env, EXAMPLE_PACKAGE_NAME).unwrap();
-        assert_eq!(meta.outputs.is_some(), true);
-        assert_eq!(meta.outputs.unwrap()[0].starts_with("/nix/store/"), true);
+        assert_eq!(meta.outputs.len(), 1);
+        assert_eq!(meta.outputs[0].starts_with("/nix/store/"), true);
     }
 
     // Template end to end test
