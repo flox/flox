@@ -143,7 +143,7 @@ fn check_build_metadata(
     pkg: &str,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     // For now assume the build is successful, and present.
-    // look for the outputs from the build at `results-<pkgname>`
+    // look for the outputs from the build at `result-<pkgname>`
     // See tests in build.rs for examples
 
     let result_dir = env
