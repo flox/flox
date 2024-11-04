@@ -367,7 +367,7 @@ pub mod tests {
 
         let meta = check_build_metadata(&env, EXAMPLE_PACKAGE_NAME).unwrap();
         assert_eq!(meta.outputs.len(), 1);
-        assert_eq!(meta.outputs[0].starts_with("/nix/store/"), true);
+        assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
     }
 
     // Template end to end test
