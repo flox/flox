@@ -205,13 +205,13 @@ EOF
 }
 
 # bats test_tags=containerize:piped-to-stdout
-@test "container is written to stdout when '-o -' is passed" {
+@test "container is written to stdout when '-f -' is passed" {
   skip "duplicate of next test"
   skip_if_not_linux
 
   env_setup_catalog
 
-  USER=podman-test run bash -c '"$FLOX_BIN" containerize -o - | podman load'
+  USER=podman-test run bash -c '"$FLOX_BIN" containerize -f - | podman load'
   assert_success
   assert_line --partial "Loaded image:"
 }
@@ -222,7 +222,7 @@ EOF
 
   env_setup_catalog
 
-  USER=podman-test CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
+  USER=podman-test CONTAINER_ID="$("$FLOX_BIN" containerize -f - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
   run --separate-stderr podman run -q -i "$CONTAINER_ID" -c 'echo $foo'
   assert_success
 
