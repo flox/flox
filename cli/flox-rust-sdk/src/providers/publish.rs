@@ -1,6 +1,7 @@
 use std::error;
 use std::path::PathBuf;
 
+use catalog_api_v1::types::{self as api_types};
 use chrono::{DateTime, Utc};
 use flox_core::canonical_path::CanonicalPath;
 use thiserror::Error;
@@ -76,10 +77,10 @@ pub struct CheckedEnvironmentMetadata {
 
 /// Ensures that the required metadata for publishing is consistent from the build process
 #[allow(clippy::manual_non_exhaustive)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CheckedBuildMetadata {
     // Define metadata coming from the build, e.g. outpaths
-    pub outputs: Vec<String>,
+    pub outputs: Vec<api_types::Output>,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
@@ -144,7 +145,10 @@ fn check_build_metadata(
     pkg: &str,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     // For now assume the build is successful, and present.
-    // look for the outputs from the build at `result-<pkgname>`
+    // Look for the output from the build at `results-<pkgname>`
+    // Note that the current builds only support a single output at that
+    // pre-defined path.  Later work will get structured results from the build
+    // process to feed this.
     // See tests in build.rs for examples
 
     let result_dir = env
@@ -155,22 +159,11 @@ fn check_build_metadata(
         .read_link()
         .map_err(|e| PublishError::UnknownOutputs(Box::new(e)))?;
 
-    let mut outputs = Vec::<String>::new();
-    for dir_entry in store_dir
-        .read_dir()
-        .map_err(|e| PublishError::UnknownOutputs(Box::new(e)))?
-    {
-        outputs.push(
-            dir_entry
-                .map_err(|e| PublishError::UnknownOutputs(Box::new(e)))?
-                .path()
-                .to_string_lossy()
-                .into_owned(),
-        );
-    }
-
     Ok(CheckedBuildMetadata {
-        outputs,
+        outputs: vec![api_types::Output {
+            name: "bin".to_string(),
+            store_path: store_dir.to_string_lossy().into_owned(),
+        }],
         _private: (),
     })
 }
