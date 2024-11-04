@@ -2561,7 +2561,7 @@ mod test {
         };
         let reg_path = env_registry_path(&flox);
         let lock = LockFile::open(&env_registry_lock_path(reg_path)).unwrap();
-        write_environment_registry(&reg, &env_registry_path(&flox), lock).unwrap();
+        write_environment_registry(&reg, env_registry_path(&flox), lock).unwrap();
         let branch_name = branch_name(&pointer, &path);
         let decoded_path = ManagedEnvironment::decode(&flox, &branch_name).unwrap();
         let canonicalized_decoded_path = std::fs::canonicalize(decoded_path).unwrap();

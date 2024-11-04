@@ -8,3 +8,4 @@ pub mod lockfile;
 pub mod manifest;
 pub mod pkgdb;
 pub mod search;
+pub mod user_state;

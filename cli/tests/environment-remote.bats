@@ -275,7 +275,7 @@ EOF
 
 # bats test_tags=remote,remote:not-found
 @test "install --remote fails on a non existent environment" {
-  run "$FLOX_BIN" install -r "$OWNER/i-dont-exist"
+  run "$FLOX_BIN" install hello -r "$OWNER/i-dont-exist"
   assert_failure
   assert_output --partial "Environment not found in FloxHub."
 }

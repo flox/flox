@@ -986,7 +986,7 @@ pub enum EnvironmentSelect {
 #[derive(Debug, Error)]
 pub enum EnvironmentSelectError {
     #[error(transparent)]
-    Environment(#[from] EnvironmentError),
+    EnvironmentError(#[from] EnvironmentError),
     #[error("Did not find an environment in the current directory.")]
     EnvNotFoundInCurrentDirectory,
     #[error(transparent)]
