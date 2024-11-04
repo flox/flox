@@ -2609,9 +2609,9 @@ EOF
 }
 
 @test "profile: JUPYTER_PATH is modified when Jupyter is installed" {
-  # Although we don't actually use the environment this creates, we need to call
-  # it so wait_for_watchdogs has a PROJECT_DIR to look for
-  project_setup
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
 
   # Mock contains both extensions but only one is used in each install.
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/jupyter_with_extensions.json"
