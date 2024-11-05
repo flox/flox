@@ -153,6 +153,28 @@ impl Display for DisplayCommand<'_> {
             .get_args()
             .map(|a| shell_escape::escape(a.to_string_lossy()));
 
+        let mut envs = command
+            .get_envs()
+            .map(|(k, v)| {
+                let Some(v) = v else {
+                    return format!("-u {}", k.to_string_lossy());
+                };
+
+                format!(
+                    "{k}={v}",
+                    k = k.to_string_lossy(),
+                    v = shell_escape::escape(v.to_string_lossy())
+                )
+            })
+            .peekable();
+
+        if envs.peek().is_some() {
+            write!(f, "env ")?;
+            for env in envs {
+                write!(f, "{} ", env)?;
+            }
+        }
+
         write!(f, "{}", command.get_program().to_string_lossy())?;
         for arg in args {
             write!(f, " {}", arg)?;
