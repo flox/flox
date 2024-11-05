@@ -3,11 +3,8 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::LazyLock;
 
-use indoc::indoc;
 use pollster::FutureExt;
-use serde::Deserialize;
 use thiserror::Error;
 use tracing::debug;
 
@@ -38,26 +35,13 @@ use crate::models::pkgdb::{
     error_codes,
     BuildEnvResult,
     CallPkgDbError,
-    ContextMsgError,
     PkgDbError,
     PKGDB_BIN,
 };
+use crate::providers::buildenv::{BuildEnv, BuildEnvError, BuildEnvNix};
 use crate::providers::catalog::{self, ClientTrait};
 use crate::providers::flox_cpp_utils::InstallableLocker;
 use crate::providers::services::{maybe_make_service_config_file, ServiceError};
-use crate::utils::CommandExt;
-
-static NIX_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
-    std::env::var("NIX_BIN")
-        .unwrap_or_else(|_| env!("NIX_BIN").to_string())
-        .into()
-});
-
-static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
-    std::env::var("FLOX_BUILDENV_NIX")
-        .unwrap_or_else(|_| env!("FLOX_BUILDENV_NIX").to_string())
-        .into()
-});
 
 pub struct ReadOnly {}
 struct ReadWrite {}
@@ -272,91 +256,11 @@ impl<State> CoreEnvironment<State> {
         let lockfile = Lockfile::read_from_file(&lockfile_path)
             .map_err(CoreEnvironmentError::LockedManifest)?;
 
-        // todo: use `stat` or `nix path-info` to filter out pre-existing store paths
-
-        // Realise the packages in the lockfile
-        //
-        // Locking flakes may require using `ssh` for private flakes,
-        // so don't clear PATH
-        // We don't have tests for private flakes,
-        // so make sure private flakes work after touching this.
-        let mut pkgdb_realise_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_realise_cmd.arg("realise").arg(&lockfile_path);
-
-        debug!(cmd=%pkgdb_realise_cmd.display(), "realising packages");
-        call_pkgdb(pkgdb_realise_cmd, false).map_err(CoreEnvironmentError::BuildEnv)?;
-
-        // Build the environment
-        let mut nix_build_command = Command::new(&*NIX_BIN);
-
-        // Override nix config to use flake commands,
-        // allow impure language features such as `builtins.storePath`,
-        // and use the auto store (which is used by the preceding `pkgdb realise` command)
-        // TODO: formalize this in a config file,
-        // and potentially disable other user configs (allowing specific overrides)
-        let nix_config = indoc! {"
-            experimental-features = nix-command flakes
-            pure-eval = false
-            store = auto
-        "};
-
-        nix_build_command.env("NIX_CONFIG", nix_config);
-        nix_build_command.arg("build").args([
-            "--no-link",
-            "--offline",
-            "--print-build-logs",
-            "--json",
-        ]);
-        nix_build_command.arg("--file").arg(&*BUILDENV_NIX);
-        nix_build_command
-            .arg("--argstr")
-            .arg("manifestLock")
-            .arg(lockfile_path);
-        // todo: pass name?
-
         let service_config_path = maybe_make_service_config_file(flox, &lockfile)?;
-        if let Some(service_config_path) = &service_config_path {
-            nix_build_command
-                .arg("--argstr")
-                .arg("serviceConfigYaml")
-                .arg(service_config_path);
-        }
-        debug!(cmd=%nix_build_command.display(), "building environment");
 
-        // todo: This isn't the right error yet, but it prevents a panic at minimal cost.
-        let output = nix_build_command
-            .output()
-            .map_err(|err| CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbCall(err)))?;
+        let outputs = BuildEnvNix {}.build(&lockfile_path, service_config_path)?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            // todo: This isn't the right error yet, but it prevents a panic at minimal cost.
-            return Err(CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(
-                PkgDbError {
-                    exit_code: error_codes::NIX_GENERIC,
-                    category_message: "nix build failed".to_string(),
-                    context_message: Some(ContextMsgError {
-                        message: stderr.to_string(),
-                        caught: None,
-                    }),
-                },
-            )));
-        }
-
-        #[derive(Debug, Clone, Deserialize)]
-        struct BuildEnvResult {
-            outputs: BuildEnvOutputs,
-        }
-
-        #[derive(Debug, Clone, Deserialize)]
-        struct BuildEnvOutputs {
-            develop: PathBuf,
-        }
-
-        let [build_env_result]: [BuildEnvResult; 1] = serde_json::from_slice(&output.stdout)
-            .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
-
-        let store_path = build_env_result.outputs.develop;
+        let store_path = outputs.develop;
         debug!(
             "built locked environment, store path={}",
             store_path.display()
@@ -409,7 +313,7 @@ impl CoreEnvironment<()> {
         // Locking flakes may require using `ssh` for private flakes,
         // so don't clear PATH
         let result: BuildEnvResult = serde_json::from_value(
-            call_pkgdb(pkgdb_cmd, false).map_err(CoreEnvironmentError::BuildEnv)?,
+            call_pkgdb(pkgdb_cmd, false).map_err(CoreEnvironmentError::PkgdbBuildEnv)?,
         )
         .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
 
@@ -430,10 +334,7 @@ impl CoreEnvironment<()> {
             .args(["--out-link", &out_link_path.as_ref().to_string_lossy()])
             .args(["--store-path", &store_path.as_ref().to_string_lossy()]);
 
-        serde_json::from_value::<BuildEnvResult>(
-            call_pkgdb(pkgdb_cmd, true).map_err(CoreEnvironmentError::BuildEnv)?,
-        )
-        .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
+        BuildEnvNix.link(out_link_path, store_path)?;
 
         Ok(())
     }
@@ -1108,18 +1009,18 @@ pub enum CoreEnvironmentError {
     UpgradeFailedCatalog(#[source] UpgradeError),
     // endregion
 
-    // region: pkgdb builds
+    // region: pkgdb (container) builds - to be removed
     #[error("failed to build environment")]
-    BuildEnv(#[source] CallPkgDbError),
+    PkgdbBuildEnv(#[source] CallPkgDbError),
     #[error("failed to parse buildenv output")]
     ParseBuildEnvOutput(#[source] serde_json::Error),
-    #[error("package is unsupported for this sytem")]
-    UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
     #[error("failed to build container builder")]
     CallContainerBuilder(#[source] std::io::Error),
+    // endregion
+    #[error("package is unsupported for this sytem")]
+    UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
     #[error("failed to write container builder to sink")]
     WriteContainer(#[source] std::io::Error),
-    // endregion
 
     // endregion
     #[error("unsupported system to build container: {0}")]
@@ -1133,13 +1034,16 @@ pub enum CoreEnvironmentError {
 
     #[error(transparent)]
     Services(#[from] ServiceError),
+
+    #[error(transparent)]
+    BuildEnv(#[from] BuildEnvError),
 }
 
 impl CoreEnvironmentError {
     pub fn is_incompatible_system_error(&self) -> bool {
         let is_pkgdb_incompatible_system_error = matches!(
             self,
-            CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+            CoreEnvironmentError::BuildEnv(BuildEnvError::Realise(PkgDbError {
                 exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
                 ..
             }))
@@ -1172,7 +1076,7 @@ impl CoreEnvironmentError {
     /// Otherwise return None.
     pub fn pkgdb_exit_code(&self) -> Option<&u64> {
         match self {
-            CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+            CoreEnvironmentError::BuildEnv(BuildEnvError::Realise(PkgDbError {
                 exit_code,
                 ..
             })) => Some(exit_code),
