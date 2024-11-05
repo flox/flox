@@ -167,7 +167,7 @@ writeShellScriptBin PROJECT_NAME ''
   ${
     if WATCHDOG_BIN == null then
       # We pass this to daemonize which requires an absolute path
-      "export WATCHDOG_BIN=\"$(which flox-watchdog)\";"
+      "export WATCHDOG_BIN=\"$(command -v flox-watchdog)\";"
     else
       "export WATCHDOG_BIN='${WATCHDOG_BIN}';"
   }
