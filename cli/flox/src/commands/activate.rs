@@ -14,7 +14,6 @@ use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::env_registry::env_registry_path;
 use flox_rust_sdk::models::environment::{
     path_hash,
-    CoreEnvironmentError,
     Environment,
     EnvironmentError,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -28,7 +27,6 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
     FLOX_SERVICES_SOCKET_VAR,
 };
-use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::utils::traceable_path;
@@ -190,12 +188,7 @@ impl Activate {
         };
 
         let rendered_env_path = match rendered_env_path_result {
-            Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
-                CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
-                    ..
-                }),
-            ))) => {
+            Err(EnvironmentError::Core(err)) if err.is_incompatible_system_error() => {
                 let mut message = format!(
                     "This environment is not yet compatible with your system ({system}).",
                     system = flox.system

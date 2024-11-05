@@ -13,6 +13,7 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::floxmeta::FloxMetaError;
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, ContextMsgError, PkgDbError};
+use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use flox_rust_sdk::providers::services::{LoggedError, ServiceError};
 use indoc::{formatdoc, indoc};
@@ -23,7 +24,7 @@ use crate::commands::EnvironmentSelectError;
 /// Convert to an error variant that directs the user to the docs if the provided error is
 /// due to a package not being supported on the current system.
 pub fn apply_doc_link_for_unsupported_packages(err: EnvironmentError) -> EnvironmentError {
-    if let EnvironmentError::Core(CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(
+    if let EnvironmentError::Core(CoreEnvironmentError::BuildEnv(BuildEnvError::Realise(
         PkgDbError {
             exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
             category_message,
@@ -310,7 +311,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         CoreEnvironmentError::BadLockfilePath(_) => display_chain(err),
 
         // catch package eval and build errors
-        CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+        CoreEnvironmentError::BuildEnv(BuildEnvError::Realise(PkgDbError {
             exit_code,
             context_message:
                 Some(ContextMsgError {
@@ -345,14 +346,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         // this is a BUG
         CoreEnvironmentError::ParseBuildEnvOutput(_) => display_chain(err),
 
-        // catch package conflict error:
-        // https://github.com/flox/flox/issues/857
-        CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: error_codes::BUILDENV_CONFLICT,
-            context_message: Some(ContextMsgError { message, .. }),
-            ..
-        })) => message.to_string(),
-        CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+        CoreEnvironmentError::BuildEnv(BuildEnvError::Realise(PkgDbError {
             exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
             context_message: Some(ContextMsgError { message, .. }),
             ..
@@ -391,7 +385,14 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             // Could probably do with a better error message
             "encountered an internal error".into()
         },
-        CoreEnvironmentError::BuildEnv(pkgdb_error) => {
+        CoreEnvironmentError::BuildEnv(err) => formatdoc! {"
+            Failed to build environment:
+
+            {err}
+        ", err = display_chain(err)},
+
+        // todo: to be removed
+        CoreEnvironmentError::PkgdbBuildEnv(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to build environment.")
         },
 
