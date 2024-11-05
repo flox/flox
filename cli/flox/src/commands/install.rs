@@ -1,4 +1,7 @@
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::exit;
 use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
@@ -41,6 +44,7 @@ use tracing::{instrument, warn};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{environment_select, EnvironmentSelect};
+use crate::commands::activate::Activate;
 use crate::commands::{
     ensure_floxhub_token,
     environment_description,
@@ -52,6 +56,7 @@ use crate::utils::dialog::{Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_error};
 use crate::utils::message;
+use crate::utils::openers::Shell;
 use crate::utils::tracing::sentry_set_tag;
 
 // Install a package into an environment
@@ -177,12 +182,16 @@ impl Install {
                         .context("failed to save default environment choice")?;
                     let msg = format!("Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'", self.packages.join(" "));
                     message::plain(msg);
-                    return Ok(());
+                    exit(1);
                 }
                 let env = create_default_env(&flox)?;
                 user_state.confirmed_create_default_env = Some(should_install_to_default_env);
                 write_user_state_file(&user_state, &user_state_path, lock)
                     .context("failed to save default environment choice")?;
+                let edited_rc_file = prompt_to_modify_rc_file()?;
+                if !edited_rc_file {
+                    exit(1);
+                }
                 ConcreteEnvironment::Path(env)
             },
             Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
@@ -463,6 +472,102 @@ fn create_default_env(flox: &Flox) -> Result<PathEnvironment, anyhow::Error> {
     .context("failed to initialize default environment")
 }
 
+fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
+    let shell = Activate::detect_shell_for_subshell();
+    let shell_cmd = match shell {
+        Shell::Bash(_) => "source <(flox activate -d ~/.)",
+        Shell::Zsh(_) => "source <(flox activate -d ~/.)",
+        Shell::Tcsh(_) => r#"eval "`flox activate -d ~/.`""#,
+        Shell::Fish(_) => "flox activate -d ~/. | source",
+    };
+    let rc_file_name = match shell {
+        Shell::Bash(_) => ".bashrc",
+        Shell::Zsh(_) => ".zshrc",
+        Shell::Tcsh(_) => ".tcshrc",
+        Shell::Fish(_) => "config.fish",
+    };
+    let msg = formatdoc! {"
+        The 'default' environment can be activated automatically for every new shell
+        by adding one line to your {rc_file_name} file:        
+        {shell_cmd}
+    "};
+
+    message::plain(msg);
+    let prompt =
+        format!("Would you like Flox to add this configuration to your {rc_file_name} now?");
+    let (choice_idx, _) = Dialog {
+        message: &prompt,
+        help_message: None,
+        typed: Select {
+            options: vec!["Yes", "No"],
+        },
+    }
+    .raw_prompt()?;
+    let should_modify_rc_file = choice_idx == 0;
+
+    let read_more_msg = formatdoc! {"
+        -> Read more about the 'default' environment at:    
+           https://flox.dev/docs/tutorials/layering-multiple-environments/#create-your-default-home-environment"};
+    let restart_msg = formatdoc! {"
+        The 'default' environment will be activated for every new shell.
+        -> Restart your shell to continue using the default environment."};
+    if !should_modify_rc_file {
+        message::plain(&read_more_msg);
+        return Ok(false);
+    }
+    let rc_file_path = locate_rc_file(&shell, rc_file_name)?;
+    ensure_rc_file_exists(&rc_file_path)?;
+    add_activation_to_rc_file(&rc_file_path, shell_cmd)?;
+    message::updated(format!("Configuration added to your {rc_file_name} file."));
+    message::plain(&restart_msg);
+    message::plain(&read_more_msg);
+    message::plain(""); // need a blank line before package installation result
+    Ok(true)
+}
+
+fn locate_rc_file(shell: &Shell, name: impl AsRef<str>) -> Result<PathBuf, anyhow::Error> {
+    use Shell::*;
+    let home = dirs::home_dir().context("failed to locate home directory")?;
+    let rc_file = match shell {
+        Bash(_) => home.join(name.as_ref()),
+        Zsh(_) => home.join(name.as_ref()),
+        Tcsh(_) => home.join(name.as_ref()),
+        // Note, this `.config` is _not_ what you get from `dirs::config_dir`,
+        // which points at `Application Support`
+        Fish(_) => home.join(".config/fish").join(name.as_ref()),
+    };
+    Ok(rc_file)
+}
+
+fn ensure_rc_file_exists(path: impl AsRef<Path>) -> Result<(), anyhow::Error> {
+    let path = path.as_ref();
+    if !path.exists() {
+        std::fs::create_dir_all(path.parent().context("RC file had no parent")?)
+            .context("failed to create parent directory for RC file")?;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .context("failed to create empty RC file")?;
+    }
+    Ok(())
+}
+
+fn add_activation_to_rc_file(
+    path: impl AsRef<Path>,
+    cmd: impl AsRef<str>,
+) -> Result<(), anyhow::Error> {
+    let backup = path.as_ref().with_extension(".pre_flox");
+    std::fs::copy(&path, backup).context("failed to make backup of RC file")?;
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .context("failed to open RC file")?;
+    file.write(format!("{}\n", cmd.as_ref()).as_bytes())
+        .context("failed to write to RC file")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -601,4 +706,7 @@ mod tests {
             package_list_for_prompt(&packages).unwrap()
         );
     }
+
+    #[test]
+    fn foo() {}
 }
