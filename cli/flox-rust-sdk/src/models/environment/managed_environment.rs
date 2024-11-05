@@ -1631,7 +1631,6 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
     use std::str::FromStr;
 
     use fslock::LockFile;
@@ -2556,7 +2555,6 @@ mod test {
                     created_at: 0,
                     pointer: EnvironmentPointer::Managed(pointer.clone()),
                 }],
-                activations: HashSet::new(),
             }],
         };
         let reg_path = env_registry_path(&flox);
