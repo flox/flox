@@ -755,7 +755,7 @@ impl Activate {
     /// 2. SHELL environment variable
     /// 3. Parent process shell
     /// 4. Default to bash bundled with flox
-    fn detect_shell_for_subshell() -> Shell {
+    pub(crate) fn detect_shell_for_subshell() -> Shell {
         Self::detect_shell_for_subshell_with(Shell::detect_from_parent_process)
     }
 
