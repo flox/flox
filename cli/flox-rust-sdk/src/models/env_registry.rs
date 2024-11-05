@@ -1,13 +1,8 @@
-use std::collections::HashSet;
-use std::fmt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use flox_core::{serialize_atomically, SerializeError, Version};
 use fslock::LockFile;
-use nix::errno::Errno;
-use nix::sys::signal::kill;
-use nix::unistd::Pid as NixPid;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -91,7 +86,6 @@ impl EnvRegistry {
                 self.entries.push(RegistryEntry {
                     path_hash: hash.to_string(),
                     path: dot_flox_path.as_ref().to_path_buf(),
-                    activations: HashSet::new(),
                     envs: vec![],
                 });
                 self.entries
@@ -135,9 +129,6 @@ pub struct RegistryEntry {
     /// The list of environments that have existed at this path
     /// since the last time environments were garbage collected.
     pub envs: Vec<RegisteredEnv>,
-    /// The PIDs of current activations
-    #[serde(default)]
-    pub activations: HashSet<ActivationPid>,
 }
 
 impl RegistryEntry {
@@ -195,32 +186,6 @@ impl RegistryEntry {
         }
         None
     }
-
-    /// Register an activation for an existing enviroment.
-    fn register_activation(&mut self, pid: ActivationPid) {
-        tracing::debug!(%pid, hash = self.path_hash, "registering activation");
-        self.activations.insert(pid);
-    }
-
-    /// Deregister an activation for an existing enviroment.
-    ///
-    /// Doesn't error if the activation wasn't found, because another watchdog
-    /// may have already cleaned it up as stale.
-    fn deregister_activation(&mut self, pid: ActivationPid) {
-        tracing::debug!(%pid, hash = self.path_hash, "deregistering activation");
-        self.activations.remove(&pid);
-    }
-
-    /// Remove any activation PIDs that are no longer running and weren't explicitly deregistered.
-    fn remove_stale_activations(&mut self) {
-        self.activations.retain(|pid| {
-            let running = pid.is_running();
-            if !running {
-                tracing::debug!(%pid, "removing stale activation");
-            }
-            running
-        })
-    }
 }
 
 /// Metadata about an environment that has been registered.
@@ -232,57 +197,6 @@ pub struct RegisteredEnv {
     /// The metadata about the owner and name of the environment if this environment is a
     /// managed environment.
     pub pointer: EnvironmentPointer,
-}
-
-/// PID of an environment's activation. This is a simpler variation of
-/// `nix::unistd::Pid`.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ActivationPid(i32);
-
-impl ActivationPid {
-    /// Check whether an activation is still running.
-    pub fn is_running(&self) -> bool {
-        // TODO: Compare name or check for watchdog child to see if it's a real activation?
-        let pid = NixPid::from(*self);
-        match kill(pid, None) {
-            // These semantics come from kill(2).
-            Ok(_) => true,              // Process received the signal and is running.
-            Err(Errno::EPERM) => true,  // No permission to send a signal but we know it's running.
-            Err(Errno::ESRCH) => false, // No process running to receive the signal.
-            Err(_) => false,            // Unknown error, assume no running process.
-        }
-    }
-}
-
-impl From<i32> for ActivationPid {
-    fn from(value: i32) -> Self {
-        Self(value)
-    }
-}
-
-impl From<ActivationPid> for i32 {
-    fn from(value: ActivationPid) -> Self {
-        value.0
-    }
-}
-
-impl From<ActivationPid> for NixPid {
-    fn from(pid: ActivationPid) -> Self {
-        NixPid::from_raw(pid.0)
-    }
-}
-
-impl From<NixPid> for ActivationPid {
-    fn from(pid: NixPid) -> Self {
-        ActivationPid(pid.as_raw())
-    }
-}
-
-impl fmt::Display for ActivationPid {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
 }
 
 /// Returns the path to the user's environment registry file.
@@ -380,58 +294,13 @@ pub fn deregister(
     Ok(())
 }
 
-/// Register an activation for an existing enviroment.
-pub fn register_activation(
-    reg_path: impl AsRef<Path>,
-    path_hash: &str,
-    pid: ActivationPid,
-) -> Result<(), EnvRegistryError> {
-    // Acquire the lock before reading the registry so that we know there are no modifications while
-    // we're editing it.
-    let lock = acquire_env_registry_lock(&reg_path)?;
-    let mut reg = read_environment_registry(&reg_path)?.unwrap_or_default();
-    let entry = reg
-        .entry_for_hash_mut(path_hash)
-        .ok_or(EnvRegistryError::UnknownKey(path_hash.to_string()))?;
-
-    entry.remove_stale_activations();
-    entry.register_activation(pid);
-
-    write_environment_registry(&reg, &reg_path, lock)?;
-    Ok(())
-}
-
-/// Deregister an activation for an existing enviroment, returning the number of activations
-/// remaining after deregistering.
-pub fn deregister_activation(
-    reg_path: impl AsRef<Path>,
-    path_hash: &str,
-    pid: ActivationPid,
-) -> Result<usize, EnvRegistryError> {
-    // Acquire the lock before reading the registry so that we know there are no modifications while
-    // we're editing it.
-    let lock = acquire_env_registry_lock(&reg_path)?;
-    let mut reg = read_environment_registry(&reg_path)?.unwrap_or_default();
-    let entry = reg
-        .entry_for_hash_mut(path_hash)
-        .ok_or(EnvRegistryError::UnknownKey(path_hash.to_string()))?;
-
-    entry.deregister_activation(pid);
-    entry.remove_stale_activations();
-    let current_activations = entry.activations.len();
-
-    write_environment_registry(&reg, &reg_path, lock)?;
-    Ok(current_activations)
-}
-
 #[cfg(test)]
 mod test {
     use std::fs::OpenOptions;
     use std::io::BufWriter;
-    use std::process::{Child, Command};
 
     use proptest::arbitrary::{any, Arbitrary};
-    use proptest::collection::{hash_set, vec};
+    use proptest::collection::vec;
     use proptest::path::PathParams;
     use proptest::strategy::{BoxedStrategy, Just, Strategy};
     use proptest::{prop_assert, prop_assert_eq, prop_assume, proptest};
@@ -451,22 +320,19 @@ mod test {
             //   be in reality.
             (
                 PathBuf::arbitrary_with(PathParams::default().with_components(1..3)),
-                hash_set((1i32..=65535).prop_map(ActivationPid), 0..20),
                 vec(any::<RegisteredEnv>(), 0..=3),
             )
-                .prop_flat_map(|(path, activation_pids, mut registered_envs)| {
+                .prop_flat_map(|(path, mut registered_envs)| {
                     registered_envs.sort_by_cached_key(|e| e.created_at);
                     (
                         Just(path.clone()),
                         Just(path_hash(&path)),
-                        Just(activation_pids),
                         Just(registered_envs),
                     )
                 })
-                .prop_map(|(path, hash, activation_pids, envs)| RegistryEntry {
+                .prop_map(|(path, hash, envs)| RegistryEntry {
                     path_hash: hash.to_string(),
                     path,
-                    activations: activation_pids,
                     envs,
                 })
                 .boxed()
@@ -595,83 +461,5 @@ mod test {
             // Empty entries should be removed
             prop_assert!(reg.entry_for_hash(&hash).is_none());
         }
-
-        #[test]
-        fn entries_register_activation(mut entry: RegistryEntry, activation: ActivationPid) {
-            entry.register_activation(activation);
-            prop_assert!(entry.activations.contains(&activation));
-        }
-
-        #[test]
-        fn entries_deregister_activation(mut entry: RegistryEntry) {
-            prop_assume!(!entry.activations.is_empty());
-            let activations = entry.activations.clone();
-            let activation = activations.iter().next().unwrap();
-            entry.deregister_activation(*activation);
-            prop_assert!(!entry.activations.contains(activation));
-        }
-    }
-
-    /// Start a shortlived process that we can check the PID is running.
-    fn start_process() -> Child {
-        Command::new("sleep")
-            .arg("2")
-            .spawn()
-            .expect("failed to start")
-    }
-
-    /// Stop a shortlived process that we can check the PID is not running. It's
-    /// unlikely, but not impossible, that the kernel will have not re-used the
-    /// PID by the time we check it.
-    fn stop_process(mut child: Child) {
-        child.kill().expect("failed to kill");
-        child.wait().expect("failed to wait");
-    }
-
-    impl From<&Child> for ActivationPid {
-        fn from(child: &Child) -> Self {
-            Self(child.id() as i32)
-        }
-    }
-
-    #[test]
-    fn test_pid_is_running_lifecycle() {
-        let child = start_process();
-
-        let pid = ActivationPid::from(&child);
-        assert!(pid.is_running());
-
-        stop_process(child);
-        assert!(!pid.is_running());
-    }
-
-    #[test]
-    fn test_pid_is_running_pid1() {
-        // PID 1 is always running on Linux and MacOS but we don't have perms to send signals.
-        assert!(ActivationPid(1).is_running());
-    }
-
-    #[test]
-    fn test_remove_stale_activations() {
-        let child1 = start_process();
-        let child2 = start_process();
-        let activations_before = HashSet::from([
-            ActivationPid(1),
-            ActivationPid::from(&child1),
-            ActivationPid::from(&child2),
-        ]);
-        let mut entry = RegistryEntry {
-            path: PathBuf::from("foo"),
-            path_hash: String::from("foo"),
-            envs: vec![],
-            activations: activations_before.clone(),
-        };
-        entry.remove_stale_activations();
-        assert_eq!(entry.activations, activations_before);
-
-        stop_process(child1);
-        stop_process(child2);
-        entry.remove_stale_activations();
-        assert_eq!(entry.activations, HashSet::from([ActivationPid(1)]));
     }
 }
