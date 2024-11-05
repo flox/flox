@@ -142,9 +142,9 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::from(0),
 
         Err(e) => {
-            // Do not print any error if caused by wrapped flox (sh)
-            if e.is::<FloxShellErrorCode>() {
-                return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;
+            // Do not print any error
+            if e.is::<Exit>() {
+                return e.downcast_ref::<Exit>().unwrap().0;
             }
 
             let message = e
@@ -189,14 +189,15 @@ fn main() -> ExitCode {
     // drop(runtime) should implicilty be last
 }
 
+/// Error to exit without printing an error message
 #[derive(Debug)]
-struct FloxShellErrorCode(ExitCode);
-impl Display for FloxShellErrorCode {
+struct Exit(ExitCode);
+impl Display for Exit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         <Self as Debug>::fmt(self, f)
     }
 }
-impl std::error::Error for FloxShellErrorCode {}
+impl std::error::Error for Exit {}
 
 /// Resets the `$USER`/`HOME` variables to match `euid`
 ///
