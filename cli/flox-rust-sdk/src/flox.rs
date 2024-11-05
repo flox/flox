@@ -66,6 +66,8 @@ pub struct Features {
     pub search_strategy: SearchStrategy,
     #[serde(default)]
     pub build: bool,
+    #[serde(default)]
+    pub publish: bool,
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, derive_more::Deref)]

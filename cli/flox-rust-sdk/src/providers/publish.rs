@@ -4,22 +4,16 @@ use std::str::FromStr;
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
 use flox_core::canonical_path::CanonicalPath;
+use log::trace;
 use thiserror::Error;
 
 use super::build::ManifestBuilder;
 use super::catalog::{Client, ClientTrait, UserBuildInfo, UserDerivationInfo};
 use super::git::GitCommandProvider;
 use crate::flox::{Flox, FloxhubToken};
-use crate::models::environment::managed_environment::ManagedEnvironment;
-use crate::models::environment::path_environment::PathEnvironment;
 use crate::models::environment::Environment;
 use crate::models::lockfile::Lockfile;
 use crate::providers::git::GitProvider;
-
-pub enum PublishEnvironment {
-    Path(PathEnvironment),
-    Managed(ManagedEnvironment),
-}
 
 #[derive(Debug, Error)]
 pub enum PublishError {
@@ -98,10 +92,10 @@ pub struct CheckedBuildMetadata {
 /// The `PublishProvider` is a generic struct, parameterized by a `Builder` type,
 /// to build packages before publishing.
 pub struct PublishProvider<Builder> {
-    env_meta: CheckedEnvironmentMetadata,
-    build_meta: CheckedBuildMetadata,
+    pub env_meta: CheckedEnvironmentMetadata,
+    pub build_meta: CheckedBuildMetadata,
 
-    _builder: Option<Builder>,
+    pub _builder: Option<Builder>,
 }
 
 /// (default) implementation of the `Publish` trait, i.e. the publish interface to publish.
@@ -121,8 +115,13 @@ where
         // The create package service call will create the user's own catalog
         // if not already created, and then create (or return) the package noted
         // returning either a 200 or 201.  Either is ok here, as long as it's not an error.
+        trace!("Creating package in catalog...");
         client
-            .create_package(&catalog_name, &self.build_meta.package)
+            .create_package(
+                &catalog_name,
+                &self.build_meta.package,
+                &self.env_meta.build_repo_ref.url,
+            )
             .await
             .map_err(|e| PublishError::CatalogError(Box::new(e)))?;
 
@@ -152,9 +151,16 @@ where
                 unfree: None,
                 version: None,
             },
-            locked_base_catalog_url: Some(self.env_meta.build_repo_ref.url.clone()),
-            locked_url: self.env_meta.base_catalog_ref.as_ref().unwrap().url.clone(),
+            // TODO - make this optional in the API
+            locked_base_catalog_url: self
+                .env_meta
+                .base_catalog_ref
+                .as_ref()
+                .or(None)
+                .map(|b| b.url.clone()),
+            locked_url: self.env_meta.build_repo_ref.url.clone(),
         };
+        trace!("Publishing build in catalog...");
         client
             .publish_build(&catalog_name, &self.build_meta.package, &build_info)
             .await
@@ -166,7 +172,7 @@ where
 
 /// Collect metadata needed for publishing that is obtained from the build output
 pub fn check_build_metadata(
-    env: &PathEnvironment,
+    env: &dyn Environment,
     pkg: &str,
     system: &str,
 ) -> Result<CheckedBuildMetadata, PublishError> {
@@ -175,7 +181,6 @@ pub fn check_build_metadata(
     // Note that the current builds only support a single output at that
     // pre-defined path.  Later work will get structured results from the build
     // process to feed this.
-    // See tests in build.rs for examples
 
     let system = SystemEnum::from_str(system)
         .map_err(|e| PublishError::UnsupportEnvironmentState(Box::new(e)))?;
@@ -200,7 +205,7 @@ pub fn check_build_metadata(
     })
 }
 
-fn gather_build_repo_meta(environment: &PathEnvironment) -> Result<LockedUrlInfo, PublishError> {
+fn gather_build_repo_meta(environment: &dyn Environment) -> Result<LockedUrlInfo, PublishError> {
     // Gather build repo info
     let git = match environment.parent_path() {
         Ok(env_path) => GitCommandProvider::discover(env_path)
@@ -232,7 +237,7 @@ fn gather_build_repo_meta(environment: &PathEnvironment) -> Result<LockedUrlInfo
 
 fn gather_base_repo_meta(
     flox: &Flox,
-    environment: &PathEnvironment,
+    environment: &dyn Environment,
 ) -> Result<Option<LockedUrlInfo>, PublishError> {
     // Gather locked base catalog page info
     let lockfile_path = CanonicalPath::new(
@@ -284,7 +289,7 @@ fn gather_base_repo_meta(
 
 pub fn check_environment_metadata(
     flox: &Flox,
-    environment: &PathEnvironment,
+    environment: &dyn Environment,
 ) -> Result<CheckedEnvironmentMetadata, PublishError> {
     // TODO - Ensure current commit is in remote (needed for repeatable builds)
     let build_repo_meta = gather_build_repo_meta(environment)?;
@@ -310,6 +315,7 @@ pub mod tests {
     use super::*;
     use crate::flox::test_helpers::{create_test_token, flox_instance};
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
+    use crate::models::environment::path_environment::PathEnvironment;
     use crate::providers::build::test_helpers::assert_build_status;
     use crate::providers::build::FloxBuildMk;
     use crate::providers::catalog::{MockClient, GENERATED_DATA};

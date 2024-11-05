@@ -9,6 +9,7 @@ mod general;
 mod init;
 mod install;
 mod list;
+mod publish;
 mod pull;
 mod push;
 mod search;
@@ -910,6 +911,9 @@ enum InternalCommands {
     /// Build packages for Flox
     #[bpaf(command, hide, footer("Run 'man flox-build' for more details."))]
     Build(#[bpaf(external(build::build))] build::Build),
+    /// Publish packages
+    #[bpaf(command, hide, footer("Run 'man flox-publish' for more details."))]
+    Publish(#[bpaf(external(publish::publish_cmd))] publish::PublishCmd),
 }
 
 impl InternalCommands {
@@ -918,6 +922,7 @@ impl InternalCommands {
             InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
             InternalCommands::Build(args) => args.handle(config, flox).await?,
+            InternalCommands::Publish(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
