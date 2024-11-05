@@ -577,6 +577,7 @@ mod tests {
     use flox_rust_sdk::models::manifest::{CatalogPackage, PackageToInstall};
     use flox_rust_sdk::providers::catalog::SystemEnum;
 
+    use super::{add_activation_to_rc_file, ensure_rc_file_exists};
     use crate::commands::install::{package_list_for_prompt, Install};
 
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
@@ -708,5 +709,29 @@ mod tests {
     }
 
     #[test]
-    fn foo() {}
+    fn creates_rc_file_if_parent_doesnt_exist() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let parent = tmpdir.path().join("foo");
+        let rc_file_path = parent.join(".bashrc");
+        ensure_rc_file_exists(&rc_file_path).unwrap();
+        assert!(rc_file_path.exists());
+    }
+
+    #[test]
+    fn creates_rc_file_if_doesnt_exist() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let rc_file_path = tmpdir.path().join(".bashrc");
+        ensure_rc_file_exists(&rc_file_path).unwrap();
+        assert!(rc_file_path.exists());
+    }
+
+    #[test]
+    fn creates_rc_file_backup() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let rc_file_path = tmpdir.path().join(".bashrc");
+        ensure_rc_file_exists(&rc_file_path).unwrap();
+        let backup = rc_file_path.with_extension(".pre_flox");
+        add_activation_to_rc_file(&rc_file_path, "be activated").unwrap();
+        assert!(backup.exists());
+    }
 }
