@@ -755,7 +755,7 @@ impl Activate {
     /// 2. SHELL environment variable
     /// 3. Parent process shell
     /// 4. Default to bash bundled with flox
-    pub(crate) fn detect_shell_for_subshell() -> Shell {
+    fn detect_shell_for_subshell() -> Shell {
         Self::detect_shell_for_subshell_with(Shell::detect_from_parent_process)
     }
 
@@ -782,8 +782,10 @@ impl Activate {
 
     /// Detect the shell to use for in-place activation
     ///
-    /// Used to determine shell for `eval "$(flox activate)"` / `flox activate --print-script`
-    fn detect_shell_for_in_place() -> Result<Shell> {
+    /// Used to determine shell for `eval "$(flox activate)"`,
+    /// `flox activate --print-script`, and
+    /// when adding activation of a default environment to RC files.
+    pub(crate) fn detect_shell_for_in_place() -> Result<Shell> {
         Self::detect_shell_for_in_place_with(Shell::detect_from_parent_process)
     }
 
