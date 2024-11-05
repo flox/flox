@@ -1575,6 +1575,7 @@ pub(crate) mod tests {
             &self,
             _catalog_name: impl AsRef<str> + Send + Sync,
             _package_name: impl AsRef<str> + Send + Sync,
+            _original_url: impl AsRef<str> + Send + Sync,
         ) -> Result<(), CatalogClientError> {
             unreachable!("catalog service should not be called");
         }

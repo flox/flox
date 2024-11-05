@@ -24,6 +24,7 @@ use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
+use log::trace;
 use once_cell::sync::Lazy;
 use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
@@ -318,6 +319,7 @@ pub trait ClientTrait {
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
+        _original_url: impl AsRef<str> + Send + Sync,
     ) -> Result<(), CatalogClientError>;
 
     /// Publish a build of a user package
@@ -490,18 +492,81 @@ impl ClientTrait for CatalogClient {
 
     async fn create_package(
         &self,
-        _catalog_name: impl AsRef<str> + Send + Sync,
-        _package_name: impl AsRef<str> + Send + Sync,
+        catalog_name: impl AsRef<str> + Send + Sync,
+        package_name: impl AsRef<str> + Send + Sync,
+        original_url: impl AsRef<str> + Send + Sync,
     ) -> Result<(), CatalogClientError> {
+        let body = api_types::UserPackageCreate {
+            original_url: original_url.as_ref().to_string(),
+        };
+        let catalog = api_types::CatalogName::from_str(catalog_name.as_ref()).map_err(|_e| {
+            CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+                format!(
+                    "catalog name {} does not meet API requirements.",
+                    catalog_name.as_ref()
+                )
+                .to_string(),
+            ))
+        })?;
+        let package = api_types::Name::from_str(package_name.as_ref()).map_err(|_e| {
+            CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+                format!(
+                    "package name {} does not meet API requirements.",
+                    package_name.as_ref()
+                )
+                .to_string(),
+            ))
+        })?;
+        self.client
+            .create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post(
+                &catalog, &package, &body,
+            )
+            .await
+            .map_err(|e| match e {
+                APIError::ErrorResponse(err) => {
+                    CatalogClientError::UnexpectedError(APIError::ErrorResponse(err))
+                },
+                _ => CatalogClientError::UnexpectedError(e),
+            })?;
+        trace!("successfully created package");
         Ok(())
     }
 
     async fn publish_build(
         &self,
-        _catalog_name: impl AsRef<str> + Send + Sync,
-        _package_name: impl AsRef<str> + Send + Sync,
-        _build_info: &UserBuildInfo,
+        catalog_name: impl AsRef<str> + Send + Sync,
+        package_name: impl AsRef<str> + Send + Sync,
+        build_info: &UserBuildInfo,
     ) -> Result<(), CatalogClientError> {
+        let catalog = api_types::CatalogName::from_str(catalog_name.as_ref()).map_err(|_e| {
+            CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+                format!(
+                    "catalog name {} does not meet API requirements.",
+                    catalog_name.as_ref()
+                )
+                .to_string(),
+            ))
+        })?;
+        let package = api_types::PackageName::from_str(package_name.as_ref()).map_err(|_e| {
+            CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+                format!(
+                    "package name {} does not meet API requirements.",
+                    package_name.as_ref()
+                )
+                .to_string(),
+            ))
+        })?;
+        self.client
+            .create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_post(
+                &catalog, &package, build_info,
+            )
+            .await
+            .map_err(|e| match e {
+                APIError::ErrorResponse(err) => {
+                    CatalogClientError::UnexpectedError(APIError::ErrorResponse(err))
+                },
+                _ => CatalogClientError::UnexpectedError(e),
+            })?;
         Ok(())
     }
 }
@@ -680,6 +745,7 @@ impl ClientTrait for MockClient {
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
+        _original_url: impl AsRef<str> + Send + Sync,
     ) -> Result<(), CatalogClientError> {
         Ok(())
     }
