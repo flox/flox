@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::exit;
 use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
@@ -51,13 +50,13 @@ use crate::commands::{
     ConcreteEnvironment,
     EnvironmentSelectError,
 };
-use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_error};
 use crate::utils::message;
 use crate::utils::openers::Shell;
 use crate::utils::tracing::sentry_set_tag;
+use crate::{subcommand_metric, Exit};
 
 // Install a package into an environment
 #[derive(Bpaf, Clone)]
@@ -182,16 +181,13 @@ impl Install {
                         .context("failed to save default environment choice")?;
                     let msg = format!("Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'", self.packages.join(" "));
                     message::plain(msg);
-                    exit(1);
+                    return Err(Exit(1.into()).into());
                 }
                 let env = create_default_env(&flox)?;
                 user_state.confirmed_create_default_env = Some(should_install_to_default_env);
                 write_user_state_file(&user_state, &user_state_path, lock)
                     .context("failed to save default environment choice")?;
-                let edited_rc_file = prompt_to_modify_rc_file()?;
-                if !edited_rc_file {
-                    exit(1);
-                }
+                prompt_to_modify_rc_file()?;
                 ConcreteEnvironment::Path(env)
             },
             Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
@@ -473,12 +469,15 @@ fn create_default_env(flox: &Flox) -> Result<PathEnvironment, anyhow::Error> {
 }
 
 fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
-    let shell = Activate::detect_shell_for_subshell();
+    let shell = Activate::detect_shell_for_in_place()?;
     let shell_cmd = match shell {
-        Shell::Bash(_) => "source <(flox activate -d ~/.)",
-        Shell::Zsh(_) => "source <(flox activate -d ~/.)",
-        Shell::Tcsh(_) => r#"eval "`flox activate -d ~/.`""#,
-        Shell::Fish(_) => "flox activate -d ~/. | source",
+        // TODO: should we use source <(flox activate -d ~) for bash?
+        // There are unicode quoting issues with the current form
+        // We can't use <() for zsh because it blocks input which can make it
+        // impossible to Ctrl-C
+        Shell::Bash(_) | Shell::Zsh(_) => r#"eval "$(flox activate -d ~)""#,
+        Shell::Tcsh(_) => r#"eval "`flox activate -d ~`""#,
+        Shell::Fish(_) => "flox activate -d ~ | source",
     };
     let rc_file_name = match shell {
         Shell::Bash(_) => ".bashrc",
@@ -488,7 +487,7 @@ fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
     };
     let msg = formatdoc! {"
         The 'default' environment can be activated automatically for every new shell
-        by adding one line to your {rc_file_name} file:        
+        by adding one line to your {rc_file_name} file:
         {shell_cmd}
     "};
 
@@ -506,7 +505,7 @@ fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
     let should_modify_rc_file = choice_idx == 0;
 
     let read_more_msg = formatdoc! {"
-        -> Read more about the 'default' environment at:    
+        -> Read more about the 'default' environment at:
            https://flox.dev/docs/tutorials/layering-multiple-environments/#create-your-default-home-environment"};
     let restart_msg = formatdoc! {"
         The 'default' environment will be activated for every new shell.
