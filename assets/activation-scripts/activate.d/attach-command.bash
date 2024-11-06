@@ -18,11 +18,11 @@ fi
 # "-c" command mode: pass both [2] arguments unaltered to shell invocation
 case "$_flox_shell" in
   *bash)
+    pwd
+    if [ -d "$(pwd)" ]; then
+      echo "exists"
+    fi
     if [ -n "$FLOX_NOPROFILE" ]; then
-      pwd
-      if [ -d "$(pwd)" ]; then
-        echo "exists"
-      fi
       exec "$_flox_shell" --noprofile --norc -c "$*"
     else
       if [ -t 1 ]; then
