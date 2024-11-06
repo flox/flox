@@ -323,6 +323,7 @@ impl FloxArgs {
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
+            state_dir: config.flox.state_dir.clone(),
             config_dir: config.flox.config_dir.clone(),
             runtime_dir,
             temp_dir: temp_dir_path.clone(),
