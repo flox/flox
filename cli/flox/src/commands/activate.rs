@@ -4,6 +4,7 @@ use std::io::stdout;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::str::FromStr;
 use std::{env, fs};
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -66,6 +67,25 @@ pub static FLOX_INTERPRETER: Lazy<PathBuf> = Lazy::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
 });
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Mode {
+    #[default]
+    Dev,
+    Run,
+}
+
+impl FromStr for Mode {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "dev" => Ok(Mode::Dev),
+            "run" => Ok(Mode::Run),
+            _ => Err(anyhow!("'{s}' is not a valid activation mode")),
+        }
+    }
+}
+
 #[derive(Bpaf, Clone)]
 pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -87,6 +107,14 @@ pub struct Activate {
     /// interpreter bundled with the CLI.
     #[bpaf(long, hide)]
     pub use_fallback_interpreter: bool,
+
+    /// Whether to activate in "dev" mode or "run" mode, the difference being
+    /// that "dev" mode will set environment variables necessary for
+    /// development, whereas "run" will simply put executables in PATH.
+    // TODO: don't need to specify the flag names once the leading underscore
+    //       is removed
+    #[bpaf(short('m'), long("mode"))]
+    pub _mode: Option<Mode>,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]

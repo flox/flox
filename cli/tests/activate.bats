@@ -3317,3 +3317,19 @@ EOF
   run "$FLOX_BIN" activate --use-fallback-interpreter -- true
   assert_failure
 }
+
+# ---------------------------------------------------------------------------- #
+
+@test "can activate in dev mode" {
+  project_setup
+
+  run "$FLOX_BIN" activate -m dev -- true
+  assert_success
+}
+
+@test "can activate in run mode" {
+  project_setup
+
+  run "$FLOX_BIN" activate -m run -- true
+  assert_success
+}
