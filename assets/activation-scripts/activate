@@ -35,6 +35,7 @@ export _gnused="@gnused@"
 export _jq="@jq@"
 export _process_compose="@process-compose@"
 export _setsid="@setsid@"
+export _strace="@strace@"
 
 # Top-level Flox environment activation script.
 
