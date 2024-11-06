@@ -37,14 +37,13 @@ xdg_reals_setup() {
   : "${XDG_CACHE_HOME:=$HOME/.cache}"
   : "${XDG_DATA_HOME:=$HOME/.local/share}"
   : "${XDG_STATE_HOME:=$HOME/.local/state}"
-  export REAL_USER="$USER"
   export REAL_HOME="$HOME"
   export REAL_XDG_CONFIG_HOME="${XDG_CONFIG_HOME:?}"
   export REAL_XDG_CACHE_HOME="${XDG_CACHE_HOME:?}"
   export REAL_XDG_DATA_HOME="${XDG_DATA_HOME:?}"
   export REAL_XDG_STATE_HOME="${XDG_STATE_HOME:?}"
   # Prevent later routines from referencing real dirs.
-  unset USER HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_DATA_DIRS
+  unset HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_DATA_DIRS
   export __FT_RAN_XDG_REALS_SETUP=:
 }
 
@@ -87,7 +86,6 @@ reals_setup() {
     print_var REAL_GIT_CONFIG_GLOBAL
     print_var REAL_GIT_CONFIG_SYSTEM
     print_var REAL_HOME
-    print_var REAL_USER
     print_var REAL_XDG_CACHE_HOME
     print_var REAL_XDG_CONFIG_HOME
     print_var REAL_XDG_DATA_HOME
@@ -370,7 +368,6 @@ flox_vars_setup() {
   export FLOX_STATE_HOME="$XDG_STATE_HOME/flox"
   export FLOX_META="$FLOX_CACHE_DIR/meta"
   export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments"
-  export USER="flox-test"
   export HOME="${FLOX_TEST_HOME:-$HOME}"
 }
 
