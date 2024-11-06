@@ -34,7 +34,10 @@ let
   system = builtins.currentSystem;
 
   # Copy manifest file into the store for access within derivations.
-  manifestLockFile = builtins.path { path = manifestLock; };
+  manifestLockFile = builtins.path {
+    path = manifestLock;
+    name = "manifest.lock";
+  };
 
   # Parse the manifest file.
   manifestLockData = builtins.fromJSON (builtins.readFile manifestLock);
@@ -103,8 +106,14 @@ let
         if (serviceConfigYaml == null) then
           ""
         else
+          let
+            serviceConfigYamlStorePath = builtins.path {
+              path = serviceConfigYaml;
+              name = "service-config.yaml";
+            };
+          in
           ''
-            cp ${/. + serviceConfigYaml} $out/service-config.yaml
+            cp ${serviceConfigYamlStorePath} $out/service-config.yaml
           ''
       )
     ]
