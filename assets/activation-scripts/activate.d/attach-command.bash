@@ -19,6 +19,10 @@ fi
 case "$_flox_shell" in
   *bash)
     if [ -n "$FLOX_NOPROFILE" ]; then
+      pwd
+      if [ -d "$(pwd)" ]; then
+        echo "exists"
+      fi
       exec "$_flox_shell" --noprofile --norc -c "$*"
     else
       if [ -t 1 ]; then
