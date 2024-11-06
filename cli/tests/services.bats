@@ -1011,12 +1011,15 @@ EOF
   TEARDOWN_FIFO="$PROJECT_DIR/finished"
 
   mkfifo started "$TEARDOWN_FIFO"
-  "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
+  "$FLOX_BIN" -vvv activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
     echo > started
     echo > finished
 EOF
-  ) &
-  timeout 8 cat started
+  ) >> output 2>&1 &
+  if ! timeout 8 cat started; then
+    cat output
+    return 1
+  fi
 
   run "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- true
   assert_success
