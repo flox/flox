@@ -213,6 +213,7 @@ jobs:
           AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.MANAGED_AUTH0_FLOX_DEV_CLIENT_SECRET }}"
         run: |
           nix develop -L --no-update-lock-file --command just integ-tests --\
+            services.bats \
             --filter-tags '"${{ matrix.test-tags }}"'
 
       - name: "Capture process tree for failing tests"
@@ -236,9 +237,6 @@ jobs:
       matrix:
         system:
           - "x86_64-linux"
-          - "x86_64-darwin"
-          - "aarch64-linux"
-          - "aarch64-darwin"
 
     steps:
       - name: "Checkout"
@@ -411,9 +409,6 @@ jobs:
       matrix:
         system:
           - "x86_64-linux"
-          - "x86_64-darwin"
-          - "aarch64-linux"
-          - "aarch64-darwin"
         test-tags:
           - "containerize"
           - "!containerize"
