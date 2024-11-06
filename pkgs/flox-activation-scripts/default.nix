@@ -17,6 +17,7 @@
   flox-activations,
   shfmt,
   daemonize,
+  strace,
 }:
 let
   ld-floxlib_so = if stdenv.isLinux then "${ld-floxlib}/lib/ld-floxlib.so" else "__LINUX_ONLY__";
@@ -26,6 +27,13 @@ let
     name = "editorconfig";
     path = ../../.editorconfig;
   };
+  addStrace =
+    if stdenv.isLinux then
+      ''
+        substituteInPlace $out/activate --replace "@strace@" "${strace}/bin/strace"
+      ''
+    else
+      "";
 in
 runCommand "flox-activation-scripts"
   {
@@ -51,6 +59,8 @@ runCommand "flox-activation-scripts"
       --replace "@setsid@" "${util-linux}/bin/setsid" \
       --replace "@daemonize@" "${daemonize}/bin/daemonize" \
       --replace "/usr/bin/env bash" "${bash}/bin/bash"
+
+    ${addStrace}
 
     substituteInPlace $out/activate.d/bash \
       --replace "@gnused@" "${gnused}"

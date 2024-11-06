@@ -45,11 +45,12 @@ start_services_blocking() {
 
   # flox services start [service...] needs to be able to start some but not all
   # services
+  mkdir -p "$HOME/strace_debugging"
   if [ -n "${_FLOX_SERVICES_TO_START:-}" ]; then
     readarray -t services_to_start < <(echo "$_FLOX_SERVICES_TO_START" | "$_jq" -r '.[]')
-    COMPOSE_SHELL="$_bash" "$_setsid" "$_setsid" "$_process_compose" up "${services_to_start[@]}" -f "$config_file" -u "$socket_file" -L "$log_file" --tui=false > /dev/null 2>&1 &
+    COMPOSE_SHELL="$_bash" "$_strace" -f -o "$HOME/strace_debugging/log_$BATS_TEST_NAME.txt" "$_setsid" "$_setsid" "$_process_compose" up "${services_to_start[@]}" -f "$config_file" -u "$socket_file" -L "$log_file" --tui=false > /dev/null 2>&1 &
   else
-    COMPOSE_SHELL="$_bash" "$_setsid" "$_setsid" "$_process_compose" up -f "$config_file" -u "$socket_file" -L "$log_file" --tui=false > /dev/null 2>&1 &
+    COMPOSE_SHELL="$_bash" "$_strace" -f -o "$HOME/strace_debugging/log_$BATS_TEST_NAME.txt" "$_setsid" "$_setsid" "$_process_compose" up -f "$config_file" -u "$socket_file" -L "$log_file" --tui=false > /dev/null 2>&1 &
   fi
   # Make these functions available in subshells so that `timeout` can call them
   export -f wait_for_services_socket poll_services_status
