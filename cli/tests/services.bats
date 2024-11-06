@@ -1009,13 +1009,19 @@ EOF
   "$FLOX_BIN" push --owner "$OWNER"
   assert_success
 
+  rm -f /tmp/output
   mkfifo started finished
-  "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
+  "$FLOX_BIN" -vvv activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
     echo > started
     timeout 2 cat finished
 EOF
-  ) &
-  timeout 2 cat started
+  ) >> /tmp/output 2>&1 &
+  if ! timeout 2 cat started; then
+    watchdog_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log)"
+    cp "$watchdog_log" /tmp/watchdog
+    echo "Failed to start services"
+    exit 1
+  fi
 
   run "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash -c \
     'echo > finished'
