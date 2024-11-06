@@ -72,10 +72,102 @@ jobs:
             - "flake.lock"
             - "shells/**"
 
+  nix-build:
+    name: "Nix build"
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 120
+
+    outputs:
+      closure-size-x86_64-linux:   ${{ steps.closure.outputs.closure-size-x86_64-linux }}
+      closure-size-aarch64-linux:  ${{ steps.closure.outputs.closure-size-aarch64-linux }}
+      closure-size-x86_64-darwin:  ${{ steps.closure.outputs.closure-size-x86_64-darwin }}
+      closure-size-aarch64-darwin: ${{ steps.closure.outputs.closure-size-aarch64-darwin }}
+      flox-version:                ${{ steps.version.outputs.flox-version }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        system:
+          - "x86_64-linux"
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v4"
+        # needed for git describe to work
+        with:
+          fetch-depth: 0
+
+      - name: "Setup upterm session"
+        if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
+        uses: owenthereal/action-upterm@v1
+        with:
+          limit-access-to-actor: true
+          limit-access-to-users: ${{ inputs.allowedUptermUsers }}
+          wait-timeout-minutes: 15
+
+      - name: "Setup"
+        uses: "./.github/actions/common-setup"
+        with:
+          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
+          SUBSTITUTER:            "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER_KEY:        "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID:      "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY:  "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
+          TAILSCALE_URL:          "${{    vars.MANAGED_TAILSCALE_URL }}"
+          TAILSCALE_AUTH_KEY:     "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
+          REMOTE_BUILDERS:        "${{    vars.MANAGED_REMOTE_BUILDERS }}"
+          SYSTEM:                 "${{ matrix.system }}"
+
+      - name: "Build"
+        id: "build"
+        run: |
+          for package in '.#packages.${{ matrix.system }}.flox-pkgdb' '.#packages.${{ matrix.system }}.flox-cli' '.#packages.${{ matrix.system }}.flox' '.#packages.${{ matrix.system }}.flox-cli-tests'; do
+            echo "Building $package ..."
+            git clean -xfd .
+            if nix path-info                 \
+                --store "$CONFIGURE_NIX_SUBSTITUTER"  \
+                --eval-store auto            \
+                --builders ''                \
+                -j0                          \
+                  "$package".outPath ; then
+               echo "  -> Paths for $package already exists in the substituter";
+            else
+              nix build -L             \
+                --no-update-lock-file  \
+                --print-out-paths      \
+                  "$package";
+            fi
+          done
+
+      - name: "Get closure size"
+        id: "closure"
+        run: |
+          NIX="nix --accept-flake-config --experimental-features 'nix-command flakes'"
+          CLOSURE_SIZE=$(
+            ssh github@$REMOTE_SERVER \
+              -oLogLevel=ERROR \
+              -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
+                "$NIX build github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox &&" \
+                "$NIX path-info -r --json ./result" \
+            | jq '[.[].narSize]|add'
+          )
+          echo "closure-size-${{ matrix.system }}=$CLOSURE_SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: "Get Flox version"
+        id: "version"
+        run: |
+            FLOX_VERSION="${FLOX_VERSION:=$(git describe)}"
+            FLOX_VERSION="${FLOX_VERSION:1}"
+            echo "flox-version=$FLOX_VERSION" >> $GITHUB_OUTPUT
+
   nix-build-bats-tests:
     name: "remote"
     runs-on: "ubuntu-latest"
     timeout-minutes: 90
+
+    needs:
+      - "nix-build"
 
     strategy:
       fail-fast: false
@@ -83,6 +175,7 @@ jobs:
         system:
           - "x86_64-linux"
         test-tags:
+          - "containerize"
           - "!containerize"
     steps:
       - name: "Checkout"
