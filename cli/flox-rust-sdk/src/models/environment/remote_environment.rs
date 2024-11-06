@@ -87,6 +87,8 @@ impl RemoteEnvironment {
 
         let path = path.as_ref().join(DOT_FLOX);
         fs::create_dir_all(&path).map_err(RemoteEnvironmentError::CreateTempDotFlox)?;
+        debug!("grep: {:?}", path);
+        debug!("path.exists(): {:?}", path.exists());
 
         let dot_flox_path =
             CanonicalPath::new(&path).map_err(RemoteEnvironmentError::InvalidTempPath)?;
