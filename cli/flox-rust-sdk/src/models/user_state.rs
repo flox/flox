@@ -19,6 +19,8 @@ pub enum UserStateError {
     Parse(#[source] serde_json::Error),
     #[error("failed to write user state file")]
     WriteFile(#[source] SerializeError),
+    #[error("couldn't find parent for path: {0}")]
+    BadFilePath(PathBuf),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -35,7 +37,7 @@ pub struct UserState {
 
 /// Returns the path to the user's state file.
 pub fn user_state_path(flox: &Flox) -> PathBuf {
-    flox.cache_dir.join(USER_STATE_FILENAME)
+    flox.state_dir.join(USER_STATE_FILENAME)
 }
 
 /// Returns the path to the user state lock file. The presensce
@@ -63,6 +65,10 @@ pub fn acquire_user_state_lock(
     state_file_path: impl AsRef<Path>,
 ) -> Result<LockFile, UserStateError> {
     let lock_path = user_state_lock_path(state_file_path);
+    debug!(
+        path = traceable_path(&lock_path),
+        "acquiring user state lock"
+    );
     let mut lock = LockFile::open(lock_path.as_os_str()).map_err(UserStateError::AcquireLock)?;
     lock.lock().map_err(UserStateError::AcquireLock)?;
     Ok(lock)
@@ -87,8 +93,16 @@ pub fn write_user_state_file(
 pub fn lock_and_read_user_state_file(
     path: impl AsRef<Path>,
 ) -> Result<(LockFile, UserState), UserStateError> {
+    let path = path.as_ref();
     debug!(path = traceable_path(&path), "reading user state file");
-    let lock = acquire_user_state_lock(&path)?;
-    let state = read_user_state_file(&path)?.unwrap_or_default();
+    if !path.exists() {
+        std::fs::create_dir_all(
+            path.parent()
+                .ok_or(UserStateError::BadFilePath(path.to_owned()))?,
+        )
+        .map_err(UserStateError::ReadFile)?;
+    }
+    let lock = acquire_user_state_lock(path)?;
+    let state = read_user_state_file(path)?.unwrap_or_default();
     Ok((lock, state))
 }
