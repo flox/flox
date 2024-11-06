@@ -19,7 +19,7 @@ use logger::{init_logger, spawn_gc_logs, spawn_heartbeat_log};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
 use once_cell::sync::Lazy;
-use process::{PidWatcher, WaitResult};
+use process::{LockedActivations, PidWatcher, WaitResult};
 use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
 
@@ -163,10 +163,11 @@ fn run_inner(
         activation_state_dir_path(&args.runtime_dir, &args.flox_env, &args.activation_id)?;
 
     match watcher.wait_for_termination() {
-        Ok(WaitResult::CleanUp) => {
+        Ok(WaitResult::CleanUp(locked_activations)) => {
             // Exit
             info!("running cleanup after all PIDs terminated");
             cleanup(
+                locked_activations,
                 &args.socket_path,
                 &activations_json_path,
                 &activation_state_dir,
@@ -182,7 +183,12 @@ fn run_inner(
         },
         Err(err) => {
             info!("running cleanup after error");
+            let (activations_json, lock) = read_activations_json(&activations_json_path)?;
+            let Some(activations_json) = activations_json else {
+                bail!("watchdog shouldn't be running when activations.json doesn't exist");
+            };
             let _ = cleanup(
+                (activations_json, lock),
                 &args.socket_path,
                 &activations_json_path,
                 &activation_state_dir,
@@ -199,6 +205,7 @@ fn run_inner(
 // multiple watchdogs could perform cleanup.
 // The following can be run multiple times without issue.
 fn cleanup(
+    locked_activations: LockedActivations,
     socket_path: impl AsRef<Path>,
     activations_json_path: impl AsRef<Path>,
     activation_state_dir_path: impl AsRef<Path>,
@@ -206,10 +213,7 @@ fn cleanup(
 ) -> Result<()> {
     debug!("running cleanup");
 
-    let (activations_json, lock) = read_activations_json(&activations_json_path)?;
-    let Some(mut activations_json) = activations_json else {
-        bail!("watchdog shouldn't be running when activations.json doesn't exist");
-    };
+    let (mut activations_json, lock) = locked_activations;
     activations_json.remove_activation(activation_id);
 
     // Even if this activation has no more attached PIDs, there may be other
@@ -225,11 +229,15 @@ fn cleanup(
         }
     }
 
-    // We want to hold the lock until services are cleaned up
-    write_activations_json(&activations_json, activations_json_path, lock)?;
-
     fs::remove_dir_all(activation_state_dir_path)
         .context("couldn't remove activations state dir")?;
+
+    // We want to hold the lock until
+    // - services are cleaned up
+    // - activation state dir is removed, otherwise the removal could occur
+    //   after a newly started activation has already put files in activation
+    //   state dir
+    write_activations_json(&activations_json, activations_json_path, lock)?;
 
     debug!("finished cleanup");
 
