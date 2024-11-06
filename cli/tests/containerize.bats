@@ -116,9 +116,7 @@ function skip_if_linux() {
 
   assert [ -f "test-container.tar" ] # <env-name>-container.tar by default
 
-  run which podman
-
-  run podman load -i test-container.tar
+  USER=podman-test run podman load -i test-container.tar
   assert_success
   assert_line --partial "Loaded image: localhost/test:latest"
 }
@@ -136,7 +134,7 @@ function skip_if_linux() {
 
   run which podman
 
-  run podman load -i test-container.tar
+  USER=podman-test run podman load -i test-container.tar
   assert_success
   assert_line --partial "Loaded image: localhost/test:sometag"
 }
@@ -148,7 +146,7 @@ function skip_if_linux() {
 
   env_setup_catalog
 
-  run bash -c '"$FLOX_BIN" containerize -o - | podman load'
+  USER=podman-test run bash -c '"$FLOX_BIN" containerize -o - | podman load'
   assert_success
   assert_line --partial "Loaded image:"
 }
@@ -159,7 +157,7 @@ function skip_if_linux() {
 
   env_setup_catalog
 
-  CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
+  USER=podman-test CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
   run --separate-stderr podman run -q -i "$CONTAINER_ID" -c 'echo $foo'
   assert_success
 
