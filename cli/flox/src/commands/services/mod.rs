@@ -9,6 +9,7 @@ use flox_rust_sdk::models::manifest::{Manifest, ManifestServices};
 use flox_rust_sdk::providers::services::{new_services_to_start, ProcessState, ProcessStates};
 use tracing::{debug, instrument};
 
+use super::activate::Mode;
 use super::{
     activated_environments,
     ConcreteEnvironment,
@@ -305,6 +306,7 @@ pub async fn start_services_with_new_process_compose(
         print_script: false,
         start_services: true,
         use_fallback_interpreter: false,
+        _mode: Some(Mode::Dev),
         run_args: vec!["true".to_string()],
     }
     .activate(

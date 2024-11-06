@@ -15,6 +15,8 @@ flox [<general-options>] activate
      [-d=<path> | -r=<owner>/<name>]
      [-t]
      [--print-script]
+     [-s]
+     [-m=(dev|run)]
      [-- <command> [<arguments>]]
 ```
 
@@ -97,6 +99,14 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 
    A remote environment can only have a single set of running services,
    regardless of how many times the environment is activated concurrently.
+
+`-m (dev|run)`, `--mode (dev|run)`
+:  Activate the environment in either "dev" mode or "run" mode. In "dev" mode
+   sets environment variables and runs certain hooks to make the packages in the
+   environment and their dependencies available as is necessary for development.
+   In "run" mode the packages in the environment are simply added to `PATH`.
+
+   The default mode is "dev".
 
 
 ```{.include}
