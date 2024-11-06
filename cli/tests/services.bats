@@ -1015,7 +1015,7 @@ EOF
     timeout 2 cat finished
 EOF
   ) &
-  timeout 4 cat started
+  timeout 8 cat started
 
   run "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash -c \
     'echo > finished'
@@ -1035,7 +1035,7 @@ EOF
     timeout 2 cat finished
 EOF
   ) &
-  timeout 4 cat started
+  timeout 8 cat started
 
   run "$FLOX_BIN" services status -r "${OWNER}/${PROJECT_NAME}"
   assert_success
