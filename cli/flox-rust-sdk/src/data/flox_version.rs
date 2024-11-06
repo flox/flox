@@ -228,6 +228,8 @@ impl fmt::Display for FloxVersion {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
 
     #[test]
@@ -378,5 +380,19 @@ mod tests {
 
         assert!(v1 != v2);
         assert_eq!(v1.partial_cmp(&v2), None);
+    }
+
+    #[test]
+    fn tmp() {
+        let new_link_path = PathBuf::from("/Users/matthew/flox/main/.flox/run/aarch64-darwin.main")
+            .read_link()
+            .unwrap();
+
+        if out_link.read_link().is_ok() {
+            fs::remove_file(out_link).map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
+        }
+
+        std::os::unix::fs::symlink(new_link_path, out_link)
+            .map_err(RemoteEnvironmentError::WriteNewOutlink)?;
     }
 }

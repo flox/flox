@@ -162,6 +162,19 @@ impl RemoteEnvironment {
             fs::remove_file(out_link).map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
         }
 
+        debug!("new_link_path: {:?}", new_link_path);
+        debug!("new_link_path.exists(): {:?}", new_link_path.exists());
+        debug!(
+            "new_link.parent().unwrap().exists(): {:?}",
+            new_link_path.parent().unwrap().exists()
+        );
+        debug!("out_link: {:?}", out_link);
+        debug!("out_link.exists(): {:?}", out_link.exists());
+        debug!(
+            "out_link.parent().unwrap().exists(): {:?}",
+            out_link.parent().unwrap().exists()
+        );
+
         std::os::unix::fs::symlink(new_link_path, out_link)
             .map_err(RemoteEnvironmentError::WriteNewOutlink)?;
 
