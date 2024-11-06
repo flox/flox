@@ -1008,17 +1008,17 @@ EOF
   floxhub_setup "flox"
   "$FLOX_BIN" push --owner "$OWNER"
   assert_success
+  TEARDOWN_FIFO="$PROJECT_DIR/finished"
 
-  mkfifo started finished
+  mkfifo started "$TEARDOWN_FIFO"
   "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
     echo > started
-    timeout 2 cat finished
+    echo > finished
 EOF
   ) &
   timeout 8 cat started
 
-  run "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash -c \
-    'echo > finished'
+  run "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- true
   assert_success
   assert_output --partial "⚠️  Skipped starting services, services are already running"
 }
