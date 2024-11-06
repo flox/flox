@@ -2157,7 +2157,6 @@ pub mod types {
     ///  "type": "object",
     ///  "required": [
     ///    "derivation",
-    ///    "locked_base_catalog_url",
     ///    "locked_url"
     ///  ],
     ///  "properties": {
@@ -2166,7 +2165,10 @@ pub mod types {
     ///    },
     ///    "locked_base_catalog_url": {
     ///      "title": "Locked Base Catalog Url",
-    ///      "type": "string"
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    },
     ///    "locked_url": {
     ///      "title": "Locked Url",
@@ -2179,7 +2181,8 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct UserBuildInput {
         pub derivation: UserDerivationInput,
-        pub locked_base_catalog_url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub locked_base_catalog_url: Option<String>,
         pub locked_url: String,
     }
     impl From<&UserBuildInput> for UserBuildInput {
@@ -2282,7 +2285,6 @@ pub mod types {
     ///  "type": "object",
     ///  "required": [
     ///    "derivation",
-    ///    "locked_base_catalog_url",
     ///    "locked_url"
     ///  ],
     ///  "properties": {
@@ -2291,7 +2293,10 @@ pub mod types {
     ///    },
     ///    "locked_base_catalog_url": {
     ///      "title": "Locked Base Catalog Url",
-    ///      "type": "string"
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    },
     ///    "locked_url": {
     ///      "title": "Locked Url",
@@ -2304,7 +2309,8 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct UserBuildOutput {
         pub derivation: UserDerivationOutput,
-        pub locked_base_catalog_url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub locked_base_catalog_url: Option<String>,
         pub locked_url: String,
     }
     impl From<&UserBuildOutput> for UserBuildOutput {
@@ -3303,7 +3309,7 @@ Returns:
 Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
 
 */
-    pub async fn post_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post<
+    pub async fn create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post<
         'a,
     >(
         &'a self,
