@@ -35,6 +35,7 @@ pub struct Flox {
     pub config_dir: PathBuf,
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,
+    pub state_dir: PathBuf,
     pub temp_dir: PathBuf,
     pub runtime_dir: PathBuf,
 
@@ -240,12 +241,14 @@ pub mod test_helpers {
 
         let cache_dir = tempdir_handle.path().join("caches");
         let data_dir = tempdir_handle.path().join(".local/share/flox");
+        let state_dir = tempdir_handle.path().join(".local/state/flox");
         let temp_dir = tempdir_handle.path().join("temp");
         let config_dir = tempdir_handle.path().join("config");
         let runtime_dir = tempdir_handle.path().join("run");
 
         std::fs::create_dir_all(&cache_dir).unwrap();
         std::fs::create_dir_all(&data_dir).unwrap();
+        std::fs::create_dir_all(&state_dir).unwrap();
         std::fs::create_dir_all(&temp_dir).unwrap();
         std::fs::create_dir_all(&config_dir).unwrap();
         std::fs::create_dir_all(&runtime_dir).unwrap();
@@ -262,6 +265,7 @@ pub mod test_helpers {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             cache_dir,
             data_dir,
+            state_dir,
             temp_dir,
             config_dir,
             runtime_dir,

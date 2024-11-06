@@ -46,13 +46,17 @@ pub struct FloxConfig {
     #[serde(default)]
     pub disable_metrics: bool,
     /// Directory where flox should store ephemeral data (default:
-    /// `$XDG_CACHE_HOME/flox`)
+    /// `$XDG_CACHE_HOME/flox` e.g. `~/.cache/flox`)
     pub cache_dir: PathBuf,
     /// Directory where flox should store persistent data (default:
-    /// `$XDG_DATA_HOME/flox`)
+    /// `$XDG_DATA_HOME/flox` e.g. `~/.local/share/flox`)
     pub data_dir: PathBuf,
+    /// Directory where flox should store data that's not critical but also
+    /// shouldn't be able to be freely deleted like data in the cache directory.
+    /// (default: `$XDG_STATE_HOME/flox` e.g. `~/.local/state/flox`)
+    pub state_dir: PathBuf,
     /// Directory where flox should load its configuration file (default:
-    /// `$XDG_CONFIG_HOME/flox`)
+    /// `$XDG_CONFIG_HOME/flox` e.g. `~/.config/flox`)
     pub config_dir: PathBuf,
 
     /// Token to authenticate on FloxHub
@@ -153,6 +157,7 @@ impl Config {
 
             let cache_dir = flox_dirs.get_cache_home();
             let data_dir = flox_dirs.get_data_home();
+            let state_dir = flox_dirs.get_state_home();
 
             let config_dir = match env::var(FLOX_CONFIG_DIR_VAR) {
                 Ok(v) => {
@@ -178,6 +183,7 @@ impl Config {
                 .set_default("default_substituter", "https://cache.floxdev.com/")?
                 .set_default("cache_dir", cache_dir.to_str().unwrap())?
                 .set_default("data_dir", data_dir.to_str().unwrap())?
+                .set_default("state_dir", state_dir.to_str().unwrap())?
                 // Config dir is added to the config for completeness;
                 // the config file cannot change the config dir.
                 .set_override("config_dir", config_dir.to_str().unwrap())?;
