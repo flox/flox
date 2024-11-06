@@ -1016,12 +1016,7 @@ EOF
     timeout 2 cat finished
 EOF
   ) >> /tmp/output 2>&1 &
-  if ! timeout 2 cat started; then
-    watchdog_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log)"
-    cp "$watchdog_log" /tmp/watchdog
-    echo "Failed to start services"
-    exit 1
-  fi
+  timeout 2 cat started
 
   run "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash -c \
     'echo > finished'
