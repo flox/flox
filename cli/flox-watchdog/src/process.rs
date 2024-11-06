@@ -10,14 +10,15 @@
 
 use std::collections::HashSet;
 use std::fs::read_to_string;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Result};
-use flox_core::activations::{read_activations_json, AttachedPid};
+use flox_core::activations::{read_activations_json, Activations, AttachedPid};
+use fslock::LockFile;
 use time::OffsetDateTime;
 use tracing::{debug, warn};
 /// How long to wait between watcher updates.
@@ -25,9 +26,14 @@ pub const WATCHER_SLEEP_INTERVAL: Duration = Duration::from_millis(100);
 
 type Error = anyhow::Error;
 
-#[derive(Debug, PartialEq, Eq)]
+/// A deserialized activations.json together with a lock preventing it from
+/// being modified
+/// TODO: there's probably a cleaner way to do this
+pub type LockedActivations = (Activations, LockFile);
+
+#[derive(Debug)]
 pub enum WaitResult {
-    CleanUp,
+    CleanUp(LockedActivations),
     Terminate,
 }
 
@@ -36,7 +42,7 @@ pub trait Watcher {
     fn wait_for_termination(&mut self) -> Result<WaitResult, Error>;
     /// Instructs the watcher to update the list of PIDs that it's watching
     /// by reading the environment registry (for now).
-    fn update_watchlist(&mut self) -> Result<(), Error>;
+    fn update_watchlist(&mut self, hold_lock: bool) -> Result<Option<LockedActivations>, Error>;
     /// Returns true if the watcher determines that it's time to perform
     /// cleanup.
     fn should_clean_up(&self) -> Result<bool, Error>;
@@ -193,9 +199,17 @@ impl PidWatcher {
 impl Watcher for PidWatcher {
     fn wait_for_termination(&mut self) -> Result<WaitResult, Error> {
         loop {
-            self.update_watchlist()?;
+            self.update_watchlist(false)?;
             if self.should_clean_up()? {
-                return Ok(WaitResult::CleanUp);
+                // Don't hold the lock during normal polling to avoid contention
+                // But when we're actually ready to cleanup, we need to hold the lock
+                // TODO: could probably refactor and get rid of the unwrap
+                let locked_activations = self.update_watchlist(true)?.ok_or(anyhow::anyhow!(
+                    "update_watchlist always returns Some when hold_lock is true"
+                ))?;
+                if self.should_clean_up()? {
+                    return Ok(WaitResult::CleanUp(locked_activations));
+                };
             }
             if self
                 .should_terminate_flag
@@ -207,19 +221,41 @@ impl Watcher for PidWatcher {
                 .should_clean_up_flag
                 .load(std::sync::atomic::Ordering::SeqCst)
             {
-                return Ok(WaitResult::CleanUp);
+                let (activations_json, lock) = read_activations_json(&self.activations_json_path)?;
+                let Some(activations_json) = activations_json else {
+                    bail!("watchdog shouldn't be running when activations.json doesn't exist");
+                };
+                return Ok(WaitResult::CleanUp((activations_json, lock)));
             }
             std::thread::sleep(WATCHER_SLEEP_INTERVAL);
         }
     }
 
     /// Update the list of PIDs that are currently being watched.
-    fn update_watchlist(&mut self) -> Result<(), Error> {
-        let all_attached_pids = attached_pids(&self.activations_json_path, &self.activation_id)?;
+    fn update_watchlist(&mut self, hold_lock: bool) -> Result<Option<LockedActivations>, Error> {
+        let (activations_json, lock) = read_activations_json(&self.activations_json_path)?;
+        let Some(activations_json) = activations_json else {
+            bail!("watchdog shouldn't be running when activations.json doesn't exist");
+        };
+        let maybe_locked_activations = if hold_lock {
+            Some((activations_json.clone(), lock))
+        } else {
+            drop(lock);
+            None
+        };
+        let Some(activation) = activations_json.activation_for_id_ref(&self.activation_id) else {
+            bail!("watchdog shouldn't be running with ID that isn't in activations.json");
+        };
+
+        let all_attached_pids: HashSet<AttachedPid> = activation
+            .attached_pids()
+            .iter()
+            .map(AttachedPid::to_owned)
+            .collect();
         // Add all PIDs, even if they're dead, but then immediately remove them
         self.pids_watching.extend(all_attached_pids);
         self.prune_terminations();
-        Ok(())
+        Ok(maybe_locked_activations)
     }
 
     /// Returns true if the watcher is not currently watching any PIDs.
@@ -230,26 +266,6 @@ impl Watcher for PidWatcher {
         }
         Ok(should_clean_up)
     }
-}
-
-/// Returns the list of activation PIDs for a given activation.
-pub fn attached_pids(
-    activations_json_path: impl AsRef<Path>,
-    activation_id: impl AsRef<str>,
-) -> Result<HashSet<AttachedPid>> {
-    let (activations_json, _lock) = read_activations_json(activations_json_path)?;
-    let Some(activations_json) = activations_json else {
-        bail!("watchdog shouldn't be running when activations.json doesn't exist");
-    };
-    let Some(activation) = activations_json.activation_for_id_ref(activation_id) else {
-        bail!("watchdog shouldn't be running with ID that isn't in activations.json");
-    };
-
-    Ok(activation
-        .attached_pids()
-        .iter()
-        .map(AttachedPid::to_owned)
-        .collect())
 }
 
 #[cfg(test)]
@@ -380,7 +396,7 @@ pub mod test {
             let _ = procs_handle.join(); // should already have terminated
             wait_result
         });
-        assert_eq!(wait_result, WaitResult::CleanUp);
+        assert!(matches!(wait_result, WaitResult::CleanUp(_)));
     }
 
     #[test]
@@ -434,7 +450,7 @@ pub mod test {
             terminate_flag,
             cleanup_flag,
         );
-        watcher.update_watchlist().unwrap();
+        watcher.update_watchlist(false).unwrap();
 
         assert_eq!(
             watcher.pids_watching,
@@ -457,7 +473,7 @@ pub mod test {
         stop_process(proc1);
         stop_process(proc2);
 
-        watcher.update_watchlist().unwrap();
+        watcher.update_watchlist(false).unwrap();
 
         assert!(!watcher.should_clean_up().unwrap());
         assert_eq!(
@@ -518,7 +534,7 @@ pub mod test {
             terminate_flag,
             cleanup_flag,
         );
-        watcher.update_watchlist().unwrap();
+        watcher.update_watchlist(false).unwrap();
 
         assert_eq!(
             watcher.pids_watching,
@@ -541,7 +557,7 @@ pub mod test {
         stop_process(proc1);
         stop_process(proc2);
 
-        watcher.update_watchlist().unwrap();
+        watcher.update_watchlist(false).unwrap();
 
         assert!(watcher.should_clean_up().unwrap());
     }
@@ -588,7 +604,7 @@ pub mod test {
             wait_result
         });
         stop_process(proc);
-        assert_eq!(wait_result, WaitResult::Terminate);
+        assert!(matches!(wait_result, WaitResult::Terminate));
     }
 
     #[test]
@@ -633,6 +649,6 @@ pub mod test {
             wait_result
         });
         stop_process(proc);
-        assert_eq!(wait_result, WaitResult::CleanUp);
+        assert!(matches!(wait_result, WaitResult::CleanUp(_)));
     }
 }

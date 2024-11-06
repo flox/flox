@@ -1197,6 +1197,7 @@ dependencies = [
  "flox-activations",
  "flox-core",
  "flox-rust-sdk",
+ "fslock",
  "glob",
  "kqueue",
  "nix",

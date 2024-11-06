@@ -28,7 +28,7 @@ type Error = anyhow::Error;
 ///
 /// Notably, the [Activations] does not feature methods to remove activations.
 /// Removing actiavtions falls onto the watchdog, which is responsible for cleaning up activations.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Activations {
     version: Version<1>,
     activations: Vec<Activation>,
@@ -112,7 +112,7 @@ impl Activations {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Activation {
     /// Unique identifier for this activation
     ///
@@ -225,7 +225,7 @@ impl AttachedPid {
 
 /// Acquires the filesystem-based lock on activations.json
 #[allow(unused)]
-fn acquire_activations_json_lock(
+pub fn acquire_activations_json_lock(
     activations_json_path: impl AsRef<Path>,
 ) -> Result<LockFile, Error> {
     let lock_path = activations_json_lock_path(activations_json_path);
