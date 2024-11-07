@@ -17,7 +17,7 @@ use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::{LockedManifestError, Lockfile};
 use super::manifest::{Manifest, ManifestError, PackageToInstall};
-use crate::data::{CanonicalPath, CanonicalizeError};
+use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
@@ -212,6 +212,52 @@ pub trait Environment: Send {
     }
 
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
+}
+
+/// A link to a built environment in the Nix store.
+///
+/// The path may not exist if the environment has never been built and linked.
+///
+/// As part of an environment, the existence of this path guarantees exactly two things:
+/// - The environment was built at some point in the past.
+/// - The environment can be activated.
+///
+/// The existence of this path explicitly _does not_ guarantee
+/// that the current state of the environment is "buildable".
+/// The environment may have been modified since it was last built
+/// and therefore may no longer build.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, derive_more::Deref, derive_more::AsRef)]
+#[as_ref(forward)]
+pub struct RenderedEnvironmentLink(PathBuf);
+
+/// A pair of links to the development and runtime variants of an environment.
+/// Refer to the documentation of [RenderedEnvironmentLink] for what guarantees
+/// the existence of these paths provides.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct RenderedEnvironmentLinks {
+    pub development: RenderedEnvironmentLink,
+    pub runtime: RenderedEnvironmentLink,
+}
+
+impl RenderedEnvironmentLinks {
+    pub(crate) fn new_unchecked(development: PathBuf, runtime: PathBuf) -> Self {
+        Self {
+            development: RenderedEnvironmentLink(development),
+            runtime: RenderedEnvironmentLink(runtime),
+        }
+    }
+
+    pub fn new_in_base_dir_with_name_and_system(
+        base_dir: &CanonicalPath,
+        name: impl AsRef<str>,
+        system: &System,
+    ) -> Self {
+        let development_name = format!("{system}.{name}.dev", name = name.as_ref());
+        let development_path = base_dir.join(development_name);
+        let runtime_name = format!("{system}.{name}.run", name = name.as_ref());
+        let runtime_path = base_dir.join(runtime_name);
+        Self::new_unchecked(development_path, runtime_path)
+    }
 }
 
 /// A pointer to an environment, either managed or path.
