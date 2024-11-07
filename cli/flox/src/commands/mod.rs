@@ -913,7 +913,7 @@ enum InternalCommands {
     Build(#[bpaf(external(build::build))] build::Build),
     /// Publish packages
     #[bpaf(command, hide, footer("Run 'man flox-publish' for more details."))]
-    Publish(#[bpaf(external(publish::publish_cmd))] publish::Publish),
+    Publish(#[bpaf(external(publish::publish))] publish::Publish),
 }
 
 impl InternalCommands {

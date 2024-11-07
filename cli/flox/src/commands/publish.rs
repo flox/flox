@@ -1,16 +1,13 @@
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
-use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
-use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::providers::build::FloxBuildMk;
 use flox_rust_sdk::providers::publish::{
     check_build_metadata,
     check_environment_metadata,
-    Publisher,
     PublishProvider,
+    Publisher,
 };
 use indoc::indoc;
 use log::debug;
@@ -62,22 +59,34 @@ impl Publish {
     }
 
     #[instrument(name = "publish", skip_all, fields(package))]
-    async fn publish(mut flox: Flox, env: ConcreteEnvironment, package: String) -> Result<()> {
+    async fn publish(mut flox: Flox, mut env: ConcreteEnvironment, package: String) -> Result<()> {
         subcommand_metric!("publish");
 
-        if !check_package(&env.dyn_environment_ref().lockfile(&flox)?, &package)? {
+        if !check_package(&env.dyn_environment_ref_mut().lockfile(&flox)?, &package)? {
             bail!("Package '{}' not found in environment", package);
         }
 
-        let env_metadata = match check_environment_metadata(&flox, env.dyn_environment_ref().as_ref()) {
-            Ok(env_metadata) => env_metadata,
-            Err(e) => bail!("Pre-publish environment checks failed: {}", e.to_string()),
-        };
+        let env_metadata = match &env {
+            ConcreteEnvironment::Managed(environment) => {
+                check_environment_metadata(&flox, environment)
+            },
+            ConcreteEnvironment::Path(environment) => {
+                check_environment_metadata(&flox, environment)
+            },
+            _ => bail!("Unsupported environment type"),
+        }
+        .or_else(|e| bail!(e.to_string()))?;
 
-        let build_metadata = match check_build_metadata(&*env.dyn_environment_ref(), &package, &flox.system) {
-            Ok(build_metadata) => build_metadata,
-            Err(e) => bail!("Pre-publish build checks failed: {}", e.to_string()),
-        };
+        let build_metadata = match &env {
+            ConcreteEnvironment::Managed(environment) => {
+                check_build_metadata(environment, &package, &flox.system)
+            },
+            ConcreteEnvironment::Path(environment) => {
+                check_build_metadata(environment, &package, &flox.system)
+            },
+            _ => unreachable!(),
+        }
+        .or_else(|e| bail!(e.to_string()))?;
 
         let publish_provider = PublishProvider::<&FloxBuildMk> {
             build_metadata,
