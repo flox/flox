@@ -35,6 +35,7 @@ let
       ]
       ++ lib.optional hostPlatform.isDarwin [
         darwin.libiconv
+        darwin.libobjc
         darwin.apple_sdk.frameworks.SystemConfiguration
       ];
 
