@@ -174,7 +174,7 @@ impl Activate {
 
         // Don't spin in bashrcs and similar contexts
         let rendered_env_path_result = if in_place {
-            environment.rendered_env_path(&flox)
+            environment.rendered_env_links(&flox)
         } else {
             Dialog {
                 message: &format!(
@@ -182,7 +182,7 @@ impl Activate {
                     now_active.message_description()?
                 ),
                 help_message: None,
-                typed: Spinner::new(|| environment.rendered_env_path(&flox)),
+                typed: Spinner::new(|| environment.rendered_env_links(&flox)),
             }
             .spin()
         };
@@ -207,15 +207,16 @@ impl Activate {
             other => other?,
         };
 
-        let store_path = fs::read_link(&rendered_env_path).with_context(|| {
+        // TODO: honor `--mode` flag
+        let store_path = fs::read_link(&rendered_env_path.development).with_context(|| {
             format!(
                 "a symlink at {} was just created and should still exist",
-                rendered_env_path.display()
+                rendered_env_path.development.display()
             )
         })?;
 
         let interpreter_path = if self.use_fallback_interpreter {
-            let path = rendered_env_path.clone();
+            let path = rendered_env_path.development.to_path_buf();
             tracing::debug!(
                 interpreter = "stored",
                 path = traceable_path(&path),
@@ -245,7 +246,8 @@ impl Activate {
         let flox_env_install_prefixes: IndexSet<PathBuf> = {
             let mut set = IndexSet::new();
             if !flox_active_environments.is_active(&now_active) {
-                set.insert(rendered_env_path.clone());
+                // TODO: honor `--mode` flag
+                set.insert(rendered_env_path.development.to_path_buf());
             }
             let active_set: IndexSet<PathBuf> = {
                 if let Ok(var) = env::var(FLOX_ENV_DIRS_VAR) {
@@ -329,9 +331,10 @@ impl Activate {
             .unwrap_or(utils::colors::INDIGO_300.to_ansi256().to_string());
 
         let mut exports = HashMap::from([
+            // TODO: honor `--mode` flag
             (
                 FLOX_ENV_VAR,
-                rendered_env_path.to_string_lossy().to_string(),
+                rendered_env_path.development.to_string_lossy().to_string(),
             ),
             (
                 FLOX_ACTIVE_ENVIRONMENTS_VAR,
