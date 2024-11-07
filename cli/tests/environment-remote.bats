@@ -80,7 +80,9 @@ function make_empty_remote_env() {
   run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
   assert_success
 
-  assert [ -h "$FLOX_CACHE_DIR/run/$OWNER/test" ]
+  assert [ -h "$FLOX_CACHE_DIR/run/$OWNER/$NIX_SYSTEM.test.dev" ]
+  assert [ -h "$FLOX_CACHE_DIR/run/$OWNER/$NIX_SYSTEM.test.run" ]
+
 }
 
 # bats test_tags=install,remote,remote:install
@@ -143,9 +145,10 @@ EOF
   make_empty_remote_env
   "$FLOX_BIN" install hello --remote "$OWNER/test"
 
+  export FLOX_CACHE_DIR="$(realpath $FLOX_CACHE_DIR)"
   run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- command -v hello
   assert_success
-  assert_output --partial "$FLOX_CACHE_DIR/remote/owner/test/.flox/run/bin/hello"
+  assert_output --partial "$FLOX_CACHE_DIR/run/owner/$NIX_SYSTEM.test.dev/bin/hello"
 }
 
 # We need to trust the remote environment before we can activate it.
