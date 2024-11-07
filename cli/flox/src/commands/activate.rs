@@ -292,7 +292,7 @@ impl Activate {
             "}),
             (set_prompt, hide_default_prompt, _) => (
                 set_prompt.unwrap_or(true),
-                hide_default_prompt.unwrap_or(true),
+                hide_default_prompt.unwrap_or(false),
             ),
         };
 
