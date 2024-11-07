@@ -192,8 +192,8 @@ impl Pull {
                     typed: Spinner::new(|| {
                         // The pulled generation already has a lock,
                         // so we can skip locking.
-                        let store_path = env.build(flox)?;
-                        env.link(store_path)
+                        let store_paths = env.build(flox)?;
+                        env.link(&store_paths)
                     }),
                 }
                 .spin()?;
@@ -303,8 +303,8 @@ impl Pull {
             typed: Spinner::new(|| {
                 // The pulled generation already has a lock,
                 // so we can skip locking.
-                let store_path = env.build(flox)?;
-                env.link(store_path)
+                let store_paths = env.build(flox)?;
+                env.link(&store_paths)
             }),
         }
         .spin();

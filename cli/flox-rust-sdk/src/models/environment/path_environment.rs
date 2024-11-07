@@ -49,6 +49,7 @@ use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::{CatalogPackage, Manifest, PackageToInstall, RawManifest};
+use crate::providers::buildenv::BuildEnvOutputs;
 use crate::utils::mtime_of;
 
 /// Struct representing a local environment
@@ -206,8 +207,8 @@ impl Environment for PathEnvironment {
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.install(packages, flox)?;
-        if let Some(ref store_path) = result.store_path {
-            self.link(flox, store_path)?;
+        if let Some(ref store_paths) = result.built_environments {
+            self.link(flox, store_paths)?;
         }
 
         Ok(result)
@@ -225,8 +226,8 @@ impl Environment for PathEnvironment {
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.uninstall(packages, flox)?;
-        if let Some(ref store_path) = result.store_path {
-            self.link(flox, store_path)?;
+        if let Some(ref store_paths) = result.built_environment_store_paths {
+            self.link(flox, store_paths)?;
         }
 
         Ok(result)
@@ -237,8 +238,8 @@ impl Environment for PathEnvironment {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.edit(flox, contents)?;
         if result != EditResult::Unchanged {
-            if let Some(ref store_path) = result.store_path() {
-                self.link(flox, store_path)?;
+            if let Some(ref store_paths) = result.built_environment_store_paths() {
+                self.link(flox, store_paths)?;
             };
         }
         Ok(result)
@@ -253,8 +254,8 @@ impl Environment for PathEnvironment {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.upgrade(flox, groups_or_iids)?;
-        if let Some(ref store_path) = result.store_path {
-            self.link(flox, store_path)?;
+        if let Some(ref store_paths) = result.store_path {
+            self.link(flox, store_paths)?;
         }
 
         Ok(result)
@@ -295,8 +296,8 @@ impl Environment for PathEnvironment {
         if self.needs_rebuild(flox)? {
             let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
             env_view.ensure_locked(flox)?;
-            let store_path = env_view.build(flox)?;
-            self.link(flox, store_path)?;
+            let store_paths = env_view.build(flox)?;
+            self.link(flox, &store_paths)?;
         }
 
         Ok(out_link)
@@ -416,8 +417,8 @@ impl PathEnvironment {
         if matches!(customization.packages.as_deref(), Some([_, ..])) {
             let mut env_view = CoreEnvironment::new(environment.path.join(ENV_DIR_NAME));
             env_view.lock(flox)?;
-            let store_path = env_view.build(flox)?;
-            environment.link(flox, store_path)?;
+            let store_paths = env_view.build(flox)?;
+            environment.link(flox, &store_paths)?;
         }
 
         Ok(environment)
@@ -510,8 +511,8 @@ impl PathEnvironment {
         Ok(manifest_modified_at >= out_link_modified_at || !self.out_link(&flox.system)?.exists())
     }
 
-    fn link(&mut self, flox: &Flox, store_path: impl AsRef<Path>) -> Result<(), EnvironmentError> {
-        CoreEnvironment::link(self.out_link(&flox.system)?, store_path)?;
+    fn link(&mut self, flox: &Flox, store_path: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
+        CoreEnvironment::link(self.out_link(&flox.system)?, &store_path.develop)?;
         Ok(())
     }
 }
@@ -614,8 +615,8 @@ mod tests {
         // build the environment -> out link is created -> no rebuild necessary
         let mut env_view = CoreEnvironment::new(env.path.join(ENV_DIR_NAME));
         env_view.lock(&flox).unwrap();
-        let store_path = env_view.build(&flox).unwrap();
-        env.link(&flox, store_path).unwrap();
+        let store_paths = env_view.build(&flox).unwrap();
+        env.link(&flox, &store_paths).unwrap();
 
         assert!(!env.needs_rebuild(&flox).unwrap());
 

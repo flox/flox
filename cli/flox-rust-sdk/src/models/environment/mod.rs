@@ -19,6 +19,7 @@ use super::lockfile::{LockedManifestError, Lockfile};
 use super::manifest::{Manifest, ManifestError, PackageToInstall};
 use crate::data::{CanonicalPath, CanonicalizeError};
 use crate::flox::{Flox, Floxhub};
+use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
     GitCommandDiscoverError,
     GitCommandProvider,
@@ -84,9 +85,9 @@ pub use flox_core::N_HASH_CHARS;
 pub struct InstallationAttempt {
     pub new_manifest: Option<String>,
     pub already_installed: HashMap<String, bool>,
-    /// The store path of environment that was built to validate the install.
+    /// The store paths of environment that was built to validate the install.
     /// This is used as an optimization to skip builds that we've already done.
-    pub store_path: Option<PathBuf>,
+    pub built_environments: Option<BuildEnvOutputs>,
 }
 
 /// The result of an uninstallation attempt
@@ -95,7 +96,7 @@ pub struct UninstallationAttempt {
     pub new_manifest: Option<String>,
     /// The store path of environment that was built to validate the uninstall.
     /// This is used as an optimization to skip builds that we've already done.
-    pub store_path: Option<PathBuf>,
+    pub built_environment_store_paths: Option<BuildEnvOutputs>,
 }
 
 pub trait Environment: Send {

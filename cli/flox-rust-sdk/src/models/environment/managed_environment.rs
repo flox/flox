@@ -45,6 +45,7 @@ use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::{Manifest, PackageToInstall};
+use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandError,
@@ -259,8 +260,8 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut local_checkout, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        if let Some(ref store_path) = &result.store_path {
-            self.link(store_path)?;
+        if let Some(ref store_paths) = &result.built_environments {
+            self.link(store_paths)?;
         }
 
         Ok(result)
@@ -295,8 +296,8 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut local_checkout, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        if let Some(ref store_path) = &result.store_path {
-            self.link(store_path)?;
+        if let Some(ref store_paths) = &result.built_environment_store_paths {
+            self.link(store_paths)?;
         }
 
         Ok(result)
@@ -318,8 +319,8 @@ impl Environment for ManagedEnvironment {
                 .add_generation(&mut local_checkout, "manually edited".to_string())
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
             self.lock_pointer()?;
-            if let Some(ref store_path) = result.store_path() {
-                self.link(store_path)?;
+            if let Some(ref store_paths) = result.built_environment_store_paths() {
+                self.link(store_paths)?;
             }
         }
 
@@ -397,7 +398,7 @@ impl Environment for ManagedEnvironment {
 
         if local_manifest >= out_link_modified_at || !self.out_link.exists() {
             let store_path = self.build(flox)?;
-            self.link(store_path)?
+            self.link(&store_path)?
         }
 
         Ok(self.out_link.to_path_buf())
@@ -513,14 +514,14 @@ impl ManagedEnvironment {
         }
     }
 
-    pub fn build(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+    pub fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
         Ok(local_checkout.build(flox)?)
     }
 
-    pub fn link(&mut self, store_path: impl AsRef<Path>) -> Result<(), EnvironmentError> {
-        CoreEnvironment::link(&self.out_link, store_path)?;
+    pub fn link(&mut self, store_path: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
+        CoreEnvironment::link(&self.out_link, &store_path.develop)?;
 
         Ok(())
     }
@@ -895,12 +896,15 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::Lock)?;
 
         // Ensure the created generation is valid
-        let store_path = local_checkout
+        let store_paths = local_checkout
             .build(flox)
             .map_err(ManagedEnvironmentError::Build)?;
 
         // TODO: should use self.link but that returns an EnvironmentError
-        CoreEnvironment::link(&self.out_link, store_path).map_err(ManagedEnvironmentError::Link)?;
+        CoreEnvironment::link(&self.out_link, &store_path.develop)
+            .map_err(ManagedEnvironmentError::Link)?;
+        CoreEnvironment::link(&self.rendered_env_links.runtime, &store_paths.runtime)
+            .map_err(ManagedEnvironmentError::Link)?;
 
         let mut generations = self
             .generations()

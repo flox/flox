@@ -59,14 +59,15 @@ pub enum BuildEnvError {
     ReadOutputs(#[source] serde_json::Error),
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 pub struct BuildEnvOutputs {
-    pub develop: PathBuf,
-    pub runtime: PathBuf,
+    pub develop: BuiltStorePath,
+    pub runtime: BuiltStorePath,
     // todo: add more build runtime outputs
 }
 
-pub type BuildEnvResult = BuildEnvOutputs;
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, derive_more::Deref, derive_more::AsRef)]
+pub struct BuiltStorePath(PathBuf);
 
 pub trait BuildEnv {
     fn build(
@@ -78,7 +79,7 @@ pub trait BuildEnv {
     fn link(
         &self,
         store_path: impl AsRef<Path>,
-        destination: impl AsRef<Path>,
+        destination: &BuiltStorePath,
     ) -> Result<(), BuildEnvError>;
 }
 
@@ -156,7 +157,7 @@ impl BuildEnv for BuildEnvNix {
     fn link(
         &self,
         destination: impl AsRef<Path>,
-        store_path: impl AsRef<Path>,
+        store_path: &BuiltStorePath,
     ) -> Result<(), BuildEnvError> {
         let mut nix_build_command = self.base_command();
 
@@ -164,6 +165,9 @@ impl BuildEnv for BuildEnvNix {
         nix_build_command
             .arg("--out-link")
             .arg(destination.as_ref());
+
+        // avoid trying to substitute
+        nix_build_command.arg("--offline");
 
         debug!(cmd=%nix_build_command.display(), "linking store path");
 
