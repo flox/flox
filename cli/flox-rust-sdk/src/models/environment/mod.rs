@@ -151,7 +151,10 @@ pub trait Environment: Send {
     /// This should be a link to a store path so that it can be swapped
     /// dynamically, i.e. so that install/edit can modify the environment
     /// without requiring reactivation.
-    fn rendered_env_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
+    fn rendered_env_links(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<RenderedEnvironmentLinks, EnvironmentError>;
 
     /// Return a path that environment hooks should use to store transient data.
     ///

@@ -10,24 +10,7 @@ use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
-    gcroots_dir,
-    path_hash,
-    services_socket_path,
-    CanonicalizeError,
-    CoreEnvironmentError,
-    EditResult,
-    Environment,
-    EnvironmentError,
-    EnvironmentPointer,
-    InstallationAttempt,
-    ManagedPointer,
-    PathPointer,
-    UninstallationAttempt,
-    CACHE_DIR_NAME,
-    ENVIRONMENT_POINTER_FILENAME,
-    ENV_DIR_NAME,
-    LOG_DIR_NAME,
-    N_HASH_CHARS,
+    gcroots_dir, path_hash, services_socket_path, CanonicalizeError, CoreEnvironmentError, EditResult, Environment, EnvironmentError, EnvironmentPointer, InstallationAttempt, ManagedPointer, PathPointer, RenderedEnvironmentLinks, UninstallationAttempt, CACHE_DIR_NAME, ENVIRONMENT_POINTER_FILENAME, ENV_DIR_NAME, LOG_DIR_NAME, N_HASH_CHARS
 };
 use crate::data::CanonicalPath;
 use crate::flox::{EnvironmentRef, Flox};
@@ -381,7 +364,7 @@ impl Environment for ManagedEnvironment {
     }
 
     /// This will lock if there is an out of sync local checkout
-    fn rendered_env_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+    fn rendered_env_path(&mut self, flox: &Flox) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
         self.ensure_locked(flox, &mut local_checkout)?;
