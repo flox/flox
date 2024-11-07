@@ -38,7 +38,13 @@ use crate::models::pkgdb::{
     PkgDbError,
     PKGDB_BIN,
 };
-use crate::providers::buildenv::{BuildEnv, BuildEnvError, BuildEnvNix};
+use crate::providers::buildenv::{
+    BuildEnv,
+    BuildEnvError,
+    BuildEnvNix,
+    BuildEnvOutputs,
+    BuiltStorePath,
+};
 use crate::providers::catalog::{self, ClientTrait};
 use crate::providers::flox_cpp_utils::InstallableLocker;
 use crate::providers::services::{maybe_make_service_config_file, ServiceError};
@@ -249,8 +255,8 @@ impl<State> CoreEnvironment<State> {
     ///     .link(&flox, "/path/to/out-link", &Some(store_path))
     ///     .unwrap();
     /// ```
-    #[must_use = "don't discard the store path of built environments"]
-    pub fn build(&mut self, flox: &Flox) -> Result<PathBuf, CoreEnvironmentError> {
+    #[must_use = "don't discard the store paths of built environments"]
+    pub fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
         let lockfile_path = CanonicalPath::new(self.lockfile_path())
             .map_err(CoreEnvironmentError::BadLockfilePath)?;
         let lockfile = Lockfile::read_from_file(&lockfile_path)
@@ -258,15 +264,9 @@ impl<State> CoreEnvironment<State> {
 
         let service_config_path = maybe_make_service_config_file(flox, &lockfile)?;
 
-        let outputs = BuildEnvNix {}.build(&lockfile_path, service_config_path)?;
-
-        let store_path = outputs.develop;
-        debug!(
-            "built locked environment, store path={}",
-            store_path.display()
-        );
-
-        Ok(store_path)
+        let outputs = BuildEnvNix.build(&lockfile_path, service_config_path)?;
+        debug!(?outputs, "built environment");
+        Ok(outputs)
     }
 }
 
@@ -326,7 +326,7 @@ impl CoreEnvironment<()> {
     /// store-path obtained from [Self::build].
     pub fn link(
         out_link_path: impl AsRef<Path>,
-        store_path: impl AsRef<Path>,
+        store_path: &BuiltStorePath,
     ) -> Result<(), CoreEnvironmentError> {
         let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
         pkgdb_cmd
@@ -373,12 +373,12 @@ impl CoreEnvironment<ReadOnly> {
             .map(|insertion| InstallationAttempt {
                 new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
                 already_installed: insertion.already_installed,
-                store_path: None,
+                built_environments: None,
             })
             .map_err(CoreEnvironmentError::ModifyToml)?;
         if let Some(ref new_manifest) = installation.new_manifest {
             let store_path = self.transact_with_manifest_contents(new_manifest, flox)?;
-            installation.store_path = Some(store_path);
+            installation.built_environments = Some(store_path);
         }
         Ok(installation)
     }
@@ -402,7 +402,7 @@ impl CoreEnvironment<ReadOnly> {
         let store_path = self.transact_with_manifest_contents(toml.to_string(), flox)?;
         Ok(UninstallationAttempt {
             new_manifest: Some(toml.to_string()),
-            store_path: Some(store_path),
+            built_environment_store_paths: Some(store_path),
         })
     }
 
@@ -803,7 +803,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         manifest_contents: impl AsRef<str>,
         flox: &Flox,
-    ) -> Result<PathBuf, CoreEnvironmentError> {
+    ) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
         let manifest: Manifest = toml::from_str(manifest_contents.as_ref())
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
         manifest.services.validate()?;
@@ -846,7 +846,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         lockfile_contents: impl AsRef<str>,
         flox: &Flox,
-    ) -> Result<PathBuf, CoreEnvironmentError> {
+    ) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
             .into_path();
@@ -902,16 +902,20 @@ pub enum EditResult {
     /// The manifest was not modified.
     Unchanged,
     /// The manifest was modified, and the user needs to re-activate it.
-    ReActivateRequired { store_path: Option<PathBuf> },
+    ReActivateRequired {
+        built_environment_store_paths: Option<BuildEnvOutputs>,
+    },
     /// The manifest was modified, but the user does not need to re-activate it.
-    Success { store_path: Option<PathBuf> },
+    Success {
+        built_environment_store_paths: Option<BuildEnvOutputs>,
+    },
 }
 
 impl EditResult {
     pub fn new(
         old_manifest_contents: &str,
         new_manifest_contents: &str,
-        store_path: Option<PathBuf>,
+        built_environment_store_paths: Option<BuildEnvOutputs>,
     ) -> Result<Self, CoreEnvironmentError> {
         if old_manifest_contents == new_manifest_contents {
             Ok(Self::Unchanged)
@@ -928,18 +932,26 @@ impl EditResult {
                 || old_manifest.vars != new_manifest.vars
                 || old_manifest.profile != new_manifest.profile
             {
-                Ok(Self::ReActivateRequired { store_path })
+                Ok(Self::ReActivateRequired {
+                    built_environment_store_paths,
+                })
             } else {
-                Ok(Self::Success { store_path })
+                Ok(Self::Success {
+                    built_environment_store_paths,
+                })
             }
         }
     }
 
-    pub fn store_path(&self) -> Option<PathBuf> {
+    pub fn built_environment_store_paths(&self) -> Option<BuildEnvOutputs> {
         match self {
             EditResult::Unchanged => None,
-            EditResult::ReActivateRequired { store_path } => store_path.clone(),
-            EditResult::Success { store_path } => store_path.clone(),
+            EditResult::ReActivateRequired {
+                built_environment_store_paths,
+            } => built_environment_store_paths.clone(),
+            EditResult::Success {
+                built_environment_store_paths,
+            } => built_environment_store_paths.clone(),
         }
     }
 }
@@ -947,7 +959,7 @@ impl EditResult {
 #[derive(Debug)]
 pub struct UpgradeResult {
     pub packages: Vec<String>,
-    pub store_path: Option<PathBuf>,
+    pub store_path: Option<BuildEnvOutputs>,
 }
 
 #[derive(Debug, Error)]
@@ -1251,7 +1263,7 @@ mod tests {
 
         // Build the environment and verify that the config file exists
         let store_path = env.build(&flox).unwrap();
-        let config_path = store_path.join(SERVICE_CONFIG_FILENAME);
+        let config_path = store_path.develop.join(SERVICE_CONFIG_FILENAME);
         assert!(config_path.exists());
     }
 
@@ -1270,7 +1282,9 @@ mod tests {
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
-        assert!(matches!(result, EditResult::Success { store_path: _ }));
+        assert!(matches!(result, EditResult::Success {
+            built_environment_store_paths: _
+        }));
     }
 
     /// Adding a hook with edit returns EditResult::ReActivateRequired
@@ -1288,7 +1302,7 @@ mod tests {
         let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
         assert!(matches!(result, EditResult::ReActivateRequired {
-            store_path: _
+            built_environment_store_paths: _
         }));
     }
 
@@ -1428,8 +1442,11 @@ mod tests {
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         env_view.lock(&flox).expect("locking should succeed");
         let store_path = env_view.build(&flox).expect("build should succeed");
-        CoreEnvironment::link(env_path.path().with_extension("out-link"), store_path)
-            .expect("link should succeed");
+        CoreEnvironment::link(
+            env_path.path().with_extension("out-link"),
+            &store_path.develop,
+        )
+        .expect("link should succeed");
 
         // very rudimentary check that the environment manifest built correctly
         // and linked to the out-link.

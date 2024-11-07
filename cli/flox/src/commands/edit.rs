@@ -146,7 +146,7 @@ impl Edit {
                         // The current generation already has a lock,
                         // so we can skip locking.
                         let store_path = environment.build(&flox)?;
-                        environment.link(store_path)
+                        environment.link(&store_path)
                     }),
                 }
                 .spin()?;
