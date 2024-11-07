@@ -10,7 +10,25 @@ use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
-    gcroots_dir, path_hash, services_socket_path, CanonicalizeError, CoreEnvironmentError, EditResult, Environment, EnvironmentError, EnvironmentPointer, InstallationAttempt, ManagedPointer, PathPointer, RenderedEnvironmentLinks, UninstallationAttempt, CACHE_DIR_NAME, ENVIRONMENT_POINTER_FILENAME, ENV_DIR_NAME, LOG_DIR_NAME, N_HASH_CHARS
+    path_hash,
+    services_socket_path,
+    CanonicalizeError,
+    CoreEnvironmentError,
+    EditResult,
+    Environment,
+    EnvironmentError,
+    EnvironmentPointer,
+    InstallationAttempt,
+    ManagedPointer,
+    PathPointer,
+    RenderedEnvironmentLinks,
+    UninstallationAttempt,
+    CACHE_DIR_NAME,
+    ENVIRONMENT_POINTER_FILENAME,
+    ENV_DIR_NAME,
+    GCROOTS_DIR_NAME,
+    LOG_DIR_NAME,
+    N_HASH_CHARS,
 };
 use crate::data::CanonicalPath;
 use crate::flox::{EnvironmentRef, Flox};
@@ -44,7 +62,7 @@ pub struct ManagedEnvironment {
     /// Absolute path to the directory containing `env.json`
     // TODO might be better to keep this private
     pub path: CanonicalPath,
-    out_link: PathBuf,
+    rendered_env_links: RenderedEnvironmentLinks,
     pointer: ManagedPointer,
     floxmeta: FloxMeta,
 }
@@ -364,7 +382,10 @@ impl Environment for ManagedEnvironment {
     }
 
     /// This will lock if there is an out of sync local checkout
-    fn rendered_env_path(&mut self, flox: &Flox) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
+    fn rendered_env_links(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
         self.ensure_locked(flox, &mut local_checkout)?;
@@ -372,19 +393,19 @@ impl Environment for ManagedEnvironment {
         let local_manifest_path = local_checkout.manifest_path();
 
         let local_manifest = mtime_of(local_manifest_path);
-        let out_link_modified_at = mtime_of(&self.out_link);
+        let out_link_modified_at = mtime_of(&self.rendered_env_links.development);
 
         debug!(
             "local_manifest: {local_manifest:?}
             out_link_modified_at: {out_link_modified_at:?}"
         );
 
-        if local_manifest >= out_link_modified_at || !self.out_link.exists() {
-            let store_path = self.build(flox)?;
-            self.link(&store_path)?
+        if local_manifest >= out_link_modified_at || !self.rendered_env_links.development.exists() {
+            let store_paths = self.build(flox)?;
+            self.link(&store_paths)?
         }
 
-        Ok(self.out_link.to_path_buf())
+        Ok(self.rendered_env_links.clone())
     }
 
     /// Returns .flox/cache
@@ -457,12 +478,6 @@ impl Environment for ManagedEnvironment {
             .delete_branch(&branch_name(&self.pointer, &self.path), true)
             .map_err(ManagedEnvironmentError::DeleteBranch)?;
 
-        let out_link_path = self.out_link;
-        if out_link_path.exists() {
-            std::fs::remove_file(&out_link_path)
-                .map_err(|e| ManagedEnvironmentError::DeleteEnvironmentLink(out_link_path, e))?;
-        }
-
         deregister(flox, &self.path, &EnvironmentPointer::Managed(self.pointer))?;
 
         Ok(())
@@ -503,8 +518,9 @@ impl ManagedEnvironment {
         Ok(local_checkout.build(flox)?)
     }
 
-    pub fn link(&mut self, store_path: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
-        CoreEnvironment::link(&self.out_link, &store_path.develop)?;
+    pub fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
+        CoreEnvironment::link(&self.rendered_env_links.development, &store_paths.develop)?;
+        CoreEnvironment::link(&self.rendered_env_links.runtime, &store_paths.runtime)?;
 
         Ok(())
     }
@@ -597,10 +613,23 @@ impl ManagedEnvironment {
         let dot_flox_path =
             CanonicalPath::new(dot_flox_path).map_err(ManagedEnvironmentError::CanonicalizePath)?;
 
-        let out_link =
-            gcroots_dir(flox, &pointer.owner).join(branch_name(&pointer, &dot_flox_path));
+        let rendered_env_links = {
+            let run_dir = dot_flox_path.join(GCROOTS_DIR_NAME);
+            if !run_dir.exists() {
+                std::fs::create_dir_all(&run_dir)
+                    .map_err(ManagedEnvironmentError::CreateLinksDir)?;
+            }
 
-        Self::open_with(floxmeta, flox, pointer, dot_flox_path, out_link)
+            let base_dir = CanonicalPath::new(run_dir).expect("run dir is checked to exist");
+
+            RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+                &base_dir,
+                pointer.name.as_ref(),
+                &flox.system,
+            )
+        };
+
+        Self::open_with(floxmeta, flox, pointer, dot_flox_path, rendered_env_links)
     }
 
     /// Open a managed environment backed by a provided floxmeta clone.
@@ -614,7 +643,7 @@ impl ManagedEnvironment {
         flox: &Flox,
         pointer: ManagedPointer,
         dot_flox_path: CanonicalPath,
-        out_link: PathBuf,
+        rendered_env_links: RenderedEnvironmentLinks,
     ) -> Result<Self, ManagedEnvironmentError> {
         let lock = Self::ensure_generation_locked(&pointer, &dot_flox_path, &floxmeta)?;
 
@@ -628,7 +657,7 @@ impl ManagedEnvironment {
 
         let env = ManagedEnvironment {
             path: dot_flox_path,
-            out_link,
+            rendered_env_links,
             pointer,
             floxmeta,
         };
@@ -884,7 +913,7 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::Build)?;
 
         // TODO: should use self.link but that returns an EnvironmentError
-        CoreEnvironment::link(&self.out_link, &store_path.develop)
+        CoreEnvironment::link(&self.rendered_env_links.development, &store_paths.develop)
             .map_err(ManagedEnvironmentError::Link)?;
         CoreEnvironment::link(&self.rendered_env_links.runtime, &store_paths.runtime)
             .map_err(ManagedEnvironmentError::Link)?;
@@ -1491,14 +1520,6 @@ impl ManagedEnvironment {
         // Since conversion happens in place, i.e. not in a transaction,
         // we need to be careful not to break the environment as much as possible,
         // if any of the intermediate steps fails.
-        //
-        // First, remove the out link as this can always be recreated
-        let out_link_path = &self.out_link;
-        if out_link_path.exists() {
-            std::fs::remove_file(out_link_path).map_err(|e| {
-                ManagedEnvironmentError::DeleteEnvironmentLink(out_link_path.to_path_buf(), e)
-            })?;
-        }
 
         // remove the environment branch
         // this can be recovered from the generation lock
@@ -1529,7 +1550,7 @@ impl ManagedEnvironment {
 
         // trigger creation of an environment link
         // todo: should we rather expose build/link methods for `PathEnv`?
-        let _ = path_env.rendered_env_path(flox)?;
+        let _ = path_env.rendered_env_links(flox)?;
 
         Ok(path_env)
     }
@@ -1554,7 +1575,10 @@ pub mod test_helpers {
         let floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None).unwrap();
         ManagedEnvironment {
             path: CanonicalPath::new(PathBuf::from("/")).unwrap(),
-            out_link: PathBuf::new(),
+            rendered_env_links: RenderedEnvironmentLinks::new_unchecked(
+                PathBuf::new(),
+                PathBuf::new(),
+            ),
             pointer: ManagedPointer::new(
                 "owner".parse().unwrap(),
                 "test".parse().unwrap(),
@@ -2560,6 +2584,10 @@ mod test {
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         std::fs::create_dir_all(&dot_flox_path).unwrap();
 
+        // dummy paths since we are not rendering the environment
+        let rendered_env_links =
+            RenderedEnvironmentLinks::new_unchecked(PathBuf::new(), PathBuf::new());
+
         // create a mock remote
         let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
@@ -2575,7 +2603,7 @@ mod test {
             &flox,
             test_pointer,
             CanonicalPath::new(dot_flox_path).unwrap(),
-            flox.temp_dir.join("out_link"),
+            rendered_env_links,
         )
         .unwrap();
         let reg_path = env_registry_path(&flox);
@@ -2593,6 +2621,10 @@ mod test {
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         std::fs::create_dir_all(&dot_flox_path).unwrap();
 
+        // dummy paths since we are not rendering the environment
+        let rendered_env_links =
+            RenderedEnvironmentLinks::new_unchecked(PathBuf::new(), PathBuf::new());
+
         // create a mock remote
         let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
@@ -2609,7 +2641,7 @@ mod test {
             &flox,
             test_pointer,
             CanonicalPath::new(dot_flox_path).unwrap(),
-            flox.temp_dir.join("out_link"),
+            rendered_env_links,
         )
         .unwrap();
         let reg_path = env_registry_path(&flox);
@@ -2656,10 +2688,10 @@ mod test {
         // its safe to do so in this instance.
         let git = environment.floxmeta.git.clone();
         let path_before = environment.path.clone();
-        let out_link_before = environment.out_link.clone();
+        let out_links_before = environment.rendered_env_links.clone();
 
         // Convert the environment to a path environment
-        let path_env = environment.into_path_environment(&flox).unwrap();
+        let mut path_env = environment.into_path_environment(&flox).unwrap();
 
         // Assert that the environment looks like a path environment after conversion
         // - its path is the same as before
@@ -2683,9 +2715,11 @@ mod test {
                 .unwrap(),
             "branch should be deleted"
         );
-        assert!(
-            !out_link_before.exists(),
-            "managed env out link should be deleted"
+
+        // Assert that the rendered environment links are the same as before
+        assert_eq!(
+            path_env.rendered_env_links(&flox).unwrap(),
+            out_links_before
         )
     }
 }
