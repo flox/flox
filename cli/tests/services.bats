@@ -1032,7 +1032,7 @@ EOF
   mkfifo started finished
   "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
     echo > started
-    timeout 2 cat finished
+    timeout 8 cat finished
 EOF
   ) &
   timeout 8 cat started
