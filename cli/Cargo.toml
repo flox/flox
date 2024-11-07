@@ -58,7 +58,7 @@ serde_yaml = "0.9"
 shell-escape = "0.1.5"
 supports-color = "3.0.1"
 # provides process tools for shell detection
-sysinfo = "0.30.13"
+sysinfo = "0.32.0"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"

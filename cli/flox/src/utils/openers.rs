@@ -6,7 +6,7 @@ use std::process::Command;
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use log::debug;
-use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System, UpdateKind};
+use sysinfo::{Pid, ProcessesToUpdate, System};
 
 const OPENERS: &[&str] = &["xdg-open", "gnome-open", "kde-open"];
 
@@ -137,12 +137,12 @@ impl Shell {
 }
 
 fn get_parent_process_exe() -> Result<PathBuf> {
-    let refresh_exe = ProcessRefreshKind::new().with_exe(UpdateKind::Always);
-    let refresh_procs = RefreshKind::new().with_processes(refresh_exe);
-    let system = System::new_with_specifics(refresh_procs);
+    let parent_pid = Pid::from_u32(std::os::unix::process::parent_id());
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::Some(&[parent_pid]), false);
 
     let parent_process = system
-        .process(Pid::from_u32(std::os::unix::process::parent_id()))
+        .process(parent_pid)
         .context("Failed to get info about parent process")?;
 
     // Investigate whether to use `parent_process.cmd()[0]` instead.
