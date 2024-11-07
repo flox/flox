@@ -8,18 +8,7 @@ use thiserror::Error;
 use super::core_environment::UpgradeResult;
 use super::managed_environment::{remote_branch_name, ManagedEnvironment, ManagedEnvironmentError};
 use super::{
-    gcroots_dir,
-    CanonicalPath,
-    CanonicalizeError,
-    EditResult,
-    Environment,
-    EnvironmentError,
-    InstallationAttempt,
-    ManagedPointer,
-    UninstallationAttempt,
-    DOT_FLOX,
-    ENVIRONMENT_POINTER_FILENAME,
-    GCROOTS_DIR_NAME,
+    gcroots_dir, CanonicalPath, CanonicalizeError, EditResult, Environment, EnvironmentError, InstallationAttempt, ManagedPointer, RenderedEnvironmentLinks, UninstallationAttempt, DOT_FLOX, ENVIRONMENT_POINTER_FILENAME, GCROOTS_DIR_NAME
 };
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
@@ -253,7 +242,7 @@ impl Environment for RemoteEnvironment {
         self.inner.manifest(flox)
     }
 
-    fn rendered_env_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+    fn rendered_env_path(&mut self, flox: &Flox) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
         Self::update_out_link(flox, &self.out_link, &mut self.inner)?;
         Ok(self.out_link.clone())
     }

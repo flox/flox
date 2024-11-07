@@ -23,23 +23,7 @@ use log::debug;
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::{
-    path_hash,
-    services_socket_path,
-    DotFlox,
-    EditResult,
-    Environment,
-    EnvironmentError,
-    EnvironmentPointer,
-    InstallationAttempt,
-    PathPointer,
-    UninstallationAttempt,
-    CACHE_DIR_NAME,
-    DOT_FLOX,
-    ENVIRONMENT_POINTER_FILENAME,
-    GCROOTS_DIR_NAME,
-    LIB_DIR_NAME,
-    LOCKFILE_FILENAME,
-    LOG_DIR_NAME,
+    path_hash, services_socket_path, DotFlox, EditResult, Environment, EnvironmentError, EnvironmentPointer, InstallationAttempt, PathPointer, RenderedEnvironmentLinks, UninstallationAttempt, CACHE_DIR_NAME, DOT_FLOX, ENVIRONMENT_POINTER_FILENAME, GCROOTS_DIR_NAME, LIB_DIR_NAME, LOCKFILE_FILENAME, LOG_DIR_NAME
 };
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
@@ -290,7 +274,7 @@ impl Environment for PathEnvironment {
     }
 
     /// This will lock the environment if it is not already locked.
-    fn rendered_env_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+    fn rendered_env_path(&mut self, flox: &Flox) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
         let out_link = self.out_link(&flox.system)?;
 
         if self.needs_rebuild(flox)? {
