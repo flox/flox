@@ -31,7 +31,10 @@ The `--runtime|-r <runtime>` flag supports `docker` and `podman`,
 and expects the selected runtime to be found in PATH.
 
 When neither option is provided,
-the container is written to `./<env name>-container.tar`.
+the container is loaded into a supported runtime,
+`docker` or `podman`, whichever is found first on the PATH.
+If no supported runtime is found,
+the container is written to `./<env name>-container.tar` instead.
 
 Running the container will behave like running `flox activate`.
 Running the container interactively with `docker run -it <container id>`,

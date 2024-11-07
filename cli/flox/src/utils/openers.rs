@@ -162,7 +162,7 @@ fn get_parent_process_exe() -> Result<PathBuf> {
     Ok(parent_exe)
 }
 
-fn first_in_path<'a, I>(
+pub fn first_in_path<'a, I>(
     candidates: I,
     path: impl IntoIterator<Item = PathBuf>,
 ) -> Option<(PathBuf, &'a str)>
@@ -172,7 +172,7 @@ where
 {
     path.into_iter()
         .cartesian_product(candidates)
-        .find(|(path, editor)| path.join(editor).exists())
+        .find(|(path, candidate)| path.join(candidate).exists())
 }
 
 #[cfg(test)]
