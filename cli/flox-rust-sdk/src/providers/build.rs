@@ -303,8 +303,8 @@ pub mod test_helpers {
             .build(
                 flox,
                 &env.parent_path().unwrap(),
-                &env.rendered_env_path(flox).unwrap(),
-                &env.rendered_env_path(flox).unwrap(),
+                &env.rendered_env_links(flox).unwrap().development,
+                &env.rendered_env_links(flox).unwrap().development,
                 &[package_name.to_owned()],
             )
             .unwrap();
@@ -337,7 +337,7 @@ pub mod test_helpers {
         let err = builder
             .clean(
                 &env.parent_path().unwrap(),
-                &env.rendered_env_path(flox).unwrap(),
+                &env.rendered_env_links(flox).unwrap().development,
                 &package_names
                     .iter()
                     .map(|s| s.to_string())

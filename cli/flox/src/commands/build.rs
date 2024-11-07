@@ -86,12 +86,12 @@ impl Build {
         let mut env = env.into_dyn_environment();
 
         let base_dir = env.parent_path()?;
-        let flox_env = env.rendered_env_path(&flox)?;
+        let flox_env = env.rendered_env_links(&flox)?;
 
         let packages_to_clean = available_packages(&env.lockfile(&flox)?, packages)?;
 
         let builder = FloxBuildMk;
-        builder.clean(&base_dir, &flox_env, &packages_to_clean)?;
+        builder.clean(&base_dir, &flox_env.development, &packages_to_clean)?;
 
         message::created("Clean completed successfully");
 
@@ -109,7 +109,7 @@ impl Build {
         let mut env = env.into_dyn_environment();
 
         let base_dir = env.parent_path()?;
-        let flox_env = env.rendered_env_path(&flox)?;
+        let flox_env = env.rendered_env_links(&flox)?;
 
         let packages_to_build = available_packages(&env.lockfile(&flox)?, packages)?;
 
@@ -117,7 +117,7 @@ impl Build {
         let output = builder.build(
             &flox,
             &base_dir,
-            &flox_env,
+            &flox_env.development,
             &FLOX_INTERPRETER,
             &packages_to_build,
         )?;
