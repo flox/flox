@@ -225,10 +225,10 @@ pub mod test_helpers {
     use super::*;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
-    pub fn create_test_token(handle: &str) -> Result<FloxhubToken, FloxhubTokenError> {
+    pub fn create_test_token(handle: &str) -> FloxhubToken {
         let my_claims = serde_json::json!({
-            "https://flox.dev/handle": {handle},
-            "exp": 9999999999,
+        "https://flox.dev/handle": handle,
+        "exp": 9999999999_i64
         });
 
         // my_claims is a struct that implements Serialize
@@ -240,7 +240,7 @@ pub mod test_helpers {
         )
         .unwrap();
 
-        FloxhubToken::from_str(&token)
+        FloxhubToken::from_str(&token).unwrap()
     }
 
     pub fn flox_instance() -> (Flox, TempDir) {

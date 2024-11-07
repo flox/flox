@@ -413,7 +413,7 @@ pub mod tests {
         assert_build_status(&flox, &mut env, EXAMPLE_PACKAGE_NAME, true);
 
         let client = Client::Mock(MockClient::new(None::<String>).unwrap());
-        let token = create_test_token("test").unwrap();
+        let token = create_test_token("test");
 
         let (env_meta, build_meta) = (
             check_environment_metadata(&flox, &env).unwrap(),
