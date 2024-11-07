@@ -357,8 +357,14 @@ if ($manifest) {
         sub packagesToPkgs($) {
             my $packages = shift;
             my @retarray = ();
+
+            # Counter for ensuring that all "other" outputs are added with a unique
+            # priority value. # XXX Remove once we properly support outputs_to_install.
+            my $otherOutputPriorityCounter = 1;
+
             foreach my $package (@{$packages}) {
-                my @storePaths = ();
+                my @outputsToInstall = ();
+                my @otherOutputs = (); # XXX remove once we properly support outputs_to_install.
                 # XXX flake locking bug: outputs-to-install != outputs_to_install
                 if ( defined $package->{"outputs-to-install"} and not
                      defined $package->{"outputs_to_install"} ) {
@@ -372,15 +378,37 @@ if ($manifest) {
                     # consistent for users. However, it won't be long before we
                     # switch over to the more correct strategy of honoring
                     # outputs_to_install, and when we do we can uncomment the
-                    # following line.
+                    # following two lines.
                     # next unless grep { $_ eq $output } @{$package->{"outputs_to_install"}};
-                    push @storePaths, $package->{"outputs"}{$output};
+                    # push @outputsToInstall, $package->{"outputs"}{$output};
+
+                    # And for now we divide the outputs into two categories: those
+                    # that should be installed by default and those that should not.
+                    # XXX Remove once we properly support outputs_to_install.
+                    if (grep { $_ eq $output } @{$package->{"outputs_to_install"}}) {
+                        push @outputsToInstall, $package->{"outputs"}{$output};
+                    } else {
+                        push @otherOutputs, $package->{"outputs"}{$output};
+                    }
+
                 }
-                next unless scalar @storePaths;
+                next unless scalar @outputsToInstall;
                 push @retarray, {
-                    "paths" => \@storePaths,
-                    "priority" => $package->{"priority"}
+                    "paths" => \@outputsToInstall,
+                    "priority" => (1000 * $package->{"priority"})
                 };
+
+                # Increment the priority as we add "other" outputs to be installed
+                # specifically to avoid collisions with each other.
+                # XXX Remove once we properly support outputs_to_install.
+                next unless scalar @otherOutputs;
+                foreach my $otherOutput (@otherOutputs) {
+                    push @retarray, {
+                        "paths" => [ $otherOutput ],
+                        "priority" => ((1000 * $package->{"priority"}) + $otherOutputPriorityCounter++)
+                    };
+                }
+
             }
             return \@retarray;
         }
