@@ -23,7 +23,24 @@ use log::debug;
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::{
-    path_hash, services_socket_path, DotFlox, EditResult, Environment, EnvironmentError, EnvironmentPointer, InstallationAttempt, PathPointer, RenderedEnvironmentLinks, UninstallationAttempt, CACHE_DIR_NAME, DOT_FLOX, ENVIRONMENT_POINTER_FILENAME, GCROOTS_DIR_NAME, LIB_DIR_NAME, LOCKFILE_FILENAME, LOG_DIR_NAME
+    path_hash,
+    services_socket_path,
+    DotFlox,
+    EditResult,
+    Environment,
+    EnvironmentError,
+    EnvironmentPointer,
+    InstallationAttempt,
+    PathPointer,
+    RenderedEnvironmentLinks,
+    UninstallationAttempt,
+    CACHE_DIR_NAME,
+    DOT_FLOX,
+    ENVIRONMENT_POINTER_FILENAME,
+    GCROOTS_DIR_NAME,
+    LIB_DIR_NAME,
+    LOCKFILE_FILENAME,
+    LOG_DIR_NAME,
 };
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
@@ -54,6 +71,10 @@ pub struct PathEnvironment {
     ///
     /// Used to identify the environment.
     pub pointer: PathPointer,
+
+    /// The rendered environment links for this environment.
+    /// These may not yet exist if the environment has not been built.
+    rendered_env_links: RenderedEnvironmentLinks,
 }
 
 /// A profile script or list of packages to install when initializing an environment
@@ -78,6 +99,7 @@ impl PathEnvironment {
     pub fn new(
         pointer: PathPointer,
         dot_flox_path: CanonicalPath,
+        system: &System,
     ) -> Result<Self, EnvironmentError> {
         if &*dot_flox_path == Path::new("/") {
             return Err(EnvironmentError::InvalidPath(dot_flox_path.into_inner()));
@@ -92,31 +114,27 @@ impl PathEnvironment {
             Err(EnvironmentError::ManifestNotFound)?
         }
 
+        let rendered_env_links = {
+            let run_dir = dot_flox_path.join(GCROOTS_DIR_NAME);
+            if !run_dir.exists() {
+                std::fs::create_dir_all(&run_dir).map_err(EnvironmentError::CreateGcRootDir)?;
+            }
+
+            let base_dir = CanonicalPath::new(run_dir).expect("run dir is checked to exist");
+
+            RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+                &base_dir,
+                pointer.name.as_ref(),
+                system,
+            )
+        };
+
         Ok(Self {
             // path must be absolute as it is used to set FLOX_ENV
             path: dot_flox_path,
             pointer,
+            rendered_env_links,
         })
-    }
-
-    /// Where to link a built environment to. The path may not exist if the environment has
-    /// never been built.
-    ///
-    /// The existence of this path guarantees exactly two things:
-    /// - The environment was built at some point in the past.
-    /// - The environment can be activated.
-    ///
-    /// The existence of this path explicitly _does not_ guarantee that the current
-    /// state of the environment is "buildable". The environment may have been modified
-    /// since it was last built and therefore may no longer build. Thus, the presence of
-    /// this path doesn't guarantee that the current environment can be built,
-    /// just that it built at some point in the past.
-    fn out_link(&self, system: &System) -> Result<PathBuf, EnvironmentError> {
-        let run_dir = self.path.join(GCROOTS_DIR_NAME);
-        if !run_dir.exists() {
-            std::fs::create_dir_all(&run_dir).map_err(EnvironmentError::CreateGcRootDir)?;
-        }
-        Ok(run_dir.join([system.clone(), self.name().to_string()].join(".")))
     }
 
     /// Get a view of the environment that can be used to perform operations
@@ -274,8 +292,11 @@ impl Environment for PathEnvironment {
     }
 
     /// This will lock the environment if it is not already locked.
-    fn rendered_env_path(&mut self, flox: &Flox) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
-        let out_link = self.out_link(&flox.system)?;
+    fn rendered_env_links(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
+        let out_paths = self.rendered_env_links.clone();
 
         if self.needs_rebuild(flox)? {
             let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
@@ -284,7 +305,7 @@ impl Environment for PathEnvironment {
             self.link(flox, &store_paths)?;
         }
 
-        Ok(out_link)
+        Ok(out_paths)
     }
 
     /// Returns .flox/cache
@@ -358,7 +379,7 @@ impl PathEnvironment {
             &EnvironmentPointer::Path(pointer.clone()),
         )?;
 
-        PathEnvironment::new(pointer, dot_flox_path)
+        PathEnvironment::new(pointer, dot_flox_path, &flox.system)
     }
 
     /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
@@ -485,18 +506,25 @@ impl PathEnvironment {
     /// Similarly, if any adjacent files are modified, the environment will not be rebuilt.
     fn needs_rebuild(&self, flox: &Flox) -> Result<bool, EnvironmentError> {
         let manifest_modified_at = mtime_of(self.manifest_path(flox)?);
-        let out_link_modified_at = mtime_of(self.out_link(&flox.system)?);
+        let out_link_modified_at = mtime_of(&self.rendered_env_links.development);
 
         debug!(
             "manifest_modified_at: {manifest_modified_at:?},
              out_link_modified_at: {out_link_modified_at:?}"
         );
 
-        Ok(manifest_modified_at >= out_link_modified_at || !self.out_link(&flox.system)?.exists())
+        Ok(manifest_modified_at >= out_link_modified_at
+            || !self.rendered_env_links.development.exists())
     }
 
-    fn link(&mut self, flox: &Flox, store_path: &BuildEnvOutputs) -> Result<(), EnvironmentError> {
-        CoreEnvironment::link(self.out_link(&flox.system)?, &store_path.develop)?;
+    fn link(
+        &mut self,
+        _flox: &Flox,
+        store_paths: &BuildEnvOutputs,
+    ) -> Result<(), EnvironmentError> {
+        CoreEnvironment::link(&self.rendered_env_links.development, &store_paths.develop)?;
+        CoreEnvironment::link(&self.rendered_env_links.runtime, &store_paths.runtime)?;
+
         Ok(())
     }
 }
@@ -566,6 +594,7 @@ mod tests {
         let expected = PathEnvironment::new(
             PathPointer::new("test".parse().unwrap()),
             CanonicalPath::new(environment_temp_dir.path().join(DOT_FLOX)).unwrap(),
+            &flox.system,
         )
         .unwrap();
 
