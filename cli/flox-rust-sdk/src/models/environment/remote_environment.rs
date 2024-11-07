@@ -1,17 +1,30 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use log::debug;
 use tempfile::TempDir;
 use thiserror::Error;
+use tracing::debug;
 
 use super::core_environment::UpgradeResult;
 use super::managed_environment::{remote_branch_name, ManagedEnvironment, ManagedEnvironmentError};
 use super::{
-    gcroots_dir, CanonicalPath, CanonicalizeError, EditResult, Environment, EnvironmentError, InstallationAttempt, ManagedPointer, RenderedEnvironmentLinks, UninstallationAttempt, DOT_FLOX, ENVIRONMENT_POINTER_FILENAME, GCROOTS_DIR_NAME
+    gcroots_dir,
+    CanonicalPath,
+    CanonicalizeError,
+    EditResult,
+    Environment,
+    EnvironmentError,
+    InstallationAttempt,
+    ManagedPointer,
+    RenderedEnvironmentLinks,
+    UninstallationAttempt,
+    DOT_FLOX,
+    ENVIRONMENT_POINTER_FILENAME,
+    GCROOTS_DIR_NAME,
 };
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
+use crate::models::environment::RenderedEnvironmentLink;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
 use crate::models::lockfile::Lockfile;
@@ -23,6 +36,9 @@ const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
 pub enum RemoteEnvironmentError {
     #[error("open managed environment")]
     OpenManagedEnvironment(#[source] ManagedEnvironmentError),
+
+    #[error("could not create gc-root directory")]
+    CreateGcRootDir(#[source] std::io::Error),
 
     #[error("could not get latest version of environment")]
     GetLatestVersion(#[source] FloxMetaError),
@@ -53,7 +69,7 @@ pub enum RemoteEnvironmentError {
 #[derive(Debug)]
 pub struct RemoteEnvironment {
     inner: ManagedEnvironment,
-    out_link: PathBuf,
+    rendered_env_links: RenderedEnvironmentLinks,
 }
 
 impl RemoteEnvironment {
@@ -87,10 +103,40 @@ impl RemoteEnvironment {
         )
         .unwrap();
 
-        let inner_out_link = gcroots_dir(flox, &pointer.owner).join(remote_branch_name(&pointer));
-        let mut inner =
-            ManagedEnvironment::open_with(floxmeta, flox, pointer, dot_flox_path, inner_out_link)
-                .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
+        let inner_rendered_env_links = {
+            let gcroots_dir = dot_flox_path.join(GCROOTS_DIR_NAME);
+
+            // `.flox/run` used to be a link until flox verions 1.3.3!
+            // If we find a symlink, we need to delete it to create a directory
+            // with symlinked files in the following step.
+            if gcroots_dir.exists() && gcroots_dir.is_symlink() {
+                dbg!("removing symlink");
+                fs::remove_file(&gcroots_dir).map_err(RemoteEnvironmentError::CreateGcRootDir)?;
+            }
+
+            if !gcroots_dir.exists() {
+                std::fs::create_dir_all(&gcroots_dir)
+                    .map_err(RemoteEnvironmentError::CreateGcRootDir)?;
+            }
+
+            let base_dir =
+                CanonicalPath::new(gcroots_dir).expect("gcroots_dir is not a valid path");
+
+            RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+                &base_dir,
+                pointer.name.as_ref(),
+                &flox.system,
+            )
+        };
+
+        let mut inner = ManagedEnvironment::open_with(
+            floxmeta,
+            flox,
+            pointer.clone(),
+            dot_flox_path,
+            inner_rendered_env_links,
+        )
+        .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
 
         // (force) Pull latest changes of the environment from upstream.
         // remote environments stay in sync with upstream without providing a local staging state.
@@ -98,9 +144,26 @@ impl RemoteEnvironment {
             .pull(flox, true)
             .map_err(RemoteEnvironmentError::ResetManagedEnvironment)?;
 
-        let out_link = path.join(GCROOTS_DIR_NAME);
+        let rendered_env_links = {
+            let gcroots_dir = gcroots_dir(flox, &pointer.owner);
+            if !gcroots_dir.exists() {
+                std::fs::create_dir_all(&gcroots_dir)
+                    .map_err(RemoteEnvironmentError::CreateGcRootDir)?;
+            }
+            let base_dir =
+                CanonicalPath::new(gcroots_dir).expect("gcroots_dir is not a valid path");
 
-        Ok(Self { inner, out_link })
+            RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+                &base_dir,
+                remote_branch_name(&pointer),
+                &flox.system,
+            )
+        };
+
+        Ok(Self {
+            inner,
+            rendered_env_links,
+        })
     }
 
     /// Pull a remote environment into a flox-provided managed environment
@@ -139,20 +202,35 @@ impl RemoteEnvironment {
     /// [RemoteEnvironment::update_out_link] updates the out link when the push succeeds.
     fn update_out_link(
         flox: &Flox,
-        out_link: &Path,
+        rendered_env_links: &RenderedEnvironmentLinks,
         inner: &mut ManagedEnvironment,
     ) -> Result<(), EnvironmentError> {
-        let new_link_path = inner
-            .rendered_env_path(flox)?
-            .read_link()
-            .map_err(RemoteEnvironmentError::ReadInternalOutLink)?;
+        let new_rendered_paths = inner.rendered_env_links(flox)?;
 
-        if out_link.read_link().is_ok() {
-            fs::remove_file(out_link).map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
+        fn update_link(
+            old_link: &RenderedEnvironmentLink,
+            new_link: &RenderedEnvironmentLink,
+        ) -> Result<(), RemoteEnvironmentError> {
+            let new_dev_link_path = new_link
+                .read_link()
+                .map_err(RemoteEnvironmentError::ReadInternalOutLink)?;
+
+            debug!(gcroot=?old_link, to=?new_dev_link_path, "updating gcroot");
+
+            if old_link.read_link().is_ok() {
+                fs::remove_file(old_link).map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
+            }
+
+            std::os::unix::fs::symlink(new_dev_link_path, old_link)
+                .map_err(RemoteEnvironmentError::WriteNewOutlink)?;
+            Ok(())
         }
 
-        std::os::unix::fs::symlink(new_link_path, out_link)
-            .map_err(RemoteEnvironmentError::WriteNewOutlink)?;
+        update_link(
+            &rendered_env_links.development,
+            &new_rendered_paths.development,
+        )?;
+        update_link(&rendered_env_links.runtime, &new_rendered_paths.runtime)?;
 
         Ok(())
     }
@@ -183,7 +261,7 @@ impl Environment for RemoteEnvironment {
         self.inner
             .push(flox, false)
             .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
+            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
         // TODO: clean up git branch for temporary environment
         Ok(result)
     }
@@ -198,7 +276,7 @@ impl Environment for RemoteEnvironment {
         self.inner
             .push(flox, false)
             .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
+            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
 
         Ok(result)
     }
@@ -212,7 +290,7 @@ impl Environment for RemoteEnvironment {
         self.inner
             .push(flox, false)
             .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
+            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
 
         Ok(result)
     }
@@ -227,7 +305,7 @@ impl Environment for RemoteEnvironment {
         self.inner
             .push(flox, false)
             .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
+            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
 
         Ok(result)
     }
@@ -242,9 +320,12 @@ impl Environment for RemoteEnvironment {
         self.inner.manifest(flox)
     }
 
-    fn rendered_env_path(&mut self, flox: &Flox) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
-        Self::update_out_link(flox, &self.out_link, &mut self.inner)?;
-        Ok(self.out_link.clone())
+    fn rendered_env_links(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
+        Ok(self.rendered_env_links.clone())
     }
 
     /// Return a path that environment hooks should use to store transient data.
@@ -299,5 +380,52 @@ impl Environment for RemoteEnvironment {
 
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         self.inner.services_socket_path(flox)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::fs::symlink;
+
+    use super::*;
+    use crate::flox::test_helpers::flox_instance_with_optional_floxhub;
+    use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_from_env_files;
+    use crate::providers::catalog::GENERATED_DATA;
+
+    #[test]
+    fn migrate_remote_gcroot_link_to_dir() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        // Create a remote environment "owner/name"
+        let environment = mock_managed_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs").join("hello"),
+            owner,
+        );
+
+        // Create a symlink, as it was done in older versions of flox prior to 1.3.4
+        fs::remove_dir_all(environment.dot_flox_path().join(GCROOTS_DIR_NAME)).unwrap();
+        symlink(
+            "/dev/null",
+            environment.dot_flox_path().join(GCROOTS_DIR_NAME),
+        )
+        .unwrap();
+
+        assert!(environment
+            .dot_flox_path()
+            .join(GCROOTS_DIR_NAME)
+            .is_symlink());
+
+        // Create a remote environment with the existing managed environment as its backend
+        let _ = RemoteEnvironment::new_in(
+            &flox,
+            environment.parent_path().unwrap(),
+            environment.pointer().clone(),
+        )
+        .unwrap();
+
+        // Once created, the symlink should be replaced with a directory
+        assert!(environment.dot_flox_path().join(GCROOTS_DIR_NAME).is_dir())
     }
 }

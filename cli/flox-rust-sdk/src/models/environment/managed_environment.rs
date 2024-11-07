@@ -1564,6 +1564,7 @@ pub mod test_helpers {
     use crate::flox::{Floxhub, DEFAULT_FLOXHUB_URL};
     use crate::models::environment::core_environment::test_helpers::new_core_environment;
     use crate::models::environment::test_helpers::new_core_environment_from_env_files;
+    use crate::models::environment::DOT_FLOX;
     use crate::models::floxmeta::test_helpers::unusable_mock_floxmeta;
 
     /// Get a [ManagedEnvironment] that is invalid but can be used in tests
@@ -1628,12 +1629,21 @@ pub mod test_helpers {
         env_files_dir: impl AsRef<Path>,
         owner: EnvironmentOwner,
     ) -> ManagedEnvironment {
+        // TODO: `RemoteEnvironment::new_in` still expects a .flox directory
+        // We create a temporary .flox directory here,
+        // but it would be better if we wouldn't depend on the existence of a literal `.flox` directory.
+        let dot_flox_path = tempdir_in(&flox.temp_dir)
+            .unwrap()
+            .into_path()
+            .join(DOT_FLOX);
+        fs::create_dir(&dot_flox_path).unwrap();
+
         ManagedEnvironment::push_new_without_building(
             flox,
             owner,
             "name".parse().unwrap(),
             false,
-            CanonicalPath::new(tempdir_in(&flox.temp_dir).unwrap().into_path()).unwrap(),
+            CanonicalPath::new(dot_flox_path).unwrap(),
             new_core_environment_from_env_files(flox, env_files_dir),
         )
         .unwrap()
