@@ -8,12 +8,13 @@ use std::str::FromStr;
 use anyhow::{anyhow, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use super::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
+use crate::utils::openers::first_in_path;
 
 // Containerize an environment
 #[derive(Bpaf, Clone, Debug)]
@@ -21,7 +22,9 @@ pub struct Containerize {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// Output to write the container to, defaults to '{environment}-container.tar'
+    /// Output to write the container to.
+    /// Defaults to loading into container storage if docker or podman is present
+    /// or otherwise writes to a file '{name}-container.tar'
     #[bpaf(external(output_target), optional)]
     output: Option<OutputTarget>,
 
@@ -95,10 +98,31 @@ enum OutputTarget {
 
 impl OutputTarget {
     fn detect_or_default(env_name: impl AsRef<str>) -> Self {
-        OutputTarget::File(PathBuf::from(format!(
+        let default_to_file = OutputTarget::File(PathBuf::from(format!(
             "{}-container.tar",
             env_name.as_ref()
-        )))
+        )));
+
+        let path_var = match std::env::var("PATH") {
+            Err(e) => {
+                debug!("Could not read PATH variable: {e}");
+                return default_to_file;
+            },
+            Ok(path) => path,
+        };
+
+        let Some((_, runtime)) =
+            first_in_path(["docker", "podman"], std::env::split_paths(&path_var))
+        else {
+            debug!("No container runtime found in PATH");
+            return default_to_file;
+        };
+
+        debug!(runtime, "Detected container runtime");
+        let runtime =
+            Runtime::from_str(runtime).expect("Should search for valid runtime names only");
+
+        OutputTarget::Runtime(runtime)
     }
 
     fn to_writer(&self) -> Result<Box<dyn ContainerSink>> {
@@ -241,5 +265,60 @@ mod tests {
         "docker".parse::<Runtime>().unwrap();
         "podman".parse::<Runtime>().unwrap();
         assert!("invalid".parse::<Runtime>().is_err());
+    }
+
+    /// Test that the default output target is one of the supported runtimes
+    /// which is found first in the PATH, or a file with the environment name,
+    /// if no supported runtime is found in the PATH.
+    #[test]
+    fn detect_runtime_in_path() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let default_target = OutputTarget::File(PathBuf::from("test-container.tar"));
+        let docker_target = OutputTarget::Runtime(Runtime::Docker);
+        let podman_target = OutputTarget::Runtime(Runtime::Podman);
+
+        let docker_bin = tempdir.path().join("docker-bin");
+        let podman_bin = tempdir.path().join("podman-bin");
+        let combined_bin = tempdir.path().join("combined-bin");
+        let neither_bin = tempdir.path().join("neither-bin");
+
+        fs::create_dir(&docker_bin).unwrap();
+        fs::create_dir(&podman_bin).unwrap();
+        fs::create_dir(&combined_bin).unwrap();
+        fs::create_dir(&neither_bin).unwrap();
+
+        fs::write(docker_bin.join("docker"), "").unwrap();
+        fs::write(podman_bin.join("podman"), "").unwrap();
+        fs::write(combined_bin.join("docker"), "").unwrap();
+        fs::write(combined_bin.join("podman"), "").unwrap();
+
+        let target = temp_env::with_var(
+            "PATH",
+            Some(std::env::join_paths([&docker_bin, &podman_bin, &combined_bin]).unwrap()),
+            || OutputTarget::detect_or_default("test"),
+        );
+        assert_eq!(target, docker_target);
+
+        let target = temp_env::with_var(
+            "PATH",
+            Some(std::env::join_paths([&podman_bin, &docker_bin, &combined_bin]).unwrap()),
+            || OutputTarget::detect_or_default("test"),
+        );
+        assert_eq!(target, podman_target);
+
+        let target = temp_env::with_var(
+            "PATH",
+            Some(std::env::join_paths([&combined_bin, &podman_bin, &docker_bin]).unwrap()),
+            || OutputTarget::detect_or_default("test"),
+        );
+        assert_eq!(target, docker_target);
+
+        let target = temp_env::with_var(
+            "PATH",
+            Some(std::env::join_paths([neither_bin]).unwrap()),
+            || OutputTarget::detect_or_default("test"),
+        );
+        assert_eq!(target, default_target);
     }
 }

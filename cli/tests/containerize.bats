@@ -52,6 +52,35 @@ setup() {
 
   mkdir -p $HOME/.config/containers
   echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$HOME/.config/containers/policy.json"
+
+  if ! is_linux; then
+    return
+  fi
+  # flox does not allow to set a $HOME
+  # that does not correspond to the effective user's,
+  # but podman requires the policy.json set in the **test user's** $HOME,
+  # or otherwise fails with
+  #
+  # Error: payload does not match any of the supported image formats:
+  #  * oci: open /etc/containers/policy.json: no such file or directory
+  #  * oci-archive: open /etc/containers/policy.json: no such file or directory
+  #  * docker-archive: open /etc/containers/policy.json: no such file or directory
+  #  * dir: open /etc/containers/policy.json: no such file or directory
+  #
+  # (The fact that podman _also_ looks in HOME/.config/containers/policy.json,
+  #  but refuses to mention it in the error message, notwithstanding.)
+  #
+  # To work around this wrap podman in a script that sets the HOME to the test user's.
+  # 一点傻傻地，但是有效。
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  ORIGINAL_PODMAN="$(command -v podman)"
+  cat > "$BATS_TEST_TMPDIR/bin/podman" << EOF
+#!/usr/bin/env bash
+HOME=$HOME USER=podman-user exec $ORIGINAL_PODMAN "\$@"
+EOF
+
+  chmod +x "$BATS_TEST_TMPDIR/bin/podman"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
 }
 
 setup_file() {
@@ -112,19 +141,26 @@ function skip_if_linux() {
 }
 
 # bats test_tags=containerize:default-to-file
-@test "container is written to a file by default" {
+@test "container is written to a runtime by default" {
   skip_if_not_linux
-
   env_setup_catalog
+
+  # Check that podman is installed
+  which podman
 
   run "$FLOX_BIN" containerize
   assert_success
-
-  assert [ -f "test-container.tar" ] # <env-name>-container.tar by default
-
-  USER=podman-test run podman load -i test-container.tar
-  assert_success
   assert_line --partial "Loaded image: localhost/test:latest"
+}
+
+# bats test_tags=containerize:default-to-file
+@test "container is written to a file if no runtime is found on PATH" {
+  skip_if_not_linux
+  env_setup_catalog
+
+  PATH= run "$FLOX_BIN" containerize
+  assert_success
+  assert [ -f "test-container.tar" ] # <env-name>-container.tar by default
 }
 
 # bats test_tags=containerize:container-tag
@@ -133,14 +169,10 @@ function skip_if_linux() {
 
   env_setup_catalog
 
+  # Check that podman is installed
+  which podman
+
   run "$FLOX_BIN" containerize --tag 'sometag'
-  assert_success
-
-  assert [ -f "test-container.tar" ] # <env-name>-container.tar by default
-
-  run which podman
-
-  USER=podman-test run podman load -i test-container.tar
   assert_success
   assert_line --partial "Loaded image: localhost/test:sometag"
 }
@@ -148,33 +180,6 @@ function skip_if_linux() {
 # bats test_tags=containerize:piped-to-runtime
 @test "container is written to runtime when '--runtime <runtime>' is passed" {
   skip_if_not_linux
-
-  # flox does not allow to set a $HOME
-  # that does not correspond to the effective user's,
-  # but podman requires the policy.json set in the **test user's** $HOME,
-  # or otherwise fails with
-  #
-  # Error: payload does not match any of the supported image formats:
-  #  * oci: open /etc/containers/policy.json: no such file or directory
-  #  * oci-archive: open /etc/containers/policy.json: no such file or directory
-  #  * docker-archive: open /etc/containers/policy.json: no such file or directory
-  #  * dir: open /etc/containers/policy.json: no such file or directory
-  #
-  # (The fact that podman _also_ looks in HOME/.config/containers/policy.json,
-  #  but refuses to mention it in the error message, notwithstanding.)
-  #
-  # To work around this wrap podman in a script that sets the HOME to the test user's.
-  # 一点傻傻地，但是有效。
-  mkdir -p "$BATS_TEST_TMPDIR/bin"
-  ORIGINAL_PODMAN="$(command -v podman)"
-  cat > "$BATS_TEST_TMPDIR/bin/podman" << EOF
-#!/usr/bin/env bash
-HOME=$HOME exec $ORIGINAL_PODMAN "\$@"
-EOF
-
-  chmod +x "$BATS_TEST_TMPDIR/bin/podman"
-  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
-
   env_setup_catalog
 
   run bash -c '"$FLOX_BIN" containerize --tag "runtime" --runtime podman' 3>&-
@@ -202,7 +207,7 @@ EOF
 
   env_setup_catalog
 
-  USER=podman-test run bash -c '"$FLOX_BIN" containerize -f - | podman load'
+  run bash -c '"$FLOX_BIN" containerize -f - | podman load'
   assert_success
   assert_line --partial "Loaded image:"
 }
@@ -213,7 +218,7 @@ EOF
 
   env_setup_catalog
 
-  USER=podman-test CONTAINER_ID="$("$FLOX_BIN" containerize -f - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
+  CONTAINER_ID="$("$FLOX_BIN" containerize -f - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
   run --separate-stderr podman run -q -i "$CONTAINER_ID" -c 'echo $foo'
   assert_success
 
