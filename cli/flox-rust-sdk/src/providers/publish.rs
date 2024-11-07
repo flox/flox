@@ -25,6 +25,9 @@ pub enum PublishError {
     #[error("The outputs from the build could not be identified")]
     UnknownOutputs(#[source] Box<dyn error::Error>),
 
+    #[error("The outputs from the build do not exist")]
+    NonexistentOutputs(#[source] Box<dyn error::Error>),
+
     #[error("The environment is in an unsupported state for publishing")]
     UnsupportEnvironmentState(#[source] Box<dyn error::Error>),
 
@@ -39,7 +42,7 @@ pub enum PublishError {
 /// Authentication, upload, builds etc, are implementation details of the specific provider.
 /// Modeling the behavior as a trait allows us to swap out the provider, e.g. a mock for testing.
 #[allow(async_fn_in_trait)]
-pub trait Publish {
+pub trait Publisher {
     async fn publish(
         &self,
         client: &Client,
@@ -92,14 +95,14 @@ pub struct CheckedBuildMetadata {
 /// The `PublishProvider` is a generic struct, parameterized by a `Builder` type,
 /// to build packages before publishing.
 pub struct PublishProvider<Builder> {
-    pub env_meta: CheckedEnvironmentMetadata,
-    pub build_meta: CheckedBuildMetadata,
+    pub env_metadata: CheckedEnvironmentMetadata,
+    pub build_metadata: CheckedBuildMetadata,
 
     pub _builder: Option<Builder>,
 }
 
 /// (default) implementation of the `Publish` trait, i.e. the publish interface to publish.
-impl<Builder> Publish for PublishProvider<&Builder>
+impl<Builder> Publisher for PublishProvider<&Builder>
 where
     Builder: ManifestBuilder,
 {
@@ -119,14 +122,14 @@ where
         client
             .create_package(
                 &catalog_name,
-                &self.build_meta.package,
-                &self.env_meta.build_repo_ref.url,
+                &self.build_metadata.package,
+                &self.env_metadata.build_repo_ref.url,
             )
             .await
             .map_err(|e| PublishError::CatalogError(Box::new(e)))?;
 
         let outputs = Outputs(
-            self.build_meta
+            self.build_metadata
                 .outputs
                 .clone()
                 .into_iter()
@@ -141,28 +144,28 @@ where
             derivation: UserDerivationInfo {
                 broken: Some(false),
                 description: "".to_string(),
-                drv_path: self.build_meta.drv_path.clone(),
+                drv_path: self.build_metadata.drv_path.clone(),
                 license: None,
-                name: self.build_meta.package.to_string().to_owned(),
+                name: self.build_metadata.package.to_string().to_owned(),
                 outputs,
                 outputs_to_install: None,
-                pname: Some(self.build_meta.package.to_string()),
-                system: self.build_meta.system,
+                pname: Some(self.build_metadata.package.to_string()),
+                system: self.build_metadata.system,
                 unfree: None,
                 version: None,
             },
             // TODO - make this optional in the API
             locked_base_catalog_url: self
-                .env_meta
+                .env_metadata
                 .base_catalog_ref
                 .as_ref()
                 .or(None)
                 .map(|b| b.url.clone()),
-            locked_url: self.env_meta.build_repo_ref.url.clone(),
+            locked_url: self.env_metadata.build_repo_ref.url.clone(),
         };
         trace!("Publishing build in catalog...");
         client
-            .publish_build(&catalog_name, &self.build_meta.package, &build_info)
+            .publish_build(&catalog_name, &self.build_metadata.package, &build_info)
             .await
             .map_err(|e| PublishError::CatalogError(Box::new(e)))?;
 
@@ -172,7 +175,7 @@ where
 
 /// Collect metadata needed for publishing that is obtained from the build output
 pub fn check_build_metadata(
-    env: &dyn Environment,
+    env: &impl Environment,
     pkg: &str,
     system: &str,
 ) -> Result<CheckedBuildMetadata, PublishError> {
@@ -191,7 +194,7 @@ pub fn check_build_metadata(
         .join(format!("result-{pkg}"));
     let store_dir = result_dir
         .read_link()
-        .map_err(|e| PublishError::UnknownOutputs(Box::new(e)))?;
+        .map_err(|e| PublishError::NonexistentOutputs(Box::new(e)))?;
 
     Ok(CheckedBuildMetadata {
         drv_path: store_dir.to_string_lossy().to_string(),
@@ -205,7 +208,7 @@ pub fn check_build_metadata(
     })
 }
 
-fn gather_build_repo_meta(environment: &dyn Environment) -> Result<LockedUrlInfo, PublishError> {
+fn gather_build_repo_meta(environment: &impl Environment) -> Result<LockedUrlInfo, PublishError> {
     // Gather build repo info
     let git = match environment.parent_path() {
         Ok(env_path) => GitCommandProvider::discover(env_path)
@@ -237,7 +240,7 @@ fn gather_build_repo_meta(environment: &dyn Environment) -> Result<LockedUrlInfo
 
 fn gather_base_repo_meta(
     flox: &Flox,
-    environment: &dyn Environment,
+    environment: &impl Environment,
 ) -> Result<Option<LockedUrlInfo>, PublishError> {
     // Gather locked base catalog page info
     let lockfile_path = CanonicalPath::new(
@@ -289,7 +292,7 @@ fn gather_base_repo_meta(
 
 pub fn check_environment_metadata(
     flox: &Flox,
-    environment: &dyn Environment,
+    environment: &impl Environment,
 ) -> Result<CheckedEnvironmentMetadata, PublishError> {
     // TODO - Ensure current commit is in remote (needed for repeatable builds)
     let build_repo_meta = gather_build_repo_meta(environment)?;
@@ -421,14 +424,14 @@ pub mod tests {
         let client = Client::Mock(MockClient::new(None::<String>).unwrap());
         let token = create_test_token("test");
 
-        let (env_meta, build_meta) = (
+        let (env_metadata, build_metadata) = (
             check_environment_metadata(&flox, &env).unwrap(),
             check_build_metadata(&env, EXAMPLE_PACKAGE_NAME, &flox.system).unwrap(),
         );
 
         let publish_provider = PublishProvider::<&FloxBuildMk> {
-            build_meta,
-            env_meta,
+            build_metadata,
+            env_metadata,
             _builder: None,
         };
 

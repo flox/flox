@@ -1,12 +1,15 @@
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
+use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
+use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::providers::build::FloxBuildMk;
 use flox_rust_sdk::providers::publish::{
     check_build_metadata,
     check_environment_metadata,
-    Publish,
+    Publisher,
     PublishProvider,
 };
 use indoc::indoc;
@@ -21,17 +24,17 @@ use crate::utils::message;
 
 #[allow(unused)] // remove when we implement the command
 #[derive(Bpaf, Clone)]
-pub struct PublishCmd {
+pub struct Publish {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    #[bpaf(external(subcommand_or_build_targets))]
-    subcommand_or_targets: SubcommandOrBuildTargets,
+    #[bpaf(external(subcommand_or_publish_target))]
+    subcommand_or_publish_target: SubcommandOrPublishTarget,
 }
 
 #[derive(Debug, Bpaf, Clone)]
-enum SubcommandOrBuildTargets {
-    BuildTarget {
+enum SubcommandOrPublishTarget {
+    PublishTarget {
         /// The package to build.
         /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
         /// If not specified, all packages are built.
@@ -40,18 +43,18 @@ enum SubcommandOrBuildTargets {
     },
 }
 
-impl PublishCmd {
+impl Publish {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         if !config.features.unwrap_or_default().publish {
             message::plain("🚧 👷 heja, a new command is in construction here, stay tuned!");
             bail!("'publish' feature is not enabled.");
         }
 
-        match self.subcommand_or_targets {
-            SubcommandOrBuildTargets::BuildTarget { target } => {
+        match self.subcommand_or_publish_target {
+            SubcommandOrPublishTarget::PublishTarget { target } => {
                 let env = self
                     .environment
-                    .detect_concrete_environment(&flox, "Clean build files of")?;
+                    .detect_concrete_environment(&flox, "Publish")?;
 
                 Self::publish(flox, env, target).await
             },
@@ -62,24 +65,23 @@ impl PublishCmd {
     async fn publish(mut flox: Flox, env: ConcreteEnvironment, package: String) -> Result<()> {
         subcommand_metric!("publish");
 
-        if let ConcreteEnvironment::Remote(_) = &env {
-            bail!("Cannot publish from a remote environment");
-        };
-
-        let mut env = env.into_dyn_environment();
-
-        if !check_package(&env.lockfile(&flox)?, &package)? {
+        if !check_package(&env.dyn_environment_ref().lockfile(&flox)?, &package)? {
             bail!("Package '{}' not found in environment", package);
         }
 
-        let (env_meta, build_meta) = (
-            check_environment_metadata(&flox, &*env).unwrap(),
-            check_build_metadata(&*env, &package, &flox.system).unwrap(),
-        );
+        let env_metadata = match check_environment_metadata(&flox, env.dyn_environment_ref().as_ref()) {
+            Ok(env_metadata) => env_metadata,
+            Err(e) => bail!("Pre-publish environment checks failed: {}", e.to_string()),
+        };
+
+        let build_metadata = match check_build_metadata(&*env.dyn_environment_ref(), &package, &flox.system) {
+            Ok(build_metadata) => build_metadata,
+            Err(e) => bail!("Pre-publish build checks failed: {}", e.to_string()),
+        };
 
         let publish_provider = PublishProvider::<&FloxBuildMk> {
-            build_meta,
-            env_meta,
+            build_metadata,
+            env_metadata,
             _builder: None,
         };
 
@@ -91,28 +93,6 @@ impl PublishCmd {
             Ok(_) => message::created("Package published successfully"),
             Err(e) => bail!("Failed to publish package: {}", e.to_string()),
         }
-
-        // let base_dir = env.parent_path()?;
-        // let flox_env = env.activation_path(&flox)?;
-
-        // let packages_to_build = available_packages(&env.lockfile(&flox)?, package)?;
-
-        // let builder = FloxBuildMk;
-        // let output = builder.build(&flox, &base_dir, &flox_env, &packages_to_build)?;
-
-        // for message in output {
-        //     match message {
-        //         Output::Stdout(line) => println!("{line}"),
-        //         Output::Stderr(line) => eprintln!("{line}"),
-        //         Output::Exit(status) if status.success() => {
-        //             message::created("Build completed successfully");
-        //             break;
-        //         },
-        //         Output::Exit(status) => {
-        //             bail!("Build failed with status: {status}");
-        //         },
-        //     }
-        // }
 
         Ok(())
     }
