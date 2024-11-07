@@ -685,6 +685,7 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
         RemoteEnvironmentError::ReadInternalOutLink(_) => display_chain(err),
         RemoteEnvironmentError::DeleteOldOutLink(_) => display_chain(err),
         RemoteEnvironmentError::WriteNewOutlink(_) => display_chain(err),
+        RemoteEnvironmentError::CreateGcRootDir(_) => display_chain(err),
     }
 }
 
