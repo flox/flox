@@ -278,9 +278,10 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     "$FLOX_BIN" install hello
 
+  export PROJECT_DIR="$(realpath "$PROJECT_DIR")"
   run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- command -v hello
   assert_success
-  assert_output --regexp "${FLOX_CACHE_DIR}/run/owner/${PROJECT_NAME}\..+/bin/hello"
+  assert_output --regexp "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}.dev/bin/hello"
 }
 
 # ---------------------------------------------------------------------------- #
