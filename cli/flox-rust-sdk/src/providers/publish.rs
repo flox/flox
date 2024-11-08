@@ -3,7 +3,6 @@ use std::str::FromStr;
 
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
-use flox_core::canonical_path::CanonicalPath;
 use log::trace;
 use thiserror::Error;
 
@@ -12,7 +11,6 @@ use super::catalog::{Client, ClientTrait, UserBuildInfo, UserDerivationInfo};
 use super::git::GitCommandProvider;
 use crate::flox::{Flox, FloxhubToken};
 use crate::models::environment::Environment;
-use crate::models::lockfile::Lockfile;
 use crate::providers::git::GitProvider;
 
 #[derive(Debug, Error)]
@@ -22,14 +20,11 @@ pub enum PublishError {
     #[error("The environment must be locked to publish")]
     UnlockedEnvironment,
 
-    #[error("The outputs from the build could not be identified")]
-    UnknownOutputs(#[source] Box<dyn error::Error>),
+    #[error("The outputs from the build do not exist: {0}")]
+    NonexistentOutputs(String),
 
-    #[error("The outputs from the build do not exist")]
-    NonexistentOutputs(#[source] Box<dyn error::Error>),
-
-    #[error("The environment is in an unsupported state for publishing")]
-    UnsupportEnvironmentState(#[source] Box<dyn error::Error>),
+    #[error("The environment is in an unsupported state for publishing: {0}")]
+    UnsupportEnvironmentState(String),
 
     #[error("There was an error communicating with the catalog")]
     CatalogError(#[source] Box<dyn error::Error>),
@@ -184,16 +179,17 @@ pub fn check_build_metadata(
     // pre-defined path.  Later work will get structured results from the build
     // process to feed this.
 
-    let system = SystemEnum::from_str(system)
-        .map_err(|e| PublishError::UnsupportEnvironmentState(Box::new(e)))?;
+    let system = SystemEnum::from_str(system).map_err(|e| {
+        PublishError::UnsupportEnvironmentState(format!("Unable to identify system: {e}"))
+    })?;
 
     let result_dir = env
         .parent_path()
-        .map_err(|e| PublishError::UnsupportEnvironmentState(Box::new(e)))?
+        .map_err(|e| PublishError::UnsupportEnvironmentState(e.to_string()))?
         .join(format!("result-{pkg}"));
     let store_dir = result_dir
         .read_link()
-        .map_err(|e| PublishError::NonexistentOutputs(Box::new(e)))?;
+        .map_err(|e| PublishError::NonexistentOutputs(e.to_string()))?;
 
     Ok(CheckedBuildMetadata {
         drv_path: store_dir.to_string_lossy().to_string(),
@@ -211,23 +207,23 @@ fn gather_build_repo_meta(environment: &impl Environment) -> Result<LockedUrlInf
     // Gather build repo info
     let git = match environment.parent_path() {
         Ok(env_path) => GitCommandProvider::discover(env_path)
-            .map_err(|e| PublishError::UnsupportEnvironmentState(Box::new(e)))?,
-        Err(e) => return Err(PublishError::UnsupportEnvironmentState(Box::new(e))),
+            .map_err(|e| PublishError::UnsupportEnvironmentState(format!("Git error {e}")))?,
+        Err(e) => return Err(PublishError::UnsupportEnvironmentState(e.to_string())),
     };
 
     let origin = git
         .get_origin()
-        .map_err(|e| PublishError::UnsupportEnvironmentState(Box::new(e)))?;
+        .map_err(|e| PublishError::UnsupportEnvironmentState(format!("Git error {e}")))?;
 
     let rev = origin
         .revision
         .ok_or(PublishError::UnsupportEnvironmentState(
-            "No revision found".to_string().into(),
+            "No revision found".to_string(),
         ))?;
 
     let rev_count = git
         .rev_count(rev.as_str())
-        .map_err(|e| PublishError::UnsupportEnvironmentState(Box::new(e)))?;
+        .map_err(|e| PublishError::UnsupportEnvironmentState(format!("Git error {e}")))?;
 
     Ok(LockedUrlInfo {
         url: origin.url,
@@ -239,19 +235,12 @@ fn gather_build_repo_meta(environment: &impl Environment) -> Result<LockedUrlInf
 
 fn gather_base_repo_meta(
     flox: &Flox,
-    environment: &impl Environment,
+    environment: &mut impl Environment,
 ) -> Result<Option<LockedUrlInfo>, PublishError> {
     // Gather locked base catalog page info
-    let lockfile_path = CanonicalPath::new(
-        environment
-            .lockfile_path(flox)
-            .map_err(|e| PublishError::UnsupportEnvironmentState(Box::new(e)))?,
-    )
-    .map_err(|e| PublishError::UnsupportEnvironmentState(Box::new(e)))?;
-
-    let lockfile = Lockfile::read_from_file(&lockfile_path)
-        .map_err(|e| PublishError::UnsupportEnvironmentState(Box::new(e)))?;
-
+    let lockfile = environment
+        .lockfile(flox)
+        .map_err(|e| PublishError::UnsupportEnvironmentState(e.to_string()))?;
     let install_ids_in_toplevel_group = lockfile
         .manifest
         .pkg_descriptors_in_toplevel_group()
@@ -282,16 +271,14 @@ fn gather_base_repo_meta(
         }))
     } else {
         Err(PublishError::UnsupportEnvironmentState(
-            "Unable to find locked descriptor for toplevel package"
-                .to_string()
-                .into(),
+            "Unable to find locked descriptor for toplevel package".to_string(),
         ))
     }
 }
 
 pub fn check_environment_metadata(
     flox: &Flox,
-    environment: &impl Environment,
+    environment: &mut impl Environment,
 ) -> Result<CheckedEnvironmentMetadata, PublishError> {
     // TODO - Ensure current commit is in remote (needed for repeatable builds)
     let build_repo_meta = gather_build_repo_meta(environment)?;
@@ -315,9 +302,11 @@ pub mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::data::CanonicalPath;
     use crate::flox::test_helpers::{create_test_token, flox_instance};
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
     use crate::models::environment::path_environment::PathEnvironment;
+    use crate::models::lockfile::Lockfile;
     use crate::providers::build::test_helpers::assert_build_status;
     use crate::providers::build::FloxBuildMk;
     use crate::providers::catalog::{MockClient, GENERATED_DATA};
@@ -359,9 +348,9 @@ pub mod tests {
     #[test]
     fn test_check_env_meta_failure() {
         let (flox, _temp_dir_handle) = flox_instance();
-        let (env, _git) = example_path_environment(&flox, None);
+        let (mut env, _git) = example_path_environment(&flox, None);
 
-        let meta = check_environment_metadata(&flox, &env);
+        let meta = check_environment_metadata(&flox, &mut env);
         assert_eq!(meta.is_err(), true);
     }
 
@@ -369,9 +358,9 @@ pub mod tests {
     fn test_check_env_meta_nominal() {
         let (flox, _temp_dir_handle) = flox_instance();
         let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
-        let (env, build_repo) = example_path_environment(&flox, Some(&remote_uri));
+        let (mut env, build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
-        let meta = check_environment_metadata(&flox, &env).unwrap();
+        let meta = check_environment_metadata(&flox, &mut env).unwrap();
 
         let build_repo_meta = meta.build_repo_ref;
         assert!(build_repo_meta.url.contains(&remote_uri));
@@ -424,7 +413,7 @@ pub mod tests {
         let token = create_test_token("test");
 
         let (env_metadata, build_metadata) = (
-            check_environment_metadata(&flox, &env).unwrap(),
+            check_environment_metadata(&flox, &mut env).unwrap(),
             check_build_metadata(&env, EXAMPLE_PACKAGE_NAME, &flox.system).unwrap(),
         );
 
