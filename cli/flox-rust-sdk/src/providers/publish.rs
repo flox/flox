@@ -154,7 +154,6 @@ where
                 unfree: None,
                 version: None,
             },
-            // TODO - make this optional in the API
             locked_base_catalog_url: self
                 .env_metadata
                 .base_catalog_ref
