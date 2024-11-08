@@ -737,7 +737,7 @@ mod tests {
     fn build_uses_package_from_manifest() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
-        let file_content = String::from("environment-develop/bin/hello\n");
+        let file_content = String::from("environment-build-foo/bin/hello\n");
 
         let manifest = formatdoc! {r#"
             version = 1

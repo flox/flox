@@ -4,8 +4,9 @@
   nixpkgs-url ? "github:flox/nixpkgs/stable",
   pkgs ? (builtins.getFlake nixpkgs-url).legacyPackages.${builtins.currentSystem},
   name,
-  flox-env,
-  install-prefix,
+  flox-env, # environment from which package is built
+  wrapper-env, # environment with which to wrap contents of bin, sbin
+  install-prefix ? null, # optional
   srcTarball ? null, # optional
   buildDeps ? [ ], # optional
   buildScript ? null, # optional
@@ -18,7 +19,11 @@ assert (buildCache != null) -> (buildScript != null);
 assert (srcTarball != null) -> (buildScript != null);
 let
   flox-env-package = builtins.storePath flox-env;
-  buildInputs = (map (d: builtins.storePath d) buildDeps) ++ [ flox-env-package ];
+  wrapper-env-package = builtins.storePath wrapper-env;
+  buildInputs = [
+    wrapper-env-package
+    flox-env-package
+  ] ++ (map (d: builtins.storePath d) buildDeps);
   install-prefix-contents = /. + install-prefix;
   buildScript-contents = /. + buildScript;
   buildCache-tar-contents = if (buildCache == null) then null else (/. + buildCache);
@@ -43,6 +48,9 @@ pkgs.runCommandNoCC name
       ]
       ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ darwin.autoSignDarwinBinariesHook ];
     outputs = [ "out" ] ++ pkgs.lib.optionals (buildCache != null) [ "buildCache" ];
+    # We don't want to allow build outputs to reference the "develop" environment
+    # because they should get everything they need at runtime from the wrapper env.
+    disallowedReferences = [ flox-env-package ]; # XXX too easy to leak into output.
   }
   (
     (
@@ -68,6 +76,7 @@ pkgs.runCommandNoCC name
           ''
       else
         ''
+          # Print the checksums of the inputs to the build script.
           echo "---"
           echo "Input checksums:"
           md5sum \
@@ -101,29 +110,38 @@ pkgs.runCommandNoCC name
                 tar --skip-old-files -xpf ${buildCache-tar-contents}
               ''
           }
+
+          # Run the build script using _BOTH_ the flox and wrapper environments,
+          # ensuring to use the wrapper environment as the "inner" activation so
+          # that tools and libraries from the wrapper env are preferred. This
+          # prevents the output from depending on the "develop" environment.
           ${
             if buildCache == null then
               ''
-                     # When not preserving a cache we just run the build normally.
+                # When not preserving a cache we just run the build normally.
 
-                     # flox-activations needs runtime dir for activation state dir
-                     # TMP will be set to something like
-                     # /private/tmp/nix-build-file-0.0.0.drv-0
-                     FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" ${flox-env-package}/activate --turbo -- \
-                bash -e ${buildScript-contents}
+                # flox-activations needs runtime dir for activation state dir
+                # TMP will be set to something like
+                # /private/tmp/nix-build-file-0.0.0.drv-0
+                FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
+                  ${flox-env-package}/activate --mode run --turbo -- \
+                    ${wrapper-env-package}/activate --env ${wrapper-env-package} --turbo -- \
+                      bash -e ${buildScript-contents}
               ''
             else
               ''
-                     # If the build fails we still want to preserve the build cache, so we
-                     # remove $out on failure and allow the Nix build to proceed to write
-                     # the result symlink.
+                # If the build fails we still want to preserve the build cache, so we
+                # remove $out on failure and allow the Nix build to proceed to write
+                # the result symlink.
 
-                     # flox-activations needs runtime dir for activation state dir
-                     # TMP will be set to something like
-                     # /private/tmp/nix-build-file-0.0.0.drv-0
-                     FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" ${flox-env-package}/activate --turbo -- \
-                bash -e ${buildScript-contents} || \
-                       ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
+                # flox-activations needs runtime dir for activation state dir
+                # TMP will be set to something like
+                # /private/tmp/nix-build-file-0.0.0.drv-0
+                FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
+                  ${flox-env-package}/activate --mode run --turbo -- \
+                    ${wrapper-env-package}/activate --env ${wrapper-env-package} --turbo -- \
+                      bash -e ${buildScript-contents} || \
+                ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
           }
         ''
@@ -133,13 +151,14 @@ pkgs.runCommandNoCC name
       if [ ! -e "$out" ]; then
         ${dollar_out_error_and_exit}
       fi
-      # Start by patching shebangs in bin and sbin directories.
+      # Start by patching shebangs in bin and sbin directories, making sure to
+      # prefer the wrapper environment over the "develop" environment.
       for dir in $out/bin $out/sbin; do
         if [ -d "$dir" ]; then
           patchShebangs $dir
         fi
       done
-      # Wrap contents of files in bin with ${flox-env-package}/activate
+      # Wrap contents of files in bin with ${wrapper-env-package}/activate
       for prog in $out/bin/* $out/sbin/*; do
         if [ -L "$prog" ]; then
           : # You cannot wrap a symlink, so just leave it be?
@@ -148,9 +167,9 @@ pkgs.runCommandNoCC name
           hidden="$(dirname "$prog")/.$(basename "$prog")"-wrapped
           mv "$prog" "$hidden"
           # TODO: we shouldn't need to set FLOX_RUNTIME_DIR here
-          makeShellWrapper "${flox-env-package}/activate" "$prog" \
+          makeShellWrapper "${wrapper-env-package}/activate" "$prog" \
             --inherit-argv0 \
-            --set FLOX_ENV "${flox-env-package}" \
+            --set FLOX_ENV "${wrapper-env-package}" \
             --set FLOX_MANIFEST_BUILD_OUT "$out" \
             --set FLOX_RUNTIME_DIR "/tmp" \
             --run 'export FLOX_SET_ARG0="$0"' \
