@@ -1,3 +1,7 @@
+# Export PATH and MANPATH to restore in shell-specific activate scripts.
+export _FLOX_RESTORE_PATH="$PATH"
+export _FLOX_RESTORE_MANPATH="$MANPATH"
+
 # "interactive" mode: invoke the user's shell with args that:
 #   a. defeat the shell's normal startup scripts
 #   b. source the relevant activation script

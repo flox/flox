@@ -28,6 +28,7 @@
   gnused,
   gnutar,
   jq,
+  man,
   nix,
   yq,
   openssh,
@@ -78,6 +79,7 @@ let
       gnused
       gnutar
       jq
+      man
       nix
       openssh
       parallel

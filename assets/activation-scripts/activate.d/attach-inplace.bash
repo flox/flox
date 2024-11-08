@@ -15,6 +15,8 @@ expiring_pid="$$"
 # script fragment when represented on a single line.
 case "$_flox_shell" in
   *bash)
+    echo "export _FLOX_RESTORE_PATH=\"$PATH\";"
+    echo "export _FLOX_RESTORE_MANPATH=\"$MANPATH\";"
     echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
     echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
     echo "export FLOX_ENV=\"$FLOX_ENV\";"
@@ -23,6 +25,8 @@ case "$_flox_shell" in
     echo "source '$_activate_d/bash';"
     ;;
   *fish)
+    echo "set -gx _FLOX_RESTORE_PATH \"$PATH\";"
+    echo "set -gx _FLOX_RESTORE_MANPATH \"$MANPATH\";"
     echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$fish_pid --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
     echo "set -gx _flox_activate_tracelevel \"$_flox_activate_tracelevel\";"
     echo "set -gx FLOX_ENV \"$FLOX_ENV\";"
@@ -31,6 +35,8 @@ case "$_flox_shell" in
     echo "source '$_activate_d/fish';"
     ;;
   *tcsh)
+    echo "setenv _FLOX_RESTORE_PATH \"$PATH\";"
+    echo "setenv _FLOX_RESTORE_MANPATH \"$MANPATH\";"
     echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
     echo "setenv _flox_activate_tracelevel \"$_flox_activate_tracelevel\";"
     echo "setenv FLOX_ENV \"$FLOX_ENV\";"
@@ -40,6 +46,8 @@ case "$_flox_shell" in
     ;;
   # Any additions should probably be restored in zdotdir/* scripts
   *zsh)
+    echo "export _FLOX_RESTORE_PATH=\"$PATH\";"
+    echo "export _FLOX_RESTORE_MANPATH=\"$MANPATH\";"
     echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
     echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
     echo "export FLOX_ENV=\"$FLOX_ENV\";"

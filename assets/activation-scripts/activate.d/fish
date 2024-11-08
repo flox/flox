@@ -20,6 +20,16 @@ end
 $_gnused/bin/sed -e 's/^/set -e /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env" | source
 $_gnused/bin/sed -e 's/^/set -gx /' -e 's/=/ /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env" | source
 
+# Restore PATH and MANPATH if set in one of the attach scripts.
+if set -q _FLOX_RESTORE_PATH
+  set -gx PATH $_FLOX_RESTORE_PATH
+  set -e _FLOX_RESTORE_PATH
+end
+if set -q _FLOX_RESTORE_MANPATH
+  set -gx MANPATH $_FLOX_RESTORE_MANPATH
+  set -e _FLOX_RESTORE_MANPATH
+end
+
 # Set the prompt if we're in an interactive shell.
 if isatty 1
     source "$_activate_d/set-prompt.fish"
