@@ -17,6 +17,12 @@ pre_cmd = '''
 cmd = "flox install definitely-not-a-package"
 ignore_cmd_errors = true
 
+[resolve.almonds]
+pre_cmd = '''
+  flox init  
+'''
+cmd = "flox install almonds"
+
 # Install a package that doesn't exist and that doesn't have suggestions
 [resolve.badpkg]
 pre_cmd = "flox init"

@@ -475,9 +475,9 @@ fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
         // There are unicode quoting issues with the current form
         // We can't use <() for zsh because it blocks input which can make it
         // impossible to Ctrl-C
-        Shell::Bash(_) | Shell::Zsh(_) => r#"eval "$(flox activate -d ~)""#,
-        Shell::Tcsh(_) => r#"eval "`flox activate -d ~`""#,
-        Shell::Fish(_) => "flox activate -d ~ | source",
+        Shell::Bash(_) | Shell::Zsh(_) => r#"eval "$(flox activate -d ~ -m run)""#,
+        Shell::Tcsh(_) => r#"eval "`flox activate -d ~ -m run`""#,
+        Shell::Fish(_) => "flox activate -d ~ -m run | source",
     };
     let rc_file_name = match shell {
         Shell::Bash(_) => ".bashrc",

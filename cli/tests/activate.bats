@@ -3455,3 +3455,92 @@ EOF
   assert_success
   assert_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
 }
+
+# ---------------------------------------------------------------------------- #
+
+@test "runtime: dev dependencies aren't added to PATH" {
+  project_setup
+  "$FLOX_BIN" edit -n "runtime_project" # give it a stable name
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.json" "$FLOX_BIN" install almonds
+  # `almonds` brings in Python as a development dependency, and we don't want
+  # that in runtime mode
+  run "$FLOX_BIN" activate -m run -- bash <(cat <<'EOF'
+    [ -e "$FLOX_ENV/bin/almonds" ]
+    [ ! -e "$FLOX_ENV/bin/python3" ]
+EOF
+)
+  assert_success
+}
+
+@test "runtime: packages still added to PATH" {
+  project_setup
+  "$FLOX_BIN" edit -n "runtime_project" # give it a stable name
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.json" "$FLOX_BIN" install almonds
+  run "$FLOX_BIN" activate -m run -- which almonds
+  assert_output --partial ".flox/run/$NIX_SYSTEM.runtime_project.run/bin/almonds"
+}
+
+@test "runtime: remains in runtime mode as bottom layer" {
+  # Prepare two environments that we're going to layer
+  export bottom_layer_dir="$BATS_TEST_TMPDIR/bottom_layer"
+  mkdir "$bottom_layer_dir"
+  "$FLOX_BIN" init -d "$bottom_layer_dir"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.json" "$FLOX_BIN" install -d "$bottom_layer_dir" almonds
+  export top_layer_dir="$BATS_TEST_TMPDIR/top_layer"
+  mkdir "$top_layer_dir"
+  "$FLOX_BIN" init -d "$top_layer_dir"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" "$FLOX_BIN" install -d "$top_layer_dir" hello
+
+  run "$FLOX_BIN" activate -m run -d "$bottom_layer_dir" -- bash <(cat <<'EOF'
+    # This is where we *would* find `python3` if it was present
+    python_path_bottom="$FLOX_ENV/bin/python3"
+    if [ "$(command -v python3)" = "$python_path_bottom" ]; then
+      exit 1
+    fi
+
+    # Layer another environment on top
+    source <("$FLOX_BIN" activate -d "$top_layer_dir")
+
+    # Ensure that we don't find Python from the bottom environment
+    if [ "$(command -v python3)" = "$python_path_bottom" ]; then
+      exit 1
+    fi
+EOF
+)
+  assert_success
+}
+
+@test "runtime: remains in runtime mode as top layer" {
+  # Prepare two environments that we're going to layer
+  export bottom_layer_dir="$BATS_TEST_TMPDIR/bottom_layer"
+  mkdir "$bottom_layer_dir"
+  "$FLOX_BIN" init -d "$bottom_layer_dir"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" "$FLOX_BIN" install -d "$bottom_layer_dir" hello
+  export top_layer_dir="$BATS_TEST_TMPDIR/top_layer"
+  mkdir "$top_layer_dir"
+  "$FLOX_BIN" init -d "$top_layer_dir"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.json" "$FLOX_BIN" install -d "$top_layer_dir" almonds
+
+  run "$FLOX_BIN" activate -d "$bottom_layer_dir" -m run  -- bash <(cat <<'EOF'
+    # Layer another environment on top
+    source <("$FLOX_BIN" activate -m run -d "$top_layer_dir")
+
+    # Ensure that we don't find Python from the bottom environment
+    if [ "$(command -v python3)" = "$FLOX_ENV/bin/python3" ]; then
+      exit 1
+    fi
+EOF
+)
+  assert_success
+}
+
+@test "runtime: doesn't set CPATH" {
+  project_setup
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" "$FLOX_BIN" install hello
+  export outer_cpath="$CPATH"
+  run "$FLOX_BIN" activate -m run -- bash <(cat <<'EOF'
+    [ "$CPATH" = "$outer_cpath" ]
+EOF
+)
+  assert_success
+}

@@ -306,7 +306,7 @@ pub async fn start_services_with_new_process_compose(
         print_script: false,
         start_services: true,
         use_fallback_interpreter: false,
-        _mode: Some(Mode::Dev),
+        mode: Some(Mode::Dev),
         run_args: vec!["true".to_string()],
     }
     .activate(
