@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::io::stdout;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -72,6 +73,15 @@ pub enum Mode {
     Run,
 }
 
+impl Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Mode::Dev => write!(f, "dev"),
+            Mode::Run => write!(f, "run"),
+        }
+    }
+}
+
 impl FromStr for Mode {
     type Err = anyhow::Error;
 
@@ -109,10 +119,8 @@ pub struct Activate {
     /// Whether to activate in "dev" mode or "run" mode, the difference being
     /// that "dev" mode will set environment variables necessary for
     /// development, whereas "run" will simply put executables in PATH.
-    // TODO: don't need to specify the flag names once the leading underscore
-    //       is removed
-    #[bpaf(short('m'), long("mode"))]
-    pub _mode: Option<Mode>,
+    #[bpaf(short, long)]
+    pub mode: Option<Mode>,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
@@ -171,6 +179,7 @@ impl Activate {
 
         let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         let interactive = !in_place && self.run_args.is_empty();
+        let mode = self.mode.clone().unwrap_or_default();
 
         // Don't spin in bashrcs and similar contexts
         let rendered_env_path_result = if in_place {
@@ -207,11 +216,14 @@ impl Activate {
             other => other?,
         };
 
-        // TODO: honor `--mode` flag
-        let store_path = fs::read_link(&rendered_env_path.development).with_context(|| {
+        let mode_link_path = match mode {
+            Mode::Dev => &rendered_env_path.development.clone(),
+            Mode::Run => &rendered_env_path.runtime.clone(),
+        };
+        let store_path = fs::read_link(mode_link_path).with_context(|| {
             format!(
                 "a symlink at {} was just created and should still exist",
-                rendered_env_path.development.display()
+                mode_link_path.display()
             )
         })?;
 
@@ -246,8 +258,7 @@ impl Activate {
         let flox_env_install_prefixes: IndexSet<PathBuf> = {
             let mut set = IndexSet::new();
             if !flox_active_environments.is_active(&now_active) {
-                // TODO: honor `--mode` flag
-                set.insert(rendered_env_path.development.to_path_buf());
+                set.insert(mode_link_path.to_path_buf());
             }
             let active_set: IndexSet<PathBuf> = {
                 if let Ok(var) = env::var(FLOX_ENV_DIRS_VAR) {
@@ -331,11 +342,7 @@ impl Activate {
             .unwrap_or(utils::colors::INDIGO_300.to_ansi256().to_string());
 
         let mut exports = HashMap::from([
-            // TODO: honor `--mode` flag
-            (
-                FLOX_ENV_VAR,
-                rendered_env_path.development.to_string_lossy().to_string(),
-            ),
+            (FLOX_ENV_VAR, mode_link_path.to_string_lossy().to_string()),
             (
                 FLOX_ACTIVE_ENVIRONMENTS_VAR,
                 flox_active_environments.to_string(),
@@ -482,7 +489,7 @@ impl Activate {
         //    eval "$(flox activate)"
         if in_place {
             let shell = Self::detect_shell_for_in_place()?;
-            Self::activate_in_place(&shell, &exports, &interpreter_path);
+            Self::activate_in_place(&mode, &shell, &exports, &interpreter_path);
 
             return Ok(());
         }
@@ -490,9 +497,10 @@ impl Activate {
         let shell = Self::detect_shell_for_subshell();
         // These functions will only return if exec fails
         if interactive {
-            Self::activate_interactive(shell, exports, interpreter_path, now_active)
+            Self::activate_interactive(&mode, shell, exports, interpreter_path)
         } else {
             Self::activate_command(
+                &mode,
                 self.run_args,
                 shell,
                 exports,
@@ -503,42 +511,8 @@ impl Activate {
     }
 
     /// Used for `flox activate -- run_args`
-    fn old_activate_command(
-        run_args: Vec<String>,
-        shell: Shell,
-        exports: HashMap<&str, String>,
-        interpreter_path: PathBuf,
-    ) -> Result<()> {
-        let mut command = Command::new(shell.exe_path());
-
-        command.envs(exports);
-
-        // TODO: the activation script sets prompt, which isn't necessary
-        let script = formatdoc! {r#"
-                # to avoid infinite recursion sourcing bashrc
-                export FLOX_SOURCED_FROM_SHELL_RC=1
-
-                source {activation_path}/activate/{shell}
-
-                unset FLOX_SOURCED_FROM_SHELL_RC
-
-                {quoted_args}
-        "#,
-            activation_path=shell_escape::escape(interpreter_path.to_string_lossy()),
-            quoted_args = Self::quote_run_args(&run_args)
-        };
-
-        command.arg("-c");
-        command.arg(script);
-
-        debug!("running activation command: {:?}", command);
-
-        // exec should never return
-        Err(command.exec().into())
-    }
-
-    /// Used for `flox activate -- run_args`
     fn activate_command(
+        mode: &Mode,
         run_args: Vec<String>,
         shell: Shell,
         exports: HashMap<&str, String>,
@@ -552,18 +526,6 @@ impl Activate {
         // path is a directory, we assume it's the old style and invoke the
         // old_activate_command function.
         let activate_path = interpreter_path.join("activate");
-        if activate_path.is_dir() {
-            // We'll warn the user with a debug message for now, and when we
-            // are ready to start deprecating support for the old style we'll
-            // change this to an info message, and finally throw an error as
-            // we remove support entirely for the old style.
-            debug!(
-                "old-style activation directory found, \
-                 consider re-rendering environment: {}",
-                activate_path.display()
-            );
-            return Self::old_activate_command(run_args, shell, exports, interpreter_path);
-        }
 
         let mut command = Command::new(activate_path);
         command.env("FLOX_SHELL", shell.exe_path());
@@ -574,6 +536,9 @@ impl Activate {
         // userShell invocation. Take this opportunity to combine these args
         // safely, and *exactly* as the user provided them in argv.
         command.arg("-c").arg(Self::quote_run_args(&run_args));
+
+        // Pass down the activation mode
+        command.arg("--mode").arg(mode.to_string());
 
         debug!("running activation command: {:?}", command);
 
@@ -599,81 +564,11 @@ impl Activate {
     /// and running the respective activation scripts.
     ///
     /// This function should never return as it replaces the current process
-    fn old_activate_interactive(
-        shell: Shell,
-        exports: HashMap<&str, String>,
-        interpreter_path: PathBuf,
-        now_active: UninitializedEnvironment,
-    ) -> Result<()> {
-        let mut command = Command::new(shell.exe_path());
-        command.envs(exports);
-
-        match shell {
-            Shell::Bash(_) => {
-                command
-                    .arg("--rcfile")
-                    .arg(interpreter_path.join("activate").join("bash"));
-            },
-            Shell::Fish(_) => {
-                return Err(anyhow!("fish not supported with environments rendered before version 1.0.5; please update environment and try again"));
-            },
-            Shell::Tcsh(_) => {
-                return Err(anyhow!("tcsh not supported with environments rendered before version 1.0.5; please update environment and try again"));
-            },
-            Shell::Zsh(_) => {
-                // From man zsh:
-                // Commands are then read from $ZDOTDIR/.zshenv.  If the shell is a
-                // login shell, commands are read from /etc/zprofile and then
-                // $ZDOTDIR/.zprofile.  Then, if the shell is interactive, commands
-                // are read from /etc/zshrc and then $ZDOTDIR/.zshrc.  Finally, if
-                // the shell is a login shell, /etc/zlogin and $ZDOTDIR/.zlogin are
-                // read.
-                //
-                // We want to add our customizations as late as possible in the
-                // initialization process - if, e.g. the user has prompt
-                // customizations, we want ours to go last. So we put our
-                // customizations at the end of .zshrc, passing our customizations
-                // using FLOX_ZSH_INIT_SCRIPT.
-                // Otherwise, we want initialization to proceed as normal, so the
-                // files in our ZDOTDIR source global rcs and user rcs.
-                // We disable global rc files and instead source them manually so we
-                // can control the ZDOTDIR they are run with - this is important
-                // since macOS sets
-                // HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history
-                // in /etc/zshrc.
-                if let Ok(zdotdir) = env::var("ZDOTDIR") {
-                    command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
-                }
-                command
-                    .env("ZDOTDIR", env!("FLOX_ZDOTDIR"))
-                    .env(
-                        "FLOX_ZSH_INIT_SCRIPT",
-                        interpreter_path.join("activate").join("zsh"),
-                    )
-                    .arg("--no-globalrcs");
-            },
-        };
-
-        debug!("running activation command: {:?}", command);
-
-        let message = formatdoc! {"
-                You are now using the environment {}.
-                To stop using this environment, type 'exit'\n", now_active.message_description()?};
-        message::updated(message);
-
-        // exec should never return
-        Err(command.exec().into())
-    }
-
-    /// Activate the environment interactively by spawning a new shell
-    /// and running the respective activation scripts.
-    ///
-    /// This function should never return as it replaces the current process
     fn activate_interactive(
+        mode: &Mode,
         shell: Shell,
         exports: HashMap<&str, String>,
         interpreter_path: PathBuf,
-        now_active: UninitializedEnvironment,
     ) -> Result<()> {
         // TODO: we can delete this now that we've removed support for v0
         //       and that was still available _after_ the changes mentioned
@@ -685,22 +580,12 @@ impl Activate {
         // path is a directory, we assume it's the old style and invoke the
         // old_activate_interactive function.
         let activate_path = interpreter_path.join("activate");
-        if activate_path.is_dir() {
-            // We'll warn the user with a debug message for now, and when we
-            // are ready to start deprecating support for the old style we'll
-            // change this to an info message, and finally throw an error as
-            // we remove support entirely for the old style.
-            debug!(
-                "old-style activation directory found, \
-                 consider re-rendering environment: {}",
-                activate_path.display()
-            );
-            return Self::old_activate_interactive(shell, exports, interpreter_path, now_active);
-        }
-
         let mut command = Command::new(activate_path);
         command.env("FLOX_SHELL", shell.exe_path());
         command.envs(exports);
+
+        // Pass down the activation mode
+        command.arg("--mode").arg(mode.to_string());
 
         debug!("running activation command: {:?}", command);
 
@@ -709,36 +594,12 @@ impl Activate {
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn old_activate_in_place(
+    fn activate_in_place(
+        mode: &Mode,
         shell: &Shell,
         exports: &HashMap<&str, String>,
-        interpreter_path: &Path,
+        activation_path: &Path,
     ) {
-        let exports_rendered = exports
-            .iter()
-            .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
-            .map(|(key, value)| format!("export {key}={value}",))
-            .join("\n");
-
-        let script = formatdoc! {"
-                # Common flox environment variables
-                {exports_rendered}
-
-                # to avoid infinite recursion sourcing bashrc
-                export FLOX_SOURCED_FROM_SHELL_RC=1
-
-                source {activation_path}/activate/{shell}
-
-                unset FLOX_SOURCED_FROM_SHELL_RC
-            ",
-        activation_path=shell_escape::escape(interpreter_path.to_string_lossy()),
-        };
-
-        println!("{script}");
-    }
-
-    /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(shell: &Shell, exports: &HashMap<&str, String>, activation_path: &Path) {
         // Previous versions of pkgdb rendered activation scripts into a
         // subdirectory called "activate", but now that path is occupied by
         // the activation script itself. The new activation scripts are in a
@@ -746,22 +607,13 @@ impl Activate {
         // path is a directory, we assume it's the old style and invoke the
         // old_activate_in_place function.
         let activate_path = activation_path.join("activate");
-        if activate_path.is_dir() {
-            // We'll warn the user with a debug message for now, and when we
-            // are ready to start deprecating support for the old style we'll
-            // change this to an info message, and finally throw an error as
-            // we remove support entirely for the old style.
-            debug!(
-                "old-style activation directory found, \
-                 consider re-rendering environment: {}",
-                activate_path.display()
-            );
-            return Self::old_activate_in_place(shell, exports, activation_path);
-        }
 
         let mut command = Command::new(&activate_path);
         command.env("FLOX_SHELL", shell.exe_path());
         command.envs(exports);
+
+        // Pass down the activation mode
+        command.arg("--mode").arg(mode.to_string());
 
         debug!("running activation command: {:?}", command);
 
