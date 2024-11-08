@@ -16,7 +16,7 @@ export | LC_ALL=C $_coreutils/bin/sort > "$_start_env"
 # Process the flox environment customizations, which includes (amongst
 # other things) prepending this environment's bin directory to the PATH.
 # shellcheck disable=SC2154 # set in the main `activate` script
-if [ -d "$_profile_d" ]; then
+if [ "$_FLOX_ENV_ACTIVATION_MODE" = "dev" ] && [ -d "$_profile_d" ]; then
   declare -a _profile_scripts
   # TODO: figure out why this is needed
   set +e

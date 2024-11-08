@@ -46,6 +46,7 @@ runCommand "flox-activation-scripts"
       --replace "@getopt@" "${getopt}" \
       --replace "@gnused@" "${gnused}" \
       --replace "@jq@" "${jq}/bin/jq" \
+      --replace "@nawk@" "${nawk}" \
       --replace "@out@" "$out" \
       --replace "@process-compose@" "${process-compose}/bin/process-compose" \
       --replace "@setsid@" "${util-linux}/bin/setsid" \

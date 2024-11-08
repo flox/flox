@@ -15,6 +15,10 @@ if [ -n "$FLOX_TURBO" ]; then
   fi
 fi
 
+# Export PATH and MANPATH to restore in shell-specific activate scripts.
+export _FLOX_RESTORE_PATH="$PATH"
+export _FLOX_RESTORE_MANPATH="$MANPATH"
+
 # "-c" command mode: pass both [2] arguments unaltered to shell invocation
 case "$_flox_shell" in
   *bash)

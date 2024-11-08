@@ -3333,3 +3333,125 @@ EOF
   run "$FLOX_BIN" activate -m run -- true
   assert_success
 }
+
+# bats test_tags=activate,activate:attach
+@test "attach doesn't break MANPATH" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d vim
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.json" "$FLOX_BIN" install -d vim vim
+
+  "$FLOX_BIN" init -d emacs
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.json" "$FLOX_BIN" install -d emacs emacs
+
+  mkfifo activate_finished
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  case "$NIX_SYSTEM" in
+    *-linux)
+      VIM_MAN="$(realpath "$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man/man1/vim.1.gz")"
+      run man --path vim
+      assert_failure
+      refute_output "$VIM_MAN"
+
+      EMACS_MAN="$(realpath "$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man/man1/emacs.1.gz")"
+      run man --path emacs
+      assert_failure
+      refute_output "$EMACS_MAN"
+
+      # vim gets added to MANPATH
+      FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -- bash -c "man --path vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
+      cat activate_finished
+      run cat output
+      assert_success
+      assert_output "$VIM_MAN"
+
+      # emacs gets added to MANPATH, and then a nested attach also adds vim
+      FLOX_SHELL=bash "$FLOX_BIN" activate -d emacs -- \
+        bash -c 'man --path emacs > output_emacs_1 && "$FLOX_BIN" activate -d vim -- bash -c "man --path vim > output_vim && man --path emacs > output_emacs_2"'
+      run cat output_emacs_1
+      assert_output "$EMACS_MAN"
+      run cat output_vim
+      assert_output "$VIM_MAN"
+      run cat output_emacs_2
+      assert_output  "$EMACS_MAN"
+      ;;
+    *-darwin)
+      # Use /usr/bin/manpath to ensure we're checking macOS behavior
+      # Neither environment starts out in MANPATH
+      run /usr/bin/manpath
+      assert_success
+      refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
+      refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
+
+      # vim gets added to MANPATH
+      FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output && echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
+      cat activate_finished
+      run cat output
+      assert_success
+      assert_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
+      refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
+
+      # emacs gets added to MANPATH, and then a nested attach also adds vim
+      FLOX_SHELL=bash "$FLOX_BIN" activate -d emacs -- \
+        bash -c '/usr/bin/manpath > output_1 && "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output_2"'
+      run cat output_1
+      refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
+      assert_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
+      run cat output_2
+      assert_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
+      assert_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
+      ;;
+    *)
+      echo "unsupported system: $NIX_SYSTEM"
+      return 1
+      ;;
+  esac
+}
+
+# bats test_tags=activate,activate:attach
+@test "attach doesn't break PATH" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d vim
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.json" "$FLOX_BIN" install -d vim vim
+
+  "$FLOX_BIN" init -d emacs
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.json" "$FLOX_BIN" install -d emacs emacs
+
+  mkfifo activate_finished
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  run command -v vim
+  refute_output "$(realpath "$PROJECT_DIR")/vim/.flox/run/$NIX_SYSTEM.vim.dev/bin/vim"
+
+  run command -v emacs
+  refute_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -- bash -c "command -v vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
+  cat activate_finished
+
+  run cat output
+  assert_success
+  assert_output "$(realpath "$PROJECT_DIR")/vim/.flox/run/$NIX_SYSTEM.vim.dev/bin/vim"
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate -d emacs -- \
+    bash -c 'command -v emacs > output_emacs_1; "$FLOX_BIN" activate -d vim -- bash -c "command -v vim > output_vim && command -v emacs > output_emacs_2 || true"'
+  run cat output_emacs_1
+  assert_success
+  assert_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
+  run cat output_vim
+  assert_success
+  assert_output "$(realpath "$PROJECT_DIR")/vim/.flox/run/$NIX_SYSTEM.vim.dev/bin/vim"
+  run cat output_emacs_2
+  assert_success
+  assert_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
+}

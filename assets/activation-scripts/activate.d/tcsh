@@ -14,6 +14,16 @@ endif
 eval `$_gnused/bin/sed -e 's/^/unsetenv /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"`
 eval `$_gnused/bin/sed -e 's/^/setenv /' -e 's/=/ /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"`
 
+# Restore PATH and MANPATH if set in one of the attach scripts.
+if ( $?_FLOX_RESTORE_PATH ) then
+  setenv PATH "$_FLOX_RESTORE_PATH"
+  unset _FLOX_RESTORE_PATH
+endif
+if ( $?_FLOX_RESTORE_MANPATH ) then
+  setenv MANPATH "$_FLOX_RESTORE_MANPATH"
+  unset _FLOX_RESTORE_MANPATH
+endif
+
 # Set the prompt if we're in an interactive shell.
 if ( $?tty ) then
   source "$_activate_d/set-prompt.tcsh"

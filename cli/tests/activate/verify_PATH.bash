@@ -20,13 +20,21 @@ IFS=: read -ra path_array <<< "$PATH"
   exit 1;
 }
 # 3) contains neither of the above more than once
-declare -A seen
+declare seen_bin=""
+declare seen_sbin=""
 for p in "${path_array[@]}"; do
-    if [ "$p" = "$FLOX_ENV/bin" ] || [ "$p" = "$FLOX_ENV/sbin" ]; then
-        if [ -n "${seen[$p]}" ]; then
+    if [ "$p" = "$FLOX_ENV/bin" ]; then
+        if [ -n "$seen_bin" ]; then
             exit 1
         else
-            seen["$p"]=1
+            seen_bin=1
+        fi
+    fi
+    if [ "$p" = "$FLOX_ENV/sbin" ]; then
+        if [ -n "$seen_sbin" ]; then
+            exit 1
+        else
+            seen_sbin=1
         fi
     fi
 done
