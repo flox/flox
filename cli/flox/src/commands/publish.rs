@@ -66,7 +66,7 @@ impl Publish {
             bail!("Package '{}' not found in environment", package);
         }
 
-        let env_metadata = match &env {
+        let env_metadata = match &mut env {
             ConcreteEnvironment::Managed(environment) => {
                 check_environment_metadata(&flox, environment)
             },
