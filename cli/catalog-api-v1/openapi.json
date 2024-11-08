@@ -520,7 +520,7 @@
         ],
         "summary": "Create a new package in a user catalog",
         "description": "Creates a catalog package\n\nPath Parameters:\n- **catalog_name**: The name of catalog to place the package into\n\nRequired Query Parameters:\n- **name**: The name of package (attr_path) to create\n\nReturns:\n- **UserPackage**",
-        "operationId": "post_catalog_package_api_v1_catalog_catalogs__catalog_name__packages_post",
+        "operationId": "create_catalog_package_api_v1_catalog_catalogs__catalog_name__packages_post",
         "security": [
           {
             "HTTPBearer": []
@@ -561,6 +561,16 @@
         "responses": {
           "201": {
             "description": "The new package was created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPackage"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The package already exists",
             "content": {
               "application/json": {
                 "schema": {
@@ -776,6 +786,16 @@
         "responses": {
           "201": {
             "description": "The build was submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserBuildCreationResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The build already exists",
             "content": {
               "application/json": {
                 "schema": {
@@ -1980,8 +2000,9 @@
             "title": "Locked Url"
           },
           "locked_base_catalog_url": {
-            "type": "string",
-            "title": "Locked Base Catalog Url"
+            "title": "Locked Base Catalog Url",
+            "nullable": true,
+            "type": "string"
           },
           "derivation": {
             "$ref": "#/components/schemas/UserDerivation-Input"
@@ -1990,7 +2011,6 @@
         "type": "object",
         "required": [
           "locked_url",
-          "locked_base_catalog_url",
           "derivation"
         ],
         "title": "UserBuild",
@@ -2021,8 +2041,9 @@
             "title": "Locked Url"
           },
           "locked_base_catalog_url": {
-            "type": "string",
-            "title": "Locked Base Catalog Url"
+            "title": "Locked Base Catalog Url",
+            "nullable": true,
+            "type": "string"
           },
           "derivation": {
             "$ref": "#/components/schemas/UserDerivation-Output"
@@ -2031,7 +2052,6 @@
         "type": "object",
         "required": [
           "locked_url",
-          "locked_base_catalog_url",
           "derivation"
         ],
         "title": "UserBuild",
