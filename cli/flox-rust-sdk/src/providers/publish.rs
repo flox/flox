@@ -154,7 +154,7 @@ where
                 unfree: None,
                 version: None,
             },
-            locked_base_catalog_url: Some(self.env_meta.build_repo_ref.url.clone()),
+            locked_base_catalog_url: self.env_meta.base_catalog_ref.url.clone(),
             url: self.env_meta.build_repo_ref.url.clone(),
             rev: self.env_meta.build_repo_ref.rev.clone(),
             rev_count: self.env_meta.build_repo_ref.rev_count as i64,
