@@ -47,6 +47,7 @@ __package_bin = $(if $(filter @%@,$(1)),$(2),$(1)/bin/$(2))
 _bash := $(call __package_bin,$(__bashInteractive),bash)
 _cp := $(call __package_bin,$(__coreutils),cp)
 _cut := $(call __package_bin,$(__coreutils),cut)
+_env := $(call __package_bin,$(__coreutils),env)
 _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
 _head := $(call __package_bin,$(__coreutils),head)
@@ -169,12 +170,12 @@ $(foreach build,$(BUILDS),$(eval $(call DEPENDS_template)))
 space := $(subst x,,x x)
 
 # The method of calling the sandbox differs based on O/S. Define
-# PRELOAD_ARGS to denote the correct way.
+# PRELOAD_VARS to denote the correct way.
 ifeq (Darwin,$(OS))
-  PRELOAD_ARGS = DYLD_INSERT_LIBRARIES=$(_libexec_dir)/libsandbox.dylib
+  PRELOAD_VARS = DYLD_INSERT_LIBRARIES=$(_libexec_dir)/libsandbox.dylib
 else
   ifeq (Linux,$(OS))
-    PRELOAD_ARGS = LD_PRELOAD=$(_libexec_dir)/libsandbox.so
+    PRELOAD_VARS = LD_PRELOAD=$(_libexec_dir)/libsandbox.so
   else
     $(error unknown OS: $(OS))
   endif
@@ -209,20 +210,34 @@ endef
 define BUILD_local_template =
   $(eval _virtualSandbox = $(filter-out null off,$(_sandbox)))
 
+  # Set temp outpath of same strlen as eventual package storePath using the
+  # 32-char hash previously derived from the package name, current working
+  # directory and FLOX_ENV.
+  $(eval _out = /tmp/store_$($(_pvarname)_hash)-$(_name))
+
+  # Make sure to invoke the build script in a nested activation of both the
+  # "develop" and "wrapper" environments, and that the wrapper environment is
+  # the "inner" activation preferred for sourcing commands, libraries, etc.
+  # Also blat all env variables set by the outer activation to avoid
+  # including the "develop" environment in the build closure.
   .INTERMEDIATE: $(_pname)_local_build
   $(_pname)_local_build: $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
 	@echo "Building $(_name) in local mode"
 	@$(_rm) -rf $(_out)
-	$(if $(_virtualSandbox),$(PRELOAD_ARGS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
-	MAKEFLAGS= out=$(_out) $(FLOX_INTERPRETER)/activate --turbo -- $(_bash) -e $($(_pvarname)_buildScript)
+	$(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
+	$(FLOX_INTERPRETER)/activate --turbo -- \
+	  $(_env) -i out=$(_out) FLOX_RUNTIME_DIR="$$$$FLOX_RUNTIME_DIR" PATH="$$$$PATH" HOME="$$$$HOME" USER="$$$$USER" \
+	    $(_wrapper_env)/activate --env $(_wrapper_env) --turbo -- \
+	      $(_bash) -e $($(_pvarname)_buildScript)
 	set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
-	    --argstr name "$(_name)" \
-	    --argstr flox-env "$(FLOX_ENV)" \
-	    --argstr install-prefix "$(_out)" \
-	    --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
-	    --out-link "result-$(_pname)" \
-	    2>&1 | $(_tee) $($(_pvarname)_logfile)
+	  --argstr name "$(_name)" \
+	  --argstr flox-env "$(FLOX_ENV)" \
+	  --argstr wrapper-env "$(_wrapper_env)" \
+	  --argstr install-prefix "$(_out)" \
+	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
+	  --out-link "result-$(_pname)" \
+	  2>&1 | $(_tee) $($(_pvarname)_logfile)
 
 endef
 
@@ -277,16 +292,16 @@ define BUILD_nix_sandbox_template =
 	  $(_readlink) "$(_result)-buildCache" > "$(_result)-buildCache.prevOutPath"; \
 	fi
 	set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
-	    --argstr name "$(_name)" \
-	    --argstr srcTarball "$($(_pvarname)_src_tar)" \
-	    --argstr flox-env "$(FLOX_ENV)" \
-	    --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
-	    --argstr install-prefix "$(_out)" \
-	    $(if $($(_pvarname)_buildDeps),--arg buildDeps $($(_pvarname)_buildDeps_arg)) \
-	    --argstr buildScript "$($(_pvarname)_buildScript)" \
-	    $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
-	    --out-link "result-$(_pname)" \
-	    '^*' 2>&1 | $(_tee) $($(_pvarname)_logfile)
+	  --argstr name "$(_name)" \
+	  --argstr srcTarball "$($(_pvarname)_src_tar)" \
+	  --argstr flox-env "$(FLOX_ENV)" \
+	  --argstr wrapper-env "$(_wrapper_env)" \
+	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
+	  $(if $($(_pvarname)_buildDeps),--arg buildDeps $($(_pvarname)_buildDeps_arg)) \
+	  --argstr buildScript "$($(_pvarname)_buildScript)" \
+	  $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
+	  --out-link "result-$(_pname)" \
+	  '^*' 2>&1 | $(_tee) $($(_pvarname)_logfile)
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
 	@# mind that the symlink will remain unchanged in the event of an
@@ -304,6 +319,16 @@ define BUILD_nix_sandbox_template =
 endef
 
 define BUILD_template =
+
+  # Identify the wrapper environment with which to wrap the contents of bin, sbin.
+  $(eval _wrapper_env = $$(strip \
+    $(if $(FLOX_ENV_OUTPUTS), \
+      $$(shell $(_jq) -n -r \
+        --argjson results '$$(FLOX_ENV_OUTPUTS)' \
+        '$$$$results."build-$(_pname)"') \
+      $$(if $$(filter 0,$$(.SHELLSTATUS)),,$$(error could not identify wrapper env for $(_pname))), \
+      $$$$(error FLOX_ENV_OUTPUTS not defined))))
+
   # build mode passed as $(1)
   $(eval _build_mode = $(1))
   # We want to create build-specific variables, and variable names cannot
@@ -321,11 +346,6 @@ define BUILD_template =
   $(eval $(_pvarname)_buildDeps_arg = $(strip \
     $(if $($(_pvarname)_buildDeps),\
       '["$(subst $(space)," ",$($(_pvarname)_buildDeps))"]')))
-
-  # Set temp outpath of same strlen as eventual package storePath using the
-  # 32-char hash previously derived from the package name, current working
-  # directory and FLOX_ENV.
-  $(eval _out = /tmp/store_$($(_pvarname)_hash)-$(_name))
 
   # By the time this rule will be evaluated all of its package dependencies
   # will have been added to the set of rule prerequisites in $^, using their
