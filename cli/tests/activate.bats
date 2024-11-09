@@ -3336,9 +3336,13 @@ EOF
 
 # bats test_tags=activate,activate:attach
 @test "attach doesn't break MANPATH" {
-  # We don't need an environment, but we do need wait_for_watchdogs to have a
-  # PROJECT_DIR to look for
-  project_setup_common
+  project_setup
+
+  # Ensure that an empty MANPATH is replaced with something with a trailing
+  # colon so that the default list is honoured as a fallback.
+  MANPATH= run "$FLOX_BIN" activate -- sh -c 'echo $MANPATH'
+  assert_success
+  assert_output --regexp ".*:$"
 
   "$FLOX_BIN" init -d vim
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.json" "$FLOX_BIN" install -d vim vim
