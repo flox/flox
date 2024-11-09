@@ -247,9 +247,13 @@ fn gather_base_repo_meta(
         .into_iter()
         .map(|(pkg, _desc)| pkg);
 
-    // Require a lockfile, but don't require anything in the top level group.
+    // We should not need this, and allow for no base catalog page dependency.
+    // But for now, requireing it simplifies resolution and model updates
+    // significantly.
     if install_ids_in_toplevel_group.clone().count() == 0 {
-        return Ok(None);
+        return Err(PublishError::UnsupportEnvironmentState(
+            "No packages in toplevel group".to_string(),
+        ));
     }
 
     let top_level_locked_descs = lockfile.packages.iter().filter(|pkg| {
