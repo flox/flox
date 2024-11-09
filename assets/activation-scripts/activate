@@ -235,14 +235,14 @@ MANPATH="$_prepend_manpath:${MANPATH:+$MANPATH}"
 IFS="$_save_IFS"
 unset _save_IFS
 
-# Remove duplicates from PATH and MANPATH. We use echo -n in the command
-# below to remove trailing newline characters from the input that might
-# otherwise cause a [trailing] duplicate entry to be missed.
+# Remove duplicates from PATH and MANPATH. Note we must use `echo` and not
+# `echo -n` in the command below so that trailing ":" characters are followed
+# by a newline and treated by awk as an empty field.
 declare _awkScript _nodup_PATH _nodup_MANPATH
 # shellcheck disable=SC2016
 _awkScript='BEGIN { RS = ":"; } { if (A[$0]) {} else { A[$0]=1; printf(((NR==1) ? "" : ":") $0); } }'
-_nodup_PATH="$(echo -n "$PATH" | "$_nawk/bin/nawk" "$_awkScript")"
-_nodup_MANPATH="$(echo -n "$MANPATH" | "$_nawk/bin/nawk" "$_awkScript")"
+_nodup_PATH="$(echo "$PATH" | "$_nawk/bin/nawk" "$_awkScript")"
+_nodup_MANPATH="$(echo "$MANPATH" | "$_nawk/bin/nawk" "$_awkScript")"
 export PATH="${_nodup_PATH}"
 export MANPATH="${_nodup_MANPATH}"
 
