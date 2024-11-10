@@ -19,6 +19,10 @@ namespace flox::realisepkgs {
 
 /* -------------------------------------------------------------------------- */
 
+
+/** @brief A mapping of output name to outpath. */
+typedef std::unordered_map<std::string, std::string> OutputsToOutpaths;
+
 /** @brief The components of a package that realisepkgs needs to realise it. */
 struct RealisepkgsLockedPackage
 {
@@ -28,6 +32,7 @@ struct RealisepkgsLockedPackage
   resolver::LockedInputRaw input;
   AttrPath                 attrPath;
   unsigned                 priority;
+  OutputsToOutpaths        outputsToOutpaths;
 };
 
 

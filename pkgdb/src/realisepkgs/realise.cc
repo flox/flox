@@ -318,17 +318,14 @@ outpathsForPackageOutputs( nix::ref<nix::EvalState> &              state,
   return outputsToOutpaths;
 }
 
-
 /* -------------------------------------------------------------------------- */
 
 std::vector<std::pair<realisepkgs::RealisedPackage, nix::StorePath>>
-collectRealisedOutputs(
-  nix::ref<nix::EvalState> &                     state,
-  const RealisepkgsLockedPackage &               lockedPackage,
-  std::unordered_map<std::string, std::string> & outputsToOutpaths )
+collectRealisedOutputs( nix::ref<nix::EvalState> &       state,
+                        const RealisepkgsLockedPackage & lockedPackage )
 {
   std::vector<std::pair<realisepkgs::RealisedPackage, nix::StorePath>> pkgs;
-  for ( const auto & [name, outpathStr] : outputsToOutpaths )
+  for ( const auto & [name, outpathStr] : lockedPackage.outputsToOutpaths )
     {
       debugLog( nix::fmt( "processing output '%s' of '%s'",
                           name,
@@ -349,21 +346,12 @@ std::vector<std::pair<realisepkgs::RealisedPackage, nix::StorePath>>
 getRealisedOutputs( nix::ref<nix::EvalState> &       state,
                     const RealisepkgsLockedPackage & lockedPackage )
 {
-  debugLog( nix::fmt( "getting cursor for %s", lockedPackage.attrPath[0] ) );
   auto timeEvalStart = std::chrono::high_resolution_clock::now();
-  auto cursor        = evalCacheCursorForInput( state,
-                                         lockedPackage.input,
-                                         lockedPackage.attrPath );
-
   /**
    * Collect the store paths for each output of the package.
    * Note that the "out" output is the same as the package's outPath.
    */
-  auto outputsToOutpaths
-    = outpathsForPackageOutputs( state, lockedPackage.installId, cursor );
-
-
-  auto pkgs = collectRealisedOutputs( state, lockedPackage, outputsToOutpaths );
+  auto pkgs        = collectRealisedOutputs( state, lockedPackage );
   auto timeEvalEnd = std::chrono::high_resolution_clock::now();
 
   bool allValid = true;
@@ -385,6 +373,11 @@ getRealisedOutputs( nix::ref<nix::EvalState> &       state,
   // we need to build the derivation to get all outputs
   if ( ! allValid )
     {
+      debugLog(
+        nix::fmt( "getting cursor for %s", lockedPackage.attrPath[0] ) );
+      auto cursor  = evalCacheCursorForInput( state,
+                                             lockedPackage.input,
+                                             lockedPackage.attrPath );
       auto drvPath = cursor->forceDerivation();
       try
         {
