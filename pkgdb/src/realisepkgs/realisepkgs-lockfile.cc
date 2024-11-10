@@ -55,14 +55,13 @@ RealisepkgsLockfile::from_v0_content( const nlohmann::json & jfrom )
                 lockedPackage->input.attrs );
               input.url = nix::FlakeRef::fromAttrs( input.attrs ).to_string();
 
-              this->packages.emplace_back( RealisepkgsLockedPackage {
-                system,
-                installId,
-                input,
-                lockedPackage->attrPath,
-                lockedPackage->priority,
-                // TODO - this is a hack, not supported in V0?
-                OutputsToOutpaths() } );
+              this->packages.emplace_back(
+                RealisepkgsLockedPackage { system,
+                                           installId,
+                                           input,
+                                           lockedPackage->attrPath,
+                                           lockedPackage->priority,
+                                           nullptr } );
             }
         }
     }
@@ -183,9 +182,10 @@ realisepkgsPackageFromV1Descriptor( const nlohmann::json &     jfrom,
                       attrPath ) );
         }
 
+      pkg.outputsToOutpaths = std::make_shared<OutputsToOutpaths>();
       for ( auto [output, outpath] : jfrom["outputs"].items() )
         {
-          pkg.outputsToOutpaths[output] = outpath;
+          pkg.outputsToOutpaths.get()->emplace( output, outpath );
         }
     }
 }

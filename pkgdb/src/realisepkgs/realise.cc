@@ -325,7 +325,24 @@ collectRealisedOutputs( nix::ref<nix::EvalState> &       state,
                         const RealisepkgsLockedPackage & lockedPackage )
 {
   std::vector<std::pair<realisepkgs::RealisedPackage, nix::StorePath>> pkgs;
-  for ( const auto & [name, outpathStr] : lockedPackage.outputsToOutpaths )
+  std::shared_ptr<realisepkgs::OutputsToOutpaths> outputsToOutpaths;
+
+  // If we don't have the outputsToOutpaths, we need to evaluate the package to
+  // get them.  If this is a catalog package, we should have loaded these from
+  // the lockfile
+  if ( lockedPackage.outputsToOutpaths.get() == nullptr )
+    {
+      debugLog(
+        nix::fmt( "getting cursor for %s", lockedPackage.attrPath[0] ) );
+      auto cursor       = evalCacheCursorForInput( state,
+                                             lockedPackage.input,
+                                             lockedPackage.attrPath );
+      outputsToOutpaths = std::make_shared<OutputsToOutpaths>(
+        outpathsForPackageOutputs( state, lockedPackage.installId, cursor ) );
+    }
+  else { outputsToOutpaths = lockedPackage.outputsToOutpaths; }
+
+  for ( const auto & [name, outpathStr] : *( outputsToOutpaths.get() ) )
     {
       debugLog( nix::fmt( "processing output '%s' of '%s'",
                           name,

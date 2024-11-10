@@ -29,10 +29,10 @@ struct RealisepkgsLockedPackage
   std::string system;
   std::string installId;
   // TODO: this could probably just be attrs
-  resolver::LockedInputRaw input;
-  AttrPath                 attrPath;
-  unsigned                 priority;
-  OutputsToOutpaths        outputsToOutpaths;
+  resolver::LockedInputRaw           input;
+  AttrPath                           attrPath;
+  unsigned                           priority;
+  std::shared_ptr<OutputsToOutpaths> outputsToOutpaths;
 };
 
 
