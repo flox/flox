@@ -110,7 +110,7 @@ impl RemoteEnvironment {
             // If we find a symlink, we need to delete it to create a directory
             // with symlinked files in the following step.
             if gcroots_dir.exists() && gcroots_dir.is_symlink() {
-                dbg!("removing symlink");
+                debug!(gcroot=?gcroots_dir, "removing symlink");
                 fs::remove_file(&gcroots_dir).map_err(RemoteEnvironmentError::CreateGcRootDir)?;
             }
 
