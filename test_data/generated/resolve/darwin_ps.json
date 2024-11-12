@@ -10,44 +10,45 @@
           {
             "attr_path": "darwin.ps",
             "broken": false,
-            "derivation": "/nix/store/kjajqsdmcylczdhm3xnzc3wxzdqachga-adv_cmds-119.drv",
-            "description": null,
+            "derivation": "/nix/store/vgy8gs4fjxmk22g73rfp294y6hqiavij-adv_cmds-231.drv",
+            "description": "Advanced commands package for Darwin",
             "insecure": false,
             "install_id": "ps",
-            "license": "APSL-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "adv_cmds-119",
+            "license": "[ APSL-1.0, APSL-2.0 ]",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "adv_cmds-231",
             "outputs": [
               {
                 "name": "ps",
-                "store_path": "/nix/store/2ia2pa46s6nyrywg1rz5qvmh0n0mh4k4-adv_cmds-119-ps"
+                "store_path": "/nix/store/1sjn7w7bwa1j36nji1f1gdvhh8b11zal-adv_cmds-231-ps"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/2a5m7da3a2k9qwq8rmglnp1av5yjkhp0-adv_cmds-231-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/rxpdvnidcg24yz7xca5jyd9w39zvwscj-adv_cmds-119"
-              },
-              {
-                "name": "locale",
-                "store_path": "/nix/store/fzamsb5ilcrmrvyjxgw8c0dq27bqd74f-adv_cmds-119-locale"
+                "store_path": "/nix/store/dj9hnhpsznjja8n7x5bvhq01sq4fp7fg-adv_cmds-231"
               }
             ],
             "outputs_to_install": [
-              "out"
+              "out",
+              "man"
             ],
             "pname": "ps",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "adv_cmds-119"
+            "version": "adv_cmds-231"
           }
         ],
-        "page": 687768,
+        "page": 705705,
         "url": ""
       }
     }

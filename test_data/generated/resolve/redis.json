@@ -10,33 +10,33 @@
           {
             "attr_path": "netcat",
             "broken": false,
-            "derivation": "/nix/store/ad6hl7nxr64y61vkf114mnh94s10zsj3-libressl-3.9.2.drv",
+            "derivation": "/nix/store/lc2nm6w227l9j4md6ds6ibbss6xxxdnl-libressl-4.0.0.drv",
             "description": "Free TLS/SSL implementation",
             "insecure": false,
             "install_id": "netcat",
             "license": "[ Public Domain, BSD-4-Clause, 0BSD, BSD-3-Clause, GPL-3.0, ISC, OpenSSL ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "libressl-3.9.2",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "libressl-4.0.0",
             "outputs": [
               {
                 "name": "nc",
-                "store_path": "/nix/store/cd29zqgqi09nd7dnvqq7x8zlja4afp46-libressl-3.9.2-nc"
+                "store_path": "/nix/store/s74w0l4fqbzdfhq2cc75qppc2air0iqz-libressl-4.0.0-nc"
               },
               {
                 "name": "bin",
-                "store_path": "/nix/store/kqy0pvg9kd6vv42hqnqsmiiva0is04a6-libressl-3.9.2-bin"
+                "store_path": "/nix/store/fp9rg0gbz3drc80r68q9ri8rphjdqvjr-libressl-4.0.0-bin"
               },
               {
                 "name": "dev",
-                "store_path": "/nix/store/y4g9g1d0agi8wlcwq47kr28qranx2s4h-libressl-3.9.2-dev"
+                "store_path": "/nix/store/l0kpzhbgff1nb4azlf4214qx8r2vsjvl-libressl-4.0.0-dev"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/1nyjk22c6126k95x5hnwgiqz35d8cfvv-libressl-3.9.2-man"
+                "store_path": "/nix/store/dzmgmcp53hmfypsw6yp4pbc3xmmlkz76-libressl-4.0.0-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/g9dn5p1xdxwlirwcz9y2m69zap3dg7yg-libressl-3.9.2"
+                "store_path": "/nix/store/vyyhbpz100aq5vfgvlr6gwbrwan7yp9v-libressl-4.0.0"
               }
             ],
             "outputs_to_install": [
@@ -44,47 +44,47 @@
               "man"
             ],
             "pname": "netcat",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "libressl-3.9.2"
+            "version": "libressl-4.0.0"
           },
           {
             "attr_path": "netcat",
             "broken": false,
-            "derivation": "/nix/store/9dz8xps23cm9fj5j5bymjy4x2islys6p-libressl-3.9.2.drv",
+            "derivation": "/nix/store/a73mz5fh6aj6312yk19jv5y9ndmixa9n-libressl-4.0.0.drv",
             "description": "Free TLS/SSL implementation",
             "insecure": false,
             "install_id": "netcat",
             "license": "[ Public Domain, BSD-4-Clause, 0BSD, BSD-3-Clause, GPL-3.0, ISC, OpenSSL ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "libressl-3.9.2",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "libressl-4.0.0",
             "outputs": [
               {
                 "name": "nc",
-                "store_path": "/nix/store/0dlsssfibssk5gy569n0011pagir7hk7-libressl-3.9.2-nc"
+                "store_path": "/nix/store/vc25n2yhgkkfwp7g0i1qylnvd3k8ycp4-libressl-4.0.0-nc"
               },
               {
                 "name": "bin",
-                "store_path": "/nix/store/lq19pg4822m3gc6ii3giqxi30vp7mk3b-libressl-3.9.2-bin"
+                "store_path": "/nix/store/qzj7v6iviw3i9h1pz2acipn0czlbnwck-libressl-4.0.0-bin"
               },
               {
                 "name": "dev",
-                "store_path": "/nix/store/4i9mv3bwwwqgn6j46m2fdic13gq5c6xm-libressl-3.9.2-dev"
+                "store_path": "/nix/store/a2wbvwsj7avq2ghx82bnbxc9avixvj2x-libressl-4.0.0-dev"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/jsnbaafnaqf2flj81lyv7aff7lb370x5-libressl-3.9.2-man"
+                "store_path": "/nix/store/h28b6x8r98n34rlf0rbbqqwnkdab3m24-libressl-4.0.0-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/14xfq6a0h68wnpq7za0wjgbicd4wyvdy-libressl-3.9.2"
+                "store_path": "/nix/store/khhdlff9bs5pkzvq5pjzmi4sgaqiqar6-libressl-4.0.0"
               }
             ],
             "outputs_to_install": [
@@ -92,47 +92,47 @@
               "man"
             ],
             "pname": "netcat",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "libressl-3.9.2"
+            "version": "libressl-4.0.0"
           },
           {
             "attr_path": "netcat",
             "broken": false,
-            "derivation": "/nix/store/ihv5manxah56j42hjnbldw3w8hy9hlnj-libressl-3.9.2.drv",
+            "derivation": "/nix/store/xlpi9i43z8gbs28c7kpk2z5vx6xj0zap-libressl-4.0.0.drv",
             "description": "Free TLS/SSL implementation",
             "insecure": false,
             "install_id": "netcat",
             "license": "[ Public Domain, BSD-4-Clause, 0BSD, BSD-3-Clause, GPL-3.0, ISC, OpenSSL ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "libressl-3.9.2",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "libressl-4.0.0",
             "outputs": [
               {
                 "name": "nc",
-                "store_path": "/nix/store/g6f77xhgdziyi7wcy2jw9awn9vrk64mw-libressl-3.9.2-nc"
+                "store_path": "/nix/store/9vqwfp8cia0gahjnljy37f4d4phgmjg3-libressl-4.0.0-nc"
               },
               {
                 "name": "bin",
-                "store_path": "/nix/store/a5rj9kjq044rmjagxyywnhyl4qmyw9q9-libressl-3.9.2-bin"
+                "store_path": "/nix/store/kgz0g8l289fsfi2v2h625mif8pyrnll0-libressl-4.0.0-bin"
               },
               {
                 "name": "dev",
-                "store_path": "/nix/store/wi2aww2i2p377qxzbrv7z2bgxfa28y1x-libressl-3.9.2-dev"
+                "store_path": "/nix/store/xnbj6w6fd4rbi1826nypvfhw3n6fa52c-libressl-4.0.0-dev"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/mwb37zfgphcavdz8n92pzpnxchyf6sl1-libressl-3.9.2-man"
+                "store_path": "/nix/store/pcc8pp793vkrz9q69dhyhg5zakwl1zqw-libressl-4.0.0-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/y0yd4s72gvs88374lawck5if9j3mnpz8-libressl-3.9.2"
+                "store_path": "/nix/store/64q9s4vida9581y01y118l8g5h7bwzqq-libressl-4.0.0"
               }
             ],
             "outputs_to_install": [
@@ -140,47 +140,47 @@
               "man"
             ],
             "pname": "netcat",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "libressl-3.9.2"
+            "version": "libressl-4.0.0"
           },
           {
             "attr_path": "netcat",
             "broken": false,
-            "derivation": "/nix/store/hfpqill08cyzp9yzbggwlimxl462iywb-libressl-3.9.2.drv",
+            "derivation": "/nix/store/sjqgmpxw2igg9j7qcr3bkkmq48bi3dw0-libressl-4.0.0.drv",
             "description": "Free TLS/SSL implementation",
             "insecure": false,
             "install_id": "netcat",
             "license": "[ Public Domain, BSD-4-Clause, 0BSD, BSD-3-Clause, GPL-3.0, ISC, OpenSSL ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "libressl-3.9.2",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "libressl-4.0.0",
             "outputs": [
               {
                 "name": "nc",
-                "store_path": "/nix/store/631lgj4lyqg6fqgbf8m6wm7yb476p2sq-libressl-3.9.2-nc"
+                "store_path": "/nix/store/k6ab3jd757j4drn45b408vhpdbjqwirz-libressl-4.0.0-nc"
               },
               {
                 "name": "bin",
-                "store_path": "/nix/store/hwbxxhzfl8k7srnkzpbzn3cmzvr55x78-libressl-3.9.2-bin"
+                "store_path": "/nix/store/5bci00l60qq6124d30wx3d3nr0b54f0g-libressl-4.0.0-bin"
               },
               {
                 "name": "dev",
-                "store_path": "/nix/store/qlq8h7cks694ad5b8ymwz1jm0cqs0524-libressl-3.9.2-dev"
+                "store_path": "/nix/store/krfpyp9rk4ab43v8rfny7qx6mskgwi0n-libressl-4.0.0-dev"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/hf9v9gcjrvc7bbbd41i8x04mcar4yrmq-libressl-3.9.2-man"
+                "store_path": "/nix/store/gfq1wbvd6andipmh8p5gibaq3agdm9g6-libressl-4.0.0-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/x1azhfqxr965d99dyr8fv2983harxgc8-libressl-3.9.2"
+                "store_path": "/nix/store/k2sqz14lx7l8k5inzamlyd9xbj0qvnwg-libressl-4.0.0"
               }
             ],
             "outputs_to_install": [
@@ -188,143 +188,143 @@
               "man"
             ],
             "pname": "netcat",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "libressl-3.9.2"
+            "version": "libressl-4.0.0"
           },
           {
             "attr_path": "redis",
             "broken": false,
-            "derivation": "/nix/store/19k5bb90n89hs1wdwpx758mng7qc8n6n-redis-7.2.5.drv",
+            "derivation": "/nix/store/y3db7kw1qj9fvlnb1h1navlw3d9vj2hp-redis-7.2.6.drv",
             "description": "Open source, advanced key-value store",
             "insecure": false,
             "install_id": "redis",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "redis-7.2.5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "redis-7.2.6",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/nfx2mdmpvh055hnb6hscj00hhifx65m9-redis-7.2.5"
+                "store_path": "/nix/store/2h8kvmk82alvcx4pijm6pqwksw5pqa8p-redis-7.2.6"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "redis",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "7.2.5"
+            "version": "7.2.6"
           },
           {
             "attr_path": "redis",
             "broken": false,
-            "derivation": "/nix/store/r59f0yxp370lkzjvj1bm1wgv9z8zvf8i-redis-7.2.5.drv",
+            "derivation": "/nix/store/fmllf9kqq1agybyqq0flzzk0nkdccxh9-redis-7.2.6.drv",
             "description": "Open source, advanced key-value store",
             "insecure": false,
             "install_id": "redis",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "redis-7.2.5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "redis-7.2.6",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/vr7vg4x12zchdvc36gr4y07m952sfakg-redis-7.2.5"
+                "store_path": "/nix/store/0mmi6lvrppq39i3zh6wcj358h2jhdhv0-redis-7.2.6"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "redis",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "7.2.5"
+            "version": "7.2.6"
           },
           {
             "attr_path": "redis",
             "broken": false,
-            "derivation": "/nix/store/gs1b13l835j0w5kdap5knlb4z6fy0j7w-redis-7.2.5.drv",
+            "derivation": "/nix/store/258gg1gjdnylm8f3y4897y1ngmbsl6yg-redis-7.2.6.drv",
             "description": "Open source, advanced key-value store",
             "insecure": false,
             "install_id": "redis",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "redis-7.2.5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "redis-7.2.6",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/r109pmqi0dfqrgximn3q8ippj3z93861-redis-7.2.5"
+                "store_path": "/nix/store/d9hvv3x9lm19yzakpblmpm3vm6rw04nk-redis-7.2.6"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "redis",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "7.2.5"
+            "version": "7.2.6"
           },
           {
             "attr_path": "redis",
             "broken": false,
-            "derivation": "/nix/store/hvbb6r4gr0j8gjn0zzysc9i388fnvbm8-redis-7.2.5.drv",
+            "derivation": "/nix/store/4pahxaq90vdn3nv0l60ya53fc2q69rig-redis-7.2.6.drv",
             "description": "Open source, advanced key-value store",
             "insecure": false,
             "install_id": "redis",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "redis-7.2.5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "redis-7.2.6",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/hb2k1i13w2f9cv5a4b8aakvg5r2hxzff-redis-7.2.5"
+                "store_path": "/nix/store/78a8lprsn4w2walhd7mck6zc8f76yj5x-redis-7.2.6"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "redis",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "7.2.5"
+            "version": "7.2.6"
           }
         ],
-        "page": 687768,
+        "page": 705705,
         "url": ""
       }
     }

@@ -16,7 +16,7 @@
     }
   ],
   {
-    "count": 65,
+    "count": 67,
     "results": [
       {
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
@@ -33,9 +33,9 @@
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
         "input": "nixpkgs",
         "license": null,
-        "pname": "nodejs_22",
+        "pname": "nodejs_23",
         "relPath": [
-          "nodejs_22"
+          "nodejs_23"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -44,9 +44,9 @@
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
         "input": "nixpkgs",
         "license": null,
-        "pname": "nodejs_21",
+        "pname": "nodejs_22",
         "relPath": [
-          "nodejs_21"
+          "nodejs_22"
         ],
         "system": "aarch64-darwin",
         "version": null

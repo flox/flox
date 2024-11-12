@@ -10,56 +10,56 @@
           {
             "attr_path": "glibc",
             "broken": false,
-            "derivation": "/nix/store/0fj9hk6x5yprg4v9l2b0g4fp1bnchalz-glibc-2.39-52.drv",
+            "derivation": "/nix/store/cxd5si2wb4qr1p20m79xdp1gdxfjyg7l-glibc-2.40-36.drv",
             "description": "GNU C Library",
             "insecure": false,
             "install_id": "glibc",
             "license": "LGPL-2.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "glibc-2.39-52",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "glibc-2.40-36",
             "outputs": [
               {
                 "name": "bin",
-                "store_path": "/nix/store/k4jv8fr725amxalmplzhnlyik93wvk3z-glibc-2.39-52-bin"
+                "store_path": "/nix/store/5571d6dklkwfcp1812dj4lxb0gl3w1yw-glibc-2.40-36-bin"
               },
               {
                 "name": "dev",
-                "store_path": "/nix/store/wlavaybjbzgllhq11lib6qgr7rm8imgp-glibc-2.39-52-dev"
+                "store_path": "/nix/store/932dj5qwfzck90mnvqpd1f9hjqznaqdj-glibc-2.40-36-dev"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/3dyw8dzj9ab4m8hv5dpyx7zii8d0w6fi-glibc-2.39-52"
+                "store_path": "/nix/store/3bvxjkkmwlymr0fssczhgi39c3aj1l7i-glibc-2.40-36"
               },
               {
                 "name": "debug",
-                "store_path": "/nix/store/xgac3z4w4iillaq7wsa8mlc3z7i0hwhc-glibc-2.39-52-debug"
+                "store_path": "/nix/store/4hyvva1qccsqw6w2vy8p9rb659hjm8lh-glibc-2.40-36-debug"
               },
               {
                 "name": "getent",
-                "store_path": "/nix/store/jimhqfkgwjcp12wylw64xcwa6il5nx47-glibc-2.39-52-getent"
+                "store_path": "/nix/store/az5vszpdy3i53lksl8rbjai7bc88r5zs-glibc-2.40-36-getent"
               },
               {
                 "name": "static",
-                "store_path": "/nix/store/y6bk80q2srr75db0psplh0k3x74bjnrd-glibc-2.39-52-static"
+                "store_path": "/nix/store/dn3xrgx3gcg6y4ijnjrxm8px2d7rh6zk-glibc-2.40-36-static"
               }
             ],
             "outputs_to_install": [
               "bin"
             ],
             "pname": "glibc",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "2.39-52"
+            "version": "2.40-36"
           }
         ],
-        "page": 687768,
+        "page": 705705,
         "url": ""
       }
     }

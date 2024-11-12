@@ -10,33 +10,33 @@
           {
             "attr_path": "curl",
             "broken": false,
-            "derivation": "/nix/store/f387f71iq7pd00mqllca6bwx8rrwyh08-curl-8.9.1.drv",
+            "derivation": "/nix/store/ymakr4ff7ps39gpkahcndc1iw9lmji9l-curl-8.10.1.drv",
             "description": "Command line tool for transferring files with URL syntax",
             "insecure": false,
             "install_id": "curl",
             "license": "curl",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "curl-8.9.1",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "curl-8.10.1",
             "outputs": [
               {
                 "name": "bin",
-                "store_path": "/nix/store/b9vcp70yhf5s0qadg2i1pdnzi7mfzkx4-curl-8.9.1-bin"
+                "store_path": "/nix/store/a9kflqidhvy31wsqagmbz6z86zyqpyix-curl-8.10.1-bin"
               },
               {
                 "name": "dev",
-                "store_path": "/nix/store/g7iznpcciawm2alm7hn9qf2x2nz9gcld-curl-8.9.1-dev"
+                "store_path": "/nix/store/2ip854mhfmvidwyk91zapnr22miwk5pj-curl-8.10.1-dev"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/nlnz9711av6sb5mcx6slmkbngg5kd57r-curl-8.9.1-man"
+                "store_path": "/nix/store/5mdbgrc9s83iz4j1z221qa51rwwlrvx5-curl-8.10.1-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/dijbmwxxhizpgva2idb261ic4f0r47cq-curl-8.9.1"
+                "store_path": "/nix/store/gn4n8pj1xiwxg0hliq0kjld7lkplilip-curl-8.10.1"
               },
               {
                 "name": "devdoc",
-                "store_path": "/nix/store/g3rwsivls1y3b9iyzzgda5s3nb0pnvkg-curl-8.9.1-devdoc"
+                "store_path": "/nix/store/xgkicx2nj38khn77hrc856cvd6418j1r-curl-8.10.1-devdoc"
               }
             ],
             "outputs_to_install": [
@@ -44,51 +44,51 @@
               "man"
             ],
             "pname": "curl",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "8.9.1"
+            "version": "8.10.1"
           },
           {
             "attr_path": "curl",
             "broken": false,
-            "derivation": "/nix/store/a6cfvi69wfq4kdl00b1b7k4vmjy8grsp-curl-8.9.1.drv",
+            "derivation": "/nix/store/yfadhncbhj6cmmbah0mzf3spnrsg9m3z-curl-8.10.1.drv",
             "description": "Command line tool for transferring files with URL syntax",
             "insecure": false,
             "install_id": "curl",
             "license": "curl",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "curl-8.9.1",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "curl-8.10.1",
             "outputs": [
               {
                 "name": "bin",
-                "store_path": "/nix/store/jz56y8dn9vyp5qxc2gvs99isis3ql5ml-curl-8.9.1-bin"
+                "store_path": "/nix/store/caawgal4gd55fki86nnxfvwfknpj0n52-curl-8.10.1-bin"
               },
               {
                 "name": "dev",
-                "store_path": "/nix/store/cgshc8z3alwlyh3yv7bp7lv7hj4ny8mp-curl-8.9.1-dev"
+                "store_path": "/nix/store/36lgi7lbbidpkhbpm8f82pk2g9xj6s7p-curl-8.10.1-dev"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/cqdyp0jrflbjbr6xcd5dlb704qkzh2sm-curl-8.9.1-man"
+                "store_path": "/nix/store/pjbbx3qgzx0ncwf7b96f3lylic2j6zpw-curl-8.10.1-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/w431gagkp4phpi8dn9i7d02xxgjvmfpx-curl-8.9.1"
+                "store_path": "/nix/store/l8dsa6w5m2mibqvlc60i4id9bypsypjc-curl-8.10.1"
               },
               {
                 "name": "debug",
-                "store_path": "/nix/store/jvjycva14kpdk2yyj3b9hpyi0lgl1rf1-curl-8.9.1-debug"
+                "store_path": "/nix/store/rqvbd7adrbndv19msl5yxsvma4akff71-curl-8.10.1-debug"
               },
               {
                 "name": "devdoc",
-                "store_path": "/nix/store/b2nzf7rzlrkbw5ha3admbpp2pks3izf2-curl-8.9.1-devdoc"
+                "store_path": "/nix/store/xx7pz76nzis56brawq4v1ycp942sl388-curl-8.10.1-devdoc"
               }
             ],
             "outputs_to_install": [
@@ -96,47 +96,47 @@
               "man"
             ],
             "pname": "curl",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "8.9.1"
+            "version": "8.10.1"
           },
           {
             "attr_path": "curl",
             "broken": false,
-            "derivation": "/nix/store/b635nq6l21k7r8gk38lf8gkh5rwja36r-curl-8.9.1.drv",
+            "derivation": "/nix/store/pdr37ys7g1d4m7dafm46b8l9xc4v64ql-curl-8.10.1.drv",
             "description": "Command line tool for transferring files with URL syntax",
             "insecure": false,
             "install_id": "curl",
             "license": "curl",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "curl-8.9.1",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "curl-8.10.1",
             "outputs": [
               {
                 "name": "bin",
-                "store_path": "/nix/store/zzz5688jdq269a7mi18al2zbqnmrd7d6-curl-8.9.1-bin"
+                "store_path": "/nix/store/7rbl5692vxchfnys7vb07xi241g1f93w-curl-8.10.1-bin"
               },
               {
                 "name": "dev",
-                "store_path": "/nix/store/iw3jwk48gfg0s0lsz0qpz89paig14fsy-curl-8.9.1-dev"
+                "store_path": "/nix/store/k9cz0k0zr2zs2fh3w58fvr462rgp5im1-curl-8.10.1-dev"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/ap0q2b6i3kx3f3mys9r6rp9kcry17rqj-curl-8.9.1-man"
+                "store_path": "/nix/store/7y2ad0fd9bhllk4ahfi3b680s8a0k5ah-curl-8.10.1-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/rl0lg5swlzlsrmhmw7cgi46kbxwxngkh-curl-8.9.1"
+                "store_path": "/nix/store/r4lqdyi6r4nxnhqb7qm8lsf5772qdij7-curl-8.10.1"
               },
               {
                 "name": "devdoc",
-                "store_path": "/nix/store/rj4x8krz9n9d6s0ys0x20s6wd2fq29pw-curl-8.9.1-devdoc"
+                "store_path": "/nix/store/p96mbch8dclsn8nkd4d97bddwq5bn8h9-curl-8.10.1-devdoc"
               }
             ],
             "outputs_to_install": [
@@ -144,51 +144,51 @@
               "man"
             ],
             "pname": "curl",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "8.9.1"
+            "version": "8.10.1"
           },
           {
             "attr_path": "curl",
             "broken": false,
-            "derivation": "/nix/store/i6bhkmlxb71wbrljipj1bjga1rbxs6wn-curl-8.9.1.drv",
+            "derivation": "/nix/store/y0sq8pyz20wa6fssxnic0c9hvqkkdhdk-curl-8.10.1.drv",
             "description": "Command line tool for transferring files with URL syntax",
             "insecure": false,
             "install_id": "curl",
             "license": "curl",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "curl-8.9.1",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "curl-8.10.1",
             "outputs": [
               {
                 "name": "bin",
-                "store_path": "/nix/store/6r0bn0dkvlvhicyvair205s07m92dpaz-curl-8.9.1-bin"
+                "store_path": "/nix/store/rw1sbc7ya3abg2p2fbkpmijzn6ylna9d-curl-8.10.1-bin"
               },
               {
                 "name": "dev",
-                "store_path": "/nix/store/a49si5nv16sy1jaabryasl015w3s52rr-curl-8.9.1-dev"
+                "store_path": "/nix/store/h9ff1kzr3xfijmxqgxjbbmjac29sh9nj-curl-8.10.1-dev"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/4ph78zm36yji16fypdk08bcj3agaqwh5-curl-8.9.1-man"
+                "store_path": "/nix/store/drvj3jlg5xgngpwzll4djzd54s3b3wd0-curl-8.10.1-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/x6ssc2mmx1kb52gchksqbzg5c2y0z7lf-curl-8.9.1"
+                "store_path": "/nix/store/vic96jkyhfvq58bwch08618zg72gdgkz-curl-8.10.1"
               },
               {
                 "name": "debug",
-                "store_path": "/nix/store/hprnrdjjf4ybw74hf0w852842zzyxq11-curl-8.9.1-debug"
+                "store_path": "/nix/store/b7mwv94v6621fr97wmfy4crb6dsqv445-curl-8.10.1-debug"
               },
               {
                 "name": "devdoc",
-                "store_path": "/nix/store/3w9135g8l2fqxjcdcqdn400gjigf7w5x-curl-8.9.1-devdoc"
+                "store_path": "/nix/store/chcn09z0kfvzn6qswpkjin9ky6yi9l67-curl-8.10.1-devdoc"
               }
             ],
             "outputs_to_install": [
@@ -196,41 +196,41 @@
               "man"
             ],
             "pname": "curl",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "8.9.1"
+            "version": "8.10.1"
           },
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/2xclkmh62nvh11fz839lnnfp0fvdmars-hello-2.12.1.drv",
+            "derivation": "/nix/store/ph067qvffgfhbg9n9jqgcb3x5j0pfaim-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "hello-2.12.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/p3vrcf0z38979rclg1923vwi4vcrpgq1-hello-2.12.1"
+                "store_path": "/nix/store/4ybggjzsxhb5gjh13ihygdlsfa90zpgk-hello-2.12.1"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "hello",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -241,27 +241,27 @@
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/07iwdbb4j4r2daaja5fancdh1wq4r0lj-hello-2.12.1.drv",
+            "derivation": "/nix/store/h92kkp3kj6sqhjqg4l3175n0qdlvv7cp-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "hello-2.12.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/7lml1vf30kmg4lppnjjf0sqpgvvafp40-hello-2.12.1"
+                "store_path": "/nix/store/fiw9as9x9wbawh5g50x676my5ba7a0ck-hello-2.12.1"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "hello",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -272,27 +272,27 @@
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/gm4sf3dwjyw1zslv4b1l020m1p3122a0-hello-2.12.1.drv",
+            "derivation": "/nix/store/ka8arzfyisnz9g80shr88q91jzazv2sb-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "hello-2.12.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/b9nxjjjpnv5npiwqxw882x4z7wxmvwm5-hello-2.12.1"
+                "store_path": "/nix/store/ihc48rywbj8ymmjdb2gypyfzhw8yf8zq-hello-2.12.1"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "hello",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -303,27 +303,27 @@
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/af3rc6phyv80h7aq4y3d08awnq2ja8fp-hello-2.12.1.drv",
+            "derivation": "/nix/store/66xjkspa6p80g7mml5hwk4wmjjb8ivpl-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "hello-2.12.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/yb84nwgvixzi9sx9nxssq581pc0cc8p3-hello-2.12.1"
+                "store_path": "/nix/store/qdaj356l85gyahgvlwmj9g955pkpsfgv-hello-2.12.1"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "hello",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -332,7 +332,7 @@
             "version": "2.12.1"
           }
         ],
-        "page": 687768,
+        "page": 705705,
         "url": ""
       }
     }

@@ -10,27 +10,27 @@
           {
             "attr_path": "rustPlatform.rustLibSrc",
             "broken": false,
-            "derivation": "/nix/store/za8qn1akdaglwdm4sv2ndnsa92hy54j7-rust-lib-src.drv",
+            "derivation": "/nix/store/ff1b02sbawgqbxf12idp25na91vb82gi-rust-lib-src.drv",
             "description": null,
             "insecure": false,
             "install_id": "rustLibSrc",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "rust-lib-src",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/9mwdk449lws263ykk01xrbywpdzqmgh3-rust-lib-src"
+                "store_path": "/nix/store/5ls52qv7vk6z8xkvr2vwm24kzjs2gqxf-rust-lib-src"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "rustLibSrc",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -41,27 +41,27 @@
           {
             "attr_path": "rustPlatform.rustLibSrc",
             "broken": false,
-            "derivation": "/nix/store/nin524xcp0l7xzw4ccbgpzxsncf5y447-rust-lib-src.drv",
+            "derivation": "/nix/store/1qgf1icj9izym2dfhn0aayavrf4hkl61-rust-lib-src.drv",
             "description": null,
             "insecure": false,
             "install_id": "rustLibSrc",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "rust-lib-src",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/b2kn9wlf1bhz2kry46d1xv0ir402vfrw-rust-lib-src"
+                "store_path": "/nix/store/v0yfhkszbg3j07rh939qp8xqvir3i440-rust-lib-src"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "rustLibSrc",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -72,27 +72,27 @@
           {
             "attr_path": "rustPlatform.rustLibSrc",
             "broken": false,
-            "derivation": "/nix/store/7g5crphsvw21gbwm5ij3b5pbhx0i0m8j-rust-lib-src.drv",
+            "derivation": "/nix/store/sh6m3i4v1bvsf590jgr1lci23crv6gci-rust-lib-src.drv",
             "description": null,
             "insecure": false,
             "install_id": "rustLibSrc",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "rust-lib-src",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/p84mx4ksfzlvpi12rcxhsaihy0pkynxs-rust-lib-src"
+                "store_path": "/nix/store/ya7q5lncvd2i57is0g6w1mkl9282xi7c-rust-lib-src"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "rustLibSrc",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -103,27 +103,27 @@
           {
             "attr_path": "rustPlatform.rustLibSrc",
             "broken": false,
-            "derivation": "/nix/store/4ix01cdzxqcpk452lndkw3d3pib10d4w-rust-lib-src.drv",
+            "derivation": "/nix/store/jgvjdc8mja2lv31id558m0qvvghp3nym-rust-lib-src.drv",
             "description": null,
             "insecure": false,
             "install_id": "rustLibSrc",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "rust-lib-src",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/5dh2vfghjizfwgci0z00hbrpx5vwv6zc-rust-lib-src"
+                "store_path": "/nix/store/4j0ahwzkbz0gz655swdqkliz5rgwznfh-rust-lib-src"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "rustLibSrc",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -132,7 +132,7 @@
             "version": "rust-lib-src"
           }
         ],
-        "page": 687768,
+        "page": 705705,
         "url": ""
       }
     }

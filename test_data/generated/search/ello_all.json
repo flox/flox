@@ -1,6 +1,6 @@
 [
   {
-    "count": 61,
+    "count": 63,
     "results": [
       {
         "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
@@ -108,6 +108,17 @@
         "pname": "hello-wayland",
         "relPath": [
           "hello-wayland"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Marwaita GTK theme with Pop_os Linux style",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "marwaita-yellow",
+        "relPath": [
+          "marwaita-yellow"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -468,6 +479,18 @@
         "relPath": [
           "texlivePackages",
           "othelloboard"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Execute loops using parallel forked subprocesses",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "ParallelLoops",
+        "relPath": [
+          "perl540Packages",
+          "ParallelLoops"
         ],
         "system": "aarch64-darwin",
         "version": null

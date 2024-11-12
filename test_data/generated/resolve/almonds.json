@@ -15,7 +15,7 @@
             "insecure": false,
             "install_id": "almonds",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=4aa36568d413aca0ea84a1684d2d46f55dbabad7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "almonds-1.25b",
             "outputs": [
               {
@@ -31,10 +31,10 @@
               "out"
             ],
             "pname": "almonds",
-            "rev": "4aa36568d413aca0ea84a1684d2d46f55dbabad7",
-            "rev_count": 703931,
-            "rev_date": "2024-11-05T05:43:48Z",
-            "scrape_date": "2024-11-07T03:55:45Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -50,7 +50,7 @@
             "insecure": false,
             "install_id": "almonds",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=4aa36568d413aca0ea84a1684d2d46f55dbabad7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "almonds-1.25b",
             "outputs": [
               {
@@ -66,10 +66,10 @@
               "out"
             ],
             "pname": "almonds",
-            "rev": "4aa36568d413aca0ea84a1684d2d46f55dbabad7",
-            "rev_count": 703931,
-            "rev_date": "2024-11-05T05:43:48Z",
-            "scrape_date": "2024-11-07T03:55:45Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -85,7 +85,7 @@
             "insecure": false,
             "install_id": "almonds",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=4aa36568d413aca0ea84a1684d2d46f55dbabad7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "almonds-1.25b",
             "outputs": [
               {
@@ -101,10 +101,10 @@
               "out"
             ],
             "pname": "almonds",
-            "rev": "4aa36568d413aca0ea84a1684d2d46f55dbabad7",
-            "rev_count": 703931,
-            "rev_date": "2024-11-05T05:43:48Z",
-            "scrape_date": "2024-11-07T03:55:45Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -120,7 +120,7 @@
             "insecure": false,
             "install_id": "almonds",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=4aa36568d413aca0ea84a1684d2d46f55dbabad7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "almonds-1.25b",
             "outputs": [
               {
@@ -136,10 +136,10 @@
               "out"
             ],
             "pname": "almonds",
-            "rev": "4aa36568d413aca0ea84a1684d2d46f55dbabad7",
-            "rev_count": 703931,
-            "rev_date": "2024-11-05T05:43:48Z",
-            "scrape_date": "2024-11-07T03:55:45Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -148,7 +148,7 @@
             "version": "1.25b"
           }
         ],
-        "page": 703931,
+        "page": 705705,
         "url": ""
       }
     }
