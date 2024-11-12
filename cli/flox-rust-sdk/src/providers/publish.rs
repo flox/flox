@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
-use log::trace;
+use log::debug;
 use thiserror::Error;
 
 use super::build::ManifestBuilder;
@@ -59,7 +59,7 @@ pub struct LockedUrlInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckedEnvironmentMetadata {
     // There may or may not be a locked base catalog reference in the environment
-    pub base_catalog_ref: Option<LockedUrlInfo>,
+    pub base_catalog_ref: LockedUrlInfo,
     // The build repo reference is always present
     pub build_repo_ref: LockedUrlInfo,
 
@@ -113,7 +113,7 @@ where
         // The create package service call will create the user's own catalog
         // if not already created, and then create (or return) the package noted
         // returning either a 200 or 201.  Either is ok here, as long as it's not an error.
-        trace!("Creating package in catalog...");
+        debug!("Creating package in catalog...");
         client
             .create_package(
                 &catalog_name,
@@ -153,9 +153,9 @@ where
             url: self.env_meta.build_repo_ref.url.clone(),
             rev: self.env_meta.build_repo_ref.rev.clone(),
             rev_count: self.env_meta.build_repo_ref.rev_count as i64,
-            rev_date: self.env_meta.build_repo_ref.rev_date.unwrap(),
+            rev_date: self.env_meta.build_repo_ref.rev_date,
         };
-        trace!("Publishing build in catalog...");
+        debug!("Publishing build in catalog...");
         client
             .publish_build(&catalog_name, &self.build_metadata.package, &build_info)
             .await
@@ -238,7 +238,7 @@ fn gather_build_repo_meta(environment: &impl Environment) -> Result<LockedUrlInf
 fn gather_base_repo_meta(
     flox: &Flox,
     environment: &mut impl Environment,
-) -> Result<Option<LockedUrlInfo>, PublishError> {
+) -> Result<LockedUrlInfo, PublishError> {
     // Gather locked base catalog page info
     let lockfile = environment
         .lockfile(flox)
@@ -264,7 +264,7 @@ fn gather_base_repo_meta(
             .any(|id| id == pkg.install_id())
     });
     if let Some(pkg) = top_level_locked_descs.clone().next() {
-        Ok(Some(LockedUrlInfo {
+        Ok(LockedUrlInfo {
             url: pkg.as_catalog_package_ref().unwrap().locked_url.clone(),
             rev: pkg.as_catalog_package_ref().unwrap().rev.clone(),
             rev_count: pkg
@@ -274,7 +274,7 @@ fn gather_base_repo_meta(
                 .try_into()
                 .unwrap(),
             rev_date: pkg.as_catalog_package_ref().unwrap().rev_date,
-        }))
+        })
     } else {
         Err(PublishError::UnsupportEnvironmentState(
             "Unable to find locked descriptor for toplevel package".to_string(),
@@ -375,20 +375,17 @@ pub mod tests {
             .is_ok());
         assert_eq!(build_repo_meta.rev_count, 1);
 
-        assert!(meta.base_catalog_ref.is_some());
-        let base_repo_meta = meta.base_catalog_ref.unwrap();
-
         let lockfile_path = CanonicalPath::new(env.lockfile_path(&flox).unwrap());
         let lockfile = Lockfile::read_from_file(&lockfile_path.unwrap()).unwrap();
         // Only the toplevel group in this example, so we can grap the first package
         let locked_base_pkg = lockfile.packages[0].as_catalog_package_ref().unwrap();
-        assert_eq!(base_repo_meta.url, locked_base_pkg.locked_url);
-        assert_eq!(base_repo_meta.rev, locked_base_pkg.rev);
+        assert_eq!(meta.base_catalog_ref.url, locked_base_pkg.locked_url);
+        assert_eq!(meta.base_catalog_ref.rev, locked_base_pkg.rev);
         assert_eq!(
-            base_repo_meta.rev_count,
+            meta.base_catalog_ref.rev_count,
             TryInto::<u64>::try_into(locked_base_pkg.rev_count).unwrap()
         );
-        assert_eq!(base_repo_meta.rev_date, locked_base_pkg.rev_date);
+        assert_eq!(meta.base_catalog_ref.rev_date, locked_base_pkg.rev_date);
     }
 
     #[test]

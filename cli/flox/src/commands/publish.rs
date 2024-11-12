@@ -19,25 +19,22 @@ use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::message;
 
-#[allow(unused)] // remove when we implement the command
 #[derive(Bpaf, Clone)]
 pub struct Publish {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    #[bpaf(external(subcommand_or_publish_target))]
-    subcommand_or_publish_target: SubcommandOrPublishTarget,
+    #[bpaf(external(publish_target))]
+    publish_target: PublishTarget,
 }
 
 #[derive(Debug, Bpaf, Clone)]
-enum SubcommandOrPublishTarget {
-    PublishTarget {
-        /// The package to build.
-        /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
-        /// If not specified, all packages are built.
-        #[bpaf(positional("package"))]
-        target: String,
-    },
+struct PublishTarget {
+    /// The package to build.
+    /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
+    /// If not specified, all packages are built.
+    #[bpaf(positional("package"))]
+    target: String,
 }
 
 impl Publish {
@@ -47,14 +44,13 @@ impl Publish {
             bail!("'publish' feature is not enabled.");
         }
 
-        match self.subcommand_or_publish_target {
-            SubcommandOrPublishTarget::PublishTarget { target } => {
-                let env = self
-                    .environment
-                    .detect_concrete_environment(&flox, "Publish")?;
+        let PublishTarget { target } = self.publish_target;
+        {
+            let env = self
+                .environment
+                .detect_concrete_environment(&flox, "Publish")?;
 
-                Self::publish(flox, env, target).await
-            },
+            Self::publish(flox, env, target).await
         }
     }
 
@@ -95,7 +91,10 @@ impl Publish {
         };
 
         ensure_floxhub_token(&mut flox).await?;
-        let token = flox.floxhub_token.as_ref().unwrap();
+        let token = flox
+            .floxhub_token
+            .as_ref()
+            .expect("should be authenticated to FloxHub");
 
         debug!("publishing package: {}", &package);
         match publish_provider.publish(&flox.catalog_client, token).await {

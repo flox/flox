@@ -24,7 +24,7 @@ use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
-use log::trace;
+use log::debug;
 use once_cell::sync::Lazy;
 use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
@@ -528,7 +528,7 @@ impl ClientTrait for CatalogClient {
                 },
                 _ => CatalogClientError::UnexpectedError(e),
             })?;
-        trace!("successfully created package");
+        debug!("successfully created package");
         Ok(())
     }
 
