@@ -60,7 +60,8 @@ RealisepkgsLockfile::from_v0_content( const nlohmann::json & jfrom )
                                            installId,
                                            input,
                                            lockedPackage->attrPath,
-                                           lockedPackage->priority } );
+                                           lockedPackage->priority,
+                                           nullptr } );
             }
         }
     }
@@ -179,6 +180,12 @@ realisepkgsPackageFromV1Descriptor( const nlohmann::json &     jfrom,
           traceLog(
             nix::fmt( "locked_url is not nixpkgs... skipping input for %s ",
                       attrPath ) );
+        }
+
+      pkg.outputsToOutpaths = std::make_shared<OutputsToOutpaths>();
+      for ( auto [output, outpath] : jfrom["outputs"].items() )
+        {
+          pkg.outputsToOutpaths.get()->emplace( output, outpath );
         }
     }
 }
