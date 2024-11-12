@@ -10,25 +10,25 @@
           {
             "attr_path": "gzip",
             "broken": false,
-            "derivation": "/nix/store/xhbqf29rxmpkffx0fvyrnmg0ppk7faia-gzip-1.13.drv",
+            "derivation": "/nix/store/7zr9a7qnwcp4gnvsxsmy51hjqb77fw6p-gzip-1.13.drv",
             "description": "GNU zip compression program",
             "insecure": false,
             "install_id": "gzip",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "gzip-1.13",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/592rg8ajhxk2g60vpjzsib7ks4p1nw89-gzip-1.13-man"
+                "store_path": "/nix/store/pnca7cj1kbjvkds2kglrrnfagzxj5rbb-gzip-1.13-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/11q17b4qydb1z4lksslmz592ld1fphbb-gzip-1.13"
+                "store_path": "/nix/store/203vr06z8isiffinykb2v1asij8pka54-gzip-1.13"
               },
               {
                 "name": "info",
-                "store_path": "/nix/store/7s45gn94l1ap49ixyy9ff89pxzpp3k8n-gzip-1.13-info"
+                "store_path": "/nix/store/295cwd3bmwi7lan1sm6zpz598gpl3896-gzip-1.13-info"
               }
             ],
             "outputs_to_install": [
@@ -36,10 +36,10 @@
               "man"
             ],
             "pname": "gzip",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -50,25 +50,25 @@
           {
             "attr_path": "gzip",
             "broken": false,
-            "derivation": "/nix/store/mqz7ilw52kwr54ddwdc54r3kgrv8llfc-gzip-1.13.drv",
+            "derivation": "/nix/store/r51mk07xya6pdznbh63kvsmzxa913rl7-gzip-1.13.drv",
             "description": "GNU zip compression program",
             "insecure": false,
             "install_id": "gzip",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "gzip-1.13",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/lz2xyi3bk7w61d1z1snxzi7hsv29gf2i-gzip-1.13-man"
+                "store_path": "/nix/store/p4qa1ckvh1dvklss0jbzwn1spcs28vyy-gzip-1.13-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/m4x7f54mvac4lfm58rpshb2wyc5f18v7-gzip-1.13"
+                "store_path": "/nix/store/506d11m4pwg3jacgd0ddf93rirp710mc-gzip-1.13"
               },
               {
                 "name": "info",
-                "store_path": "/nix/store/vkkjaxgkqnbk6xjr40m8rd1ix7yc241j-gzip-1.13-info"
+                "store_path": "/nix/store/i2ck2dx63mk3myirmqjhfnp03q1r1g5n-gzip-1.13-info"
               }
             ],
             "outputs_to_install": [
@@ -76,10 +76,10 @@
               "man"
             ],
             "pname": "gzip",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -90,25 +90,25 @@
           {
             "attr_path": "gzip",
             "broken": false,
-            "derivation": "/nix/store/5fk0kyxwx2f8q63nqjn3ashgvs77vp7a-gzip-1.13.drv",
+            "derivation": "/nix/store/icalhsfk7f276is2znxd2k32k4nhq4w6-gzip-1.13.drv",
             "description": "GNU zip compression program",
             "insecure": false,
             "install_id": "gzip",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "gzip-1.13",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/3iq3k8xj9jsg4r004h39n88y10wcx4bg-gzip-1.13-man"
+                "store_path": "/nix/store/c93ykyi1d8fqqvf5mxqr96frp92p9ks5-gzip-1.13-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/dginq278axycqh3sf6pqkzs0r5pmcv8z-gzip-1.13"
+                "store_path": "/nix/store/rxk1c2a7qa8pd3w4kcyckwgscq9y872f-gzip-1.13"
               },
               {
                 "name": "info",
-                "store_path": "/nix/store/dxyxvb51qkgw1c9dh05k5gv3b5z7q2k5-gzip-1.13-info"
+                "store_path": "/nix/store/2m7529p7jrsrpllf6vjabr3i8hjb02lz-gzip-1.13-info"
               }
             ],
             "outputs_to_install": [
@@ -116,10 +116,10 @@
               "man"
             ],
             "pname": "gzip",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -130,25 +130,25 @@
           {
             "attr_path": "gzip",
             "broken": false,
-            "derivation": "/nix/store/4ggkkk3brgiadw056g9053qvfr62pjfx-gzip-1.13.drv",
+            "derivation": "/nix/store/kdfbpnvj0q53zaqs8bxdazn94222vhyb-gzip-1.13.drv",
             "description": "GNU zip compression program",
             "insecure": false,
             "install_id": "gzip",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "gzip-1.13",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/yi19rp08yj7hkp73dzdra83lizji7pyc-gzip-1.13-man"
+                "store_path": "/nix/store/5d4236bgrpgmj4rh4jqy5f9dqyabj02v-gzip-1.13-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/164s7a7yscnicprzrr78bvk45d77a3yg-gzip-1.13"
+                "store_path": "/nix/store/qfc6wq1wpxvkkjqa6xr5685ip97qc3sr-gzip-1.13"
               },
               {
                 "name": "info",
-                "store_path": "/nix/store/lkx5dl2v5l5wfccr6wgfxmvpmxf3sz6p-gzip-1.13-info"
+                "store_path": "/nix/store/am7l7jyrkv9javzjs45x3528zkgy03wb-gzip-1.13-info"
               }
             ],
             "outputs_to_install": [
@@ -156,10 +156,10 @@
               "man"
             ],
             "pname": "gzip",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -168,7 +168,7 @@
             "version": "1.13"
           }
         ],
-        "page": 687768,
+        "page": 705705,
         "url": ""
       }
     }

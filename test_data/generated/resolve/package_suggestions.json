@@ -16,7 +16,7 @@
     }
   ],
   {
-    "count": 3095,
+    "count": 3172,
     "results": [
       {
         "description": "System to facilitate installing and updating packages",
@@ -41,12 +41,12 @@
         "version": null
       },
       {
-        "description": "Media packaging framework for VOD and Live DASH and HLS applications",
+        "description": "Fix broken node modules instantly",
         "input": "nixpkgs",
         "license": null,
-        "pname": "shaka-packager",
+        "pname": "patch-package",
         "relPath": [
-          "shaka-packager"
+          "patch-package"
         ],
         "system": "aarch64-darwin",
         "version": null

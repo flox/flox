@@ -10,27 +10,27 @@
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/2xclkmh62nvh11fz839lnnfp0fvdmars-hello-2.12.1.drv",
+            "derivation": "/nix/store/ph067qvffgfhbg9n9jqgcb3x5j0pfaim-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "hello-2.12.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/p3vrcf0z38979rclg1923vwi4vcrpgq1-hello-2.12.1"
+                "store_path": "/nix/store/4ybggjzsxhb5gjh13ihygdlsfa90zpgk-hello-2.12.1"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "hello",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -41,27 +41,27 @@
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/07iwdbb4j4r2daaja5fancdh1wq4r0lj-hello-2.12.1.drv",
+            "derivation": "/nix/store/h92kkp3kj6sqhjqg4l3175n0qdlvv7cp-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "hello-2.12.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/7lml1vf30kmg4lppnjjf0sqpgvvafp40-hello-2.12.1"
+                "store_path": "/nix/store/fiw9as9x9wbawh5g50x676my5ba7a0ck-hello-2.12.1"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "hello",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -72,27 +72,27 @@
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/gm4sf3dwjyw1zslv4b1l020m1p3122a0-hello-2.12.1.drv",
+            "derivation": "/nix/store/ka8arzfyisnz9g80shr88q91jzazv2sb-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "hello-2.12.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/b9nxjjjpnv5npiwqxw882x4z7wxmvwm5-hello-2.12.1"
+                "store_path": "/nix/store/ihc48rywbj8ymmjdb2gypyfzhw8yf8zq-hello-2.12.1"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "hello",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -103,27 +103,27 @@
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/af3rc6phyv80h7aq4y3d08awnq2ja8fp-hello-2.12.1.drv",
+            "derivation": "/nix/store/66xjkspa6p80g7mml5hwk4wmjjb8ivpl-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "hello-2.12.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/yb84nwgvixzi9sx9nxssq581pc0cc8p3-hello-2.12.1"
+                "store_path": "/nix/store/qdaj356l85gyahgvlwmj9g955pkpsfgv-hello-2.12.1"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "hello",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -132,7 +132,7 @@
             "version": "2.12.1"
           }
         ],
-        "page": 687768,
+        "page": 705705,
         "url": ""
       }
     }

@@ -1330,6 +1330,7 @@ mod tests {
             name: DEFAULT_GROUP_NAME.to_string(),
             page: Some(CatalogPage {
                 packages: Some(vec![ResolvedPackageDescriptor {
+                    catalog: None,
                     attr_path: "foo".to_string(),
                     broken: Some(false),
                     derivation: "new derivation".to_string(),

@@ -10,27 +10,27 @@
           {
             "attr_path": "emacs",
             "broken": false,
-            "derivation": "/nix/store/1nb9hv7r3n9h20zx72dy4hi1d6rdhmp8-emacs-29.4.drv",
+            "derivation": "/nix/store/2c4bzkja7fg0d0xh3kly4xgknr3dn8ag-emacs-29.4.drv",
             "description": "Extensible, customizable GNU text editor",
             "insecure": false,
             "install_id": "emacs",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "emacs-29.4",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/qk3h8jd8mi563hkc4hy40cmq9ial0hds-emacs-29.4"
+                "store_path": "/nix/store/7fgk633mnwv7bhs5qnkr80zhzrk7iy6z-emacs-29.4"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "emacs",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -41,27 +41,27 @@
           {
             "attr_path": "emacs",
             "broken": false,
-            "derivation": "/nix/store/j17jkcv4anmzglzqb967x1g7qqfmc5jb-emacs-29.4.drv",
+            "derivation": "/nix/store/qsfbrw1nn7j49l3c995as87iy6s00xgj-emacs-29.4.drv",
             "description": "Extensible, customizable GNU text editor",
             "insecure": false,
             "install_id": "emacs",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "emacs-29.4",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/akp04kk0sszm505mksbhqlj080g5dycb-emacs-29.4"
+                "store_path": "/nix/store/dg14z183b20fh2b77g9xqsz1d52n8899-emacs-29.4"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "emacs",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -72,27 +72,27 @@
           {
             "attr_path": "emacs",
             "broken": false,
-            "derivation": "/nix/store/alz86pw144gl3xa4k4pg9sg9wlwsqsj3-emacs-29.4.drv",
+            "derivation": "/nix/store/b415ll01x8b1h3r22n8mgl0zq9zjh5jr-emacs-29.4.drv",
             "description": "Extensible, customizable GNU text editor",
             "insecure": false,
             "install_id": "emacs",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "emacs-29.4",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/njnn4r0v8g3kvnm6rsz8a0f87pqxh4a0-emacs-29.4"
+                "store_path": "/nix/store/4qhmks84sn6abhzdv31annhxpzy5hbxy-emacs-29.4"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "emacs",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -103,27 +103,27 @@
           {
             "attr_path": "emacs",
             "broken": false,
-            "derivation": "/nix/store/jhvdd417bpnvx724qqi4y50r2flzj90h-emacs-29.4.drv",
+            "derivation": "/nix/store/bjj9l4wnyd8ls543ydnri5j5cff3k989-emacs-29.4.drv",
             "description": "Extensible, customizable GNU text editor",
             "insecure": false,
             "install_id": "emacs",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "emacs-29.4",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/qpydf23li3b7kciidc6x7drw1awz0jlc-emacs-29.4"
+                "store_path": "/nix/store/fsglyaxfhlavaskr159b4yyjlajy4qq5-emacs-29.4"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "emacs",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -134,21 +134,21 @@
           {
             "attr_path": "vim",
             "broken": false,
-            "derivation": "/nix/store/gpm74hfhpnr2azyrd7ch3gpvpa941fx0-vim-9.1.0707.drv",
+            "derivation": "/nix/store/jmldk96i7hs3i1gn422rqvhfi166wa4b-vim-9.1.0765.drv",
             "description": "Most popular clone of the VI editor",
             "insecure": false,
             "install_id": "vim",
             "license": "Vim",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "vim-9.1.0707",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "vim-9.1.0765",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/wdhpl0civ3ny5m6h4i426lp6x26xq7rx-vim-9.1.0707"
+                "store_path": "/nix/store/15w0vq9akakjvwkr8sq7ihla037cancw-vim-9.1.0765"
               },
               {
                 "name": "xxd",
-                "store_path": "/nix/store/igiq809m3jlhjm215vn26c33xcizhipm-vim-9.1.0707-xxd"
+                "store_path": "/nix/store/102kwd22viask6l0v21kg2zimy7p0vcl-vim-9.1.0765-xxd"
               }
             ],
             "outputs_to_install": [
@@ -156,35 +156,35 @@
               "xxd"
             ],
             "pname": "vim",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "9.1.0707"
+            "version": "9.1.0765"
           },
           {
             "attr_path": "vim",
             "broken": false,
-            "derivation": "/nix/store/v3x39b12a4dwbdv66c8k7wmcq16rf9n8-vim-9.1.0707.drv",
+            "derivation": "/nix/store/2521zz16fvr3k9g6kipg64bzj8nj52vc-vim-9.1.0765.drv",
             "description": "Most popular clone of the VI editor",
             "insecure": false,
             "install_id": "vim",
             "license": "Vim",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "vim-9.1.0707",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "vim-9.1.0765",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/nhsna3kf8rmj24fi8hh08xn0wrxdapxb-vim-9.1.0707"
+                "store_path": "/nix/store/dfhgbd34zilgq78g7w9mjzl0i0y564rl-vim-9.1.0765"
               },
               {
                 "name": "xxd",
-                "store_path": "/nix/store/84l4vc3mngac17gg6c3k45y1fsrdf595-vim-9.1.0707-xxd"
+                "store_path": "/nix/store/s8v7vknra4z4y425g1pkp802jd1pzh1d-vim-9.1.0765-xxd"
               }
             ],
             "outputs_to_install": [
@@ -192,35 +192,35 @@
               "xxd"
             ],
             "pname": "vim",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "9.1.0707"
+            "version": "9.1.0765"
           },
           {
             "attr_path": "vim",
             "broken": false,
-            "derivation": "/nix/store/kihqhs35i8rkx2y0akyr1l6v4lpl6s04-vim-9.1.0707.drv",
+            "derivation": "/nix/store/7743iz2k05c0hyhc2lssqxwaw05qxs5r-vim-9.1.0765.drv",
             "description": "Most popular clone of the VI editor",
             "insecure": false,
             "install_id": "vim",
             "license": "Vim",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "vim-9.1.0707",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "vim-9.1.0765",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/kw42adc63whvnnricp9m0p1z4qqhirp4-vim-9.1.0707"
+                "store_path": "/nix/store/2lzcq0qd2g257zbwdii6ah5fylj16n1y-vim-9.1.0765"
               },
               {
                 "name": "xxd",
-                "store_path": "/nix/store/v7qrl2wqr8a5574zyjsxn4xsw3zifjcb-vim-9.1.0707-xxd"
+                "store_path": "/nix/store/kxkxrpv4i5al1a7idha363pa1dqgjw4p-vim-9.1.0765-xxd"
               }
             ],
             "outputs_to_install": [
@@ -228,35 +228,35 @@
               "xxd"
             ],
             "pname": "vim",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "9.1.0707"
+            "version": "9.1.0765"
           },
           {
             "attr_path": "vim",
             "broken": false,
-            "derivation": "/nix/store/i432hbkxnlk6ll4i74j15mlsrsp8v2al-vim-9.1.0707.drv",
+            "derivation": "/nix/store/w36g09agrcqbs9jaskxwpzbd6xvn5bmj-vim-9.1.0765.drv",
             "description": "Most popular clone of the VI editor",
             "insecure": false,
             "install_id": "vim",
             "license": "Vim",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "vim-9.1.0707",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "vim-9.1.0765",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/fymb2prdsmc9268m3nr061zyxxqi8wkv-vim-9.1.0707"
+                "store_path": "/nix/store/hbhwf3i2jb4dcxxv22kamdnpyj1bpqmq-vim-9.1.0765"
               },
               {
                 "name": "xxd",
-                "store_path": "/nix/store/9z5agdwv20vxi35i9c024pr6bk8aziy9-vim-9.1.0707-xxd"
+                "store_path": "/nix/store/7rccc4l3f63q27ynawmb39qw32jdcfm9-vim-9.1.0765-xxd"
               }
             ],
             "outputs_to_install": [
@@ -264,19 +264,19 @@
               "xxd"
             ],
             "pname": "vim",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "9.1.0707"
+            "version": "9.1.0765"
           }
         ],
-        "page": 687768,
+        "page": 705705,
         "url": ""
       }
     }

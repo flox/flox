@@ -10,25 +10,25 @@
           {
             "attr_path": "python311Packages.pip",
             "broken": false,
-            "derivation": "/nix/store/8zsn66g2plk6iwnrcwqm4c1r84qaiqsh-python3.11-pip-24.0.drv",
+            "derivation": "/nix/store/5gmgncbnqx3sbb78ljg8sdrvgan1i708-python3.11-pip-24.0.drv",
             "description": "PyPA recommended tool for installing Python packages",
             "insecure": false,
             "install_id": "pip",
             "license": "[ MIT ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "python3.11-pip-24.0",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/gs2bn63f8s3hqjhiws774sbplsva0ms8-python3.11-pip-24.0-man"
+                "store_path": "/nix/store/9zkkfyyhj2g0ap9sr1a766yb2a3pyqh6-python3.11-pip-24.0-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/ckni67h8iqidyzhgsd7fgx5ihgfrpqk5-python3.11-pip-24.0"
+                "store_path": "/nix/store/g1y7h2xj13qjjwl3vvsb2qv6hc9yp21x-python3.11-pip-24.0"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/pdmc4wm32l2vma3ygmhxq1dvd2wyy8jz-python3.11-pip-24.0-dist"
+                "store_path": "/nix/store/kr09wmk6f36rlap4ilnhnn1m3h2jc8jy-python3.11-pip-24.0-dist"
               }
             ],
             "outputs_to_install": [
@@ -36,10 +36,10 @@
               "man"
             ],
             "pname": "pip",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -50,25 +50,25 @@
           {
             "attr_path": "python311Packages.pip",
             "broken": false,
-            "derivation": "/nix/store/dycmgxvddyw161s2rv63ims4lbr1b22w-python3.11-pip-24.0.drv",
+            "derivation": "/nix/store/v6ipjynv6k4sq1sy3p70p7amadwqpwzc-python3.11-pip-24.0.drv",
             "description": "PyPA recommended tool for installing Python packages",
             "insecure": false,
             "install_id": "pip",
             "license": "[ MIT ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "python3.11-pip-24.0",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/94cmsqrmnivlydk77jmnh2lha8vd0q21-python3.11-pip-24.0-man"
+                "store_path": "/nix/store/lyk3gwqsyndh6fihs3pplpzlwb3s3nxj-python3.11-pip-24.0-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/r30930px67zm59qavs1wrb4dafv3zvv6-python3.11-pip-24.0"
+                "store_path": "/nix/store/6mpz570swgihw953sg64l4bqvzn2c64b-python3.11-pip-24.0"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/cxv4ynjhxb9kd59xg8b02alkr0fjqiz5-python3.11-pip-24.0-dist"
+                "store_path": "/nix/store/k133m7ck638wqh611iq9apaszpaj6fli-python3.11-pip-24.0-dist"
               }
             ],
             "outputs_to_install": [
@@ -76,10 +76,10 @@
               "man"
             ],
             "pname": "pip",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -90,25 +90,25 @@
           {
             "attr_path": "python311Packages.pip",
             "broken": false,
-            "derivation": "/nix/store/fwv6cgva02q7zsv5lf40diwi7hhbbsa3-python3.11-pip-24.0.drv",
+            "derivation": "/nix/store/147jldcymbs732rwr2r7rh3zp8dsi58i-python3.11-pip-24.0.drv",
             "description": "PyPA recommended tool for installing Python packages",
             "insecure": false,
             "install_id": "pip",
             "license": "[ MIT ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "python3.11-pip-24.0",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/45cshzilw33zwdrl4yfdq675wzm13wsz-python3.11-pip-24.0-man"
+                "store_path": "/nix/store/2f82d9r4slg6k1wg43cscmjihgs36ixp-python3.11-pip-24.0-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/wkwx7w9zcjwvzspls7r19hlpa7xl94w8-python3.11-pip-24.0"
+                "store_path": "/nix/store/3yclm7acsm51cnphq4p3d67bp1x3s8qx-python3.11-pip-24.0"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/h3k84d0r810lhwa9152z96ikilbnwgg2-python3.11-pip-24.0-dist"
+                "store_path": "/nix/store/clw36ird7bn5pbhrlsxpyvr9iqqn9qk1-python3.11-pip-24.0-dist"
               }
             ],
             "outputs_to_install": [
@@ -116,10 +116,10 @@
               "man"
             ],
             "pname": "pip",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -130,25 +130,25 @@
           {
             "attr_path": "python311Packages.pip",
             "broken": false,
-            "derivation": "/nix/store/2drq8qfvldk02lypkavr5mj65zcd9ci6-python3.11-pip-24.0.drv",
+            "derivation": "/nix/store/s4wcbi023cviv13fh483719i9wcn9qm6-python3.11-pip-24.0.drv",
             "description": "PyPA recommended tool for installing Python packages",
             "insecure": false,
             "install_id": "pip",
             "license": "[ MIT ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
             "name": "python3.11-pip-24.0",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/hvjfxrx4h92qm9y1jvw44ndy8fk61wlc-python3.11-pip-24.0-man"
+                "store_path": "/nix/store/r2lzavxsnf25fphyssqhlb0b57vn62ah-python3.11-pip-24.0-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/b4hrc7i8hzfzhvmq5qffyb748zkc4lkr-python3.11-pip-24.0"
+                "store_path": "/nix/store/4z8ghf4sn5d28i4kzcxv9if3qf3llmwj-python3.11-pip-24.0"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/npnd0dqb76jk3pw7n735r5ppzd1cr3w8-python3.11-pip-24.0-dist"
+                "store_path": "/nix/store/blac1sczzi65vq4lsdy7lz2wp8605zwh-python3.11-pip-24.0-dist"
               }
             ],
             "outputs_to_install": [
@@ -156,10 +156,10 @@
               "man"
             ],
             "pname": "pip",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
@@ -170,137 +170,137 @@
           {
             "attr_path": "python3",
             "broken": false,
-            "derivation": "/nix/store/dzz3d11s5dqrnzfyhmq4fhf1q9ly3jlp-python3-3.12.5.drv",
+            "derivation": "/nix/store/nfqzgvmajgyf3h5hchs03ngs99h0zaqn-python3-3.12.7.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "python3-3.12.5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "python3-3.12.7",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/9pj4rzx5pbynkkxq1srzwjhywmcfxws3-python3-3.12.5"
+                "store_path": "/nix/store/2djmffykchgm4q4j7ylv7xgkg441mp2j-python3-3.12.7"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "python3",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "3.12.5"
+            "version": "3.12.7"
           },
           {
             "attr_path": "python3",
             "broken": false,
-            "derivation": "/nix/store/1gcbmlprvgy00zgar9czh867sr0kfw8n-python3-3.12.5.drv",
+            "derivation": "/nix/store/nrwf0ar2p6wrx17vvs9zfmllkn1p1gqh-python3-3.12.7.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "python3-3.12.5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "python3-3.12.7",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/6iq3nhgdyp8a5wzwf097zf2mn4zyqxr6-python3-3.12.5"
+                "store_path": "/nix/store/zkzg2gaacmhc2i9ggp35dbl5x0y49531-python3-3.12.7"
               },
               {
                 "name": "debug",
-                "store_path": "/nix/store/xc4hygp28y7g1rvjf0vi7fj0d83a75pj-python3-3.12.5-debug"
+                "store_path": "/nix/store/i2dk7l0b260px2i3v751z12kh6fkanzw-python3-3.12.7-debug"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "python3",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "3.12.5"
+            "version": "3.12.7"
           },
           {
             "attr_path": "python3",
             "broken": false,
-            "derivation": "/nix/store/dazm7qi0dvmjlf1kbjzq81ipbwqlmiij-python3-3.12.5.drv",
+            "derivation": "/nix/store/8xdxhcf5yh5p4rc1b8i3g0z3bq52kv46-python3-3.12.7.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "python3-3.12.5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "python3-3.12.7",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/ks8acr22s4iggnmvxydm5czl30racy32-python3-3.12.5"
+                "store_path": "/nix/store/70ifxn668cb1y4yiy35v0g8ic1wg33cz-python3-3.12.7"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "python3",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "3.12.5"
+            "version": "3.12.7"
           },
           {
             "attr_path": "python3",
             "broken": false,
-            "derivation": "/nix/store/5k1b6g2qgy2a7kiis6snyidzryz6bljl-python3-3.12.5.drv",
+            "derivation": "/nix/store/97s6qwipyppnh12dayv0k3qml0xb5dsq-python3-3.12.7.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "name": "python3-3.12.5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "name": "python3-3.12.7",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/h3i0acpmr8mrjx07519xxmidv8mpax4y-python3-3.12.5"
+                "store_path": "/nix/store/901c80rlps5q05bnjk1sj4zaz5k736nc-python3-3.12.7"
               },
               {
                 "name": "debug",
-                "store_path": "/nix/store/0a39pi2s6kxqc3kjjz2y9yzibd62zhhb-python3-3.12.5-debug"
+                "store_path": "/nix/store/1qffxia2lrnwa8pcwbl1hk4i5v5xagcj-python3-3.12.7-debug"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "python3",
-            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
-            "rev_count": 687768,
-            "rev_date": "2024-10-01T17:15:20Z",
-            "scrape_date": "2024-10-03T03:20:29Z",
+            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "rev_count": 705705,
+            "rev_date": "2024-11-09T08:06:34Z",
+            "scrape_date": "2024-11-11T03:57:18Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "3.12.5"
+            "version": "3.12.7"
           }
         ],
-        "page": 687768,
+        "page": 705705,
         "url": ""
       }
     }

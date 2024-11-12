@@ -3,15 +3,12 @@
     {
       "msgs": [
         {
-          "AttrPathNotFoundNotFoundForAllSystems": {
+          "AttrPathNotFoundSystemsNotOnSamePage": {
             "attr_path": "darwin.ps",
             "install_id": "ps",
             "level": "error",
-            "msg": "The attr_path darwin.ps is not found for all the requested systems, suggest limiting systems to (aarch64-darwin,x86_64-darwin).",
-            "valid_systems": [
-              "aarch64-darwin",
-              "x86_64-darwin"
-            ]
+            "msg": "The attr_path darwin.ps is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,x86_64-darwin), (x86_64-darwin).",
+            "system_groupings": "(aarch64-darwin,x86_64-darwin), (x86_64-darwin)"
           }
         }
       ],

@@ -1,7 +1,0 @@
-version = 1
-
-[install]
-darwin_ps.pkg-path = "darwin.ps"
-
-[options]
-systems = ["aarch64-darwin", "x86_64-darwin"] 
