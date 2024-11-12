@@ -267,7 +267,7 @@ pub fn activation_state_dir_path(
         .join(activation_id.as_ref()))
 }
 
-/// Returns the parsed environment registry file or `None` if it doesn't yet exist.
+/// Returns the parsed `activations.json` file or `None` if it doesn't yet exist.
 ///
 /// The file can be written with [write_activations_json].
 /// This function acquires a lock on the file,
@@ -279,10 +279,7 @@ pub fn read_activations_json(
     let lock_file = acquire_activations_json_lock(path).context("failed to acquire lockfile")?;
 
     if !path.exists() {
-        debug!(
-            "environment registry not found at {}",
-            path.to_string_lossy()
-        );
+        debug!("activations file not found at {}", path.to_string_lossy());
         return Ok((None, lock_file));
     }
 
@@ -291,7 +288,7 @@ pub fn read_activations_json(
     Ok((Some(parsed), lock_file))
 }
 
-/// Writes the environment registry file.
+/// Writes the environment `activations.json` file.
 /// The file is written atomically.
 /// The lock is released after the write.
 ///
