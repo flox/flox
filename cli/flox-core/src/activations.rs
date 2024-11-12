@@ -25,9 +25,6 @@ type Error = anyhow::Error;
 /// being the only way to add an activation.
 /// Activations are identifiable by their [Activation::id], for simpler lookups
 /// and global uniqueness in case the that two environments have the same store path.
-///
-/// Notably, the [Activations] does not feature methods to remove activations.
-/// Removing actiavtions falls onto the watchdog, which is responsible for cleaning up activations.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Activations {
     version: Version<1>,
@@ -102,6 +99,7 @@ impl Activations {
         Ok(self.activations.last_mut().unwrap())
     }
 
+    /// Remove an activation. Should only be called by `flox-watchdog`.
     pub fn remove_activation(&mut self, id: impl AsRef<str>) {
         self.activations
             .retain(|activation| activation.id != id.as_ref());
