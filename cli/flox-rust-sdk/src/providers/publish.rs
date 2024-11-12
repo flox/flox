@@ -149,11 +149,11 @@ where
                 unfree: None,
                 version: None,
             },
-            locked_base_catalog_url: self.env_meta.base_catalog_ref.url.clone(),
-            url: self.env_meta.build_repo_ref.url.clone(),
-            rev: self.env_meta.build_repo_ref.rev.clone(),
-            rev_count: self.env_meta.build_repo_ref.rev_count as i64,
-            rev_date: self.env_meta.build_repo_ref.rev_date,
+            locked_base_catalog_url: Some(self.env_metadata.base_catalog_ref.url.clone()),
+            url: self.env_metadata.build_repo_ref.url.clone(),
+            rev: self.env_metadata.build_repo_ref.rev.clone(),
+            rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
+            rev_date: self.env_metadata.build_repo_ref.rev_date,
         };
         debug!("Publishing build in catalog...");
         client
