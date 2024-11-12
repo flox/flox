@@ -51,7 +51,7 @@ pub struct LockedUrlInfo {
     pub url: String,
     pub rev: String,
     pub rev_count: u64,
-    pub rev_date: Option<DateTime<Utc>>,
+    pub rev_date: DateTime<Utc>,
 }
 
 /// Ensures that the required metadata for publishing is consistent from the environment
@@ -223,11 +223,15 @@ fn gather_build_repo_meta(environment: &impl Environment) -> Result<LockedUrlInf
         .rev_count(rev.as_str())
         .map_err(|e| PublishError::UnsupportEnvironmentState(format!("Git error {e}")))?;
 
+    let rev_date = git
+        .rev_date(rev.as_str())
+        .map_err(|e| PublishError::UnsupportEnvironmentState(format!("Git error {e}")))?;
+
     Ok(LockedUrlInfo {
         url: origin.url,
         rev,
         rev_count,
-        rev_date: None,
+        rev_date,
     })
 }
 
@@ -269,7 +273,7 @@ fn gather_base_repo_meta(
                 .rev_count
                 .try_into()
                 .unwrap(),
-            rev_date: Some(pkg.as_catalog_package_ref().unwrap().rev_date),
+            rev_date: pkg.as_catalog_package_ref().unwrap().rev_date,
         }))
     } else {
         Err(PublishError::UnsupportEnvironmentState(
@@ -384,7 +388,7 @@ pub mod tests {
             base_repo_meta.rev_count,
             TryInto::<u64>::try_into(locked_base_pkg.rev_count).unwrap()
         );
-        assert_eq!(base_repo_meta.rev_date.unwrap(), locked_base_pkg.rev_date);
+        assert_eq!(base_repo_meta.rev_date, locked_base_pkg.rev_date);
     }
 
     #[test]
