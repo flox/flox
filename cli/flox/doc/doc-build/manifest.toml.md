@@ -151,7 +151,7 @@ Each option is described below:
     pkg-groups and packages interact during upgrades.
 
 `version`
-:   Requires that the package match either an exact version or a semver range.
+:   Requires that the package match either an exact version or a SemVer range.
 
     The semantic version can be specified with the typical qualifiers such as
     `^`, `>=`, etc.
@@ -443,7 +443,7 @@ echo 'Hello, World!' >> $out/hello.txt
 '''
 ```
 
-This would define a package called `hello` that produces a singe file
+This would define a package called `hello` that produces a single file
 `hello.txt` containing the string `Hello, World!".
 Running `flox build hello` would create a symlink `./result-hello`
 in the directory adjacent to the `./flox` directory.

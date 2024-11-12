@@ -64,7 +64,7 @@ setup_test_envname() {
 
 # Build `hello' and root it temporarily so it can be used as an
 # install target in various tests.
-# This symlink is deleteed by `common_teardown'.
+# This symlink is deleted by `common_teardown'.
 hello_pkg_setup() {
   if [[ -n "${__FT_RAN_HELLO_PKG_SETUP:-}" ]]; then return 0; fi
   export HELLO_LINK="$BATS_SUITE_TMPDIR/gc-roots/hello"
@@ -186,7 +186,7 @@ wait_for_watchdogs() {
   # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
   # grep command itself doesn't get listed when we search for the data dir.
   # The `sed` removes any leading whitespace,
-  # that is present in the output of `ps` on linux aparently?!.
+  # that is present in the output of `ps` on linux apparently?!.
   # The `cut` just extracts the PID.
 
   local pids

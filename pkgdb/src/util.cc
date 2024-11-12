@@ -382,7 +382,7 @@ getAvailableSystemMemory()
 
   long long physicalRAM = getSysCtlValue<long long>( "hw.memsize" );
   /* For now use 3/4ths of physical ram.
-   * Simplifed from ((physicalRAM / 1024) / 4) * 3
+   * Simplified from ((physicalRAM / 1024) / 4) * 3
    */
   availableKb = ( physicalRAM / 4096 ) * 3;
 #else

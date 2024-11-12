@@ -241,7 +241,7 @@ gitconfig_setup() {
 
 # deleteEnvForce ENV_NAME
 # ------------------------
-# Force the destruction of an env including any remote metdata.
+# Force the destruction of an env including any remote metadata.
 deleteEnvForce() {
   # TODO delete using Rust
   # { $FLOX_BIN --bash-passthru delete -e "${1?}" --origin -f||:; } >/dev/null 2>&1;

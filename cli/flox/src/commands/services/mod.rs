@@ -206,7 +206,7 @@ pub fn guard_is_within_activation(
 }
 
 /// Warn about manifest changes that may require services to be restarted, if
-/// the Environment has a service manager running. It doesn't guarentee that the
+/// the Environment has a service manager running. It doesn't guarantee that the
 /// service manager is working (e.g. hasn't crashed). It is the caller's
 /// responsibility to determine what manifest changes would affect services.
 pub fn warn_manifest_changes_for_services(flox: &Flox, env: &dyn Environment) {

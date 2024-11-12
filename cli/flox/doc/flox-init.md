@@ -26,7 +26,7 @@ The name of the environment will be the basename of the current directory
 or `default` if the current directory is `$HOME`.
 The `--name` flag can be used to give the environment a specific name.
 
-By default the environment will be created in the current directory.
+By default, the environment will be created in the current directory.
 Flox will add a directory `$PWD/.flox` containing all relevant environment
 metadata.
 The `--dir` flag can be used to create an environment in another location.

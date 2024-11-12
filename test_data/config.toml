@@ -74,7 +74,7 @@ pre_cmd = '''
     tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux" ]' .flox/env/manifest.toml
 '''
 cmd = "flox install glibc"
-ignore_cmd_errors = true # build will fail on macos, thats fine
+ignore_cmd_errors = true # build will fail on macos, that's fine
 
 [resolve.glibc_incompatible]
 pre_cmd = '''
@@ -85,7 +85,7 @@ cmd = '''
  tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux", "aarch64-darwin" ]' .flox/env/manifest.toml
  flox install glibc || true
 '''
-ignore_cmd_errors = true # build will fail on macos, thats fine
+ignore_cmd_errors = true # build will fail on macos, that's fine
 
 [resolve.influxdb2]
 pre_cmd = "flox init"
@@ -97,7 +97,7 @@ pre_cmd = '''
     tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin" ]' .flox/env/manifest.toml
 '''
 cmd = "flox install darwin.ps"
-ignore_cmd_errors = true # build will fail on linux, thats fine
+ignore_cmd_errors = true # build will fail on linux, that's fine
 
 [resolve.darwin_ps_incompatible]
 pre_cmd = '''
@@ -107,7 +107,7 @@ cmd = '''
     tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin", "aarch64-linux" ]' .flox/env/manifest.toml
     flox install darwin.ps
 '''
-ignore_cmd_errors = true # build will fail on linux, thats fine
+ignore_cmd_errors = true # build will fail on linux, that's fine
 
 [resolve.fish_3_2_2]
 pre_cmd = "flox init"
@@ -236,7 +236,7 @@ cmd = "flox install vim"
 [resolve.vim-vim-full-conflict]
 pre_cmd = "flox init"
 cmd = "flox install vim vim-full"
-ignore_cmd_errors = true # pacakges conflict
+ignore_cmd_errors = true # packages conflict
 
 
 [search.hello]

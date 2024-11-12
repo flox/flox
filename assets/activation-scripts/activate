@@ -15,7 +15,7 @@ set -euo pipefail
 export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
 [ "$_flox_activate_tracelevel" -eq 0 ] || set -x
 
-# These all derive from the `flox-interpeter` package.
+# These all derive from the `flox-interpreter` package.
 # FIXME This is wrong; the profile.d scripts in particular should be
 #       sourced from the environment itself so that users can add pkgs
 #       which add additional scripts to the etc/profile.d directory.

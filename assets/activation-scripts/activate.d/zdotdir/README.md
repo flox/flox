@@ -28,7 +28,7 @@ The zsh initialization sequence as described in the `zsh(1)` man page is:
 4. if a *login shell*, source `/etc/zlogin` followed by `$ZDOTDIR/.zlogin`
 
 Our goal is to source our own `$FLOX_ZSH_INIT_SCRIPT` last, so we must apply
-conditional logic to figure out which of the first, third or fourth case above
+conditional logic to figure out which of the first, third, or fourth case above
 will be the last to be sourced, then append the sourcing of our script to that.
 This logic can be found at the end of each of the `.{zshenv,zshrc,zlogin}`
 scripts.

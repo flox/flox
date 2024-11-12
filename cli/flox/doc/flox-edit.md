@@ -21,7 +21,7 @@ flox [<general options>] edit
 
 ## Transactionally edit the environment manifest.
 
-By default invokes an editor with a copy of the local manifest for the user to
+By default, invokes an editor with a copy of the local manifest for the user to
 interactively edit.
 The editor is found by querying `$EDITOR`, `$VISUAL`,
 and then by looking for common editors in `$PATH`.

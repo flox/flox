@@ -185,7 +185,7 @@ floxNixpkgsAttrsToGithubAttrs( const nix::fetchers::Attrs & attrs )
  * @todo throw a flox exception instead of a nix exception for easier handling?
  * @todo support wrapping of other inputs than `github:nixos/nixpkgs`.
  * This would also require changes to the `WrappedNixpkgsInputScheme` class,
- * as well as existing conversion methods imlemented for it.
+ * as well as existing conversion methods implemented for it.
  */
 nix::fetchers::Attrs
 githubAttrsToFloxNixpkgsAttrs( const nix::fetchers::Attrs & attrs )

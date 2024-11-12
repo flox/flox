@@ -89,7 +89,7 @@ let
       process-compose
       procps
     ]
-    # TODO: this hack is not going to be needed once we test against sutff on system
+    # TODO: this hack is not going to be needed once we test against stuff on system
     ++ lib.optional stdenv.isDarwin (
       runCommandCC "locale"
         {

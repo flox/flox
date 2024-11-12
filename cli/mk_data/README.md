@@ -68,7 +68,7 @@ Semantics:
 - `files` are relative paths specified relative to the input data directory.
 - `files` are copied from the input data directory into the working directory before anything else happens.
 - `pre_cmd` executes next, but no response file is generated during execution.
-- `cmd` is executed next and a response file is generated.
+- `cmd` is executed next, and a response file is generated.
 - `post_cmd` is executed next, but no response file is generated.
 - `$RESPONSE_FILE` contains the path to the generated response file and is available inside `post_cmd` for post-processing of response files.
 

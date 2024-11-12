@@ -53,7 +53,7 @@ static constexpr std::string_view REQUISITES_TXT_NAME = "requisites.txt";
 /**
  * @class flox::buildenv::SystemNotSupportedByLockfile
  * @brief An exception thrown when a lockfile is is missing a package.<system>
- * entry fro the requested system.
+ * entry from the requested system.
  * @{
  */
 FLOX_DEFINE_EXCEPTION( SystemNotSupportedByLockfile,

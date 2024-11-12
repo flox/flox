@@ -251,7 +251,7 @@ fn ensure_process_group_leader() -> Result<(), Error> {
     // Trivia:
     // You can't create a new session if you're already a session leader, the reason being that
     // the other processes in the group aren't automatically moved to the new session. You're supposed
-    // to have this invariant: all processes in a process group share the same controllling terminal.
+    // to have this invariant: all processes in a process group share the same controlling terminal.
     // If you were able to create a new session as session leader and leave behind the other processes
     // in the group in the old session, it would be possible for processes in this group to be in two
     // different sessions and therefore have two different controlling terminals.

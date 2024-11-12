@@ -53,7 +53,7 @@ FloxHub with local changes to the environment.
 :   FloxHub owner to push environment to (default: current FloxHub user).
 
 `-f`, `--force`
-:   Forceably overwrite the remote copy of the environment.
+:   Forcibly overwrite the remote copy of the environment.
 
 ```{.include}
 ./include/general-options.md

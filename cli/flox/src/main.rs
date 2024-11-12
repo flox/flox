@@ -186,7 +186,7 @@ fn main() -> ExitCode {
 
     exit_code
 
-    // drop(runtime) should implicilty be last
+    // drop(runtime) should implicitly be last
 }
 
 /// Error to exit without printing an error message

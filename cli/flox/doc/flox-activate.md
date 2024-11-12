@@ -34,7 +34,7 @@ and adds `bin` directories to your `$PATH`.
   Executes `CMD` in the same environment as if run inside an interactive shell
   produced by an interactive `flox activate`
   The shell `CMD` is run by is determined by `$FLOX_SHELL` or `$SHELL`.
-* in-place: `flox activate` when invoked from an non-interactive shell
+* in-place: `flox activate` when invoked from a non-interactive shell
   with it's `stdout` redirected e.g. `eval "$(flox activate)"`\
   Produces commands to be sourced by the parent shell.
   Flox will determine the parent shell from `$FLOX_SHELL` or otherwise

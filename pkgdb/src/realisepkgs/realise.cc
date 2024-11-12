@@ -226,7 +226,7 @@ tryEvaluatePackageOutPath( nix::ref<nix::EvalState> &              state,
         }
 
       /**
-       * eval errors are cached without the eror trace
+       * eval errors are cached without the error trace
        * force an impure eval to get the full error message
        */
       try

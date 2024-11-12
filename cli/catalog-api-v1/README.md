@@ -6,7 +6,7 @@ using the [progenitor](https://github.com/oxidecomputer/progenitor) crate.
 
 ## Documentation
 
-The types and methods of the client are docuemnted using rustdoc.
+The types and methods of the client are documented using rustdoc.
 [progenitor](https://github.com/oxidecomputer/progenitor) tries it's best
 to enhance the documentation of the generated client based on the spec.
 
@@ -18,7 +18,7 @@ $ cargo doc --open -p catalog-api-v1
 
 Since the client code is generated directly into [the source directory](./src/),
 changes to the [OpenAPI Spec](./openapi.json) are reflected after the next code analysis.
-It may be necessary to updated the shims in [`flox-rust-sdk`](../flox-rust-sdk/)
+It may be necessary to update the shims in [`flox-rust-sdk`](../flox-rust-sdk/)
 after the client was updated.
 
 ```
@@ -26,7 +26,7 @@ after the client was updated.
 $ cargo check -p catalog-api-v1
 ```
 
-Finally, remember to check-in the updated sources.
+Finally, remember to check in the updated sources.
 Mid-term updating the client library and proposing it as a PR will be done by automation.
 
 ## Debugging

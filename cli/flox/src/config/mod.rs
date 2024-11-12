@@ -32,7 +32,7 @@ pub struct Config {
     /// Feature flags are set from config but more commonly controlled by
     /// `FLOX_FEATURES_` environment variables.
     ///
-    /// Accessing from `flox_rust_sdk::flox::Flox.features` should be prefered
+    /// Accessing from `flox_rust_sdk::flox::Flox.features` should be preferred
     /// over `flox::config::Config.features` if both are available.
     #[serde(default)]
     pub features: Option<Features>,
@@ -264,7 +264,7 @@ impl Config {
 
     /// get a value from the config
     ///
-    /// **intended for human consumtion/intospection of config only**
+    /// **intended for human consumption/intospection of config only**
     ///
     /// Values in the context should be read from the [Config] type instead!
     pub fn get(&self, path: &[Key]) -> Result<String, ReadWriteError> {
@@ -296,7 +296,7 @@ impl Config {
         Ok(value.to_string())
     }
 
-    /// Append or update a key value parin in the toml representation of a partial config
+    /// Append or update a key value paring in the toml representation of a partial config
     ///
     /// Validate using [Self]
     pub fn write_to<V: Serialize>(

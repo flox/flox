@@ -43,7 +43,7 @@ public:
 /* -------------------------------------------------------------------------- */
 
 /* Approach 2: Using `friend' classes.
- * This does not require changes to visiblity, but does require a forward
+ * This does not require changes to visibility, but does require a forward
  * declaration of `TestClass1' in your public headers. */
 
 class TestClass1;

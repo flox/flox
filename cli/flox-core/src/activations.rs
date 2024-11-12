@@ -220,7 +220,7 @@ impl Activation {
 
     /// Whether the activation is ready to be attached to.
     ///
-    /// "Readyness" is a one way state change, set via [Self::set_ready].
+    /// "Readiness" is a one way state change, set via [Self::set_ready].
     pub fn ready(&self) -> bool {
         self.ready
     }

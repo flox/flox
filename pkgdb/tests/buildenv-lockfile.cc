@@ -150,7 +150,7 @@ test_LockfileFromV1()
   auto pkg = lockfile.packages[0];
   EXPECT_EQ( pkg.installId, "mycowsay" );
 
-  // The attr path is pre-pended for compatibility reasons
+  // The attr path is prepended for compatibility reasons
   flox::AttrPath attrPath = { "legacyPackages", "x86_64-linux", "cowsay" };
   EXPECT( pkg.attrPath == attrPath );
 
