@@ -161,13 +161,25 @@ realisepkgsPackageFromV1Descriptor( const nlohmann::json &     jfrom,
       pkg.priority = jfrom["priority"];
 
       // Set `input` to a flox-nixpkgs input
-      pkg.input              = resolver::LockedInputRaw();
       std::string locked_url = jfrom["locked_url"];
-      // Convert first from https to github and then to flox-nixpkgs
-      // TODO: do this in one hop instead of two
-      pkg.input       = nixpkgsHttpsToGithubInput( locked_url );
-      pkg.input.attrs = flox::githubAttrsToFloxNixpkgsAttrs( pkg.input.attrs );
-      pkg.input.url   = nix::FlakeRef::fromAttrs( pkg.input.attrs ).to_string();
+      if ( locked_url.find( "https://github.com/flox/nixpkgs" ) == 0 )
+        {
+          // Convert first from https to github and then to flox-nixpkgs
+          // TODO: do this in one hop instead of two
+          pkg.input = resolver::LockedInputRaw();
+          pkg.input = nixpkgsHttpsToGithubInput( locked_url );
+          pkg.input.attrs
+            = flox::githubAttrsToFloxNixpkgsAttrs( pkg.input.attrs );
+          pkg.input.url
+            = nix::FlakeRef::fromAttrs( pkg.input.attrs ).to_string();
+        }
+      else
+        {
+          // TODO - else, this is likely a custom catalog package.
+          traceLog(
+            nix::fmt( "locked_url is not nixpkgs... skipping input for %s ",
+                      attrPath ) );
+        }
     }
 }
 

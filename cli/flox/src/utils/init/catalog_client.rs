@@ -52,6 +52,11 @@ pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
             }
         };
 
+        // Authenticated requests (for custom catalogs) require a token.
+        if let Some(token) = config.flox.floxhub_token.as_ref() {
+            extra_headers.insert("Authorization".to_string(), format!("Bearer {}", token));
+        };
+
         // Pass in a bool if we are running in CI, so requests can reflect this in the headers
         if std::env::var("CI").is_ok() {
             extra_headers.insert("flox-ci".to_string(), "true".to_string());

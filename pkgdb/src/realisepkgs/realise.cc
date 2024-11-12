@@ -375,7 +375,6 @@ getRealisedOutputs( nix::ref<nix::EvalState> &       state,
         }
       catch ( const nix::Error & e )
         {
-          debugLog( "failed to ensure path: " + std::string( e.what() ) );
           allValid = false;
           break;  // no need to check the rest if any output is not
                   // substitutable

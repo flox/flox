@@ -1568,15 +1568,16 @@ pub(crate) mod tests {
             &self,
             _catalog_name: impl AsRef<str> + Send + Sync,
         ) -> Result<(), CatalogClientError> {
-            unreachable!("catalog service should not be called");
+            unreachable!("create_catalog should not be called");
         }
 
         async fn create_package(
             &self,
             _catalog_name: impl AsRef<str> + Send + Sync,
             _package_name: impl AsRef<str> + Send + Sync,
+            _original_url: impl AsRef<str> + Send + Sync,
         ) -> Result<(), CatalogClientError> {
-            unreachable!("catalog service should not be called");
+            unreachable!("create_package should not be called");
         }
 
         async fn publish_build(
@@ -1585,7 +1586,7 @@ pub(crate) mod tests {
             _package_name: impl AsRef<str> + Send + Sync,
             _build_info: &UserBuildInfo,
         ) -> Result<(), CatalogClientError> {
-            unreachable!("catalog service should not be called");
+            unreachable!("publish_build should not be called");
         }
     }
 
