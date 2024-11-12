@@ -1184,6 +1184,7 @@ pub mod test_helpers {
         version: &str,
     ) -> ResolvedPackageGroup {
         let pkg = PackageResolutionInfo {
+            catalog: None,
             attr_path: pkg_path.to_string(),
             broken: Some(false),
             derivation: String::new(),

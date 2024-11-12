@@ -153,7 +153,10 @@ where
                 version: None,
             },
             locked_base_catalog_url: Some(self.env_meta.build_repo_ref.url.clone()),
-            locked_url: self.env_meta.base_catalog_ref.as_ref().unwrap().url.clone(),
+            url: self.env_meta.build_repo_ref.url.clone(),
+            rev: self.env_meta.build_repo_ref.rev.clone(),
+            rev_count: self.env_meta.build_repo_ref.rev_count as i64,
+            rev_date: self.env_meta.build_repo_ref.rev_date.unwrap(),
         };
         client
             .publish_build(&catalog_name, &self.build_meta.package, &build_info)
