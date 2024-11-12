@@ -1,7 +1,0 @@
-version = 1
-
-[install]
-bpftrace.pkg-path = "bpftrace"
-
-[options]
-systems = ["aarch64-linux", "x86_64-linux"] 
