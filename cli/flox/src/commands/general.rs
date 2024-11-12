@@ -47,7 +47,7 @@ impl ResetMetrics {
         }
 
         let notice = indoc! {"
-            Sucessfully reset telemetry ID for this machine!
+            Successfully reset telemetry ID for this machine!
 
             A new ID will be assigned next time you use Flox.
 

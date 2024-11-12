@@ -718,7 +718,7 @@ impl Activate {
             })
     }
 
-    /// Construct the envrionment list for the shell prompt
+    /// Construct the environment list for the shell prompt
     ///
     /// [`None`] if the prompt is disabled, or filters removed all components.
     fn make_prompt_environments(

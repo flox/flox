@@ -360,7 +360,7 @@ impl ProcessStates {
         self.0.iter().find(|state| state.name == name)
     }
 
-    /// Iterater over references to the contained [ProcessState]s.
+    /// Iterate over references to the contained [ProcessState]s.
     pub fn iter(&self) -> impl Iterator<Item = &ProcessState> {
         self.0.iter()
     }
@@ -659,7 +659,7 @@ impl Iterator for ProcessComposeLogStream {
     fn next(&mut self) -> Option<Self::Item> {
         match self.receiver.recv() {
             Ok(line) => Some(Ok(line)),
-            // All senders have been dropped, so we wont't receive any more messages.
+            // All senders have been dropped, so we won't receive any more messages.
             // Drain remaining reader return values.
             Err(_) => {
                 loop {
@@ -964,7 +964,7 @@ pub mod test_helpers {
                 // Processes _may_ have not started yet, or the socket is unresponsive.
                 // We can't really check if the process is running,
                 // as it may have already exited.
-                // We could chek if the socket can be connected to
+                // We could check if the socket can be connected to
                 // or try to read ProcessStates, if the current approach leads to flaking tests.
                 if socket.exists() {
                     break;

@@ -62,7 +62,7 @@ pub struct Pull {
     #[bpaf(long, short, argument("path"))]
     dir: Option<PathBuf>,
 
-    /// Forceably pull the environment
+    /// Forcibly pull the environment
     /// When pulling a new environment, adds the system to the manifest if the lockfile is incompatible
     /// and ignores eval and build errors.
     /// When pulling an existing environment, overrides local changes.

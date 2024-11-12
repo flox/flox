@@ -61,7 +61,7 @@ protected:
   shouldIgnoreWarning( const std::string & str ) const
   {
     /* Ignore warnings about overrides for missing indirect inputs.
-     * These can come up when an indirect input drops a dependendency
+     * These can come up when an indirect input drops a dependency
      * between different revisions and isn't particularly interesting
      * to users. */
     if ( str.find( " has an override for a non-existent input " )

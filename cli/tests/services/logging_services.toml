@@ -18,7 +18,7 @@ echo 3
 echo >> ./resume-mostly-deterministic.pipe
 
 # Asserting any output past this is prone to race conditions,
-# since we cant guarantee that tests will run before the sleep ends
+# since we can't guarantee that tests will run before the sleep ends
 sleep 3
 
 echo 4

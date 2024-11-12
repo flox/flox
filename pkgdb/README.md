@@ -13,14 +13,14 @@ Links to additional documentation may be found at the bottom of this file.
 
 ## Purpose
 
-Evaluating nix expressions for an entire flake is expensive but necessary for
+Evaluating nix expressions for an entire flake is expensive, but necessary for
 features like package search.
 This tool provides a way to scrape the data from a flake once and store it in a
 database for later usage.
 
 The current responsibility of the `pkgdb` tool extends only as far as scraping
 a flake and generating a database.
-The database should be queried using standard sqlite tools and libraries and all
+The database should be queried using standard SQLite tools and libraries and all
 decisions about how and when to generate and update the database are left up to
 the consumer.
 
@@ -100,7 +100,7 @@ $ for subtree in packages legacyPackages; do
 $ sqlite3 "$dbPath" 'SELECT COUNT( * ) FROM Packages';
 ```
 
-In the example above we the caller would passes in a locked ref, this was
+In the example above we the caller would pass in a locked ref, this was
 technically optional, but is strongly recommended.
 What's important is that invocations that intend to append to an existing
 database ABSOLUTELY SHOULD be using locked flake references.
@@ -165,7 +165,7 @@ architectures) by a `Descriptions` table.
 If they are defined explicitly, `pname` and `version` will be read from the
 corresponding attributes.
 Otherwise, they will be parsed from the `name`.
-If `version` can be converted to a semver, it will be.
+If `version` can be converted to a SemVer, it will be.
 
 Note that the `attrName` for a package is the actual name in the tree.
 

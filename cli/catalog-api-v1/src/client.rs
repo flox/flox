@@ -2864,7 +2864,7 @@ impl Client {
 Search the catalog(s) under the given criteria for matching packages.
 
 Required Query Parameters:
-- **seach_term**: The search term to search on.
+- **search_term**: The search term to search on.
 - **system**: This is returned but does not affect results
 
 Optional Query Parameters:
@@ -2922,7 +2922,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
-    /**Shows avaliable packages of a specfic package
+    /**Shows available packages of a specific package
 
 Returns a list of versions for a given attr_path
 

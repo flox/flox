@@ -501,7 +501,7 @@ impl Lockfile {
     /// Already locked flake installables will not be locked again,
     /// and copied from the seed lockfile as is.
     ///
-    /// Catalog and flake installables are locked separately, usinf largely symmetric logic.
+    /// Catalog and flake installables are locked separately, using largely symmetric logic.
     /// Keeping the locking of each kind separate keeps the existing methods simpler
     /// and allows for potential parallelization in the future.
     pub async fn lock_manifest(
@@ -659,7 +659,7 @@ impl Lockfile {
             let new_priority = manifest
                 .install
                 .get(install_id)
-                .and_then(|desciptor| desciptor.as_catalog_descriptor_ref())
+                .and_then(|descriptor| descriptor.as_catalog_descriptor_ref())
                 .and_then(|descriptor| descriptor.priority)
                 .unwrap_or(DEFAULT_PRIORITY);
 

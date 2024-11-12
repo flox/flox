@@ -194,7 +194,7 @@ impl DisplaySearchResults {
         // In addition after deduplication we may have fewer results than the limit,
         // but we dont want to show a message like `Showing 5 of 9...`,
         // when the requested number of results is 10.
-        // There is still an issue wit duplicate results where even when called with `--all`
+        // There is still an issue with duplicate results where even when called with `--all`
         // the number of elements in `deduped_display_items` may be less than `count`.
         // That bug will be fixed separately.
         if count == self.n_results {

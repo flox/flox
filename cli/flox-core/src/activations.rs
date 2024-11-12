@@ -27,7 +27,7 @@ type Error = anyhow::Error;
 /// and global uniqueness in case the that two environments have the same store path.
 ///
 /// Notably, the [Activations] does not feature methods to remove activations.
-/// Removing actiavtions falls onto the watchdog, which is responsible for cleaning up activations.
+/// Removing activations falls onto the watchdog, which is responsible for cleaning up activations.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Activations {
     version: Version<1>,
@@ -144,7 +144,7 @@ impl Activation {
 
     /// Whether the activation is ready to be attached to.
     ///
-    /// "Readyness" is a one way state change, set via [Self::set_ready].
+    /// "Readiness" is a one way state change, set via [Self::set_ready].
     pub fn ready(&self) -> bool {
         self.ready
     }

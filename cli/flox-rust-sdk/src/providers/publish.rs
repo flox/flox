@@ -24,7 +24,7 @@ pub enum PublishError {
     NonexistentOutputs(String),
 
     #[error("The environment is in an unsupported state for publishing: {0}")]
-    UnsupportEnvironmentState(String),
+    UnsupportedEnvironmentState(String),
 
     #[error("There was an error communicating with the catalog")]
     CatalogError(#[source] Box<dyn error::Error>),
@@ -178,12 +178,12 @@ pub fn check_build_metadata(
     // process to feed this.
 
     let system = SystemEnum::from_str(system).map_err(|e| {
-        PublishError::UnsupportEnvironmentState(format!("Unable to identify system: {e}"))
+        PublishError::UnsupportedEnvironmentState(format!("Unable to identify system: {e}"))
     })?;
 
     let result_dir = env
         .parent_path()
-        .map_err(|e| PublishError::UnsupportEnvironmentState(e.to_string()))?
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?
         .join(format!("result-{pkg}"));
     let store_dir = result_dir
         .read_link()
@@ -205,27 +205,27 @@ fn gather_build_repo_meta(environment: &impl Environment) -> Result<LockedUrlInf
     // Gather build repo info
     let git = match environment.parent_path() {
         Ok(env_path) => GitCommandProvider::discover(env_path)
-            .map_err(|e| PublishError::UnsupportEnvironmentState(format!("Git error {e}")))?,
-        Err(e) => return Err(PublishError::UnsupportEnvironmentState(e.to_string())),
+            .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git error {e}")))?,
+        Err(e) => return Err(PublishError::UnsupportedEnvironmentState(e.to_string())),
     };
 
     let origin = git
         .get_origin()
-        .map_err(|e| PublishError::UnsupportEnvironmentState(format!("Git error {e}")))?;
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git error {e}")))?;
 
     let rev = origin
         .revision
-        .ok_or(PublishError::UnsupportEnvironmentState(
+        .ok_or(PublishError::UnsupportedEnvironmentState(
             "No revision found".to_string(),
         ))?;
 
     let rev_count = git
         .rev_count(rev.as_str())
-        .map_err(|e| PublishError::UnsupportEnvironmentState(format!("Git error {e}")))?;
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git error {e}")))?;
 
     let rev_date = git
         .rev_date(rev.as_str())
-        .map_err(|e| PublishError::UnsupportEnvironmentState(format!("Git error {e}")))?;
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git error {e}")))?;
 
     Ok(LockedUrlInfo {
         url: origin.url,
@@ -242,7 +242,7 @@ fn gather_base_repo_meta(
     // Gather locked base catalog page info
     let lockfile = environment
         .lockfile(flox)
-        .map_err(|e| PublishError::UnsupportEnvironmentState(e.to_string()))?;
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
     let install_ids_in_toplevel_group = lockfile
         .manifest
         .pkg_descriptors_in_toplevel_group()
@@ -250,10 +250,10 @@ fn gather_base_repo_meta(
         .map(|(pkg, _desc)| pkg);
 
     // We should not need this, and allow for no base catalog page dependency.
-    // But for now, requireing it simplifies resolution and model updates
+    // But for now, requiring it simplifies resolution and model updates
     // significantly.
     if install_ids_in_toplevel_group.clone().count() == 0 {
-        return Err(PublishError::UnsupportEnvironmentState(
+        return Err(PublishError::UnsupportedEnvironmentState(
             "No packages in toplevel group".to_string(),
         ));
     }
@@ -276,7 +276,7 @@ fn gather_base_repo_meta(
             rev_date: pkg.as_catalog_package_ref().unwrap().rev_date,
         })
     } else {
-        Err(PublishError::UnsupportEnvironmentState(
+        Err(PublishError::UnsupportedEnvironmentState(
             "Unable to find locked descriptor for toplevel package".to_string(),
         ))
     }
@@ -377,7 +377,7 @@ pub mod tests {
 
         let lockfile_path = CanonicalPath::new(env.lockfile_path(&flox).unwrap());
         let lockfile = Lockfile::read_from_file(&lockfile_path.unwrap()).unwrap();
-        // Only the toplevel group in this example, so we can grap the first package
+        // Only the toplevel group in this example, so we can grab the first package
         let locked_base_pkg = lockfile.packages[0].as_catalog_package_ref().unwrap();
         assert_eq!(meta.base_catalog_ref.url, locked_base_pkg.locked_url);
         assert_eq!(meta.base_catalog_ref.rev, locked_base_pkg.rev);

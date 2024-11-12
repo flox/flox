@@ -284,7 +284,7 @@ mod tests {
             .expect("locking local test flake should succeed");
     }
 
-    // Tests against locking errors thown by pkgdb.
+    // Tests against locking errors thrown by pkgdb.
     //
     // There is currently no coverage of error cases in the pkgdb unit tests,
     // because it's not yet clear how detailed we want tests to be.

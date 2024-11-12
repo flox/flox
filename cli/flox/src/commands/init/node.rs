@@ -22,11 +22,11 @@ use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 
 const NPM_HOOK: &str = indoc! {"
-                # Install nodejs depedencies
+                # Install nodejs dependencies
                 npm install"};
 
 const YARN_HOOK: &str = indoc! {"
-                # Install nodejs depedencies
+                # Install nodejs dependencies
                 yarn"};
 
 /// The general flow of the node hook is:
@@ -150,7 +150,7 @@ impl Node {
         // but since npm comes bundled with nodejs, we'll probably cover the most
         // cases by just giving the requested node and hoping for the bundled
         // npm to work.
-        // We could check if our one version of npm with its harcoded nodejs
+        // We could check if our one version of npm with its hardcoded nodejs
         // satisfies all constraints,
         // but that seems unlikely to be as commonly needed.
         let versions = Self::get_package_json_versions(path)?;
@@ -989,7 +989,7 @@ mod tests {
                 "nodejs",
                 "18",
             )]);
-            // Reponse when yarn version 1 is requested
+            // Response when yarn version 1 is requested
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "yarn_group",
                 &System::from("aarch64-darwin"),

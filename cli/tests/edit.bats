@@ -208,7 +208,7 @@ EOF
   assert_success
 
   # applying the same edit again should return early
-  # (simulates quiting the editor without saving)
+  # (simulates quitting the editor without saving)
   run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   assert_success
   assert_output "⚠️  No changes made to environment."

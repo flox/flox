@@ -882,7 +882,7 @@ pub struct MsgAttrPathNotFoundNotInCatalog {
 /// A message that is returned by a catalog if the package,
 /// installed as [Self::install_id], cannot be resolved,
 /// because no single page contain a package for all requested systems.
-/// The catalog suggests an alternaive grouping in [Self::system_groupings].
+/// The catalog suggests an alternative grouping in [Self::system_groupings].
 ///
 /// Typically constructed from a [ResolutionMessageGeneral] where
 /// the [ResolutionMessageGeneral::type_] is [MessageType::AttrPathNotFoundSystemsNotOnSamePage].
@@ -936,7 +936,7 @@ pub struct MsgConstraintsTooTight {
     pub msg: String,
 }
 
-/// The content of a yet unkown message.
+/// The content of a yet unknown message.
 ///
 /// Generic messages are typically constructed [MsgGeneral].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

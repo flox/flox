@@ -140,7 +140,7 @@ impl ManifestBuilder for FloxBuildMk {
         // Add build target arguments by prefixing the package names with "build/".
         // If no packages are specified, build all packages.
         // While the default target is "build", we explicitly specify it here
-        // to avoid unintentional changes in behvaior.
+        // to avoid unintentional changes in behavior.
         if packages.is_empty() {
             let build_all_target = "build";
             command.arg(build_all_target);
@@ -1009,7 +1009,7 @@ mod tests {
         assert_eq!(
             String::from_utf8_lossy(&output.stdout).trim_end(),
             result_wrapped.to_string_lossy(),
-            "intepreted scripts are known to have the wrong arg0"
+            "interpreted scripts are known to have the wrong arg0"
         );
     }
 

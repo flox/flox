@@ -12,7 +12,7 @@ The caller provides filters to the query builder in the form of `PkgQueryArgs`.
 `PkgQuery` can either emit a SQL `SELECT` statement as a string or run that
 query on databases using `PkgQuery::bind( flox::pkgdb::database & )` or
 `PkgQuery::execute( flox::pkgdb::database & )`.
-The difference between `bind` and `execute` will be explain later.
+The difference between `bind` and `execute` will be explained later.
 
 Throughout this codebase you will find various `struct` and `class` definitions
 which essentially exist to hold the parsed user input and convert it into
@@ -59,7 +59,7 @@ stores it on the `SearchCommand` struct.
 `flox::search::SearchParams` contains these components:
 - A `flox::resolver::GlobalManifestRaw`, a path to a global manifest file,
   or nothing.
-- A `flox::resolver::ManfiestRaw`, a path to a manifest file, or nothing.
+- A `flox::resolver::ManifestRaw`, a path to a manifest file, or nothing.
 - A `flox::resolver::LockfileRaw`, a path to a lockfile, or nothing.
 - A `flox::search::SearchQuery`.
 
@@ -123,7 +123,7 @@ The query is constructed when the `PkgQuery` is initialized from
 the `PkgQueryArgs`.
 `PkgQuery` stores an internal list of `SELECT`, `WHERE`, etc clauses that get
 built up as the query arguments are processed.
-The details of query building is covered in a separate section.
+The details of query building are covered in a separate section.
 
 ### The query is executed
 

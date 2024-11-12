@@ -19,7 +19,7 @@
 export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
 [ "$_flox_activate_tracelevel" -eq 0 ] || set -x
 
-# These all derive from the `flox-interpeter` package
+# These all derive from the `flox-interpreter` package
 export _activate_d="@out@/activate.d"
 export _profile_d="@out@/etc/profile.d"
 export _tcsh_home="@out@/activate.d/tcsh_home"

@@ -26,7 +26,7 @@ During an installation attempt the environment is built in order to validate
 that the environment isn't broken
 (for example, in rare cases packages may provide files that conflict).
 If building the environment fails,
-including any of the consitituent packages,
+including any of the constituent packages,
 the attempt is discarded and the environment is unmodified.
 If the build succeeds, the environment is atomically updated.
 

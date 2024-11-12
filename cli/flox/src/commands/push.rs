@@ -38,7 +38,7 @@ pub struct Push {
     #[bpaf(long, short, argument("owner"))]
     owner: Option<EnvironmentOwner>,
 
-    /// Forceably overwrite the remote copy of the environment
+    /// Forcibly overwrite the remote copy of the environment
     #[bpaf(long, short)]
     force: bool,
 }

@@ -1951,7 +1951,7 @@ mod tests {
 
     /// [UpdateNotification::check_for_update_inner] returns
     /// [UpdateCheckResult::MissingNotificationFile] if no update is available
-    ///  but the nitification file is missing
+    ///  but the notification file is missing
     #[tokio::test]
     async fn test_check_for_update_returns_missing_notification_file() {
         let temp_dir = tempdir().unwrap();

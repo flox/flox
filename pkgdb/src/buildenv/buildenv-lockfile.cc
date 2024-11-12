@@ -32,7 +32,7 @@ BuildenvLockfile::load_from_content( const nlohmann::json & jfrom )
       default:
         throw resolver::InvalidLockfileException(
           "unsupported lockfile version",
-          "only v0 and v1 are supprted" );
+          "only v0 and v1 are supported" );
     }
 }
 

@@ -395,7 +395,7 @@ impl PathEnvironment {
         match DotFlox::open_in(dot_flox_parent_path.as_ref()) {
             // continue if the .flox directory does not exist, as it's being created by this method
             Err(EnvironmentError::DotFloxNotFound(_)) => {},
-            // propagate any other error signalling a faulty .flox directory
+            // propagate any other error signaling a faulty .flox directory
             Err(e) => Err(e)?,
             // .flox directory exists, so we can't create a new environment here
             Ok(_) => Err(EnvironmentError::EnvironmentExists(

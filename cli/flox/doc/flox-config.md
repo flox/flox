@@ -112,7 +112,7 @@ flox config --set 'trusted_environments."owner/name"' trust
     (default: "show-all").
     This has been deprecated in favor of `set_prompt` and `hide_default_prompt`.
     Possible values are
-    * "show-all": shows all active anvironments
+    * "show-all": shows all active environments
     * "hide-all": disables the modification of the shell prompt
     * "hide-default": filters out environments named 'default' from the shell prompt
 

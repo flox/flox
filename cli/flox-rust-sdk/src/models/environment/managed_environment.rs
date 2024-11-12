@@ -1010,7 +1010,7 @@ impl ManagedEnvironment {
     /// Note:
     /// This is not a method on CoreEnvironment because its currently only relevant
     /// in the context of a ManagedEnvironment.
-    /// A potential future version could provide more detailed comaparison/diff information
+    /// A potential future version could provide more detailed comparison/diff information
     /// that may be more generally useful and see this method changed or moved.
     fn validate_checkout(
         local: &CoreEnvironment,
@@ -1199,7 +1199,7 @@ fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> Strin
 /// within the context of an instance of [ManagedEnvironment].
 ///
 /// [`remote_branch_name`] is primarily used when talking to upstream on FloxHub,
-/// during opening to reconciliate with the upsream repo
+/// during opening to reconciliate with the upstream repo
 /// as well as during [`ManagedEnvironment::pull`].
 pub fn remote_branch_name(pointer: &ManagedPointer) -> String {
     format!("{}", pointer.name)
@@ -2305,7 +2305,7 @@ mod test {
             .join(MANIFEST_FILENAME)
             .exists());
 
-        // dlete env dir to see wheter it is recreated
+        // dlete env dir to see whether it is recreated
         fs::remove_dir_all(managed_env.path.join(ENV_DIR_NAME)).unwrap();
 
         let _ = managed_env
@@ -2394,13 +2394,13 @@ mod test {
         "})
         .unwrap();
 
-        // sanity check that before synching, the manifest is now different
+        // sanity check that before syncing, the manifest is now different
         assert_ne!(
             local_checkout.manifest_contents().unwrap(),
             generation_manifest
         );
 
-        // check that after synching, the manifest is the same
+        // check that after syncing, the manifest is the same
         managed_env.create_generation_from_local_env(&flox).unwrap();
 
         let generation_manifest = managed_env

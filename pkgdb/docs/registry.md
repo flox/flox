@@ -80,7 +80,7 @@ and are often used in the output of `search` and `resolve` invocations.
 
 The `from` fields in each `input` are _flake references_ like those seen in
 `flake.nix` files, being either a URL string or an attribute set representation.
-These _flake references_ may be locked or unlocked but
+These _flake references_ may be locked or unlocked, but
 **locking is strongly recommended** for most use cases.
 
 The `priority` list should contain ONLY keys from `inputs`, and is used to

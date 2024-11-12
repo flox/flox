@@ -38,7 +38,7 @@ pub enum BuildEnvError {
     /// I.e. `nix build` returned with a non-zero exit code.
     /// The error message is the stderr of the `nix build` command.
     // TODO: this requires to capture the stderr of the `nix build` command
-    // or essentially "tee" it if we also want to foward the logs to the user.
+    // or essentially "tee" it if we also want to forward the logs to the user.
     // At the moment the "interesting" logs
     // are emitted by the `pkgdb realise` portion of the build.
     // So in the interest of initial simplicity

@@ -781,7 +781,7 @@ EOF
     read < ./resume-one.pipe
     read < ./resume-mostly-deterministic.pipe
 
-    # kill log reading, because with `--follow` the process wil block indefinitely
+    # kill log reading, because with `--follow` the process will block indefinitely
     timeout 0.5 "$FLOX_BIN" services logs --follow one mostly-deterministic
 EOF
   )
@@ -815,11 +815,11 @@ EOF
         sleep .1
       done
     '; then
-      # kill log reading, because with `--follow` the process wil block indefinitely
+      # kill log reading, because with `--follow` the process will block indefinitely
       kill -SIGTERM "$logs_pid"
     else
       echo "didn't find expected logs"
-      # kill log reading, because with `--follow` the process wil block indefinitely
+      # kill log reading, because with `--follow` the process will block indefinitely
       kill -SIGTERM "$logs_pid"
       exit 1
     fi

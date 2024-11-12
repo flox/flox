@@ -35,7 +35,7 @@ namespace flox::realisepkgs {
 /**
  * @class flox::realisepkgs::SystemNotSupportedByLockfile
  * @brief An exception thrown when a lockfile is is missing a package.<system>
- * entry fro the requested system.
+ * entry from the requested system.
  * @{
  */
 FLOX_DEFINE_EXCEPTION( SystemNotSupportedByLockfile,
