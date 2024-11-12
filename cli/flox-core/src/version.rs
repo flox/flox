@@ -107,7 +107,7 @@ mod tests {
         serde_json::from_value::<Bla>(json!({
             "foo": "bar",
         }))
-        .expect_err("Should'nt parse implicit V2");
+        .expect_err("Shouldn't parse implicit V2");
 
         serde_json::from_value::<Bla>(json!({
             "foo": "bar",

@@ -60,7 +60,7 @@ pub fn format_error(err: &EnvironmentError) -> String {
 
             Try deleting the '.flox' directory and reinitializing the environment.
             If you cloned this environment from a remote repository, verify that
-            `.flox/env/maifest.toml` is commited to the version control system.
+            `.flox/env/maifest.toml` is committed to the version control system.
         "},
         // todo: enrich with a path?
         EnvironmentError::EnvPointerNotFound => formatdoc! {"
@@ -70,7 +70,7 @@ pub fn format_error(err: &EnvironmentError) -> String {
 
             Try deleting the '.flox' directory and reinitializing the environment.
             If you cloned this environment from a remote repository, verify that
-            `.flox/env.json` is commited to the version control system.
+            `.flox/env.json` is committed to the version control system.
         "},
 
         // todo: enrich with a path?
@@ -81,7 +81,7 @@ pub fn format_error(err: &EnvironmentError) -> String {
 
             Try deleting the '.flox' directory and reinitializing the environment.
             If you cloned this environment from a remote repository, verify that
-            `.flox/env/maifest.toml` is commited to the version control system.
+            `.flox/env/maifest.toml` is committed to the version control system.
         "},
 
         // todo: enrich with a path?
@@ -115,7 +115,7 @@ pub fn format_error(err: &EnvironmentError) -> String {
 
             Try deleting the '.flox' directory and reinitializing the environment.
             If you cloned this environment from a remote repository, verify that
-            `.flox/env.json` is commited to the version control system.
+            `.flox/env.json` is committed to the version control system.
         "},
         // todo: enrich with a path?
         // todo: when can this happen:
@@ -123,7 +123,7 @@ pub fn format_error(err: &EnvironmentError) -> String {
         //   * user pushed environment but did not commit the changes to env.json
         //   * new version of the file format and we don't support it yet
         //     or not anymore with the current version of flox
-        //     (this should be catched earlier but you never know...)
+        //     (this should be caught earlier but you never know...)
         EnvironmentError::ParseEnvJson(error) => formatdoc! {"
             Failed to parse environment metadata: {error}
 
@@ -131,7 +131,7 @@ pub fn format_error(err: &EnvironmentError) -> String {
 
             Try deleting the '.flox' directory and reinitializing the environment.
             If you cloned this environment from a remote repository, verify that
-            the latest changes to `.flox/env.json` are commited to the version control system.
+            the latest changes to `.flox/env.json` are committed to the version control system.
         "},
         // this should always never be a problem and if it is, it's a bug
         // the user can likely not do anything about it
@@ -254,7 +254,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             err = format_core_error(err)
         },
         CoreEnvironmentError::MakeSandbox(_) => display_chain(err),
-        // witin transaction, user should not see this and likely can't do anything about it
+        // within transaction, user should not see this and likely can't do anything about it
         CoreEnvironmentError::WriteLockfile(_) => display_chain(err),
         CoreEnvironmentError::MakeTemporaryEnv(_) => display_chain(err),
         CoreEnvironmentError::PriorTransaction(backup) => {
@@ -424,7 +424,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
 
     match err {
         // todo: communicate reasons for this error
-        // git auth errors may be catched separately or reported
+        // git auth errors may be caught separately or reported
         ManagedEnvironmentError::OpenFloxmeta(err) => formatdoc! {"
             Failed to fetch environment: {err}
         "},
@@ -565,7 +565,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
                 message.to_string()
             }
         },
-        // acces denied is catched early as ManagedEnvironmentError::AccessDenied
+        // access denied is caught early as ManagedEnvironmentError::AccessDenied
         ManagedEnvironmentError::Push(_) => display_chain(err),
         ManagedEnvironmentError::DeleteBranch(_) => display_chain(err),
         ManagedEnvironmentError::DeleteEnvironment(path, err) => formatdoc! {"

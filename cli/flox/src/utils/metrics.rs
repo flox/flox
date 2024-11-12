@@ -337,7 +337,7 @@ impl Hub {
     /// Flush the metrics to the telemetry backend
     ///
     /// If `force` is true, the metrics are flushed even if the buffer is not expired.
-    /// This methods is jut a convience wrapper around [Client::flush],
+    /// This methods is jut a convenience wrapper around [Client::flush],
     /// that will do nothing if no client is setup.
     fn flush_metrics(&self, force: bool) -> Result<()> {
         self.with_client(|client| {
@@ -352,7 +352,7 @@ impl Hub {
 
     /// Record a metric event
     ///
-    /// This is a convience wrapper around [Client::record_metric],
+    /// This is a convenience wrapper around [Client::record_metric],
     /// that will do nothing if no client is setup.
     pub fn record_metric(&self, event: MetricEvent) -> Result<()> {
         self.with_client(|client| {
@@ -544,7 +544,7 @@ impl Client {
 
     /// Send the metrics to the telemetry backend and clear the buffer file.
     ///
-    /// Any connection errors will bubble up and be catched by the event handler.
+    /// Any connection errors will bubble up and be caught by the event handler.
     /// If the network request failed, the buffer file is _not_ cleared.
     fn flush(&mut self, force: bool) -> Result<()> {
         let mut metrics = MetricsBuffer::read(&self.metrics_dir)?;
@@ -726,7 +726,7 @@ mod tests {
         buffer.push(entry_foo.clone()).unwrap();
         buffer.push(entry_bar.clone()).unwrap();
 
-        // Can't create another bufer object while one is currently locked
+        // Can't create another buffer object while one is currently locked
         drop(buffer);
 
         let buffer = MetricsBuffer::read(tempdir.as_ref()).unwrap();

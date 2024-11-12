@@ -205,7 +205,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     // The argument is never stored on the `InstallableFlake` struct
     // or referenced outside of the constructor.
     // We can safely pass a nullptr here, as the constructor performs a null
-    // check before dereferencing the arguement:
+    // check before dereferencing the argument:
     // <https://github.com/NixOS/nix/blob/509be0e77aacd8afcf419526620994cbbbe3708a/src/libcmd/installable-flake.cc#L86-L87>
     static_cast<nix::SourceExprCommand *>( nullptr ),
     state,

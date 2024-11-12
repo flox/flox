@@ -106,7 +106,7 @@ impl RemoteEnvironment {
         let inner_rendered_env_links = {
             let gcroots_dir = dot_flox_path.join(GCROOTS_DIR_NAME);
 
-            // `.flox/run` used to be a link until flox verions 1.3.3!
+            // `.flox/run` used to be a link until flox versions 1.3.3!
             // If we find a symlink, we need to delete it to create a directory
             // with symlinked files in the following step.
             if gcroots_dir.exists() && gcroots_dir.is_symlink() {

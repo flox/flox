@@ -34,7 +34,7 @@ and build related temporary data.
 :   The package(s) to clean.
     Possible values are all keys under the `build` attribute
     in the environment's `manifest.toml`.
-    If ommitted, will clean all build related data.
+    If omitted, will clean all build related data.
 
 
 ```{.include}

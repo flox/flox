@@ -364,7 +364,7 @@ impl Install {
                 // with `DidYouMean`.
                 // We use `DidYouMean` to generate the suggestions,
                 // separately from attempting an install,
-                // or other kind of resoluton.
+                // or other kind of resolution.
                 // This is because `DidYouMean` may take an unknown amount of time,
                 // performing a search.
                 // For the same reason `DidYouMean` is also showing a spinner

@@ -1,6 +1,6 @@
 # Garbage Collection
 
-`pkgdb` has a garbage collector command `pkgdb gc` which uses a 30 day timer to
+`pkgdb` has a garbage collector command `pkgdb gc` which uses a 30-day timer to
 mark existing databases as _stale_ to be removed from the user's system.
 
 In the future we may have additional methods of detecting __staleness_ but for
@@ -9,7 +9,7 @@ now, this simple approach is suitable.
 
 ## Staleness
 
-The 30 day timer can be modified using the option `-a,--min-age AGE` where
+The 30-day timer can be modified using the option `-a,--min-age AGE` where
 `AGE` is _number of days_.
 
 The flag `--dry-run` may be used to list stale databases without actually

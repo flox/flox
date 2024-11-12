@@ -5,7 +5,7 @@
 `valgrind` is a memory profiling toolkit that is available in our development
 shell on **Linux only**[^1].
 
-[^1]: `valgrind` may work on OSX but I have not personally had success with it
+[^1]: `valgrind` may work on OSX, but I have not personally had success with it
       which is why it has not been included in the Darwin development shell.
 
 While `valgrind` has a variety of tools, we will focus on `memcheck` and 

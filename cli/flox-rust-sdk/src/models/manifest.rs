@@ -2180,7 +2180,7 @@ pub(super) mod test {
                                 AttrPathComponent::Quoted => "\"floxtastic\"",
                                 AttrPathComponent::QuotedWithDots => "\"flox.tastic\"",
                             };
-                            (format!("#legacyPackges.aarch64-darwin.{}", id), id)
+                            (format!("#legacyPackages.aarch64-darwin.{}", id), id)
                         },
                         2 => {
                             let namespace = match attr_path_seeds[0] {

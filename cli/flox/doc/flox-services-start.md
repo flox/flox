@@ -21,8 +21,8 @@ flox [<general-options>] services start
 Starts the specified services.
 
 If any services are currently running, a warning will be displayed for each
-specified service that is already running but the command will still succeed.
-If a specified service does not exist, an error will displayed and no services
+specified service that is already running, but the command will still succeed.
+If a specified service does not exist, an error will be displayed and no services
 will be started.
 
 If no services are currently running, then the services will be started from an

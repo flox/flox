@@ -47,7 +47,7 @@ manual builds, `.env` files containing secrets etc.,
 only files tracked by `git` are available.
 Untracked files, files outside of the repository and notably network access
 will be restricted to encourage "pure" and reproducible builds.
-Builds can opt-out of the sandbox by setting `build.<package>.sandbox = "off"`.
+Builds can opt out of the sandbox by setting `build.<package>.sandbox = "off"`.
 With the sandbox disabled, building is equivalent
 to running the build script manually within a shell created by `flox activate`.
 Any build can access the _results_ of other builds
@@ -109,7 +109,7 @@ echo "hello world" >> $out/hello.txt
 '''
 ```
 
-2. Build the pacakge and verify its contents:
+2. Build the package and verify its contents:
 
 ```
 $ flox build hello
@@ -119,7 +119,7 @@ $ cat ./result-hello/hello.txt
 hello, world
 ```
 
-## Building a simple multi stage app
+## Building a simple multi-stage app
 
 Assume a simple `nodejs` project
 
@@ -140,7 +140,7 @@ Assume a simple `nodejs` project
 $ flox init
 ```
 
-2. Install dependencies and add build instaructions
+2. Install dependencies and add build instructions
 
 ```toml
 # file: .flox/env/manifest.toml

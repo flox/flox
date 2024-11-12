@@ -20,9 +20,9 @@ $ just test-all;
 
 - [ ] All commits in a Pull Request are
       [signed](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits)
-      and Verified by Github or via GPG.
+      and Verified by GitHub or via GPG.
 - [ ] As an outside contributor you need to accept the flox
-      [Contributor License Agreement](.github/CLA.md) by adding your Git/Github
+      [Contributor License Agreement](.github/CLA.md) by adding your Git/GitHub
       details in a row at the end of the
       [`CONTRIBUTORS.csv`](.github/CONTRIBUTORS.csv) file by way of the same
       pull request or one done previously.
@@ -41,7 +41,7 @@ This project follows (tries to),
 [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
 We employ [commitizen](https://commitizen-tools.github.io/commitizen/)
-to help enforcing those rules.
+to help to enforce those rules.
 
 **Commit messages that explain the content of the commit are appreciated**
 
@@ -113,7 +113,7 @@ This sets up an environment with dependencies, rust toolchain, variable
 and `pre-commit-hooks`.
 
 In the environment, use [`cargo`](https://doc.rust-lang.org/cargo/)
-to build the rust based cli.
+to build the rust based CLI.
 
 **Note:**
 
@@ -190,10 +190,10 @@ section refers to settings from that plugin.
 
 - Install the `rust-analyzer` plugin for your editor
    - See the [official installation instruction](https://rust-analyzer.github.io/manual.html#installation)
-     (in the `nix develop` subshell the toolchain will aready be provided, you
+     (in the `nix develop` subshell the toolchain will already be provided, you
       can skip right to your editor of choice)
 - If you prefer to open your editor at the project root, you'll need to help
-  `rust-analyzer` find the rust workspace by configuing the`linkedProjects`
+  `rust-analyzer` find the rust workspace by configuring the`linkedProjects`
   for `rust-analyzer`.
   In VS Code you can add this: to you `.vscode/settings.json`:
   ```json
@@ -361,7 +361,7 @@ for details.
 ##### Running tests in a Linux container
 
 It's possible to shorten the feedback loop when developing Linux dependent
-features on a MacOS system by running the tests from a container.
+features on a macOS system by running the tests from a container.
 
 Start a container with the code mounted in so that you can continue to use your normal editor:
 
@@ -407,5 +407,5 @@ Development is done on branches and merged back to `main`.  Keep your branch
 updated by rebasing and resolving conflicts regularly to avoid messy merges.
 Merges to `main` should be squashed and *ff-only* back to `main` using GitHub
 PRs.  Or, if they represent multiple bigger changes, squashed into multiple
-distinct change sets.  Also be sure to run all tests before creating a mergable
+distinct change sets.  Also be sure to run all tests before creating a mergeable
 PR (See [above](#testing)).

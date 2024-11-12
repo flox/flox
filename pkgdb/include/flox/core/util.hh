@@ -29,7 +29,7 @@
 
 /* -------------------------------------------------------------------------- */
 
-/* Backported from C++20a for C++20b compatability. */
+/* Backported from C++20a for C++20b compatibility. */
 
 /**
  * @brief Helper type for `std::visit( overloaded { ... }, x );` pattern.
@@ -121,7 +121,7 @@ struct adl_serializer<std::variant<A, B>>
  * will succeed before attempting to parse alternatives.
  *
  * For example, always attempt `bool` first, then `int`, then `float`, and
- * alway attempt `std::string` LAST.
+ * always attempt `std::string` LAST.
  *
  * It's important to note that you must never nest multiple `std::optional`
  * types in a variant, instead make `std::optional<std::variant<...>>`.
@@ -430,7 +430,7 @@ assertIsJSONObject( const nlohmann::json & value,
 
 /**
  * @brief Merge two @a std::vector containers by putting all elements of the
- *        higher prioirty vector first, then appending the deduplicated keys of
+ *        higher priority vector first, then appending the deduplicated keys of
  *        the lower priortity vector.
  * @param lower The lower priority @a std::vector.
  * @param higher The higher priority @a std::vector.

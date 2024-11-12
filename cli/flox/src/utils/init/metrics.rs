@@ -15,7 +15,7 @@ use crate::utils::metrics::{METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
 ///
 /// Check whether the current uuid file is empty.
 ///
-/// An empty metrics uuid file used to signal telemtry opt-out.
+/// An empty metrics uuid file used to signal telemetry opt-out.
 /// We are moving this responsibility to the user configuration file.
 /// This detects whether a migration is necessary.
 pub async fn telemetry_opt_out_needs_migration(

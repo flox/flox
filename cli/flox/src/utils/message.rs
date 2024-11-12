@@ -94,7 +94,7 @@ pub(crate) fn package_installed(pkg: &PackageToInstall, environment_description:
 ///
 /// Luckily, our CLI surface is largely single threaded.
 /// Threads are mainly spawned for blocking operations either in the library layer,
-/// or to run library funcitons in the background, e.g. to print a progress bar
+/// or to run library functions in the background, e.g. to print a progress bar
 /// on the main thread.
 /// Also, while technically within an async runtime, the CLI is largely synchronous,
 /// and the default [#[tokio::test]] runtime is single threaded.

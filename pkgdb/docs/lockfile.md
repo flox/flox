@@ -55,7 +55,7 @@ Fields:
 
 ## Locking Groups
 
-Currently we enforce compatibility with package groups in a simple manner;
+Currently, we enforce compatibility with package groups in a simple manner;
 in the future we expect to have more sophisticated strategies for ensuring
 compatibility among group members - but for now we enforce that all group
 members come from a single input+rev.
@@ -86,7 +86,7 @@ This has yet to be implemented.
 ### Extending an Existing Locked Group
 
 When locking new members in a group of packages we aim to preserve existing
-resolutions without upgrading other group members; however there's some
+resolutions without upgrading other group members; however there are some
 interesting situations that are worth explicitly specifying:
 
 1. When we can resolve new descriptors in the group's existing input+rev, we

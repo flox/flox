@@ -113,7 +113,7 @@ usage:
 # and we will presumably want `flox build` to do the same. However,
 # we cannot just mark the various build targets as PHONY because they
 # must be INTERMEDIATE to prevent `flox build foo` from rebuilding
-# `bar` and `baz` as well (unless of course it was a prerequsite).
+# `bar` and `baz` as well (unless of course it was a prerequisite).
 # So we instead derive the packages to be force-rebuilt from the special
 # MAKECMDGOALS variable if defined, and otherwise rebuild them all.
 BUILDGOALS = $(if $(MAKECMDGOALS),$(MAKECMDGOALS),$(notdir $(BUILDS)))

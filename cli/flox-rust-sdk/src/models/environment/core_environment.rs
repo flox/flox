@@ -1032,7 +1032,7 @@ pub enum CoreEnvironmentError {
     #[error("failed to build container builder")]
     CallContainerBuilder(#[source] std::io::Error),
     // endregion
-    #[error("package is unsupported for this sytem")]
+    #[error("package is unsupported for this system")]
     UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
     #[error("failed to write container builder to sink")]
     WriteContainer(#[source] std::io::Error),

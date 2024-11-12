@@ -77,7 +77,7 @@ function transclude (cb)
     end
   end
 
-  --- keep track of level before recusion
+  --- keep track of level before recursion
   local buffer_last_heading_level = last_heading_level
 
   local blocks = List:new()

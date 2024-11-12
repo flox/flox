@@ -356,7 +356,7 @@ tryEvaluatePackageOutPath( nix::ref<nix::EvalState> &              state,
         }
 
       /**
-       * eval errors are cached without the eror trace
+       * eval errors are cached without the error trace
        * force an impure eval to get the full error message
        */
       try
@@ -1040,7 +1040,7 @@ createContainerBuilder( nix::EvalState &         state,
 
   // Access to absolute paths is restricted by default.
   // Instead of disabling restricted evaluation,
-  // we allow access to the bundled store path explictly.
+  // we allow access to the bundled store path explicitly.
   state.allowPath( environmentStorePath );
 
   // the derivation uses `builtins.storePath`

@@ -77,7 +77,7 @@ pre-commit-hooks.lib.${system}.run {
             by checking the range `"$PRE_COMMIT_FROM_REF".."$PRE_COMMIT_TO_REF"` with commitizen.
             This requires pre-commit to be run with the --from-ref and --to-ref arguments.
             Currently, this hook is called only in the 'Nix Git hooks" CI pipeline,
-            and is reqiored because the commitizen hook does not work with commit ranges.
+            and is required because the commitizen hook does not work with commit ranges.
           '';
 
           stages = [ "manual" ];

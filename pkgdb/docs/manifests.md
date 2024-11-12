@@ -50,7 +50,7 @@ Fields:
   - `prefer-pre-releases`: Whether to prefer pre-release software over equivalent stable versions for the purpose of search results and installs.
     - Default value is `false`, which would prefer `4.1.9` over `4.2.0-pre`.
 - `Options`
-  - `package-grouping-strategy`: Governs how packages not explicity requested to resolve in a group should be resolved.
+  - `package-grouping-strategy`: Governs how packages not explicitly requested to resolve in a group should be resolved.
     - This field is currently unused.
   - `activation-strategy`: Governs how environments should be activated.
     - This field is currently unused.

@@ -54,7 +54,7 @@ pub struct ReadOnly {}
 /// Generations as a checked out branch of a git clone of a [ReadOnly] repo.
 /// In this state files are read and writeable using the filesystem.
 ///
-/// Mutating commands are commited and pushed to the [ReadOnly] branch.
+/// Mutating commands are committed and pushed to the [ReadOnly] branch.
 ///
 /// Instances of this type are created using [Generations::writable].
 ///
@@ -71,7 +71,7 @@ pub struct ReadWrite {}
 pub struct Generations<State = ReadOnly> {
     /// A floxmeta repository/branch that contains the generations of an environment
     ///
-    /// - When [ReadOnly], this is assumend to be bare, but it is not enforced.
+    /// - When [ReadOnly], this is assumed to be bare, but it is not enforced.
     ///   If not bare, updating it using `git push` may fail to update checked out branches.
     /// - When [ReadWrite], this is required to not be bare.
     ///   This is enforced when created using [Self::writable].

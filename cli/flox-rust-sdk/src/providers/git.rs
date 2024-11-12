@@ -854,7 +854,7 @@ impl GitProvider for GitCommandProvider {
     /// 3. the upstream branch name
     /// 4. the current revision of the upstream branch
     ///
-    /// This is essentialy
+    /// This is essentially
     ///
     ///   upstream_ref = git rev-parse @{u}
     ///   (remote_name, branch_name) = split_once "/" upstream_ref
