@@ -1412,6 +1412,11 @@
       },
       "PackageResolutionInfo": {
         "properties": {
+          "catalog": {
+            "title": "Catalog",
+            "nullable": true,
+            "type": "string"
+          },
           "attr_path": {
             "type": "string",
             "title": "Attr Path"
@@ -1671,6 +1676,11 @@
       },
       "ResolvedPackageDescriptor": {
         "properties": {
+          "catalog": {
+            "title": "Catalog",
+            "nullable": true,
+            "type": "string"
+          },
           "attr_path": {
             "type": "string",
             "title": "Attr Path"
@@ -1995,9 +2005,22 @@
       },
       "UserBuild-Input": {
         "properties": {
-          "locked_url": {
+          "url": {
             "type": "string",
-            "title": "Locked Url"
+            "title": "Url"
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          },
+          "rev_count": {
+            "type": "integer",
+            "title": "Rev Count"
+          },
+          "rev_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Rev Date"
           },
           "locked_base_catalog_url": {
             "title": "Locked Base Catalog Url",
@@ -2010,7 +2033,10 @@
         },
         "type": "object",
         "required": [
-          "locked_url",
+          "url",
+          "rev",
+          "rev_count",
+          "rev_date",
           "derivation"
         ],
         "title": "UserBuild",
@@ -2031,14 +2057,30 @@
             "version": "1.0"
           },
           "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-          "locked_url": "http://example.com?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172"
+          "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+          "rev_count": 1,
+          "rev_date": "2021-09-01T00:00:00",
+          "url": "http://example.com"
         }
       },
       "UserBuild-Output": {
         "properties": {
-          "locked_url": {
+          "url": {
             "type": "string",
-            "title": "Locked Url"
+            "title": "Url"
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          },
+          "rev_count": {
+            "type": "integer",
+            "title": "Rev Count"
+          },
+          "rev_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Rev Date"
           },
           "locked_base_catalog_url": {
             "title": "Locked Base Catalog Url",
@@ -2051,7 +2093,10 @@
         },
         "type": "object",
         "required": [
-          "locked_url",
+          "url",
+          "rev",
+          "rev_count",
+          "rev_date",
           "derivation"
         ],
         "title": "UserBuild",
@@ -2072,7 +2117,10 @@
             "version": "1.0"
           },
           "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-          "locked_url": "http://example.com?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172"
+          "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+          "rev_count": 1,
+          "rev_date": "2021-09-01T00:00:00",
+          "url": "http://example.com"
         }
       },
       "UserBuildCreationResponse": {

@@ -1089,6 +1089,13 @@ pub mod types {
     ///        "null"
     ///      ]
     ///    },
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "derivation": {
     ///      "title": "Derivation",
     ///      "type": "string"
@@ -1193,6 +1200,8 @@ pub mod types {
     pub struct PackageResolutionInfo {
         pub attr_path: String,
         pub broken: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub catalog: Option<String>,
         pub derivation: String,
         pub description: Option<String>,
         pub insecure: Option<bool>,
@@ -1489,6 +1498,13 @@ pub mod types {
     ///        "null"
     ///      ]
     ///    },
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "derivation": {
     ///      "title": "Derivation",
     ///      "type": "string"
@@ -1597,6 +1613,8 @@ pub mod types {
     pub struct ResolvedPackageDescriptor {
         pub attr_path: String,
         pub broken: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub catalog: Option<String>,
         pub derivation: String,
         pub description: Option<String>,
         pub insecure: Option<bool>,
@@ -2151,13 +2169,19 @@ pub mod types {
     ///        "version": "1.0"
     ///      },
     ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-    ///      "locked_url": "http://example.com?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172"
+    ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+    ///      "rev_count": 1,
+    ///      "rev_date": "2021-09-01T00:00:00",
+    ///      "url": "http://example.com"
     ///    }
     ///  ],
     ///  "type": "object",
     ///  "required": [
     ///    "derivation",
-    ///    "locked_url"
+    ///    "rev",
+    ///    "rev_count",
+    ///    "rev_date",
+    ///    "url"
     ///  ],
     ///  "properties": {
     ///    "derivation": {
@@ -2170,8 +2194,21 @@ pub mod types {
     ///        "null"
     ///      ]
     ///    },
-    ///    "locked_url": {
-    ///      "title": "Locked Url",
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "rev_count": {
+    ///      "title": "Rev Count",
+    ///      "type": "integer"
+    ///    },
+    ///    "rev_date": {
+    ///      "title": "Rev Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "url": {
+    ///      "title": "Url",
     ///      "type": "string"
     ///    }
     ///  }
@@ -2183,7 +2220,10 @@ pub mod types {
         pub derivation: UserDerivationInput,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub locked_base_catalog_url: Option<String>,
-        pub locked_url: String,
+        pub rev: String,
+        pub rev_count: i64,
+        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
+        pub url: String,
     }
     impl From<&UserBuildInput> for UserBuildInput {
         fn from(value: &UserBuildInput) -> Self {
@@ -2279,13 +2319,19 @@ pub mod types {
     ///        "version": "1.0"
     ///      },
     ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-    ///      "locked_url": "http://example.com?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172"
+    ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+    ///      "rev_count": 1,
+    ///      "rev_date": "2021-09-01T00:00:00",
+    ///      "url": "http://example.com"
     ///    }
     ///  ],
     ///  "type": "object",
     ///  "required": [
     ///    "derivation",
-    ///    "locked_url"
+    ///    "rev",
+    ///    "rev_count",
+    ///    "rev_date",
+    ///    "url"
     ///  ],
     ///  "properties": {
     ///    "derivation": {
@@ -2298,8 +2344,21 @@ pub mod types {
     ///        "null"
     ///      ]
     ///    },
-    ///    "locked_url": {
-    ///      "title": "Locked Url",
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "rev_count": {
+    ///      "title": "Rev Count",
+    ///      "type": "integer"
+    ///    },
+    ///    "rev_date": {
+    ///      "title": "Rev Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "url": {
+    ///      "title": "Url",
     ///      "type": "string"
     ///    }
     ///  }
@@ -2311,7 +2370,10 @@ pub mod types {
         pub derivation: UserDerivationOutput,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub locked_base_catalog_url: Option<String>,
-        pub locked_url: String,
+        pub rev: String,
+        pub rev_count: i64,
+        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
+        pub url: String,
     }
     impl From<&UserBuildOutput> for UserBuildOutput {
         fn from(value: &UserBuildOutput) -> Self {

@@ -5,6 +5,7 @@ use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use chrono::{DateTime, Utc};
 use log::{debug, error, warn};
 use once_cell::sync::Lazy;
 use thiserror::Error;
@@ -65,6 +66,7 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     type SetOriginError: std::error::Error;
     type GetOriginError: std::error::Error;
     type RevListError: std::error::Error;
+    type ShowDateError: std::error::Error;
 
     fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError>;
     fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<Self, Self::InitError>;
@@ -90,6 +92,7 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     fn add(&self, paths: &[&Path]) -> Result<(), Self::AddError>;
     fn commit(&self, message: &str) -> Result<(), Self::CommitError>;
     fn rev_count(&self, rev: &str) -> Result<u64, Self::RevListError>;
+    fn rev_date(&self, rev: &str) -> Result<DateTime<Utc>, Self::ShowDateError>;
 
     fn show(&self, object: &str) -> Result<OsString, Self::ShowError>;
 
@@ -692,6 +695,7 @@ impl GitProvider for GitCommandProvider {
     type RevListError = GitCommandError;
     type RmError = GitCommandError;
     type SetOriginError = GitCommandError;
+    type ShowDateError = GitCommandError;
     type ShowError = GitCommandError;
 
     /// Discover a git repository at `path` and return a provider with default options
@@ -1040,6 +1044,34 @@ impl GitProvider for GitCommandProvider {
             ))
         }
     }
+
+    fn rev_date(&self, rev: &str) -> Result<DateTime<Utc>, Self::ShowDateError> {
+        let mut command = self.new_command();
+        command.arg("show");
+        command.arg("-s");
+        command.arg("--date=rfc");
+        command.arg("--format=%cd");
+        command.arg(rev);
+
+        let out = GitCommandProvider::run_command(&mut command)?;
+        if let Some(output) = out.to_str() {
+            if let Ok(date_fixed_offset) = DateTime::parse_from_rfc2822(output.trim()) {
+                Ok(date_fixed_offset.with_timezone(&Utc))
+            } else {
+                Err(GitCommandError::BadExit(
+                    1,
+                    out.into_string().unwrap(),
+                    "Unable to parse date in git show output".to_string(),
+                ))
+            }
+        } else {
+            Err(GitCommandError::BadExit(
+                1,
+                out.into_string().unwrap(),
+                "Git show command returned an error.".to_string(),
+            ))
+        }
+    }
 }
 
 pub mod test_helpers {
@@ -1254,6 +1286,19 @@ pub mod tests {
 
         let ct = repo.rev_count(&hash_1).unwrap();
         assert_eq!(ct, 1);
+    }
+
+    #[test]
+    fn test_rev() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+        let date = repo.rev_date("HEAD");
+        assert!(date.is_err());
+
+        commit_file(&repo, "dummy");
+        let hash_1 = repo.branch_hash("branch_1").unwrap();
+        let date = repo.rev_date(&hash_1).unwrap();
+        assert!(Utc::now().signed_duration_since(date) < chrono::Duration::seconds(1));
     }
 
     #[test]

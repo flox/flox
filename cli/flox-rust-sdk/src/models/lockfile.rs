@@ -203,6 +203,7 @@ impl LockedPackageCatalog {
     ) -> Self {
         // unpack package to avoid missing new fields
         let catalog::PackageResolutionInfo {
+            catalog: _,
             attr_path,
             broken,
             derivation,
@@ -1773,6 +1774,7 @@ pub(crate) mod tests {
                 page: 1,
                 url: "url".to_string(),
                 packages: Some(vec![PackageResolutionInfo {
+                    catalog: None,
                     attr_path: "hello".to_string(),
                     broken: Some(false),
                     derivation: "derivation".to_string(),
@@ -2398,6 +2400,7 @@ pub(crate) mod tests {
                 complete: true,
                 url: "url".to_string(),
                 packages: Some(vec![PackageResolutionInfo {
+                    catalog: None,
                     attr_path: "hello".to_string(),
                     broken: Some(false),
                     derivation: "derivation".to_string(),
@@ -3042,6 +3045,7 @@ pub(crate) mod tests {
             page: Some(CatalogPage {
                 complete: true,
                 packages: Some(vec![ResolvedPackageDescriptor {
+                    catalog: None,
                     attr_path: foo_catalog_descriptor.pkg_path.clone(),
                     broken: Default::default(),
                     derivation: "derivation".to_string(),
