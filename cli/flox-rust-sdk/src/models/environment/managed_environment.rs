@@ -408,6 +408,13 @@ impl Environment for ManagedEnvironment {
         Ok(self.rendered_env_links.clone())
     }
 
+    fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
+        // todo: ensure lockfile exists?
+
+        Ok(local_checkout.build(flox)?)
+    }
+
     /// Returns .flox/cache
     fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError> {
         let cache_dir = self.path.join(CACHE_DIR_NAME);
@@ -510,12 +517,6 @@ impl ManagedEnvironment {
             let content = local_checkout.existing_lockfile()?;
             content.ok_or(EnvironmentError::MissingLockfile)
         }
-    }
-
-    pub fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
-        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
-
-        Ok(local_checkout.build(flox)?)
     }
 
     pub fn link(&mut self, store_paths: &BuildEnvOutputs) -> Result<(), EnvironmentError> {

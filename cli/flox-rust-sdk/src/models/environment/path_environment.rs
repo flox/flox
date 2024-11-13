@@ -299,13 +299,20 @@ impl Environment for PathEnvironment {
         let out_paths = self.rendered_env_links.clone();
 
         if self.needs_rebuild(flox)? {
-            let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
-            env_view.ensure_locked(flox)?;
-            let store_paths = env_view.build(flox)?;
+            let store_paths = self.build(flox)?;
             self.link(flox, &store_paths)?;
         }
 
         Ok(out_paths)
+    }
+
+    /// Build the environment
+    /// This will lock the environment if it is not already locked.
+    fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        env_view.lock(flox)?;
+        let store_paths = env_view.build(flox)?;
+        Ok(store_paths)
     }
 
     /// Returns .flox/cache

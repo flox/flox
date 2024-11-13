@@ -328,6 +328,13 @@ impl Environment for RemoteEnvironment {
         Ok(self.rendered_env_links.clone())
     }
 
+    fn build(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<crate::providers::buildenv::BuildEnvOutputs, EnvironmentError> {
+        self.inner.build(flox)
+    }
+
     /// Return a path that environment hooks should use to store transient data.
     ///
     /// Remote environments shouldn't have state of any kind, so this just
