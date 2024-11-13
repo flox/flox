@@ -9,7 +9,7 @@ use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
 };
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use log::debug;
 use tracing::instrument;
 
@@ -30,9 +30,8 @@ pub struct Publish {
 
 #[derive(Debug, Bpaf, Clone)]
 struct PublishTarget {
-    /// The package to build.
+    /// The package to publish.
     /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
-    /// If not specified, all packages are built.
     #[bpaf(positional("package"))]
     target: String,
 }
@@ -95,10 +94,18 @@ impl Publish {
             .floxhub_token
             .as_ref()
             .expect("should be authenticated to FloxHub");
+        let catalog_name = token.handle().to_string();
 
         debug!("publishing package: {}", &package);
-        match publish_provider.publish(&flox.catalog_client, token).await {
-            Ok(_) => message::created("Package published successfully"),
+        match publish_provider
+            .publish(&flox.catalog_client, &catalog_name)
+            .await
+        {
+            Ok(_) => message::updated(formatdoc! {"
+                Package published successfully.
+
+                Use 'flox install {catalog_name}/{package}' to install it.
+                "}),
             Err(e) => bail!("Failed to publish package: {}", e.to_string()),
         }
 
