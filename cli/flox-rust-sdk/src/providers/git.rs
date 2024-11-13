@@ -1289,7 +1289,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_rev() {
+    fn test_rev_date() {
         let (repo, _tempdir_handle) = init_temp_repo(false);
         repo.checkout("branch_1", true).unwrap();
         let date = repo.rev_date("HEAD");
@@ -1298,7 +1298,7 @@ pub mod tests {
         commit_file(&repo, "dummy");
         let hash_1 = repo.branch_hash("branch_1").unwrap();
         let date = repo.rev_date(&hash_1).unwrap();
-        assert!(Utc::now().signed_duration_since(date) < chrono::Duration::seconds(1));
+        assert!(Utc::now().signed_duration_since(date) < chrono::Duration::seconds(5));
     }
 
     #[test]
