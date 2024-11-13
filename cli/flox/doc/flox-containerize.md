@@ -27,7 +27,7 @@ Export a Flox environment as a container image.
 The image is written to the specified output target.
 With `--file|-f <file>` a tarball is writtent to the specified file.
 When `-` is passed as `<file>` the image is instead written to stdout.
-The `--runtime|-r <runtime>` flag supports `docker` and `podman`,
+The `--runtime <runtime>` flag supports `docker` and `podman`,
 and expects the selected runtime to be found in PATH.
 
 When neither option is provided,
@@ -56,7 +56,7 @@ The produced container however can also run on macOS.
 :   Write the container image to `<file>`.
     If `<output target>` is `-`, writes to `stdout`.
 
-`-r`, `--runtime`
+`--runtime`
 :   Load the image into the specified `<runtime>`.
     `<runtime>` may bei either `docker` or `podman`.
     The specified binary must be found in `PATH`.
@@ -78,7 +78,7 @@ $ docker load -i ./mycontainer.tar
 Load the image into Docker:
 
 ```
-$ flox containerize -r docker
+$ flox containerize --runtime docker
 
 # or through stdout e.g. if `docker` is not in `PATH`:
 
