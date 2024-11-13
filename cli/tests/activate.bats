@@ -3261,6 +3261,76 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=activate,activate:attach
+# NB: There is a corresponding test in `services.bats`.
+@test "version: refuses to attach to an older activations.json version" {
+  project_setup
+
+  # TODO: Workaround for https://github.com/flox/flox/issues/2164
+  rm "${HOME}/.bashrc"
+
+  export -f jq_edit
+  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- bash <(
+    cat << 'EOF'
+      echo "$PPID" > activation_pid
+
+      ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
+      ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
+      jq_edit "$ACTIVATIONS_JSON" '.version = 0'
+
+      "$FLOX_BIN" activate -- echo "should fail"
+EOF
+  )
+
+  # Capture from the previous activation.
+  ACTIVATION_PID=$(cat activation_pid)
+
+  assert_failure
+  refute_line "should fail"
+  assert_output "Error: This environment has already been activated with an older incompatible version of 'flox'
+
+Exit the following activation PIDs and try again: ${ACTIVATION_PID}"
+}
+
+# bats test_tags=activate,activate:attach
+@test "version: upgrades the activations.json version" {
+  project_setup
+
+  # This has to be updated with [flox_core::activations::LATEST_VERSION].
+  LATEST_VERSION=1
+
+  export -f jq_edit
+  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- bash <(
+    cat << 'EOF'
+      ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
+      ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
+
+      jq_edit "$ACTIVATIONS_JSON" '.version = 0'
+      echo "$ACTIVATIONS_JSON" > activations_json
+EOF
+  )
+  assert_success
+
+  # Capture from the previous activation.
+  ACTIVATIONS_JSON=$(cat activations_json)
+
+  # Wait for the "start" to exit.
+  wait_for_watchdogs "$PROJECT_DIR"
+
+  # Old version should still be recorded.
+  jq --exit-status '.version == 0' "$ACTIVATIONS_JSON"
+
+  # New "start" with old version should succeed.
+  run "$FLOX_BIN" activate -- echo "should succeed"
+  assert_success
+  assert_line "should succeed"
+
+  # Version should be upgraded by "start" when there are no other activations.
+  jq --exit-status ".version == ${LATEST_VERSION}" "$ACTIVATIONS_JSON"
+}
+
+# ---------------------------------------------------------------------------- #
+
 # Sub-commands like `flox-activations` and `flox-watchdog` depend on this.
 @test "activate: sets FLOX_DISABLE_METRICS from config" {
   project_setup

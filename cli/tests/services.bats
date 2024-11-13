@@ -599,6 +599,39 @@ EOF
   done
 }
 
+# NB: There is a corresponding test in `activate.bats`.
+@test "start, restart: refuses to attach to an older activations.json version" {
+  setup_sleeping_services
+
+  export -f jq_edit
+  commands=("start" "restart")
+  for command in "${commands[@]}"; do
+    echo "Testing: flox services $command"
+    FLOX_SHELL="bash" command="$command" run "$FLOX_BIN" activate -- bash <(
+      cat << 'EOF'
+        echo "$PPID" > activation_pid
+
+        ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
+        ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
+        jq_edit "$ACTIVATIONS_JSON" '.version = 0'
+
+        "$FLOX_BIN" services "$command"
+EOF
+    )
+
+    # Capture from the previous activation.
+    ACTIVATION_PID=$(cat activation_pid)
+
+    assert_failure
+    assert_output "❌ ERROR: failed to run activation script: Error: This environment has already been activated with an older incompatible version of 'flox'
+
+Exit the following activation PIDs and try again: ${ACTIVATION_PID}"
+
+    # give the watchdog a chance to clean up the services before the next iteration
+    wait_for_watchdogs "$PROJECT_DIR"
+  done
+}
+
 # bats test_tags=services:stop
 @test "stop: stops all services" {
   setup_sleeping_services
