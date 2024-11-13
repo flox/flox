@@ -22,6 +22,8 @@ struct Version(u8);
 /// Latest supported version for compatibility between:
 /// - `flox` and `flox-activation-scripts`
 /// - `flox-activations` and `flox-watchdog`
+///
+/// Incrementing this will require existing activations to exit.
 const LATEST_VERSION: Version = Version(1);
 impl Default for Version {
     fn default() -> Self {
@@ -122,6 +124,29 @@ impl Activations {
 
     pub fn is_empty(&self) -> bool {
         self.activations.is_empty()
+    }
+
+    /// Return a list of activations that need to be exited before the version
+    /// can be upgraded.
+    pub fn incompatible_activations(&self) -> Option<Vec<i32>> {
+        if self.is_empty() || self.version == LATEST_VERSION {
+            return None;
+        }
+
+        let pids = self
+            .activations
+            .iter()
+            .flat_map(|activation| &activation.attached_pids)
+            .map(|attached_pid| attached_pid.pid)
+            .collect();
+        Some(pids)
+    }
+
+    /// Upgrade the version if there are no current activations.
+    pub fn attempt_version_upgrade(&mut self) {
+        if self.is_empty() {
+            self.version = LATEST_VERSION;
+        }
     }
 }
 
@@ -360,6 +385,70 @@ mod test {
         let activation = activations.activation_for_id_mut(&id).unwrap();
         assert_eq!(activation.id(), id);
         assert_eq!(activation.store_path, store_path);
+    }
+
+    #[test]
+    fn incompatible_activations() {
+        let mut activations = Activations::default();
+        assert_eq!(activations.version, LATEST_VERSION);
+        assert_eq!(
+            activations.incompatible_activations(),
+            None,
+            "should return None when version is latest and there are no activations"
+        );
+
+        let activation1 = activations.create_activation("/store/path1", 100).unwrap();
+        let activation1_id = activation1.id();
+        activation1.attach_pid(101, None);
+        let activation2 = activations.create_activation("/store/path2", 200).unwrap();
+        let activation2_id = activation2.id();
+        activation2.attach_pid(201, None);
+        assert_eq!(
+            activations.incompatible_activations(),
+            None,
+            "should return None when version is latest and there are activations"
+        );
+
+        activations.version = Version(0);
+        assert_eq!(
+            activations.incompatible_activations(),
+            Some(vec![100, 101, 200, 201]),
+            "should return all PIDs when version is not latest"
+        );
+
+        activations.remove_activation(activation1_id);
+        activations.remove_activation(activation2_id);
+        assert_eq!(
+            activations.incompatible_activations(),
+            None,
+            "should return None when there version is not latest but there are no activations"
+        );
+    }
+
+    #[test]
+    fn attempt_version_upgrade() {
+        let mut activations = Activations::default();
+        assert_eq!(
+            activations.version, LATEST_VERSION,
+            "should default to latest version"
+        );
+
+        activations.version = Version(0);
+        let activation = activations.create_activation("/store/path1", 123).unwrap();
+        let activation_id = activation.id();
+        activations.attempt_version_upgrade();
+        assert_eq!(
+            activations.version,
+            Version(0),
+            "should not upgrade version when there are activations"
+        );
+
+        activations.remove_activation(activation_id);
+        activations.attempt_version_upgrade();
+        assert_eq!(
+            activations.version, LATEST_VERSION,
+            "should upgrade version when there are no activations"
+        );
     }
 
     #[test]

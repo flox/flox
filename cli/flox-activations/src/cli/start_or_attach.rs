@@ -7,7 +7,7 @@ use anyhow::Context;
 use clap::Args;
 use flox_core::activations::{self, Activations};
 use fslock::LockFile;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use log::debug;
 use time::{Duration, OffsetDateTime};
 
@@ -56,7 +56,7 @@ impl StartOrAttachArgs {
     pub fn handle_inner(
         &self,
         runtime_dir: &Path,
-        attach_fn: impl FnOnce(&Path, LockFile, &str, i32) -> Result<(), Error>,
+        attach_fn: impl FnOnce(&Activations, &Path, LockFile, &str, i32) -> Result<(), Error>,
         start_fn: impl FnOnce(
             Activations,
             PathBuf,
@@ -77,7 +77,13 @@ impl StartOrAttachArgs {
         let (activation_id, attaching) =
             match activations.activation_for_store_path(&self.store_path) {
                 Some(activation) => {
-                    attach_fn(&activations_json_path, lock, &self.store_path, self.pid)?;
+                    attach_fn(
+                        &activations,
+                        &activations_json_path,
+                        lock,
+                        &self.store_path,
+                        self.pid,
+                    )?;
                     (activation.id(), true)
                 },
                 None => {
@@ -108,11 +114,25 @@ impl StartOrAttachArgs {
 }
 
 fn attach(
+    activations: &Activations,
     activations_json_path: &Path,
     lock: fslock::LockFile,
     store_path: &str,
     pid: i32,
 ) -> Result<(), Error> {
+    if let Some(pids) = activations.incompatible_activations() {
+        let pid_list = pids
+            .iter()
+            .map(|pid| pid.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        anyhow::bail!(formatdoc! {"
+            This environment has already been activated with an older incompatible version of 'flox'
+
+            Exit the following activation PIDs and try again: {pid_list}
+        "});
+    }
+
     // Drop the lock to allow the activation to be updated by other processes
     drop(lock);
 
@@ -139,6 +159,7 @@ fn start(
     store_path: &str,
     pid: i32,
 ) -> Result<String, anyhow::Error> {
+    activations.attempt_version_upgrade();
     let activation_id = activations.create_activation(store_path, pid)?.id();
     // The activation script will assume this directory exists
     fs::create_dir_all(activations::activation_state_dir_path(
@@ -266,7 +287,7 @@ mod tests {
 
         args.handle_inner(
             runtime_dir.path(),
-            |_, _, _, _| Ok(()),
+            |_, _, _, _, _| Ok(()),
             |_, _, _, _, _, _, _| panic!("start should not be called"),
             &mut output,
         )
@@ -306,7 +327,7 @@ mod tests {
         let id = "1".to_string();
         args.handle_inner(
             runtime_dir.path(),
-            |_, _, _, _| panic!("attach should not be called"),
+            |_, _, _, _, _| panic!("attach should not be called"),
             |_, _, _, _, _, _, _| Ok(id.clone()),
             &mut output,
         )
