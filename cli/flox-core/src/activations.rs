@@ -10,9 +10,24 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
 
-use crate::{path_hash, Version};
+use crate::path_hash;
 
 type Error = anyhow::Error;
+
+/// Simplified alternative to [flox_core::Version] while we don't need to
+/// support multiple schemas.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct Version(u8);
+
+/// Latest supported version for compatibility between:
+/// - `flox` and `flox-activation-scripts`
+/// - `flox-activations` and `flox-watchdog`
+const LATEST_VERSION: Version = Version(1);
+impl Default for Version {
+    fn default() -> Self {
+        LATEST_VERSION
+    }
+}
 
 /// Deserialized contents of activations.json
 ///
@@ -27,7 +42,7 @@ type Error = anyhow::Error;
 /// and global uniqueness in case the that two environments have the same store path.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Activations {
-    version: Version<1>,
+    version: Version,
     activations: Vec<Activation>,
 }
 
