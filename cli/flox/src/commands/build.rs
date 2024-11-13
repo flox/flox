@@ -110,7 +110,7 @@ impl Build {
         };
 
         let base_dir = env.parent_path()?;
-        let flox_env = env.rendered_env_links(&flox)?;
+        let built_environments = env.build(&flox)?;
 
         let packages_to_build = available_packages(&env.lockfile(&flox)?, packages)?;
 
@@ -118,7 +118,7 @@ impl Build {
         let output = builder.build(
             &flox,
             &base_dir,
-            &flox_env.development,
+            &built_environments,
             &FLOX_INTERPRETER,
             &packages_to_build,
         )?;

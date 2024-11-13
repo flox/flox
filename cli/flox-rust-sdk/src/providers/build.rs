@@ -8,6 +8,7 @@ use std::thread;
 use thiserror::Error;
 use tracing::{debug, warn};
 
+use super::buildenv::BuildEnvOutputs;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
 use crate::utils::CommandExt;
@@ -39,7 +40,7 @@ pub trait ManifestBuilder {
         &self,
         flox: &Flox,
         base_dir: &Path,
-        flox_env: &Path,
+        built_environments: &BuildEnvOutputs,
         flox_interpreter: &Path,
         package: &[String],
     ) -> Result<BuildOutput, ManifestBuilderError>;
@@ -57,7 +58,7 @@ pub enum ManifestBuilderError {
     #[error("failed to call package builder: {0}")]
     CallBuilderError(#[source] std::io::Error),
 
-    #[error("failed to clean up build artifacts")]
+    #[error("failed to clean up build artifacts: {stderr}")]
     RunClean {
         stdout: String,
         stderr: String,
@@ -96,13 +97,12 @@ impl Iterator for BuildOutput {
 pub struct FloxBuildMk;
 
 impl FloxBuildMk {
-    fn base_command(&self, base_dir: &Path, flox_env: &Path) -> Command {
+    fn base_command(&self, base_dir: &Path) -> Command {
         // todo: extra makeflags, eventually
         let mut command = Command::new(&*GNUMAKE_BIN);
         command.env_remove("MAKEFLAGS");
         command.arg("--file").arg(&*FLOX_BUILD_MK);
         command.arg("--directory").arg(base_dir); // Change dir before reading makefile.
-        command.arg(format!("FLOX_ENV={}", flox_env.display()));
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*BUILDTIME_NIXPKGS_URL));
 
         command
@@ -131,11 +131,16 @@ impl ManifestBuilder for FloxBuildMk {
         &self,
         flox: &Flox,
         base_dir: &Path,
-        flox_env: &Path,
+        built_environments: &BuildEnvOutputs,
         flox_interpreter: &Path,
         packages: &[String],
     ) -> Result<BuildOutput, ManifestBuilderError> {
-        let mut command = self.base_command(base_dir, flox_env);
+        let mut command = self.base_command(base_dir);
+        command.arg(format!("FLOX_ENV={}", built_environments.develop.display()));
+        command.arg(format!(
+            "FLOX_ENV_OUTPUTS={}",
+            serde_json::json!(built_environments)
+        ));
         command.arg(format!("FLOX_INTERPRETER={}", flox_interpreter.display()));
 
         // Add build target arguments by prefixing the package names with "build/".
@@ -209,7 +214,9 @@ impl ManifestBuilder for FloxBuildMk {
         flox_env: &Path,
         packages: &[String],
     ) -> Result<(), ManifestBuilderError> {
-        let mut command = self.base_command(base_dir, flox_env);
+        let mut command = self.base_command(base_dir);
+        // TODO: is this even necessary, or can we detect build outputs instead?
+        command.arg(format!("FLOX_ENV={}", flox_env.display()));
 
         // Add clean target arguments by prefixing the package names with "clean/".
         // If no packages are specified, clean all packages.
@@ -311,7 +318,7 @@ pub mod test_helpers {
             .build(
                 flox,
                 &env.parent_path().unwrap(),
-                &env.rendered_env_links(flox).unwrap().development,
+                &env.build(flox).unwrap(),
                 &env.rendered_env_links(flox).unwrap().development,
                 &[package_name.to_owned()],
             )

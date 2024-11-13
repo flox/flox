@@ -161,6 +161,13 @@ pub trait Environment: Send {
         flox: &Flox,
     ) -> Result<RenderedEnvironmentLinks, EnvironmentError>;
 
+    /// Build the environment and return the built store paths
+    /// for the development and runtime variants,
+    /// as well as runtime environments of the manifest builds defined in this environment.
+    ///
+    /// This does not link the environment, but may lock the environment, if necessary.
+    fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError>;
+
     /// Return a path that environment hooks should use to store transient data.
     ///
     /// The returned path will exist.
