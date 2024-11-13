@@ -75,6 +75,16 @@ teardown() {
   assert_success
 }
 
+@test "cuda disabled when nvidia0 device present but libcuba absent on NixOS" {
+  touch "${FAKE_FHS_ROOT}/dev/nvidia0"
+
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+    "$TESTS_DIR/cuda/cuda-disabled.sh" \
+    "${FAKE_FHS_ROOT}" \
+    "${TESTS_DIR}/cuda/ldconfig-mock-error.sh"
+  assert_success
+}
+
 @test "cuda disabled when not on Linux" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
 
@@ -126,7 +136,7 @@ teardown() {
   FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
     "$TESTS_DIR/cuda/cuda-enabled.sh" \
     "${FAKE_FHS_ROOT}" \
-    "${TESTS_DIR}/cuda/ldconfig-mock-absent.sh"
+    "${TESTS_DIR}/cuda/ldconfig-mock-error.sh"
   assert_success
 }
 
