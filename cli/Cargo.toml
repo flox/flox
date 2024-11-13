@@ -62,7 +62,7 @@ sysinfo = "0.32.0"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
-tempfile = "3.13.0"
+tempfile = "3.14.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "1"
 time = { version = "0.3", features = ["serde", "formatting"] }
@@ -81,7 +81,7 @@ xdg = "2.4"
 
 # dev dependencies
 pretty_assertions = "1.4"
-serial_test = "3.1.1"
+serial_test = "3.2.0"
 temp-env = "0.3.2"
 
 # watchdog dependencies
