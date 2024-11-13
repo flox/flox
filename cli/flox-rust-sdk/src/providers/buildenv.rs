@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
 
 use indoc::indoc;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
 
@@ -59,14 +60,21 @@ pub enum BuildEnvError {
     ReadOutputs(#[source] serde_json::Error),
 }
 
-#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct BuildEnvOutputs {
     pub develop: BuiltStorePath,
     pub runtime: BuiltStorePath,
-    // todo: add more build runtime outputs
+    /// A map of additional built store paths.
+    /// These are the runtime environments for each manifest build.
+    /// The main consumer of this is [super::build::FloxBuildMk].
+    // todo: nest additional built paths for manifest builds
+    #[serde(flatten)]
+    pub manifest_build_runtimes: HashMap<String, BuiltStorePath>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, derive_more::Deref, derive_more::AsRef)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_more::Deref, derive_more::AsRef,
+)]
 pub struct BuiltStorePath(PathBuf);
 
 pub trait BuildEnv {
