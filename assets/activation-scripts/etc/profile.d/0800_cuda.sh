@@ -38,8 +38,10 @@ activate_cuda() {
   fi
 
   # Use system library cache.
-  SYSTEM_LIBS=$("$ldconfig_bin" --print-cache -C /etc/ld.so.cache 2> /dev/null \
-    | "$_nawk" "\$1 ~ /${lib_pattern}/ { print \$4 }")
+  SYSTEM_LIBS=$(
+    { "$ldconfig_bin" --print-cache -C /etc/ld.so.cache 2> /dev/null || echo; } \
+      | "$_nawk" "\$1 ~ /${lib_pattern}/ { print \$4 }"
+  )
 
   # Fallback for NixOS.
   if [ -z "$SYSTEM_LIBS" ]; then
