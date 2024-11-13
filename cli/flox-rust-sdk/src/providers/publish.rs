@@ -9,7 +9,7 @@ use thiserror::Error;
 use super::build::ManifestBuilder;
 use super::catalog::{Client, ClientTrait, UserBuildInfo, UserDerivationInfo};
 use super::git::GitCommandProvider;
-use crate::flox::{Flox, FloxhubToken};
+use crate::flox::Flox;
 use crate::models::environment::Environment;
 use crate::providers::git::GitProvider;
 
@@ -38,11 +38,7 @@ pub enum PublishError {
 /// Modeling the behavior as a trait allows us to swap out the provider, e.g. a mock for testing.
 #[allow(async_fn_in_trait)]
 pub trait Publisher {
-    async fn publish(
-        &self,
-        client: &Client,
-        floxhub_token: &FloxhubToken,
-    ) -> Result<(), PublishError>;
+    async fn publish(&self, client: &Client, catalog_name: &str) -> Result<(), PublishError>;
 }
 
 /// Simple struct to hold the information of a locked URL.
@@ -101,14 +97,8 @@ impl<Builder> Publisher for PublishProvider<&Builder>
 where
     Builder: ManifestBuilder,
 {
-    async fn publish(
-        &self,
-        client: &Client,
-        floxhub_token: &FloxhubToken,
-    ) -> Result<(), PublishError> {
+    async fn publish(&self, client: &Client, catalog_name: &str) -> Result<(), PublishError> {
         // Get metadata from the environment, like locked URLs.
-
-        let catalog_name = floxhub_token.handle().to_string();
 
         // The create package service call will create the user's own catalog
         // if not already created, and then create (or return) the package noted
@@ -414,6 +404,7 @@ pub mod tests {
 
         let client = Client::Mock(MockClient::new(None::<String>).unwrap());
         let token = create_test_token("test");
+        let catalog_name = token.handle().to_string();
 
         let (env_metadata, build_metadata) = (
             check_environment_metadata(&flox, &mut env).unwrap(),
@@ -426,6 +417,6 @@ pub mod tests {
             _builder: None,
         };
 
-        let _res = publish_provider.publish(&client, &token);
+        let _res = publish_provider.publish(&client, &catalog_name);
     }
 }
