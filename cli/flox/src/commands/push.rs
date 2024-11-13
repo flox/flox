@@ -210,6 +210,9 @@ impl Push {
             {name} successfully pushed to FloxHub{suffix}
 
             Use 'flox pull {owner}/{name}' to get this environment in any other location.
+
+            This environment is public.
+            You can change this by editing settings at https://hub.flox.dev/{owner}/{name}/settings
         "}
     }
 }
