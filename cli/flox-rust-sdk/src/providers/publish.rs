@@ -124,6 +124,14 @@ where
                 })
                 .collect(),
         );
+        let outputs_to_install = Some(
+            self.build_metadata
+                .outputs
+                .clone()
+                .into_iter()
+                .map(|o| o.name.clone())
+                .collect(),
+        );
 
         let build_info = UserBuildInfo {
             derivation: UserDerivationInfo {
@@ -133,7 +141,7 @@ where
                 license: None,
                 name: self.build_metadata.package.to_string().to_owned(),
                 outputs,
-                outputs_to_install: None,
+                outputs_to_install,
                 pname: Some(self.build_metadata.package.to_string()),
                 system: self.build_metadata.system,
                 unfree: None,

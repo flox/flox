@@ -370,6 +370,9 @@ if ($manifest) {
                      defined $package->{"outputs_to_install"} ) {
                     $package->{"outputs_to_install"} = $package->{"outputs-to-install"};
                 }
+                unless ( defined $package->{"outputs_to_install"} ) {
+                    $package->{"outputs_to_install"} = keys %{$package->{"outputs"}};
+                }
                 foreach my $output (keys %{$package->{"outputs"}}) {
                     # Unfortunately, due to pkgdb limitations in the 1.0 release we
                     # adopted the convention of installing all outputs for every
