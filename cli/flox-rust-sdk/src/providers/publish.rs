@@ -6,11 +6,11 @@ use chrono::{DateTime, Utc};
 use log::debug;
 use thiserror::Error;
 
-use super::build::ManifestBuilder;
+use super::build::{build_symlink_path, ManifestBuilder};
 use super::catalog::{Client, ClientTrait, UserBuildInfo, UserDerivationInfo};
 use super::git::GitCommandProvider;
 use crate::flox::Flox;
-use crate::models::environment::Environment;
+use crate::models::environment::{Environment, EnvironmentError};
 use crate::providers::git::GitProvider;
 
 #[derive(Debug, Error)]
@@ -31,6 +31,9 @@ pub enum PublishError {
 
     #[error("Could not identify user from authentication info")]
     Unauthenticated,
+
+    #[error(transparent)]
+    Environment(#[from] EnvironmentError),
 }
 
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
@@ -179,10 +182,7 @@ pub fn check_build_metadata(
         PublishError::UnsupportEnvironmentState(format!("Unable to identify system: {e}"))
     })?;
 
-    let result_dir = env
-        .parent_path()
-        .map_err(|e| PublishError::UnsupportEnvironmentState(e.to_string()))?
-        .join(format!("result-{pkg}"));
+    let result_dir = build_symlink_path(env, pkg)?;
     let store_dir = result_dir
         .read_link()
         .map_err(|e| PublishError::NonexistentOutputs(e.to_string()))?;

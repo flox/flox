@@ -534,15 +534,21 @@ pub mod test_helpers {
 
     use super::*;
 
-    pub fn new_path_environment(flox: &Flox, contents: &str) -> PathEnvironment {
+    pub fn new_path_environment_in(
+        flox: &Flox,
+        contents: &str,
+        path: impl AsRef<Path>,
+    ) -> PathEnvironment {
         let pointer = PathPointer::new("name".parse().unwrap());
-        PathEnvironment::write_new_unchecked(
+        PathEnvironment::write_new_unchecked(flox, pointer, path, contents).unwrap()
+    }
+
+    pub fn new_path_environment(flox: &Flox, contents: &str) -> PathEnvironment {
+        new_path_environment_in(
             flox,
-            pointer,
-            tempdir_in(&flox.temp_dir).unwrap().into_path(),
             contents,
+            tempdir_in(&flox.temp_dir).unwrap().into_path(),
         )
-        .unwrap()
     }
 
     pub fn new_path_environment_from_env_files(

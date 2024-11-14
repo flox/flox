@@ -9,6 +9,7 @@ use thiserror::Error;
 use tracing::{debug, warn};
 
 use crate::flox::Flox;
+use crate::models::environment::{Environment, EnvironmentError};
 use crate::utils::CommandExt;
 
 pub const FLOX_RUNTIME_DIR_VAR: &str = "FLOX_RUNTIME_DIR";
@@ -265,6 +266,13 @@ fn read_output_to_channel(
             break;
         };
     }
+}
+
+pub fn build_symlink_path(
+    environment: &impl Environment,
+    package: &str,
+) -> Result<PathBuf, EnvironmentError> {
+    Ok(environment.parent_path()?.join(format!("result-{package}")))
 }
 
 pub mod test_helpers {
