@@ -1,9 +1,13 @@
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
+use std::thread::sleep;
+use std::time::Duration;
 
 use anyhow::{bail, Context};
 use rexpect::session::{spawn_specific_bash, PtyReplSession};
+use sysinfo::{Process, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tempfile::TempDir;
 
 type Error = anyhow::Error;
@@ -251,7 +255,6 @@ impl<'dirs> ShellProcess<'dirs> {
         self.pty
             .wait_for_prompt()
             .context("prompt never appeared")?;
-        eprintln!("post-init buffer: {:?}", self.pty.pty_session.reader.buffer);
         Ok(())
     }
 
@@ -295,12 +298,35 @@ impl<'dirs> ShellProcess<'dirs> {
         self.pty
             .send_line("echo $_FLOX_ACTIVATION_UUID")
             .context("failed to send command")?;
+        sleep(Duration::from_millis(100));
         let value = self.pty.read_line().context("failed to read line")?;
         self.pty
             .wait_for_prompt()
             .context("prompt never appeared")?;
         Ok(value)
     }
+}
+
+/// Locates the watchdog fingerprinted with the provided UUID
+pub fn find_watchdog_pid_with_uuid(uuid: impl AsRef<str>) -> Option<i32> {
+    let var = format!("_FLOX_ACTIVATION_UUID={}", uuid.as_ref());
+    let mut system = System::new();
+    let update_kind = ProcessRefreshKind::new()
+        .with_exe(UpdateKind::Always)
+        .with_environ(UpdateKind::Always);
+    system.refresh_processes_specifics(ProcessesToUpdate::All, false, update_kind);
+    for proc in system
+        .processes()
+        .values()
+        .filter(|proc| proc.exe().is_some_and(|p| p.ends_with("flox-watchdog")))
+    {
+        for env_var in proc.environ().iter() {
+            if env_var.to_string_lossy() == var {
+                return Some(proc.pid().as_u32() as i32);
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -369,5 +395,16 @@ mod tests {
                 r#"\w{8}-\w{4}-\w{4}-\w{4}-\w{12}"#,
             )
             .unwrap();
+    }
+
+    #[test]
+    fn can_locate_watchdog() {
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(2000)).unwrap();
+        shell.init_env_with_name("myenv").unwrap();
+        shell.activate().unwrap();
+        let uuid = shell.read_activation_uuid().unwrap();
+        let watchdog = find_watchdog_pid_with_uuid(uuid);
+        assert!(watchdog.is_some());
     }
 }
