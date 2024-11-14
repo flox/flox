@@ -12,6 +12,7 @@ use flox_rust_sdk::models::environment::managed_environment::{
     SyncToGenerationResult,
 };
 use flox_rust_sdk::models::environment::{
+    ConcreteEnvironment,
     CoreEnvironmentError,
     EditResult,
     Environment,
@@ -29,7 +30,7 @@ use super::{
     EnvironmentSelect,
     UninitializedEnvironment,
 };
-use crate::commands::{ensure_floxhub_token, ConcreteEnvironment, EnvironmentSelectError};
+use crate::commands::{ensure_floxhub_token, EnvironmentSelectError};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
 use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_core_error};

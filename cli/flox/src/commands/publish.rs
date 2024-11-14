@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::providers::build::FloxBuildMk;
 use flox_rust_sdk::providers::publish::{
@@ -14,7 +15,7 @@ use log::debug;
 use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
-use crate::commands::{ensure_floxhub_token, ConcreteEnvironment};
+use crate::commands::ensure_floxhub_token;
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::message;
@@ -57,31 +58,19 @@ impl Publish {
     async fn publish(mut flox: Flox, mut env: ConcreteEnvironment, package: String) -> Result<()> {
         subcommand_metric!("publish");
 
-        if !check_package(&env.dyn_environment_ref_mut().lockfile(&flox)?, &package)? {
+        if !check_package(&env.lockfile(&flox)?, &package)? {
             bail!("Package '{}' not found in environment", package);
         }
 
-        let env_metadata = match &mut env {
-            ConcreteEnvironment::Managed(environment) => {
-                check_environment_metadata(&flox, environment)
-            },
-            ConcreteEnvironment::Path(environment) => {
-                check_environment_metadata(&flox, environment)
-            },
-            _ => bail!("Unsupported environment type"),
+        if matches!(env, ConcreteEnvironment::Remote(_)) {
+            bail!("Unsupported environment type");
         }
-        .or_else(|e| bail!(e.to_string()))?;
 
-        let build_metadata = match &env {
-            ConcreteEnvironment::Managed(environment) => {
-                check_build_metadata(environment, &package, &flox.system)
-            },
-            ConcreteEnvironment::Path(environment) => {
-                check_build_metadata(environment, &package, &flox.system)
-            },
-            _ => unreachable!(),
-        }
-        .or_else(|e| bail!(e.to_string()))?;
+        let env_metadata =
+            check_environment_metadata(&flox, &mut env).or_else(|e| bail!(e.to_string()))?;
+
+        let build_metadata =
+            check_build_metadata(&env, &package, &flox.system).or_else(|e| bail!(e.to_string()))?;
 
         let publish_provider = PublishProvider::<&FloxBuildMk> {
             build_metadata,

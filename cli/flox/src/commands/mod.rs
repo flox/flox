@@ -47,6 +47,7 @@ use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     find_dot_flox,
+    ConcreteEnvironment,
     DotFlox,
     Environment,
     EnvironmentError,
@@ -1160,44 +1161,6 @@ fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, Environ
     DotFlox::open_in(path)
         .map(UninitializedEnvironment::DotFlox)?
         .into_concrete_environment(flox)
-}
-
-/// The various ways in which an environment can be referred to
-pub enum ConcreteEnvironment {
-    /// Container for [PathEnvironment]
-    Path(PathEnvironment),
-    /// Container for [ManagedEnvironment]
-    #[allow(unused)] // pending implementation of ManagedEnvironment
-    Managed(ManagedEnvironment),
-    /// Container for [RemoteEnvironment]
-    #[allow(unused)] // pending implementation of RemoteEnvironment
-    Remote(RemoteEnvironment),
-}
-
-impl ConcreteEnvironment {
-    pub fn into_dyn_environment(self) -> Box<dyn Environment> {
-        match self {
-            ConcreteEnvironment::Path(path_env) => Box::new(path_env),
-            ConcreteEnvironment::Managed(managed_env) => Box::new(managed_env),
-            ConcreteEnvironment::Remote(remote_env) => Box::new(remote_env),
-        }
-    }
-
-    pub fn dyn_environment_ref(&self) -> &dyn Environment {
-        match self {
-            ConcreteEnvironment::Path(path_env) => path_env,
-            ConcreteEnvironment::Managed(managed_env) => managed_env,
-            ConcreteEnvironment::Remote(remote_env) => remote_env,
-        }
-    }
-
-    pub fn dyn_environment_ref_mut(&mut self) -> &mut dyn Environment {
-        match self {
-            ConcreteEnvironment::Path(path_env) => path_env,
-            ConcreteEnvironment::Managed(managed_env) => managed_env,
-            ConcreteEnvironment::Remote(remote_env) => remote_env,
-        }
-    }
 }
 
 /// An environment descriptor of an environment that can be (re)opened,

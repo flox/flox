@@ -3,8 +3,12 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use core_environment::UpgradeResult;
+use enum_dispatch::enum_dispatch;
 pub use flox_core::{path_hash, Version};
 use log::debug;
+use managed_environment::ManagedEnvironment;
+use path_environment::PathEnvironment;
+use remote_environment::RemoteEnvironment;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -99,6 +103,7 @@ pub struct UninstallationAttempt {
     pub built_environment_store_paths: Option<BuildEnvOutputs>,
 }
 
+#[enum_dispatch]
 pub trait Environment: Send {
     /// Create a container image from the environment, tagged with the given tag
     fn build_container(
@@ -215,6 +220,43 @@ pub trait Environment: Send {
     }
 
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
+}
+
+/// The various ways in which an environment can be referred to
+#[enum_dispatch(Environment)]
+pub enum ConcreteEnvironment {
+    /// Container for [PathEnvironment]
+    Path(PathEnvironment),
+    /// Container for [ManagedEnvironment]
+    Managed(ManagedEnvironment),
+    /// Container for [RemoteEnvironment]
+    Remote(RemoteEnvironment),
+}
+
+impl ConcreteEnvironment {
+    pub fn into_dyn_environment(self) -> Box<dyn Environment> {
+        match self {
+            ConcreteEnvironment::Path(path_env) => Box::new(path_env),
+            ConcreteEnvironment::Managed(managed_env) => Box::new(managed_env),
+            ConcreteEnvironment::Remote(remote_env) => Box::new(remote_env),
+        }
+    }
+
+    pub fn dyn_environment_ref(&self) -> &dyn Environment {
+        match self {
+            ConcreteEnvironment::Path(path_env) => path_env,
+            ConcreteEnvironment::Managed(managed_env) => managed_env,
+            ConcreteEnvironment::Remote(remote_env) => remote_env,
+        }
+    }
+
+    pub fn dyn_environment_ref_mut(&mut self) -> &mut dyn Environment {
+        match self {
+            ConcreteEnvironment::Path(path_env) => path_env,
+            ConcreteEnvironment::Managed(managed_env) => managed_env,
+            ConcreteEnvironment::Remote(remote_env) => remote_env,
+        }
+    }
 }
 
 /// A link to a built environment in the Nix store.
