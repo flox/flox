@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::ConcreteEnvironment;
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::providers::build::{FloxBuildMk, ManifestBuilder, Output};
 use indoc::indoc;
@@ -8,7 +9,6 @@ use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::activate::FLOX_INTERPRETER;
-use crate::commands::ConcreteEnvironment;
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::message;

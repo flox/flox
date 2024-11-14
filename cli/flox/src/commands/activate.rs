@@ -15,6 +15,7 @@ use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::env_registry::env_registry_path;
 use flox_rust_sdk::models::environment::{
     path_hash,
+    ConcreteEnvironment,
     Environment,
     EnvironmentError,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -45,7 +46,7 @@ use super::{
     UninitializedEnvironment,
 };
 use crate::commands::services::ServicesCommandsError;
-use crate::commands::{ensure_environment_trust, ConcreteEnvironment, EnvironmentSelectError};
+use crate::commands::{ensure_environment_trust, EnvironmentSelectError};
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::openers::Shell;

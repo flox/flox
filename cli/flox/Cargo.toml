@@ -13,6 +13,7 @@ config.workspace = true
 crossterm.workspace = true
 derive_more.workspace = true
 dirs.workspace = true
+enum_dispatch.workspace = true
 flox-rust-sdk.workspace = true
 fslock.workspace = true
 futures.workspace = true

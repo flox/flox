@@ -7,7 +7,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
-use flox_rust_sdk::models::environment::{Environment, PathPointer};
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
 use flox_rust_sdk::models::manifest::{insert_packages, CatalogPackage, PackageToInstall};
 use flox_rust_sdk::models::search::SearchResult;
 use flox_rust_sdk::providers::catalog::{
@@ -22,7 +22,7 @@ use path_dedot::ParseDot;
 use toml_edit::{DocumentMut, Formatted, Item, Table, Value};
 use tracing::instrument;
 
-use crate::commands::{environment_description, ConcreteEnvironment};
+use crate::commands::environment_description;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;

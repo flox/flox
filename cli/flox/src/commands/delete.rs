@@ -1,12 +1,12 @@
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use indoc::formatdoc;
 use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
-use crate::commands::{environment_description, ConcreteEnvironment};
+use crate::commands::environment_description;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::message;

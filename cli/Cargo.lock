@@ -1052,6 +1052,7 @@ dependencies = [
  "crossterm 0.27.0",
  "derive_more",
  "dirs",
+ "enum_dispatch",
  "flox-rust-sdk",
  "fslock",
  "futures",
