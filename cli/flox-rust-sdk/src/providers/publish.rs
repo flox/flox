@@ -145,7 +145,7 @@ where
                 pname: Some(self.build_metadata.package.to_string()),
                 system: self.build_metadata.system,
                 unfree: None,
-                version: None,
+                version: Some("unknown".to_string()),
             },
             locked_base_catalog_url: Some(self.env_metadata.base_catalog_ref.url.clone()),
             url: self.env_metadata.build_repo_ref.url.clone(),
