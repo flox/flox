@@ -169,7 +169,7 @@ impl<'dirs> ShellProcess<'dirs> {
     pub fn spawn(dirs: &'dirs IsolatedHome, timeout_millis: Option<u64>) -> Result<Self, Error> {
         let test_shell = std::env::var("FLOX_SHELL_BASH")?;
         let mut shell =
-            spawn_specific_bash(test_shell, timeout_millis).context("failed to spawn bash")?;
+            spawn_specific_bash(&test_shell, timeout_millis).context("failed to spawn bash")?;
         for (var, value) in dirs.envs.iter() {
             shell
                 .send_line(&format!(r#"export {var}="{value}""#))
@@ -179,6 +179,10 @@ impl<'dirs> ShellProcess<'dirs> {
         shell
             .send_line("export _FLOX_NO_PROMPT=1")
             .context("failed to set no-prompt var")?;
+        shell.wait_for_prompt().context("prompt never appeared")?;
+        shell
+            .send_line(&format!("export FLOX_SHELL={}", test_shell))
+            .context("failed to set FLOX_SHELL")?;
         shell.wait_for_prompt().context("prompt never appeared")?;
 
         // I don't know why this is necessary
@@ -208,6 +212,14 @@ impl<'dirs> ShellProcess<'dirs> {
         Ok(Self { pty: shell, dirs })
     }
 
+    pub fn shell_reconfig(&mut self) -> Result<(), Error> {
+        // This last command is to turn off whatever bracketed paste mode is about
+        self.pty.send_line(
+            r#"PS1="[REXPECT_PROMPT>" && unset PROMPT_COMMAND && bind 'set enable-bracketed-paste off'"#,
+        )?;
+        Ok(())
+    }
+
     /// Send a string, adding a newline.
     pub fn send_line(&mut self, line: impl AsRef<str>) -> Result<(), Error> {
         let _ = self
@@ -235,8 +247,11 @@ impl<'dirs> ShellProcess<'dirs> {
             .send_line("flox init")
             .with_context(|| format!("failed to cd into directory: {}", name.as_ref()))?;
         self.pty
+            .exp_string(&format!("Created environment '{}'", name.as_ref()))?;
+        self.pty
             .wait_for_prompt()
             .context("prompt never appeared")?;
+        eprintln!("post-init buffer: {:?}", self.pty.pty_session.reader.buffer);
         Ok(())
     }
 
@@ -268,16 +283,23 @@ impl<'dirs> ShellProcess<'dirs> {
 
     /// Activates the environment in the current directory
     pub fn activate(&mut self) -> Result<(), Error> {
+        self.pty.send_line("flox activate")?;
+        self.pty.exp_string("bash-5.2$")?;
+        self.shell_reconfig()?;
+        self.pty.wait_for_prompt()?;
+        Ok(())
+    }
+
+    /// Reads the _FLOX_ACTIVATION_UUID value from an activated shell
+    pub fn read_activation_uuid(&mut self) -> Result<String, Error> {
         self.pty
-            .send_line("flox activate")
-            .context("failed to send activate command")?;
-        self.pty
-            .exp_string("flox [")
-            .context("never saw flox prompt")?;
+            .send_line("echo $_FLOX_ACTIVATION_UUID")
+            .context("failed to send command")?;
+        let value = self.pty.read_line().context("failed to read line")?;
         self.pty
             .wait_for_prompt()
-            .context("never saw shell prompt")?;
-        Ok(())
+            .context("prompt never appeared")?;
+        Ok(value)
     }
 }
 
@@ -333,5 +355,19 @@ mod tests {
         );
         shell.send_line(&cmd).unwrap();
         shell.exp_string("howdy").unwrap();
+    }
+
+    #[test]
+    fn read_activation_uuid() {
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(2000)).unwrap();
+        shell.init_env_with_name("myenv").unwrap();
+        shell.activate().unwrap();
+        shell
+            .execute(
+                "echo $_FLOX_ACTIVATION_UUID",
+                r#"\w{8}-\w{4}-\w{4}-\w{4}-\w{12}"#,
+            )
+            .unwrap();
     }
 }
