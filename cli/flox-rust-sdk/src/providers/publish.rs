@@ -211,25 +211,18 @@ fn gather_build_repo_meta(environment: &impl Environment) -> Result<LockedUrlInf
         .get_origin()
         .map_err(|e| PublishError::UnsupportEnvironmentState(format!("Git error {e}")))?;
 
-    let rev = origin
-        .revision
-        .ok_or(PublishError::UnsupportEnvironmentState(
-            "No revision found".to_string(),
-        ))?;
+    let status = git
+        .status()
+        .map_err(|e| PublishError::UnsupportEnvironmentState(e.to_string()))?;
 
-    let rev_count = git
-        .rev_count(rev.as_str())
-        .map_err(|e| PublishError::UnsupportEnvironmentState(format!("Git error {e}")))?;
-
-    let rev_date = git
-        .rev_date(rev.as_str())
-        .map_err(|e| PublishError::UnsupportEnvironmentState(format!("Git error {e}")))?;
+    // TODO - check is_dirty and warn?
+    // TODO - check if REV is in remote?
 
     Ok(LockedUrlInfo {
         url: origin.url,
-        rev,
-        rev_count,
-        rev_date,
+        rev: status.rev,
+        rev_count: status.rev_count,
+        rev_date: status.rev_date,
     })
 }
 

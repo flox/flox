@@ -39,6 +39,13 @@ pub struct BranchInfo {
     pub description: String,
 }
 
+pub struct StatusInfo {
+    pub rev: String,
+    pub rev_count: u64,
+    pub rev_date: DateTime<Utc>,
+    pub is_dirty: bool,
+}
+
 // simple git provider for the tasks we need to provide in
 // flox
 pub trait GitProvider: Sized + std::fmt::Debug {
@@ -67,6 +74,7 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     type GetOriginError: std::error::Error;
     type RevListError: std::error::Error;
     type ShowDateError: std::error::Error;
+    type StatusError: std::error::Error;
 
     fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError>;
     fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<Self, Self::InitError>;
@@ -76,6 +84,7 @@ pub trait GitProvider: Sized + std::fmt::Debug {
         bare: bool,
     ) -> Result<Self, Self::CloneError>;
 
+    fn status(&self) -> Result<StatusInfo, Self::StatusError>;
     fn checkout(&self, name: &str, orphan: bool) -> Result<(), Self::CheckoutError>;
     fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError>;
     fn rename_branch(&self, new_name: &str) -> Result<(), Self::RenameError>;
@@ -697,6 +706,7 @@ impl GitProvider for GitCommandProvider {
     type SetOriginError = GitCommandError;
     type ShowDateError = GitCommandError;
     type ShowError = GitCommandError;
+    type StatusError = GitCommandError;
 
     /// Discover a git repository at `path` and return a provider with default options
     ///
@@ -761,6 +771,34 @@ impl GitProvider for GitCommandProvider {
             options,
             workdir: (!bare).then(|| path.as_ref().to_path_buf()),
             path: path.as_ref().into(),
+        })
+    }
+
+    fn status(&self) -> Result<StatusInfo, Self::StatusError> {
+        let mut command = self.new_command();
+        command.arg("rev-parse");
+        command.arg("HEAD");
+        let rev = {
+            let rev_output = GitCommandProvider::run_command(&mut command)?;
+            let as_str = rev_output.to_string_lossy();
+            as_str.trim().to_string()
+        };
+
+        let mut command = self.new_command();
+        command.arg("status");
+        command.arg("--porcelain");
+        command.arg("--untracked-files=no");
+        let is_dirty = {
+            let dirty_output = GitCommandProvider::run_command(&mut command)?;
+            let as_str = dirty_output.to_string_lossy();
+            !as_str.trim().is_empty()
+        };
+
+        Ok(StatusInfo {
+            rev: rev.clone(),
+            rev_count: self.rev_count(&rev)?,
+            rev_date: self.rev_date(&rev)?,
+            is_dirty,
         })
     }
 
@@ -1266,6 +1304,39 @@ pub mod tests {
         commit_file(&repo, "dummy");
 
         assert!(!repo.branch_contains_commit("XXX", "branch_1").unwrap());
+    }
+
+    #[test]
+    fn test_status_no_head() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+        let status = repo.status();
+        assert!(status.is_err());
+    }
+
+    #[test]
+    fn test_status() {
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
+
+        let new_filename = "dummy";
+        commit_file(&repo, &new_filename);
+        let hash_1 = repo.branch_hash("branch_1").unwrap();
+        let ct = repo.rev_count("HEAD").unwrap();
+        let date = repo.rev_date("HEAD").unwrap();
+
+        let status = repo.status().unwrap();
+        assert_eq!(status.rev, hash_1);
+        assert_eq!(status.rev_count, ct);
+        assert_eq!(status.rev_date, date);
+        assert_eq!(status.is_dirty, false);
+
+        // touch a file
+        let new_file_path = repo.path.join(new_filename);
+        fs::write(&new_file_path, "new content").unwrap();
+
+        let status = repo.status().unwrap();
+        assert_eq!(status.is_dirty, true);
     }
 
     #[test]
