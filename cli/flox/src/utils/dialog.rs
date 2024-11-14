@@ -210,6 +210,9 @@ impl<'a, F: FnOnce() -> T + Send, T: Send> Dialog<'a, Spinner<F>> {
 impl Dialog<'_, ()> {
     /// True if stderr and stdin are ttys
     pub fn can_prompt() -> bool {
+        if std::env::var("_FLOX_NO_PROMPT").is_ok_and(|v| v == "1") {
+            return false;
+        }
         std::io::stderr().is_tty() && std::io::stdin().is_tty() && std::io::stdout().is_tty()
     }
 }

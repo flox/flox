@@ -1,0 +1,24 @@
+language: rust
+
+rust:
+  - nightly
+  - beta
+  - stable
+
+matrix:
+  allow_failures:
+    - rust: nightly
+    - os: osx
+
+os:
+  - linux
+  - osx
+
+after_success:
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then travis-cargo --only stable doc-upload; fi
+
+# needed to forbid travis-cargo to pass `--feature nightly` when building with nightly compiler
+env:
+  global:
+    - TRAVIS_CARGO_NIGHTLY_FEATURE=""
+    - RUST_BACKTRACE=full

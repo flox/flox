@@ -1,0 +1,29 @@
+name: pre-commit
+
+permissions: {} # none
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+  CLICOLOR: 1
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  pre-commit:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    - uses: pre-commit/action@v3.0.1
