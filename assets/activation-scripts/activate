@@ -188,7 +188,7 @@ declare -a _FLOX_ENV_DIRS
 # If $FLOX_ENV is already in $FLOX_ENV_DIRS, the deduplication logic below will
 # handle that
 # shellcheck disable=SC2206
-_FLOX_ENV_DIRS=($FLOX_ENV $FLOX_ENV_DIRS)
+_FLOX_ENV_DIRS=($FLOX_ENV ${FLOX_ENV_DIRS:-})
 
 # Set the PATH environment variable.
 declare _prepend_path=""
