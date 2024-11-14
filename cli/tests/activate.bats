@@ -2370,7 +2370,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:validate_hook_and_dotfile_sourcing
-@test "{bash,fish,tcsh,zsh}: confirm hooks and dotfiles sourced correctly" {
+@test "bash: confirm hooks and dotfiles sourced correctly" {
   project_setup
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
