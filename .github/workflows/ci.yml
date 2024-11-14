@@ -228,7 +228,6 @@ jobs:
       closure-size-x86_64-linux:   ${{ steps.closure.outputs.closure-size-x86_64-linux }}
       closure-size-aarch64-linux:  ${{ steps.closure.outputs.closure-size-aarch64-linux }}
       closure-size-x86_64-darwin:  ${{ steps.closure.outputs.closure-size-x86_64-darwin }}
-      closure-size-aarch64-darwin: ${{ steps.closure.outputs.closure-size-aarch64-darwin }}
       flox-version:                ${{ steps.version.outputs.flox-version }}
 
     strategy:
@@ -238,7 +237,7 @@ jobs:
           - "x86_64-linux"
           - "x86_64-darwin"
           - "aarch64-linux"
-          - "aarch64-darwin"
+          # - "aarch64-darwin" # Disabled since Bryan managed to break the machine...
 
     steps:
       - name: "Checkout"
@@ -354,7 +353,6 @@ jobs:
             --arg "flox_closure_size-x86_64-linux" "${{ needs.nix-build.outputs.closure-size-x86_64-linux }}" \
             --arg "flox_closure_size-aarch64-linux" "${{ needs.nix-build.outputs.closure-size-aarch64-linux }}" \
             --arg "flox_closure_size-x86_64-darwin" "${{ needs.nix-build.outputs.closure-size-x86_64-darwin }}" \
-            --arg "flox_closure_size-aarch64-darwin" "${{ needs.nix-build.outputs.closure-size-aarch64-darwin }}" \
             --arg "flox_version" "${{ needs.nix-build.outputs.flox-version }}" \
             '$ARGS.named' > shipit.json
           cat shipit.json | jq
@@ -413,7 +411,7 @@ jobs:
           - "x86_64-linux"
           - "x86_64-darwin"
           - "aarch64-linux"
-          - "aarch64-darwin"
+          # - "aarch64-darwin" # Disabled since Bryan managed to break the machine...
         test-tags:
           - "containerize"
           - "!containerize"
