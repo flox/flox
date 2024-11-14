@@ -2375,6 +2375,13 @@ EOF
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
+  # Prevent `/etc/bashrc_Apple_Terminal` from altering output with:
+  #   Saving session...completed.
+  #   Deleting expired sessions...none found.
+  if [[ "$NIX_SYSTEM" == *"-darwin" ]]; then
+    touch "${HOME}/.bash_sessions_disable"
+  fi
+
   # This test doesn't just confirm that the right things are sourced,
   # but that they are sourced in the correct order and exactly once.
 
