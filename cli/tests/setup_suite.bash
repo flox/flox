@@ -13,6 +13,16 @@ bats_require_minimum_version '1.5.0'
 
 # ---------------------------------------------------------------------------- #
 
+# Unset all FLOX_ENV related vars to prevent an outer activation from leaking
+# back into test activations.
+unset_flox_env_setup() {
+  for var in $(env | awk -F= '{print $1}'); do
+    if [[ $var == FLOX_ENV* || $var == _FLOX_ENV* ]]; then
+      unset "$var"
+    fi
+  done
+}
+
 # Set the vars `REAL_XDG_{CONFIG,CACHE}_HOME' to point to the user's homedir.
 # This allows us to copy some of their existing configs and caches into
 # our test harnesses.
@@ -419,6 +429,7 @@ home_setup() {
 # `{setup,teardown}_suite' functions must be defined in `setup_suite.bash'
 # files, AND keep in mind that `SET_TESTS_DIR' will likely differ.
 common_suite_setup() {
+  unset_flox_env_setup
   # Backup real env vars.
   reals_setup
   # Setup a phony home directory shared by the test suite.
