@@ -1,10 +1,13 @@
-use anyhow::{bail, Result};
+use std::env;
+use std::path::Path;
+
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::ConcreteEnvironment;
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
-use flox_rust_sdk::providers::build::{FloxBuildMk, ManifestBuilder, Output};
-use indoc::indoc;
+use flox_rust_sdk::providers::build::{build_symlink_path, FloxBuildMk, ManifestBuilder, Output};
+use indoc::{formatdoc, indoc};
 use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
@@ -99,14 +102,12 @@ impl Build {
     }
 
     #[instrument(name = "build", skip_all, fields(packages))]
-    async fn build(flox: Flox, env: ConcreteEnvironment, packages: Vec<String>) -> Result<()> {
+    async fn build(flox: Flox, mut env: ConcreteEnvironment, packages: Vec<String>) -> Result<()> {
         subcommand_metric!("build");
 
         if let ConcreteEnvironment::Remote(_) = &env {
             bail!("Cannot build from a remote environment");
         };
-
-        let mut env = env.into_dyn_environment();
 
         let base_dir = env.parent_path()?;
         let flox_env = env.rendered_env_links(&flox)?;
@@ -127,7 +128,26 @@ impl Build {
                 Output::Stdout(line) => println!("{line}"),
                 Output::Stderr(line) => eprintln!("{line}"),
                 Output::Exit(status) if status.success() => {
-                    message::created("Build completed successfully");
+                    let current_dir = env::current_dir()
+                        .context("could not get current directory")?
+                        .canonicalize()
+                        .context("could not canonicalize current directory")?;
+                    let links_to_print = packages_to_build
+                        .iter()
+                        .map(|package| Self::check_and_display_symlink(&env, package, &current_dir))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    if packages_to_build.len() > 1 {
+                        message::created(formatdoc!(
+                            "Builds completed successfully.
+                            Outputs created: {}",
+                            links_to_print.join(", ")
+                        ));
+                    } else {
+                        message::created(format!(
+                            "Build completed successfully. Output created: {}",
+                            links_to_print[0]
+                        ));
+                    }
                     break;
                 },
                 Output::Exit(status) => {
@@ -137,6 +157,42 @@ impl Build {
         }
 
         Ok(())
+    }
+
+    /// Check if the expected symlink for a package exists.
+    /// If so, shorten it if in the current directory.
+    ///
+    /// current_dir should be canonicalized
+    fn check_and_display_symlink(
+        environment: &impl Environment,
+        package: &str,
+        current_dir: impl AsRef<Path>,
+    ) -> Result<String> {
+        let symlink = build_symlink_path(environment, package)?;
+
+        if !symlink.exists() {
+            bail!("Build symlink for package '{}' does not exist", package);
+        }
+
+        let parent = symlink
+            .parent()
+            .ok_or(anyhow!("symlink must be in a directory"))?;
+
+        let parent = parent
+            .canonicalize()
+            .context("couldn't canonicalize parent of build symlink")?;
+
+        if parent == current_dir.as_ref() {
+            Ok(format!(
+                "./{}",
+                symlink
+                    .file_name()
+                    .ok_or(anyhow!("symlink must have a file name"))?
+                    .to_string_lossy()
+            ))
+        } else {
+            Ok(symlink.to_string_lossy().to_string())
+        }
     }
 }
 
@@ -164,4 +220,42 @@ fn available_packages(lockfile: &Lockfile, packages: Vec<String>) -> Result<Vec<
     }
 
     Ok(packages_to_build)
+}
+
+#[cfg(test)]
+mod test {
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use flox_rust_sdk::providers::buildenv::NIX_BIN;
+    use tempfile::tempdir_in;
+
+    use super::*;
+
+    #[test]
+    /// Test that check_and_display_symlink shortens the symlink when in the
+    /// current directory,
+    fn symlink_gets_shortened_when_in_current_dir() {
+        let (flox, _temp_dir) = flox_instance();
+        let dot_flox_parent_path = tempdir_in(&flox.temp_dir)
+            .unwrap()
+            .into_path()
+            .canonicalize()
+            .unwrap();
+        let environment = new_path_environment_in(&flox, "version 1", &dot_flox_parent_path);
+        let package = "foo";
+        let symlink = dot_flox_parent_path.join(format!("result-{package}"));
+        // We just want some random symlink possibly into the /nix/store
+        std::os::unix::fs::symlink(&*NIX_BIN, &symlink).unwrap();
+        let displayed = Build::check_and_display_symlink(
+            &environment,
+            package,
+            dot_flox_parent_path.canonicalize().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(displayed, format!("./result-{package}"));
+
+        let displayed =
+            Build::check_and_display_symlink(&environment, package, &flox.temp_dir).unwrap();
+        assert_eq!(displayed, symlink.to_string_lossy());
+    }
 }

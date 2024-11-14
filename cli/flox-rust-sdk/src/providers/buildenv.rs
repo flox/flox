@@ -10,7 +10,7 @@ use tracing::debug;
 use crate::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
 use crate::utils::CommandExt;
 
-static NIX_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
+pub static NIX_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("NIX_BIN")
         .unwrap_or_else(|_| env!("NIX_BIN").to_string())
         .into()
