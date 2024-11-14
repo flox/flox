@@ -88,6 +88,16 @@ TMPDIR ?= /tmp
 # Use the wildcard operator to identify builds in the provided $FLOX_ENV.
 BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
 
+# Set makefile verbosity based on the value of _FLOX_PKGDB_VERBOSITY [sic]
+# as set in the environment by the flox CLI. First set it to 0 if not defined.
+ifeq (,$(_FLOX_PKGDB_VERBOSITY))
+  _FLOX_PKGDB_VERBOSITY = 0
+endif
+# Then set them to empty string or "@" based on being greater than 0, 1, or 2.
+$(eval _V_ = $(intcmp 0,$(_FLOX_PKGDB_VERBOSITY),,@))
+$(eval _VV_ = $(intcmp 1,$(_FLOX_PKGDB_VERBOSITY),,@))
+$(eval _VVV_ = $(intcmp 2,$(_FLOX_PKGDB_VERBOSITY),,@))
+
 # Define a usage target to provide a helpful message when no target is specified.
 .PHONY: usage
 usage:
