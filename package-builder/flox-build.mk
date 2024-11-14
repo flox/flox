@@ -238,7 +238,10 @@ define BUILD_nix_sandbox_template =
   # instead.
   $(eval $(_pvarname)_src_tar = $($(_pvarname)_tmpBasename)-src.tar)
   $($(_pvarname)_src_tar): FORCE
-	$(_tar) -cf - --no-recursion -T <($(_git) ls-files) > $$@
+	@# TIL that you have to explicitly call `wait` to harvest the exit status
+	@# of a process substitution, and that `set -o pipefail` does nothing here.
+	@# See: https://mywiki.wooledge.org/ProcessSubstitution
+	$(_tar) -cf $$@ --no-recursion -T <($(_git) ls-files) && wait "$$$$!"
 
   # The buildCache value needs to be similarly stable when nothing changes across
   $(eval $(_pvarname)_buildCache = $($(_pvarname)_tmpBasename)-buildCache.tar)

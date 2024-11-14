@@ -401,6 +401,7 @@ mod tests {
     use crate::models::environment::Environment;
     use crate::providers::catalog::test_helpers::reset_mocks_from_file;
     use crate::providers::catalog::GENERATED_DATA;
+    use crate::providers::git::{GitCommandProvider, GitProvider};
 
     #[test]
     fn build_returns_failure_when_package_not_defined() {
@@ -477,6 +478,9 @@ mod tests {
 
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
         let output = assert_build_status(&flox, &mut env, &package_name, false);
         // Weird string formatting because indoc strips leading whitespace
@@ -631,6 +635,8 @@ mod tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
 
+        let _git = GitCommandProvider::init(&env_path, false).unwrap();
+
         assert_build_status(&flox, &mut env, &package_name, true);
         let file_content = result_content(&env_path, &package_name, &file_name);
 
@@ -667,6 +673,8 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
+
+        let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
         assert_build_status(&flox, &mut env, &package_name, true);
         let file_content_first_run = result_content(&env_path, &package_name, &file_name);
@@ -741,6 +749,8 @@ mod tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
 
+        let _git = GitCommandProvider::init(&env_path, false).unwrap();
+
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         assert_build_status(&flox, &mut env, &package_name, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
@@ -771,6 +781,8 @@ mod tests {
         let (mut flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
+
+        let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         assert_build_status(&flox, &mut env, &package_name, true);
@@ -1184,6 +1196,9 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
+
+        let _git = GitCommandProvider::init(&env_path, false).unwrap();
+
         let result = result_dir(&env_path, &package_name);
         let cache = cache_dir(&env_path, &package_name);
 
@@ -1256,6 +1271,9 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
+
+        let _git = GitCommandProvider::init(&env_path, false).unwrap();
+
         let result_foo = result_dir(&env_path, &package_foo);
         let cache_foo = cache_dir(&env_path, &package_foo);
         let result_bar = result_dir(&env_path, &package_bar);
@@ -1325,6 +1343,9 @@ mod tests {
 
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
         let output = assert_build_status(&flox, &mut env, &package_name, succeed);
 
