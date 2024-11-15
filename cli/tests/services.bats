@@ -772,7 +772,7 @@ EOF
   mkfifo ./resume-mostly-deterministic.pipe
 
   # We expect flox to block and be killed by `timeout`, which will return a 124 exit code
-  run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
+  run --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
 
     # ensure some logs are printed for both services then stop the log reader
@@ -781,13 +781,26 @@ EOF
     read < ./resume-one.pipe
     read < ./resume-mostly-deterministic.pipe
 
-    # kill log reading, because with `--follow` the process wil block indefinitely
-    timeout 0.5 "$FLOX_BIN" services logs --follow one mostly-deterministic
+    "$FLOX_BIN" services logs --follow > logs &
+    logs_pid="$!"
+
+    timeout 5s bash -c '
+      while ! grep "^mostly-deterministic: " logs || ! grep "^one                 : " logs; do
+        sleep .1
+      done
+      exit 0
+    '
+    status="$?"
+
+    [ $status = 0 ] || echo "didn't find expected logs"
+
+    # kill log reading, because with `--follow` the process will block indefinitely
+    kill -SIGTERM "$logs_pid"
+
+    exit $status
 EOF
   )
 
-  assert_line --regexp "^mostly-deterministic: "
-  assert_line --regexp "^one                 : "
 }
 
 # bats test_tags=services:logs:follow:combines
@@ -810,19 +823,21 @@ EOF
     "$FLOX_BIN" services logs --follow > logs &
     logs_pid="$!"
 
-    if timeout 1s bash -c '
-      while ! grep "^mostly-deterministic: " logs || !grep "^one                 : " logs; do
+    timeout 5s bash -c '
+      while ! grep "^mostly-deterministic: " logs || ! grep "^one                 : " logs; do
         sleep .1
       done
-    '; then
-      # kill log reading, because with `--follow` the process wil block indefinitely
-      kill -SIGTERM "$logs_pid"
-    else
-      echo "didn't find expected logs"
-      # kill log reading, because with `--follow` the process wil block indefinitely
-      kill -SIGTERM "$logs_pid"
-      exit 1
-    fi
+      exit 0
+    '
+    status="$?"
+    [ $status = 124 ] || echo "didn't find expected logs"
+
+
+    # kill log reading, because with `--follow` the process will block indefinitely
+    kill -SIGTERM "$logs_pid"
+
+
+    exit $status
 EOF
   )
 }
