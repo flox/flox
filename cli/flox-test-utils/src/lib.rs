@@ -224,7 +224,7 @@ impl<'dirs> ShellProcess<'dirs> {
         Ok(Self { pty: shell, dirs })
     }
 
-    pub fn shell_reconfig(&mut self) -> Result<(), Error> {
+    pub fn reconfigure_prompt(&mut self) -> Result<(), Error> {
         // This last command is to turn off whatever bracketed paste mode is about
         self.pty.send_line(
             r#"PS1="[REXPECT_PROMPT>" && unset PROMPT_COMMAND && bind 'set enable-bracketed-paste off'"#,
@@ -296,7 +296,7 @@ impl<'dirs> ShellProcess<'dirs> {
     pub fn activate(&mut self) -> Result<(), Error> {
         self.pty.send_line("flox activate")?;
         self.pty.exp_string("bash-5.2$")?;
-        self.shell_reconfig()?;
+        self.reconfigure_prompt()?;
         self.pty.wait_for_prompt()?;
         Ok(())
     }
@@ -313,7 +313,7 @@ impl<'dirs> ShellProcess<'dirs> {
         };
         self.pty.send_line(&cmd)?;
         self.pty.exp_string("bash-5.2$")?;
-        self.shell_reconfig()?;
+        self.reconfigure_prompt()?;
         self.pty.wait_for_prompt()?;
         Ok(())
     }
@@ -347,20 +347,14 @@ pub fn find_process_compose_pid_with_uuid(
 
 /// Data that's global to a single test
 pub struct TestGlobals {
-    pub dirs: IsolatedHome,
     pub system: Arc<Mutex<System>>,
 }
 
 impl TestGlobals {
     pub fn new() -> Self {
         Self {
-            dirs: IsolatedHome::new().unwrap(),
             system: Arc::new(Mutex::new(System::new())),
         }
-    }
-
-    pub fn new_bash_shell(&self, expect_timeout: Option<u64>) -> Result<ShellProcess, Error> {
-        ShellProcess::spawn(&self.dirs, expect_timeout)
     }
 
     pub fn watchdog_with_uuid(&mut self, uuid: impl AsRef<str>) -> Option<ProcToGC<WatchdogProc>> {
@@ -382,7 +376,7 @@ impl TestGlobals {
 #[derive(Debug)]
 pub struct ProcToGC<T> {
     is_terminated: bool,
-    pid: u32,
+    pub pid: u32,
     system: Arc<Mutex<System>>,
     _kind: T,
 }
@@ -409,7 +403,7 @@ impl<T> ProcToGC<T> {
         let mut system = self.system.lock().unwrap();
         system.refresh_processes_specifics(
             ProcessesToUpdate::Some(&[pid]),
-            false,
+            true,
             ProcessRefreshKind::new(),
         );
         let Some(proc) = system.process(pid) else {
@@ -456,7 +450,7 @@ impl<T> ProcToGC<T> {
 
     pub fn wait_for_termination_with_timeout(&mut self, millis: u64) -> Result<(), Error> {
         let mut remaining = millis;
-        let interval = 10;
+        let interval = 100;
         let mut next_sleep = interval.min(remaining);
         loop {
             if !self.is_running() {
@@ -530,27 +524,46 @@ mod tests {
 
     use super::*;
 
+    const MANIFEST_WITH_SERVICES: &str = r#"
+        version = 1
+
+        [services.sleeper_1]
+        command = "sleep 999999"
+
+        [services.sleeper_2]
+        command = "sleep 999999"
+
+        [options]
+        systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
+    "#;
+
+    // Just a helper function for less typing
+    #[allow(dead_code)]
+    fn sleep_millis(millis: u64) {
+        sleep(Duration::from_millis(millis));
+    }
+
     #[test]
     fn can_construct_shell() {
-        let globals = TestGlobals::new();
-        let _shell = globals.new_bash_shell(Some(1000)).unwrap();
+        let dirs = IsolatedHome::new().unwrap();
+        let _shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
     }
 
     #[test]
     fn can_activate() {
-        let globals = TestGlobals::new();
-        let mut shell = globals.new_bash_shell(Some(1000)).unwrap();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell.send_line("flox activate").unwrap();
-        shell.exp_string("flox [myenv]").unwrap();
+        shell.reconfigure_prompt().unwrap();
         shell.send_line(r#"echo "$_activate_d""#).unwrap();
         shell.exp_string("/nix/store").unwrap();
     }
 
     #[test]
     fn update_env_with_manifest() {
-        let globals = TestGlobals::new();
-        let mut shell = globals.new_bash_shell(Some(2000)).unwrap();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(2000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(formatdoc! {r#"
@@ -569,18 +582,14 @@ mod tests {
             std::fs::read_to_string(shell.dirs.home_dir.join("myenv/.flox/env/manifest.toml"))
                 .unwrap();
         assert!(manifest_contents.find("howdy").is_some());
-        let cmd = format!(
-            "FLOX_SHELL={} flox activate",
-            std::env::var("FLOX_SHELL_BASH").unwrap()
-        );
-        shell.send_line(&cmd).unwrap();
+        shell.send_line("flox activate").unwrap();
         shell.exp_string("howdy").unwrap();
     }
 
     #[test]
     fn read_activation_uuid() {
-        let globals = TestGlobals::new();
-        let mut shell = globals.new_bash_shell(Some(1000)).unwrap();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell.activate().unwrap();
         shell
@@ -594,7 +603,8 @@ mod tests {
     #[test]
     fn can_locate_watchdog() {
         let globals = TestGlobals::new();
-        let mut shell = globals.new_bash_shell(Some(1000)).unwrap();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell.activate().unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
@@ -605,7 +615,8 @@ mod tests {
     #[test]
     fn can_locate_process_compose() {
         let globals = TestGlobals::new();
-        let mut shell = globals.new_bash_shell(Some(1000)).unwrap();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(formatdoc! {r#"
@@ -625,7 +636,8 @@ mod tests {
     #[test]
     fn cleans_up_watchdog() {
         let mut globals = TestGlobals::new();
-        let mut shell = globals.new_bash_shell(Some(1000)).unwrap();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell.activate().unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
@@ -638,6 +650,35 @@ mod tests {
         shell.send_line("exit").unwrap();
         shell.wait_for_prompt().unwrap();
         watchdog_proc
+            .wait_for_termination_with_timeout(1000)
+            .unwrap();
+    }
+
+    #[test]
+    fn cleans_up_process_compose() {
+        let mut globals = TestGlobals::new();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        shell.init_env_with_name("myenv").unwrap();
+        shell
+            .edit_with_manifest_contents(formatdoc! {r#"
+            version = 1
+
+            [services.sleep_forever]
+            command = "sleep 999999"
+        "#})
+            .unwrap();
+        shell.activate_with_args(&["--start-services"]).unwrap();
+        let uuid = shell.read_activation_uuid().unwrap();
+        let process_compose_proc = globals.process_compose_with_uuid(uuid);
+        assert!(process_compose_proc.is_some());
+        let Some(mut process_compose_proc) = process_compose_proc else {
+            panic!("we literally just checked that it was Some(_)");
+        };
+        assert!(process_compose_proc.is_running());
+        shell.send_line("exit").unwrap();
+        shell.wait_for_prompt().unwrap();
+        process_compose_proc
             .wait_for_termination_with_timeout(1000)
             .unwrap();
     }
