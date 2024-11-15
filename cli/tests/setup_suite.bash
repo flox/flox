@@ -159,6 +159,11 @@ misc_vars_setup() {
   # rc files from getting loaded.
   unset ZDOTDIR
 
+  # Ignore the user shell and assume bash as the default.
+  SHELL="$(which bash)"
+  export SHELL
+  unset FLOX_SHELL
+
   # Used to check if metrics are coming form the CI
   export CI=true
 }
