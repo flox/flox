@@ -3269,6 +3269,9 @@ EOF
   # TODO: Workaround for https://github.com/flox/flox/issues/2164
   rm "${HOME}/.bashrc"
 
+  # Prevent backtraces from `flox-activations` leaking into output.
+  unset RUST_BACKTRACE
+
   export -f jq_edit
   FLOX_SHELL="bash" run "$FLOX_BIN" activate -- bash <(
     cat << 'EOF'
