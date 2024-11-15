@@ -12,6 +12,7 @@ nix.workspace = true
 indoc.workspace = true
 sysinfo.workspace = true
 temp-env.workspace = true
+dirs.workspace = true
 
 flox-core.workspace = true
 

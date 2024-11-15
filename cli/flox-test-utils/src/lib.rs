@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 
-use anyhow::{bail, Context};
+use anyhow::{anyhow, bail, Context};
 use rexpect::session::{spawn_specific_bash, PtyReplSession};
 use sysinfo::{
     Pid,
@@ -114,6 +114,13 @@ impl IsolatedHome {
         std::fs::create_dir(config_dir.join("flox")).context("failed to create flox config dir")?;
         std::fs::write(config_dir.join("flox/flox.toml"), "disable_metrics = true")
             .context("failed to write flox config file")?;
+
+        // NOTE: This turned out to make no difference, so it's either not working properly
+        //       or the bottleneck isn't Nix evaluation.
+        // Symlink the host's eval cache into this set of directories to speed up tests
+        // if let Some(path) = dirs::cache_dir().map(|p| p.join("nix")) {
+        //     let _ = std::os::unix::fs::symlink(path, cache_dir.join("nix"));
+        // }
 
         // Create the environment variables that will point to these
         // temporary directories
@@ -330,6 +337,29 @@ impl<'dirs> ShellProcess<'dirs> {
             .context("prompt never appeared")?;
         Ok(value)
     }
+
+    /// Exports an environment variable
+    pub fn set_var(&mut self, name: impl AsRef<str>, value: impl AsRef<str>) -> Result<(), Error> {
+        self.pty
+            .send_line(&format!(r#"export {}="{}""#, name.as_ref(), value.as_ref()))?;
+        self.pty.wait_for_prompt()?;
+        Ok(())
+    }
+
+    /// Returns whether the previous command succeeded
+    pub fn succeeded(&mut self) -> Result<bool, Error> {
+        self.pty.send_line("echo $?")?;
+        let output = self.wait_for_prompt()?;
+        // `output` contains the trailing newline and carriage return
+        match output.as_str().trim() {
+            "0" => Ok(true),
+            "1" => Ok(false),
+            _ => Err(anyhow!(
+                "unexpected output while checking status: {:?}",
+                output
+            )),
+        }
+    }
 }
 
 /// Locates the watchdog fingerprinted with the provided UUID
@@ -537,6 +567,33 @@ mod tests {
         systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
     "#;
 
+    const EMPTY_MANIFEST: &str = r#"
+        version = 1
+
+        [options]
+        systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
+    "#;
+
+    const MANIFEST_TEMPLATE: &str = r#"
+        version = 1
+
+        @@
+
+        [options]
+        systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
+    "#;
+
+    fn make_manifest(snippet: impl AsRef<str>) -> String {
+        MANIFEST_TEMPLATE.replace("@@", snippet.as_ref())
+    }
+
+    #[test]
+    fn can_template_manifest() {
+        let templated = make_manifest("[install]");
+        let found = templated.find("install");
+        assert!(found.is_some());
+    }
+
     // Just a helper function for less typing
     #[allow(dead_code)]
     fn sleep_millis(millis: u64) {
@@ -681,5 +738,54 @@ mod tests {
         process_compose_proc
             .wait_for_termination_with_timeout(1000)
             .unwrap();
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // These are the actual service tests
+    ////////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn services_arent_started_unless_requested() {
+        let mut globals = TestGlobals::new();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        shell.init_env_with_name("myenv").unwrap();
+        shell
+            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .unwrap();
+        shell.activate().unwrap();
+        // If services _were_ going to start, give them a chance to do so
+        sleep_millis(100);
+        let process_compose =
+            globals.process_compose_with_uuid(shell.read_activation_uuid().unwrap());
+        assert!(process_compose.is_none());
+    }
+
+    #[test]
+    fn imperative_commands_error_when_no_services_defined() {
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        shell.init_env_with_name("myenv").unwrap();
+        shell.edit_with_manifest_contents(EMPTY_MANIFEST).unwrap();
+        shell.activate().unwrap();
+        shell.send_line("flox services start").unwrap();
+        shell.wait_for_prompt().unwrap();
+        assert!(shell.succeeded().is_ok_and(|r| r == false));
+    }
+
+    // TODO: create `activate_with_services` method that automatically looks for
+    //       the watchdog and process-compose
+    #[test]
+    fn leaves_behind_process_compose() {
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        shell.init_env_with_name("myenv").unwrap();
+        shell
+            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .unwrap();
+        // Give services a chance to start
+        shell.activate_with_args(&["-s"]).unwrap();
+        sleep_millis(100);
+        panic!()
     }
 }

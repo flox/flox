@@ -1197,6 +1197,7 @@ name = "flox-test-utils"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dirs",
  "flox-core",
  "indoc",
  "nix 0.28.0",
