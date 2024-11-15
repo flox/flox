@@ -58,7 +58,7 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 #
 @test "cuda disabled when nvidia device absent and libcuda present" {
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+  run "$FLOX_BIN" activate -- bash \
     "$TESTS_DIR/cuda/cuda-disabled.sh" \
     "${FAKE_FHS_ROOT}" \
     "${TESTS_DIR}/cuda/ldconfig-mock-present.sh"
@@ -68,7 +68,7 @@ teardown() {
 @test "cuda disabled when nvidia0 device present but libcuba absent" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+  run "$FLOX_BIN" activate -- bash \
     "$TESTS_DIR/cuda/cuda-disabled.sh" \
     "${FAKE_FHS_ROOT}" \
     "${TESTS_DIR}/cuda/ldconfig-mock-absent.sh"
@@ -78,7 +78,7 @@ teardown() {
 @test "cuda disabled when nvidia0 device present but libcuba absent on NixOS" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+  run "$FLOX_BIN" activate -- bash \
     "$TESTS_DIR/cuda/cuda-disabled.sh" \
     "${FAKE_FHS_ROOT}" \
     "${TESTS_DIR}/cuda/ldconfig-mock-error.sh"
@@ -88,13 +88,13 @@ teardown() {
 @test "cuda disabled when not on Linux" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+  run "$FLOX_BIN" activate -- bash \
     "$TESTS_DIR/cuda/cuda-disabled.sh" \
     "${FAKE_FHS_ROOT}" \
     "__LINUX_ONLY__"
   assert_success
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+  run "$FLOX_BIN" activate -- bash \
     "$TESTS_DIR/cuda/cuda-disabled.sh" \
     "${FAKE_FHS_ROOT}" \
     "invalid_ldconfig_path"
@@ -105,7 +105,7 @@ teardown() {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
   tomlq --in-place -t '.options."cuda-detection" = false' .flox/env/manifest.toml
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+  run "$FLOX_BIN" activate -- bash \
     "$TESTS_DIR/cuda/cuda-disabled.sh" \
     "${FAKE_FHS_ROOT}" \
     "${TESTS_DIR}/cuda/ldconfig-mock-present.sh"
@@ -115,7 +115,7 @@ teardown() {
 @test "cuda enabled when nvidia0 device present and libcuda present" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+  run "$FLOX_BIN" activate -- bash \
     "$TESTS_DIR/cuda/cuda-enabled.sh" \
     "${FAKE_FHS_ROOT}" \
     "${TESTS_DIR}/cuda/ldconfig-mock-present.sh"
@@ -133,7 +133,7 @@ teardown() {
   touch "${FAKE_FHS_ROOT}/run/opengl-driver/libnvidia-nvvm.so"
   touch "${FAKE_FHS_ROOT}/run/opengl-driver/libnvidia-nvvm.so.4"
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+  run "$FLOX_BIN" activate -- bash \
     "$TESTS_DIR/cuda/cuda-enabled.sh" \
     "${FAKE_FHS_ROOT}" \
     "${TESTS_DIR}/cuda/ldconfig-mock-error.sh"
@@ -148,7 +148,7 @@ teardown() {
   NESTED_PROJECT_DIR="${PROJECT_NAME}-nested"
   "$FLOX_BIN" init -d "$NESTED_PROJECT_DIR"
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -d "$NESTED_PROJECT_DIR" -- bash \
+  run "$FLOX_BIN" activate -d "$NESTED_PROJECT_DIR" -- bash \
     "$TESTS_DIR/cuda/cuda-enabled.sh" \
     "${FAKE_FHS_ROOT}" \
     "${TESTS_DIR}/cuda/ldconfig-mock-present.sh"
@@ -162,7 +162,7 @@ teardown() {
   "$FLOX_BIN" init -d "$NESTED_PROJECT_DIR"
   tomlq --in-place -t '.options."cuda-detection" = false' "${NESTED_PROJECT_DIR}/.flox/env/manifest.toml"
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -d "$NESTED_PROJECT_DIR" -- bash \
+  run "$FLOX_BIN" activate -d "$NESTED_PROJECT_DIR" -- bash \
     "$TESTS_DIR/cuda/cuda-disabled.sh" \
     "${FAKE_FHS_ROOT}" \
     "${TESTS_DIR}/cuda/ldconfig-mock-present.sh"

@@ -62,7 +62,7 @@ teardown() {
   assert_output --partial "✅ 'pip' installed to environment"
   assert_output --partial "✅ 'python3' installed to environment"
 
-  FLOX_SHELL=bash "$FLOX_BIN" activate -- bash "$INPUT_DATA/init/python/requests-with-pip.sh"
+  "$FLOX_BIN" activate -- bash "$INPUT_DATA/init/python/requests-with-pip.sh"
 }
 
 # bats test_tags=python:activate:poetry,catalog
