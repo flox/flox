@@ -514,7 +514,7 @@ EOF
   TEARDOWN_FIFO="$PROJECT_DIR/finished"
   mkfifo "$TEARDOWN_FIFO"
 
-  FLOX_SHELL=bash "$FLOX_BIN" activate -- bash -c "echo > started && echo > \"$TEARDOWN_FIFO\"" >> output 2>&1 &
+  "$FLOX_BIN" activate -- bash -c "echo > started && echo > \"$TEARDOWN_FIFO\"" >> output 2>&1 &
   timeout 2 cat started
   run cat output
   assert_success

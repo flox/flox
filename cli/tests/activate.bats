@@ -2682,7 +2682,7 @@ EOF
   run bash <(cat <<'EOF'
     eval "$("$FLOX_BIN" activate)"
 
-    FLOX_SHELL="bash" expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
+    expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
 EOF
 )
   assert_failure
@@ -2707,7 +2707,7 @@ attach_runs_hooks_once() {
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
 
-  FLOX_SHELL=bash "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" 2> output &
+  "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" 2> output &
 
   cat activate_finished
   run cat output
@@ -2716,10 +2716,10 @@ attach_runs_hooks_once() {
 
   case "$mode" in
     interactive)
-      FLOX_SHELL=bash NO_COLOR=1 run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
+      NO_COLOR=1 run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
       ;;
     command)
-      FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
+      run "$FLOX_BIN" activate -- true
       ;;
     in-place)
       run bash -c 'eval "$("$FLOX_BIN" activate)"'
@@ -3273,7 +3273,7 @@ EOF
   unset RUST_BACKTRACE
 
   export -f jq_edit
-  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- bash <(
+  run "$FLOX_BIN" activate -- bash <(
     cat << 'EOF'
       echo "$PPID" > activation_pid
 
@@ -3304,7 +3304,7 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   LATEST_VERSION=1
 
   export -f jq_edit
-  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- bash <(
+  run "$FLOX_BIN" activate -- bash <(
     cat << 'EOF'
       ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
       ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
@@ -3449,14 +3449,14 @@ EOF
       refute_output "$EMACS_MAN"
 
       # vim gets added to MANPATH
-      FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -- bash -c "man --path vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
+      "$FLOX_BIN" activate -d vim -- bash -c "man --path vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
       cat activate_finished
       run cat output
       assert_success
       assert_output "$VIM_MAN"
 
       # emacs gets added to MANPATH, and then a nested attach also adds vim
-      FLOX_SHELL=bash "$FLOX_BIN" activate -d emacs -- \
+      "$FLOX_BIN" activate -d emacs -- \
         bash -c 'man --path emacs > output_emacs_1 && "$FLOX_BIN" activate -d vim -- bash -c "man --path vim > output_vim && man --path emacs > output_emacs_2"'
       run cat output_emacs_1
       assert_output "$EMACS_MAN"
@@ -3474,7 +3474,7 @@ EOF
       refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
 
       # vim gets added to MANPATH
-      FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output && echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
+      "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output && echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
       cat activate_finished
       run cat output
       assert_success
@@ -3482,7 +3482,7 @@ EOF
       refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
 
       # emacs gets added to MANPATH, and then a nested attach also adds vim
-      FLOX_SHELL=bash "$FLOX_BIN" activate -d emacs -- \
+      "$FLOX_BIN" activate -d emacs -- \
         bash -c '/usr/bin/manpath > output_1 && "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output_2"'
       run cat output_1
       refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
@@ -3521,14 +3521,14 @@ EOF
   run command -v emacs
   refute_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
 
-  FLOX_SHELL=bash "$FLOX_BIN" activate -d vim -- bash -c "command -v vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
+  "$FLOX_BIN" activate -d vim -- bash -c "command -v vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
   cat activate_finished
 
   run cat output
   assert_success
   assert_output "$(realpath "$PROJECT_DIR")/vim/.flox/run/$NIX_SYSTEM.vim.dev/bin/vim"
 
-  FLOX_SHELL=bash "$FLOX_BIN" activate -d emacs -- \
+  "$FLOX_BIN" activate -d emacs -- \
     bash -c 'command -v emacs > output_emacs_1; "$FLOX_BIN" activate -d vim -- bash -c "command -v vim > output_vim && command -v emacs > output_emacs_2 || true"'
   run cat output_emacs_1
   assert_success

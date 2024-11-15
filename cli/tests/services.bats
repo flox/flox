@@ -610,7 +610,7 @@ EOF
   commands=("start" "restart")
   for command in "${commands[@]}"; do
     echo "Testing: flox services $command"
-    FLOX_SHELL="bash" command="$command" run "$FLOX_BIN" activate -- bash <(
+    command="$command" run "$FLOX_BIN" activate -- bash <(
       cat << 'EOF'
         echo "$PPID" > activation_pid
 
