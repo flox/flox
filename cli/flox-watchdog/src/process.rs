@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Result};
-use flox_core::activations::{read_activations_json, Activations, AttachedPid};
+use flox_core::activations::{read_activations_json, Activations, AttachedPid, UncheckedVersion};
 use fslock::LockFile;
 use time::OffsetDateTime;
 use tracing::{debug, trace, warn};
@@ -29,7 +29,7 @@ type Error = anyhow::Error;
 /// A deserialized activations.json together with a lock preventing it from
 /// being modified
 /// TODO: there's probably a cleaner way to do this
-pub type LockedActivations = (Activations, LockFile);
+pub type LockedActivations = (Activations<UncheckedVersion>, LockFile);
 
 #[derive(Debug)]
 pub enum WaitResult {
@@ -243,6 +243,7 @@ impl Watcher for PidWatcher {
             drop(lock);
             None
         };
+
         let Some(activation) = activations_json.activation_for_id_ref(&self.activation_id) else {
             bail!("watchdog shouldn't be running with ID that isn't in activations.json");
         };

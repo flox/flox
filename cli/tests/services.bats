@@ -626,9 +626,10 @@ EOF
     ACTIVATION_PID=$(cat activation_pid)
 
     assert_failure
-    assert_output "❌ ERROR: failed to run activation script: Error: This environment has already been activated with an older incompatible version of 'flox'
+    assert_output "❌ ERROR: failed to run activation script: Error: This environment has already been activated with an incompatible version of 'flox'.
 
-Exit the following activation PIDs and try again: ${ACTIVATION_PID}"
+Exit all activations of the environment and try again.
+PIDs of the running activations: ${ACTIVATION_PID}"
 
     # give the watchdog a chance to clean up the services before the next iteration
     wait_for_watchdogs "$PROJECT_DIR"

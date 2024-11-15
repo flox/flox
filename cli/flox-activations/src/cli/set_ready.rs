@@ -21,8 +21,12 @@ impl SetReadyArgs {
         let activations_json_path = activations::activations_json_path(runtime_dir, &self.flox_env);
 
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
-        let Some(mut activations) = activations else {
+        let Some(activations) = activations else {
             anyhow::bail!("Expected an existing activations.json file");
+        };
+
+        let Ok(mut activations) = activations.check_version() else {
+            anyhow::bail!("Invalid version in activations.json file");
         };
 
         let activation = activations

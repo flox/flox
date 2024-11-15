@@ -3290,9 +3290,10 @@ EOF
 
   assert_failure
   refute_line "should fail"
-  assert_output "Error: This environment has already been activated with an older incompatible version of 'flox'
+  assert_output "Error: This environment has already been activated with an incompatible version of 'flox'.
 
-Exit the following activation PIDs and try again: ${ACTIVATION_PID}"
+Exit all activations of the environment and try again.
+PIDs of the running activations: ${ACTIVATION_PID}"
 }
 
 # bats test_tags=activate,activate:attach
