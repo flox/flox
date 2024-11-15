@@ -465,8 +465,9 @@ mod tests {
         assert!(output.stdout.contains(
             r#"
        > ❌ ERROR: Build command did not copy outputs to '$out'.
-       > - copy a single file with 'cp bin $out'
-       > - copy multiple files with 'mkdir -p $out && cp bin/* $out/'
+       > - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
+       > - copy a bin directory with 'mkdir $out && cp -r bin $out'
+       > - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
        > - copy files from an Autotools project with 'make install PREFIX=$out'"#
         ));
     }
@@ -494,8 +495,9 @@ mod tests {
         assert!(output.stdout.contains(
             r#"
        > ❌ ERROR: Build command did not copy outputs to '$out'.
-       > - copy a single file with 'cp bin $out'
-       > - copy multiple files with 'mkdir -p $out && cp bin/* $out/'
+       > - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
+       > - copy a bin directory with 'mkdir $out && cp -r bin $out'
+       > - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
        > - copy files from an Autotools project with 'make install PREFIX=$out'"#
         ));
         assert!(
