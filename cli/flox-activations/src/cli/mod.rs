@@ -51,7 +51,11 @@ mod test {
         let activations_json_path = activations::activations_json_path(runtime_dir, flox_env);
         let (activations, lock) =
             activations::read_activations_json(&activations_json_path).unwrap();
-        let mut activations = activations.unwrap_or_default();
+        let mut activations = activations
+            .map(|a| a.check_version())
+            .transpose()
+            .unwrap()
+            .unwrap_or_default();
 
         let res = f(&mut activations);
 
@@ -67,7 +71,7 @@ mod test {
         let activations_json_path = activations::activations_json_path(runtime_dir, flox_env);
         let (activations, _lock) =
             activations::read_activations_json(&activations_json_path).unwrap();
-        activations.map(|activations| f(&activations))
+        activations.map(|activations| f(&activations.check_version().unwrap()))
     }
 
     #[test]

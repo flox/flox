@@ -14,20 +14,20 @@ use crate::path_hash;
 
 type Error = anyhow::Error;
 
-/// Simplified alternative to [flox_core::Version] while we don't need to
-/// support multiple schemas.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-struct Version(u8);
-
 /// Latest supported version for compatibility between:
 /// - `flox` and `flox-activation-scripts`
 /// - `flox-activations` and `flox-watchdog`
 ///
 /// Incrementing this will require existing activations to exit.
-const LATEST_VERSION: Version = Version(1);
-impl Default for Version {
+const LATEST_VERSION: u8 = 1;
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct UncheckedVersion(u8);
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CheckedVersion(u8);
+impl Default for CheckedVersion {
     fn default() -> Self {
-        LATEST_VERSION
+        Self(LATEST_VERSION)
     }
 }
 
@@ -38,17 +38,77 @@ impl Default for Version {
 /// which may be rendered at different times with different store paths.
 /// [Activations::activations] is a list of [Activation]s
 /// with AT MOST ONE activation for a given store path.
-/// This latter invariant is enforced by [Activations::get_or_create_activation_for_store_path]
+/// This latter invariant is enforced by [Activations::create_activation]
 /// being the only way to add an activation.
 /// Activations are identifiable by their [Activation::id], for simpler lookups
 /// and global uniqueness in case the that two environments have the same store path.
+///
+/// [Activations::version] describes both the version of the file format,
+/// and its interpretation, i.e. the version of the `flox-activations` binary that wrote it.
+/// When read, [Activations] will be parsed with an arbitrary [UncheckedVersion],
+/// wich must first be validated or upgraded with [Activations::check_version].
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Activations {
-    version: Version,
+pub struct Activations<VERSION = CheckedVersion> {
+    version: VERSION,
     activations: Vec<Activation>,
 }
 
-impl Activations {
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+#[error(
+    "This environment has already been activated with an incompatible version of 'flox'.\n\
+     \n\
+     Exit all activations of the environment and try again.\n\
+     PIDs of the running activations: {pid_list}",
+    pid_list = .pids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", "))]
+pub struct Unsupported {
+    pub version: UncheckedVersion,
+    pub pids: Vec<i32>,
+}
+
+impl Activations<UncheckedVersion> {
+    /// Check the version of the activations file, and upgrade it if necessary.
+    ///
+    /// Currently, this only checks if the version is the [LATEST_VERSION].
+    ///
+    /// As we don't yet have any schema changes,
+    /// it only only handles the interpretation of the Activations file,
+    /// i.e. the version of the `flox-activations` binary that wrote it.
+    ///
+    /// If there are no activations, the version will be upgraded to the [LATEST_VERSION].
+    /// If in the future we change the intepretation or schema with a clear migration path,
+    /// this method would also upgrade the [Activations] to the new version.
+    pub fn check_version(self) -> Result<Activations<CheckedVersion>, Unsupported> {
+        if self.activations.is_empty() {
+            return Ok(Activations {
+                version: CheckedVersion(LATEST_VERSION),
+                activations: self.activations,
+            });
+        }
+
+        if self.version.0 == LATEST_VERSION {
+            return Ok(Activations {
+                version: CheckedVersion(self.version.0),
+                activations: self.activations,
+            });
+        }
+
+        return Err(Unsupported {
+            version: self.version,
+            pids: self
+                .activations
+                .iter()
+                .flat_map(|activation| {
+                    activation
+                        .attached_pids
+                        .iter()
+                        .map(|attached_pid| attached_pid.pid)
+                })
+                .collect(),
+        });
+    }
+}
+
+impl Activations<CheckedVersion> {
     /// Get a mutable reference to the activation with the given ID.
     ///
     /// Used internally to manipulate the state of an activation.
@@ -58,16 +118,6 @@ impl Activations {
     ) -> Option<&mut Activation> {
         self.activations
             .iter_mut()
-            .find(|activation| activation.id == activation_id.as_ref())
-    }
-
-    /// Get an immutable reference to the activation with the given ID.
-    ///
-    /// Used internally to manipulate the state of an activation.
-    #[allow(unused)]
-    pub fn activation_for_id_ref(&self, activation_id: impl AsRef<str>) -> Option<&Activation> {
-        self.activations
-            .iter()
             .find(|activation| activation.id == activation_id.as_ref())
     }
 
@@ -115,6 +165,17 @@ impl Activations {
 
         Ok(self.activations.last_mut().unwrap())
     }
+}
+
+impl<V> Activations<V> {
+    /// Get an immutable reference to the activation with the given ID.
+    ///
+    /// Used internally to manipulate the state of an activation.
+    pub fn activation_for_id_ref(&self, activation_id: impl AsRef<str>) -> Option<&Activation> {
+        self.activations
+            .iter()
+            .find(|activation| activation.id == activation_id.as_ref())
+    }
 
     /// Remove an activation. Should only be called by `flox-watchdog`.
     pub fn remove_activation(&mut self, id: impl AsRef<str>) {
@@ -124,29 +185,6 @@ impl Activations {
 
     pub fn is_empty(&self) -> bool {
         self.activations.is_empty()
-    }
-
-    /// Return a list of activations that need to be exited before the version
-    /// can be upgraded.
-    pub fn incompatible_activations(&self) -> Option<Vec<i32>> {
-        if self.is_empty() || self.version == LATEST_VERSION {
-            return None;
-        }
-
-        let pids = self
-            .activations
-            .iter()
-            .flat_map(|activation| &activation.attached_pids)
-            .map(|attached_pid| attached_pid.pid)
-            .collect();
-        Some(pids)
-    }
-
-    /// Upgrade the version if there are no current activations.
-    pub fn attempt_version_upgrade(&mut self) {
-        if self.is_empty() {
-            self.version = LATEST_VERSION;
-        }
     }
 }
 
@@ -312,7 +350,7 @@ pub fn activation_state_dir_path(
 /// which should be reused for writing, to avoid TOCTOU issues.
 pub fn read_activations_json(
     path: impl AsRef<Path>,
-) -> Result<(Option<Activations>, LockFile), Error> {
+) -> Result<(Option<Activations<UncheckedVersion>>, LockFile), Error> {
     let path = path.as_ref();
     let lock_file = acquire_activations_json_lock(path).context("failed to acquire lockfile")?;
 
@@ -322,7 +360,7 @@ pub fn read_activations_json(
     }
 
     let contents = std::fs::read_to_string(path)?;
-    let parsed: Activations = serde_json::from_str(&contents)?;
+    let parsed: Activations<UncheckedVersion> = serde_json::from_str(&contents)?;
     Ok((Some(parsed), lock_file))
 }
 
@@ -333,8 +371,8 @@ pub fn read_activations_json(
 /// This uses [flox_core::serialize_atomically] to write the file, and inherits its requirements.
 /// * `path` must have a parent directory.
 /// * The lock must correspond to the file being written.
-pub fn write_activations_json(
-    activations: &Activations,
+pub fn write_activations_json<V: Serialize>(
+    activations: &Activations<V>,
     path: impl AsRef<Path>,
     lock: LockFile,
 ) -> Result<(), Error> {
@@ -347,8 +385,82 @@ mod test {
     use super::*;
 
     #[test]
+    fn check_version_upgrade() {
+        let activations = Activations::<UncheckedVersion> {
+            version: UncheckedVersion(0),
+            activations: vec![],
+        };
+
+        let checked_activations = activations.check_version().unwrap();
+        assert_eq!(
+            checked_activations.version.0, LATEST_VERSION,
+            "should upgrade version when there are no activations"
+        );
+    }
+
+    #[test]
+    fn activations_latest() {
+        let activations = Activations::<UncheckedVersion> {
+            version: UncheckedVersion(LATEST_VERSION),
+            activations: vec![Activation {
+                id: "1".to_string(),
+                store_path: "/store/path".to_string(),
+                ready: false,
+                attached_pids: vec![
+                    AttachedPid {
+                        pid: 123,
+                        expiration: None,
+                    },
+                    AttachedPid {
+                        pid: 456,
+                        expiration: None,
+                    },
+                ],
+            }],
+        };
+
+        let checked_activations = activations.check_version().unwrap();
+        assert_eq!(
+            checked_activations.version.0, LATEST_VERSION,
+            "should not upgrade version when version is latest"
+        );
+    }
+
+    #[test]
+    fn activations_refuse_upgrade() {
+        let activations = Activations::<UncheckedVersion> {
+            version: UncheckedVersion(0),
+            activations: vec![Activation {
+                id: "1".to_string(),
+                store_path: "/store/path".to_string(),
+                ready: false,
+                attached_pids: vec![
+                    AttachedPid {
+                        pid: 123,
+                        expiration: None,
+                    },
+                    AttachedPid {
+                        pid: 456,
+                        expiration: None,
+                    },
+                ],
+            }],
+        };
+
+        let unsupported = activations.check_version().unwrap_err();
+        assert_eq!(
+            unsupported,
+            Unsupported {
+                version: UncheckedVersion(0),
+                pids: vec![123, 456],
+            },
+            "should return activation PIDs when version is not latest"
+        );
+    }
+
+    #[test]
     fn create_activation() {
-        let mut activations = Activations::default();
+        let mut activations = Activations::<CheckedVersion>::default();
         let store_path = "/store/path";
         let activation = activations.create_activation(store_path, 123);
 
@@ -385,70 +497,6 @@ mod test {
         let activation = activations.activation_for_id_mut(&id).unwrap();
         assert_eq!(activation.id(), id);
         assert_eq!(activation.store_path, store_path);
-    }
-
-    #[test]
-    fn incompatible_activations() {
-        let mut activations = Activations::default();
-        assert_eq!(activations.version, LATEST_VERSION);
-        assert_eq!(
-            activations.incompatible_activations(),
-            None,
-            "should return None when version is latest and there are no activations"
-        );
-
-        let activation1 = activations.create_activation("/store/path1", 100).unwrap();
-        let activation1_id = activation1.id();
-        activation1.attach_pid(101, None);
-        let activation2 = activations.create_activation("/store/path2", 200).unwrap();
-        let activation2_id = activation2.id();
-        activation2.attach_pid(201, None);
-        assert_eq!(
-            activations.incompatible_activations(),
-            None,
-            "should return None when version is latest and there are activations"
-        );
-
-        activations.version = Version(0);
-        assert_eq!(
-            activations.incompatible_activations(),
-            Some(vec![100, 101, 200, 201]),
-            "should return all PIDs when version is not latest"
-        );
-
-        activations.remove_activation(activation1_id);
-        activations.remove_activation(activation2_id);
-        assert_eq!(
-            activations.incompatible_activations(),
-            None,
-            "should return None when there version is not latest but there are no activations"
-        );
-    }
-
-    #[test]
-    fn attempt_version_upgrade() {
-        let mut activations = Activations::default();
-        assert_eq!(
-            activations.version, LATEST_VERSION,
-            "should default to latest version"
-        );
-
-        activations.version = Version(0);
-        let activation = activations.create_activation("/store/path1", 123).unwrap();
-        let activation_id = activation.id();
-        activations.attempt_version_upgrade();
-        assert_eq!(
-            activations.version,
-            Version(0),
-            "should not upgrade version when there are activations"
-        );
-
-        activations.remove_activation(activation_id);
-        activations.attempt_version_upgrade();
-        assert_eq!(
-            activations.version, LATEST_VERSION,
-            "should upgrade version when there are no activations"
-        );
     }
 
     #[test]

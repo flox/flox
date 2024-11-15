@@ -295,6 +295,8 @@ mod test {
         let activations_json = read_activations_json(&activations_json_path)
             .unwrap()
             .0
+            .unwrap()
+            .check_version()
             .unwrap();
         assert!(!activations_json.is_empty());
 
@@ -315,6 +317,8 @@ mod test {
         let activations_json = read_activations_json(&activations_json_path)
             .unwrap()
             .0
+            .unwrap()
+            .check_version()
             .unwrap();
         assert!(activations_json.is_empty());
     }
