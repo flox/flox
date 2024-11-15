@@ -603,6 +603,9 @@ EOF
 @test "start, restart: refuses to attach to an older activations.json version" {
   setup_sleeping_services
 
+  # Prevent backtraces from `flox-activations` leaking into output.
+  unset RUST_BACKTRACE
+
   export -f jq_edit
   commands=("start" "restart")
   for command in "${commands[@]}"; do
