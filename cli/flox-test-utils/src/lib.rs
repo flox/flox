@@ -1,12 +1,21 @@
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 
 use anyhow::{bail, Context};
 use rexpect::session::{spawn_specific_bash, PtyReplSession};
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use sysinfo::{
+    Pid,
+    ProcessRefreshKind,
+    ProcessStatus,
+    ProcessesToUpdate,
+    Signal,
+    System,
+    UpdateKind,
+};
 use tempfile::TempDir;
 
 type Error = anyhow::Error;
@@ -324,19 +333,163 @@ impl<'dirs> ShellProcess<'dirs> {
 }
 
 /// Locates the watchdog fingerprinted with the provided UUID
-pub fn find_watchdog_pid_with_uuid(uuid: impl AsRef<str>) -> Option<i32> {
-    find_pid_with_name_and_uuid("flox-watchdog", uuid)
+pub fn find_watchdog_pid_with_uuid(uuid: impl AsRef<str>, system: &mut System) -> Option<u32> {
+    find_pid_with_name_and_uuid("flox-watchdog", uuid, system)
 }
 
 /// Locates the watchdog fingerprinted with the provided UUID
-pub fn find_process_compose_pid_with_uuid(uuid: impl AsRef<str>) -> Option<i32> {
-    find_pid_with_name_and_uuid("process-compose", uuid)
+pub fn find_process_compose_pid_with_uuid(
+    uuid: impl AsRef<str>,
+    system: &mut System,
+) -> Option<u32> {
+    find_pid_with_name_and_uuid("process-compose", uuid, system)
+}
+
+/// Data that's global to a single test
+pub struct TestGlobals {
+    pub dirs: IsolatedHome,
+    pub system: Arc<Mutex<System>>,
+}
+
+impl TestGlobals {
+    pub fn new() -> Self {
+        Self {
+            dirs: IsolatedHome::new().unwrap(),
+            system: Arc::new(Mutex::new(System::new())),
+        }
+    }
+
+    pub fn new_bash_shell(&self, expect_timeout: Option<u64>) -> Result<ShellProcess, Error> {
+        ShellProcess::spawn(&self.dirs, expect_timeout)
+    }
+
+    pub fn watchdog_with_uuid(&mut self, uuid: impl AsRef<str>) -> Option<ProcToGC<WatchdogProc>> {
+        let mut system = self.system.lock().expect("system lock was poisoned");
+        find_watchdog_pid_with_uuid(uuid, &mut system)
+            .map(|pid| ProcToGC::new_with_pid(pid, self.system.clone(), WatchdogProc))
+    }
+
+    pub fn process_compose_with_uuid(
+        &mut self,
+        uuid: impl AsRef<str>,
+    ) -> Option<ProcToGC<ProcessComposeProc>> {
+        let mut system = self.system.lock().expect("system lock was poisoned");
+        find_process_compose_pid_with_uuid(uuid, &mut system)
+            .map(|pid| ProcToGC::new_with_pid(pid, self.system.clone(), ProcessComposeProc))
+    }
+}
+
+#[derive(Debug)]
+pub struct ProcToGC<T> {
+    is_terminated: bool,
+    pid: u32,
+    system: Arc<Mutex<System>>,
+    _kind: T,
+}
+
+pub struct ProcessComposeProc;
+pub struct WatchdogProc;
+pub struct OtherProc;
+
+impl<T> ProcToGC<T> {
+    pub fn new_with_pid(pid: u32, system: Arc<Mutex<System>>, kind: T) -> Self {
+        Self {
+            is_terminated: false,
+            pid,
+            system,
+            _kind: kind,
+        }
+    }
+
+    pub fn is_running(&mut self) -> bool {
+        if self.is_terminated {
+            return false;
+        }
+        let pid = Pid::from_u32(self.pid);
+        let mut system = self.system.lock().unwrap();
+        system.refresh_processes_specifics(
+            ProcessesToUpdate::Some(&[pid]),
+            false,
+            ProcessRefreshKind::new(),
+        );
+        let Some(proc) = system.process(pid) else {
+            self.is_terminated = true;
+            return false;
+        };
+        let status = proc.status();
+        (status != ProcessStatus::Dead) && (status != ProcessStatus::Zombie)
+    }
+
+    pub fn send_sigterm(&mut self) {
+        if self.is_terminated {
+            return;
+        }
+        if self.is_running() {
+            // If the lock is poisoned there's literally nothing we can
+            // do about it
+            let Ok(system) = self.system.lock() else {
+                return;
+            };
+            let pid = Pid::from_u32(self.pid);
+            if let Some(proc) = system.process(pid) {
+                proc.kill_with(Signal::Term);
+            }
+        }
+    }
+
+    pub fn send_sigkill(&mut self) {
+        if self.is_terminated {
+            return;
+        }
+        if self.is_running() {
+            // If the lock is poisoned there's literally nothing we can
+            // do about it
+            let Ok(system) = self.system.lock() else {
+                return;
+            };
+            let pid = Pid::from_u32(self.pid);
+            if let Some(proc) = system.process(pid) {
+                proc.kill_with(Signal::Kill);
+            }
+        }
+    }
+
+    pub fn wait_for_termination_with_timeout(&mut self, millis: u64) -> Result<(), Error> {
+        let mut remaining = millis;
+        let interval = 10;
+        let mut next_sleep = interval.min(remaining);
+        loop {
+            if !self.is_running() {
+                return Ok(());
+            }
+            if remaining == 0 {
+                bail!("timed out waiting for termination");
+            }
+            sleep(Duration::from_millis(next_sleep));
+            if let Some(new_remaining) = remaining.checked_sub(interval) {
+                next_sleep = interval;
+                remaining = new_remaining;
+            } else {
+                next_sleep = remaining;
+                remaining = 0;
+            }
+        }
+    }
+}
+
+impl<T> Drop for ProcToGC<T> {
+    fn drop(&mut self) {
+        self.send_sigterm();
+    }
 }
 
 /// Locates a process with a given name and the provided UUID fingerprint
-pub fn find_pid_with_name_and_uuid(name: &str, uuid: impl AsRef<str>) -> Option<i32> {
+pub fn find_pid_with_name_and_uuid(
+    name: &str,
+    uuid: impl AsRef<str>,
+    system: &mut System,
+) -> Option<u32> {
     let var = format!("_FLOX_ACTIVATION_UUID={}", uuid.as_ref());
-    let mut system = System::new();
     let update_kind = ProcessRefreshKind::new()
         .with_exe(UpdateKind::Always)
         .with_environ(UpdateKind::Always);
@@ -348,7 +501,7 @@ pub fn find_pid_with_name_and_uuid(name: &str, uuid: impl AsRef<str>) -> Option<
     {
         for env_var in proc.environ().iter() {
             if env_var.to_string_lossy() == var {
-                return Some(proc.pid().as_u32() as i32);
+                return Some(proc.pid().as_u32());
             }
         }
     }
@@ -356,7 +509,7 @@ pub fn find_pid_with_name_and_uuid(name: &str, uuid: impl AsRef<str>) -> Option<
 }
 
 /// Locates all processes with a given name and the provided UUID fingerprint
-pub fn find_all_pids_with_uuid(uuid: impl AsRef<str>) -> Option<i32> {
+pub fn find_all_pids_with_uuid(uuid: impl AsRef<str>) -> Option<u32> {
     let var = format!("_FLOX_ACTIVATION_UUID={}", uuid.as_ref());
     let mut system = System::new();
     let update_kind = ProcessRefreshKind::new().with_environ(UpdateKind::Always);
@@ -364,7 +517,7 @@ pub fn find_all_pids_with_uuid(uuid: impl AsRef<str>) -> Option<i32> {
     for proc in system.processes().values() {
         for env_var in proc.environ().iter() {
             if env_var.to_string_lossy() == var {
-                return Some(proc.pid().as_u32() as i32);
+                return Some(proc.pid().as_u32() as u32);
             }
         }
     }
@@ -379,14 +532,14 @@ mod tests {
 
     #[test]
     fn can_construct_shell() {
-        let dirs = IsolatedHome::new().unwrap();
-        let _shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let globals = TestGlobals::new();
+        let _shell = globals.new_bash_shell(Some(1000)).unwrap();
     }
 
     #[test]
     fn can_activate() {
-        let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let globals = TestGlobals::new();
+        let mut shell = globals.new_bash_shell(Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell.send_line("flox activate").unwrap();
         shell.exp_string("flox [myenv]").unwrap();
@@ -396,8 +549,8 @@ mod tests {
 
     #[test]
     fn update_env_with_manifest() {
-        let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(2000)).unwrap();
+        let globals = TestGlobals::new();
+        let mut shell = globals.new_bash_shell(Some(2000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(formatdoc! {r#"
@@ -415,7 +568,6 @@ mod tests {
         let manifest_contents =
             std::fs::read_to_string(shell.dirs.home_dir.join("myenv/.flox/env/manifest.toml"))
                 .unwrap();
-        // eprintln!("manifest contents: {}", manifest_contents);
         assert!(manifest_contents.find("howdy").is_some());
         let cmd = format!(
             "FLOX_SHELL={} flox activate",
@@ -427,8 +579,8 @@ mod tests {
 
     #[test]
     fn read_activation_uuid() {
-        let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(2000)).unwrap();
+        let globals = TestGlobals::new();
+        let mut shell = globals.new_bash_shell(Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell.activate().unwrap();
         shell
@@ -441,19 +593,19 @@ mod tests {
 
     #[test]
     fn can_locate_watchdog() {
-        let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(2000)).unwrap();
+        let globals = TestGlobals::new();
+        let mut shell = globals.new_bash_shell(Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell.activate().unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
-        let watchdog = find_watchdog_pid_with_uuid(uuid);
+        let watchdog = find_watchdog_pid_with_uuid(uuid, &mut globals.system.lock().unwrap());
         assert!(watchdog.is_some());
     }
 
     #[test]
     fn can_locate_process_compose() {
-        let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(2000)).unwrap();
+        let globals = TestGlobals::new();
+        let mut shell = globals.new_bash_shell(Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(formatdoc! {r#"
@@ -465,7 +617,28 @@ mod tests {
             .unwrap();
         shell.activate_with_args(&["--start-services"]).unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
-        let process_compose = find_process_compose_pid_with_uuid(uuid);
+        let process_compose =
+            find_process_compose_pid_with_uuid(uuid, &mut globals.system.lock().unwrap());
         assert!(process_compose.is_some());
+    }
+
+    #[test]
+    fn cleans_up_watchdog() {
+        let mut globals = TestGlobals::new();
+        let mut shell = globals.new_bash_shell(Some(1000)).unwrap();
+        shell.init_env_with_name("myenv").unwrap();
+        shell.activate().unwrap();
+        let uuid = shell.read_activation_uuid().unwrap();
+        let watchdog_proc = globals.watchdog_with_uuid(uuid);
+        assert!(watchdog_proc.is_some());
+        let Some(mut watchdog_proc) = watchdog_proc else {
+            panic!("we literally just checked that it was Some(_)");
+        };
+        assert!(watchdog_proc.is_running());
+        shell.send_line("exit").unwrap();
+        shell.wait_for_prompt().unwrap();
+        watchdog_proc
+            .wait_for_termination_with_timeout(1000)
+            .unwrap();
     }
 }
