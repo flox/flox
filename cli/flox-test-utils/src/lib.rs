@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::ffi::OsString;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::thread::sleep;
@@ -7,7 +6,7 @@ use std::time::Duration;
 
 use anyhow::{bail, Context};
 use rexpect::session::{spawn_specific_bash, PtyReplSession};
-use sysinfo::{Process, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tempfile::TempDir;
 
 type Error = anyhow::Error;
@@ -293,6 +292,23 @@ impl<'dirs> ShellProcess<'dirs> {
         Ok(())
     }
 
+    /// Activates the environment in the current directory
+    pub fn activate_with_args(&mut self, args: &[&str]) -> Result<(), Error> {
+        let cmd = {
+            let mut buf = String::from("flox activate");
+            for arg in args.iter() {
+                buf.push_str(" ");
+                buf.push_str(arg);
+            }
+            buf
+        };
+        self.pty.send_line(&cmd)?;
+        self.pty.exp_string("bash-5.2$")?;
+        self.shell_reconfig()?;
+        self.pty.wait_for_prompt()?;
+        Ok(())
+    }
+
     /// Reads the _FLOX_ACTIVATION_UUID value from an activated shell
     pub fn read_activation_uuid(&mut self) -> Result<String, Error> {
         self.pty
@@ -309,6 +325,16 @@ impl<'dirs> ShellProcess<'dirs> {
 
 /// Locates the watchdog fingerprinted with the provided UUID
 pub fn find_watchdog_pid_with_uuid(uuid: impl AsRef<str>) -> Option<i32> {
+    find_pid_with_name_and_uuid("flox-watchdog", uuid)
+}
+
+/// Locates the watchdog fingerprinted with the provided UUID
+pub fn find_process_compose_pid_with_uuid(uuid: impl AsRef<str>) -> Option<i32> {
+    find_pid_with_name_and_uuid("process-compose", uuid)
+}
+
+/// Locates a process with a given name and the provided UUID fingerprint
+pub fn find_pid_with_name_and_uuid(name: &str, uuid: impl AsRef<str>) -> Option<i32> {
     let var = format!("_FLOX_ACTIVATION_UUID={}", uuid.as_ref());
     let mut system = System::new();
     let update_kind = ProcessRefreshKind::new()
@@ -318,8 +344,24 @@ pub fn find_watchdog_pid_with_uuid(uuid: impl AsRef<str>) -> Option<i32> {
     for proc in system
         .processes()
         .values()
-        .filter(|proc| proc.exe().is_some_and(|p| p.ends_with("flox-watchdog")))
+        .filter(|proc| proc.exe().is_some_and(|p| p.ends_with(name)))
     {
+        for env_var in proc.environ().iter() {
+            if env_var.to_string_lossy() == var {
+                return Some(proc.pid().as_u32() as i32);
+            }
+        }
+    }
+    None
+}
+
+/// Locates all processes with a given name and the provided UUID fingerprint
+pub fn find_all_pids_with_uuid(uuid: impl AsRef<str>) -> Option<i32> {
+    let var = format!("_FLOX_ACTIVATION_UUID={}", uuid.as_ref());
+    let mut system = System::new();
+    let update_kind = ProcessRefreshKind::new().with_environ(UpdateKind::Always);
+    system.refresh_processes_specifics(ProcessesToUpdate::All, false, update_kind);
+    for proc in system.processes().values() {
         for env_var in proc.environ().iter() {
             if env_var.to_string_lossy() == var {
                 return Some(proc.pid().as_u32() as i32);
@@ -406,5 +448,24 @@ mod tests {
         let uuid = shell.read_activation_uuid().unwrap();
         let watchdog = find_watchdog_pid_with_uuid(uuid);
         assert!(watchdog.is_some());
+    }
+
+    #[test]
+    fn can_locate_process_compose() {
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(2000)).unwrap();
+        shell.init_env_with_name("myenv").unwrap();
+        shell
+            .edit_with_manifest_contents(formatdoc! {r#"
+            version = 1
+
+            [services.sleep_forever]
+            command = "sleep 999999"
+        "#})
+            .unwrap();
+        shell.activate_with_args(&["--start-services"]).unwrap();
+        let uuid = shell.read_activation_uuid().unwrap();
+        let process_compose = find_process_compose_pid_with_uuid(uuid);
+        assert!(process_compose.is_some());
     }
 }
