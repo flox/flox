@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -20,7 +21,7 @@ use tempfile::TempDir;
 
 type Error = anyhow::Error;
 
-// Notes:
+// Modifications to `rexpect`:
 // - The built-in reader used by `rexpect` has a hard-coded sleep interval of 100ms,
 //   so a command that's even 1ms later than the `wait_for_prompt` call will take
 //   100ms even though it's complete much earlier.
@@ -31,6 +32,27 @@ type Error = anyhow::Error;
 //   prompt always takes 100ms.
 // - I added a new function that allows you specify which shell to use in `spawn_bash`.
 // - I disabled "bracketed paste mode", which was also breaking `wait_for_prompt`.
+
+// Approaches for test failure on leaked process:
+// - During drop you can wait to see if the process terminates with a timeout.
+//   If the timeout fails you can panic (if you aren't already panicking). This will
+//   fail the test even if it's in the process of cleaning up an otherwise successful
+//   test (which is what you want).
+// - This depends on drop order though. If you haven't explicitly called `exit`, and
+//   you haven't dropped the shell yet, there's no reason for the background process
+//   to exit yet, and you'll panic even though everything would have been cleaned up
+//   properly had the drop order been different.
+
+// Nifty things:
+// - By storing a reference to the isolated home directory, you can ensure that the
+//   directories live as long or longer than the watchdog and process-compose, which
+//   is the cause of some weird test failures (at cleanup time) in `bats`.
+// - By using `tempfile` we ensure that any temporary files we create are cleaned up
+//   when the test completes.
+// - `bats` creates a file for each test by concatenating the setup/body/teardown
+//   scripts, so you get a new tempfile for every test in the suite, every time you
+//   run it. Since this is a compiled artifact, you get one artifact for the entire
+//   suite.
 
 /// A collection of temporary directories to be used as an isolated home directory
 #[derive(Debug)]
@@ -300,8 +322,9 @@ impl<'dirs> ShellProcess<'dirs> {
     }
 
     /// Activates the environment in the current directory
-    pub fn activate(&mut self) -> Result<(), Error> {
-        self.pty.send_line("flox activate")?;
+    pub fn activate(&mut self, args: &[&str]) -> Result<(), Error> {
+        let cmd = Self::make_activation_command(args, true);
+        self.pty.send_line(&cmd)?;
         self.pty.exp_string("bash-5.2$")?;
         self.reconfigure_prompt()?;
         self.pty.wait_for_prompt()?;
@@ -309,20 +332,56 @@ impl<'dirs> ShellProcess<'dirs> {
     }
 
     /// Activates the environment in the current directory
-    pub fn activate_with_args(&mut self, args: &[&str]) -> Result<(), Error> {
-        let cmd = {
-            let mut buf = String::from("flox activate");
-            for arg in args.iter() {
-                buf.push_str(" ");
-                buf.push_str(arg);
-            }
-            buf
-        };
+    pub fn activate_with_unchecked_args(&mut self, args: &[&str]) -> Result<(), Error> {
+        let cmd = Self::make_activation_command(args, false);
         self.pty.send_line(&cmd)?;
         self.pty.exp_string("bash-5.2$")?;
         self.reconfigure_prompt()?;
         self.pty.wait_for_prompt()?;
         Ok(())
+    }
+
+    /// Performs an activation and returns handles to the watchdog and process-compose
+    pub fn activate_with_services(
+        &mut self,
+        args: &[&str],
+        globals: &mut TestGlobals,
+    ) -> Result<(ProcToGC<WatchdogProc>, ProcToGC<ProcessComposeProc>), Error> {
+        let mut all_args = vec!["--start-services"];
+        all_args.extend_from_slice(args);
+        let cmd = Self::make_activation_command(&all_args, false);
+        self.pty.send_line(&cmd)?;
+        self.pty.exp_string("bash-5.2$")?;
+        self.reconfigure_prompt()?;
+        self.pty.wait_for_prompt()?;
+        let uuid = self.read_activation_uuid()?;
+        let watchdog = globals
+            .watchdog_with_uuid(&uuid)
+            .context("activation with services didn't spawn watchdog")?;
+        let process_compose = globals
+            .process_compose_with_uuid(&uuid)
+            .context("activation with services didn't spawn process-compose")?;
+        Ok((watchdog, process_compose))
+    }
+
+    /// Constructs the `flox activate` command from the provided arguments
+    fn make_activation_command(
+        args_without_flox_activate: &[&str],
+        check_service_arg: bool,
+    ) -> String {
+        let mut buf = String::from("flox activate");
+        for arg in args_without_flox_activate.iter() {
+            if check_service_arg {
+                if (*arg == "-s") || (*arg == "--start-services") {
+                    // This ensures we always get handles to the processes
+                    // we want to GC at the end of a test
+                    panic!("use ShellProcess::activate_with_services to activate with services");
+                }
+            }
+            buf.push_str(" ");
+            buf.push_str(arg);
+        }
+        buf
     }
 
     /// Reads the _FLOX_ACTIVATION_UUID value from an activated shell
@@ -411,9 +470,25 @@ pub struct ProcToGC<T> {
     _kind: T,
 }
 
+#[derive(Debug)]
 pub struct ProcessComposeProc;
+
+#[derive(Debug)]
 pub struct WatchdogProc;
+
 pub struct OtherProc;
+
+impl Display for ProcessComposeProc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "process-compose")
+    }
+}
+
+impl Display for WatchdogProc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "flox-watchdog")
+    }
+}
 
 impl<T> ProcToGC<T> {
     pub fn new_with_pid(pid: u32, system: Arc<Mutex<System>>, kind: T) -> Self {
@@ -503,7 +578,17 @@ impl<T> ProcToGC<T> {
 
 impl<T> Drop for ProcToGC<T> {
     fn drop(&mut self) {
-        self.send_sigterm();
+        use std::thread::panicking;
+
+        if panicking() {
+            // eprintln!("sent SIGTERM to background process during panic");
+            self.send_sigterm();
+        } else {
+            if self.wait_for_termination_with_timeout(1000).is_err() {
+                self.send_sigterm();
+                panic!("background process was leaked");
+            }
+        }
     }
 }
 
@@ -648,7 +733,7 @@ mod tests {
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
-        shell.activate().unwrap();
+        shell.activate(&[]).unwrap();
         shell
             .execute(
                 "echo $_FLOX_ACTIVATION_UUID",
@@ -663,7 +748,7 @@ mod tests {
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
-        shell.activate().unwrap();
+        shell.activate(&[]).unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
         let watchdog = find_watchdog_pid_with_uuid(uuid, &mut globals.system.lock().unwrap());
         assert!(watchdog.is_some());
@@ -683,7 +768,9 @@ mod tests {
             command = "sleep 999999"
         "#})
             .unwrap();
-        shell.activate_with_args(&["--start-services"]).unwrap();
+        shell
+            .activate_with_unchecked_args(&["--start-services"])
+            .unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
         let process_compose =
             find_process_compose_pid_with_uuid(uuid, &mut globals.system.lock().unwrap());
@@ -696,7 +783,7 @@ mod tests {
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
-        shell.activate().unwrap();
+        shell.activate(&[]).unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
         let watchdog_proc = globals.watchdog_with_uuid(uuid);
         assert!(watchdog_proc.is_some());
@@ -725,13 +812,8 @@ mod tests {
             command = "sleep 999999"
         "#})
             .unwrap();
-        shell.activate_with_args(&["--start-services"]).unwrap();
-        let uuid = shell.read_activation_uuid().unwrap();
-        let process_compose_proc = globals.process_compose_with_uuid(uuid);
-        assert!(process_compose_proc.is_some());
-        let Some(mut process_compose_proc) = process_compose_proc else {
-            panic!("we literally just checked that it was Some(_)");
-        };
+        let (_watchdog, mut process_compose_proc) =
+            shell.activate_with_services(&[], &mut globals).unwrap();
         assert!(process_compose_proc.is_running());
         shell.send_line("exit").unwrap();
         shell.wait_for_prompt().unwrap();
@@ -739,6 +821,78 @@ mod tests {
             .wait_for_termination_with_timeout(1000)
             .unwrap();
     }
+
+    #[test]
+    fn background_procs_exit_cleanly() {
+        let mut globals = TestGlobals::new();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        shell.init_env_with_name("myenv").unwrap();
+        shell
+            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .unwrap();
+        let (mut watchdog, mut process_compose) =
+            shell.activate_with_services(&[], &mut globals).unwrap();
+        shell.send_line("exit").unwrap();
+        watchdog.wait_for_termination_with_timeout(1000).unwrap();
+        process_compose
+            .wait_for_termination_with_timeout(1000)
+            .unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn detects_leaked_process() {
+        let mut globals = TestGlobals::new();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        shell.init_env_with_name("myenv").unwrap();
+        shell
+            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .unwrap();
+        let (mut watchdog, mut process_compose) =
+            shell.activate_with_services(&[], &mut globals).unwrap();
+        shell.send_line("exit").unwrap();
+        watchdog.send_sigkill();
+        process_compose
+            .wait_for_termination_with_timeout(1000)
+            .unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn automatically_fails_on_leaked_process() {
+        let mut globals = TestGlobals::new();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        shell.init_env_with_name("myenv").unwrap();
+        shell
+            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .unwrap();
+        let (mut watchdog, _process_compose) =
+            shell.activate_with_services(&[], &mut globals).unwrap();
+        shell.send_line("exit").unwrap();
+        watchdog.send_sigkill();
+        // The Drop impl for the process-compose struct should cause
+        // a panic because nothing is cleaning up the process
+    }
+
+    // // This one is just for demonstration purposes
+    // #[test]
+    // #[should_panic]
+    // fn panic_doesnt_leave_behind_process_compose() {
+    //     let mut globals = TestGlobals::new();
+    //     let dirs = IsolatedHome::new().unwrap();
+    //     let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+    //     shell.init_env_with_name("myenv").unwrap();
+    //     shell
+    //         .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+    //         .unwrap();
+    //     // Give services a chance to start
+    //     let (_watchdog, _pc) = shell.activate_with_services(&[], &mut globals).unwrap();
+    //     sleep_millis(100);
+    //     panic!()
+    // }
 
     ////////////////////////////////////////////////////////////////////////////
     // These are the actual service tests
@@ -753,7 +907,7 @@ mod tests {
         shell
             .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
             .unwrap();
-        shell.activate().unwrap();
+        shell.activate(&[]).unwrap();
         // If services _were_ going to start, give them a chance to do so
         sleep_millis(100);
         let process_compose =
@@ -767,25 +921,31 @@ mod tests {
         let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell.edit_with_manifest_contents(EMPTY_MANIFEST).unwrap();
-        shell.activate().unwrap();
+        shell.activate(&[]).unwrap();
         shell.send_line("flox services start").unwrap();
         shell.wait_for_prompt().unwrap();
         assert!(shell.succeeded().is_ok_and(|r| r == false));
     }
 
-    // TODO: create `activate_with_services` method that automatically looks for
-    //       the watchdog and process-compose
     #[test]
-    fn leaves_behind_process_compose() {
+    fn warns_about_restarting_services() {
+        let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
             .unwrap();
-        // Give services a chance to start
-        shell.activate_with_args(&["-s"]).unwrap();
-        sleep_millis(100);
-        panic!()
+        let (_w, _pc) = shell.activate_with_services(&[], &mut globals).unwrap();
+        shell
+            .set_var(
+                "_FLOX_USE_CATALOG_MOCK",
+                "$GENERATED_DATA/resolve/hello.json",
+            )
+            .unwrap();
+        shell.send_line("flox install hello").unwrap();
+        shell.exp_string("flox services restart").unwrap();
+        shell.wait_for_prompt().unwrap();
+        shell.send_line("exit").unwrap();
     }
 }
