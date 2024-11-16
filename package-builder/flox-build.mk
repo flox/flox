@@ -206,6 +206,13 @@ define CLEAN_result_link_template =
     $(if $(_storePath),clean_result_storepath/$(1))
 endef
 
+# The following env vars need to be passed from the outer "develop" environment
+# to the inner "wrapper" environment in the in-situ build mode in support of
+# the tools and compilers found in the outer environment, and for Flox to
+# otherwise function properly.
+ALLOW_OUTER_ENV_VARS := FLOX_RUNTIME_DIR HOME PATH \
+  $(filter NIX_CFLAGS% NIX_CC%,$(.VARIABLES))
+
 # The following template renders targets for the in-situ build mode.
 define BUILD_local_template =
   $(eval _virtualSandbox = $(filter-out null off,$(_sandbox)))
@@ -226,9 +233,9 @@ define BUILD_local_template =
 	@echo "Building $(_name) in local mode"
 	@$(_rm) -rf $(_out)
 	$(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
-	$(FLOX_INTERPRETER)/activate --turbo -- \
-	  $(_env) -i out=$(_out) FLOX_RUNTIME_DIR="$$$$FLOX_RUNTIME_DIR" PATH="$$$$PATH" HOME="$$$$HOME" USER="$$$$USER" \
-	    $(_wrapper_env)/activate --env $(_wrapper_env) --turbo -- \
+	$(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode dev --turbo -- \
+	  $(_env) -i out=$(_out) $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
+	    $(_wrapper_env)/activate --env $(_wrapper_env) --mode dev --turbo -- \
 	      $(_bash) -e $($(_pvarname)_buildScript)
 	set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr name "$(_name)" \
