@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
+_dirname="@coreutils@/bin/dirname"
+_flox_activations="@flox_activations@/bin/flox-activations"
+_getopt="@getopt@/bin/getopt"
+_nawk="@nawk@/bin/nawk"
+_readlink="@coreutils@/bin/readlink"
 
 # Disabled for now.
 # - The etc/profile.d/0800_cuda.sh script relies on a failure filling out
@@ -19,23 +24,14 @@
 export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
 [ "$_flox_activate_tracelevel" -eq 0 ] || set -x
 
-# These all derive from the `flox-interpeter` package
-export _activate_d="@out@/activate.d"
-export _profile_d="@out@/etc/profile.d"
-export _tcsh_home="@out@/activate.d/tcsh_home"
-export _zdotdir="@out@/activate.d/zdotdir"
-
-# External tools
-export _bash="@bash@"
-export _coreutils="@coreutils@"
-export _daemonize="@daemonize@"
-export _flox_activations="@flox_activations@"
-export _getopt="@getopt@"
-export _gnused="@gnused@"
-export _jq="@jq@"
-export _nawk="@nawk@"
-export _process_compose="@process-compose@"
-export _setsid="@setsid@"
+# These all derive from the `flox-interpeter` package.
+# FIXME This is wrong; the profile.d scripts in particular should be
+#       sourced from the environment itself so that users can add pkgs
+#       which add additional scripts to the etc/profile.d directory.
+export _activate_d="__OUT__/activate.d"
+export _profile_d="__OUT__/etc/profile.d"
+export _tcsh_home="__OUT__/activate.d/tcsh_home"
+export _zdotdir="__OUT__/activate.d/zdotdir"
 
 # Top-level Flox environment activation script.
 
@@ -49,11 +45,11 @@ export FLOX_PROMPT_COLOR_1="${FLOX_PROMPT_COLOR_1:-99}"
 export FLOX_PROMPT_COLOR_2="${FLOX_PROMPT_COLOR_2:-141}"
 
 # Parse command-line arguments.
-OPTIONS="c:"
-LONGOPTS="command:,noprofile,turbo,mode:"
-USAGE="Usage: $0 [-c \"<cmd> <args>\"] [--turbo] [--noprofile] [--mode (dev|run)]"
+OPTIONS="e:c:m:"
+LONGOPTS="command:,env:,mode:,noprofile,turbo"
+USAGE="Usage: $0 [-c \"<cmd> <args>\"] [(-e|--env) <env>] [--turbo] [--noprofile] [(-m|--mode) (dev|run)]"
 
-PARSED=$("$_getopt/bin/getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@")
+PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@")
 # shellcheck disable=SC2181
 if [[ $? -ne 0 ]]; then
   echo "Failed to parse options."
@@ -80,7 +76,17 @@ while true; do
       FLOX_CMD="$1"
       shift
       ;;
-    --mode)
+    -e | --env)
+      shift
+      if [ -z "${1:-}" ] || [ ! -d "$1" ]; then
+        echo "Option --env requires a valid environment path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      FLOX_ENV="$1"
+      shift
+      ;;
+    -m | --mode)
       shift
       if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ]; }; then
         echo "Option --mode requires 'dev' or 'run' as an argument." >&2
@@ -132,15 +138,14 @@ fi
 #       the value coming from the CLI for now because it won't be set for
 #       container invocations, and it would have the incorrect value for
 #       nested flox activations.
-_FLOX_ENV="$($_coreutils/bin/dirname -- "${BASH_SOURCE[0]}")"
+_FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
 export FLOX_ENV="${FLOX_ENV:-$_FLOX_ENV}"
 
 # Set a default for _FLOX_ACTIVATE_STORE_PATH for container and build
 # invocations
 if [ -z "${_FLOX_ACTIVATE_STORE_PATH:-}" ]; then
-  _FLOX_ACTIVATE_STORE_PATH="$("$_coreutils/bin/readlink" -f "$FLOX_ENV")"
+  _FLOX_ACTIVATE_STORE_PATH="$("$_readlink" -f "$FLOX_ENV")"
 fi
-
 
 # The rust CLI contains sophisticated logic to set $FLOX_SHELL based on the
 # process listening on STDOUT, but that won't happen when activating from
@@ -197,7 +202,7 @@ _FLOX_ENV_DIRS=($FLOX_ENV $FLOX_ENV_DIRS)
 # Set the PATH environment variable.
 declare _prepend_path=""
 for i in "${_FLOX_ENV_DIRS[@]}"; do
-    _prepend_path="$_prepend_path${_prepend_path:+:}$i/bin:$i/sbin"
+  _prepend_path="$_prepend_path${_prepend_path:+:}$i/bin:$i/sbin"
 done
 PATH="$_prepend_path${PATH:+:$PATH}"
 
@@ -227,7 +232,7 @@ PATH="$_prepend_path${PATH:+:$PATH}"
 #   FLOX_ENV:MANPATH replaces the defaults (no change)
 declare _prepend_manpath=""
 for i in "${_FLOX_ENV_DIRS[@]}"; do
-    _prepend_manpath="$_prepend_manpath${_prepend_manpath:+:}$i/share/man"
+  _prepend_manpath="$_prepend_manpath${_prepend_manpath:+:}$i/share/man"
 done
 MANPATH="$_prepend_manpath:${MANPATH:+$MANPATH}"
 
@@ -241,8 +246,8 @@ unset _save_IFS
 declare _awkScript _nodup_PATH _nodup_MANPATH
 # shellcheck disable=SC2016
 _awkScript='BEGIN { RS = ":"; } { if (A[$0]) {} else { A[$0]=1; printf(((NR==1) ? "" : ":") $0); } }'
-_nodup_PATH="$(echo "$PATH" | "$_nawk/bin/nawk" "$_awkScript")"
-_nodup_MANPATH="$(echo "$MANPATH" | "$_nawk/bin/nawk" "$_awkScript")"
+_nodup_PATH="$(echo "$PATH" | "$_nawk" "$_awkScript")"
+_nodup_MANPATH="$(echo "$MANPATH" | "$_nawk" "$_awkScript")"
 export PATH="${_nodup_PATH}"
 export MANPATH="${_nodup_MANPATH}"
 

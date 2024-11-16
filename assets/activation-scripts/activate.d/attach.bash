@@ -1,3 +1,5 @@
+_sed="@gnused@/bin/sed"
+
 # If interactive and a command has not been passed, this is an interactive
 # activate,
 # and we print a message to the user
@@ -10,5 +12,5 @@ if [ -t 1 ] && [ $# -eq 0 ] && [ -n "${FLOX_ENV_DESCRIPTION:-}" ]; then
 fi
 
 # Replay the environment for the benefit of this shell.
-eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env")"
-eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env")"
+eval "$($_sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env")"
+eval "$($_sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env")"

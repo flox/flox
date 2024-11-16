@@ -1,6 +1,8 @@
 NOT_READY="SOCKET_NOT_READY"
 
 poll_services_status() {
+  local _jq="@jq@/bin/jq"
+  local _process_compose="@process_compose@/bin/process-compose"
   local socket_file="$1"
   local output
   output=$($_process_compose process list -u "$socket_file" -o json 2>&1)
@@ -18,23 +20,31 @@ poll_services_status() {
 }
 
 wait_for_services_socket() {
+  local _sleep="@coreutils@/bin/sleep"
   local socket_file="$1"
   local status
   status=$(poll_services_status "$socket_file")
   while [ "$status" == "$NOT_READY" ]; do
-    "$_coreutils/bin/sleep" 0.02
+    "$_sleep" 0.02
     status=$(poll_services_status "$socket_file")
   done
 }
 
 start_services_blocking() {
+  local _bash="@bash@/bin/bash"
+  local _cat="@coreutils@/bin/cat"
+  local _date="@coreutils@/bin/date"
+  local _jq="@jq@/bin/jq"
+  local _process_compose="@process_compose@/bin/process-compose"
+  local _setsid="@util_linux@/bin/setsid"
+  local _timeout="@coreutils@/bin/timeout"
   local config_file="$1"
   shift
   local socket_file="$1"
   shift
   local log_dir="$1"
   local timestamp_ms
-  timestamp_ms=$("$_coreutils/bin/date" "+%Y%m%d%H%M%S%6N")
+  timestamp_ms=$("$_date" "+%Y%m%d%H%M%S%6N")
   local log_file
   log_file="${log_dir}/services.${timestamp_ms}.log"
   # process-compose will vomit all over your log files unless you tell it otherwise
@@ -55,7 +65,7 @@ start_services_blocking() {
   export -f wait_for_services_socket poll_services_status
   local activation_timeout="${_FLOX_SERVICES_ACTIVATE_TIMEOUT:-1}"
   local blocking_command="wait_for_services_socket \"$socket_file\""
-  if ! "$_coreutils/bin/timeout" "$activation_timeout" bash -c "$blocking_command"; then
+  if ! "$_timeout" "$activation_timeout" $_bash -c "$blocking_command"; then
     if [ ! -e "$log_file" ]; then
       # If something failed before process-compose could write to the log file,
       # don't tell a user to look at the log file
@@ -63,7 +73,7 @@ start_services_blocking() {
       exit 1
     else
       echo "❌ Failed to start services:" >&2
-      "$_coreutils/bin/cat" "$log_file" >&2
+      "$_cat" "$log_file" >&2
       exit 1
     fi
   fi
