@@ -1,3 +1,9 @@
+_comm="@coreutils@/bin/comm"
+_daemonize="@daemonize@/bin/daemonize"
+_flox_activations="@flox_activations@/bin/flox-activations"
+_sed="@gnused@/bin/sed"
+_sort="@coreutils@/bin/sort"
+
 # If interactive and a command has not been passed, this is an interactive
 # activate,
 # and we print a message to the user
@@ -11,7 +17,7 @@ fi
 
 # First activation of this environment. Snapshot environment to start.
 _start_env="$_FLOX_ACTIVATION_STATE_DIR/bare.env"
-export | LC_ALL=C $_coreutils/bin/sort > "$_start_env"
+export | LC_ALL=C $_sort > "$_start_env"
 
 # Process the flox environment customizations, which includes (amongst
 # other things) prepending this environment's bin directory to the PATH.
@@ -36,7 +42,7 @@ fi
 # Capture post-etc-profiles.env.
 # This is currently unused but could be useful for runtime only environment in
 # the future.
-export | LC_ALL=C $_coreutils/bin/sort > "$_FLOX_ACTIVATION_STATE_DIR/post-etc-profiles.env"
+export | LC_ALL=C $_sort > "$_FLOX_ACTIVATION_STATE_DIR/post-etc-profiles.env"
 
 # Set static environment variables from the manifest.
 if [ -f "$FLOX_ENV/activate.d/envrc" ]; then
@@ -80,7 +86,7 @@ fi
 
 # Capture ending environment.
 _end_env="$_FLOX_ACTIVATION_STATE_DIR/post-hook.env"
-export | LC_ALL=C $_coreutils/bin/sort > "$_end_env"
+export | LC_ALL=C $_sort > "$_end_env"
 
 # The userShell initialization scripts that follow have the potential to undo
 # the environment modifications performed above, so we must first calculate
@@ -94,13 +100,13 @@ _del_env="$_FLOX_ACTIVATION_STATE_DIR/del.env"
 
 # Capture environment variables to _set_ as "key=value" pairs.
 # comm -13: only env declarations unique to `$_end_env` (new declarations)
-LC_ALL=C $_coreutils/bin/comm -13 "$_start_env" "$_end_env" \
-  | $_gnused/bin/sed -e 's/^declare -x //' > "$_add_env"
+LC_ALL=C $_comm -13 "$_start_env" "$_end_env" \
+  | $_sed -e 's/^declare -x //' > "$_add_env"
 
 # Capture environment variables to _unset_ as a list of keys.
 # TODO: remove from $_del_env keys set in $_add_env
-LC_ALL=C $_coreutils/bin/comm -23 "$_start_env" "$_end_env" \
-  | $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
+LC_ALL=C $_comm -23 "$_start_env" "$_end_env" \
+  | $_sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
 
 # Finally mark the environment as ready to use for attachments.
 "$_flox_activations" \

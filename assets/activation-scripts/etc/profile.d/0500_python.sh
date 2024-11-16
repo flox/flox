@@ -1,5 +1,7 @@
 # shellcheck shell=bash
-export _coreutils="@coreutils@"
+_cat="@coreutils@/bin/cat"
+_realpath="@coreutils@/bin/realpath"
+
 # ============================================================================ #
 #
 # Setup Python3
@@ -23,9 +25,9 @@ fi
 
 # Only run if `pip' is in `PATH'
 if [[ -x "$FLOX_ENV/bin/pip3" ]]; then
-  PIP_CONFIG_FILE="$("$_coreutils/bin/realpath" --no-symlinks "$FLOX_ENV/../../pip.ini")"
+  PIP_CONFIG_FILE="$("$_realpath" --no-symlinks "$FLOX_ENV/../../pip.ini")"
   export PIP_CONFIG_FILE
-  "$_coreutils/bin/cat" > "$PIP_CONFIG_FILE" << EOF
+  "$_cat" > "$PIP_CONFIG_FILE" << EOF
 [global]
 require-virtualenv = true
 EOF

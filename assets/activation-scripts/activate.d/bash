@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-export _gnused="@gnused@"
+_sed="@gnused@/bin/sed"
 
 # Enable shell-specific profile script startup with verbosity 2.
 if [ "$_flox_activate_tracelevel" -ge 2 ]; then
@@ -29,8 +29,8 @@ if [ -z "${_flox_activate_tracelevel:=}" ]; then
 fi
 
 # Restore environment variables set in the previous bash initialization.
-eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env")"
-eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env")"
+eval "$($_sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env")"
+eval "$($_sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env")"
 
 # Restore PATH and MANPATH if set in one of the attach scripts.
 if [ -n "$_FLOX_RESTORE_PATH" ]; then

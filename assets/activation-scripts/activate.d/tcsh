@@ -1,4 +1,4 @@
-setenv _gnused "@gnused@"
+set _sed="@gnused@/bin/sed"
 
 # Confirm _flox_activate_tracelevel is defined before proceeding.
 if ( ! $?_flox_activate_tracelevel ) then
@@ -11,8 +11,8 @@ if ( $_flox_activate_tracelevel >= 2 ) then
 endif
 
 # Restore environment variables set in the previous bash initialization.
-eval `$_gnused/bin/sed -e 's/^/unsetenv /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"`
-eval `$_gnused/bin/sed -e 's/^/setenv /' -e 's/=/ /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"`
+eval `$_sed -e 's/^/unsetenv /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"`
+eval `$_sed -e 's/^/setenv /' -e 's/=/ /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"`
 
 # Restore PATH and MANPATH if set in one of the attach scripts.
 if ( $?_FLOX_RESTORE_PATH ) then

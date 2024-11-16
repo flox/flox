@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-export _coreutils="@coreutils@"
+
 # ============================================================================ #
 #
 # Setup Rust
