@@ -460,6 +460,20 @@ impl TestGlobals {
         find_process_compose_pid_with_uuid(uuid, &mut system)
             .map(|pid| ProcToGC::new_with_pid(pid, self.system.clone(), ProcessComposeProc))
     }
+
+    pub fn pid_is_running(&mut self, pid: u32) -> Option<bool> {
+        let pid = Pid::from_u32(pid);
+        let mut system = self.system.lock().expect("system lock was poisoned");
+        system.refresh_processes(ProcessesToUpdate::Some(&[pid]), false);
+        let Some(proc) = system.process(pid) else {
+            return None;
+        };
+        Some(status_is_running(proc.status()))
+    }
+}
+
+fn status_is_running(status: ProcessStatus) -> bool {
+    (status != ProcessStatus::Dead) && (status != ProcessStatus::Zombie)
 }
 
 #[derive(Debug)]
@@ -516,7 +530,7 @@ impl<T> ProcToGC<T> {
             return false;
         };
         let status = proc.status();
-        (status != ProcessStatus::Dead) && (status != ProcessStatus::Zombie)
+        status_is_running(status)
     }
 
     pub fn send_sigterm(&mut self) {
@@ -636,6 +650,7 @@ pub fn find_all_pids_with_uuid(uuid: impl AsRef<str>) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use indoc::formatdoc;
+    use serde_json::Value;
 
     use super::*;
 
@@ -947,5 +962,55 @@ mod tests {
         shell.exp_string("flox services restart").unwrap();
         shell.wait_for_prompt().unwrap();
         shell.send_line("exit").unwrap();
+    }
+
+    #[test]
+    fn restart_fails_fast_on_invalid_service_name() {
+        let mut globals = TestGlobals::new();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        shell.init_env_with_name("myenv").unwrap();
+        shell
+            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .unwrap();
+        let (_w, _pc) = shell.activate_with_services(&[], &mut globals).unwrap();
+        shell.send_line("flox services status --json").unwrap();
+        let output = shell.wait_for_prompt().unwrap();
+        let mut service_pids = vec![];
+        for line in output.lines() {
+            let json: Value = serde_json::from_str(line).unwrap();
+            let pid: u32 = json.get("pid").unwrap().as_u64().unwrap() as u32;
+            service_pids.push(pid);
+        }
+        shell
+            .send_line("flox services restart sleeper_1 sleeper_2 invalid")
+            .unwrap();
+        shell
+            .exp_string("Service 'invalid' does not exist")
+            .unwrap();
+        // Assert that the previous processes are still running
+        for pid in service_pids.into_iter() {
+            let Some(is_running) = globals.pid_is_running(pid) else {
+                panic!("service was no longer running");
+            };
+            assert!(is_running);
+        }
+        shell.send_line("exit").unwrap();
+    }
+
+    #[test]
+    fn attach_doesnt_start_second_watchdog() {
+        let mut globals = TestGlobals::new();
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell1 = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        shell1.init_env_with_name("myenv").unwrap();
+        shell1.activate(&[]).unwrap();
+        let mut shell2 = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        shell2.send_line("cd myenv").unwrap();
+        shell2.wait_for_prompt().unwrap();
+        shell2.activate(&[]).unwrap();
+        let uuid = shell2.read_activation_uuid().unwrap();
+        sleep_millis(50);
+        assert!(globals.watchdog_with_uuid(&uuid).is_none());
     }
 }
