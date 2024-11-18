@@ -67,7 +67,7 @@ start_services_blocking() {
   local blocking_command="wait_for_services_socket \"$socket_file\""
 
   if { true >&3; } 2> /dev/null; then
-    " ----- Starting services at: $("@coreutils@/bin/date" +"%T.%N")" >&3
+    echo " ----- Starting services at: $("@coreutils@/bin/date" +"%T.%N")" >&3
   fi
 
   if ! "$_timeout" "$activation_timeout" $_bash -c "$blocking_command"; then
