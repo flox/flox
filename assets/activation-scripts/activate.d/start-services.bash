@@ -83,7 +83,9 @@ start_services_blocking() {
     fi
   fi
 
-  echo " Finished starting services at: $("@coreutils@/bin/date" +"%T.%N") ------" >&2
+  if { true >&3; } 2> /dev/null; then
+    echo " Finished starting services at: $("@coreutils@/bin/date" +"%T.%N") ------" >&3
+  fi
 
   # Unset the helper functions so that they aren't passed to the user shell/command
   unset wait_for_services_socket poll_services_status
