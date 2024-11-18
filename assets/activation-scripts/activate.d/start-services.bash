@@ -63,8 +63,11 @@ start_services_blocking() {
   fi
   # Make these functions available in subshells so that `timeout` can call them
   export -f wait_for_services_socket poll_services_status
-  local activation_timeout="${_FLOX_SERVICES_ACTIVATE_TIMEOUT:-1}"
+  local activation_timeout="${_FLOX_SERVICES_ACTIVATE_TIMEOUT:-10}"
   local blocking_command="wait_for_services_socket \"$socket_file\""
+
+  echo " ----- Starting services at: $($_coreutils/bin/date +"%T.%N")" >&2
+
   if ! "$_timeout" "$activation_timeout" $_bash -c "$blocking_command"; then
     if [ ! -e "$log_file" ]; then
       # If something failed before process-compose could write to the log file,
@@ -77,6 +80,9 @@ start_services_blocking() {
       exit 1
     fi
   fi
+
+  echo " Finished starting services at: $($_coreutils/bin/date +"%T.%N") ------" >&2
+
   # Unset the helper functions so that they aren't passed to the user shell/command
   unset wait_for_services_socket poll_services_status
   if [ -z "$previous_no_color" ]; then
