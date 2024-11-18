@@ -19,7 +19,8 @@ let
   buildenv = (writers.writeBash "buildenv" (builtins.readFile ../../buildenv/buildenv.bash));
   buildenv_nix = ../../buildenv/buildenv.nix;
   builder_pl = ../../buildenv/builder.pl;
-  activationScripts = flox-activation-scripts;
+  activationScripts_out = flox-activation-scripts.out;
+  activationScripts_build_wrapper = flox-activation-scripts.build_wrapper;
   defaultEnvrc = writeText "default.envrc" (
     ''
       # Default environment variables
@@ -45,7 +46,8 @@ runCommandNoCC "${pname}-${version}"
       nix
       pname
       version
-      activationScripts
+      activationScripts_out
+      activationScripts_build_wrapper
       defaultEnvrc
       ;
     # Substitutions for builder.pl.
