@@ -80,13 +80,7 @@ runCommandNoCC "flox-activation-scripts"
 
     # Remove start-services.bash.
     rm $build_wrapper/activate.d/start-services.bash
-    sed -i 's/source ".*start-services.bash"/: no services in build_wrapper script/' $build_wrapper/activate
-
-    # Remove references to flox-activations.
-    rm $build_wrapper/activate.d/attach-*.bash
-    sed -i 's/source ".*attach-.*.bash"/: no attaching in build_wrapper script/' $build_wrapper/activate
-    sed -i 's/_flox_activations=.*/_flox_activations=true/' \
-        $build_wrapper/activate $build_wrapper/activate.d/start.bash
+    sed -i 's/source ".*start-services.bash"/echo no services in build_wrapper script >\&2; false/' $build_wrapper/activate
 
     # That's the build done, now shellcheck the results.
     ${shellcheck}/bin/shellcheck --external-sources --check-sourced \
