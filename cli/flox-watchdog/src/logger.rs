@@ -1,4 +1,4 @@
-use std::fs::{remove_file, OpenOptions};
+use std::fs::remove_file;
 use std::path::{Path, PathBuf};
 use std::thread::{sleep, spawn};
 use std::time::{Duration, SystemTime};
@@ -11,30 +11,24 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(3600);
+const WATCHDOG_GC_INTERVAL: Duration = Duration::from_secs(3600);
 const KEEP_WATCHDOG_DAYS: u64 = 3;
 const KEEP_SERVICES_LAST: usize = 5;
 
 /// Initializes a logger that persists logs to an optional file in addition to `stderr`
-pub(crate) fn init_logger(file_path: &Option<PathBuf>) -> Result<(), anyhow::Error> {
+pub(crate) fn init_logger(
+    logs_dir: &Option<PathBuf>,
+    log_file_prefix: &str,
+) -> Result<(), anyhow::Error> {
     let stderr_layer = tracing_subscriber::fmt::layer()
         .with_writer(std::io::stderr)
         .with_filter(EnvFilter::from_default_env());
-    let file_layer = if let Some(path) = file_path {
-        let path = if path.is_relative() {
-            std::env::current_dir()?.join(path)
-        } else {
-            path.clone()
-        };
-        let file = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(&path)
-            .with_context(|| format!("failed to open log file {}", path.display()))?;
+    let file_layer = if let Some(dir_path) = logs_dir {
+        let appender = tracing_appender::rolling::daily(dir_path, log_file_prefix);
         Some(
             tracing_subscriber::fmt::layer()
                 .with_ansi(false)
-                .with_writer(file)
+                .with_writer(appender)
                 .with_filter(EnvFilter::from_env("_FLOX_WATCHDOG_LOG_LEVEL")),
         )
     } else {
@@ -68,11 +62,14 @@ pub(crate) fn spawn_heartbeat_log() {
 /// Starts a background thread which garbage collects known log files. This is
 /// done on a best effort basis; errors are traced rather than being bubbled up
 /// and the thread will run until the watchdog exits.
-pub(crate) fn spawn_gc_logs(dir: impl AsRef<Path>) {
+pub(crate) fn spawn_logs_gc_threads(dir: impl AsRef<Path>) {
     let dir = dir.as_ref().to_path_buf();
-    std::thread::spawn(move || {
-        gc_logs_watchdog(&dir, KEEP_WATCHDOG_DAYS)
+    let dir_clone = dir.clone();
+    spawn(move || {
+        gc_logs_watchdog(dir_clone, KEEP_WATCHDOG_DAYS)
             .unwrap_or_else(|err| error!(%err, "failed to delete watchdog logs"));
+    });
+    spawn(move || {
         gc_logs_services(&dir, KEEP_SERVICES_LAST)
             .unwrap_or_else(|err| error!(%err, "failed to delete services logs"));
     });
@@ -82,18 +79,26 @@ pub(crate) fn spawn_gc_logs(dir: impl AsRef<Path>) {
 /// time. This relies on the watchdog emitting a heartbeat log file from
 /// `log_heartbeat`.
 fn gc_logs_watchdog(dir: impl AsRef<Path>, keep_days: u64) -> Result<()> {
-    let mut files = glob_log_files(dir, "watchdog.*.log")?;
+    let dir = dir.as_ref().to_path_buf();
+    loop {
+        let files = watchdog_logs_to_gc(&dir, keep_days)?;
+
+        for file in files {
+            try_delete_log(file);
+        }
+        std::thread::sleep(WATCHDOG_GC_INTERVAL);
+    }
+}
+
+/// Returns a list of watchdog logs ready to be garbage collected
+fn watchdog_logs_to_gc(dir: impl AsRef<Path>, keep_days: u64) -> Result<Vec<PathBuf>> {
+    let mut files = glob_log_files(&dir, "watchdog.*.log.*")?;
     let threshold = duration_from_days(keep_days);
     let now = SystemTime::now();
 
     // Defaults to keeping if mtime is not supported by platform or filesystem.
     files.retain(|file| file_older_than(file, now, threshold).unwrap_or(false));
-
-    for file in files {
-        try_delete_log(file);
-    }
-
-    Ok(())
+    Ok(files)
 }
 
 /// Garbage collects services log files, keeping the last N files by filename.
@@ -160,11 +165,11 @@ mod tests {
     use super::*;
 
     /// Create a test log file. Optionally set a modified time in days.
-    fn create_log_file(dir: &Path, name: &str, days: Option<u64>) -> PathBuf {
+    fn create_log_file(dir: &Path, name: &str, days_old: Option<u64>) -> PathBuf {
         let path = dir.join(name);
         File::create(&path).unwrap();
 
-        if let Some(days) = days {
+        if let Some(days) = days_old {
             let mtime = SystemTime::now() - duration_from_days(days);
             File::open(&path).unwrap().set_modified(mtime).unwrap();
         }
@@ -173,24 +178,45 @@ mod tests {
     }
 
     #[test]
-    fn test_gc_logs_watchdog_removes_old_files() {
-        let keep_last = 2;
+    fn identifies_watchdog_logs_to_gc() {
+        let days_old_to_keep = 2;
         let dir = tempdir().unwrap();
-        let file_now = create_log_file(dir.path(), "watchdog.now.log", None);
-        let file_one = create_log_file(dir.path(), "watchdog.one.log", Some(keep_last - 1));
-        let file_two = create_log_file(dir.path(), "watchdog.two.log", Some(keep_last));
-        let file_three = create_log_file(dir.path(), "watchdog.three.log", Some(keep_last + 1));
+        let _file_now = create_log_file(dir.path(), "watchdog.now.log.1234-12-12", None);
+        let _file_one = create_log_file(
+            dir.path(),
+            "watchdog.one.log.1234-12-12",
+            Some(days_old_to_keep - 1),
+        );
+        let file_two = create_log_file(
+            dir.path(),
+            "watchdog.two.log.1234-12-12",
+            Some(days_old_to_keep),
+        );
+        let file_three = create_log_file(
+            dir.path(),
+            "watchdog.three.log.1234-12-12",
+            Some(days_old_to_keep + 1),
+        );
+        let should_be_gced = {
+            let mut paths = vec![file_two.clone(), file_three.clone()];
+            paths.sort();
+            paths
+        };
 
-        gc_logs_watchdog(dir.path(), keep_last).unwrap();
-        assert!(file_now.exists());
-        assert!(file_one.exists());
-        assert!(!file_two.exists());
-        assert!(!file_three.exists());
+        // Ensure that the old files are selected for GC
+        let mut to_gc = watchdog_logs_to_gc(dir.path(), days_old_to_keep).unwrap();
+        to_gc.sort();
+        assert_eq!(to_gc.len(), 2);
+        assert_eq!(to_gc, should_be_gced);
 
-        // Keeps the same files on second run.
-        gc_logs_watchdog(dir.path(), keep_last).unwrap();
-        assert!(file_now.exists());
-        assert!(file_one.exists());
+        // Simulate the old files being GCed
+        std::fs::remove_file(file_two).unwrap();
+        std::fs::remove_file(file_three).unwrap();
+
+        // Ensure that the younger files aren't selected for GC after the old
+        // files are deleted.
+        let to_gc = watchdog_logs_to_gc(dir.path(), days_old_to_keep).unwrap();
+        assert!(to_gc.is_empty());
     }
 
     #[test]
@@ -210,10 +236,9 @@ mod tests {
             .collect();
         assert_eq!(files.len(), filenames.len());
 
-        gc_logs_watchdog(dir.path(), keep_last).unwrap();
-        for file in files {
-            assert!(file.exists(), "file should exist: {}", file.display());
-        }
+        assert!(watchdog_logs_to_gc(dir.path(), keep_last)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

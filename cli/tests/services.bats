@@ -902,7 +902,7 @@ EOF
 
   # Poll because watchdog may not have started by the time the activation finishes.
   run timeout 1s bash -c "
-    while ! grep 'flox_watchdog: starting' \"$PROJECT_DIR\"/.flox/log/watchdog.*.log; do
+    while ! grep 'flox_watchdog: starting' \"$PROJECT_DIR\"/.flox/log/watchdog.*.log*; do
       sleep 0.1
     done
   "
@@ -1406,7 +1406,7 @@ EOF
 
   # Check that services and watchdog are both running
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
-  watchdog_1_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log)"
+  watchdog_1_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
   run cat "$watchdog_1_log"
   assert_success
   assert_output --partial "woof"
@@ -1445,7 +1445,7 @@ EOF
   rm "$watchdog_1_log"
 
   # Check that watchdog 2 is running
-  watchdog_2_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log)"
+  watchdog_2_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
   run cat "$watchdog_2_log"
   assert_output --partial "woof"
   refute_output "finished cleanup"

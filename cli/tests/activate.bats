@@ -3199,10 +3199,10 @@ EOF
   # Start a first_activation which sets FOO=first_activation
   case "$mode" in
     command)
-      injected="first_activation" "$FLOX_BIN" activate -- bash -c "echo \$FOO > output && echo > activate_finished && echo > $TEARDOWN_FIFO" &
+      injected="first_activation" _FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate -- bash -c "echo \$FOO > output && echo > activate_finished && echo > $TEARDOWN_FIFO" &
       ;;
     in-place)
-      TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$("$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_finished && echo > "$TEARDOWN_FIFO"' &
+      TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$(_FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_finished && echo > "$TEARDOWN_FIFO"' &
       ;;
   esac
 
@@ -3217,11 +3217,11 @@ EOF
 
   # First wait for the logfile to appear
   timeout 1s bash -c '
-    while ! ls $PROJECT_DIR/.flox/log/watchdog.*.log; do
+    while ! ls $PROJECT_DIR/.flox/log/watchdog.*.log.*; do
       sleep .1
     done
   '
-  watchdog_1_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log)"
+  watchdog_1_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
   initial_number_of_polls="$(cat "$watchdog_1_log" | grep "still watching PIDs" | wc -l)"
   watchdog_1_log="$watchdog_1_log" initial_number_of_polls="$initial_number_of_polls" \
     timeout 1s bash -c '

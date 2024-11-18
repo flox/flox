@@ -70,6 +70,7 @@ tokio = { version = "1", features = ["full"] }
 toml = "0.8.19"
 toml_edit = { version = "0.22", features = ["serde"] }
 tracing = "0.1"
+tracing-appender = "0.2"
 tracing-log = { version = "0.2", features = [] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2.5", features = ["serde"] }
