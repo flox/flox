@@ -66,7 +66,9 @@ start_services_blocking() {
   local activation_timeout="${_FLOX_SERVICES_ACTIVATE_TIMEOUT:-10}"
   local blocking_command="wait_for_services_socket \"$socket_file\""
 
-  echo " ----- Starting services at: $("@coreutils@/bin/date" +"%T.%N")" >&2
+  if { true >&3; } 2> /dev/null; then
+     " ----- Starting services at: $("@coreutils@/bin/date" +"%T.%N")" >&3
+  fi
 
   if ! "$_timeout" "$activation_timeout" $_bash -c "$blocking_command"; then
     if [ ! -e "$log_file" ]; then
