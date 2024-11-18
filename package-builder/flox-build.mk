@@ -203,6 +203,7 @@ define BUILD_local_template =
   $(_pname)_local_build: $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
 	@echo "Building $(_name) in local mode"
+	@$(_rm) -rf $(_out)
 	$(if $(_virtualSandbox),$(PRELOAD_ARGS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	MAKEFLAGS= out=$(_out) $(FLOX_INTERPRETER)/activate --turbo -- $(_bash) -e $($(_pvarname)_buildScript)
 	set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
