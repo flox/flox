@@ -11,7 +11,7 @@ blake3 = "1.5.3"
 bpaf = { version = "0.9.15", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.38", features = ["serde"] }
-clap = { version = "4.5.20", features = ["derive"] }
+clap = { version = "4.5.21", features = ["derive"] }
 clap_derive = "4.5.4"
 config = "0.14.1"
 crossterm = "0.27"
