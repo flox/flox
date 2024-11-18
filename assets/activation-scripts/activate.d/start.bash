@@ -62,7 +62,7 @@ fi
 if [ -n "${_FLOX_WATCHDOG_BIN:-}" ]; then
   # TODO: Some of these args can be removed after https://github.com/flox/flox/issues/2206
   "$_daemonize" \
-    -E _FLOX_WATCHDOG_LOG_LEVEL="debug" \
+    -E _FLOX_WATCHDOG_LOG_LEVEL="${_FLOX_WATCHDOG_LOG_LEVEL:-debug}" \
     "$_FLOX_WATCHDOG_BIN" \
     ${FLOX_DISABLE_METRICS:+--disable-metrics} \
     --log-dir "$_FLOX_ENV_LOG_DIR" \

@@ -155,12 +155,13 @@ EOF
     --socket does_not_exist 3>&- &
 
   watchdog_pid="$!"
-  log_file="$BATS_TEST_TMPDIR/watchdog.${_FLOX_ACTIVATION_ID}.log"
+  log_file="$BATS_TEST_TMPDIR/watchdog.${_FLOX_ACTIVATION_ID}.log.*"
 
   # Wait for initial log entry. Other entries will be printed later but we don't
   # want to wait that long.
   timeout 1s bash -c "
-    while ! grep -qs 'still watching, woof woof' \"$log_file\"; do
+    # $log_file is intentionally unquoted here so that the glob is expanded
+    while ! grep -qs 'still watching, woof woof' $log_file; do
       sleep 0.1
     done
   "
@@ -244,11 +245,12 @@ EOF
     --socket does_not_exist &
 
   watchdog_pid="$!"
-  log_file="$BATS_TEST_TMPDIR/watchdog.${_FLOX_ACTIVATION_ID}.log"
+  log_file="$BATS_TEST_TMPDIR/watchdog.${_FLOX_ACTIVATION_ID}.log.*"
 
   # Wait for start.
   timeout 1s bash -c "
-    while ! grep -qs 'watchdog is on duty' \"$log_file\"; do
+    # $log_file is intentionally unquoted here so that the glob is expanded
+    while ! grep -qs 'watchdog is on duty' $log_file; do
       sleep 0.1
     done
   "
@@ -295,11 +297,12 @@ EOF
     --socket does_not_exist &
 
   watchdog_pid="$!"
-  log_file="$BATS_TEST_TMPDIR/watchdog.${_FLOX_ACTIVATION_ID}.log"
+  log_file="$BATS_TEST_TMPDIR/watchdog.${_FLOX_ACTIVATION_ID}.log.*"
 
   # Wait for start.
   timeout 1s bash -c "
-    while ! grep -qs 'starting' \"$log_file\"; do
+    # $log_file is intentionally unquoted here so that the glob is expanded
+    while ! grep -qs 'starting' $log_file; do
       sleep 0.1
     done
   "

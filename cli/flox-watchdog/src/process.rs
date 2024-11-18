@@ -20,7 +20,7 @@ use anyhow::{bail, Result};
 use flox_core::activations::{read_activations_json, Activations, AttachedPid};
 use fslock::LockFile;
 use time::OffsetDateTime;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 /// How long to wait between watcher updates.
 pub const WATCHER_SLEEP_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -133,7 +133,7 @@ impl PidWatcher {
         let stat = match read_to_string(path) {
             Ok(stat) => stat,
             Err(err) => {
-                warn!(
+                trace!(
                     %err,
                     pid,
                     "failed to parse /proc/<pid>/stat, treating as not running"
@@ -262,7 +262,7 @@ impl Watcher for PidWatcher {
     fn should_clean_up(&self) -> Result<bool, super::Error> {
         let should_clean_up = self.pids_watching.is_empty();
         if !should_clean_up {
-            debug!("still watching PIDs {:?}", self.pids_watching);
+            trace!("still watching PIDs {:?}", self.pids_watching);
         }
         Ok(should_clean_up)
     }

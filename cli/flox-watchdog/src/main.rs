@@ -15,7 +15,7 @@ use flox_core::activations::{
 use flox_rust_sdk::flox::FLOX_VERSION_STRING;
 use flox_rust_sdk::providers::services::process_compose_down;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
-use logger::{init_logger, spawn_gc_logs, spawn_heartbeat_log};
+use logger::{init_logger, spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
 use process::{LockedActivations, PidWatcher, WaitResult};
@@ -74,12 +74,8 @@ fn main() -> ExitCode {
     let args = Cli::parse();
 
     // Initialization
-    let log_file = &args
-        .log_dir
-        .as_ref()
-        .map(|dir| dir.join(format!("watchdog.{}.log", args.activation_id)));
-
-    init_logger(log_file)
+    let watchdog_log_prefix = format!("watchdog.{}.log", args.activation_id);
+    init_logger(&args.log_dir, &watchdog_log_prefix)
         .context("failed to initialize logger")
         .unwrap();
     let _sentry_guard = (!args.disable_metrics).then(init_sentry);
@@ -153,7 +149,7 @@ fn run_inner(
     );
     spawn_heartbeat_log();
     if let Some(log_dir) = args.log_dir {
-        spawn_gc_logs(log_dir);
+        spawn_logs_gc_threads(log_dir);
     }
 
     debug!("waiting for termination");
