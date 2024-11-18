@@ -207,8 +207,8 @@ define CLEAN_result_link_template =
 endef
 
 # The following env vars need to be passed from the outer "develop" environment
-# to the inner "wrapper" environment in the in-situ build mode in support of
-# the tools and compilers found in the outer environment, and for Flox to
+# to the inner "build wrapper" environment in the in-situ build mode in support
+# of the tools and compilers found in the outer environment, and for Flox to
 # otherwise function properly.
 ALLOW_OUTER_ENV_VARS := FLOX_RUNTIME_DIR HOME PATH \
   $(filter NIX_CFLAGS% NIX_CC%,$(.VARIABLES))
@@ -223,10 +223,10 @@ define BUILD_local_template =
   $(eval _out = /tmp/store_$($(_pvarname)_hash)-$(_name))
 
   # Make sure to invoke the build script in a nested activation of both the
-  # "develop" and "wrapper" environments, and that the wrapper environment is
-  # the "inner" activation preferred for sourcing commands, libraries, etc.
-  # Also blat all env variables set by the outer activation to avoid
-  # including the "develop" environment in the build closure.
+  # "develop" and "build wrapper" environments, and that the build wrapper
+  # environment is the "inner" activation preferred for sourcing commands,
+  # libraries, etc.  Also blat all env variables set by the outer activation
+  # to avoid including the "develop" environment in the build closure.
   .INTERMEDIATE: $(_pname)_local_build
   $(_pname)_local_build: $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
@@ -235,12 +235,12 @@ define BUILD_local_template =
 	$(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	$(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode dev --turbo -- \
 	  $(_env) -i out=$(_out) $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
-	    $(_wrapper_env)/activate --env $(_wrapper_env) --mode dev --turbo -- \
+	    $(_build_wrapper_env)/activate --env $(_build_wrapper_env) --mode dev --turbo -- \
 	      $(_bash) -e $($(_pvarname)_buildScript)
 	set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr name "$(_name)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
-	  --argstr wrapper-env "$(_wrapper_env)" \
+	  --argstr build-wrapper-env "$(_build_wrapper_env)" \
 	  --argstr install-prefix "$(_out)" \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  --out-link "result-$(_pname)" \
@@ -302,7 +302,7 @@ define BUILD_nix_sandbox_template =
 	  --argstr name "$(_name)" \
 	  --argstr srcTarball "$($(_pvarname)_src_tar)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
-	  --argstr wrapper-env "$(_wrapper_env)" \
+	  --argstr build-wrapper-env "$(_build_wrapper_env)" \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  $(if $($(_pvarname)_buildDeps),--arg buildDeps $($(_pvarname)_buildDeps_arg)) \
 	  --argstr buildScript "$($(_pvarname)_buildScript)" \
@@ -327,13 +327,14 @@ endef
 
 define BUILD_template =
 
-  # Identify the wrapper environment with which to wrap the contents of bin, sbin.
-  $(eval _wrapper_env = $$(strip \
+  # Identify the build wrapper environment with which to wrap the contents
+  # of bin, sbin.
+  $(eval _build_wrapper_env = $$(strip \
     $(if $(FLOX_ENV_OUTPUTS), \
       $$(shell $(_jq) -n -r \
         --argjson results '$$(FLOX_ENV_OUTPUTS)' \
         '$$$$results."build-$(_pname)"') \
-      $$(if $$(filter 0,$$(.SHELLSTATUS)),,$$(error could not identify wrapper env for $(_pname))), \
+      $$(if $$(filter 0,$$(.SHELLSTATUS)),,$$(error could not identify build wrapper env for $(_pname))), \
       $$$$(error FLOX_ENV_OUTPUTS not defined))))
 
   # build mode passed as $(1)

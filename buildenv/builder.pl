@@ -417,7 +417,8 @@ if ($manifest) {
         }
 
         # We can have nice names for things.
-        my $activationScripts = $nix_attrs->{"activationScripts"};
+        my $activationScripts_out = $nix_attrs->{"activationScripts_out"};
+        my $activationScripts_build_wrapper = $nix_attrs->{"activationScripts_build_wrapper"};
         my $manifestPackage = $nix_attrs->{"manifestPackage"};
         my $system = $nix_attrs->{"system"};
         my $packages = $manifestData->{"packages"};
@@ -426,31 +427,41 @@ if ($manifest) {
         my $builds = $manifest->{"build"};
         my @buildNames = keys %{$builds};
 
-        # Construct an array containing the Flox activation-scripts packages.
-        my @floxEnvironmentPackages = (
-            {
-                "group" => "toplevel", # Want to appear in build closures.
-                "outputs_to_install" => [ "out" ],
-                "outputs" => {
-                    "out" => $activationScripts
-                },
-                priority => 1
+        # Construct hashes for each of the flox-sourced packages.
+        my %activationScripts_out_PackageEntry = (
+            "group" => "toplevel", # Want to appear in build closures.
+            "outputs_to_install" => [ "out" ],
+            "outputs" => {
+                "out" => $activationScripts_out
             },
-            {
-                "group" => "toplevel", # Want to appear in build closures.
-                "outputs_to_install" => [ "out" ],
-                "outputs" => {
-                    "out" => $manifestPackage
-                },
-                priority => 1
+            priority => 1
+        );
+        my %activationScripts_build_wrapper_PackageEntry = (
+            "group" => "toplevel", # Want to appear in build closures.
+            "outputs_to_install" => [ "out" ],
+            "outputs" => {
+                "out" => $activationScripts_build_wrapper
             },
+            priority => 1
+        );
+        my %manifestPackageEntry = (
+            "group" => "toplevel", # Want to appear in build closures.
+            "outputs_to_install" => [ "out" ],
+            "outputs" => {
+                "out" => $manifestPackage
+            },
+            priority => 1
         );
 
         # Filter system-specific outputs to include in the "out" output.
         my @outPackages = grep { $_->{"system"} eq $system } @{$packages};
 
         # Define the "develop" output as all packages with activation scripts included.
-        my @developPackages = ( @outPackages, @floxEnvironmentPackages );
+        my @developPackages = (
+            @outPackages,
+            \%activationScripts_out_PackageEntry,
+            \%manifestPackageEntry
+        );
 
         # Filter only packages included in the "toplevel" group for use in builds.
         my @toplevelPackages = grep { $_->{"group"} eq "toplevel" } @outPackages;
@@ -489,9 +500,17 @@ if ($manifest) {
                         }
                     }
                     # Represent the result as a hash keyed by the build name.
-                    $buildPackagesHash{$build} = [ @buildPackages, @floxEnvironmentPackages ];
+                    $buildPackagesHash{$build} = [
+                        @buildPackages,
+                        \%activationScripts_build_wrapper_PackageEntry,
+                        \%manifestPackageEntry
+                    ];
                 } else {
-                    $buildPackagesHash{$build} = [ @toplevelPackages, @floxEnvironmentPackages ];
+                    $buildPackagesHash{$build} = [
+                        @toplevelPackages,
+                        \%activationScripts_build_wrapper_PackageEntry,
+                        \%manifestPackageEntry
+                    ];
                 }
             }
         }
