@@ -577,8 +577,11 @@ impl CoreEnvironment<ReadOnly> {
             (lockfile, upgraded)
         };
 
-        let store_path =
-            self.transact_with_lockfile_contents(serde_json::json!(&lockfile).to_string(), flox)?;
+        // SAFETY: serde_json::to_string_pretty is only documented to fail if
+        // the "Serialize decides to fail, or if T contains a map with non-string keys",
+        // neither of which should happen here.
+        let lockfile_contents = serde_json::to_string_pretty(&lockfile).unwrap();
+        let store_path = self.transact_with_lockfile_contents(lockfile_contents, flox)?;
 
         Ok(UpgradeResult {
             packages: upgraded,
