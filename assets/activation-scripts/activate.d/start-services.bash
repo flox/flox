@@ -84,6 +84,7 @@ start_services_blocking() {
     fi
   fi
 
+  end_time=$("@coreutils@/bin/date" "+%s%3N")
   if { true >&3; } 2> /dev/null; then
     echo " Finished starting services at: $("@coreutils@/bin/date" +"%T.%N") ---------" >&3
   fi
