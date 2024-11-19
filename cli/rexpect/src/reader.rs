@@ -4,6 +4,7 @@ use crate::error::Error;
 pub use regex::Regex;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -116,6 +117,7 @@ pub struct Options {
 /// a single character at a time.
 pub struct BufferedNBReader {
     buf: Arc<Mutex<String>>,
+    flag: Arc<AtomicBool>,
     timeout: Option<Duration>,
     eof: bool,
 }
@@ -124,22 +126,23 @@ impl BufferedNBReader {
     pub fn new<R: Read + Send + 'static>(f: R, options: Options) -> Self {
         let buf_handle = Arc::new(Mutex::new(String::with_capacity(1024)));
         let buf_clone = buf_handle.clone();
+        let flag = Arc::new(AtomicBool::new(false));
+        let flag_clone = flag.clone();
         thread::spawn(move || -> Result<(), Error> {
             let mut reader = BufReader::new(f);
-            let mut inner_buf = Vec::with_capacity(1024);
+            let mut inner_buf = [0u8; 1024];
             loop {
-                match reader.read(&mut inner_buf) {
+                match reader.read(inner_buf.as_mut_slice()) {
                     Ok(0) => {
-                        eprintln!("reader died");
+                        flag.store(true, Ordering::SeqCst);
                         break;
                     }
-                    Ok(_) => {
+                    Ok(n) => {
                         let mut buf = buf_clone.lock().unwrap();
-                        // eprintln!("reader saw: '{}'", inner_buf);
-                        for c in inner_buf.iter() {
+                        // eprintln!("reader saw {} bytes", n);
+                        for c in inner_buf[..n].iter() {
                             buf.push(*c as char);
                         }
-                        inner_buf.clear();
                     }
                     Err(err) => {
                         return Err(Error::Io(err));
@@ -147,11 +150,13 @@ impl BufferedNBReader {
                 }
                 thread::sleep(Duration::from_millis(11));
             }
+            eprintln!("reader exiting");
             Ok(())
         });
         Self {
             buf: buf_handle,
             timeout: options.timeout_ms.map(Duration::from_millis),
+            flag: flag_clone,
             eof: false,
         }
     }
@@ -168,17 +173,22 @@ impl BufferedNBReader {
         let start = time::Instant::now();
 
         loop {
-            print_elapsed(start, "loop start");
-            // print_elapsed(start, "filled buffer");
-
             let mut buf = self.buf.lock().unwrap();
-            eprintln!("buf length: {}", buf.len());
+            // eprintln!("buf length: {}", buf.len());
             if let Some(tuple_pos) = find(needle, &buf, false) {
                 let first = buf.drain(..tuple_pos.0).collect();
                 let second = buf.drain(..tuple_pos.1 - tuple_pos.0).collect();
                 return Ok((first, second));
             }
-            print_elapsed(start, "didn't find needle");
+            // print_elapsed(start, "didn't find needle");
+
+            if self.flag.load(Ordering::SeqCst) {
+                return Err(Error::EOF {
+                    expected: needle.to_string(),
+                    got: buf.clone(),
+                    exit_code: None,
+                });
+            }
 
             // reached end of stream and didn't match -> error
             // we don't know the reason of eof yet, so we provide an empty string
@@ -206,7 +216,7 @@ impl BufferedNBReader {
                 }
             }
             drop(buf);
-            print_elapsed(start, "sleeping");
+            // print_elapsed(start, "sleeping");
             // nothing matched: wait a little
             thread::sleep(Duration::from_millis(5));
         }
