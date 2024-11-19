@@ -407,7 +407,7 @@ pub fn spawn_bash(timeout: Option<u64>) -> Result<PtyReplSession, Error> {
         let mut pb = PtyReplSession {
             prompt: new_prompt.to_owned(),
             pty_session: p,
-            quit_command: Some("quit".to_owned()),
+            quit_command: Some("exit".to_owned()),
             echo_on: false,
         };
         pb.exp_string("~~~~")?;
@@ -453,7 +453,7 @@ pub fn spawn_specific_bash(
         let mut pb = PtyReplSession {
             prompt: new_prompt.to_owned(),
             pty_session: p,
-            quit_command: Some("quit".to_owned()),
+            quit_command: Some("exit".to_owned()),
             echo_on: false,
         };
         // This last command is to turn off whatever bracketed paste mode is about
