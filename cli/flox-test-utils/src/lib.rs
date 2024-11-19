@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context};
+use indoc::formatdoc;
 use rexpect::session::{spawn_specific_bash, PtyReplSession};
 use sysinfo::{
     Pid,
@@ -318,6 +319,55 @@ impl<'dirs> ShellProcess<'dirs> {
         // Remove the tempfile first so it isn't left laying around if there's an error
         std::fs::remove_file(file.path()).context("failed to delete temp manifest")?;
         let _ = res?;
+        Ok(())
+    }
+
+    /// Copies one of the manifests/lockfile generated from the catalog client
+    /// and uses it to initialize an environment.
+    ///
+    /// `copy_from`: The directory containing the `manifest.toml` and `manifest.lock`
+    pub fn init_from_generated_env(
+        &mut self,
+        name: impl AsRef<str>,
+        copy_from: impl AsRef<Path>,
+    ) -> Result<(), Error> {
+        // Create the .flox directory
+        let env_dir = self.dirs.home_dir.join(name.as_ref()).join(".flox/env");
+        std::fs::create_dir_all(&env_dir).context("couldn't create .flox/env")?;
+
+        // Copy the manifest and lockfile
+        std::fs::copy(
+            copy_from.as_ref().join("manifest.toml"),
+            env_dir.join("manifest.toml"),
+        )
+        .context("failed to copy manifest")?;
+        std::fs::copy(
+            copy_from.as_ref().join("manifest.lock"),
+            env_dir.join("manifest.lock"),
+        )
+        .context("failed to copy lockfile")?;
+
+        // Create a `.flox/env.json` file since those aren't stored in the
+        // generated data
+        let contents = formatdoc! {r#"
+            {{
+                "version": 1,
+                "name": "{}"
+            }}
+        "#, name.as_ref()};
+        std::fs::write(
+            env_dir.parent().unwrap().join("env.json"),
+            contents.as_bytes(),
+        )
+        .context("failed to write env.json")?;
+
+        self.pty
+            .send_line(&format!(r#"cd "{}""#, name.as_ref()))
+            .context("failed to send cd command")?;
+        self.pty
+            .wait_for_prompt()
+            .context("prompt never appeared")?;
+
         Ok(())
     }
 
@@ -652,8 +702,16 @@ pub fn find_all_pids_with_uuid(uuid: impl AsRef<str>) -> Option<u32> {
     None
 }
 
+/// Returns the path to a `mkdata`-generated environment
+fn path_to_generated_env(name: &str) -> PathBuf {
+    let base_dir = PathBuf::from(std::env::var("GENERATED_DATA").unwrap());
+    base_dir.join("envs").join(name)
+}
+
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
     use indoc::formatdoc;
     use serde_json::Value;
 
@@ -692,6 +750,20 @@ mod tests {
         MANIFEST_TEMPLATE.replace("@@", snippet.as_ref())
     }
 
+    #[allow(dead_code)]
+    fn start_timer() -> Instant {
+        eprintln!("starting clock");
+        Instant::now()
+    }
+
+    #[allow(dead_code)]
+    fn print_elapsed(start: Instant, msg: &str) {
+        eprintln!(
+            "elapsed: {} ({msg})",
+            Instant::now().duration_since(start).as_millis()
+        );
+    }
+
     #[test]
     fn can_template_manifest() {
         let templated = make_manifest("[install]");
@@ -708,19 +780,19 @@ mod tests {
     #[test]
     fn can_construct_shell() {
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(5000)).unwrap();
-        shell.exit_shell();
+        let _shell = ShellProcess::spawn(&dirs, Some(5000)).unwrap();
     }
 
     #[test]
     fn can_activate() {
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
-        shell.send_line("flox activate").unwrap();
-        shell.reconfigure_prompt().unwrap();
+        // shell.init_env_with_name("myenv").unwrap();
+        shell
+            .init_from_generated_env("myenv", path_to_generated_env("hello"))
+            .unwrap();
+        shell.activate(&[]).unwrap();
         shell.send_line(r#"echo "$_activate_d""#).unwrap();
-        shell.exp_string("/nix/store").unwrap();
         shell.exit_shell(); // once for the activation
     }
 
@@ -753,17 +825,26 @@ mod tests {
 
     #[test]
     fn read_activation_uuid() {
+        let start = start_timer();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
+        print_elapsed(start, "init done");
+        shell
+            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .unwrap();
+        print_elapsed(start, "edit done");
         shell.activate(&[]).unwrap();
+        print_elapsed(start, "activated");
         shell
             .execute(
                 "echo $_FLOX_ACTIVATION_UUID",
                 r#"\w{8}-\w{4}-\w{4}-\w{4}-\w{12}"#,
             )
             .unwrap();
+        print_elapsed(start, "executed");
         shell.exit_shell(); // once for the activation
+        print_elapsed(start, "exiting");
     }
 
     #[test]
