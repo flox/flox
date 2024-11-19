@@ -2,7 +2,7 @@
 
 use crate::error::Error; // load error-chain
 use crate::process::PtyProcess;
-use crate::reader::{NBReader, Regex};
+use crate::reader::{BufferedNBReader, NBReader, Regex};
 pub use crate::reader::{Options, ReadUntil};
 use std::fs::File;
 use std::io::prelude::*;
@@ -15,6 +15,7 @@ use tempfile;
 pub struct StreamSession<W: Write> {
     pub writer: LineWriter<W>,
     pub reader: NBReader,
+    // pub reader: BufferedNBReader,
 }
 
 impl<W: Write> StreamSession<W> {
@@ -22,6 +23,7 @@ impl<W: Write> StreamSession<W> {
         Self {
             writer: LineWriter::new(writer),
             reader: NBReader::new(reader, options),
+            // reader: BufferedNBReader::new(reader, options),
         }
     }
 
@@ -85,9 +87,9 @@ impl<W: Write> StreamSession<W> {
 
     /// Return `Some(c)` if a char is ready in the stdout stream of the process, return `None`
     /// otherwise. This is non-blocking.
-    pub fn try_read(&mut self) -> Option<char> {
-        self.reader.try_read()
-    }
+    // pub fn try_read(&mut self) -> Option<char> {
+    //     self.reader.try_read()
+    // }
 
     // wrapper around reader::read_until to give more context for errors
     fn exp(&mut self, needle: &ReadUntil) -> Result<(String, String), Error> {

@@ -4,7 +4,7 @@ use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context};
 use rexpect::session::{spawn_specific_bash, PtyReplSession};
@@ -19,6 +19,9 @@ use sysinfo::{
 };
 use tempfile::TempDir;
 
+// mod arrexpect;
+// mod proc_status;
+
 type Error = anyhow::Error;
 
 // Modifications to `rexpect`:
@@ -32,6 +35,7 @@ type Error = anyhow::Error;
 //   prompt always takes 100ms.
 // - I added a new function that allows you specify which shell to use in `spawn_bash`.
 // - I disabled "bracketed paste mode", which was also breaking `wait_for_prompt`.
+// - The `quit_command` is wrong...it's exit not quit
 
 // Approaches for test failure on leaked process:
 // - During drop you can wait to see if the process terminates with a timeout.
@@ -53,6 +57,10 @@ type Error = anyhow::Error;
 //   scripts, so you get a new tempfile for every test in the suite, every time you
 //   run it. Since this is a compiled artifact, you get one artifact for the entire
 //   suite.
+
+// Performance:
+// - After "fixing" rexpect, spawning a shell takes about sixty ms.
+// - init takes about thirty ms
 
 /// A collection of temporary directories to be used as an isolated home directory
 #[derive(Debug)]
@@ -204,6 +212,21 @@ impl DerefMut for ShellProcess<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.pty
     }
+}
+
+#[allow(dead_code)]
+fn print_elapsed(start: Instant, msg: &str) {
+    eprintln!(
+        "elapsed: {} ({msg})",
+        Instant::now().duration_since(start).as_millis()
+    );
+}
+
+#[allow(dead_code)]
+fn elapsed_start() -> Instant {
+    let now = Instant::now();
+    eprintln!("starting clock");
+    now
 }
 
 impl<'dirs> ShellProcess<'dirs> {
@@ -707,21 +730,34 @@ mod tests {
 
     #[test]
     fn can_construct_shell() {
+        let start = elapsed_start();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(5000)).unwrap();
         shell.exit_shell();
+        print_elapsed(start, "done");
     }
 
     #[test]
     fn can_activate() {
+        let start = elapsed_start();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        print_elapsed(start, "started shell");
+        print_elapsed(start, "about to init env");
         shell.init_env_with_name("myenv").unwrap();
+        print_elapsed(start, "init env");
         shell.send_line("flox activate").unwrap();
+        print_elapsed(start, "sent activate cmd");
         shell.reconfigure_prompt().unwrap();
+        print_elapsed(start, "reconf prompt");
         shell.send_line(r#"echo "$_activate_d""#).unwrap();
-        shell.exp_string("/nix/store").unwrap();
+        print_elapsed(start, "ECHO");
+        // shell.exp_string("/nix/store").unwrap();
+        // print_elapsed(start, "exp nix store");
+        shell.wait_for_prompt().unwrap();
+        print_elapsed(start, "got prompt");
         shell.exit_shell(); // once for the activation
+        print_elapsed(start, "exit shell");
     }
 
     #[test]
