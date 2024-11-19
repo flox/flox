@@ -4,11 +4,8 @@ use crate::error::Error;
 pub use regex::Regex;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver};
-use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 use std::{fmt, time};
 
 #[derive(Debug)]
@@ -113,116 +110,6 @@ pub struct Options {
     pub strip_ansi_escape_codes: bool,
 }
 
-/// A reader that uses a lock to write directly to the buffer instead of reading
-/// a single character at a time.
-pub struct BufferedNBReader {
-    buf: Arc<Mutex<String>>,
-    flag: Arc<AtomicBool>,
-    timeout: Option<Duration>,
-    eof: bool,
-}
-
-impl BufferedNBReader {
-    pub fn new<R: Read + Send + 'static>(f: R, options: Options) -> Self {
-        let buf_handle = Arc::new(Mutex::new(String::with_capacity(1024)));
-        let buf_clone = buf_handle.clone();
-        let flag = Arc::new(AtomicBool::new(false));
-        let flag_clone = flag.clone();
-        thread::spawn(move || -> Result<(), Error> {
-            let mut reader = BufReader::new(f);
-            let mut inner_buf = [0u8; 1024];
-            loop {
-                match reader.read(inner_buf.as_mut_slice()) {
-                    Ok(0) => {
-                        flag.store(true, Ordering::SeqCst);
-                        break;
-                    }
-                    Ok(n) => {
-                        let mut buf = buf_clone.lock().unwrap();
-                        // eprintln!("reader saw {} bytes", n);
-                        for c in inner_buf[..n].iter() {
-                            buf.push(*c as char);
-                        }
-                    }
-                    Err(err) => {
-                        return Err(Error::Io(err));
-                    }
-                }
-                thread::sleep(Duration::from_millis(11));
-            }
-            eprintln!("reader exiting");
-            Ok(())
-        });
-        Self {
-            buf: buf_handle,
-            timeout: options.timeout_ms.map(Duration::from_millis),
-            flag: flag_clone,
-            eof: false,
-        }
-    }
-
-    pub fn read_until(&mut self, needle: &ReadUntil) -> Result<(String, String), Error> {
-        #[allow(dead_code)]
-        fn print_elapsed(start: time::Instant, msg: &str) {
-            eprintln!(
-                "elapsed: {} ({msg})",
-                time::Instant::now().duration_since(start).as_millis()
-            );
-        }
-
-        let start = time::Instant::now();
-
-        loop {
-            let mut buf = self.buf.lock().unwrap();
-            // eprintln!("buf length: {}", buf.len());
-            if let Some(tuple_pos) = find(needle, &buf, false) {
-                let first = buf.drain(..tuple_pos.0).collect();
-                let second = buf.drain(..tuple_pos.1 - tuple_pos.0).collect();
-                return Ok((first, second));
-            }
-            // print_elapsed(start, "didn't find needle");
-
-            if self.flag.load(Ordering::SeqCst) {
-                return Err(Error::EOF {
-                    expected: needle.to_string(),
-                    got: buf.clone(),
-                    exit_code: None,
-                });
-            }
-
-            // reached end of stream and didn't match -> error
-            // we don't know the reason of eof yet, so we provide an empty string
-            // this will be filled out in session::exp()
-            if self.eof {
-                return Err(Error::EOF {
-                    expected: needle.to_string(),
-                    got: buf.clone(),
-                    exit_code: None,
-                });
-            }
-
-            // ran into timeout
-            if let Some(timeout) = self.timeout {
-                if start.elapsed() > timeout {
-                    return Err(Error::Timeout {
-                        expected: needle.to_string(),
-                        got: buf
-                            .clone()
-                            .replace('\n', "`\\n`\n")
-                            .replace('\r', "`\\r`")
-                            .replace('\u{1b}', "`^`"),
-                        timeout,
-                    });
-                }
-            }
-            drop(buf);
-            // print_elapsed(start, "sleeping");
-            // nothing matched: wait a little
-            thread::sleep(Duration::from_millis(5));
-        }
-    }
-}
-
 /// Non blocking reader
 ///
 /// Typically you'd need that to check for output of a process without blocking your thread.
@@ -254,7 +141,6 @@ impl NBReader {
             loop {
                 match reader.read(&mut byte) {
                     Ok(0) => {
-                        eprintln!("reader died");
                         tx.send(Ok(PipedChar::EOF))
                             .map_err(|_| Error::MpscSendError)?;
                         break;
@@ -293,7 +179,6 @@ impl NBReader {
 
     /// reads all available chars from the read channel and stores them in self.buffer
     fn read_into_buffer(&mut self) -> Result<(), Error> {
-        eprintln!("BUFFER: {}", self.buffer.len());
         if self.eof {
             return Ok(());
         }
@@ -361,27 +246,16 @@ impl NBReader {
     /// ```
     ///
     pub fn read_until(&mut self, needle: &ReadUntil) -> Result<(String, String), Error> {
-        #[allow(dead_code)]
-        fn print_elapsed(start: time::Instant, msg: &str) {
-            eprintln!(
-                "elapsed: {} ({msg})",
-                time::Instant::now().duration_since(start).as_millis()
-            );
-        }
-
         let start = time::Instant::now();
 
         loop {
-            print_elapsed(start, "loop start");
             self.read_into_buffer()?;
-            print_elapsed(start, "filled buffer");
 
             if let Some(tuple_pos) = find(needle, &self.buffer, self.eof) {
                 let first = self.buffer.drain(..tuple_pos.0).collect();
                 let second = self.buffer.drain(..tuple_pos.1 - tuple_pos.0).collect();
                 return Ok((first, second));
             }
-            print_elapsed(start, "didn't find needle");
 
             // reached end of stream and didn't match -> error
             // we don't know the reason of eof yet, so we provide an empty string
@@ -409,7 +283,6 @@ impl NBReader {
                     });
                 }
             }
-            print_elapsed(start, "sleeping");
             // nothing matched: wait a little
             thread::sleep(time::Duration::from_millis(5));
         }

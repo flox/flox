@@ -43,7 +43,4 @@ pub enum Error {
     #[cfg(feature = "which")]
     #[error(transparent)]
     Which(#[from] which::Error),
-
-    #[error("Dunno")]
-    Dunno,
 }
