@@ -921,8 +921,10 @@ pub mod types {
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
+    ///    "catalog",
     ///    "description",
     ///    "name",
+    ///    "pkg_path",
     ///    "pname",
     ///    "stabilities",
     ///    "system"
@@ -931,6 +933,13 @@ pub mod types {
     ///    "attr_path": {
     ///      "title": "Attr Path",
     ///      "type": "string"
+    ///    },
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    },
     ///    "description": {
     ///      "title": "Description",
@@ -941,6 +950,10 @@ pub mod types {
     ///    },
     ///    "name": {
     ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "pkg_path": {
+    ///      "title": "Pkg Path",
     ///      "type": "string"
     ///    },
     ///    "pname": {
@@ -964,8 +977,10 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageInfoSearch {
         pub attr_path: String,
+        pub catalog: Option<String>,
         pub description: Option<String>,
         pub name: String,
+        pub pkg_path: String,
         pub pname: String,
         pub stabilities: Vec<String>,
         pub system: SystemEnum,
