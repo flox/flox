@@ -206,7 +206,6 @@ mod tests {
         // Ensure that the old files are selected for GC
         let mut to_gc = watchdog_logs_to_gc(dir.path(), days_old_to_keep).unwrap();
         to_gc.sort();
-        assert_eq!(to_gc.len(), 2);
         assert_eq!(to_gc, should_be_gced);
 
         // Simulate the old files being GCed
@@ -216,7 +215,7 @@ mod tests {
         // Ensure that the younger files aren't selected for GC after the old
         // files are deleted.
         let to_gc = watchdog_logs_to_gc(dir.path(), days_old_to_keep).unwrap();
-        assert!(to_gc.is_empty());
+        assert_eq!(to_gc, vec![] as Vec<PathBuf>);
     }
 
     #[test]
