@@ -93,6 +93,8 @@ fn gc_logs_watchdog(dir: impl AsRef<Path>, keep_days: u64) -> Result<()> {
 /// Returns a list of watchdog logs ready to be garbage collected
 fn watchdog_logs_to_gc(dir: impl AsRef<Path>, keep_days: u64) -> Result<Vec<PathBuf>> {
     let mut files = glob_log_files(&dir, "watchdog.*.log.*")?;
+    // Clean up old <= v1.3.4 pattern.
+    files.extend(glob_log_files(&dir, "watchdog.*.log")?);
     let threshold = duration_from_days(keep_days);
     let now = SystemTime::now();
 
@@ -197,8 +199,10 @@ mod tests {
             "watchdog.three.log.1234-12-12",
             Some(days_old_to_keep + 1),
         );
+        // Old <= v1.3.4 pattern.
+        let file_old = create_log_file(dir.path(), "watchdog.old.log", Some(days_old_to_keep + 1));
         let should_be_gced = {
-            let mut paths = vec![file_two.clone(), file_three.clone()];
+            let mut paths = vec![file_two.clone(), file_three.clone(), file_old.clone()];
             paths.sort();
             paths
         };
@@ -211,6 +215,7 @@ mod tests {
         // Simulate the old files being GCed
         std::fs::remove_file(file_two).unwrap();
         std::fs::remove_file(file_three).unwrap();
+        std::fs::remove_file(file_old).unwrap();
 
         // Ensure that the younger files aren't selected for GC after the old
         // files are deleted.
