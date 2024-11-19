@@ -86,7 +86,8 @@ start_services_blocking() {
 
   end_time=$("@coreutils@/bin/date" "+%s%3N")
   if { true >&3; } 2> /dev/null; then
-    echo " Finished starting services at: $("@coreutils@/bin/date" +"%T.%N") ---------" >&3
+    echo " Finished starting services at: $end_time ---------" >&3
+    echo " Time taken to start services: $((end_time - start_time))ms" >&3
   fi
 
   # Unset the helper functions so that they aren't passed to the user shell/command
