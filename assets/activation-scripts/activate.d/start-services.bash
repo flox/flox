@@ -68,7 +68,7 @@ start_services_blocking() {
 
   start_time=$("@coreutils@/bin/date" "+%s%3N")
   if { true >&3; } 2> /dev/null; then
-    echo " -------- Starting services at: $("@coreutils@/bin/date" +"%T.%N")" >&3
+    echo " -------- Starting services at: $start_time" >&3
   fi
 
   if ! "$_timeout" "$activation_timeout" $_bash -c "$blocking_command"; then
