@@ -419,6 +419,11 @@ impl<'dirs> ShellProcess<'dirs> {
             )),
         }
     }
+
+    pub fn exit_shell(&mut self) {
+        self.pty.send_line("exit").unwrap();
+        self.pty.wait_for_prompt().unwrap();
+    }
 }
 
 /// Locates the watchdog fingerprinted with the provided UUID
@@ -703,7 +708,8 @@ mod tests {
     #[test]
     fn can_construct_shell() {
         let dirs = IsolatedHome::new().unwrap();
-        let _shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(5000)).unwrap();
+        shell.exit_shell();
     }
 
     #[test]
@@ -715,6 +721,7 @@ mod tests {
         shell.reconfigure_prompt().unwrap();
         shell.send_line(r#"echo "$_activate_d""#).unwrap();
         shell.exp_string("/nix/store").unwrap();
+        shell.exit_shell(); // once for the activation
     }
 
     #[test]
@@ -741,6 +748,7 @@ mod tests {
         assert!(manifest_contents.find("howdy").is_some());
         shell.send_line("flox activate").unwrap();
         shell.exp_string("howdy").unwrap();
+        shell.exit_shell(); // once for the activation
     }
 
     #[test]
@@ -755,6 +763,7 @@ mod tests {
                 r#"\w{8}-\w{4}-\w{4}-\w{4}-\w{12}"#,
             )
             .unwrap();
+        shell.exit_shell(); // once for the activation
     }
 
     #[test]
@@ -767,6 +776,7 @@ mod tests {
         let uuid = shell.read_activation_uuid().unwrap();
         let watchdog = find_watchdog_pid_with_uuid(uuid, &mut globals.system.lock().unwrap());
         assert!(watchdog.is_some());
+        shell.exit_shell(); // once for the activation
     }
 
     #[test]
@@ -790,6 +800,7 @@ mod tests {
         let process_compose =
             find_process_compose_pid_with_uuid(uuid, &mut globals.system.lock().unwrap());
         assert!(process_compose.is_some());
+        shell.exit_shell(); // once for the activation
     }
 
     #[test]
@@ -806,8 +817,7 @@ mod tests {
             panic!("we literally just checked that it was Some(_)");
         };
         assert!(watchdog_proc.is_running());
-        shell.send_line("exit").unwrap();
-        shell.wait_for_prompt().unwrap();
+        shell.exit_shell(); // once for the activation
         watchdog_proc
             .wait_for_termination_with_timeout(1000)
             .unwrap();
@@ -830,8 +840,7 @@ mod tests {
         let (_watchdog, mut process_compose_proc) =
             shell.activate_with_services(&[], &mut globals).unwrap();
         assert!(process_compose_proc.is_running());
-        shell.send_line("exit").unwrap();
-        shell.wait_for_prompt().unwrap();
+        shell.exit_shell(); // once for the activation
         process_compose_proc
             .wait_for_termination_with_timeout(1000)
             .unwrap();
@@ -846,10 +855,9 @@ mod tests {
         shell
             .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
             .unwrap();
-        let (mut watchdog, mut process_compose) =
+        let (_watchdog, mut process_compose) =
             shell.activate_with_services(&[], &mut globals).unwrap();
-        shell.send_line("exit").unwrap();
-        watchdog.wait_for_termination_with_timeout(1000).unwrap();
+        shell.exit_shell(); // once for the activation
         process_compose
             .wait_for_termination_with_timeout(1000)
             .unwrap();
@@ -867,7 +875,7 @@ mod tests {
             .unwrap();
         let (mut watchdog, mut process_compose) =
             shell.activate_with_services(&[], &mut globals).unwrap();
-        shell.send_line("exit").unwrap();
+        shell.exit_shell(); // once for the activation
         watchdog.send_sigkill();
         process_compose
             .wait_for_termination_with_timeout(1000)
@@ -886,7 +894,7 @@ mod tests {
             .unwrap();
         let (mut watchdog, _process_compose) =
             shell.activate_with_services(&[], &mut globals).unwrap();
-        shell.send_line("exit").unwrap();
+        shell.exit_shell(); // once for the activation
         watchdog.send_sigkill();
         // The Drop impl for the process-compose struct should cause
         // a panic because nothing is cleaning up the process
@@ -928,6 +936,7 @@ mod tests {
         let process_compose =
             globals.process_compose_with_uuid(shell.read_activation_uuid().unwrap());
         assert!(process_compose.is_none());
+        shell.exit_shell(); // once for the activation
     }
 
     #[test]
@@ -940,6 +949,7 @@ mod tests {
         shell.send_line("flox services start").unwrap();
         shell.wait_for_prompt().unwrap();
         assert!(shell.succeeded().is_ok_and(|r| r == false));
+        shell.exit_shell(); // once for the activation
     }
 
     #[test]
@@ -961,7 +971,7 @@ mod tests {
         shell.send_line("flox install hello").unwrap();
         shell.exp_string("flox services restart").unwrap();
         shell.wait_for_prompt().unwrap();
-        shell.send_line("exit").unwrap();
+        shell.exit_shell(); // once for the activation
     }
 
     #[test]
@@ -995,7 +1005,7 @@ mod tests {
             };
             assert!(is_running);
         }
-        shell.send_line("exit").unwrap();
+        shell.exit_shell(); // once for the activation
     }
 
     #[test]
@@ -1012,5 +1022,7 @@ mod tests {
         let uuid = shell2.read_activation_uuid().unwrap();
         sleep_millis(50);
         assert!(globals.watchdog_with_uuid(&uuid).is_none());
+        shell1.exit_shell(); // once for the activation
+        shell2.exit_shell();
     }
 }
