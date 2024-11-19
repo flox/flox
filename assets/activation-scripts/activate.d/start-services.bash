@@ -66,6 +66,7 @@ start_services_blocking() {
   local activation_timeout="${_FLOX_SERVICES_ACTIVATE_TIMEOUT:-10}"
   local blocking_command="wait_for_services_socket \"$socket_file\""
 
+  start_time=$("@coreutils@/bin/date" "+%s%3N")
   if { true >&3; } 2> /dev/null; then
     echo " -------- Starting services at: $("@coreutils@/bin/date" +"%T.%N")" >&3
   fi
