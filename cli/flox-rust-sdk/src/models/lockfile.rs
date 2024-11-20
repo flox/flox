@@ -105,6 +105,7 @@ impl Display for Lockfile {
 pub enum LockedPackage {
     Catalog(LockedPackageCatalog),
     Flake(LockedPackageFlake),
+    StorePath(LockedPackageStorePath),
 }
 
 impl LockedPackage {
@@ -119,6 +120,7 @@ impl LockedPackage {
         match self {
             LockedPackage::Catalog(pkg) => &pkg.install_id,
             LockedPackage::Flake(pkg) => &pkg.install_id,
+            LockedPackage::StorePath(pkg) => &pkg.install_id,
         }
     }
 
@@ -126,6 +128,7 @@ impl LockedPackage {
         match self {
             LockedPackage::Catalog(pkg) => &pkg.system,
             LockedPackage::Flake(pkg) => &pkg.locked_installable.system,
+            LockedPackage::StorePath(pkg) => &pkg.system,
         }
     }
 
@@ -133,6 +136,7 @@ impl LockedPackage {
         match self {
             LockedPackage::Catalog(pkg) => pkg.broken,
             LockedPackage::Flake(pkg) => pkg.locked_installable.broken,
+            LockedPackage::StorePath(_) => None,
         }
     }
 
@@ -140,13 +144,17 @@ impl LockedPackage {
         match self {
             LockedPackage::Catalog(pkg) => pkg.unfree,
             LockedPackage::Flake(pkg) => pkg.locked_installable.unfree,
+            LockedPackage::StorePath(_) => None,
         }
     }
 
-    pub fn derivation(&self) -> &str {
+    pub fn derivation(&self) -> Option<&str> {
         match self {
-            LockedPackage::Catalog(pkg) => &pkg.derivation,
-            LockedPackage::Flake(pkg) => &pkg.locked_installable.derivation,
+            LockedPackage::Catalog(pkg) => Some(&pkg.derivation),
+            LockedPackage::Flake(pkg) => Some(&pkg.locked_installable.derivation),
+            // Technically store paths _may_ have a derivation,
+            // but it's not quite relevant yet for us to record it in the lockfile.
+            LockedPackage::StorePath(_) => None,
         }
     }
 }
@@ -296,6 +304,18 @@ struct FlakeInstallableToLock {
     install_id: String,
     descriptor: ManifestPackageDescriptorFlake,
     system: System,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[skip_serializing_none]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct LockedPackageStorePath {
+    /// The install_id of the descriptor in the manifest
+    pub install_id: String,
+    /// Store path to add to the environment
+    pub store_path: String,
+    pub system: System,
+    pub priority: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -488,6 +508,9 @@ impl Lockfile {
 
                     Ok(PackageToList::Flake(descriptor, locked_package))
                 },
+                LockedPackage::StorePath(_) => {
+                    todo!()
+                },
             })
             .collect::<Result<Vec<_>, LockedManifestError>>()
     }
@@ -518,6 +541,12 @@ impl Lockfile {
         let (already_locked_installables, installables_to_lock) =
             Self::split_locked_flake_installables(flake_installables, seed_lockfile);
 
+        // Store paths are locked by definition
+        let locked_store_paths = Self::collect_store_paths(manifest)
+            .into_iter()
+            .map(LockedPackage::StorePath)
+            .collect();
+
         // The manifest could have been edited since locking packages,
         // in which case there may be packages that aren't allowed.
         Self::check_packages_are_allowed(
@@ -535,7 +564,12 @@ impl Lockfile {
             return Ok(Lockfile {
                 version: Version::<1>,
                 manifest: manifest.clone(),
-                packages: [already_locked_packages, already_locked_installables].concat(),
+                packages: [
+                    locked_store_paths,
+                    already_locked_packages,
+                    already_locked_installables,
+                ]
+                .concat(),
             });
         }
 
@@ -576,6 +610,7 @@ impl Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: [
+                locked_store_paths,
                 already_locked_packages,
                 locked_packages,
                 already_locked_installables,
@@ -1140,6 +1175,39 @@ impl Lockfile {
         Ok(ok.into_iter())
     }
 
+    /// Collect store paths from the manifest and create a list of [LockedPackageStorePath].
+    /// Since store paths are locked by definition,
+    /// collection can directly map the discriptor to a locked package.
+    fn collect_store_paths(manifest: &Manifest) -> Vec<LockedPackageStorePath> {
+        manifest
+            .install
+            .iter()
+            .filter_map(|(install_id, descriptor)| {
+                descriptor
+                    .as_store_path_descriptor_ref()
+                    .map(|d| (install_id, d))
+            })
+            .flat_map(|(install_id, descriptor)| {
+                let systems = if let Some(ref d_systems) = descriptor.systems {
+                    d_systems.as_slice()
+                } else {
+                    manifest
+                        .options
+                        .systems
+                        .as_deref()
+                        .unwrap_or(&*DEFAULT_SYSTEMS_STR)
+                };
+
+                systems.iter().map(move |system| LockedPackageStorePath {
+                    install_id: install_id.clone(),
+                    store_path: descriptor.store_path.clone(),
+                    system: system.clone(),
+                    priority: descriptor.priority,
+                })
+            })
+            .collect()
+    }
+
     /// Filter out packages from the locked manifest by install_id or group
     ///
     /// This is used to create a seed lockfile to upgrade a subset of packages,
@@ -1382,6 +1450,7 @@ pub struct LockfileCheckWarning {
 
 pub mod test_helpers {
     use super::*;
+    use crate::models::manifest::ManifestPackageDescriptorStorePath;
 
     pub fn fake_catalog_package_lock(
         name: &str,
@@ -1467,6 +1536,30 @@ pub mod test_helpers {
         (install_id, descriptor, locked)
     }
 
+    pub fn fake_store_path_lock(
+        name: &str,
+    ) -> (
+        String,
+        ManifestPackageDescriptorStorePath,
+        LockedPackageStorePath,
+    ) {
+        let install_id = format!("{}_install_id", name);
+
+        let descriptor = ManifestPackageDescriptorStorePath {
+            store_path: format!("/nix/store/{}", name),
+            systems: Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
+            priority: None,
+        };
+
+        let locked = LockedPackageStorePath {
+            install_id: install_id.clone(),
+            store_path: format!("/nix/store/{}", name),
+            system: SystemEnum::Aarch64Darwin.to_string(),
+            priority: DEFAULT_PRIORITY,
+        };
+        (install_id, descriptor, locked)
+    }
+
     pub fn nix_eval_jobs_descriptor() -> ManifestPackageDescriptorFlake {
         ManifestPackageDescriptorFlake {
             flake: "github:nix-community/nix-eval-jobs".to_string(),
@@ -1530,7 +1623,11 @@ pub(crate) mod tests {
     use indoc::indoc;
     use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
-    use test_helpers::{fake_catalog_package_lock, fake_flake_installable_lock};
+    use test_helpers::{
+        fake_catalog_package_lock,
+        fake_flake_installable_lock,
+        fake_store_path_lock,
+    };
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
@@ -2613,6 +2710,30 @@ pub(crate) mod tests {
                 .await
                 .unwrap();
         assert_eq!(&locked_manifest, &*TEST_LOCKED_MANIFEST);
+    }
+
+    #[tokio::test]
+    async fn test_locking_with_store_paths() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_store_path_lock("foo");
+        let store_path = &foo_descriptor.store_path;
+        let system = &foo_descriptor.systems.as_ref().unwrap()[0];
+
+        let manifest: Manifest = toml::from_str(&formatdoc! {r#"
+            version = 1
+            [install]
+            {foo_iid}.store-path = "{store_path}"
+            {foo_iid}.systems = ["{system}"]
+        "#})
+        .unwrap();
+
+        let client = catalog::MockClient::new(None::<String>).unwrap();
+
+        let locked_manifest =
+            Lockfile::lock_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+                .await
+                .unwrap();
+
+        assert_eq!(&locked_manifest.packages, &[foo_locked.into()]);
     }
 
     /// If a manifest doesn't have `options.systems`, it defaults to locking for
