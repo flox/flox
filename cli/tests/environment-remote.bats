@@ -47,10 +47,12 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 function make_empty_remote_env() {
+  NAME="${1:-test}"
+
   mkdir local
   pushd local
   # init path environment and push to remote
-  "$FLOX_BIN" init --name test
+  "$FLOX_BIN" init --name "$NAME"
   "$FLOX_BIN" push --owner "$OWNER"
   "$FLOX_BIN" delete -f
   popd
@@ -178,6 +180,15 @@ EOF
 
   run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/test'" "trust"
   run "$FLOX_BIN" activate --remote "$OWNER/test" -- true
+  assert_success
+}
+
+# bats test_tags=remote,activate,trust,remote:activate:trust-config
+@test "m10.2: 'activate --remote' succeeds if trusted by config (case-sensitive)" {
+  make_empty_remote_env CaseSensitive
+
+  run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/CaseSensitive'" "trust"
+  run "$FLOX_BIN" activate --remote "$OWNER/CaseSensitive" -- true
   assert_success
 }
 
