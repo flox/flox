@@ -363,6 +363,17 @@ std::vector<std::pair<realisepkgs::RealisedPackage, nix::StorePath>>
 getRealisedOutputs( nix::ref<nix::EvalState> &       state,
                     const RealisepkgsLockedPackage & lockedPackage )
 {
+
+  if ( lockedPackage.storePath.has_value() )
+    {
+      auto storePath = state->store->parseStorePath( *lockedPackage.storePath );
+      state->store->ensurePath( storePath );
+      auto realisedPackage = realisepkgs::RealisedPackage(
+        state->store->printStorePath( storePath ),
+        true );
+      return { { realisedPackage, storePath } };
+    }
+
   auto timeEvalStart = std::chrono::high_resolution_clock::now();
   /**
    * Collect the store paths for each output of the package.

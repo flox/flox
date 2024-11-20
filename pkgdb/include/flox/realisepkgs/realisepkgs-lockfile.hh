@@ -28,6 +28,13 @@ struct RealisepkgsLockedPackage
 {
   std::string system;
   std::string installId;
+  // TODO: `storePath` is technically mutually exclusive
+  // with `input` and `attrPath`
+  // but we hope this wont be around for much longer to warrant the effort
+  // of representing this as a variant.
+  // <https://github.com/flox/flox/issues/2423>
+  std::optional<std::string> storePath;
+
   // TODO: this could probably just be attrs
   resolver::LockedInputRaw           input;
   AttrPath                           attrPath;
