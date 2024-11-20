@@ -55,9 +55,11 @@ RealisepkgsLockfile::from_v0_content( const nlohmann::json & jfrom )
                 lockedPackage->input.attrs );
               input.url = nix::FlakeRef::fromAttrs( input.attrs ).to_string();
 
+              auto store_path = std::nullopt;
               this->packages.emplace_back(
                 RealisepkgsLockedPackage { system,
                                            installId,
+                                           store_path,
                                            input,
                                            lockedPackage->attrPath,
                                            lockedPackage->priority,
@@ -135,10 +137,16 @@ realisepkgsPackageFromV1Descriptor( const nlohmann::json &     jfrom,
   pkg.installId = installId;
   pkg.system    = system;
 
+
+  if ( jfrom.contains( "store_path" ) )
+    {
+      pkg.storePath = jfrom["store_path"];
+      pkg.priority  = jfrom["priority"];
+    }
   // Catalog packages don't come from a flake context so only have attr-path.
   // Flake packages will always have locked-flake-attr-path.
   // For now, use this to differentiate between the two.
-  if ( jfrom.contains( "locked-flake-attr-path" ) )
+  else if ( jfrom.contains( "locked-flake-attr-path" ) )
     {
       LockedInstallable lockedInstallable = LockedInstallable();
       jfrom.get_to( lockedInstallable );
