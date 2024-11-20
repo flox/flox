@@ -12,7 +12,6 @@ use flox_rust_sdk::models::lockfile::{
     PackageInfo,
     PackageToList,
 };
-use flox_rust_sdk::models::manifest::DEFAULT_PRIORITY;
 use flox_rust_sdk::providers::flox_cpp_utils::LockedInstallable;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -106,6 +105,7 @@ impl List {
             let install_id = match p {
                 PackageToList::CatalogOrPkgdb(p) => &p.install_id,
                 PackageToList::Flake(_, p) => &p.install_id,
+                PackageToList::StorePath(p) => &p.install_id,
             };
             writeln!(&mut out, "{install_id}")?;
         }
@@ -137,6 +137,14 @@ impl List {
                         flake = descriptor.flake
                     )?;
                 },
+                PackageToList::StorePath(locked_package_store_path) => {
+                    writeln!(
+                        &mut out,
+                        "{id}: {store_path}",
+                        id = locked_package_store_path.install_id,
+                        store_path = locked_package_store_path.store_path
+                    )?;
+                },
             }
         }
         Ok(())
@@ -147,8 +155,9 @@ impl List {
         for (idx, package) in packages
             .iter()
             .sorted_by_key(|p| match p {
-                PackageToList::CatalogOrPkgdb(p) => p.priority.unwrap_or(DEFAULT_PRIORITY),
-                PackageToList::Flake(..) => DEFAULT_PRIORITY,
+                PackageToList::CatalogOrPkgdb(p) => p.priority,
+                PackageToList::Flake(_, locked) => locked.locked_installable.priority,
+                PackageToList::StorePath(locked) => locked.priority,
             })
             .enumerate()
         {
@@ -180,7 +189,6 @@ impl List {
                       Broken:   {broken}
                     ",
                         description = description.as_deref().unwrap_or("N/A"),
-                        priority = priority.map(|p| p.to_string()).as_deref().unwrap_or("N/A"),
                         version = version.as_deref().unwrap_or("N/A"),
                         license = license.as_deref().unwrap_or("N/A"),
                         unfree = unfree.map(|u|u.to_string()).as_deref().unwrap_or("N/A"),
@@ -200,6 +208,7 @@ impl List {
                                 licenses,
                                 broken,
                                 unfree,
+                                priority,
                                 ..
                             },
                     } = package;
@@ -228,12 +237,20 @@ impl List {
                     ",
                         formatted_pname = formatted_pname.as_deref().unwrap_or(""),
                         description = description.as_deref().unwrap_or("N/A"),
-                        priority = DEFAULT_PRIORITY,
                         version = version.as_deref().unwrap_or("N/A"),
                         formatted_licenses = formatted_licenses.as_deref().unwrap_or("License: N/A"),
                         unfree = unfree.map(|u|u.to_string()).as_deref().unwrap_or("N/A"),
                         broken = broken.map(|b|b.to_string()).as_deref().unwrap_or("N/A"),
                     }
+                },
+                PackageToList::StorePath(locked_package_store_path) => formatdoc! {"
+                    {install_id}:
+                    Store Path: {store_path}
+                    Priority:   {priority}
+                    ",
+                    install_id = locked_package_store_path.install_id,
+                    store_path = locked_package_store_path.store_path,
+                    priority = locked_package_store_path.priority,
                 },
             };
             // add an empty line between packages
@@ -274,6 +291,7 @@ mod tests {
         nix_eval_jobs_descriptor,
         LOCKED_NIX_EVAL_JOBS,
     };
+    use flox_rust_sdk::models::manifest::DEFAULT_PRIORITY;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -292,7 +310,7 @@ mod tests {
                     unfree: Some(true),
                     broken: Some(false),
                 },
-                priority: Some(100),
+                priority: 100,
             }
             .into(),
             InstalledPackage {
@@ -306,7 +324,7 @@ mod tests {
                     unfree: Some(false),
                     broken: Some(false),
                 },
-                priority: Some(200),
+                priority: 200,
             }
             .into(),
         ]
@@ -324,7 +342,7 @@ mod tests {
                 unfree: None,
                 broken: None,
             },
-            priority: None,
+            priority: DEFAULT_PRIORITY,
         }
         .into()
     }
@@ -488,7 +506,7 @@ mod tests {
         let PackageToList::CatalogOrPkgdb(ref mut package_2) = packages[1] else {
             panic!();
         };
-        package_2.priority = None;
+        package_2.priority = 5;
 
         let mut out = Vec::new();
         List::print_detail(&mut out, &packages).unwrap();
@@ -497,7 +515,7 @@ mod tests {
             python: (python)
               Description: Python interpreter
               Path:     python3Packages.python
-              Priority: N/A
+              Priority: 5
               Version:  3.9.5
               License:  PSF
               Unfree:   false
@@ -520,7 +538,7 @@ mod tests {
         let PackageToList::CatalogOrPkgdb(ref mut package_2) = packages[1] else {
             panic!();
         };
-        package_2.priority = Some(10);
+        package_2.priority = 10;
 
         let mut out = Vec::new();
         List::print_detail(&mut out, &packages).unwrap();
@@ -552,11 +570,11 @@ mod tests {
         let mut out = Vec::new();
         List::print_detail(&mut out, &[uninformative_package()]).unwrap();
         let out = String::from_utf8(out).unwrap();
-        assert_eq!(out, indoc! {"
+        assert_eq!(out, formatdoc! {"
             pip-iid: (pip)
               Description: N/A
               Path:     python3Packages.pip
-              Priority: N/A
+              Priority: {DEFAULT_PRIORITY}
               Version:  N/A
               License:  N/A
               Unfree:   N/A

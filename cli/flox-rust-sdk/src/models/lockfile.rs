@@ -489,7 +489,7 @@ impl Lockfile {
                             unfree: pkg.unfree,
                             version: Some(pkg.version),
                         },
-                        priority: Some(pkg.priority),
+                        priority: pkg.priority,
                     }))
                 },
                 LockedPackage::Flake(locked_package) => {
@@ -508,9 +508,7 @@ impl Lockfile {
 
                     Ok(PackageToList::Flake(descriptor, locked_package))
                 },
-                LockedPackage::StorePath(_) => {
-                    todo!()
-                },
+                LockedPackage::StorePath(locked) => Ok(PackageToList::StorePath(locked)),
             })
             .collect::<Result<Vec<_>, LockedManifestError>>()
     }
@@ -1334,7 +1332,7 @@ impl TypedLockedManifestPkgdb {
                             install_id: install_id.clone(),
                             rel_path: locked_package.rel_path(),
                             info: locked_package.info.clone(),
-                            priority: Some(locked_package.priority),
+                            priority: locked_package.priority,
                         }
                         .into(),
                     );
@@ -1357,6 +1355,7 @@ impl TypedLockedManifestPkgdb {
 pub enum PackageToList {
     CatalogOrPkgdb(InstalledPackage),
     Flake(ManifestPackageDescriptorFlake, LockedPackageFlake),
+    StorePath(LockedPackageStorePath),
 }
 
 impl From<InstalledPackage> for PackageToList {
@@ -1372,7 +1371,7 @@ pub struct InstalledPackage {
     pub install_id: String,
     pub rel_path: String,
     pub info: PackageInfo,
-    pub priority: Option<u64>,
+    pub priority: u64,
 }
 
 #[derive(Debug, Error)]
@@ -3555,7 +3554,7 @@ pub(crate) mod tests {
                     unfree: foo_locked.unfree,
                     version: Some(foo_locked.version),
                 },
-                priority: Some(foo_locked.priority),
+                priority: foo_locked.priority,
             }
             .into(),
             InstalledPackage {
@@ -3569,7 +3568,7 @@ pub(crate) mod tests {
                     unfree: bar_locked.unfree,
                     version: Some(bar_locked.version),
                 },
-                priority: Some(bar_locked.priority),
+                priority: bar_locked.priority,
             }
             .into(),
             // baz is not in the list because it is not available for the requested system
@@ -3604,6 +3603,37 @@ pub(crate) mod tests {
             .unwrap();
         let expected = [
             PackageToList::Flake(foo_descriptor, foo_locked), // baz is not in the list because it is not available for the requested system
+        ];
+
+        assert_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn test_list_packages_store_path() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_store_path_lock("foo");
+        let (baz_iid, baz_descriptor, mut baz_locked) = fake_store_path_lock("baz");
+
+        baz_locked.system = SystemEnum::Aarch64Linux.to_string();
+
+        let mut manifest = Manifest::default();
+        manifest
+            .install
+            .insert(foo_iid.clone(), foo_descriptor.clone().into());
+        manifest
+            .install
+            .insert(baz_iid.clone(), baz_descriptor.into());
+
+        let locked = Lockfile {
+            version: Version::<1>,
+            manifest,
+            packages: vec![foo_locked.clone().into(), baz_locked.clone().into()],
+        };
+
+        let actual = locked
+            .list_packages(&SystemEnum::Aarch64Darwin.to_string())
+            .unwrap();
+        let expected = [
+            PackageToList::StorePath(foo_locked), // baz is not in the list because it is not available for the requested system
         ];
 
         assert_eq!(&actual, &expected);
