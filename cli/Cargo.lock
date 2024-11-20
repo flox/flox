@@ -598,14 +598,16 @@ dependencies = [
 
 [[package]]
 name = "config"
-version = "0.14.1"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68578f196d2a33ff61b27fae256c3164f65e36382648e30666dde05b8cc9dfdf"
+checksum = "23738e11972c7643e4ec947840fc463b6a571afcd3e735bdfce7d03c7a784aca"
 dependencies = [
+ "async-trait",
+ "lazy_static",
  "nom",
  "pathdiff",
  "serde",
- "toml",
+ "toml 0.5.11",
 ]
 
 [[package]]
@@ -1035,7 +1037,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
- "toml",
+ "toml 0.8.19",
  "toml_edit",
  "tracing",
  "tracing-log",
@@ -1126,7 +1128,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
- "toml",
+ "toml 0.8.19",
  "toml_edit",
  "tracing",
  "url",
@@ -2120,7 +2122,7 @@ dependencies = [
  "indicatif",
  "serde",
  "tempfile",
- "toml",
+ "toml 0.8.19",
  "tracing",
  "tracing-subscriber",
 ]
@@ -3767,6 +3769,15 @@ dependencies = [
  "futures-sink",
  "pin-project-lite",
  "tokio",
+]
+
+[[package]]
+name = "toml"
+version = "0.5.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4f7f0dd8d50a853a531c426359045b1998f04219d88799810762cd4ad314234"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
