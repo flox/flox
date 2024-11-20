@@ -127,10 +127,12 @@ pub enum Verbosity {
 }
 
 impl Verbosity {
-    pub fn to_pkgdb_verbosity_level(self) -> usize {
+    pub fn to_i32(self) -> i32 {
         match self {
-            Verbosity::Quiet => 0,
-            Verbosity::Verbose(n) => n,
+            Verbosity::Quiet => -1,
+            Verbosity::Verbose(n) => n
+                .try_into()
+                .expect("If you passed -v enough times to overflow an i32, I'm impressed"),
         }
     }
 }
