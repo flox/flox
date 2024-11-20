@@ -231,13 +231,14 @@ define BUILD_local_template =
   $(_pname)_local_build: $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
 	@echo "Building $(_name) in local mode"
-	@$(_rm) -rf $(_out)
-	$(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
-	$(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode dev --turbo -- \
-	  $(_env) -i out=$(_out) $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
-	    $(_build_wrapper_env)/activate --env $(_build_wrapper_env) --mode dev --turbo -- \
-	      $(_bash) -e $($(_pvarname)_buildScript)
-	set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
+	$(_VV_) $(_rm) -rf $(_out)
+	$(_V_) \
+	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
+	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode dev --turbo -- \
+	    $(_env) -i out=$(_out) $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
+	      $(_build_wrapper_env)/activate --env $(_build_wrapper_env) --mode dev --turbo -- \
+	        $(_bash) -e $($(_pvarname)_buildScript)
+	$(_V_) set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr name "$(_name)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
 	  --argstr build-wrapper-env "$(_build_wrapper_env)" \
@@ -245,6 +246,7 @@ define BUILD_local_template =
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  --out-link "result-$(_pname)" \
 	  2>&1 | $(_tee) $($(_pvarname)_logfile)
+	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
 
@@ -263,12 +265,12 @@ define BUILD_nix_sandbox_template =
 	@# TIL that you have to explicitly call `wait` to harvest the exit status
 	@# of a process substitution, and that `set -o pipefail` does nothing here.
 	@# See: https://mywiki.wooledge.org/ProcessSubstitution
-	$(_tar) -cf $$@ --no-recursion -T <($(_git) ls-files) && wait "$$$$!"
+	$(_V_) $(_tar) -cf $$@ --no-recursion -T <($(_git) ls-files) && wait "$$$$!"
 
   # The buildCache value needs to be similarly stable when nothing changes across
   $(eval $(_pvarname)_buildCache = $($(_pvarname)_tmpBasename)-buildCache.tar)
   $($(_pvarname)_buildCache): FORCE
-	-$(_rm) -f $$@
+	-$(_V_) $(_rm) -f $$@
 	@# If a previous buildCache exists, then copy, don't link to the
 	@# previous buildCache because we want nix to import it as a
 	@# content-addressed input rather than an ever-changing series
@@ -276,7 +278,7 @@ define BUILD_nix_sandbox_template =
 	@# tarball containing only a single file indicating the time that
 	@# the buildCache was created to differentiate it from other
 	@# prior otherwise-empty buildCaches.
-	@if [ -f "$(_result)-buildCache" ]; then \
+	$(_VV_) if [ -f "$(_result)-buildCache" ]; then \
 	  $(_cp) $(_result)-buildCache $$@; \
 	else \
 	  tmpdir=$$$$($(_mktemp) -d); \
@@ -294,11 +296,11 @@ define BUILD_nix_sandbox_template =
 	@echo "Building $(_name) in Nix sandbox (pure) mode"
 	@# If a previous buildCache exists then move it out of the way
 	@# so that we can detect later if it has been updated.
-	@if [ -n "$(_do_buildCache)" ] && [ -f "$(_result)-buildCache" ]; then \
+	$(_VV_) if [ -n "$(_do_buildCache)" ] && [ -f "$(_result)-buildCache" ]; then \
 	  $(_rm) -f "$(_result)-buildCache.prevOutPath"; \
 	  $(_readlink) "$(_result)-buildCache" > "$(_result)-buildCache.prevOutPath"; \
 	fi
-	set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
+	$(_V_) set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr name "$(_name)" \
 	  --argstr srcTarball "$($(_pvarname)_src_tar)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
@@ -309,11 +311,12 @@ define BUILD_nix_sandbox_template =
 	  $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
 	  --out-link "result-$(_pname)" \
 	  '^*' 2>&1 | $(_tee) $($(_pvarname)_logfile)
+	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
 	@# mind that the symlink will remain unchanged in the event of an
 	@# unsuccessful build.
-	@if [ -n "$(_do_buildCache)" ]; then \
+	$(_VV_) if [ -n "$(_do_buildCache)" ]; then \
 	  if [ -f "$(_result)-buildCache" ] && [ -f "$(_result)-buildCache.prevOutPath" ]; then \
 	    if [ $$$$($(_readlink) "$(_result)-buildCache") != $$$$(cat "$(_result)-buildCache.prevOutPath") ]; then \
 	      $(_nix) store delete \

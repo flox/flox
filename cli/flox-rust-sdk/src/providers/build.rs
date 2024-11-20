@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::mpsc::Receiver;
 use std::sync::LazyLock;
-use std::thread;
+use std::{env, thread};
 
 use thiserror::Error;
 use tracing::{debug, warn};
@@ -103,6 +103,10 @@ impl FloxBuildMk {
         command.env_remove("MAKEFLAGS");
         command.arg("--file").arg(&*FLOX_BUILD_MK);
         command.arg("--directory").arg(base_dir); // Change dir before reading makefile.
+        let verbosity_int = env::var("_FLOX_PKGDB_VERBOSITY").unwrap_or_default();
+        if verbosity_int == "0" {
+            command.arg("--no-print-directory"); // Only print directory with -v.
+        }
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*BUILDTIME_NIXPKGS_URL));
 
         command
