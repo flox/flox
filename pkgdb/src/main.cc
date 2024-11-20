@@ -76,7 +76,10 @@ setVerbosityFromEnv()
   auto * valueChars = std::getenv( "_FLOX_PKGDB_VERBOSITY" );
   if ( valueChars == nullptr ) { return; }
   std::string value( valueChars );
-  if ( value == std::string( "0" ) ) { nix::verbosity = nix::lvlError; }
+  if ( value == std::string( "-1" ) || value == std::string( "0" ) )
+    {
+      nix::verbosity = nix::lvlError;
+    }
   else if ( value == std::string( "1" ) ) { nix::verbosity = nix::lvlInfo; }
   else if ( value == std::string( "2" ) ) { nix::verbosity = nix::lvlDebug; }
   else if ( value == std::string( "3" ) ) { nix::verbosity = nix::lvlChatty; }
