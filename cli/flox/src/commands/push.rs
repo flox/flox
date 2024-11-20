@@ -212,7 +212,7 @@ impl Push {
             Use 'flox pull {owner}/{name}' to get this environment in any other location.
 
             This environment is public.
-            You can change this by editing settings at https://hub.flox.dev/{owner}/{name}/settings
+            You can view and edit the environment at https://hub.flox.dev/{owner}/{name}
         "}
     }
 }
