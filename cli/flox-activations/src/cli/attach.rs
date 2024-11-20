@@ -64,6 +64,7 @@ impl AttachArgs {
                 remove_pid: None,
             } => {
                 let expiration = now + Duration::milliseconds(timeout_ms as i64);
+                activation.remove_pid(self.pid);
                 activation.attach_pid(self.pid, Some(expiration));
             },
             AttachExclusiveArgs {
