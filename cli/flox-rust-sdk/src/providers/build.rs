@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::mpsc::Receiver;
 use std::sync::LazyLock;
-use std::thread;
+use std::{env, thread};
 
 use thiserror::Error;
 use tracing::{debug, warn};
@@ -47,6 +47,7 @@ pub trait ManifestBuilder {
 
     fn clean(
         &self,
+        flox: &Flox,
         base_dir: &Path,
         flox_env: &Path,
         package: &[String],
@@ -97,12 +98,15 @@ impl Iterator for BuildOutput {
 pub struct FloxBuildMk;
 
 impl FloxBuildMk {
-    fn base_command(&self, base_dir: &Path) -> Command {
+    fn base_command(&self, flox: &Flox, base_dir: &Path) -> Command {
         // todo: extra makeflags, eventually
         let mut command = Command::new(&*GNUMAKE_BIN);
         command.env_remove("MAKEFLAGS");
         command.arg("--file").arg(&*FLOX_BUILD_MK);
         command.arg("--directory").arg(base_dir); // Change dir before reading makefile.
+        if flox.verbosity <= 0 {
+            command.arg("--no-print-directory"); // Only print directory with -v.
+        }
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*BUILDTIME_NIXPKGS_URL));
 
         command
@@ -135,7 +139,7 @@ impl ManifestBuilder for FloxBuildMk {
         flox_interpreter: &Path,
         packages: &[String],
     ) -> Result<BuildOutput, ManifestBuilderError> {
-        let mut command = self.base_command(base_dir);
+        let mut command = self.base_command(flox, base_dir);
         command.arg(format!("FLOX_ENV={}", built_environments.develop.display()));
         command.arg(format!(
             "FLOX_ENV_OUTPUTS={}",
@@ -210,11 +214,12 @@ impl ManifestBuilder for FloxBuildMk {
     /// * the temporary build directories for the specified packages
     fn clean(
         &self,
+        flox: &Flox,
         base_dir: &Path,
         flox_env: &Path,
         packages: &[String],
     ) -> Result<(), ManifestBuilderError> {
-        let mut command = self.base_command(base_dir);
+        let mut command = self.base_command(flox, base_dir);
         // TODO: is this even necessary, or can we detect build outputs instead?
         command.arg(format!("FLOX_ENV={}", flox_env.display()));
 
@@ -351,6 +356,7 @@ pub mod test_helpers {
         let builder = FloxBuildMk;
         let err = builder
             .clean(
+                flox,
                 &env.parent_path().unwrap(),
                 &env.rendered_env_links(flox).unwrap().development,
                 &package_names
@@ -1318,7 +1324,9 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
 
-        let output = assert_build_status(&flox, &mut env, &package_name, false);
+        let output = temp_env::with_var("_FLOX_PKGDB_VERBOSITY", Some("1"), || {
+            assert_build_status(&flox, &mut env, &package_name, false)
+        });
 
         let out_path_message_regex = regex::Regex::new("out=(.+?)\\s").unwrap();
 
@@ -1356,7 +1364,9 @@ mod tests {
 
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        let output = assert_build_status(&flox, &mut env, &package_name, succeed);
+        let output = temp_env::with_var("_FLOX_PKGDB_VERBOSITY", Some("1"), || {
+            assert_build_status(&flox, &mut env, &package_name, succeed)
+        });
 
         let build_script_path_message_regex =
             regex::Regex::new(r#"bash -e (.+-build.bash)|--argstr buildScript "(.+build.bash)""#)
