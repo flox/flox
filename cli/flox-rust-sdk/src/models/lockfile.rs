@@ -1248,7 +1248,7 @@ pub struct UpdateResult {
 /// **DEPRECATED**: pkgdb lockfiles are being phased out
 /// in favor of catalog lockfiles.
 /// Since catalog backed lockfiles are managed within the CLI,
-/// [LockedManifestCatalog] provides a typed interface directly,
+/// [Lockfile] provides a typed interface directly,
 /// hence there is no catalog equivalent of this type.
 ///
 /// This struct is meant **for reading only**.
@@ -2365,7 +2365,7 @@ pub(crate) mod tests {
     }
 
     /// If flake installables and catalog packages are mixed,
-    /// [LockedManifestCatalog::collect_package_groups]
+    /// [Lockfile::collect_package_groups]
     /// should only return [PackageGroup]s for the catalog descriptors.
     #[test]
     fn make_params_filters_installables() {
@@ -2410,7 +2410,7 @@ pub(crate) mod tests {
         assert_eq!(actual_params, expected_params);
     }
 
-    /// [LockedManifestCatalog::collect_package_groups] generates [FlakeInstallableToLock]
+    /// [Lockfile::collect_package_groups] generates [FlakeInstallableToLock]
     /// for each default system.
     #[test]
     fn make_installables_to_lock_for_default_systems() {
@@ -2434,7 +2434,7 @@ pub(crate) mod tests {
         assert_eq!(actual, expected);
     }
 
-    /// [LockedManifestCatalog::collect_package_groups] generates [FlakeInstallableToLock]
+    /// [Lockfile::collect_package_groups] generates [FlakeInstallableToLock]
     /// for each system in the manifest.
     #[test]
     fn make_installables_to_lock_for_manifest_systems() {
@@ -2461,7 +2461,7 @@ pub(crate) mod tests {
     }
 
     /// If flake installables and catalog packages are mixed,
-    /// [LockedManifestCatalog::collect_flake_installables]
+    /// [Lockfile::collect_flake_installables]
     /// should only return [FlakeInstallableToLock] for the flake installables.
     #[test]
     fn make_installables_to_lock_filter_catalog() {
@@ -3280,7 +3280,7 @@ pub(crate) mod tests {
         ]);
     }
 
-    /// [LockedManifestCatalog::lock_manifest] returns an error if an already
+    /// [Lockfile::lock_manifest] returns an error if an already
     /// locked package is no longer allowed
     #[tokio::test]
     async fn lock_manifest_catches_not_allowed_package() {
@@ -3317,7 +3317,7 @@ pub(crate) mod tests {
         ));
     }
 
-    /// [LockedManifestCatalog::lock_manifest] returns an error if the server
+    /// [Lockfile::lock_manifest] returns an error if the server
     /// returns a package that is not allowed.
     #[tokio::test]
     async fn lock_manifest_catches_not_allowed_package_from_server() {
@@ -3357,7 +3357,7 @@ pub(crate) mod tests {
         ));
     }
 
-    /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
+    /// [Lockfile::check_packages_are_allowed] returns an error
     /// when it finds a disallowed license
     #[test]
     fn check_packages_are_allowed_disallowed_license() {
@@ -3374,7 +3374,7 @@ pub(crate) mod tests {
         ));
     }
 
-    /// [LockedManifestCatalog::check_packages_are_allowed] does not error when
+    /// [Lockfile::check_packages_are_allowed] does not error when
     /// a package's license is allowed
     #[test]
     fn check_packages_are_allowed_allowed_license() {
@@ -3391,7 +3391,7 @@ pub(crate) mod tests {
         );
     }
 
-    /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
+    /// [Lockfile::check_packages_are_allowed] returns an error
     /// when a package is broken even if `allow.broken` is unset
     #[test]
     fn check_packages_are_allowed_broken_default() {
@@ -3408,7 +3408,7 @@ pub(crate) mod tests {
         ));
     }
 
-    /// [LockedManifestCatalog::check_packages_are_allowed] does not error for a
+    /// [Lockfile::check_packages_are_allowed] does not error for a
     /// broken package when `allow.broken = true`
     #[test]
     fn check_packages_are_allowed_broken_true() {
@@ -3425,7 +3425,7 @@ pub(crate) mod tests {
         );
     }
 
-    /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
+    /// [Lockfile::check_packages_are_allowed] returns an error
     /// when a package is broken and `allow.broken = false`
     #[test]
     fn check_packages_are_allowed_broken_false() {
@@ -3442,7 +3442,7 @@ pub(crate) mod tests {
         ));
     }
 
-    /// [LockedManifestCatalog::check_packages_are_allowed] does not error for
+    /// [Lockfile::check_packages_are_allowed] does not error for
     /// an unfree package when `allow.unfree` is unset
     #[test]
     fn check_packages_are_allowed_unfree_default() {
@@ -3459,7 +3459,7 @@ pub(crate) mod tests {
         );
     }
 
-    /// [LockedManifestCatalog::check_packages_are_allowed] does not error for a
+    /// [Lockfile::check_packages_are_allowed] does not error for a
     /// an unfree package when `allow.unfree = true`
     #[test]
     fn check_packages_are_allowed_unfree_true() {
@@ -3476,7 +3476,7 @@ pub(crate) mod tests {
         );
     }
 
-    /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
+    /// [Lockfile::check_packages_are_allowed] returns an error
     /// when a package is unfree and `allow.unfree = false`
     #[test]
     fn check_packages_are_allowed_unfree_false() {
