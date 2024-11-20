@@ -4,7 +4,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use enum_dispatch::enum_dispatch;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
 use tracing::debug;
@@ -37,6 +37,8 @@ pub enum FlakeInstallableError {
 /// `<flox>/pkgdb/include/flox/lock-flake-installable.hh`
 #[skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+// [sic] this is inconsistent with the naming of all other structs in the lockfile
+// and a relict of different naming conventions in the pkgdb/C++ code.
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedInstallable {
@@ -66,7 +68,32 @@ pub struct LockedInstallable {
     pub licenses: Option<Vec<String>>,
     pub broken: Option<bool>,
     pub unfree: Option<bool>,
-    pub priority: Option<u64>,
+    // In the lockfile, the priority should always be known.
+    // Usage of the output type of pkgdb lock-flake-installable,
+    // however requires guarding against a missing priority.
+    // Since the default priority is not known statically,
+    // we assign it as a default value during deserialization.
+    #[serde(
+        deserialize_with = "locked_installable_default_priority_on_null",
+        default = "locked_installable_default_priority_on_undefined"
+    )]
+    pub priority: u64,
+}
+
+/// Deserialize the priority field of a locked installable.
+/// Pkgdb will yield a `null` priority if the priority is not set,
+/// which requires a custom deserializer to set the default priority.
+fn locked_installable_default_priority_on_null<'de, D>(d: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Deserialize::deserialize(d).map(|x: Option<_>| x.unwrap_or(DEFAULT_PRIORITY))
+}
+
+/// Default priority for a locked installable if the priority is not set,
+/// as we may remove null attributes during serialization.
+fn locked_installable_default_priority_on_undefined() -> u64 {
+    DEFAULT_PRIORITY
 }
 
 /// Required functionality to lock a flake installable
@@ -177,10 +204,8 @@ impl InstallableLocker for Pkgdb {
 /// - `meta.priority` of the derivation
 /// - Default priority
 fn set_priority(locked: &mut LockedInstallable, descriptor: &ManifestPackageDescriptorFlake) {
-    if descriptor.priority.is_some() {
-        locked.priority = descriptor.priority;
-    } else if locked.priority.is_none() {
-        locked.priority = Some(DEFAULT_PRIORITY);
+    if let Some(priority) = descriptor.priority {
+        locked.priority = priority;
     }
 }
 
@@ -399,7 +424,48 @@ mod tests {
             systems: None,
         };
         set_priority(&mut locked, &descriptor);
-        assert_eq!(locked.priority, Some(10));
+        assert_eq!(locked.priority, 10);
+    }
+
+    #[test]
+    fn falls_back_to_default_priority() {
+        let locked_hello = r#"
+        {
+            "broken": false,
+            "derivation": "/nix/store/4w0wsrlfad3ilqjxk34fnkmdckiq0k0m-hello-2.12.1.drv",
+            "description": "Program that produces a familiar, friendly greeting",
+            "flake-description": "A collection of packages for the Nix package manager",
+            "licenses": [
+                "GPL-3.0-or-later"
+            ],
+            "locked-flake-attr-path": "legacyPackages.aarch64-darwin.hello",
+            "locked-url": "github:NixOS/nixpkgs/56bf14fe1c5ba088fff3f337bc0cdf28c8227f81",
+            "name": "hello-2.12.1",
+            "output-names": [
+                "out"
+            ],
+            "outputs": {
+                "out": "/nix/store/ia1pdwpvhswwnbamqkzbz69ja02bjfqx-hello-2.12.1"
+            },
+            "outputs-to-install": [
+                "out"
+            ],
+            "package-system": "aarch64-darwin",
+            "pname": "hello",
+            "requested-outputs-to-install": null,
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "2.12.1"
+        }
+        "#;
+        let mut locked: LockedInstallable = serde_json::from_str(locked_hello).unwrap();
+        let descriptor = ManifestPackageDescriptorFlake {
+            flake: "github:NixOS/nipxkgs#hello".to_string(),
+            priority: None,
+            systems: None,
+        };
+        set_priority(&mut locked, &descriptor);
+        assert_eq!(locked.priority, DEFAULT_PRIORITY);
     }
 
     // endregion: pkgdb errors
