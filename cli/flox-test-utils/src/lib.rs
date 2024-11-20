@@ -55,6 +55,13 @@ type Error = anyhow::Error;
 //   run it. Since this is a compiled artifact, you get one artifact for the entire
 //   suite.
 
+// Performance:
+// - Spawning a shell takes about 60ms
+// - `flox init` takes about 30ms
+// - Activating an empty environment takes 200-300ms
+// - By the time you've created dirs, done `flox init`, and activated, you're
+//   sitting pretty consistently around 350ms
+
 /// A collection of temporary directories to be used as an isolated home directory
 #[derive(Debug)]
 pub struct IsolatedHome {
