@@ -13,14 +13,25 @@ const OPENERS: &[&str] = &["xdg-open", "gnome-open", "kde-open"];
 const BROWSER_OPENERS: &[&str] = &["www-browser"];
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Browser(PathBuf);
+pub enum Browser {
+    BrowserCommand(PathBuf, Vec<String>),
+    GenericOpener(PathBuf),
+}
 impl Browser {
-    /// Find a system's "opener" command for the purpose of opening a browser.
-    /// This is `xdg-open`, `gnome-open`, etc. on linux and `open` on macos
+    /// Create a new Browser instance from a command and arguments
+    /// as defined in the BROWSER environment variable.
     ///
-    /// In ssh sessions or TTYs without DISPLAY, a browser cannot be opened,
-    /// so return an error.
+    /// If unset or empty, find a system's "opener" command
+    /// for the purpose of opening a browser.
+    /// This is `xdg-open`, `gnome-open`, etc. on linux and `open` on macos.
+    /// When using an opener in ssh sessions or TTYs without DISPLAY,
+    /// a browser cannot practically be opened, return an error in that case.
     pub fn detect() -> Result<Self, String> {
+        // If the BROWSER environment variable is set, use that
+        if let Some(browser) = Self::detect_by_browser_var() {
+            return Ok(browser);
+        }
+
         // in ssh sessions we can't open a browser
         if std::env::var("SSH_TTY").is_ok() {
             return Err("SSH session detected".into());
@@ -40,9 +51,9 @@ impl Browser {
                 ) else {
                     return Err("No opener found in PATH".to_string());
                 };
-                Self(path.join(executable))
+                Self::GenericOpener(path.join(executable))
             },
-            "macos" => Self(PathBuf::from("/usr/bin/open")),
+            "macos" => Self::GenericOpener(PathBuf::from("/usr/bin/open")),
             unsupported => {
                 debug!("Unsupported OS '{unsupported}' cannot open a browser");
                 return Err(format!("Unsupported OS '{unsupported}'"));
@@ -53,18 +64,35 @@ impl Browser {
         Ok(browser)
     }
 
-    #[allow(unused)]
-    pub fn path(&self) -> &Path {
-        &self.0
-    }
+    fn detect_by_browser_var() -> Option<Self> {
+        let Ok(browser_var) = env::var("BROWSER") else {
+            debug!("BROWSER environment variable not set");
+            return None;
+        };
 
-    #[allow(unused)]
-    pub fn name(&self) -> String {
-        self.0.file_name().unwrap().to_string_lossy().into_owned()
+        match browser_var.split_whitespace().collect_vec()[..] {
+            [] => {
+                debug!("BROWSER environment variable is empty");
+                None
+            },
+            [command, ref args @ ..] => {
+                let command = PathBuf::from(command);
+                let args = args.iter().map(|s| s.to_string()).collect();
+                let browser = Self::BrowserCommand(command, args);
+                Some(browser)
+            },
+        }
     }
 
     pub fn to_command(&self) -> Command {
-        Command::new(&self.0)
+        match self {
+            Browser::BrowserCommand(executable, arguments) => {
+                let mut command = Command::new(executable);
+                command.args(arguments);
+                command
+            },
+            Browser::GenericOpener(executable) => Command::new(executable),
+        }
     }
 }
 
@@ -196,6 +224,7 @@ mod tests {
 
         temp_env::with_vars(
             [
+                ("BROWSER", None),
                 ("SSH_TTY", None),
                 ("DISPLAY", Some("1")),
                 (
@@ -207,7 +236,7 @@ mod tests {
                 ),
             ],
             || {
-                assert_eq!(Browser::detect(), Ok(Browser(xdg_open)));
+                assert_eq!(Browser::detect(), Ok(Browser::GenericOpener(xdg_open)));
             },
         )
     }
@@ -216,17 +245,34 @@ mod tests {
     #[test]
     #[cfg(target_os = "macos")]
     fn test_browser_detect() {
-        assert_eq!(
-            Browser::detect(),
-            Ok(Browser(PathBuf::from("/usr/bin/open")))
-        );
+        temp_env::with_var_unset("BROWSER", || {
+            assert_eq!(
+                Browser::detect(),
+                Ok(Browser::GenericOpener(PathBuf::from("/usr/bin/open")))
+            );
+        })
     }
 
     /// Browser::detect() returns an error if SSH_TTY is set
     #[test]
     fn test_browser_detect_respects_ssh_tty() {
-        temp_env::with_var("SSH_TTY", Some("1"), || {
+        temp_env::with_vars([("SSH_TTY", Some("1")), ("BROWSER", None)], || {
             assert!(Browser::detect().is_err());
+        });
+    }
+
+    /// Browser::detect() the value of BROWSER environment variable if set
+    #[test]
+    fn test_browser_detect_by_browser_var() {
+        let browser = "firefox -P my-profile";
+        temp_env::with_var("BROWSER", Some(browser), || {
+            assert_eq!(
+                Browser::detect(),
+                Ok(Browser::BrowserCommand(PathBuf::from("firefox"), vec![
+                    "-P".to_string(),
+                    "my-profile".to_string()
+                ]))
+            );
         });
     }
 
