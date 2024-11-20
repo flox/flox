@@ -4,7 +4,7 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context};
 use indoc::formatdoc;
@@ -141,9 +141,9 @@ impl IsolatedHome {
         // NOTE: This turned out to make no difference, so it's either not working properly
         //       or the bottleneck isn't Nix evaluation.
         // Symlink the host's eval cache into this set of directories to speed up tests
-        // if let Some(path) = dirs::cache_dir().map(|p| p.join("nix")) {
-        //     let _ = std::os::unix::fs::symlink(path, cache_dir.join("nix"));
-        // }
+        if let Some(path) = dirs::cache_dir().map(|p| p.join("nix")) {
+            let _ = std::os::unix::fs::symlink(path, cache_dir.join("nix"));
+        }
 
         // Create the environment variables that will point to these
         // temporary directories
@@ -455,6 +455,17 @@ impl<'dirs> ShellProcess<'dirs> {
         Ok(())
     }
 
+    /// Returns an error if the shell is not inside an activation.
+    pub fn assert_is_activated(&mut self) -> Result<(), Error> {
+        self.pty.send_line(r#"echo $FLOX_ENV_DIRS"#)?;
+        let output = self.wait_for_prompt()?;
+        let trimmed = output.as_str().trim();
+        if trimmed.is_empty() {
+            bail!("assert activated failed");
+        }
+        Ok(())
+    }
+
     /// Returns whether the previous command succeeded
     pub fn succeeded(&mut self) -> Result<bool, Error> {
         self.pty.send_line("echo $?")?;
@@ -468,6 +479,14 @@ impl<'dirs> ShellProcess<'dirs> {
                 output
             )),
         }
+    }
+
+    /// Throws an error if the previous command didn't succeed
+    pub fn assert_success(&mut self) -> Result<(), Error> {
+        if self.succeeded().is_ok_and(|value| value) {
+            return Ok(());
+        }
+        bail!("previous command failed");
     }
 
     pub fn exit_shell(&mut self) {
@@ -628,6 +647,7 @@ impl<T> ProcToGC<T> {
         let mut next_sleep = interval.min(remaining);
         loop {
             if !self.is_running() {
+                self.is_terminated = true;
                 return Ok(());
             }
             if remaining == 0 {
@@ -647,18 +667,45 @@ impl<T> ProcToGC<T> {
 
 impl<T> Drop for ProcToGC<T> {
     fn drop(&mut self) {
+        let start = start_timer();
         use std::thread::panicking;
 
+        // No need to wait if it's already terminated
+        if self.is_terminated {
+            print_elapsed(start, "already terminated");
+            return;
+        }
+
+        // A panic inside of a panic will cause an immediate abort,
+        // check if we're already panicking.
         if panicking() {
             // eprintln!("sent SIGTERM to background process during panic");
+            print_elapsed(start, "caught panic");
             self.send_sigterm();
         } else {
+            print_elapsed(start, "waiting for termination");
             if self.wait_for_termination_with_timeout(1000).is_err() {
+                print_elapsed(start, "wait timed out");
                 self.send_sigterm();
                 panic!("background process was leaked");
             }
+            print_elapsed(start, "terminated");
         }
     }
+}
+
+#[allow(dead_code)]
+fn start_timer() -> Instant {
+    eprintln!("starting clock");
+    Instant::now()
+}
+
+#[allow(dead_code)]
+fn print_elapsed(start: Instant, msg: &str) {
+    eprintln!(
+        "elapsed: {} ({msg})",
+        Instant::now().duration_since(start).as_millis()
+    );
 }
 
 /// Locates a process with a given name and the provided UUID fingerprint
@@ -746,22 +793,10 @@ mod tests {
         systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
     "#;
 
+    const DEFAULT_EXPECT_TIMEOUT: u64 = 5000; // 30s
+
     fn make_manifest(snippet: impl AsRef<str>) -> String {
         MANIFEST_TEMPLATE.replace("@@", snippet.as_ref())
-    }
-
-    #[allow(dead_code)]
-    fn start_timer() -> Instant {
-        eprintln!("starting clock");
-        Instant::now()
-    }
-
-    #[allow(dead_code)]
-    fn print_elapsed(start: Instant, msg: &str) {
-        eprintln!(
-            "elapsed: {} ({msg})",
-            Instant::now().duration_since(start).as_millis()
-        );
     }
 
     #[test]
@@ -780,13 +815,13 @@ mod tests {
     #[test]
     fn can_construct_shell() {
         let dirs = IsolatedHome::new().unwrap();
-        let _shell = ShellProcess::spawn(&dirs, Some(5000)).unwrap();
+        let _shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
     }
 
     #[test]
     fn can_activate() {
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         // shell.init_env_with_name("myenv").unwrap();
         shell
             .init_from_generated_env("myenv", path_to_generated_env("hello"))
@@ -799,7 +834,7 @@ mod tests {
     #[test]
     fn update_env_with_manifest() {
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(2000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(formatdoc! {r#"
@@ -827,7 +862,7 @@ mod tests {
     fn read_activation_uuid() {
         let start = start_timer();
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         print_elapsed(start, "init done");
         shell
@@ -851,7 +886,7 @@ mod tests {
     fn can_locate_watchdog() {
         let globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell.activate(&[]).unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
@@ -864,7 +899,7 @@ mod tests {
     fn can_locate_process_compose() {
         let globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(formatdoc! {r#"
@@ -888,7 +923,7 @@ mod tests {
     fn cleans_up_watchdog() {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell.activate(&[]).unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
@@ -908,7 +943,7 @@ mod tests {
     fn cleans_up_process_compose() {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(formatdoc! {r#"
@@ -920,6 +955,7 @@ mod tests {
             .unwrap();
         let (_watchdog, mut process_compose_proc) =
             shell.activate_with_services(&[], &mut globals).unwrap();
+        shell.assert_is_activated().unwrap();
         assert!(process_compose_proc.is_running());
         shell.exit_shell(); // once for the activation
         process_compose_proc
@@ -931,14 +967,17 @@ mod tests {
     fn background_procs_exit_cleanly() {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
             .unwrap();
-        let (_watchdog, mut process_compose) =
+        let (mut watchdog, mut process_compose) =
             shell.activate_with_services(&[], &mut globals).unwrap();
+        shell.assert_is_activated().unwrap();
         shell.exit_shell(); // once for the activation
+
+        watchdog.wait_for_termination_with_timeout(1000).unwrap();
         process_compose
             .wait_for_termination_with_timeout(1000)
             .unwrap();
@@ -949,7 +988,7 @@ mod tests {
     fn detects_leaked_process() {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
@@ -968,7 +1007,7 @@ mod tests {
     fn automatically_fails_on_leaked_process() {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
@@ -981,23 +1020,6 @@ mod tests {
         // a panic because nothing is cleaning up the process
     }
 
-    // // This one is just for demonstration purposes
-    // #[test]
-    // #[should_panic]
-    // fn panic_doesnt_leave_behind_process_compose() {
-    //     let mut globals = TestGlobals::new();
-    //     let dirs = IsolatedHome::new().unwrap();
-    //     let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
-    //     shell.init_env_with_name("myenv").unwrap();
-    //     shell
-    //         .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
-    //         .unwrap();
-    //     // Give services a chance to start
-    //     let (_watchdog, _pc) = shell.activate_with_services(&[], &mut globals).unwrap();
-    //     sleep_millis(100);
-    //     panic!()
-    // }
-
     ////////////////////////////////////////////////////////////////////////////
     // These are the actual service tests
     ////////////////////////////////////////////////////////////////////////////
@@ -1006,7 +1028,7 @@ mod tests {
     fn services_arent_started_unless_requested() {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
@@ -1023,7 +1045,7 @@ mod tests {
     #[test]
     fn imperative_commands_error_when_no_services_defined() {
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell.edit_with_manifest_contents(EMPTY_MANIFEST).unwrap();
         shell.activate(&[]).unwrap();
@@ -1037,7 +1059,7 @@ mod tests {
     fn warns_about_restarting_services() {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
@@ -1059,7 +1081,7 @@ mod tests {
     fn restart_fails_fast_on_invalid_service_name() {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell.init_env_with_name("myenv").unwrap();
         shell
             .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
@@ -1093,10 +1115,10 @@ mod tests {
     fn attach_doesnt_start_second_watchdog() {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
-        let mut shell1 = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell1 = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell1.init_env_with_name("myenv").unwrap();
         shell1.activate(&[]).unwrap();
-        let mut shell2 = ShellProcess::spawn(&dirs, Some(1000)).unwrap();
+        let mut shell2 = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell2.send_line("cd myenv").unwrap();
         shell2.wait_for_prompt().unwrap();
         shell2.activate(&[]).unwrap();
