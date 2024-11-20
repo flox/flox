@@ -47,6 +47,7 @@ pub trait ManifestBuilder {
 
     fn clean(
         &self,
+        flox: &Flox,
         base_dir: &Path,
         flox_env: &Path,
         package: &[String],
@@ -97,14 +98,13 @@ impl Iterator for BuildOutput {
 pub struct FloxBuildMk;
 
 impl FloxBuildMk {
-    fn base_command(&self, base_dir: &Path) -> Command {
+    fn base_command(&self, flox: &Flox, base_dir: &Path) -> Command {
         // todo: extra makeflags, eventually
         let mut command = Command::new(&*GNUMAKE_BIN);
         command.env_remove("MAKEFLAGS");
         command.arg("--file").arg(&*FLOX_BUILD_MK);
         command.arg("--directory").arg(base_dir); // Change dir before reading makefile.
-        let verbosity_int = env::var("_FLOX_PKGDB_VERBOSITY").unwrap_or_default();
-        if verbosity_int == "0" {
+        if flox.verbosity <= 0 {
             command.arg("--no-print-directory"); // Only print directory with -v.
         }
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*BUILDTIME_NIXPKGS_URL));
@@ -139,7 +139,7 @@ impl ManifestBuilder for FloxBuildMk {
         flox_interpreter: &Path,
         packages: &[String],
     ) -> Result<BuildOutput, ManifestBuilderError> {
-        let mut command = self.base_command(base_dir);
+        let mut command = self.base_command(flox, base_dir);
         command.arg(format!("FLOX_ENV={}", built_environments.develop.display()));
         command.arg(format!(
             "FLOX_ENV_OUTPUTS={}",
@@ -214,11 +214,12 @@ impl ManifestBuilder for FloxBuildMk {
     /// * the temporary build directories for the specified packages
     fn clean(
         &self,
+        flox: &Flox,
         base_dir: &Path,
         flox_env: &Path,
         packages: &[String],
     ) -> Result<(), ManifestBuilderError> {
-        let mut command = self.base_command(base_dir);
+        let mut command = self.base_command(flox, base_dir);
         // TODO: is this even necessary, or can we detect build outputs instead?
         command.arg(format!("FLOX_ENV={}", flox_env.display()));
 
@@ -355,6 +356,7 @@ pub mod test_helpers {
         let builder = FloxBuildMk;
         let err = builder
             .clean(
+                flox,
                 &env.parent_path().unwrap(),
                 &env.rendered_env_links(flox).unwrap().development,
                 &package_names

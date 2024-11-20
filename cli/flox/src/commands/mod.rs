@@ -338,6 +338,7 @@ impl FloxArgs {
             catalog_client,
             installable_locker: Default::default(),
             features: config.features.clone().unwrap_or_default(),
+            verbosity: self.verbosity.to_i32(),
         };
 
         // in debug mode keep the tempdir to reproduce nix commands
