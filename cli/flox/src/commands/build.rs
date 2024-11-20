@@ -94,7 +94,7 @@ impl Build {
         let packages_to_clean = available_packages(&env.lockfile(&flox)?, packages)?;
 
         let builder = FloxBuildMk;
-        builder.clean(&base_dir, &flox_env.development, &packages_to_clean)?;
+        builder.clean(&flox, &base_dir, &flox_env.development, &packages_to_clean)?;
 
         message::created("Clean completed successfully");
 

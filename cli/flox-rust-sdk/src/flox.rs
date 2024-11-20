@@ -62,6 +62,8 @@ pub struct Flox {
 
     /// Feature flags
     pub features: Features,
+
+    pub verbosity: i32,
 }
 
 impl Flox {}
@@ -306,6 +308,7 @@ pub mod test_helpers {
             catalog_client: MockClient::default().into(),
             installable_locker: Default::default(),
             features: Default::default(),
+            verbosity: 0,
         };
 
         (flox, tempdir_handle)
