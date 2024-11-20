@@ -247,3 +247,28 @@ EOF
   run "$FLOX_BIN" edit -f <(echo "$WITHOUT_PRIORITY")
   assert_failure
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=edit:install-store-path
+@test "'flox edit' install-store-path" {
+  "$FLOX_BIN" init
+  hello_store_path="$(nix build "github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#hello^out" --no-link --print-out-paths)"
+
+  run "$FLOX_BIN" edit -f <(echo "
+    version = 1
+    [install]
+    hello.store-path = \"$hello_store_path\"
+    hello.systems = [\"$NIX_SYSTEM\"]
+  ")
+  assert_success
+
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  run "$FLOX_BIN" activate -- bash -c 'command -v hello'
+  assert_success
+  assert_output "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}.dev/bin/hello"
+
+  run "$FLOX_BIN" activate -- bash -c 'realpath "$(command -v hello)"'
+  assert_success
+  assert_output "$hello_store_path/bin/hello"
+}
