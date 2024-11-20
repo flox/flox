@@ -429,11 +429,14 @@ pub mod test {
         };
         let activation_id_2 = start_or_attach_pid2.handle(runtime_dir.path()).unwrap();
         assert_eq!(activation_id, activation_id_2);
+
+        let proc3 = start_process();
+        let pid3 = proc3.id() as i32;
         let timeout_ms = 9999;
-        let attach_2 = AttachArgs {
+        let attach_pid3 = AttachArgs {
             flox_env: flox_env.clone(),
             id: activation_id.clone(),
-            pid: pid2,
+            pid: pid3,
             exclusive: AttachExclusiveArgs {
                 timeout_ms: Some(timeout_ms),
                 remove_pid: None,
@@ -441,7 +444,7 @@ pub mod test {
         };
         let now = OffsetDateTime::now_utc();
         let expiration = Some(now + Duration::from_millis(timeout_ms as u64));
-        attach_2.handle_inner(runtime_dir.path(), now).unwrap();
+        attach_pid3.handle_inner(runtime_dir.path(), now).unwrap();
 
         let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
         let (terminate_flag, cleanup_flag) = shutdown_flags();
@@ -465,7 +468,7 @@ pub mod test {
                     expiration: None,
                 },
                 AttachedPid {
-                    pid: pid2,
+                    pid: pid3,
                     expiration,
                 }
             ])
@@ -473,6 +476,7 @@ pub mod test {
 
         stop_process(proc1);
         stop_process(proc2);
+        stop_process(proc3);
 
         watcher.update_watchlist(false).unwrap();
 
@@ -480,7 +484,7 @@ pub mod test {
         assert_eq!(
             watcher.pids_watching,
             HashSet::from([AttachedPid {
-                pid: pid2,
+                pid: pid3,
                 expiration,
             }])
         );
@@ -515,17 +519,22 @@ pub mod test {
         };
         let activation_id_2 = start_or_attach_pid2.handle(runtime_dir.path()).unwrap();
         assert_eq!(activation_id, activation_id_2);
-        let attach_2 = AttachArgs {
+
+        let proc3 = start_process();
+        let pid3 = proc3.id() as i32;
+        let attach_pid3 = AttachArgs {
             flox_env: flox_env.clone(),
             id: activation_id.clone(),
-            pid: pid2,
+            pid: pid3,
             exclusive: AttachExclusiveArgs {
                 timeout_ms: Some(0),
                 remove_pid: None,
             },
         };
         let the_past = OffsetDateTime::now_utc() - Duration::from_secs(9999);
-        attach_2.handle_inner(runtime_dir.path(), the_past).unwrap();
+        attach_pid3
+            .handle_inner(runtime_dir.path(), the_past)
+            .unwrap();
 
         let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
         let (terminate_flag, cleanup_flag) = shutdown_flags();
@@ -549,7 +558,7 @@ pub mod test {
                     expiration: None,
                 },
                 AttachedPid {
-                    pid: pid2,
+                    pid: pid3,
                     expiration: Some(the_past),
                 }
             ])
@@ -557,6 +566,7 @@ pub mod test {
 
         stop_process(proc1);
         stop_process(proc2);
+        stop_process(proc3);
 
         watcher.update_watchlist(false).unwrap();
 
