@@ -197,7 +197,13 @@ let
     package:
     if package.system == system then
       (
-        if (builtins.hasAttr "outputs" package) then
+        if builtins.hasAttr "store_path" package then
+          let
+            storePath = builtins.getAttr "store_path" package;
+            registeredStorePath = builtins.storePath storePath;
+          in
+          [ registeredStorePath ]
+        else if (builtins.hasAttr "outputs" package) then
           (
             # Important: report storePaths rather than strings because
             # the updated string context populates `inputSrcs` for the

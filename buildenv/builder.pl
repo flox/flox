@@ -363,6 +363,17 @@ if ($manifest) {
             my $otherOutputPriorityCounter = 1;
 
             foreach my $package (@{$packages}) {
+
+                # If the package is a store path to install then we can skip looking for outputs,
+                # and add the path directly to the return array.
+                if (defined $package->{"store_path"}) {
+                    push @retarray, {
+                        "paths" => [ $package->{"store_path"} ],
+                        "priority" => (1000 * $package->{"priority"})
+                    };
+                    next;
+                }
+
                 my @outputsToInstall = ();
                 my @otherOutputs = (); # XXX remove once we properly support outputs_to_install.
                 # XXX flake locking bug: outputs-to-install != outputs_to_install
@@ -464,7 +475,7 @@ if ($manifest) {
         );
 
         # Filter only packages included in the "toplevel" group for use in builds.
-        my @toplevelPackages = grep { $_->{"group"} eq "toplevel" } @outPackages;
+        my @toplevelPackages = grep { defined($_->{"group"}) and $_->{"group"} eq "toplevel" } @outPackages;
 
         my %buildPackagesHash = ();
         if (scalar @buildNames) {
@@ -517,6 +528,8 @@ if ($manifest) {
 
         # Construct data sets for each environment to be rendered by the
         # builder.pl script.
+        # Both the "runtime" and "develop" environments take _the same set of packages_,
+        # but the "develop" environment also recursively links the "propagated-build-inputs".
         my @outputData = (
             {
               "name" => "runtime",
