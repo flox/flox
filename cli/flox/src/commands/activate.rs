@@ -481,6 +481,7 @@ impl Activate {
 
         exports.extend(default_nix_env_vars());
 
+        let activate_path = interpreter_path.join("activate");
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
         //
@@ -490,7 +491,7 @@ impl Activate {
         //    eval "$(flox activate)"
         if in_place {
             let shell = Self::detect_shell_for_in_place()?;
-            Self::activate_in_place(&mode, &shell, &exports, &interpreter_path);
+            Self::activate_in_place(&mode, &shell, &exports, &activate_path);
 
             return Ok(());
         }
@@ -498,14 +499,14 @@ impl Activate {
         let shell = Self::detect_shell_for_subshell();
         // These functions will only return if exec fails
         if interactive {
-            Self::activate_interactive(&mode, shell, exports, interpreter_path)
+            Self::activate_interactive(&mode, shell, exports, &activate_path)
         } else {
             Self::activate_command(
                 &mode,
                 self.run_args,
                 shell,
                 exports,
-                interpreter_path,
+                &activate_path,
                 is_ephemeral,
             )
         }
@@ -517,17 +518,9 @@ impl Activate {
         run_args: Vec<String>,
         shell: Shell,
         exports: HashMap<&str, String>,
-        interpreter_path: PathBuf,
+        activate_path: &Path,
         is_ephemeral: bool,
     ) -> Result<()> {
-        // Previous versions of pkgdb rendered activation scripts into a
-        // subdirectory called "activate", but now that path is occupied by
-        // the activation script itself. The new activation scripts are in a
-        // subdirectory called "activate.d". If we find that the "activate"
-        // path is a directory, we assume it's the old style and invoke the
-        // old_activate_command function.
-        let activate_path = interpreter_path.join("activate");
-
         let mut command = Command::new(activate_path);
         command.env("FLOX_SHELL", shell.exe_path());
         command.envs(exports);
@@ -569,18 +562,8 @@ impl Activate {
         mode: &Mode,
         shell: Shell,
         exports: HashMap<&str, String>,
-        interpreter_path: PathBuf,
+        activate_path: &Path,
     ) -> Result<()> {
-        // TODO: we can delete this now that we've removed support for v0
-        //       and that was still available _after_ the changes mentioned
-        //       in the comment below.
-        // Previous versions of pkgdb rendered activation scripts into a
-        // subdirectory called "activate", but now that path is occupied by
-        // the activation script itself. The new activation scripts are in a
-        // subdirectory called "activate.d". If we find that the "activate"
-        // path is a directory, we assume it's the old style and invoke the
-        // old_activate_interactive function.
-        let activate_path = interpreter_path.join("activate");
         let mut command = Command::new(activate_path);
         command.env("FLOX_SHELL", shell.exe_path());
         command.envs(exports);
@@ -599,17 +582,9 @@ impl Activate {
         mode: &Mode,
         shell: &Shell,
         exports: &HashMap<&str, String>,
-        activation_path: &Path,
+        activate_path: &Path,
     ) {
-        // Previous versions of pkgdb rendered activation scripts into a
-        // subdirectory called "activate", but now that path is occupied by
-        // the activation script itself. The new activation scripts are in a
-        // subdirectory called "activate.d". If we find that the "activate"
-        // path is a directory, we assume it's the old style and invoke the
-        // old_activate_in_place function.
-        let activate_path = activation_path.join("activate");
-
-        let mut command = Command::new(&activate_path);
+        let mut command = Command::new(activate_path);
         command.env("FLOX_SHELL", shell.exe_path());
         command.envs(exports);
 
