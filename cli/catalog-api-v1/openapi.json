@@ -15,8 +15,13 @@
           "catalog"
         ],
         "summary": "Search for packages",
-        "description": "Search the catalog(s) under the given criteria for matching packages.\n\nRequired Query Parameters:\n- **seach_term**: The search term to search on.\n- **system**: This is returned but does not affect results\n\nOptional Query Parameters:\n- **catalogs**: Comma separated list of catalog names to search\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
+        "description": "Search the catalog(s) under the given criteria for matching packages.\n\nRequired Query Parameters:\n- **search_term**: The search term to search on.\n- **system**: This is returned but does not affect results\n\nOptional Query Parameters:\n- **catalogs**: Comma separated list of catalog names to search\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
         "operationId": "search_api_v1_catalog_search_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "search_term",
@@ -97,9 +102,14 @@
         "tags": [
           "catalog"
         ],
-        "summary": "Shows avaliable packages of a specfic package",
+        "summary": "Shows available packages of a specific package",
         "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
         "operationId": "packages_api_v1_catalog_packages__attr_path__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "attr_path",
@@ -204,7 +214,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/catalog/settings/{key}": {
@@ -277,7 +292,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Erorr",
+            "description": "Internal Server Error",
             "content": {
               "application/json": {
                 "schema": {
@@ -309,7 +324,7 @@
             }
           },
           "500": {
-            "description": "Internal Server Erorr",
+            "description": "Internal Server Error",
             "content": {
               "application/json": {
                 "schema": {
@@ -1364,6 +1379,15 @@
             "type": "string",
             "title": "Attr Path"
           },
+          "catalog": {
+            "title": "Catalog",
+            "nullable": true,
+            "type": "string"
+          },
+          "pkg_path": {
+            "type": "string",
+            "title": "Pkg Path"
+          },
           "name": {
             "type": "string",
             "title": "Name"
@@ -1391,6 +1415,8 @@
         "type": "object",
         "required": [
           "attr_path",
+          "catalog",
+          "pkg_path",
           "name",
           "pname",
           "description",
