@@ -315,7 +315,7 @@ pub struct LockedPackageStorePath {
     /// Store path to add to the environment
     pub store_path: String,
     pub system: System,
-    pub priority: Option<u64>,
+    pub priority: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1202,7 +1202,7 @@ impl Lockfile {
                     install_id: install_id.clone(),
                     store_path: descriptor.store_path.clone(),
                     system: system.clone(),
-                    priority: descriptor.priority,
+                    priority: descriptor.priority.unwrap_or(DEFAULT_PRIORITY),
                 })
             })
             .collect()
@@ -1530,7 +1530,7 @@ pub mod test_helpers {
                 licenses: None,
                 broken: None,
                 unfree: None,
-                priority: None,
+                priority: DEFAULT_PRIORITY,
             },
         };
         (install_id, descriptor, locked)
