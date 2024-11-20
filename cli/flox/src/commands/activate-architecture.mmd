@@ -4,87 +4,91 @@ config:
 ---
 flowchart TB
  subgraph activate["Activate Script"]
-        register["Register"]
-        initialise["initialise"]
-        attach["Attach"]
+        start-or-attach["start-or-attach"]
+        start.bash["start.bash"]
+        attach.bash["Attach"]
         invoke["invoke"]
-        inplace["Attach in place"]
+        attach-inplace.bash["Attach in place"]
+        n105{"Start services when FLOX_ACTIVATE_START_SERVICES == true"}
   end
  subgraph cli["Flox CLI"]
-        n36["Initialise state:<br>FLOX_ENV<br>FLOX_ENV_DESCRIPTION<br>FLOX_ENV_PROJECT<br>FLOX_PARENT_PID<br>write metrics spool files<br>... plus temp files, etc."]
+        n36["Initialise state:<br>FLOX_ENV<br>FLOX_ENV_DESCRIPTION<br>FLOX_ENV_PROJECT<br>..."]
         n34{"in-place<br>mode?"}
-        n79{"cmd mode?"}
-        n37[["command.exec(bash $FLOX_ENV/activate)"]]
-        n80[["command.exec(bash $FLOX_ENV/activate -- cmd args)"]]
-        n35[["command.output(bash $FLOX_ENV/activate)"]]
+        n79{"command mode?"}
+        n37[["exec(interpreter_path/activate)"]]
+        n80[["exec(interpreter_path/activate -c args)"]]
+        n35[["output(interpreter_path/activate)"]]
         n88["parse args"]
         n89{"activate()"}
         n107{"already active?"}
         n108(["ERROR"])
   end
- subgraph register[". &lt;(activation start-or-attach)"]
-        n41{"exists?<br>"}
-        n116{"up to date<br>&amp;&amp;<br>PID alive<br>??"}
-        n117{"ready?"}
+ subgraph start-or-attach["eval $(flox-activations start-or-attach)"]
+        n41{"exists?"}
+        n116{"ready?"}
+        n117{"PID alive?"}
         n118["do_attach()"]
-        n119["do_start()"]
+        n119["start_fn()"]
   end
- subgraph initialise["Start"]
-        n7[["env0=snapshotEnv()"]]
+ subgraph start.bash["start.bash"]
+        n7[["export > bare.env"]]
         n6["source etc-profiles"]
-        n62[["env1=snapshotEnv()<br>"]]
-        nd["source [vars] (envrc)<br>source hook.on-activate<br>"]
-        n63[["env2=snapshotEnv()<br>"]]
-        na[["activation set-ready<br>"]]
-      end
- subgraph inplace["Attach in place"]
-        n43[["<span style="background-color: rgb(200, 230, 201);">activation attach --timeout X</span><br>"]]
-        n45[["replayenv $userShell<br>(outputs to STDOUT)"]]
-        n83(["cat $FLOX_ENV/activate.d/profile.common<br>cat $FLOX_ENV/activate.d/profile.$userShell<br>(_the latter replays the env again_)"])
-        n84[["echo $out/libexec/activation attach --remove $$"]]
+        n62[["export > post-etc-profiles.env"]]
+        nd["source [vars] (envrc)"]
+        n120["start watchdog"]
+        n121["source hook.on-activate"]
+        n63[["export > post-hook.env"]]
+        na[["flox-activations set-ready"]]
+  end
+ subgraph attach-inplace.bash["attach-inplace.bash"]
+        n43@{ label: "<span style=\"background-color: rgb(200, 230, 201);\">flox-activations attach --timeout 5000</span><br>" }
+        n45[["echo source activate.d/$userShell"]]
+        n83(["cat $FLOX_ENV/activate.d/profile.common<br>cat $FLOX_ENV/activate.d/profile.$userShell<br>eval del.env<br>eval add.env"])
+        n84[["echo flox-activations attach --remove-pid $$"]]
   end
  subgraph colorkey["Color Key"]
         node_aqepkktvr["flox CLI<br>(rust)"]
         n0["bash"]
         nz["userShell"]
-        n111["activation<br>(rust)<br>"]
+        n111["flox-activations<br>(rust)<br>"]
+        n122["flox-watchdog<br>(rust)"]
   end
- subgraph s2["process-compose"]
+ subgraph process-compose["process-compose"]
         n96["process-compose"]
         n98["flox-never-exit"]
   end
- subgraph watchdog["Watchdog (CLI mode)"]
-        n93[["exec(watchdog)"]]
-        ns[["Await death of ppid()<br>_and_<br>registry_PIDs($_FLOX_UUID)"]]
-        ny[["Clean up state<br>(remove temp files, etc.)"]]
-        nv(["Rust Destructors<br>(Submit sentry, metrics, etc.)"])
-        n66[["stop_process-compose()"]]
-        n94[["initialise tokio, sentry, metrics, etc."]]
-        n100["submit spooled metrics, sentry data<br>"]
+ subgraph watchdog["Watchdog"]
+        ns[["Await death of all PIDs for store path"]]
+        ny[["Clean up activation state dir"]]
+        nv(["Rust Destructors<br>(Submit Sentry)"])
+        n66[["If last watchdog for FLOX_ENV, process_compose_down()"]]
+        n94[["Initialise Sentry"]]
   end
  subgraph invoke["Invoke"]
-        n105{"start process-compose<br>start services with -s"}
         n75{"cmd mode?"}
         n39{"in-place<br>mode?"}
         n70[["exec userShell"]]
         n71{"--turbo?"}
         n72(["exec cmd"])
         nq[["exec userShell"]]
-        n5[["source $FLOX_ENV/activate.d/profile.common<br>source $FLOX_ENV/activate.d/profile.$userShell<br>(_the latter replays the env again_)"]]
+        n5[["source $FLOX_ENV/activate.d/profile.common<br>source $FLOX_ENV/activate.d/profile.$userShell<br>eval del.env<br>eval add.env"]]
         nx(["exec cmd"])
-        n81[["source $FLOX_ENV/activate.d/profile.common<br>source $FLOX_ENV/activate.d/profile.$userShell<br>(_the latter replays the env again_)"]]
+        n81[["source $FLOX_ENV/activate.d/profile.common<br>source $FLOX_ENV/activate.d/profile.$userShell<br>eval del.env<br>eval add.env"]]
         n82(["interactive"])
   end
- subgraph attach["Attach"]
-        n67[[". &lt;(replayenv bash)"]]
+ subgraph attach.bash["attach.bash"]
+        n67[["eval del.env<br>eval add.env"]]
   end
     ns --> n66
     ny --> nv
     n7 --> n6
     n5 --> nx
-    nv ~~~ colorkey
+    colorkey ~~~ n94
+    watchdog ~~~ process-compose
     node_aqepkktvr ~~~ n0
     n0 ~~~ nz
+    nz ~~~ n111
+    n111 ~~~ n122
     n6 --> n62
     nq --> n5
     n75 -- yes --> n71
@@ -109,30 +113,33 @@ flowchart TB
     A(["Parent PID<br>flox activate<br>"]) -- fork() &amp;&amp; exec(flox) --> n88
     n88 --> n89
     n63 --> na
-    n93 --> n94
-    n94 --> n100
     n37 --> n41
     n35 --> n41
     n96 --> n98
     n89 --> n36
-    n100 --> ns
     n107 -- yes --> n108
     n36 --> n34
     n105 -- parent --> n75
     n105 -- child --> n96
     na -- parent --> n105
-    na -- child/daemonize --> n93
+    n120 -- child/daemonize --> n94
     n107 -- no: activate_interactive() --> n37
     n41 -- yes --> n116
-    nz ~~~ n111
-    n116 -- yes --> n117
+    n116 -- no --> n117
     n117 -- yes --> n118
     n41 -- no --> n119
     n119 --> n7
     n118 --> n67
-    n116 -- no --> n119
-    n117 -- no (unlock,sleep,relock) --> n41
-    nd --> n63
+    n117 -- no --> n41
+    nd --> n120
+    n116 -- yes --> n118
+    n120 --> n121
+    n121 --> n63
+    n94 --> ns
+    n120@{ shape: rect}
+    n121@{ shape: rect}
+    n43@{ shape: subroutine}
+    style n105 fill:#BBDEFB
     style n36 fill:#FFE0B2
     style n34 fill:#FFE0B2
     style n79 fill:#FFE0B2
@@ -152,24 +159,24 @@ flowchart TB
     style n6 fill:#BBDEFB
     style n62 fill:#BBDEFB
     style nd fill:#BBDEFB
+    style n120 fill:#BBDEFB
+    style n121 fill:#BBDEFB
     style n63 fill:#BBDEFB
     style na fill:#C8E6C9
     style n43 fill:#C8E6C9
     style n45 fill:#BBDEFB
-    style n83 fill:#BBDEFB
+    style n83 fill:#E1BEE7
     style n84 fill:#BBDEFB
     style node_aqepkktvr fill:#FFE0B2
     style n0 fill:#BBDEFB
     style nz fill:#E1BEE7
     style n111 fill:#C8E6C9
-    style n93 fill:#FFE0B2,stroke-width:1px,stroke-dasharray: 0
-    style ns fill:#FFE0B2
-    style ny fill:#FFE0B2
-    style nv fill:#FFE0B2
-    style n66 fill:#FFE0B2
-    style n94 fill:#FFE0B2
-    style n100 fill:#FFE0B2
-    style n105 fill:#BBDEFB
+    style n122 fill:#FFCDD2
+    style ns fill:#FFCDD2
+    style ny fill:#FFCDD2
+    style nv fill:#FFCDD2
+    style n66 fill:#FFCDD2
+    style n94 fill:#FFCDD2
     style n75 fill:#BBDEFB
     style n39 fill:#BBDEFB
     style n70 fill:#BBDEFB
@@ -182,7 +189,15 @@ flowchart TB
     style n82 fill:#E1BEE7
     style n67 fill:#BBDEFB
     style A fill:#FFFFFF
+
+    style start-or-attach fill:#FFFFFF
+    style start.bash fill:#FFFFFF
+    style attach.bash fill:#FFFFFF
+    style invoke fill:#FFFFFF
+    style attach-inplace.bash fill:#FFFFFF
+
     style activate fill:#F8F8F8
     style cli fill:#F8F8F8
     style watchdog fill:#F8F8F8
-    style s2 fill:#F8F8F8
+    style process-compose fill:#F8F8F8
+    style colorkey fill:#F8F8F8
