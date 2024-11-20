@@ -581,13 +581,13 @@ impl ManifestInstall {
 // todo: this can make the error messages less clear and might call for a custom (de)serialize impl
 #[serde(
     untagged,
-    expecting = "Expected either a catalog package descriptor or flake installable.
+    expecting = "Expected either a catalog package descriptor, a flake installable or a store path.
 See https://flox.dev/docs/concepts/manifest/#package-descriptors for more information."
 )]
 pub enum ManifestPackageDescriptor {
     Catalog(ManifestPackageDescriptorCatalog),
     FlakeRef(ManifestPackageDescriptorFlake),
-    // TODO: StorePath(ManifestPackageDescriptorStorePath),
+    StorePath(ManifestPackageDescriptorStorePath),
 }
 
 impl ManifestPackageDescriptor {
@@ -639,6 +639,22 @@ impl ManifestPackageDescriptor {
             _ => None,
         }
     }
+
+    #[must_use]
+    pub fn unwrap_store_path_descriptor(self) -> Option<ManifestPackageDescriptorStorePath> {
+        match self {
+            ManifestPackageDescriptor::StorePath(descriptor) => Some(descriptor),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_store_path_descriptor_ref(&self) -> Option<&ManifestPackageDescriptorStorePath> {
+        match self {
+            ManifestPackageDescriptor::StorePath(descriptor) => Some(descriptor),
+            _ => None,
+        }
+    }
 }
 
 impl From<&ManifestPackageDescriptorCatalog> for ManifestPackageDescriptor {
@@ -662,6 +678,18 @@ impl From<&ManifestPackageDescriptorFlake> for ManifestPackageDescriptor {
 impl From<ManifestPackageDescriptorFlake> for ManifestPackageDescriptor {
     fn from(val: ManifestPackageDescriptorFlake) -> Self {
         ManifestPackageDescriptor::FlakeRef(val)
+    }
+}
+
+impl From<&ManifestPackageDescriptorStorePath> for ManifestPackageDescriptor {
+    fn from(val: &ManifestPackageDescriptorStorePath) -> Self {
+        ManifestPackageDescriptor::StorePath(val.clone())
+    }
+}
+
+impl From<ManifestPackageDescriptorStorePath> for ManifestPackageDescriptor {
+    fn from(val: ManifestPackageDescriptorStorePath) -> Self {
+        ManifestPackageDescriptor::StorePath(val)
     }
 }
 
@@ -725,13 +753,22 @@ pub struct ManifestPackageDescriptorFlake {
     pub(crate) systems: Option<Vec<System>>,
 }
 
-#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
+#[skip_serializing_none]
 pub struct ManifestPackageDescriptorStorePath {
-    store_path: String,
+    pub(crate) store_path: String,
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest::option::of(proptest::collection::vec(any::<System>(), 1..3))"
+        )
+    )]
+    pub(crate) systems: Option<Vec<System>>,
+    #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
+    pub(crate) priority: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
