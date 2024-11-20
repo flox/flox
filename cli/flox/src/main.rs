@@ -95,15 +95,9 @@ fn main() -> ExitCode {
 
     // Pass down the verbosity level to all pkgdb calls
     unsafe {
-        std::env::set_var(
-            "_FLOX_PKGDB_VERBOSITY",
-            format!("{}", verbosity.to_pkgdb_verbosity_level()),
-        );
+        std::env::set_var("_FLOX_PKGDB_VERBOSITY", format!("{}", verbosity.to_i32()));
     }
-    debug!(
-        "set _FLOX_PKGDB_VERBOSITY={}",
-        verbosity.to_pkgdb_verbosity_level()
-    );
+    debug!("set _FLOX_PKGDB_VERBOSITY={}", verbosity.to_i32());
 
     // Run the argument parser
     //
