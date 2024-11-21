@@ -408,18 +408,27 @@ impl<'dirs> ShellProcess<'dirs> {
 
     /// Performs an activation and returns handles to the watchdog and process-compose
     pub fn activate_with_services(&mut self, args: &[&str]) -> Result<(ProcToGC, ProcToGC), Error> {
+        let start = start_timer();
         let mut all_args = vec!["--start-services"];
         all_args.extend_from_slice(args);
         let cmd = Self::make_activation_command(&all_args, false);
+        print_elapsed_with_prefix(start, "activate", "make cmd");
         self.pty.send_line(&cmd)?;
+        print_elapsed_with_prefix(start, "activate", "send activation cmd");
         self.pty.exp_string("bash-5.2$")?;
+        print_elapsed_with_prefix(start, "activate", "wait for default prompt");
         self.reconfigure_prompt()?;
+        print_elapsed_with_prefix(start, "activate", "reconfigure prompt");
         self.pty.wait_for_prompt()?;
+        print_elapsed_with_prefix(start, "activate", "wait for prompt");
         let uuid = self.read_activation_uuid()?;
+        print_elapsed_with_prefix(start, "activate", "read activation uuid");
         let watchdog =
             watchdog_with_uuid(&uuid).context("activation with services didn't spawn watchdog")?;
+        print_elapsed_with_prefix(start, "activate", "get watchdog");
         let process_compose = process_compose_with_uuid(&uuid)
             .context("activation with services didn't spawn process-compose")?;
+        print_elapsed_with_prefix(start, "activate", "get process-compose");
         Ok((watchdog, process_compose))
     }
 
@@ -640,6 +649,14 @@ fn start_timer() -> Instant {
 fn print_elapsed(start: Instant, msg: &str) {
     eprintln!(
         "elapsed: {} ({msg})",
+        Instant::now().duration_since(start).as_millis()
+    );
+}
+
+#[allow(dead_code)]
+fn print_elapsed_with_prefix(start: Instant, prefix: &str, msg: &str) {
+    eprintln!(
+        "[{prefix}] elapsed: {} ({msg})",
         Instant::now().duration_since(start).as_millis()
     );
 }
