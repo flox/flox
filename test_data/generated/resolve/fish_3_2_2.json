@@ -10,6 +10,7 @@
           {
             "attr_path": "fish",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/iq8lc5nzgrinjyjikdwwismllws4cg9z-fish-3.2.2.drv",
             "description": "Smart and user-friendly command line shell",
             "insecure": false,
@@ -42,6 +43,7 @@
           {
             "attr_path": "fish",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/kzl04x6vpcbdhsl49m8rkqlxj0ijjcm9-fish-3.2.2.drv",
             "description": "Smart and user-friendly command line shell",
             "insecure": false,
@@ -74,6 +76,7 @@
           {
             "attr_path": "fish",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/s6rwx318lf4p6i0vavr13l3xks06b0ip-fish-3.2.2.drv",
             "description": "Smart and user-friendly command line shell",
             "insecure": false,
@@ -106,6 +109,7 @@
           {
             "attr_path": "fish",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/1myn8ym7qdrm2gppm7szxr8zqzn372cx-fish-3.2.2.drv",
             "description": "Smart and user-friendly command line shell",
             "insecure": false,

@@ -10,6 +10,7 @@
           {
             "attr_path": "boost",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/f4lbyvmjqk26cmmh1d4cfwin24l9r6sf-boost-1.77.0.drv",
             "description": "Collection of C++ libraries",
             "insecure": false,
@@ -48,6 +49,7 @@
           {
             "attr_path": "boost",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/jl55kmmi1c437n8wsxng89dwfrnmg7rl-boost-1.77.0.drv",
             "description": "Collection of C++ libraries",
             "insecure": false,
@@ -86,6 +88,7 @@
           {
             "attr_path": "curl",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/8cyrx5sfaqg8z4wcvh4qwayl0gsszpxw-curl-7.83.1.drv",
             "description": "A command line tool for transferring files with URL syntax",
             "insecure": false,
@@ -141,6 +144,7 @@
           {
             "attr_path": "curl",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/ff9r07sqpsxdfbjgpmsvvqp1bfnbl05k-curl-7.83.1.drv",
             "description": "A command line tool for transferring files with URL syntax",
             "insecure": false,
@@ -196,6 +200,7 @@
           {
             "attr_path": "gcc",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/4srkh5i5537w3wxqwjfh9m2f928pyvsp-gcc-wrapper-9.3.0.drv",
             "description": "GNU Compiler Collection, version 9.3.0 (wrapper script)",
             "insecure": false,
@@ -239,6 +244,7 @@
           {
             "attr_path": "gcc",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/hgi9979z6i6yzav843xkv5wj4qmp43xb-gcc-wrapper-11.3.0.drv",
             "description": "GNU Compiler Collection, version 11.3.0 (wrapper script)",
             "insecure": false,
@@ -282,6 +288,7 @@
           {
             "attr_path": "gcc-unwrapped",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/5zn0yx0xxb7z5scfynsjw4kdrk13x80k-gcc-9.3.0.drv",
             "description": "GNU Compiler Collection, version 9.3.0",
             "insecure": false,
@@ -329,6 +336,7 @@
           {
             "attr_path": "gcc-unwrapped",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/f6xszh6p5wilx99bcl8mxjc3kain10qp-gcc-11.3.0.drv",
             "description": "GNU Compiler Collection, version 11.3.0",
             "insecure": false,
@@ -376,6 +384,7 @@
           {
             "attr_path": "glibc",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/51vr2ic5am7g48q2f939517c0ly3q7wl-glibc-2.34-210.drv",
             "description": "The GNU C Library",
             "insecure": false,
@@ -426,6 +435,7 @@
           {
             "attr_path": "glibc",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/slh6i99w5w5vppjcxi6ksxh56yw87xq6-glibc-2.34-210.drv",
             "description": "The GNU C Library",
             "insecure": false,
@@ -476,6 +486,7 @@
           {
             "attr_path": "libarchive",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/jlklm2wyvgcvkwrg8bq13sg7x9pgpxiw-libarchive-3.6.1.drv",
             "description": "Multi-format archive and compression library",
             "insecure": false,
@@ -518,6 +529,7 @@
           {
             "attr_path": "libarchive",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/vqn8ia59vj1dz9irr05b84idz5g5gqma-libarchive-3.6.1.drv",
             "description": "Multi-format archive and compression library",
             "insecure": false,
@@ -560,6 +572,7 @@
           {
             "attr_path": "nix",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/2ljynv6q88sc5g144mv4n38vmxf2ilbm-nix-2.8.1.drv",
             "description": "Powerful package manager that makes package management reliable and reproducible",
             "insecure": false,
@@ -611,6 +624,7 @@
           {
             "attr_path": "nix",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/kgnlqvdb7y213ackz45n1jb5b8wrbd82-nix-2.8.1.drv",
             "description": "Powerful package manager that makes package management reliable and reproducible",
             "insecure": false,
@@ -662,6 +676,7 @@
           {
             "attr_path": "patchelf",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/yp11bmqnvqgd97hlg5ypgiwdk75c51r0-patchelf-0.14.5.drv",
             "description": "A small utility to modify the dynamic linker and RPATH of ELF executables",
             "insecure": false,
@@ -696,6 +711,7 @@
           {
             "attr_path": "patchelf",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/1rmb4wd54m6mmnmrhzmdxfsn4788rfm1-patchelf-0.14.5.drv",
             "description": "A small utility to modify the dynamic linker and RPATH of ELF executables",
             "insecure": false,

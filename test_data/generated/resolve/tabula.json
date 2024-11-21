@@ -10,6 +10,7 @@
           {
             "attr_path": "tabula",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/xvlpclbzmc1wlwkmz5sx67ahpzib6pnf-tabula-1.2.1.drv",
             "description": "A tool for liberating data tables locked inside PDF files",
             "insecure": false,
@@ -42,6 +43,7 @@
           {
             "attr_path": "tabula",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/v5f742bjv62gpa3dbdxsc9qqsnwvxcgq-tabula-1.2.1.drv",
             "description": "A tool for liberating data tables locked inside PDF files",
             "insecure": false,
@@ -74,6 +76,7 @@
           {
             "attr_path": "tabula",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/swyy0ih7g49mpb39anm9nnwsfdf100jv-tabula-1.2.1.drv",
             "description": "A tool for liberating data tables locked inside PDF files",
             "insecure": false,
@@ -106,6 +109,7 @@
           {
             "attr_path": "tabula",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/1h8cnvdq5p3klfw8v6h7ry6icjv2h3gb-tabula-1.2.1.drv",
             "description": "A tool for liberating data tables locked inside PDF files",
             "insecure": false,

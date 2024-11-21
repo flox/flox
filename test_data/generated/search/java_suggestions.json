@@ -1,6 +1,6 @@
 [
   {
-    "count": 821,
+    "count": 815,
     "results": [
       {
         "description": "Parser generator for building parsers from grammars",
@@ -36,23 +36,23 @@
         "version": null
       },
       {
-        "description": "GeoIP Java API",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "geoipjava",
-        "relPath": [
-          "geoipjava"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pname": "dbus_java",
         "relPath": [
           "dbus_java"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "GeoIP Java API",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "geoipjava",
+        "relPath": [
+          "geoipjava"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -69,12 +69,12 @@
         "version": null
       },
       {
-        "description": "Award winning, fully featured low overhead profiler for Java EE and Java SE platforms",
+        "description": "Programming language used for massively scalable soft real-time systems",
         "input": "nixpkgs",
         "license": null,
-        "pname": "yourkit-java",
+        "pname": "erlang_javac",
         "relPath": [
-          "yourkit-java"
+          "erlang_javac"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -91,12 +91,12 @@
         "version": null
       },
       {
-        "description": "Programming language used for massively scalable soft real-time systems",
+        "description": "Award winning, fully featured low overhead profiler for Java EE and Java SE platforms",
         "input": "nixpkgs",
         "license": null,
-        "pname": "erlang_javac",
+        "pname": "yourkit-java",
         "relPath": [
-          "erlang_javac"
+          "yourkit-java"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -115,10 +115,10 @@
     ]
   },
   {
-    "count": 141,
+    "count": 143,
     "results": [
       {
-        "description": "Open-source Java Development Kit",
+        "description": "Certified builds of OpenJDK",
         "input": "nixpkgs",
         "license": null,
         "pname": "jdk",
@@ -129,7 +129,7 @@
         "version": null
       },
       {
-        "description": "Certified builds of OpenJDK",
+        "description": "Open-source Java Development Kit",
         "input": "nixpkgs",
         "license": null,
         "pname": "jdk8",
@@ -143,9 +143,9 @@
         "description": "Certified builds of OpenJDK",
         "input": "nixpkgs",
         "license": null,
-        "pname": "jdk23",
+        "pname": "jdk11",
         "relPath": [
-          "jdk23"
+          "jdk11"
         ],
         "system": "aarch64-darwin",
         "version": null
