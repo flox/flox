@@ -334,7 +334,6 @@ impl<'dirs> ShellProcess<'dirs> {
         name: impl AsRef<str>,
         copy_from: impl AsRef<Path>,
     ) -> Result<(), Error> {
-        eprintln!("parent: {}", copy_from.as_ref().display());
         // Create the .flox directory
         let env_dir = self.dirs.home_dir.join(name.as_ref()).join(".flox/env");
         std::fs::create_dir_all(&env_dir).context("couldn't create .flox/env")?;
@@ -659,7 +658,10 @@ mod tests {
 
     use super::*;
 
-    const DEFAULT_EXPECT_TIMEOUT: u64 = 5000;
+    // Nothing should hit this in normal operation,
+    // it's only there if you need to build an environment for
+    // the first time on the host machine.
+    const DEFAULT_EXPECT_TIMEOUT: u64 = 30_000;
 
     // Just a helper function for less typing
     #[allow(dead_code)]
