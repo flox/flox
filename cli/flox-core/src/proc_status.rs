@@ -122,10 +122,6 @@ pub fn pid_is_running(pid: i32) -> bool {
     read_pid_status(pid) == ProcStatus::Running
 }
 
-fn pause() {
-    std::thread::sleep(std::time::Duration::from_millis(1_000_000));
-}
-
 pub fn pid_with_var(
     program_name: impl AsRef<str>,
     var_name: impl AsRef<str>,
