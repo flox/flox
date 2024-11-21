@@ -529,8 +529,13 @@ pub fn process_compose_with_uuid(uuid: impl AsRef<str>) -> Option<ProcToGC> {
 
 #[derive(Debug)]
 pub struct ProcToGC {
+    /// Whether this process has already terminated. Used to short-circuit
+    /// waiting for termination or looking up process status.
     is_terminated: bool,
+    /// The PID of the process.
     pub pid: u32,
+    /// How long to wait for the process to terminate while it's being dropped.
+    drop_timeout_millis: u64,
 }
 
 impl ProcToGC {
@@ -538,6 +543,7 @@ impl ProcToGC {
         Self {
             is_terminated: false,
             pid,
+            drop_timeout_millis: 1000,
         }
     }
 
@@ -546,6 +552,10 @@ impl ProcToGC {
             return false;
         }
         pid_is_running(self.pid as i32)
+    }
+
+    pub fn set_drop_timeout(&mut self, millis: u64) {
+        self.drop_timeout_millis = millis;
     }
 
     pub fn send_sigterm(&mut self) {
@@ -610,7 +620,10 @@ impl Drop for ProcToGC {
         if panicking() {
             self.send_sigterm();
         } else {
-            if self.wait_for_termination_with_timeout(1000).is_err() {
+            if self
+                .wait_for_termination_with_timeout(self.drop_timeout_millis)
+                .is_err()
+            {
                 self.send_sigterm();
                 panic!("background process was leaked");
             }
@@ -821,11 +834,6 @@ mod tests {
         }
     }
 
-    // We drop the proc
-    // assume it isn't terminated yet
-    // wait_for_termination with 1s timeout
-    // if we time out, we panic
-
     #[test]
     #[should_panic]
     fn automatically_fails_on_leaked_process() {
@@ -834,11 +842,14 @@ mod tests {
         shell
             .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
-        let (mut watchdog, _process_compose) = shell.activate_with_services(&[]).unwrap();
+        let (mut watchdog, mut process_compose) = shell.activate_with_services(&[]).unwrap();
         shell.exit_shell(); // once for the activation
         watchdog.send_sigkill();
         // The Drop impl for the process-compose struct should cause
-        // a panic because nothing is cleaning up the process
+        // a panic because nothing is cleaning up the process. We set
+        // a short drop timeout because we expect it to time out and don't
+        // need to wait an unnecessarily long time.
+        process_compose.set_drop_timeout(100);
     }
 
     ////////////////////////////////////////////////////////////////////////////
