@@ -253,6 +253,10 @@ impl<'dirs> ShellProcess<'dirs> {
         Ok(Self { pty: shell, dirs })
     }
 
+    pub fn pid(&self) -> i32 {
+        self.pty_session.process.child_pid.as_raw()
+    }
+
     pub fn reconfigure_prompt(&mut self) -> Result<(), Error> {
         // This last command is to turn off whatever bracketed paste mode is about
         self.pty.send_line(
@@ -569,20 +573,15 @@ impl ProcToGC {
     }
 
     pub fn wait_for_termination_with_timeout(&mut self, millis: u64) -> Result<(), Error> {
-        let start = start_timer();
         let mut remaining = millis;
         let interval = 25;
         let mut next_sleep = interval.min(remaining);
         loop {
-            print_elapsed(start, &format!("remaining: {remaining}"));
             if !self.is_running() {
-                print_elapsed(start, "is terminated");
                 self.is_terminated = true;
                 return Ok(());
             }
-            print_elapsed(start, "still running");
             if remaining == 0 {
-                print_elapsed(start, "timed out");
                 bail!("timed out waiting for termination");
             }
             sleep(Duration::from_millis(next_sleep));
@@ -803,7 +802,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn detects_leaked_process() {
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
@@ -812,11 +810,15 @@ mod tests {
             .unwrap();
         let (mut watchdog, mut process_compose) = shell.activate_with_services(&[]).unwrap();
         watchdog.send_sigkill(); // kill this first so it doesn't kill process-compose
-        shell.exit_shell();
         watchdog.wait_for_termination_with_timeout(1000).unwrap();
-        process_compose
-            .wait_for_termination_with_timeout(1000)
-            .unwrap();
+        shell.exit_shell();
+        let timed_out = process_compose
+            .wait_for_termination_with_timeout(250)
+            .is_err();
+        process_compose.send_sigterm(); // nothing else is going to clean it up
+        if !timed_out {
+            panic!("process-compose terminated early");
+        }
     }
 
     // We drop the proc
