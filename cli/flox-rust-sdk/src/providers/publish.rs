@@ -5,6 +5,7 @@ use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
 use log::debug;
 use thiserror::Error;
+use url::Url;
 
 use super::build::{build_symlink_path, ManifestBuilder};
 use super::catalog::{Client, ClientTrait, UserBuildInfo, UserDerivationInfo};
@@ -91,6 +92,7 @@ pub struct CheckedBuildMetadata {
 pub struct PublishProvider<Builder> {
     pub env_metadata: CheckedEnvironmentMetadata,
     pub build_metadata: CheckedBuildMetadata,
+    pub cache: Option<Url>,
 
     pub _builder: Option<Builder>,
 }
@@ -155,7 +157,7 @@ where
             rev: self.env_metadata.build_repo_ref.rev.clone(),
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
             rev_date: self.env_metadata.build_repo_ref.rev_date,
-            cache_uri: None,
+            cache_uri: self.cache.clone().map(|u| u.to_string()),
         };
         debug!("Publishing build in catalog...");
         client
@@ -416,6 +418,7 @@ pub mod tests {
         let publish_provider = PublishProvider::<&FloxBuildMk> {
             build_metadata,
             env_metadata,
+            cache: None,
             _builder: None,
         };
 
