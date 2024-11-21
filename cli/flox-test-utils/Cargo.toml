@@ -15,7 +15,7 @@ temp-env.workspace = true
 dirs.workspace = true
 serde_json.workspace = true
 
-flox-core.workspace = true
+flox-core = { workspace = true, features = ["proc_status"]}
 
 # [patches.crates-io]
 # rexpect = { path = "/home/zmitchell/src/rexpect" }

@@ -1142,6 +1142,7 @@ dependencies = [
  "thiserror",
  "time",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

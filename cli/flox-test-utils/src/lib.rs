@@ -7,6 +7,7 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context};
+use flox_core::proc_status::pid_with_var;
 use indoc::formatdoc;
 use rexpect::session::{spawn_specific_bash, PtyReplSession};
 use sysinfo::{
@@ -504,7 +505,10 @@ impl<'dirs> ShellProcess<'dirs> {
 
 /// Locates the watchdog fingerprinted with the provided UUID
 pub fn find_watchdog_pid_with_uuid(uuid: impl AsRef<str>, system: &mut System) -> Option<u32> {
-    find_pid_with_name_and_uuid("flox-watchdog", uuid, system)
+    // find_pid_with_name_and_uuid("flox-watchdog", uuid, system)
+    pid_with_var("flox-watchdog", "_FLOX_ACTIVATION_UUID", uuid)
+        .unwrap_or_default()
+        .map(|pid_i32| pid_i32 as u32)
 }
 
 /// Locates the watchdog fingerprinted with the provided UUID
@@ -512,7 +516,10 @@ pub fn find_process_compose_pid_with_uuid(
     uuid: impl AsRef<str>,
     system: &mut System,
 ) -> Option<u32> {
-    find_pid_with_name_and_uuid("process-compose", uuid, system)
+    // find_pid_with_name_and_uuid("process-compose", uuid, system)
+    pid_with_var("process-compose", "_FLOX_ACTIVATION_UUID", uuid)
+        .unwrap_or_default()
+        .map(|pid_i32| pid_i32 as u32)
 }
 
 /// Data that's global to a single test
