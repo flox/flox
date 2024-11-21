@@ -8,6 +8,9 @@ env:
   NIX_REMOTE_BUILDER: "ssh-ng://nixbld@build-proxy.floxdev.com"
   NIX_FLAKE_URL: "."
 
+env:
+  FLOX_DISABLE_METRICS: "true"
+
 jobs:
   build:
     strategy:
@@ -15,6 +18,7 @@ jobs:
         system: ["x86_64-darwin", "aarch64-darwin", "x86_64-linux", "aarch64-linux"]
 
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - uses: "actions/checkout@v4"
