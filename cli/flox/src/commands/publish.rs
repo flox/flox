@@ -13,6 +13,7 @@ use flox_rust_sdk::providers::publish::{
 use indoc::{formatdoc, indoc};
 use log::debug;
 use tracing::instrument;
+use url::Url;
 
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::ensure_floxhub_token;
@@ -24,6 +25,9 @@ use crate::utils::message;
 pub struct Publish {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
+
+    #[bpaf(long)]
+    cache: Option<Url>,
 
     #[bpaf(external(publish_target))]
     publish_target: PublishTarget,
@@ -50,12 +54,17 @@ impl Publish {
                 .environment
                 .detect_concrete_environment(&flox, "Publish")?;
 
-            Self::publish(flox, env, target).await
+            Self::publish(flox, env, target, self.cache).await
         }
     }
 
     #[instrument(name = "publish", skip_all, fields(package))]
-    async fn publish(mut flox: Flox, mut env: ConcreteEnvironment, package: String) -> Result<()> {
+    async fn publish(
+        mut flox: Flox,
+        mut env: ConcreteEnvironment,
+        package: String,
+        cache: Option<Url>,
+    ) -> Result<()> {
         subcommand_metric!("publish");
 
         if !check_package(&env.lockfile(&flox)?, &package)? {
@@ -75,6 +84,7 @@ impl Publish {
         let publish_provider = PublishProvider::<&FloxBuildMk> {
             build_metadata,
             env_metadata,
+            cache,
             _builder: None,
         };
 
