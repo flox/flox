@@ -1,5 +1,7 @@
 pub mod activations;
 pub mod canonical_path;
+#[cfg(feature = "proc_status")]
+pub mod proc_status;
 mod version;
 
 use std::io::BufWriter;
