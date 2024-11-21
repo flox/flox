@@ -7,7 +7,7 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context};
-use flox_core::proc_status::pid_with_var;
+use flox_core::proc_status::{pid_is_running, pid_with_var};
 use indoc::formatdoc;
 use rexpect::session::{spawn_specific_bash, PtyReplSession};
 use sysinfo::{
@@ -504,19 +504,14 @@ impl<'dirs> ShellProcess<'dirs> {
 }
 
 /// Locates the watchdog fingerprinted with the provided UUID
-pub fn find_watchdog_pid_with_uuid(uuid: impl AsRef<str>, system: &mut System) -> Option<u32> {
-    // find_pid_with_name_and_uuid("flox-watchdog", uuid, system)
+pub fn find_watchdog_pid_with_uuid(uuid: impl AsRef<str>) -> Option<u32> {
     pid_with_var("flox-watchdog", "_FLOX_ACTIVATION_UUID", uuid)
         .unwrap_or_default()
         .map(|pid_i32| pid_i32 as u32)
 }
 
 /// Locates the watchdog fingerprinted with the provided UUID
-pub fn find_process_compose_pid_with_uuid(
-    uuid: impl AsRef<str>,
-    system: &mut System,
-) -> Option<u32> {
-    // find_pid_with_name_and_uuid("process-compose", uuid, system)
+pub fn find_process_compose_pid_with_uuid(uuid: impl AsRef<str>) -> Option<u32> {
     pid_with_var("process-compose", "_FLOX_ACTIVATION_UUID", uuid)
         .unwrap_or_default()
         .map(|pid_i32| pid_i32 as u32)
@@ -535,8 +530,7 @@ impl TestGlobals {
     }
 
     pub fn watchdog_with_uuid(&mut self, uuid: impl AsRef<str>) -> Option<ProcToGC<WatchdogProc>> {
-        let mut system = self.system.lock().expect("system lock was poisoned");
-        find_watchdog_pid_with_uuid(uuid, &mut system)
+        find_watchdog_pid_with_uuid(uuid)
             .map(|pid| ProcToGC::new_with_pid(pid, self.system.clone(), WatchdogProc))
     }
 
@@ -544,8 +538,7 @@ impl TestGlobals {
         &mut self,
         uuid: impl AsRef<str>,
     ) -> Option<ProcToGC<ProcessComposeProc>> {
-        let mut system = self.system.lock().expect("system lock was poisoned");
-        find_process_compose_pid_with_uuid(uuid, &mut system)
+        find_process_compose_pid_with_uuid(uuid)
             .map(|pid| ProcToGC::new_with_pid(pid, self.system.clone(), ProcessComposeProc))
     }
 
@@ -606,19 +599,7 @@ impl<T> ProcToGC<T> {
         if self.is_terminated {
             return false;
         }
-        let pid = Pid::from_u32(self.pid);
-        let mut system = self.system.lock().unwrap();
-        system.refresh_processes_specifics(
-            ProcessesToUpdate::Some(&[pid]),
-            true,
-            ProcessRefreshKind::new(),
-        );
-        let Some(proc) = system.process(pid) else {
-            self.is_terminated = true;
-            return false;
-        };
-        let status = proc.status();
-        status_is_running(status)
+        pid_is_running(self.pid as i32)
     }
 
     pub fn send_sigterm(&mut self) {
@@ -657,7 +638,7 @@ impl<T> ProcToGC<T> {
 
     pub fn wait_for_termination_with_timeout(&mut self, millis: u64) -> Result<(), Error> {
         let mut remaining = millis;
-        let interval = 100;
+        let interval = 25;
         let mut next_sleep = interval.min(remaining);
         loop {
             if !self.is_running() {
@@ -681,29 +662,22 @@ impl<T> ProcToGC<T> {
 
 impl<T> Drop for ProcToGC<T> {
     fn drop(&mut self) {
-        let start = start_timer();
         use std::thread::panicking;
 
         // No need to wait if it's already terminated
         if self.is_terminated {
-            print_elapsed(start, "already terminated");
             return;
         }
 
         // A panic inside of a panic will cause an immediate abort,
         // check if we're already panicking.
         if panicking() {
-            // eprintln!("sent SIGTERM to background process during panic");
-            print_elapsed(start, "caught panic");
             self.send_sigterm();
         } else {
-            print_elapsed(start, "waiting for termination");
             if self.wait_for_termination_with_timeout(1000).is_err() {
-                print_elapsed(start, "wait timed out");
                 self.send_sigterm();
                 panic!("background process was leaked");
             }
-            print_elapsed(start, "terminated");
         }
     }
 }
