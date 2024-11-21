@@ -479,3 +479,41 @@ EOF
   installed_flake=$(tomlq -r -c -t ".install.hello" "$MANIFEST_PATH")
   assert_equal "$installed_flake" "flake = \"$input_flake\""
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=install:install-store-path
+@test "'flox install' install-store-path" {
+  "$FLOX_BIN" init
+  hello_store_path="$(nix build "github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#hello^out" --no-link --print-out-paths)"
+
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  run "$FLOX_BIN" install "$hello_store_path"
+  assert_success
+
+  run "$FLOX_BIN" activate -- bash -c 'command -v hello'
+  assert_success
+  assert_output "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}.dev/bin/hello"
+
+  run "$FLOX_BIN" activate -- bash -c 'realpath "$(command -v hello)"'
+  assert_success
+  assert_output "$hello_store_path/bin/hello"
+}
+
+# bats test_tags=install:install-store-path
+@test "'flox install' install-store-path from link" {
+ "$FLOX_BIN" init
+  vim_store_path="$(nix build "github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#vim^out" --out-link ./result-vim --print-out-paths)"
+
+  PROJECT_DIR="$(realpath "$PROJECT_DIR")"
+  run "$FLOX_BIN" install "./result-vim"
+  assert_success
+
+  run "$FLOX_BIN" activate -- bash -c 'command -v vim'
+  assert_success
+  assert_output "${PROJECT_DIR}/.flox/run/${NIX_SYSTEM}.${PROJECT_NAME}.dev/bin/vim"
+
+  run "$FLOX_BIN" activate -- bash -c 'realpath "$(command -v vim)"'
+  assert_success
+  assert_output "$vim_store_path/bin/vim"
+}

@@ -1,18 +1,18 @@
 use std::collections::{BTreeMap, HashMap};
 use std::ops::{Deref, DerefMut};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use flox_core::Version;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use log::debug;
 #[cfg(test)]
 use proptest::prelude::*;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
-use tracing::trace;
+use tracing::{debug, trace};
 use url::Url;
 
 use super::environment::path_environment::InitCustomization;
@@ -1089,6 +1089,7 @@ pub struct PackageInsertion {
 pub enum PackageToInstall {
     Catalog(CatalogPackage),
     Flake(FlakePackage),
+    StorePath(StorePath),
 }
 
 impl PackageToInstall {
@@ -1096,6 +1097,7 @@ impl PackageToInstall {
         match self {
             PackageToInstall::Catalog(pkg) => &pkg.id,
             PackageToInstall::Flake(pkg) => &pkg.id,
+            PackageToInstall::StorePath(pkg) => &pkg.id,
         }
     }
 
@@ -1104,19 +1106,34 @@ impl PackageToInstall {
         match self {
             PackageToInstall::Catalog(pkg) => pkg.id = id,
             PackageToInstall::Flake(pkg) => pkg.id = id,
+            PackageToInstall::StorePath(pkg) => pkg.id = id,
         }
     }
-}
 
-impl FromStr for PackageToInstall {
-    type Err = ManifestError;
+    /// Parse a package descriptor from a string, inferring the type of package to install.
+    /// If the string starts with a path like prefix, it's parsed as a store path,
+    /// if it parses as a url, it's assumed to be a flake ref,
+    /// otherwise it's parsed as a catalog package.
+    ///
+    /// The method takes a `system` argument, for which to expect store paths to be valid.
+    /// Unlike flake refs, and catalog packages,
+    /// store paths are typically only valid on the system they were built for.
+    pub fn parse(system: &System, s: &str) -> Result<Self, ManifestError> {
+        // if the string starts with a path like prefix, parse it as a store path
+        if ["../", "./", "/"]
+            .iter()
+            .any(|prefix| s.starts_with(prefix))
+        {
+            return Ok(PackageToInstall::StorePath(StorePath::parse(system, s)?));
+        }
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // if the string parses as a url, assume it's a flake ref
         match Url::parse(s) {
             Ok(url) => {
                 let id = infer_flake_install_id(&url)?;
                 Ok(PackageToInstall::Flake(FlakePackage { id, url }))
             },
+            // if it's not a url, parse it as a catalog package
             _ => Ok(PackageToInstall::Catalog(s.parse()?)),
         }
     }
@@ -1187,12 +1204,6 @@ pub struct CatalogPackage {
     ///
     /// [Environment::install]: crate::models::environment::Environment::install
     pub systems: Option<Vec<System>>,
-}
-
-#[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct FlakePackage {
-    pub id: String,
-    pub url: Url,
 }
 
 impl FromStr for CatalogPackage {
@@ -1276,6 +1287,83 @@ impl FromStr for CatalogPackage {
             pkg_path: attr_path,
             version,
             systems: None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct FlakePackage {
+    pub id: String,
+    pub url: Url,
+}
+
+#[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct StorePath {
+    pub id: String,
+    pub store_path: PathBuf,
+    pub system: System,
+}
+
+impl StorePath {
+    fn parse(system: &System, descriptor: &str) -> Result<Self, ManifestError> {
+        // Don't canonicalize the path if it's already a store path.
+        // Canonicalizing a store path can potentially resolve it to a different path,
+        // if the original path is a symlink to another store path.
+        let path = if Path::new(descriptor).starts_with("/nix/store") {
+            PathBuf::from(descriptor)
+        } else {
+            Path::new(descriptor).canonicalize().map_err(|e| {
+                ManifestError::MalformedStringDescriptor {
+                    msg: format!("cannot resolve path: {}", e),
+                    desc: descriptor.to_string(),
+                }
+            })?
+        };
+
+        // [sic] 4 components, because the root dir is counted as a component on its own
+        let store_path: PathBuf = path.components().take(4).collect();
+        let Ok(hash_and_name) = store_path.strip_prefix("/nix/store") else {
+            return Err(ManifestError::MalformedStringDescriptor {
+                msg: "store path must be in the '/nix/store' directory".to_string(),
+                desc: descriptor.to_string(),
+            });
+        };
+
+        // The store path is expected to have the format `<hash>-<name>[-<version>]`
+        // the version is not required, but canonically present in store paths derived from nixpkgs.
+        //
+        // The name is parsed according to the reference implementation in nix
+        //
+        // > The `name' part of a derivation name is everything up to
+        // > but not including the first dash *not* followed by a letter.
+        // > The `version' part is the rest (excluding the separating dash).
+        // > E.g., `apache-httpd-2.0.48' is parsed to (`apache-httpd', '2.0.48').
+        // >
+        // > <https://github.com/NixOS/nix/blob/fa17927d9d75b6feec38a3fbc8b6e34e17c71b52/src/libstore/names.cc#L22-L38>
+        let id = hash_and_name
+            .to_string_lossy()
+            .split('-')
+            .skip(1)
+            .take_while(|component| {
+                component
+                    .chars()
+                    .next()
+                    .map(|c| !c.is_ascii_digit())
+                    .unwrap_or(true)
+            })
+            .join("-");
+
+        if id.is_empty() {
+            return Err(ManifestError::MalformedStringDescriptor {
+                msg: "store path must contain a package name".to_string(),
+                desc: store_path.display().to_string(),
+            });
+        }
+
+        Ok(Self {
+            id,
+            store_path,
+            system: system.clone(),
         })
     }
 }
@@ -1395,6 +1483,22 @@ pub fn insert_packages(
                         "package newly installed: id={}, flakeref={}",
                         pkg.id,
                         pkg.url.to_string()
+                    );
+                },
+                PackageToInstall::StorePath(pkg) => {
+                    descriptor_table.insert(
+                        "store-path",
+                        Value::String(Formatted::new(pkg.store_path.to_string_lossy().to_string())),
+                    );
+                    descriptor_table.insert(
+                        "systems",
+                        Value::Array(Array::from_iter([Value::String(Formatted::new(
+                            pkg.system.to_string(),
+                        ))])),
+                    );
+                    debug!(
+                        id=pkg.id, store_path=%pkg.store_path.display(),
+                        "store path newly installed",
                     );
                 },
             }
@@ -2264,6 +2368,65 @@ pub(super) mod test {
         let url = Url::parse("https://github.com/foo/bar/archive/main.tar.gz").unwrap();
         let inferred = infer_flake_install_id(&url).unwrap();
         assert_eq!(inferred.as_str(), "main.tar.gz");
+    }
+
+    fn assert_store_path_values(
+        descriptor: &str,
+        expected_path: &str,
+        expected_id: &str,
+        expected_system: &System,
+    ) {
+        let StorePath {
+            system,
+            store_path,
+            id,
+        } = StorePath::parse(expected_system, descriptor).expect("valid store path");
+        assert_eq!(&system, expected_system);
+        assert_eq!(&store_path, Path::new(expected_path));
+        assert_eq!(id, expected_id);
+    }
+
+    #[test]
+    fn parses_store_path() {
+        let dummy_system = &"dummy-system".to_string();
+
+        // invalid store paths
+        StorePath::parse(dummy_system, "foo").expect_err("store path must be a full path");
+        StorePath::parse(dummy_system, "/nix/store/foo")
+            .expect_err("store path must contain a '-' separated hash");
+        StorePath::parse(dummy_system, "/nicht/speicher/hash-foo")
+            .expect_err("store path must be in /nix/store");
+
+        // hash is stripped from the id
+        assert_store_path_values(
+            "/nix/store/hash-foo",
+            "/nix/store/hash-foo",
+            "foo",
+            dummy_system,
+        );
+
+        // version is stripped in the id
+        assert_store_path_values(
+            "/nix/store/hash-apache-httpd-2.0.48",
+            "/nix/store/hash-apache-httpd-2.0.48",
+            "apache-httpd",
+            dummy_system,
+        );
+        // non version fields are retained
+        assert_store_path_values(
+            "/nix/store/hash-foo-bar",
+            "/nix/store/hash-foo-bar",
+            "foo-bar",
+            dummy_system,
+        );
+
+        // extra path components are ignored
+        assert_store_path_values(
+            "/nix/store/hash-apache-httpd-2.0.48/bin/httpd",
+            "/nix/store/hash-apache-httpd-2.0.48",
+            "apache-httpd",
+            dummy_system,
+        );
     }
 
     #[test]
