@@ -889,22 +889,31 @@ mod tests {
 
     #[test]
     fn warns_about_restarting_services() {
+        let start = start_timer();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
+        print_elapsed(start, "spawn shell");
         shell
             .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
+        print_elapsed(start, "init env");
         let (_w, _pc) = shell.activate_with_services(&[]).unwrap();
+        print_elapsed(start, "activated");
         shell
             .set_var(
                 "_FLOX_USE_CATALOG_MOCK",
                 "$GENERATED_DATA/resolve/hello.json",
             )
             .unwrap();
+        print_elapsed(start, "set var");
         shell.send_line("flox install hello").unwrap();
+        print_elapsed(start, "send line");
         shell.exp_string("flox services restart").unwrap();
+        print_elapsed(start, "wait for string");
         shell.wait_for_prompt().unwrap();
+        print_elapsed(start, "wait for prompt");
         shell.exit_shell(); // once for the activation
+        print_elapsed(start, "exit shell");
     }
 
     #[test]
