@@ -122,16 +122,39 @@ pub fn pid_is_running(pid: i32) -> bool {
     read_pid_status(pid) == ProcStatus::Running
 }
 
+#[allow(dead_code)]
+fn start_timer() -> std::time::Instant {
+    std::time::Instant::now()
+}
+
+#[allow(dead_code)]
+fn print_elapsed(start: std::time::Instant, msg: &str) {
+    eprintln!(
+        "elapsed: {} ({msg})",
+        std::time::Instant::now().duration_since(start).as_millis()
+    );
+}
+
+#[allow(dead_code)]
+fn print_elapsed_with_prefix(start: std::time::Instant, prefix: &str, msg: &str) {
+    eprintln!(
+        "[{prefix}] elapsed: {} ({msg})",
+        std::time::Instant::now().duration_since(start).as_millis()
+    );
+}
+
 pub fn pid_with_var(
     program_name: impl AsRef<str>,
     var_name: impl AsRef<str>,
     var_value: impl AsRef<str>,
 ) -> Result<Option<i32>, ProcStatusError> {
+    let start = start_timer();
     // Print out all processes and their environments
     let output = Command::new("ps")
         .arg("ewwax")
         .output()
         .map_err(ProcStatusError::RunCommand)?;
+    print_elapsed_with_prefix(start, "get_pid", "run command");
     if !output.status.success() {
         return Err(ProcStatusError::PsFailed);
     }
@@ -167,6 +190,7 @@ pub fn pid_with_var(
             continue;
         }
 
+        print_elapsed_with_prefix(start, "get_pid", "parse output");
         return Ok(Some(pid));
     }
     Ok(None)

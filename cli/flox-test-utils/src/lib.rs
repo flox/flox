@@ -641,7 +641,7 @@ impl Drop for ProcToGC {
 
 #[allow(dead_code)]
 fn start_timer() -> Instant {
-    eprintln!("starting clock");
+    // eprintln!("starting clock");
     Instant::now()
 }
 
