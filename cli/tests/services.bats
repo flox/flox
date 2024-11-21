@@ -1053,6 +1053,23 @@ EOF
   )
 }
 
+@test "activate: starts services for in-place activations" {
+  setup_sleeping_services
+
+  # Run in a sub-shell so that `wait_for_watchdogs` in `teardown` can verify
+  # that the activation is cleaned up on exit and implicitly that services are
+  # shutdown.
+  run bash -c '
+    set -euo pipefail
+    eval "$("$FLOX_BIN" activate --start-services)"
+    "$FLOX_BIN" services status
+  '
+
+  assert_success
+  assert_output --regexp "one +Running"
+  assert_output --regexp "two +Running"
+}
+
 # ---------------------------------------------------------------------------- #
 
 @test "remote: only have a single instance of services" {

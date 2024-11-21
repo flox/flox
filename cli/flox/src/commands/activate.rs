@@ -431,11 +431,6 @@ impl Activate {
             .to_string(),
         );
 
-        if in_place && self.start_services {
-            debug!("not starting services for in-place activation");
-            message::warning("Skipped starting services. Services are not yet supported for in place activations.");
-        }
-
         // We should error for remote environments even if they don't have
         // services so that the user doesn't assume we're actually starting
         // services.
@@ -452,9 +447,8 @@ impl Activate {
             }
         }
 
-        let should_have_services = self.start_services
-            && !manifest.services.copy_for_system(&flox.system).is_empty()
-            && !in_place;
+        let should_have_services =
+            self.start_services && !manifest.services.copy_for_system(&flox.system).is_empty();
         let start_new_process_compose = should_have_services
             && if socket_path.exists() {
                 // Returns `Ok(true)` if `process-compose` was shutdown
