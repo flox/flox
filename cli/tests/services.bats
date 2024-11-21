@@ -1113,8 +1113,7 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   SCRIPT="$(cat << "EOF"
-    # don't set -euo pipefail because we expect these to fail
-    "$FLOX_BIN" services start one invalid
+    "$FLOX_BIN" services start one invalid || true
     "$FLOX_BIN" services status
 EOF
   )"
@@ -1141,8 +1140,7 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   SCRIPT="$(cat << "EOF"
-    # don't set -euo pipefail because we expect these to fail
-    "$FLOX_BIN" services start invalid
+    "$FLOX_BIN" services start invalid || true
     "$FLOX_BIN" services status
 EOF
   )"
@@ -1205,9 +1203,7 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   SCRIPT="$(cat << "EOF"
-    # don't set -euo pipefail because we expect these to fail
-
-    "$FLOX_BIN" -vvv services start
+    "$FLOX_BIN" -vvv services start || true
     "$FLOX_BIN" -vvvv services status
 EOF
   )"
@@ -1367,7 +1363,7 @@ EOF
 
   SCRIPT="$(cat << "EOF"
     # The timeout below has timed out,
-    # but it's hard to reproduce,
+    # but it is hard to reproduce,
     # so add set -x for more info in the future.
     set -euxo pipefail
 
