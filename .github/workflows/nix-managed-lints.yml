@@ -19,10 +19,14 @@ concurrency:
   group: "${{ github.workflow }}-${{ github.head_ref || github.sha }}"
   cancel-in-progress: true
 
+env:
+  FLOX_DISABLE_METRICS: "true"
+
 jobs:
   nix-git-hooks:
     name: "Nix Git Hooks"
     runs-on: "ubuntu-latest"
+    timeout-minutes: 30
 
     steps:
       - name: "Checkout"

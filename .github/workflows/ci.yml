@@ -35,10 +35,15 @@ concurrency:
   group: "${{ github.workflow }}-${{ github.head_ref || github.sha }}"
   cancel-in-progress: true
 
+env:
+  # Also set in setup_suite.bash but set here for consistency
+  FLOX_DISABLE_METRICS: "true"
+
 jobs:
 
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Required permissions
     permissions:
       pull-requests: read
@@ -369,6 +374,7 @@ jobs:
   report-failure:
     name: "Report Failure"
     runs-on: "ubuntu-latest"
+    timeout-minutes: 30
 
     if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
 
