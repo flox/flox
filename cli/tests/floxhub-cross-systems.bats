@@ -28,19 +28,19 @@ setup_file() {
     skip "AUTH0_FLOX_DEV_CLIENT_SECRET is not set"
   fi
 
-  # Get a token for the `floxEM` user on the development FloxHub instance.
+  # Get a token for the `flox` user on the development FloxHub instance.
   export FLOX_FLOXHUB_TOKEN="$(
     curl --request POST \
       --url https://flox-dev.us.auth0.com/oauth/token \
       --header 'content-type: application/x-www-form-urlencoded' \
-      --data "client_id=A77LKKZbtUo7CbeKIeJs4SoqY1v4UZFh" \
+      --data "client_id=eDC34px8XFypyON4NlDbY6aqxfRGgTo8" \
       --data "audience=https://hub.flox.dev/api" \
       --data "grant_type=client_credentials" \
       --data "client_secret=$AUTH0_FLOX_DEV_CLIENT_SECRET" \
       | jq .access_token -r
   )"
 
-  export OWNER="floxEM"
+  export OWNER="flox"
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
