@@ -1,0 +1,10 @@
+version = 1
+
+[services.sleeper_1]
+command = "sleep 999999"
+
+[services.sleeper_2]
+command = "sleep 999999"
+
+[options]
+systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
