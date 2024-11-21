@@ -10,25 +10,26 @@
           {
             "attr_path": "darwin.ps",
             "broken": false,
-            "derivation": "/nix/store/vgy8gs4fjxmk22g73rfp294y6hqiavij-adv_cmds-231.drv",
+            "catalog": "nixpkgs",
+            "derivation": "/nix/store/cjwbwvkakhard8ifvglanp9zaiij8k37-adv_cmds-231.drv",
             "description": "Advanced commands package for Darwin",
             "insecure": false,
             "install_id": "ps",
             "license": "[ APSL-1.0, APSL-2.0 ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
             "name": "adv_cmds-231",
             "outputs": [
               {
                 "name": "ps",
-                "store_path": "/nix/store/1sjn7w7bwa1j36nji1f1gdvhh8b11zal-adv_cmds-231-ps"
+                "store_path": "/nix/store/hvgagb1ckx9h00wxijj987ix8cw12afb-adv_cmds-231-ps"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/2a5m7da3a2k9qwq8rmglnp1av5yjkhp0-adv_cmds-231-man"
+                "store_path": "/nix/store/avksjclqaqvsp9a6rrcd6aqgvas6nqbc-adv_cmds-231-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/dj9hnhpsznjja8n7x5bvhq01sq4fp7fg-adv_cmds-231"
+                "store_path": "/nix/store/3ljcyqr576blfhzngzaci4pzp3801gr8-adv_cmds-231"
               }
             ],
             "outputs_to_install": [
@@ -36,10 +37,10 @@
               "man"
             ],
             "pname": "ps",
-            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
-            "rev_count": 705705,
-            "rev_date": "2024-11-09T08:06:34Z",
-            "scrape_date": "2024-11-11T03:57:18Z",
+            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "rev_count": 708622,
+            "rev_date": "2024-11-15T13:07:34Z",
+            "scrape_date": "2024-11-17T03:59:12Z",
             "stabilities": [
               "unstable"
             ],
@@ -48,7 +49,7 @@
             "version": "adv_cmds-231"
           }
         ],
-        "page": 705705,
+        "page": 708622,
         "url": ""
       }
     }

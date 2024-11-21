@@ -3,17 +3,6 @@
     "count": 63,
     "results": [
       {
-        "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "jello",
-        "relPath": [
-          "jello"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
         "description": "Program that produces a familiar, friendly greeting",
         "input": "nixpkgs",
         "license": null,
@@ -25,12 +14,12 @@
         "version": null
       },
       {
-        "description": "Higher level programming in C",
+        "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
         "input": "nixpkgs",
         "license": null,
-        "pname": "libcello",
+        "pname": "jello",
         "relPath": [
-          "libcello"
+          "jello"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -47,12 +36,12 @@
         "version": null
       },
       {
-        "description": "GTK3-based greeter for the greetd daemon, written in python",
+        "description": "Higher level programming in C",
         "input": "nixpkgs",
         "license": null,
-        "pname": "nwg-hello",
+        "pname": "libcello",
         "relPath": [
-          "nwg-hello"
+          "libcello"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -69,6 +58,17 @@
         "version": null
       },
       {
+        "description": "GTK3-based greeter for the greetd daemon, written in python",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "nwg-hello",
+        "relPath": [
+          "nwg-hello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
         "description": "SocketCAN over Ethernet tunnel",
         "input": "nixpkgs",
         "license": null,
@@ -80,23 +80,23 @@
         "version": null
       },
       {
-        "description": "Cloud music integration for your desktop",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "mellowplayer",
-        "relPath": [
-          "mellowplayer"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
         "description": "Example package with unfree license (for testing)",
         "input": "nixpkgs",
         "license": null,
         "pname": "hello-unfree",
         "relPath": [
           "hello-unfree"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Cloud music integration for your desktop",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "mellowplayer",
+        "relPath": [
+          "mellowplayer"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -153,7 +153,7 @@
         "license": null,
         "pname": "umbrello",
         "relPath": [
-          "libsForQt515",
+          "libsForQt512",
           "umbrello"
         ],
         "system": "aarch64-darwin",
@@ -177,7 +177,7 @@
         "license": null,
         "pname": "umbrello",
         "relPath": [
-          "libsForQt512",
+          "libsForQt515",
           "umbrello"
         ],
         "system": "aarch64-darwin",
@@ -191,6 +191,54 @@
         "relPath": [
           "emacsPackages",
           "ellocate"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "jello",
+        "relPath": [
+          "python310Packages",
+          "jello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "jello",
+        "relPath": [
+          "python311Packages",
+          "jello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "jello",
+        "relPath": [
+          "python312Packages",
+          "jello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": null,
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "hello-clog",
+        "relPath": [
+          "sbclPackages",
+          "hello-clog"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -211,106 +259,10 @@
         "description": null,
         "input": "nixpkgs",
         "license": null,
-        "pname": "hello-clog",
+        "pname": "org-trello",
         "relPath": [
-          "sbclPackages",
-          "hello-clog"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "jello",
-        "relPath": [
-          "python312Packages",
-          "jello"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "jello",
-        "relPath": [
-          "python311Packages",
-          "jello"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "jello",
-        "relPath": [
-          "python310Packages",
-          "jello"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Python library for nello.io intercoms",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "pynello",
-        "relPath": [
-          "python39Packages",
-          "pynello"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Python module to implement EZSP for EmberZNet devices",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "bellows",
-        "relPath": [
-          "python39Packages",
-          "bellows"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Python library for nello.io intercoms",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "pynello",
-        "relPath": [
-          "python38Packages",
-          "pynello"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Python module to implement EZSP for EmberZNet devices",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "bellows",
-        "relPath": [
-          "python38Packages",
-          "bellows"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "A Python 3 project to implement EZSP for EmberZNet devices",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "bellows",
-        "relPath": [
-          "python37Packages",
-          "bellows"
+          "emacsPackages",
+          "org-trello"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -328,97 +280,145 @@
         "version": null
       },
       {
+        "description": "A Python 3 project to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "bellows",
+        "relPath": [
+          "python37Packages",
+          "bellows"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python module to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "bellows",
+        "relPath": [
+          "python38Packages",
+          "bellows"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python library for nello.io intercoms",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "pynello",
+        "relPath": [
+          "python38Packages",
+          "pynello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python module to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "bellows",
+        "relPath": [
+          "python39Packages",
+          "bellows"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python library for nello.io intercoms",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "pynello",
+        "relPath": [
+          "python39Packages",
+          "pynello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python module to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "bellows",
+        "relPath": [
+          "python310Packages",
+          "bellows"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python library for nello.io intercoms",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "pynello",
+        "relPath": [
+          "python310Packages",
+          "pynello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python module to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "bellows",
+        "relPath": [
+          "python311Packages",
+          "bellows"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python library for nello.io intercoms",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "pynello",
+        "relPath": [
+          "python311Packages",
+          "pynello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python module to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "bellows",
+        "relPath": [
+          "python312Packages",
+          "bellows"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python library for nello.io intercoms",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "pynello",
+        "relPath": [
+          "python312Packages",
+          "pynello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
         "description": null,
         "input": "nixpkgs",
         "license": null,
-        "pname": "org-trello",
+        "pname": "mellow-theme",
         "relPath": [
           "emacsPackages",
-          "org-trello"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Python library for nello.io intercoms",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "pynello",
-        "relPath": [
-          "python312Packages",
-          "pynello"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Python module to implement EZSP for EmberZNet devices",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "bellows",
-        "relPath": [
-          "python312Packages",
-          "bellows"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Python library for nello.io intercoms",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "pynello",
-        "relPath": [
-          "python311Packages",
-          "pynello"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Python module to implement EZSP for EmberZNet devices",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "bellows",
-        "relPath": [
-          "python311Packages",
-          "bellows"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Python library for nello.io intercoms",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "pynello",
-        "relPath": [
-          "python310Packages",
-          "pynello"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Python module to implement EZSP for EmberZNet devices",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "bellows",
-        "relPath": [
-          "python310Packages",
-          "bellows"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": null,
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "hello-builder",
-        "relPath": [
-          "sbclPackages",
-          "hello-builder"
+          "mellow-theme"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -439,22 +439,10 @@
         "description": null,
         "input": "nixpkgs",
         "license": null,
-        "pname": "mellow-theme",
+        "pname": "hello-builder",
         "relPath": [
-          "emacsPackages",
-          "mellow-theme"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Maven Hello World",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "mavenHello_1_1",
-        "relPath": [
-          "javaPackages",
-          "mavenHello_1_1"
+          "sbclPackages",
+          "hello-builder"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -472,6 +460,18 @@
         "version": null
       },
       {
+        "description": "Maven Hello World",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "mavenHello_1_1",
+        "relPath": [
+          "javaPackages",
+          "mavenHello_1_1"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
         "description": "Typeset Othello (Reversi) diagrams of any size, with annotations",
         "input": "nixpkgs",
         "license": null,
@@ -484,12 +484,24 @@
         "version": null
       },
       {
+        "description": null,
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "sly-hello-world",
+        "relPath": [
+          "emacsPackages",
+          "sly-hello-world"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
         "description": "Execute loops using parallel forked subprocesses",
         "input": "nixpkgs",
         "license": null,
         "pname": "ParallelLoops",
         "relPath": [
-          "perl540Packages",
+          "perl536Packages",
           "ParallelLoops"
         ],
         "system": "aarch64-darwin",
@@ -513,20 +525,8 @@
         "license": null,
         "pname": "ParallelLoops",
         "relPath": [
-          "perl536Packages",
+          "perl540Packages",
           "ParallelLoops"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": null,
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "sly-hello-world",
-        "relPath": [
-          "emacsPackages",
-          "sly-hello-world"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -609,10 +609,11 @@
         "description": null,
         "input": "nixpkgs",
         "license": null,
-        "pname": "cl-mw_dot_examples_dot_hello-world",
+        "pname": "qtools-helloworld",
         "relPath": [
+          "lispPackages_new",
           "sbclPackages",
-          "cl-mw_dot_examples_dot_hello-world"
+          "qtools-helloworld"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -621,11 +622,10 @@
         "description": null,
         "input": "nixpkgs",
         "license": null,
-        "pname": "qtools-helloworld",
+        "pname": "cl-mw_dot_examples_dot_hello-world",
         "relPath": [
-          "lispPackages_new",
           "sbclPackages",
-          "qtools-helloworld"
+          "cl-mw_dot_examples_dot_hello-world"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -656,23 +656,23 @@
         "version": null
       },
       {
-        "description": "Computer version of the game Reversi, more popularly called Othello",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "iagno",
-        "relPath": [
-          "iagno"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
         "description": "Trello interactive CLI on terminal",
         "input": "nixpkgs",
         "license": null,
         "pname": "_3llo",
         "relPath": [
           "_3llo"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Computer version of the game Reversi, more popularly called Othello",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "iagno",
+        "relPath": [
+          "iagno"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -730,7 +730,7 @@
         "license": null,
         "pname": "gerbonara",
         "relPath": [
-          "python312Packages",
+          "python311Packages",
           "gerbonara"
         ],
         "system": "aarch64-darwin",
@@ -742,7 +742,7 @@
         "license": null,
         "pname": "gerbonara",
         "relPath": [
-          "python311Packages",
+          "python312Packages",
           "gerbonara"
         ],
         "system": "aarch64-darwin",

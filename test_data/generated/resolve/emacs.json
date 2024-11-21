@@ -10,27 +10,28 @@
           {
             "attr_path": "emacs",
             "broken": false,
-            "derivation": "/nix/store/2c4bzkja7fg0d0xh3kly4xgknr3dn8ag-emacs-29.4.drv",
+            "catalog": "nixpkgs",
+            "derivation": "/nix/store/syw9wbyfpdd79wz4ksd29yglsc5dm13y-emacs-29.4.drv",
             "description": "Extensible, customizable GNU text editor",
             "insecure": false,
             "install_id": "emacs",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
             "name": "emacs-29.4",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/7fgk633mnwv7bhs5qnkr80zhzrk7iy6z-emacs-29.4"
+                "store_path": "/nix/store/1237af4vssyidzv3y0gbvjq6fgz9g9pm-emacs-29.4"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "emacs",
-            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
-            "rev_count": 705705,
-            "rev_date": "2024-11-09T08:06:34Z",
-            "scrape_date": "2024-11-11T03:57:18Z",
+            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "rev_count": 708622,
+            "rev_date": "2024-11-15T13:07:34Z",
+            "scrape_date": "2024-11-17T03:59:12Z",
             "stabilities": [
               "unstable"
             ],
@@ -41,27 +42,28 @@
           {
             "attr_path": "emacs",
             "broken": false,
-            "derivation": "/nix/store/qsfbrw1nn7j49l3c995as87iy6s00xgj-emacs-29.4.drv",
+            "catalog": "nixpkgs",
+            "derivation": "/nix/store/wdb7ikhqbss1wbw2pzhg999hxgc92q70-emacs-29.4.drv",
             "description": "Extensible, customizable GNU text editor",
             "insecure": false,
             "install_id": "emacs",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
             "name": "emacs-29.4",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/dg14z183b20fh2b77g9xqsz1d52n8899-emacs-29.4"
+                "store_path": "/nix/store/csd9ir6v836hw6w4psiwy0k023zrs47d-emacs-29.4"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "emacs",
-            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
-            "rev_count": 705705,
-            "rev_date": "2024-11-09T08:06:34Z",
-            "scrape_date": "2024-11-11T03:57:18Z",
+            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "rev_count": 708622,
+            "rev_date": "2024-11-15T13:07:34Z",
+            "scrape_date": "2024-11-17T03:59:12Z",
             "stabilities": [
               "unstable"
             ],
@@ -72,27 +74,28 @@
           {
             "attr_path": "emacs",
             "broken": false,
-            "derivation": "/nix/store/b415ll01x8b1h3r22n8mgl0zq9zjh5jr-emacs-29.4.drv",
+            "catalog": "nixpkgs",
+            "derivation": "/nix/store/rc86874yx18ny62353l04s24k4bn3qv0-emacs-29.4.drv",
             "description": "Extensible, customizable GNU text editor",
             "insecure": false,
             "install_id": "emacs",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
             "name": "emacs-29.4",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/4qhmks84sn6abhzdv31annhxpzy5hbxy-emacs-29.4"
+                "store_path": "/nix/store/yvi1ca0mpwl2b3dnhh9cqf3jjp2nd1g2-emacs-29.4"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "emacs",
-            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
-            "rev_count": 705705,
-            "rev_date": "2024-11-09T08:06:34Z",
-            "scrape_date": "2024-11-11T03:57:18Z",
+            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "rev_count": 708622,
+            "rev_date": "2024-11-15T13:07:34Z",
+            "scrape_date": "2024-11-17T03:59:12Z",
             "stabilities": [
               "unstable"
             ],
@@ -103,27 +106,28 @@
           {
             "attr_path": "emacs",
             "broken": false,
-            "derivation": "/nix/store/bjj9l4wnyd8ls543ydnri5j5cff3k989-emacs-29.4.drv",
+            "catalog": "nixpkgs",
+            "derivation": "/nix/store/ps6jrkmw294dks1mr3sw9q0i3sxw0n1g-emacs-29.4.drv",
             "description": "Extensible, customizable GNU text editor",
             "insecure": false,
             "install_id": "emacs",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
             "name": "emacs-29.4",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/fsglyaxfhlavaskr159b4yyjlajy4qq5-emacs-29.4"
+                "store_path": "/nix/store/a3kfh7mx5ssar7z835vsiq7gmf7df2mg-emacs-29.4"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "emacs",
-            "rev": "76612b17c0ce71689921ca12d9ffdc9c23ce40b2",
-            "rev_count": 705705,
-            "rev_date": "2024-11-09T08:06:34Z",
-            "scrape_date": "2024-11-11T03:57:18Z",
+            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "rev_count": 708622,
+            "rev_date": "2024-11-15T13:07:34Z",
+            "scrape_date": "2024-11-17T03:59:12Z",
             "stabilities": [
               "unstable"
             ],
@@ -132,7 +136,7 @@
             "version": "29.4"
           }
         ],
-        "page": 705705,
+        "page": 708622,
         "url": ""
       }
     }

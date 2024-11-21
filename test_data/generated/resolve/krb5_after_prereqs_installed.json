@@ -10,6 +10,7 @@
           {
             "attr_path": "darwin.cctools",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/kmjs6bxys5b8m9rh1mprb3ms5sai6cai-cctools-llvm-16.0.6-973.0.1.drv",
             "description": null,
             "insecure": false,
@@ -51,6 +52,7 @@
           {
             "attr_path": "darwin.cctools",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/yvdfrzn2gpwq7xwklvmzjj8sikml8s8z-cctools-llvm-16.0.6-973.0.1.drv",
             "description": null,
             "insecure": false,
@@ -92,6 +94,7 @@
           {
             "attr_path": "clang",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/rgnhr1lqsdc3795b9dgizcsvqgjbda75-clang-wrapper-16.0.6.drv",
             "description": "A C language family frontend for LLVM (wrapper script)",
             "insecure": false,
@@ -124,6 +127,7 @@
           {
             "attr_path": "clang",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/3vvncxcsd3dfhd8j5vw9rd1ksvz98vsi-clang-wrapper-16.0.6.drv",
             "description": "A C language family frontend for LLVM (wrapper script)",
             "insecure": false,
@@ -156,6 +160,7 @@
           {
             "attr_path": "gcc",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/71hxpcnlwrrkyr4w8xcbk3ms4hl0yq07-gcc-wrapper-13.2.0.drv",
             "description": "GNU Compiler Collection, version 13.2.0 (wrapper script)",
             "insecure": false,
@@ -197,6 +202,7 @@
           {
             "attr_path": "gcc",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/i29mvflviqa97ac1imcrk1jr88z3a62i-gcc-wrapper-13.2.0.drv",
             "description": "GNU Compiler Collection, version 13.2.0 (wrapper script)",
             "insecure": false,
@@ -238,6 +244,7 @@
           {
             "attr_path": "krb5",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/kcjzswdw3rf0j6g7fmzwwrzz7bc3d596-krb5-1.21.2.drv",
             "description": "MIT Kerberos 5",
             "insecure": false,
@@ -274,6 +281,7 @@
           {
             "attr_path": "krb5",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/45qn956zg29qv2pkln7z33aclri9r369-krb5-1.21.2.drv",
             "description": "MIT Kerberos 5",
             "insecure": false,
@@ -310,6 +318,7 @@
           {
             "attr_path": "krb5",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/xrh9cfcny74m0xb8bq2xabp8n7blr53f-krb5-1.21.2.drv",
             "description": "MIT Kerberos 5",
             "insecure": false,
@@ -346,6 +355,7 @@
           {
             "attr_path": "krb5",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/am95i6ji7qfcvzwh2kdqgqd0wf0h75q4-krb5-1.21.2.drv",
             "description": "MIT Kerberos 5",
             "insecure": false,
@@ -382,6 +392,7 @@
           {
             "attr_path": "libcxx",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/5ix525c54yxpp8ligms4qvdahr56xgxq-libcxx-16.0.6.drv",
             "description": "C++ standard library",
             "insecure": false,
@@ -418,6 +429,7 @@
           {
             "attr_path": "libcxx",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/dyxy59n1lymr6jnsnci6srp9c84xf0pr-libcxx-16.0.6.drv",
             "description": "C++ standard library",
             "insecure": false,
@@ -454,6 +466,7 @@
           {
             "attr_path": "libcxxabi",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/x73qgazqb1zjrgfvsq1745jkfbm2sgab-libcxxabi-16.0.6.drv",
             "description": "Provides C++ standard library support",
             "insecure": false,
@@ -490,6 +503,7 @@
           {
             "attr_path": "libcxxabi",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/i6bgbgm6qf5jxz9qq9vx23g1j83bcwws-libcxxabi-16.0.6.drv",
             "description": "Provides C++ standard library support",
             "insecure": false,
@@ -526,6 +540,7 @@
           {
             "attr_path": "gnumake",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/16cbmxdjn8582fwiria1qva3819lsc0h-gnumake-4.4.1.drv",
             "description": "A tool to control the generation of non-source files from sources",
             "insecure": false,
@@ -567,6 +582,7 @@
           {
             "attr_path": "gnumake",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/rmddxn7mirdr1zdb1mpm1lp5rhsvwd1v-gnumake-4.4.1.drv",
             "description": "A tool to control the generation of non-source files from sources",
             "insecure": false,
@@ -608,6 +624,7 @@
           {
             "attr_path": "gnumake",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/b04ya8zmxb7gcscqx19wp7sdk4rrdyk2-gnumake-4.4.1.drv",
             "description": "A tool to control the generation of non-source files from sources",
             "insecure": false,
@@ -653,6 +670,7 @@
           {
             "attr_path": "gnumake",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/vprcprfykdy1qsn8cj0z2xhrszz37bd3-gnumake-4.4.1.drv",
             "description": "A tool to control the generation of non-source files from sources",
             "insecure": false,
@@ -698,6 +716,7 @@
           {
             "attr_path": "nodejs",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/3lhxdvwl4cncxznlxd1ydn4hcfrin0hb-nodejs-20.11.1.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
@@ -734,6 +753,7 @@
           {
             "attr_path": "nodejs",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/0hza9wf175b9gdxi4m3vxqwa8ajvczqk-nodejs-20.11.1.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
@@ -770,6 +790,7 @@
           {
             "attr_path": "nodejs",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/whw8n4v21syjc2ks3ymg4rjcmv7j3v6w-nodejs-20.11.1.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
@@ -806,6 +827,7 @@
           {
             "attr_path": "nodejs",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/bvlnrajf0r9msvyk9ikd5j3cqbxvabnc-nodejs-20.11.1.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
@@ -842,6 +864,7 @@
           {
             "attr_path": "python3",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/z3sz20bn0r3a60h5whxxlbrwm17n9pl6-python3-3.11.8.drv",
             "description": "A high-level dynamically-typed programming language",
             "insecure": false,
@@ -874,6 +897,7 @@
           {
             "attr_path": "python3",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/y5vr6hxd96ii7b3rxnlrlcifpfnwb19v-python3-3.11.8.drv",
             "description": "A high-level dynamically-typed programming language",
             "insecure": false,
@@ -906,6 +930,7 @@
           {
             "attr_path": "python3",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/ifw78hgj1jlmwgbnhkn0p4x2yfjxyayb-python3-3.11.8.drv",
             "description": "A high-level dynamically-typed programming language",
             "insecure": false,
@@ -942,6 +967,7 @@
           {
             "attr_path": "python3",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/kqbwi7q7b4nq8m4xh7m5d08yiijfdvsj-python3-3.11.8.drv",
             "description": "A high-level dynamically-typed programming language",
             "insecure": false,

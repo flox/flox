@@ -10,6 +10,7 @@
           {
             "attr_path": "python2",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/14chck670ca005mxvml26sk46b3m7r2l-python-2.7.18.5.drv",
             "description": "A high-level dynamically-typed programming language",
             "insecure": false,
@@ -42,6 +43,7 @@
           {
             "attr_path": "python2",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/caszjvk5h4lrg34n4j7xxlcska4c0ig5-python-2.7.18.5.drv",
             "description": "A high-level dynamically-typed programming language",
             "insecure": false,
@@ -74,6 +76,7 @@
           {
             "attr_path": "python2",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/kv5zal9yx6s16mknixcscsss1drw75zg-python-2.7.18.5.drv",
             "description": "A high-level dynamically-typed programming language",
             "insecure": false,
@@ -106,6 +109,7 @@
           {
             "attr_path": "python2",
             "broken": false,
+            "catalog": "nixpkgs",
             "derivation": "/nix/store/9xv6pv3fqipca3ndw4g311mx4a23pnyr-python-2.7.18.5.drv",
             "description": "A high-level dynamically-typed programming language",
             "insecure": false,

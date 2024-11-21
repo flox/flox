@@ -33,9 +33,9 @@
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
         "input": "nixpkgs",
         "license": null,
-        "pname": "nodejs_23",
+        "pname": "nodejs_14",
         "relPath": [
-          "nodejs_23"
+          "nodejs_14"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -44,9 +44,9 @@
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
         "input": "nixpkgs",
         "license": null,
-        "pname": "nodejs_22",
+        "pname": "nodejs_16",
         "relPath": [
-          "nodejs_22"
+          "nodejs_16"
         ],
         "system": "aarch64-darwin",
         "version": null

@@ -25,23 +25,23 @@
         "version": null
       },
       {
-        "description": "GTK3-based greeter for the greetd daemon, written in python",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "nwg-hello",
-        "relPath": [
-          "nwg-hello"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
         "description": "Basic sanity check that C++ and cmake infrastructure are working",
         "input": "nixpkgs",
         "license": null,
         "pname": "hello-cpp",
         "relPath": [
           "hello-cpp"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "GTK3-based greeter for the greetd daemon, written in python",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "nwg-hello",
+        "relPath": [
+          "nwg-hello"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -69,18 +69,6 @@
         "version": null
       },
       {
-        "description": "Modification of a Go package to create othello boards",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "othello",
-        "relPath": [
-          "texlivePackages",
-          "othello"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
         "description": null,
         "input": "nixpkgs",
         "license": null,
@@ -88,6 +76,18 @@
         "relPath": [
           "sbclPackages",
           "hello-clog"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Modification of a Go package to create othello boards",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "othello",
+        "relPath": [
+          "texlivePackages",
+          "othello"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -108,10 +108,10 @@
         "description": "Maven Hello World",
         "input": "nixpkgs",
         "license": null,
-        "pname": "mavenHello_1_1",
+        "pname": "mavenHello_1_0",
         "relPath": [
           "javaPackages",
-          "mavenHello_1_1"
+          "mavenHello_1_0"
         ],
         "system": "aarch64-darwin",
         "version": null

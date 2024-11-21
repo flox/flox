@@ -14,12 +14,12 @@
         "version": null
       },
       {
-        "description": "High-level dynamically-typed programming language",
+        "description": "Python interpreter written in Go",
         "input": "nixpkgs",
         "license": null,
-        "pname": "python3",
+        "pname": "gpython",
         "relPath": [
-          "python3"
+          "gpython"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -36,12 +36,12 @@
         "version": null
       },
       {
-        "description": "Python interpreter written in Go",
+        "description": "High-level dynamically-typed programming language",
         "input": "nixpkgs",
         "license": null,
-        "pname": "gpython",
+        "pname": "python3",
         "relPath": [
-          "gpython"
+          "python3"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -50,9 +50,9 @@
         "description": "High-level dynamically-typed programming language",
         "input": "nixpkgs",
         "license": null,
-        "pname": "python39",
+        "pname": "python27",
         "relPath": [
-          "python39"
+          "python27"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -61,9 +61,9 @@
         "description": "A high-level dynamically-typed programming language",
         "input": "nixpkgs",
         "license": null,
-        "pname": "python38",
+        "pname": "python36",
         "relPath": [
-          "python38"
+          "python36"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -83,9 +83,9 @@
         "description": "A high-level dynamically-typed programming language",
         "input": "nixpkgs",
         "license": null,
-        "pname": "python36",
+        "pname": "python38",
         "relPath": [
-          "python36"
+          "python38"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -94,20 +94,20 @@
         "description": "High-level dynamically-typed programming language",
         "input": "nixpkgs",
         "license": null,
-        "pname": "python27",
+        "pname": "python39",
         "relPath": [
-          "python27"
+          "python39"
         ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
-        "description": "PythonQt is a dynamic Python binding for the Qt framework. It offers an easy way to embed the Python scripting language into your C++ Qt applications",
+        "description": "High-level dynamically-typed programming language",
         "input": "nixpkgs",
         "license": null,
-        "pname": "python-qt",
+        "pname": "python310",
         "relPath": [
-          "python-qt"
+          "python310"
         ],
         "system": "aarch64-darwin",
         "version": null
