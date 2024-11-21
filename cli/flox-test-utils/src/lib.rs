@@ -1,24 +1,15 @@
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context};
 use flox_core::proc_status::{pid_is_running, pid_with_var};
 use indoc::formatdoc;
+use nix::sys::signal::Signal::{SIGKILL, SIGTERM};
+use nix::unistd::Pid;
 use rexpect::session::{spawn_specific_bash, PtyReplSession};
-use sysinfo::{
-    Pid,
-    ProcessRefreshKind,
-    ProcessStatus,
-    ProcessesToUpdate,
-    Signal,
-    System,
-    UpdateKind,
-};
 use tempfile::TempDir;
 
 type Error = anyhow::Error;
@@ -413,11 +404,7 @@ impl<'dirs> ShellProcess<'dirs> {
     }
 
     /// Performs an activation and returns handles to the watchdog and process-compose
-    pub fn activate_with_services(
-        &mut self,
-        args: &[&str],
-        globals: &mut TestGlobals,
-    ) -> Result<(ProcToGC<WatchdogProc>, ProcToGC<ProcessComposeProc>), Error> {
+    pub fn activate_with_services(&mut self, args: &[&str]) -> Result<(ProcToGC, ProcToGC), Error> {
         let mut all_args = vec!["--start-services"];
         all_args.extend_from_slice(args);
         let cmd = Self::make_activation_command(&all_args, false);
@@ -426,11 +413,9 @@ impl<'dirs> ShellProcess<'dirs> {
         self.reconfigure_prompt()?;
         self.pty.wait_for_prompt()?;
         let uuid = self.read_activation_uuid()?;
-        let watchdog = globals
-            .watchdog_with_uuid(&uuid)
-            .context("activation with services didn't spawn watchdog")?;
-        let process_compose = globals
-            .process_compose_with_uuid(&uuid)
+        let watchdog =
+            watchdog_with_uuid(&uuid).context("activation with services didn't spawn watchdog")?;
+        let process_compose = process_compose_with_uuid(&uuid)
             .context("activation with services didn't spawn process-compose")?;
         Ok((watchdog, process_compose))
     }
@@ -530,81 +515,25 @@ pub fn find_process_compose_pid_with_uuid(uuid: impl AsRef<str>) -> Option<u32> 
         .map(|pid_i32| pid_i32 as u32)
 }
 
-/// Data that's global to a single test
-pub struct TestGlobals {
-    pub system: Arc<Mutex<System>>,
+fn watchdog_with_uuid(uuid: impl AsRef<str>) -> Option<ProcToGC> {
+    find_watchdog_pid_with_uuid(uuid).map(|pid| ProcToGC::new_with_pid(pid))
 }
 
-impl TestGlobals {
-    pub fn new() -> Self {
-        Self {
-            system: Arc::new(Mutex::new(System::new())),
-        }
-    }
-
-    pub fn watchdog_with_uuid(&mut self, uuid: impl AsRef<str>) -> Option<ProcToGC<WatchdogProc>> {
-        find_watchdog_pid_with_uuid(uuid)
-            .map(|pid| ProcToGC::new_with_pid(pid, self.system.clone(), WatchdogProc))
-    }
-
-    pub fn process_compose_with_uuid(
-        &mut self,
-        uuid: impl AsRef<str>,
-    ) -> Option<ProcToGC<ProcessComposeProc>> {
-        find_process_compose_pid_with_uuid(uuid)
-            .map(|pid| ProcToGC::new_with_pid(pid, self.system.clone(), ProcessComposeProc))
-    }
-
-    pub fn pid_is_running(&mut self, pid: u32) -> Option<bool> {
-        let pid = Pid::from_u32(pid);
-        let mut system = self.system.lock().expect("system lock was poisoned");
-        system.refresh_processes(ProcessesToUpdate::Some(&[pid]), false);
-        let Some(proc) = system.process(pid) else {
-            return None;
-        };
-        Some(status_is_running(proc.status()))
-    }
-}
-
-fn status_is_running(status: ProcessStatus) -> bool {
-    (status != ProcessStatus::Dead) && (status != ProcessStatus::Zombie)
+pub fn process_compose_with_uuid(uuid: impl AsRef<str>) -> Option<ProcToGC> {
+    find_process_compose_pid_with_uuid(uuid).map(|pid| ProcToGC::new_with_pid(pid))
 }
 
 #[derive(Debug)]
-pub struct ProcToGC<T> {
+pub struct ProcToGC {
     is_terminated: bool,
     pub pid: u32,
-    system: Arc<Mutex<System>>,
-    _kind: T,
 }
 
-#[derive(Debug)]
-pub struct ProcessComposeProc;
-
-#[derive(Debug)]
-pub struct WatchdogProc;
-
-pub struct OtherProc;
-
-impl Display for ProcessComposeProc {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "process-compose")
-    }
-}
-
-impl Display for WatchdogProc {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "flox-watchdog")
-    }
-}
-
-impl<T> ProcToGC<T> {
-    pub fn new_with_pid(pid: u32, system: Arc<Mutex<System>>, kind: T) -> Self {
+impl ProcToGC {
+    pub fn new_with_pid(pid: u32) -> Self {
         Self {
             is_terminated: false,
             pid,
-            system,
-            _kind: kind,
         }
     }
 
@@ -620,15 +549,10 @@ impl<T> ProcToGC<T> {
             return;
         }
         if self.is_running() {
-            // If the lock is poisoned there's literally nothing we can
-            // do about it
-            let Ok(system) = self.system.lock() else {
-                return;
-            };
-            let pid = Pid::from_u32(self.pid);
-            if let Some(proc) = system.process(pid) {
-                proc.kill_with(Signal::Term);
-            }
+            nix::sys::signal::kill(Pid::from_raw(self.pid as i32), SIGTERM)
+                .expect("failed to deliver signal");
+        } else {
+            self.is_terminated = true;
         }
     }
 
@@ -637,28 +561,28 @@ impl<T> ProcToGC<T> {
             return;
         }
         if self.is_running() {
-            // If the lock is poisoned there's literally nothing we can
-            // do about it
-            let Ok(system) = self.system.lock() else {
-                return;
-            };
-            let pid = Pid::from_u32(self.pid);
-            if let Some(proc) = system.process(pid) {
-                proc.kill_with(Signal::Kill);
-            }
+            nix::sys::signal::kill(Pid::from_raw(self.pid as i32), SIGKILL)
+                .expect("failed to deliver signal");
+        } else {
+            self.is_terminated = true;
         }
     }
 
     pub fn wait_for_termination_with_timeout(&mut self, millis: u64) -> Result<(), Error> {
+        let start = start_timer();
         let mut remaining = millis;
         let interval = 25;
         let mut next_sleep = interval.min(remaining);
         loop {
+            print_elapsed(start, &format!("remaining: {remaining}"));
             if !self.is_running() {
+                print_elapsed(start, "is terminated");
                 self.is_terminated = true;
                 return Ok(());
             }
+            print_elapsed(start, "still running");
             if remaining == 0 {
+                print_elapsed(start, "timed out");
                 bail!("timed out waiting for termination");
             }
             sleep(Duration::from_millis(next_sleep));
@@ -673,7 +597,7 @@ impl<T> ProcToGC<T> {
     }
 }
 
-impl<T> Drop for ProcToGC<T> {
+impl Drop for ProcToGC {
     fn drop(&mut self) {
         use std::thread::panicking;
 
@@ -709,47 +633,6 @@ fn print_elapsed(start: Instant, msg: &str) {
     );
 }
 
-/// Locates a process with a given name and the provided UUID fingerprint
-pub fn find_pid_with_name_and_uuid(
-    name: &str,
-    uuid: impl AsRef<str>,
-    system: &mut System,
-) -> Option<u32> {
-    let var = format!("_FLOX_ACTIVATION_UUID={}", uuid.as_ref());
-    let update_kind = ProcessRefreshKind::new()
-        .with_exe(UpdateKind::Always)
-        .with_environ(UpdateKind::Always);
-    system.refresh_processes_specifics(ProcessesToUpdate::All, false, update_kind);
-    for proc in system
-        .processes()
-        .values()
-        .filter(|proc| proc.exe().is_some_and(|p| p.ends_with(name)))
-    {
-        for env_var in proc.environ().iter() {
-            if env_var.to_string_lossy() == var {
-                return Some(proc.pid().as_u32());
-            }
-        }
-    }
-    None
-}
-
-/// Locates all processes with a given name and the provided UUID fingerprint
-pub fn find_all_pids_with_uuid(uuid: impl AsRef<str>) -> Option<u32> {
-    let var = format!("_FLOX_ACTIVATION_UUID={}", uuid.as_ref());
-    let mut system = System::new();
-    let update_kind = ProcessRefreshKind::new().with_environ(UpdateKind::Always);
-    system.refresh_processes_specifics(ProcessesToUpdate::All, false, update_kind);
-    for proc in system.processes().values() {
-        for env_var in proc.environ().iter() {
-            if env_var.to_string_lossy() == var {
-                return Some(proc.pid().as_u32() as u32);
-            }
-        }
-    }
-    None
-}
-
 /// Returns the path to a `mkdata`-generated environment
 #[allow(dead_code)]
 fn path_to_generated_env(name: &str) -> PathBuf {
@@ -764,47 +647,7 @@ mod tests {
 
     use super::*;
 
-    const MANIFEST_WITH_SERVICES: &str = r#"
-        version = 1
-
-        [services.sleeper_1]
-        command = "sleep 999999"
-
-        [services.sleeper_2]
-        command = "sleep 999999"
-
-        [options]
-        systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
-    "#;
-
-    const EMPTY_MANIFEST: &str = r#"
-        version = 1
-
-        [options]
-        systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
-    "#;
-
-    const MANIFEST_TEMPLATE: &str = r#"
-        version = 1
-
-        @@
-
-        [options]
-        systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
-    "#;
-
-    const DEFAULT_EXPECT_TIMEOUT: u64 = 5000; // 30s
-
-    fn make_manifest(snippet: impl AsRef<str>) -> String {
-        MANIFEST_TEMPLATE.replace("@@", snippet.as_ref())
-    }
-
-    #[test]
-    fn can_template_manifest() {
-        let templated = make_manifest("[install]");
-        let found = templated.find("install");
-        assert!(found.is_some());
-    }
+    const DEFAULT_EXPECT_TIMEOUT: u64 = 5000;
 
     // Just a helper function for less typing
     #[allow(dead_code)]
@@ -860,7 +703,6 @@ mod tests {
 
     #[test]
     fn read_activation_uuid() {
-        let start = start_timer();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell
@@ -908,7 +750,6 @@ mod tests {
 
     #[test]
     fn cleans_up_watchdog() {
-        let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell
@@ -916,7 +757,7 @@ mod tests {
             .unwrap();
         shell.activate(&[]).unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
-        let watchdog_proc = globals.watchdog_with_uuid(uuid);
+        let watchdog_proc = watchdog_with_uuid(uuid);
         assert!(watchdog_proc.is_some());
         let Some(mut watchdog_proc) = watchdog_proc else {
             panic!("we literally just checked that it was Some(_)");
@@ -930,14 +771,12 @@ mod tests {
 
     #[test]
     fn cleans_up_process_compose() {
-        let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell
             .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
-        let (_watchdog, mut process_compose_proc) =
-            shell.activate_with_services(&[], &mut globals).unwrap();
+        let (_watchdog, mut process_compose_proc) = shell.activate_with_services(&[]).unwrap();
         shell.assert_is_activated().unwrap();
         assert!(process_compose_proc.is_running());
         shell.exit_shell(); // once for the activation
@@ -948,14 +787,12 @@ mod tests {
 
     #[test]
     fn background_procs_exit_cleanly() {
-        let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell
             .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
-        let (mut watchdog, mut process_compose) =
-            shell.activate_with_services(&[], &mut globals).unwrap();
+        let (mut watchdog, mut process_compose) = shell.activate_with_services(&[]).unwrap();
         shell.assert_is_activated().unwrap();
         shell.exit_shell(); // once for the activation
 
@@ -968,16 +805,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn detects_leaked_process() {
-        let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell
             .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
-        let (mut watchdog, mut process_compose) =
-            shell.activate_with_services(&[], &mut globals).unwrap();
-        // shell.exit_shell(); // once for the activation
-        watchdog.send_sigkill();
+        let (mut watchdog, mut process_compose) = shell.activate_with_services(&[]).unwrap();
+        watchdog.send_sigkill(); // kill this first so it doesn't kill process-compose
+        shell.exit_shell();
         watchdog.wait_for_termination_with_timeout(1000).unwrap();
         process_compose
             .wait_for_termination_with_timeout(1000)
@@ -992,14 +827,12 @@ mod tests {
     #[test]
     #[should_panic]
     fn automatically_fails_on_leaked_process() {
-        let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell
             .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
-        let (mut watchdog, _process_compose) =
-            shell.activate_with_services(&[], &mut globals).unwrap();
+        let (mut watchdog, _process_compose) = shell.activate_with_services(&[]).unwrap();
         shell.exit_shell(); // once for the activation
         watchdog.send_sigkill();
         // The Drop impl for the process-compose struct should cause
@@ -1012,7 +845,6 @@ mod tests {
 
     #[test]
     fn services_arent_started_unless_requested() {
-        let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell
@@ -1021,8 +853,7 @@ mod tests {
         shell.activate(&[]).unwrap();
         // If services _were_ going to start, give them a chance to do so
         sleep_millis(100);
-        let process_compose =
-            globals.process_compose_with_uuid(shell.read_activation_uuid().unwrap());
+        let process_compose = process_compose_with_uuid(shell.read_activation_uuid().unwrap());
         assert!(process_compose.is_none());
         shell.exit_shell(); // once for the activation
     }
@@ -1043,13 +874,12 @@ mod tests {
 
     #[test]
     fn warns_about_restarting_services() {
-        let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell
             .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
-        let (_w, _pc) = shell.activate_with_services(&[], &mut globals).unwrap();
+        let (_w, _pc) = shell.activate_with_services(&[]).unwrap();
         shell
             .set_var(
                 "_FLOX_USE_CATALOG_MOCK",
@@ -1064,13 +894,12 @@ mod tests {
 
     #[test]
     fn restart_fails_fast_on_invalid_service_name() {
-        let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell
             .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
-        let (_w, _pc) = shell.activate_with_services(&[], &mut globals).unwrap();
+        let (_w, _pc) = shell.activate_with_services(&[]).unwrap();
         shell.send_line("flox services status --json").unwrap();
         let output = shell.wait_for_prompt().unwrap();
         let mut service_pids = vec![];
@@ -1087,17 +916,13 @@ mod tests {
             .unwrap();
         // Assert that the previous processes are still running
         for pid in service_pids.into_iter() {
-            let Some(is_running) = globals.pid_is_running(pid) else {
-                panic!("service was no longer running");
-            };
-            assert!(is_running);
+            assert!(pid_is_running(pid as i32));
         }
         shell.exit_shell(); // once for the activation
     }
 
     #[test]
     fn attach_doesnt_start_second_watchdog() {
-        let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell1 = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell1
@@ -1110,7 +935,7 @@ mod tests {
         shell2.activate(&[]).unwrap();
         let uuid = shell2.read_activation_uuid().unwrap();
         sleep_millis(50);
-        assert!(globals.watchdog_with_uuid(&uuid).is_none());
+        assert!(watchdog_with_uuid(&uuid).is_none());
         shell1.exit_shell(); // once for the activation
         shell2.exit_shell();
     }

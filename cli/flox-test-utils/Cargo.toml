@@ -10,7 +10,6 @@ rexpect.workspace = true
 tempfile.workspace = true
 nix.workspace = true
 indoc.workspace = true
-sysinfo.workspace = true
 temp-env.workspace = true
 dirs.workspace = true
 serde_json.workspace = true

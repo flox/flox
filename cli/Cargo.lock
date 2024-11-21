@@ -1204,7 +1204,6 @@ dependencies = [
  "nix 0.28.0",
  "rexpect",
  "serde_json",
- "sysinfo",
  "temp-env",
  "tempfile",
  "thiserror",
