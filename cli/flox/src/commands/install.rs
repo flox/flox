@@ -110,13 +110,13 @@ impl Install {
         let mut packages_to_install = self
             .packages
             .iter()
-            .map(|p| PackageToInstall::from_str(p))
+            .map(|p| PackageToInstall::parse(&flox.system, p))
             .collect::<Result<Vec<_>, _>>()?;
         let pkgs_with_ids = self
             .id
             .iter()
             .map(|p| {
-                let mut pkg = PackageToInstall::from_str(&p.pkg);
+                let mut pkg = PackageToInstall::parse(&flox.system, &p.pkg);
                 if let Ok(ref mut pkg) = pkg {
                     pkg.set_id(&p.id);
                 }
@@ -255,6 +255,7 @@ impl Install {
             .map(|p| match p {
                 PackageToInstall::Catalog(pkg) => pkg.pkg_path.clone(),
                 PackageToInstall::Flake(pkg) => pkg.url.to_string(),
+                PackageToInstall::StorePath(pkg) => pkg.store_path.display().to_string(),
             })
             .join(",")
     }
@@ -569,8 +570,6 @@ fn add_activation_to_rc_file(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
     use flox_rust_sdk::models::manifest::{CatalogPackage, PackageToInstall};
@@ -689,9 +688,9 @@ mod tests {
     #[test]
     fn package_list_for_prompt_is_formatted_correctly() {
         let packages = vec![
-            PackageToInstall::from_str("hello").unwrap(),
-            PackageToInstall::from_str("ripgrep").unwrap(),
-            PackageToInstall::from_str("bpftrace").unwrap(),
+            PackageToInstall::parse(&"dummy-system".to_string(), "hello").unwrap(),
+            PackageToInstall::parse(&"dummy-system".to_string(), "ripgrep").unwrap(),
+            PackageToInstall::parse(&"dummy-system".to_string(), "bpftrace").unwrap(),
         ];
         assert_eq!(
             format!("'hello'"),
