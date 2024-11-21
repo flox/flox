@@ -339,21 +339,34 @@ impl<'dirs> ShellProcess<'dirs> {
         name: impl AsRef<str>,
         copy_from: impl AsRef<Path>,
     ) -> Result<(), Error> {
+        eprintln!("parent: {}", copy_from.as_ref().display());
         // Create the .flox directory
         let env_dir = self.dirs.home_dir.join(name.as_ref()).join(".flox/env");
         std::fs::create_dir_all(&env_dir).context("couldn't create .flox/env")?;
 
-        // Copy the manifest and lockfile
-        std::fs::copy(
-            copy_from.as_ref().join("manifest.toml"),
-            env_dir.join("manifest.toml"),
-        )
-        .context("failed to copy manifest")?;
-        std::fs::copy(
-            copy_from.as_ref().join("manifest.lock"),
-            env_dir.join("manifest.lock"),
-        )
-        .context("failed to copy lockfile")?;
+        // Copy the manifest and set permissions
+        let manifest_src_path = copy_from.as_ref().join("manifest.toml");
+        let manifest_dest_path = env_dir.join("manifest.toml");
+        std::fs::copy(&manifest_src_path, &manifest_dest_path)
+            .context("failed to copy manifest")?;
+        let mut manifest_perms = std::fs::metadata(&manifest_dest_path)
+            .context("failed to get file metadata for manifest")?
+            .permissions();
+        manifest_perms.set_readonly(false);
+        std::fs::set_permissions(&manifest_dest_path, manifest_perms)
+            .context("failed to set manifest permissions")?;
+
+        // Copy the lockfile and set permissions
+        let lockfile_src_path = copy_from.as_ref().join("manifest.lock");
+        let lockfile_dest_path = env_dir.join("manifest.lock");
+        std::fs::copy(&lockfile_src_path, &lockfile_dest_path)
+            .context("failed to copy lockfile")?;
+        let mut lockfile_perms = std::fs::metadata(&lockfile_dest_path)
+            .context("failed to get file metadata for lockfile")?
+            .permissions();
+        lockfile_perms.set_readonly(false);
+        std::fs::set_permissions(&lockfile_dest_path, lockfile_perms)
+            .context("failed to set lockfile permissions")?;
 
         // Create a `.flox/env.json` file since those aren't stored in the
         // generated data
@@ -738,6 +751,7 @@ pub fn find_all_pids_with_uuid(uuid: impl AsRef<str>) -> Option<u32> {
 }
 
 /// Returns the path to a `mkdata`-generated environment
+#[allow(dead_code)]
 fn path_to_generated_env(name: &str) -> PathBuf {
     let base_dir = PathBuf::from(std::env::var("GENERATED_DATA").unwrap());
     base_dir.join("envs").join(name)
@@ -745,8 +759,6 @@ fn path_to_generated_env(name: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
-
     use indoc::formatdoc;
     use serde_json::Value;
 
@@ -851,58 +863,45 @@ mod tests {
         let start = start_timer();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
-        print_elapsed(start, "init done");
         shell
-            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .init_from_generated_env("myenv", path_to_generated_env("empty"))
             .unwrap();
-        print_elapsed(start, "edit done");
         shell.activate(&[]).unwrap();
-        print_elapsed(start, "activated");
         shell
             .execute(
                 "echo $_FLOX_ACTIVATION_UUID",
                 r#"\w{8}-\w{4}-\w{4}-\w{4}-\w{12}"#,
             )
             .unwrap();
-        print_elapsed(start, "executed");
         shell.exit_shell(); // once for the activation
-        print_elapsed(start, "exiting");
     }
 
     #[test]
     fn can_locate_watchdog() {
-        let globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
+        shell
+            .init_from_generated_env("myenv", path_to_generated_env("empty"))
+            .unwrap();
         shell.activate(&[]).unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
-        let watchdog = find_watchdog_pid_with_uuid(uuid, &mut globals.system.lock().unwrap());
+        let watchdog = find_watchdog_pid_with_uuid(uuid);
         assert!(watchdog.is_some());
         shell.exit_shell(); // once for the activation
     }
 
     #[test]
     fn can_locate_process_compose() {
-        let globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
         shell
-            .edit_with_manifest_contents(formatdoc! {r#"
-            version = 1
-
-            [services.sleep_forever]
-            command = "sleep 999999"
-        "#})
+            .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
         shell
             .activate_with_unchecked_args(&["--start-services"])
             .unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
-        let process_compose =
-            find_process_compose_pid_with_uuid(uuid, &mut globals.system.lock().unwrap());
+        let process_compose = find_process_compose_pid_with_uuid(uuid);
         assert!(process_compose.is_some());
         shell.exit_shell(); // once for the activation
     }
@@ -912,7 +911,9 @@ mod tests {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
+        shell
+            .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
+            .unwrap();
         shell.activate(&[]).unwrap();
         let uuid = shell.read_activation_uuid().unwrap();
         let watchdog_proc = globals.watchdog_with_uuid(uuid);
@@ -932,14 +933,8 @@ mod tests {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
         shell
-            .edit_with_manifest_contents(formatdoc! {r#"
-            version = 1
-
-            [services.sleep_forever]
-            command = "sleep 999999"
-        "#})
+            .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
         let (_watchdog, mut process_compose_proc) =
             shell.activate_with_services(&[], &mut globals).unwrap();
@@ -956,9 +951,8 @@ mod tests {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
         shell
-            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
         let (mut watchdog, mut process_compose) =
             shell.activate_with_services(&[], &mut globals).unwrap();
@@ -977,18 +971,23 @@ mod tests {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
         shell
-            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
         let (mut watchdog, mut process_compose) =
             shell.activate_with_services(&[], &mut globals).unwrap();
-        shell.exit_shell(); // once for the activation
+        // shell.exit_shell(); // once for the activation
         watchdog.send_sigkill();
+        watchdog.wait_for_termination_with_timeout(1000).unwrap();
         process_compose
             .wait_for_termination_with_timeout(1000)
             .unwrap();
     }
+
+    // We drop the proc
+    // assume it isn't terminated yet
+    // wait_for_termination with 1s timeout
+    // if we time out, we panic
 
     #[test]
     #[should_panic]
@@ -996,9 +995,8 @@ mod tests {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
         shell
-            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
         let (mut watchdog, _process_compose) =
             shell.activate_with_services(&[], &mut globals).unwrap();
@@ -1017,9 +1015,8 @@ mod tests {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
         shell
-            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
         shell.activate(&[]).unwrap();
         // If services _were_ going to start, give them a chance to do so
@@ -1034,8 +1031,9 @@ mod tests {
     fn imperative_commands_error_when_no_services_defined() {
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
-        shell.edit_with_manifest_contents(EMPTY_MANIFEST).unwrap();
+        shell
+            .init_from_generated_env("myenv", path_to_generated_env("empty"))
+            .unwrap();
         shell.activate(&[]).unwrap();
         shell.send_line("flox services start").unwrap();
         shell.wait_for_prompt().unwrap();
@@ -1048,9 +1046,8 @@ mod tests {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
         shell
-            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
         let (_w, _pc) = shell.activate_with_services(&[], &mut globals).unwrap();
         shell
@@ -1070,9 +1067,8 @@ mod tests {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell.init_env_with_name("myenv").unwrap();
         shell
-            .edit_with_manifest_contents(MANIFEST_WITH_SERVICES)
+            .init_from_generated_env("myenv", path_to_generated_env("sleeping_services"))
             .unwrap();
         let (_w, _pc) = shell.activate_with_services(&[], &mut globals).unwrap();
         shell.send_line("flox services status --json").unwrap();
@@ -1104,7 +1100,9 @@ mod tests {
         let mut globals = TestGlobals::new();
         let dirs = IsolatedHome::new().unwrap();
         let mut shell1 = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        shell1.init_env_with_name("myenv").unwrap();
+        shell1
+            .init_from_generated_env("myenv", path_to_generated_env("empty"))
+            .unwrap();
         shell1.activate(&[]).unwrap();
         let mut shell2 = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
         shell2.send_line("cd myenv").unwrap();
