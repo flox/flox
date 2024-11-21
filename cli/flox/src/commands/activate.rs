@@ -431,11 +431,7 @@ impl Activate {
             .to_string(),
         );
 
-        // We should error for remote environments even if they don't have
-        // services so that the user doesn't assume we're actually starting
-        // services.
         if self.start_services {
-            // Error for remote envs, since they don't support services
             ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
 
             if manifest.services.is_empty() {

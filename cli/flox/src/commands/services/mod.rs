@@ -93,8 +93,6 @@ impl ServicesCommands {
 /// Constructing a [ServicesEnvironment] requires a _local_ [ConcreteEnvironment]
 /// that supports services, i.e. is defined in a v1 [TypedManifestCatalog].
 ///
-/// Constructing a [ServicesEnvironment] for a remote environment is not supported.
-///
 /// The [ServicesEnvironment] provides methods to guard
 pub struct ServicesEnvironment {
     environment: ConcreteEnvironment,
