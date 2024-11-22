@@ -101,16 +101,15 @@ teardown() {
   local pull_system
   case "$NIX_SYSTEM" in
     x86_64-linux)
-      pull_system="x86_64-darwin"
-      ;;
-    x86_64-darwin)
-      pull_system="x86_64-linux"
+      pull_system="aarch64-darwin"
       ;;
     aarch64-darwin)
       pull_system="x86_64-linux"
       ;;
     *)
-      # we only run the above two systems consistently in CI
+      # We only set AUTH0_FLOX_DEV_CLIENT_SECRET in CI on aarch64-darwin and
+      # x86_64-linux, so we only test on those systems and the skip should be
+      # unreachable
       skip "unsupported system: $NIX_SYSTEM"
       ;;
   esac
