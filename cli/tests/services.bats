@@ -1079,8 +1079,9 @@ EOF
   assert_success
   TEARDOWN_FIFO="$PROJECT_DIR/finished"
 
+  ensure_remote_environment_built "$OWNER/$PROJECT_NAME"
   mkfifo started "$TEARDOWN_FIFO"
-  "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
+  _FLOX_TESTING_NO_BUILD=true "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
     echo > started
     echo > finished
 EOF
@@ -1098,8 +1099,9 @@ EOF
   "$FLOX_BIN" push --owner "$OWNER"
   assert_success
 
+  ensure_remote_environment_built "$OWNER/$PROJECT_NAME"
   mkfifo started finished
-  "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
+  _FLOX_TESTING_NO_BUILD=true "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
     echo > started
     timeout 8 cat finished
 EOF

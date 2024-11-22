@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
@@ -99,6 +100,9 @@ impl BuildEnv for BuildEnvNix {
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
+        if env::var("_FLOX_TESTING_NO_BUILD").is_ok() {
+            panic!("Can't build when _FLOX_TESTING_NO_BUILD is set");
+        }
         // todo: use `stat` or `nix path-info` to filter out pre-existing store paths
 
         // Realise the packages in the lockfile
