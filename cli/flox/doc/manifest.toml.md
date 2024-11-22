@@ -230,6 +230,42 @@ and `flake` is described below:
     If an attrpath is specified, it is checked whether
     `packages.$system.$attrpath` or `legacyPackages.$system.$attrpath` exist.
 
+#### Store paths
+
+
+Store path descriptors allow installing software from an arbitrary Nix store path.
+
+The full list of store path descriptor options is:
+```
+Descriptor ::= {
+  store-path         = STRING
+, systems            = null | [<STRING>, ...]
+, priority           = null | <INT>
+}
+```
+
+Only `store-path` is required.
+`priority` behaves the same as described above for catalog
+descriptors and flake installables, and `store-path` is described below:
+
+
+`store-path`
+:   Specifies a nix store path, i.e. a nix built package in `/nix/store`. This
+    can be the result of a native Nix operations such as `nix build`, `nix
+    copy`, etc.
+    The store path has to be available on the current system in order to build
+    the environment. The environment will fail to build on other systems without
+    first distributing the store path via Nix tooling.
+    As such, this feature is most suitable for local experiments and ad-hoc
+    interoperability with Nix.
+
+`system`
+:   Behaves equally to the system attribute of catalog descriptors
+    and flakes installables.
+    Unlike the former, users are encouraged to specify it,
+    because store paths are generally system dependent.
+
+
 ## `[vars]`
 
 The `[vars]` section allows you to define environment variables for your
