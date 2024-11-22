@@ -267,6 +267,12 @@ cat_teardown_fifo() {
 
 }
 
+ensure_remote_environment_built() {
+  envRef="${1?}"
+  "$FLOX_BIN" list -c -r "$envRef" | sed -e '1i\' > edited-manifest.toml
+  "$FLOX_BIN" edit -r "$envRef" -f edited-manifest.toml
+}
+
 # ---------------------------------------------------------------------------- #
 #
 #

@@ -343,7 +343,8 @@ EOF
   TEARDOWN_FIFO="$PROJECT_DIR/finished"
   mkfifo "$TEARDOWN_FIFO"
 
-  "$FLOX_BIN" activate --trust -r "$OWNER/test" -- bash -c "echo > started && echo > \"$TEARDOWN_FIFO\"" >> output 2>&1 &
+  ensure_remote_environment_built "$OWNER/test"
+  _FLOX_TESTING_NO_BUILD=true "$FLOX_BIN" activate --trust -r "$OWNER/test" -- bash -c "echo > started && echo > \"$TEARDOWN_FIFO\"" >> output 2>&1 &
   timeout 8 cat started
   run cat output
   assert_success
