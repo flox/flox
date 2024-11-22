@@ -1206,6 +1206,7 @@ pub fn remote_branch_name(pointer: &ManagedPointer) -> String {
     format!("{}", pointer.name)
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum PullResult {
     /// The environment was already up to date
     UpToDate,
@@ -1430,20 +1431,19 @@ impl ManagedEnvironment {
     ) -> Result<PullResult, ManagedEnvironmentError> {
         // Check whether the local checkout is in sync with the current generation
         // before potentially updating generations and resetting the local checkout.
-        {
-            let remote = self
-                .generations()
-                .writable(flox.temp_dir.clone())
-                .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
-                .get_current_generation()
-                .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+        let remote = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-            let local_checkout = self.local_env_or_copy_current_generation(flox)?;
+        let local_checkout = self.local_env_or_copy_current_generation(flox)?;
+        let checkout_valid = Self::validate_checkout(&local_checkout, &remote)?;
 
-            // With `force` we pull even if the local checkout is out of sync.
-            if !force && !Self::validate_checkout(&local_checkout, &remote)? {
-                Err(ManagedEnvironmentError::CheckoutOutOfSync)?
-            }
+        // With `force` we pull even if the local checkout is out of sync.
+        if !force && !checkout_valid {
+            Err(ManagedEnvironmentError::CheckoutOutOfSync)?
         }
 
         let sync_branch = remote_branch_name(&self.pointer);
@@ -1470,23 +1470,23 @@ impl ManagedEnvironment {
 
         // Check whether we can fast-forward the remote branch to the local branch,
         // if not the environment has diverged.
-        // if `--force` flag is set we skip this check
-        if !force {
-            let consistent_history = self
-                .floxmeta
-                .git
-                .branch_contains_commit(&project_branch, &sync_branch)
-                .map_err(ManagedEnvironmentError::Git)?;
-            if !consistent_history {
-                Err(ManagedEnvironmentError::Diverged)?;
-            }
+        let consistent_history = self
+            .floxmeta
+            .git
+            .branch_contains_commit(&project_branch, &sync_branch)
+            .map_err(ManagedEnvironmentError::Git)?;
+        if !consistent_history && !force {
+            Err(ManagedEnvironmentError::Diverged)?;
+        }
 
-            let sync_branch_commit = self.floxmeta.git.branch_hash(&sync_branch).ok();
-            let project_branch_commit = self.floxmeta.git.branch_hash(&project_branch).ok();
+        let sync_branch_commit = self.floxmeta.git.branch_hash(&sync_branch).ok();
+        let project_branch_commit = self.floxmeta.git.branch_hash(&project_branch).ok();
 
-            if sync_branch_commit == project_branch_commit {
-                return Ok(PullResult::UpToDate);
-            }
+        // Regardless of whether `--force` is set, we want to accurately return UpToDate
+        // If the checkout is not the same as the current generation, we should
+        // instead reset_local_env_to_current_generation below
+        if checkout_valid && sync_branch_commit == project_branch_commit {
+            return Ok(PullResult::UpToDate);
         }
 
         // update the project branch to the remote branch, using `force` if specified
@@ -1657,7 +1657,7 @@ mod test {
 
     use fslock::LockFile;
     use indoc::indoc;
-    use test_helpers::mock_managed_environment_from_env_files;
+    use test_helpers::{mock_managed_environment, mock_managed_environment_from_env_files};
     use url::Url;
 
     use super::*;
@@ -2732,5 +2732,15 @@ mod test {
             path_env.rendered_env_links(&flox).unwrap(),
             out_links_before
         )
+    }
+
+    #[test]
+    fn force_pull_returns_up_to_date() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let mut environment = mock_managed_environment(&flox, "version = 1", owner);
+
+        assert_eq!(environment.pull(&flox, true).unwrap(), PullResult::UpToDate);
     }
 }
