@@ -77,7 +77,8 @@ reference.
 :   The pkg-path of the package to install as shown by 'flox search'
     Append `@<version>` to specify a version requirement.
 
-    Alternatively, an arbitrary Nix flake installable may be specified.
+    Alternatively, an arbitrary Nix flake installable,
+    or store path may be specified.
     See [`manfifest-toml(1)`](./manifest.toml.md) for more details.
 
 
