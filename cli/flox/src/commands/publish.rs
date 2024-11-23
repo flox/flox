@@ -7,6 +7,7 @@ use flox_rust_sdk::providers::build::FloxBuildMk;
 use flox_rust_sdk::providers::publish::{
     check_build_metadata,
     check_environment_metadata,
+    NixCopyCache,
     PublishProvider,
     Publisher,
 };
@@ -29,6 +30,9 @@ pub struct Publish {
     #[bpaf(long)]
     cache: Option<Url>,
 
+    #[bpaf(long)]
+    key_file: Option<String>,
+
     #[bpaf(external(publish_target))]
     publish_target: PublishTarget,
 }
@@ -49,12 +53,15 @@ impl Publish {
         }
 
         let PublishTarget { target } = self.publish_target;
+        if self.cache.is_some() && self.key_file.is_none() {
+            bail!("--cache requires a signing key to be provided via --key-file.");
+        }
         {
             let env = self
                 .environment
                 .detect_concrete_environment(&flox, "Publish")?;
 
-            Self::publish(flox, env, target, self.cache).await
+            Self::publish(flox, env, target, self.cache, self.key_file).await
         }
     }
 
@@ -63,7 +70,8 @@ impl Publish {
         mut flox: Flox,
         mut env: ConcreteEnvironment,
         package: String,
-        cache: Option<Url>,
+        cache_uri: Option<Url>,
+        key_file: Option<String>,
     ) -> Result<()> {
         subcommand_metric!("publish");
 
@@ -81,10 +89,15 @@ impl Publish {
         let build_metadata =
             check_build_metadata(&env, &package, &flox.system).or_else(|e| bail!(e.to_string()))?;
 
-        let publish_provider = PublishProvider::<&FloxBuildMk> {
+        let cache = match (cache_uri, key_file) {
+            (Some(uri), Some(key_file)) => Some(NixCopyCache { uri, key_file }),
+            _ => None,
+        };
+
+        let publish_provider = PublishProvider::<&FloxBuildMk, &NixCopyCache> {
             build_metadata,
             env_metadata,
-            cache,
+            cache: cache.as_ref(),
             _builder: None,
         };
 

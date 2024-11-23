@@ -1,4 +1,5 @@
 use std::error;
+use std::process::Command;
 use std::str::FromStr;
 
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
@@ -12,6 +13,7 @@ use super::catalog::{Client, ClientTrait, UserBuildInfo, UserDerivationInfo};
 use super::git::GitCommandProvider;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
+use crate::providers::buildenv::NIX_BIN;
 use crate::providers::git::GitProvider;
 
 #[derive(Debug, Error)]
@@ -32,6 +34,9 @@ pub enum PublishError {
 
     #[error("Could not identify user from authentication info")]
     Unauthenticated,
+
+    #[error("Failed to upload to cache: {0}")]
+    CacheUploadError(String),
 
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
@@ -83,24 +88,81 @@ pub struct CheckedBuildMetadata {
     _private: (),
 }
 
+#[allow(async_fn_in_trait)]
+pub trait BinaryCache {
+    async fn upload(&self, path: &str) -> Result<(), PublishError>;
+    fn cache_uri(&self) -> &Url;
+}
+
+pub struct NixCopyCache {
+    pub uri: Url,
+    pub key_file: String,
+}
+
+impl BinaryCache for NixCopyCache {
+    async fn upload(&self, path: &str) -> Result<(), PublishError> {
+        debug!("Uploading {} to cache...", path);
+        let uri_with_key = format!("{}?secret-key={}", self.uri.as_str(), self.key_file);
+        let mut copy_command = Command::new(&*NIX_BIN);
+        copy_command
+            .arg("copy")
+            .arg("--to")
+            .arg(uri_with_key)
+            .arg(path);
+        let output = copy_command
+            .output()
+            .map_err(|e| PublishError::CacheUploadError(e.to_string()))?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(PublishError::CacheUploadError(stderr.to_string()))
+        }
+    }
+
+    fn cache_uri(&self) -> &Url {
+        &self.uri
+    }
+}
+
+pub struct MockCache {
+    pub uri: Url,
+    pub error_msg: Option<String>,
+}
+
+impl BinaryCache for MockCache {
+    async fn upload(&self, _path: &str) -> Result<(), PublishError> {
+        if let Some(msg) = &self.error_msg {
+            Err(PublishError::CacheUploadError(msg.to_string()))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn cache_uri(&self) -> &Url {
+        &self.uri
+    }
+}
+
 /// The `PublishProvider` is a concrete implementation of the `Publish` trait.
 /// It is responsible for the actual implementation of the `Publish` trait,
 /// i.e. the actual publishing of a package to a catalog.
 ///
 /// The `PublishProvider` is a generic struct, parameterized by a `Builder` type,
 /// to build packages before publishing.
-pub struct PublishProvider<Builder> {
+pub struct PublishProvider<Builder, Cache> {
     pub env_metadata: CheckedEnvironmentMetadata,
     pub build_metadata: CheckedBuildMetadata,
-    pub cache: Option<Url>,
+    pub cache: Option<Cache>,
 
     pub _builder: Option<Builder>,
 }
 
 /// (default) implementation of the `Publish` trait, i.e. the publish interface to publish.
-impl<Builder> Publisher for PublishProvider<&Builder>
+impl<Builder, Cache> Publisher for PublishProvider<&Builder, &Cache>
 where
     Builder: ManifestBuilder,
+    Cache: BinaryCache,
 {
     async fn publish(&self, client: &Client, catalog_name: &str) -> Result<(), PublishError> {
         // Get metadata from the environment, like locked URLs.
@@ -157,8 +219,13 @@ where
             rev: self.env_metadata.build_repo_ref.rev.clone(),
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
             rev_date: self.env_metadata.build_repo_ref.rev_date,
-            cache_uri: self.cache.clone().map(|u| u.to_string()),
+            cache_uri: self.cache.map(|c| c.cache_uri().to_string()),
         };
+
+        if let Some(cache) = self.cache {
+            cache.upload(&self.build_metadata.drv_path).await?
+        }
+
         debug!("Publishing build in catalog...");
         client
             .publish_build(&catalog_name, &self.build_metadata.package, &build_info)
@@ -397,8 +464,8 @@ pub mod tests {
         assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
     }
 
-    #[test]
-    fn test_publish() {
+    #[tokio::test]
+    async fn test_publish() {
         let (flox, _temp_dir_handle) = flox_instance();
         let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
         let (mut env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
@@ -415,13 +482,57 @@ pub mod tests {
             check_build_metadata(&env, EXAMPLE_PACKAGE_NAME, &flox.system).unwrap(),
         );
 
-        let publish_provider = PublishProvider::<&FloxBuildMk> {
+        let publish_provider = PublishProvider::<&FloxBuildMk, &MockCache> {
             build_metadata,
             env_metadata,
             cache: None,
             _builder: None,
         };
 
-        let _res = publish_provider.publish(&client, &catalog_name);
+        let _res = publish_provider.publish(&client, &catalog_name).await;
+
+        assert!(_res.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_upload_to_cache() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
+        let (mut env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
+
+        // Do the build to ensure it's been run.  We just want to find the outputs
+        assert_build_status(&flox, &mut env, EXAMPLE_PACKAGE_NAME, true);
+
+        let client = Client::Mock(MockClient::new(None::<String>).unwrap());
+        let token = create_test_token("test");
+        let catalog_name = token.handle().to_string();
+
+        let (env_metadata, build_metadata) = (
+            check_environment_metadata(&flox, &mut env).unwrap(),
+            check_build_metadata(&env, EXAMPLE_PACKAGE_NAME, &flox.system).unwrap(),
+        );
+
+        // It's a lot easier to detect an error than a no-op success, so we test that case here.
+        let cache = Some(MockCache {
+            uri: Url::parse("s3://my-cool-cache").unwrap(),
+            error_msg: Some("Something went wrong".to_string()),
+        });
+
+        let publish_provider = PublishProvider::<&FloxBuildMk, &MockCache> {
+            build_metadata,
+            env_metadata,
+            cache: cache.as_ref(),
+            _builder: None,
+        };
+
+        let _res = publish_provider.publish(&client, &catalog_name).await;
+        assert!(!_res.is_ok());
+
+        if let Err(e) = _res {
+            assert_eq!(
+                e.to_string(),
+                "Failed to upload to cache: Something went wrong"
+            );
+        }
     }
 }
