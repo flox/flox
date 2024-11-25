@@ -1104,6 +1104,13 @@ pub mod types {
     ///        "null"
     ///      ]
     ///    },
+    ///    "cache_uri": {
+    ///      "title": "Cache Uri",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "catalog": {
     ///      "title": "Catalog",
     ///      "type": [
@@ -1215,6 +1222,8 @@ pub mod types {
     pub struct PackageResolutionInfo {
         pub attr_path: String,
         pub broken: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub cache_uri: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub catalog: Option<String>,
         pub derivation: String,
@@ -1513,6 +1522,13 @@ pub mod types {
     ///        "null"
     ///      ]
     ///    },
+    ///    "cache_uri": {
+    ///      "title": "Cache Uri",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "catalog": {
     ///      "title": "Catalog",
     ///      "type": [
@@ -1628,6 +1644,8 @@ pub mod types {
     pub struct ResolvedPackageDescriptor {
         pub attr_path: String,
         pub broken: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub cache_uri: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub catalog: Option<String>,
         pub derivation: String,
@@ -2168,6 +2186,7 @@ pub mod types {
     ///  "title": "UserBuild",
     ///  "examples": [
     ///    {
+    ///      "cache_uri": "https://example-s3-bucket.com",
     ///      "derivation": {
     ///        "description": "A very nice derivation",
     ///        "drv_path": "foo.bar.curl",
@@ -2199,6 +2218,13 @@ pub mod types {
     ///    "url"
     ///  ],
     ///  "properties": {
+    ///    "cache_uri": {
+    ///      "title": "Cache Uri",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "derivation": {
     ///      "$ref": "#/components/schemas/UserDerivation-Input"
     ///    },
@@ -2232,6 +2258,8 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct UserBuildInput {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub cache_uri: Option<String>,
         pub derivation: UserDerivationInput,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub locked_base_catalog_url: Option<String>,
@@ -2318,6 +2346,7 @@ pub mod types {
     ///  "title": "UserBuild",
     ///  "examples": [
     ///    {
+    ///      "cache_uri": "https://example-s3-bucket.com",
     ///      "derivation": {
     ///        "description": "A very nice derivation",
     ///        "drv_path": "foo.bar.curl",
@@ -2349,6 +2378,13 @@ pub mod types {
     ///    "url"
     ///  ],
     ///  "properties": {
+    ///    "cache_uri": {
+    ///      "title": "Cache Uri",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "derivation": {
     ///      "$ref": "#/components/schemas/UserDerivation-Output"
     ///    },
@@ -2382,6 +2418,8 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct UserBuildOutput {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub cache_uri: Option<String>,
         pub derivation: UserDerivationOutput,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub locked_base_catalog_url: Option<String>,

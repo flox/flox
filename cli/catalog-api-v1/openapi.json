@@ -1535,6 +1535,11 @@
             "type": "string",
             "format": "date-time",
             "title": "Scrape Date"
+          },
+          "cache_uri": {
+            "title": "Cache Uri",
+            "nullable": true,
+            "type": "string"
           }
         },
         "type": "object",
@@ -1800,6 +1805,11 @@
             "format": "date-time",
             "title": "Scrape Date"
           },
+          "cache_uri": {
+            "title": "Cache Uri",
+            "nullable": true,
+            "type": "string"
+          },
           "install_id": {
             "type": "string",
             "title": "Install Id"
@@ -2055,6 +2065,11 @@
           },
           "derivation": {
             "$ref": "#/components/schemas/UserDerivation-Input"
+          },
+          "cache_uri": {
+            "title": "Cache Uri",
+            "nullable": true,
+            "type": "string"
           }
         },
         "type": "object",
@@ -2067,6 +2082,7 @@
         ],
         "title": "UserBuild",
         "example": {
+          "cache_uri": "https://example-s3-bucket.com",
           "derivation": {
             "description": "A very nice derivation",
             "drv_path": "foo.bar.curl",
@@ -2115,6 +2131,11 @@
           },
           "derivation": {
             "$ref": "#/components/schemas/UserDerivation-Output"
+          },
+          "cache_uri": {
+            "title": "Cache Uri",
+            "nullable": true,
+            "type": "string"
           }
         },
         "type": "object",
@@ -2127,6 +2148,7 @@
         ],
         "title": "UserBuild",
         "example": {
+          "cache_uri": "https://example-s3-bucket.com",
           "derivation": {
             "description": "A very nice derivation",
             "drv_path": "foo.bar.curl",
