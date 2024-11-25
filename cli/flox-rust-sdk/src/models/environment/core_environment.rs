@@ -1354,6 +1354,7 @@ mod tests {
                     unfree: None,
                     version: "1.0".to_string(),
                     system: SystemEnum::Aarch64Darwin,
+                    cache_uri: None,
                 }]),
                 msgs: vec![],
                 page: 1,

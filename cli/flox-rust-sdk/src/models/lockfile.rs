@@ -233,6 +233,7 @@ impl LockedPackageCatalog {
             unfree,
             version,
             system,
+            cache_uri: _,
         } = package;
 
         let outputs = outputs
@@ -1898,6 +1899,7 @@ pub(crate) mod tests {
                     stabilities: Some(vec!["stability".to_string()]),
                     unfree: Some(false),
                     version: "version".to_string(),
+                    cache_uri: None,
                 }]),
                 msgs: vec![],
             }),
@@ -2524,6 +2526,7 @@ pub(crate) mod tests {
                     unfree: Some(false),
                     version: "version".to_string(),
                     system: SystemEnum::Aarch64Darwin,
+                    cache_uri: None,
                 }]),
                 msgs: vec![],
             }),
@@ -3186,6 +3189,7 @@ pub(crate) mod tests {
                     system: SystemEnum::Aarch64Darwin,
                     unfree: Default::default(),
                     version: Default::default(),
+                    cache_uri: Default::default(),
                 }]),
                 page: 1,
                 url: "url".to_string(),

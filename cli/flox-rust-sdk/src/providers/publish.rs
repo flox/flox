@@ -155,6 +155,7 @@ where
             rev: self.env_metadata.build_repo_ref.rev.clone(),
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
             rev_date: self.env_metadata.build_repo_ref.rev_date,
+            cache_uri: None,
         };
         debug!("Publishing build in catalog...");
         client

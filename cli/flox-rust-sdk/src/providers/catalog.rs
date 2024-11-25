@@ -1271,6 +1271,7 @@ pub mod test_helpers {
             unfree: None,
             version: version.to_string(),
             system: system.parse().unwrap(),
+            cache_uri: None,
         };
         let page = CatalogPage {
             packages: Some(vec![pkg]),
