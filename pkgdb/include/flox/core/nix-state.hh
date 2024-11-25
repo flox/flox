@@ -105,7 +105,16 @@ public:
   nix::ref<nix::Store>
   getStore()
   {
-    if ( this->store == nullptr ) { this->store = nix::openStore(); }
+    if ( this->store == nullptr )
+      {
+        std::string storeURI = "auto";
+        if ( const char * rawStoreURI = std::getenv( "_FLOX_NIX_STORE_URL" ) )
+          {
+            auto providedStoreURI = std::string( rawStoreURI );
+            if ( ! providedStoreURI.empty() ) { storeURI = providedStoreURI; }
+          }
+        this->store = nix::openStore( storeURI );
+      }
     return static_cast<nix::ref<nix::Store>>( this->store );
   }
 

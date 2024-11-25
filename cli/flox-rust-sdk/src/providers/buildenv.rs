@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
 
-use indoc::indoc;
+use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
@@ -195,15 +195,29 @@ impl BuildEnv for BuildEnvNix {
 impl BuildEnvNix {
     fn base_command(&self) -> Command {
         let mut nix_build_command = Command::new(&*NIX_BIN);
+        let store = std::env::var("_FLOX_NIX_STORE_URL")
+            .ok()
+            .and_then(|value| {
+                if value.is_empty() {
+                    debug!("using 'auto' store");
+                    None
+                } else {
+                    let store_uri = value.to_string();
+                    debug!(%store_uri, "overriding Nix store");
+                    Some(store_uri)
+                }
+            })
+            .unwrap_or(String::from("auto"));
+
         // Override nix config to use flake commands,
         // allow impure language features such as `builtins.storePath`,
         // and use the auto store (which is used by the preceding `pkgdb realise` command)
         // TODO: formalize this in a config file,
         // and potentially disable other user configs (allowing specific overrides)
-        let nix_config = indoc! {"
+        let nix_config = formatdoc! {"
             experimental-features = nix-command flakes
             pure-eval = false
-            store = auto
+            store = {store}
         "};
 
         nix_build_command.env("NIX_CONFIG", nix_config);
