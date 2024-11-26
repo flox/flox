@@ -212,7 +212,8 @@ wait_for_watchdogs() {
         break
       else
         if [[ $tries -gt 1000 ]]; then
-          echo "ERROR: flox-watchdog processes did not finish after 10 seconds." >&3
+          echo "ERROR: flox-watchdog processes did not finish after 10 seconds, logs:" >&3
+          cat "${project_dir}"/.flox/log/watchdog.* >&3
           # This will fail the test giving us a better idea of which watchdog
           # didn't get cleaned up
           exit 1
