@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::env;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
@@ -121,6 +122,26 @@ impl BuildEnvNix {
         nix_build_command.arg("--print-build-logs");
 
         nix_build_command
+    }
+
+    /// Check if the given store paths are valid,
+    /// i.e. if the store paths exist in the store.
+    fn check_store_path(
+        &self,
+        paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
+    ) -> Result<bool, BuildEnvError> {
+        let mut cmd = self.base_command();
+        cmd.arg("path-info").args(paths);
+
+        debug!(cmd=%cmd.display(), "checking store paths");
+
+        let success = cmd
+            .output()
+            .map_err(BuildEnvError::CallNixBuild)?
+            .status
+            .success();
+
+        Ok(success)
     }
 }
 
