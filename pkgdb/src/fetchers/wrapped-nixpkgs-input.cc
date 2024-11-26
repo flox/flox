@@ -64,7 +64,8 @@ namespace flox {
  *        @a nixpkgsRef configuring it to allow unfree and broken packages.
  */
 static std::filesystem::path
-createWrappedFlakeDirV0( const nix::FlakeRef & nixpkgsRef )
+createWrappedFlakeDirV0( nix::EvalState &      state,
+                         const nix::FlakeRef & nixpkgsRef )
 {
   /* Create a temporary directory to put the filled out template file in it. */
   std::filesystem::path tmpDir = nix::createTempDir();
@@ -94,10 +95,9 @@ createWrappedFlakeDirV0( const nix::FlakeRef & nixpkgsRef )
 
   /* Lock the filled out template to avoid spurious re-locking and silence the
    * "Added input ..." message. */
-  flox::NixState           nixState;
-  nix::ref<nix::EvalState> state = nixState.getState();
+
   nix::FlakeRef wrappedRef = nix::parseFlakeRef( "path:" + tmpDir.string() );
-  auto          _locked    = nix::flake::lockFlake( *state, wrappedRef, {} );
+  auto          _locked    = nix::flake::lockFlake( state, wrappedRef, {} );
   debugLog( "locked flake template" );
 
   return tmpDir;
@@ -117,12 +117,14 @@ static const uint64_t latestWrapperVersion = 0;
  * with `latestWrapperVersion`.
  */
 static inline std::filesystem::path
-createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef, uint64_t version = 0 )
+createWrappedFlakeDir( nix::EvalState &      state,
+                       const nix::FlakeRef & nixpkgsRef,
+                       uint64_t              version = 0 )
 {
   // NOLINTNEXTLINE(hicpp-multiway-paths-covered)
   switch ( version )
     {
-      case 0: return flox::createWrappedFlakeDirV0( nixpkgsRef ); break;
+      case 0: return flox::createWrappedFlakeDirV0( state, nixpkgsRef ); break;
 
       default:
         throw nix::Error( "unsupported 'version' '%d' in input '%s'",
@@ -512,8 +514,11 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
       return { std::move( res->second ), input };
     }
 
+  auto state = nix::EvalState( nix::SearchPath(), store, store );
+
   /* Otherwise create our flake and add it the `nix' store. */
   auto flakeDir = createWrappedFlakeDir(
+    state,
     nix::FlakeRef::fromAttrs( floxNixpkgsAttrsToGithubAttrs( input.attrs ) ),
     nix::fetchers::getIntAttr( input.attrs, "version" ) );
 
