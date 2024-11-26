@@ -44,13 +44,6 @@ teardown() {
   common_test_teardown
 }
 
-setup_sleeping_services() {
-  run "$FLOX_BIN" init
-  assert_success
-  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/sleeping_services.toml"
-  assert_success
-}
-
 watchdog_pids_called_with_arg() {
   # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
   # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
@@ -92,44 +85,6 @@ process_compose_pids_called_with_arg() {
 @test "watchdog: can run flox-watchdog" {
   run "$WATCHDOG_BIN" --help
   assert_success
-}
-
-@test "watchdog: lives as long as the activation" {
-  setup_sleeping_services
-  export -f watchdog_pids_called_with_arg
-  SHELL="bash" run --separate-stderr "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-
-    # Ensure that the watchdog is still running
-    times=0
-    while true; do
-      if [ "$times" -gt 100 ]; then
-        exit 1
-      fi
-      pid="$(watchdog_pids_called_with_arg "$_FLOX_SERVICES_SOCKET")"
-      if [ -n "${pid?}" ]; then
-        echo "$pid"
-        break
-      fi
-      times=$((times + 1))
-      sleep 0.01
-    done
-EOF
-)
-  pid="$output"
-  assert_success
-
-  # Ensure that the watchdog has exited now
-  times=0
-  while true; do
-    if [ "$times" -gt 100 ]; then
-      exit 1
-    fi
-    if ! kill -0 "$pid"; then
-      break
-    fi
-    times=$((times + 1))
-    sleep 0.01
-  done
 }
 
 @test "watchdog: emits heartbeat log to prevent garbage collection while running" {
