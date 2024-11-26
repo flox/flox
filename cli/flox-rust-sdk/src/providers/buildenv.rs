@@ -10,6 +10,9 @@ use thiserror::Error;
 use tracing::debug;
 
 use crate::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
+use crate::models::lockfile::{
+    LockedPackageCatalog,
+};
 use crate::utils::CommandExt;
 
 pub static NIX_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -122,6 +125,101 @@ impl BuildEnvNix {
         nix_build_command.arg("--print-build-logs");
 
         nix_build_command
+    }
+
+    /// Realise a package from the (nixpkgs) catalog.
+    /// [LockedPackageCatalog] is a locked package from the catalog.
+    /// The package is realised by checking if the store paths are valid,
+    /// and otherwise building the package to create valid store paths.
+    /// Packages are built by
+    /// 1. translating the locked url to a `flox-nixpkgs` url,
+    ///    which is a bridge to the Flox hosted mirror of nixpkgs flake
+    ///    <https://github.com/flox/nixpkgs>, which enables building packages
+    ///    without common evaluation checks, such as unfree and broken.
+    /// 2. constructing the attribute path to build the package,
+    ///    i.e. `legacyPackages.<locked system>.<attr_path>`,
+    ///    as [LockedPackageCatalog::attr_path] is incomplete.
+    /// 3. building the package with essentially
+    ///    `nix build <flox-nixpkgs-url>#<resolved attr path>^*`,
+    ///    which will realise the locked output paths.
+    ///    We set `--option pure-eval true` to avoid improve reproducibility
+    ///    of the locked outputs, and allow the use of the eval-cache
+    ///    to avoid costly re-evaluations.
+    ///
+    /// IMPORTANT/TODO: As custom catalogs, with non-nixpkgs packages are in development,
+    /// this function is currently assumes that the package is from the nixpkgs base-catalog.
+    /// Currently the type is distinguished by the [LockedPackageCatalog::locked_url].
+    /// If this does not indicate a nixpkgs package, the function will currently panic!
+    fn realise_nixpkgs(&self, locked: &LockedPackageCatalog) -> Result<(), BuildEnvError> {
+        // check if all store paths are valid, if so, return without eval
+        let all_valid = self.check_store_path(locked.outputs.values())?;
+
+        if all_valid {
+            return Ok(());
+        }
+
+        let mut nix_build_command = self.base_command();
+
+        // for now assume the plugin is relative relative to the pkgdb binary
+        // <pkgdb>
+        // ├── bin
+        // │   └── pkgdb
+        // └── lib
+        //     └── wrapped-nixpkgs-input.(so|dylib)
+        {
+            let pkgdb_lib_dir = Path::new(&*PKGDB_BIN)
+                .ancestors()
+                .nth(2)
+                .expect("pkgdb is in '<store-path>/bin'")
+                .join("lib")
+                .join(format!("wrapped-nixpkgs-input{}", env!("libExt")));
+            nix_build_command.args([
+                "--option",
+                "extra-plugin-files",
+                &pkgdb_lib_dir.to_string_lossy(),
+            ]);
+        }
+
+        let installable = {
+            let mut locked_url = locked.locked_url.to_string();
+            if let Some(revision_suffix) =
+                locked_url.strip_prefix("https://github.com/flox/nixpkgs?rev=")
+            {
+                locked_url = format!("flox-nixpkgs:v0/flox/{revision_suffix}");
+            } else {
+                todo!(
+                    "Building non-nixpkgs catalog packages is not yet supported.\n\
+                    Pending implementation and decisions regarding representation in the lockfile"
+                );
+            }
+
+            // build all out paths
+            let attrpath = format!("legacyPackages.{}.{}^*", locked.system, locked.attr_path);
+
+            format!("{}#{}", locked_url, attrpath)
+        };
+
+        nix_build_command.arg("build");
+        nix_build_command.arg("--no-write-lock-file");
+        nix_build_command.arg("--no-update-lock-file");
+        nix_build_command.args(["--option", "pure-eval", "true"]);
+        nix_build_command.arg("--no-link");
+        nix_build_command.arg(&installable);
+
+        debug!(%installable, cmd=%nix_build_command.display(), "building catalog package:");
+
+        let output = nix_build_command
+            .output()
+            .map_err(BuildEnvError::CallNixBuild)?;
+
+        if !output.status.success() {
+            return Err(BuildEnvError::Realise2 {
+                install_id: locked.install_id.clone(),
+                message: String::from_utf8_lossy(&output.stderr).to_string(),
+            });
+        }
+
+        Ok(())
     }
 
     /// Check if the given store paths are valid,
