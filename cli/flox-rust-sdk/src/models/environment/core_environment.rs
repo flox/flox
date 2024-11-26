@@ -1056,35 +1056,32 @@ pub enum CoreEnvironmentError {
 
 impl CoreEnvironmentError {
     pub fn is_incompatible_system_error(&self) -> bool {
-        let is_pkgdb_incompatible_system_error = matches!(
-            self,
-            CoreEnvironmentError::BuildEnv(BuildEnvError::Realise(PkgDbError {
-                exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
-                ..
-            }))
-        );
-        let is_catalog_incompatible_system_error = matches!(
+        // incomaptible system errors during resolution
+        let is_lock_incompatible_system_error = matches!(
             self,
             CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(failures))
              if failures.0.iter().any(|f| matches!(f, ResolutionFailure::PackageUnavailableOnSomeSystems { .. })));
-        is_catalog_incompatible_system_error || is_pkgdb_incompatible_system_error
+
+        // Incomaptible system errors during build
+        // i.e. trying to build a lockfile that specifies systems,
+        // but the current system is not in the list
+        let is_build_incompatible_system_error = matches!(
+            self,
+            CoreEnvironmentError::BuildEnv(BuildEnvError::LockfileIncompatible { .. })
+        );
+
+        is_lock_incompatible_system_error || is_build_incompatible_system_error
     }
 
     pub fn is_incompatible_package_error(&self) -> bool {
-        #[allow(clippy::match_like_matches_macro)] // rustfmt can't handle this as a match!
-        match self.pkgdb_exit_code() {
-            Some(exit_code)
-                if [
-                    error_codes::PACKAGE_BUILD_FAILURE,
-                    error_codes::PACKAGE_EVAL_FAILURE,
-                    error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-                ]
-                .contains(exit_code) =>
-            {
-                true
-            },
-            _ => false,
-        }
+        matches!(
+            self.pkgdb_exit_code().copied(),
+            Some(
+                error_codes::PACKAGE_BUILD_FAILURE
+                    | error_codes::PACKAGE_EVAL_FAILURE
+                    | error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+            )
+        )
     }
 
     /// If the error contains a PkgDbError with an exit_code, return it.

@@ -505,3 +505,120 @@ install.tabula.pkg-path = "tabula"
 options.allow.broken = true
 ' | flox lock-manifest - > "$RESPONSE_FILE"
 '''
+
+[envs.vim-vim-full-conflict]
+cmd = "true # no-op"
+post_cmd = '''
+echo '
+version = 1
+install.vim.pkg-path = "vim"
+install.vim-full.pkg-path = "vim-full"
+' | flox lock-manifest - > "$RESPONSE_FILE"
+'''
+
+[envs.vim-vim-full-conflict-resolved]
+cmd = "true # no-op"
+post_cmd = '''
+echo '
+version = 1
+install.vim.pkg-path = "vim"
+install.vim.priority = 1
+install.vim-full.pkg-path = "vim-full"
+' | flox lock-manifest - > "$RESPONSE_FILE"
+'''
+
+
+
+# used by buildenv tests
+[envs.build-runtime-all-toplevel]
+cmd = "true # no-op"
+post_cmd = '''
+echo '
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+coreutils.pkg-path = "coreutils"
+vim.pkg-path = "vim"
+vim.pkg-group = "not-toplevel"
+
+[build]
+myhello.command = """
+    mkdir -p $out/bin
+    echo echo hello foo > $out/bin/hello
+    echo exec hello >> $out/bin/hello
+    chmod +x $out/bin/hello
+"""
+' | flox lock-manifest - > "$RESPONSE_FILE"
+'''
+
+# used by buildenv tests
+[envs.build-runtime-packages-only-hello]
+cmd = "true # no-op"
+post_cmd = '''
+echo '
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+coreutils.pkg-path = "coreutils"
+vim.pkg-path = "vim"
+vim.pkg-group = "not-toplevel"
+
+[build]
+myhello.command = """
+    mkdir -p $out/bin
+    echo echo hello foo > $out/bin/hello
+    echo exec hello >> $out/bin/hello
+    chmod +x $out/bin/hello
+"""
+myhello.runtime-packages = [ "hello" ]
+' | flox lock-manifest - > "$RESPONSE_FILE"
+'''
+
+# used by buildenv tests
+[envs.build-runtime-packages-not-toplevel]
+cmd = "true # no-op"
+post_cmd = '''
+echo '
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+coreutils.pkg-path = "coreutils"
+vim.pkg-path = "vim"
+vim.pkg-group = "not-toplevel"
+
+[build]
+
+myhello.command = """
+  mkdir -p $out/bin
+  echo echo hello foo > $out/bin/hello
+  echo exec hello >> $out/bin/hello
+  chmod +x $out/bin/hello
+"""
+myhello.runtime-packages = [ "hello", "vim" ]
+' | flox lock-manifest - > "$RESPONSE_FILE"
+'''
+
+
+# used by buildenv tests
+[envs.build-runtime-packages-not-found]
+cmd = "true # no-op"
+post_cmd = '''
+echo '
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+
+[build]
+myhello.command = """
+  mkdir -p $out/bin
+  echo echo hello foo > $out/bin/hello
+  echo exec hello >> $out/bin/hello
+  chmod +x $out/bin/hello
+"""
+myhello.runtime-packages = [ "hello", "goodbye" ]
+' | flox lock-manifest - > "$RESPONSE_FILE"
+'''
