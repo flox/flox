@@ -5,16 +5,20 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
 
+use flox_core::canonical_path::CanonicalPath;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
 
-use crate::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
+use crate::data::System;
 use crate::models::lockfile::{
+    LockedPackage,
     LockedPackageCatalog,
     LockedPackageFlake,
     LockedPackageStorePath,
+    Lockfile,
 };
+use crate::models::pkgdb::{PkgDbError, PKGDB_BIN};
 use crate::utils::CommandExt;
 
 pub static NIX_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -51,6 +55,11 @@ pub enum BuildEnvError {
     // we can defer forwarding the nix build logs and capture output with [Command::output].
     #[error("Failed to constructed environment: {0}")]
     Build(String),
+
+    #[error(
+        "Lockfile is not compatible with the current system\n\
+        Supported systems: {0}", systems.join(", "))]
+    LockfileIncompatible { systems: Vec<String> },
 
     /// An error that occurred while linking a store path.
     #[error("Failed to link environment: {0}")]
@@ -127,6 +136,28 @@ impl BuildEnvNix {
         nix_build_command.arg("--print-build-logs");
 
         nix_build_command
+    }
+
+    /// Realise all store paths of packages that are installed to the environment,
+    /// for the given system.
+    /// This goes through all packages in the lockfile and realises them with
+    /// the appropriate method for the package type.
+    ///
+    /// See the individual realisation functions for more details.
+    // todo: return actual store paths built,
+    // necessary when building manifest builds.
+    fn realise_lockfile(&self, lockfile: &Lockfile, system: &System) -> Result<(), BuildEnvError> {
+        for package in lockfile.packages.iter() {
+            if package.system() != system {
+                continue;
+            }
+            match package {
+                LockedPackage::Catalog(locked) => self.realise_nixpkgs(locked)?,
+                LockedPackage::Flake(locked) => self.realise_flakes(locked)?,
+                LockedPackage::StorePath(locked) => self.realise_store_path(locked)?,
+            }
+        }
+        Ok(())
     }
 
     /// Realise a package from the (nixpkgs) catalog.
@@ -310,6 +341,56 @@ impl BuildEnvNix {
 
         Ok(success)
     }
+
+    /// Build the environment by evaluating and building
+    /// the `buildenv.nix` expression.
+    ///
+    /// The `buildenv.nix` reads the lockfile and composes
+    /// an environment derivation, with outputs for the `develop` and `runtime` modes,
+    /// as well as additional outputs for each manifest build.
+    /// Note that the `buildenv.nix` expression **does not** build any of the packages!
+    /// Instead it will exclusively use the store paths of the packages,
+    /// that have been realised via [Self::realise_lockfile].
+    /// At the moment it is required that both `buildenv.nix`
+    /// and [Self::realise_lockfile], realise the same packages and outputs consistently.
+    /// Future improvements will allow to pass the store paths explicitly
+    /// to the `buildenv.nix` expression.
+    fn call_buildenv_nix(
+        &self,
+        lockfile_path: &Path,
+        service_config_path: Option<PathBuf>,
+    ) -> Result<BuildEnvOutputs, BuildEnvError> {
+        let mut nix_build_command = self.base_command();
+        nix_build_command.args(["build", "--no-link", "--offline", "--json"]);
+        nix_build_command.arg("--file").arg(&*BUILDENV_NIX);
+        nix_build_command
+            .arg("--argstr")
+            .arg("manifestLock")
+            .arg(lockfile_path);
+        if let Some(service_config_path) = &service_config_path {
+            nix_build_command
+                .arg("--argstr")
+                .arg("serviceConfigYaml")
+                .arg(service_config_path);
+        }
+        debug!(cmd=%nix_build_command.display(), "building environment");
+        let output = nix_build_command
+            .output()
+            .map_err(BuildEnvError::CallNixBuild)?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(BuildEnvError::Build(stderr.to_string()));
+        }
+        // defined inline as an implementation detail
+        #[derive(Debug, Clone, Deserialize)]
+        struct BuildEnvResultRaw {
+            outputs: BuildEnvOutputs,
+        }
+        let [build_env_result]: [BuildEnvResultRaw; 1] =
+            serde_json::from_slice(&output.stdout).map_err(BuildEnvError::ReadOutputs)?;
+        let outputs = build_env_result.outputs;
+        Ok(outputs)
+    }
 }
 
 impl BuildEnv for BuildEnvNix {
@@ -321,66 +402,47 @@ impl BuildEnv for BuildEnvNix {
         if env::var("_FLOX_TESTING_NO_BUILD").is_ok() {
             panic!("Can't build when _FLOX_TESTING_NO_BUILD is set");
         }
-        // todo: use `stat` or `nix path-info` to filter out pre-existing store paths
 
-        // Realise the packages in the lockfile
+        let lockfile =
+            Lockfile::read_from_file(&CanonicalPath::new(lockfile_path).unwrap()).unwrap();
+
+        // Check if the lockfile is compatible with the current system.
+        // Explicitly setting the `options.systems` field in the manifest,
+        // has the semantics of restricting the environments to the specified systems.
+        // Restricting systems can help the resolution process and avoid confusion,
+        // when using the environment on unsupported systems.
+        // Without this check the lockfile would succeed to build on any system,
+        // but (in the general case) contain no packages,
+        // because the lockfile won't contain locks of packages for the current system.
+        if let Some(ref systems) = lockfile.manifest.options.systems {
+            if !systems.contains(&env!("NIX_TARGET_SYSTEM").to_string()) {
+                return Err(BuildEnvError::LockfileIncompatible {
+                    systems: systems.clone(),
+                });
+            }
+        }
+
+        // Realise the packages in the lockfile, for the current system.
+        // "Realising" a package means to check if the associated store paths are valid
+        // and otherwise building the package to _create_ valid store paths.
+        // The following build of the `buildenv.nix` file will exclusively use
+        // the now valid store paths.
+        // We split the realisation of the lockfile from the build of the environment,
+        // to allow finer grained control over the build process of individual packages,
+        // and to avoid the performance degradation of building
+        // from within an impurely evaluated nix expression.
         //
-        // Locking flakes may require using `ssh` for private flakes,
-        // so don't clear PATH
-        // We don't have tests for private flakes,
-        // so make sure private flakes work after touching this.
-        let mut pkgdb_realise_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_realise_cmd.arg("realise").arg(lockfile_path);
+        // TODO:
+        // Eventually we want to retrieve a record of the built store paths,
+        // to pass explicitly to the `buildenv.nix` expression.
+        // This will prevent failures due to e.g. non-deterministic,
+        // non-sandboxed manifest builds which may produce different store paths,
+        // than previously locked in the lockfile.
+        self.realise_lockfile(&lockfile, &env!("NIX_TARGET_SYSTEM").to_string())?;
 
-        debug!(cmd=%pkgdb_realise_cmd.display(), "realising packages");
-        match call_pkgdb(pkgdb_realise_cmd, false) {
-            Ok(_) => {},
-            Err(CallPkgDbError::PkgDbError(err)) => return Err(BuildEnvError::Realise(err)),
-            Err(err) => return Err(BuildEnvError::CallPkgDb(err)),
-        }
+        // Build the lockfile by evaluating and building the `buildenv.nix` expression.
+        let outputs = self.call_buildenv_nix(lockfile_path, service_config_path)?;
 
-        // build the environment
-        let mut nix_build_command = self.base_command();
-
-        nix_build_command.args(["build", "--no-link", "--offline", "--json"]);
-        // build the derivation produced by evaluating the `buildenv.nix` file
-        nix_build_command.arg("--file").arg(&*BUILDENV_NIX);
-        // pass the lockfile path as an argument to the `buildenv.nix` file
-        nix_build_command
-            .arg("--argstr")
-            .arg("manifestLock")
-            .arg(lockfile_path);
-        // pass the service config path as an argument to the `buildenv.nix` file
-        // if it is provided
-        if let Some(service_config_path) = &service_config_path {
-            nix_build_command
-                .arg("--argstr")
-                .arg("serviceConfigYaml")
-                .arg(service_config_path);
-        }
-        // ... use default values for the remaining arguments of the `buildenv.nix` function.
-
-        debug!(cmd=%nix_build_command.display(), "building environment");
-
-        let output = nix_build_command
-            .output()
-            .map_err(BuildEnvError::CallNixBuild)?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(BuildEnvError::Build(stderr.to_string()));
-        }
-
-        // defined inline as an implementation detail
-        #[derive(Debug, Clone, Deserialize)]
-        struct BuildEnvResultRaw {
-            outputs: BuildEnvOutputs,
-        }
-
-        let [build_env_result]: [BuildEnvResultRaw; 1] =
-            serde_json::from_slice(&output.stdout).map_err(BuildEnvError::ReadOutputs)?;
-
-        let outputs = build_env_result.outputs;
         Ok(outputs)
     }
 
