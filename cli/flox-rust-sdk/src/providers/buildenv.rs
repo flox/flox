@@ -31,9 +31,8 @@ pub enum BuildEnvError {
     #[error("Failed to realise packages in lockfile")]
     Realise(#[source] PkgDbError),
 
-    /// Other errors arising from calling pkgdb and interpreting its output.
-    #[error(transparent)]
-    CallPkgDb(CallPkgDbError),
+    #[error("Failed to realise '{install_id}':\n{message}")]
+    Realise2 { install_id: String, message: String },
 
     /// An error that occurred while composing the environment.
     /// I.e. `nix build` returned with a non-zero exit code.
