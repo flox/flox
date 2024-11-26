@@ -482,3 +482,26 @@ post_cmd = '''
     cp .flox/env/manifest.toml "$env_dir/manifest.toml"
     cp .flox/env/manifest.lock "$env_dir/manifest.lock"
 '''
+
+# lock (and only lock) hello-unfree
+# used to test buildenv's ability to build unfree packages
+[envs.hello-unfree-lock]
+cmd = "true # no-op"
+post_cmd = '''
+echo '
+version = 1
+install.hello-unfree.pkg-path = "hello-unfree"
+' | flox lock-manifest - > "$RESPONSE_FILE"
+'''
+
+# lock (and only lock) tabula
+# used to test buildenv's ability to build broken packages
+[envs.tabula-lock]
+cmd = "true # no-op"
+post_cmd = '''
+echo '
+version = 1
+install.tabula.pkg-path = "tabula"
+options.allow.broken = true
+' | flox lock-manifest - > "$RESPONSE_FILE"
+'''
