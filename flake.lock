@@ -134,7 +134,8 @@
         "fenix": "fenix",
         "nixpkgs": "nixpkgs",
         "pre-commit-hooks": "pre-commit-hooks",
-        "sqlite3pp": "sqlite3pp"
+        "sqlite3pp": "sqlite3pp",
+        "t3-src": "t3-src"
       }
     },
     "rust-analyzer-src": {
@@ -171,6 +172,22 @@
       "original": {
         "owner": "aakropotkin",
         "repo": "sqlite3pp",
+        "type": "github"
+      }
+    },
+    "t3-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1734542708,
+        "narHash": "sha256-D0igUpqO2Es9QyhcJtPUc1rInSVC96lrx4z+takOwWg=",
+        "owner": "flox",
+        "repo": "t3",
+        "rev": "813ed220eab7f678a1bfbf70e4145d9de738d562",
+        "type": "github"
+      },
+      "original": {
+        "owner": "flox",
+        "repo": "t3",
         "type": "github"
       }
     }
