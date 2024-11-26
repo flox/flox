@@ -3,6 +3,7 @@
   # this is overridden to point to the nixpkgs used to build flox by the caller
   nixpkgs-url ? "github:flox/nixpkgs/stable",
   pkgs ? (builtins.getFlake nixpkgs-url).legacyPackages.${builtins.currentSystem},
+  t3 ? "@t3@",
   name,
   flox-env, # environment from which package is built
   build-wrapper-env, # environment with which to wrap contents of bin, sbin
@@ -145,7 +146,7 @@ pkgs.runCommandNoCC name
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --mode run --turbo -- \
                     ${build-wrapper-env-package}/activate --env ${build-wrapper-env-package} --turbo -- \
-                      bash -e ${buildScript-contents}
+                      ${t3}/bin/t3 --forcecolor --ts /dev/null -- bash -e ${buildScript-contents}
               ''
             else
               ''
