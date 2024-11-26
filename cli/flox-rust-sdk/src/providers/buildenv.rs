@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::env;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
@@ -11,6 +12,7 @@ use tracing::debug;
 use crate::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
 use crate::models::lockfile::{
     LockedPackageCatalog,
+    LockedPackageFlake,
 };
 use crate::utils::CommandExt;
 
@@ -234,6 +236,55 @@ impl BuildEnvNix {
         Ok(())
     }
 
+    /// Realise a package from a flake.
+    /// [LockedPackageFlake] is a locked package from a flake installable.
+    /// The package is realised by checking if the store paths are valid,
+    /// and otherwise building the package to create valid store paths.
+    /// Packages are built by optimistically joining the flake url and attr path,
+    /// which has been previously evaluated successfully during locking,
+    /// and building the package with essentially `nix build <flake-url>#<attr-path>^*`.
+    /// We set `--option pure-eval true` to avoid improve reproducibility,
+    /// and allow the use of the eval-cache to avoid costly re-evaluations.
+    fn realise_flakes(&self, locked: &LockedPackageFlake) -> Result<(), BuildEnvError> {
+        // check if all store paths are valid, if so, return without eval
+        let all_valid = self.check_store_path(locked.locked_installable.outputs.values())?;
+        if all_valid {
+            return Ok(());
+        }
+
+        let mut nix_build_command = self.base_command();
+
+        // naïve url construction
+        let installable = {
+            let locked_url = &locked.locked_installable.locked_url;
+            let attr_path = &locked.locked_installable.locked_flake_attr_path;
+
+            format!("{}#{}^*", locked_url, attr_path)
+        };
+
+        nix_build_command.arg("build");
+        nix_build_command.arg("--no-write-lock-file");
+        nix_build_command.arg("--no-update-lock-file");
+        nix_build_command.args(["--option", "pure-eval", "true"]);
+        nix_build_command.arg("--no-link");
+        nix_build_command.arg(&installable);
+
+        debug!(%installable, cmd=%nix_build_command.display(), "building flake package:");
+
+        let output = nix_build_command
+            .output()
+            .map_err(BuildEnvError::CallNixBuild)?;
+
+        if !output.status.success() {
+            return Err(BuildEnvError::Realise2 {
+                install_id: locked.install_id.clone(),
+                message: String::from_utf8_lossy(&output.stderr).to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
     /// Check if the given store paths are valid,
     /// i.e. if the store paths exist in the store,
     /// substitute store paths if necessary and possible.
@@ -264,7 +315,11 @@ impl BuildEnvNix {
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<bool, BuildEnvError> {
         let mut cmd = self.base_command();
-        cmd.arg("path-info").args(paths);
+        cmd.arg("path-info");
+        cmd.args(paths);
+
+        // only check the local store, return as early as possible
+        cmd.arg("--offline");
 
         debug!(cmd=%cmd.display(), "checking store paths");
 
@@ -551,5 +606,207 @@ mod realise_nixpkgs_tests {
     #[ignore = "insecure packages are not yet supported by the CLI"]
     fn nixpkgs_build_insecure() {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod realise_flakes_tests {
+    use std::fs;
+
+    use indoc::formatdoc;
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::models::manifest::ManifestPackageDescriptorFlake;
+    use crate::providers::flox_cpp_utils::{InstallableLocker, InstallableLockerImpl};
+
+    // region: tools to configure mock flakes for testing
+    struct MockedLockedPackageFlakeBuilder {
+        succeed_eval: bool,
+        succeed_build: bool,
+        unique: bool,
+    }
+    impl MockedLockedPackageFlakeBuilder {
+        fn new() -> Self {
+            Self {
+                succeed_eval: true,
+                succeed_build: true,
+                unique: false,
+            }
+        }
+
+        fn succeed_eval(mut self, succeed: bool) -> Self {
+            self.succeed_eval = succeed;
+            self
+        }
+
+        fn succeed_build(mut self, succeed: bool) -> Self {
+            self.succeed_build = succeed;
+            self
+        }
+
+        fn unique(mut self, unique: bool) -> Self {
+            self.unique = unique;
+            self
+        }
+
+        fn build(self) -> MockedLockedPackageFlake {
+            let tempdir = tempfile::tempdir().unwrap();
+
+            let flake_contents = formatdoc! {r#"
+                {{
+                    inputs = {{ }};
+                    outputs = {{ self }}: {{
+                        package = let
+                            builder = builtins.toFile "builder.sh" ''
+                                echo "{cache_key}" > $primary
+                                echo "{cache_key}"  > $secondary
+                                [ "$1" = "success" ]
+                                exit $?
+                            '';
+                        in
+                        builtins.derivation {{
+                            name = "{result}";
+                            system = "{system}";
+                            outputs = [ "primary" "secondary" ];
+                            builder = "/bin/sh";
+                            args = [ "${{builder}}" "{result}" ];
+                        }};
+                    }};
+                }}
+                "#,
+                cache_key = if self.unique { tempdir.path().display().to_string() } else { "static".to_string() },
+                result = match self.succeed_build {
+                    true => "success",
+                    false => "fail",
+                },
+                system = env!("NIX_TARGET_SYSTEM"),
+            };
+            fs::write(tempdir.path().join("flake.nix"), flake_contents).unwrap();
+            let mut locked_installable = InstallableLockerImpl::default()
+                .lock_flake_installable(
+                    env!("NIX_TARGET_SYSTEM"),
+                    &ManifestPackageDescriptorFlake {
+                        flake: format!("path:{}#package", tempdir.path().display()),
+                        systems: None,
+                        priority: None,
+                    },
+                )
+                .unwrap();
+
+            // We cause an eval failure by not providing a valid flake.
+            // The locked_url must be overwritten,
+            // as nix will otherwise use a cached version of the original flake.
+            if !self.succeed_eval {
+                fs::write(
+                    tempdir.path().join("flake.nix"),
+                    r#"{ outputs = throw "should not eval""#,
+                )
+                .unwrap();
+                locked_installable.locked_url = format!("path:{}", tempdir.path().display());
+            }
+
+            let locked_package = LockedPackageFlake {
+                install_id: "mock".to_string(),
+                locked_installable,
+            };
+
+            MockedLockedPackageFlake {
+                _tempdir: tempdir,
+                locked_package,
+            }
+        }
+    }
+
+    #[derive(Debug, derive_more::Deref, derive_more::DerefMut)]
+    struct MockedLockedPackageFlake {
+        _tempdir: TempDir,
+        #[deref]
+        #[deref_mut]
+        locked_package: LockedPackageFlake,
+    }
+
+    impl MockedLockedPackageFlake {
+        fn builder() -> MockedLockedPackageFlakeBuilder {
+            MockedLockedPackageFlakeBuilder::new()
+        }
+    }
+
+    // endregion
+
+    /// Flake outputs are built successfully if invalid.
+    #[test]
+    fn flake_build_success() {
+        let locked_package = MockedLockedPackageFlake::builder().unique(true).build();
+        let buildenv = BuildEnvNix;
+
+        assert!(
+            !buildenv
+                .check_store_path(locked_package.locked_installable.outputs.values())
+                .unwrap(),
+            "store path should be invalid before building"
+        );
+
+        let result = buildenv.realise_flakes(&locked_package);
+        assert!(result.is_ok());
+        assert!(buildenv
+            .check_store_path(locked_package.locked_installable.outputs.values())
+            .unwrap());
+    }
+
+    /// Realising a flake should fail if the output is not valid and cannot be built.
+    #[test]
+    fn flake_build_failure() {
+        let locked_package = MockedLockedPackageFlake::builder()
+            .succeed_build(false)
+            .build();
+        let buildenv = BuildEnvNix;
+        let result = buildenv.realise_flakes(&locked_package);
+        let err = result.expect_err("realising flake should fail");
+        assert!(matches!(err, BuildEnvError::Realise2 { .. }));
+    }
+
+    /// Realising a flake should fail if the output is not valid and the source cannot be evaluated.
+    #[test]
+    fn flake_eval_failure() {
+        let locked_package = MockedLockedPackageFlake::builder()
+            .succeed_eval(false)
+            .unique(true)
+            .build();
+
+        let buildenv = BuildEnvNix;
+        assert!(
+            !buildenv
+                .check_store_path(locked_package.locked_installable.outputs.values())
+                .unwrap(),
+            "store path should be invalid before building"
+        );
+
+        let result = buildenv.realise_flakes(&locked_package);
+        let err = result.expect_err("realising flake should fail");
+        assert!(matches!(err, BuildEnvError::Realise2 { .. }));
+    }
+
+    /// Evaluation (and build) are skipped if the store path is already valid.
+    #[test]
+    fn flake_no_build_if_cached() {
+        let mut locked_package = MockedLockedPackageFlake::builder()
+            .succeed_eval(false)
+            .build();
+
+        for locked_path in locked_package.locked_installable.outputs.values_mut() {
+            *locked_path = env!("GIT_PKG").to_string();
+        }
+
+        let buildenv = BuildEnvNix;
+        assert!(
+            buildenv
+                .check_store_path(locked_package.locked_installable.outputs.values())
+                .unwrap(),
+            "store path should be valid before building"
+        );
+
+        let result = buildenv.realise_flakes(&locked_package);
+        assert!(result.is_ok(), "failed to skip building flake");
     }
 }
