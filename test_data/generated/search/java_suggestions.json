@@ -1,6 +1,6 @@
 [
   {
-    "count": 815,
+    "count": 818,
     "results": [
       {
         "description": "Parser generator for building parsers from grammars",
@@ -115,10 +115,10 @@
     ]
   },
   {
-    "count": 143,
+    "count": 142,
     "results": [
       {
-        "description": "Certified builds of OpenJDK",
+        "description": "Open-source Java Development Kit",
         "input": "nixpkgs",
         "license": null,
         "pname": "jdk",
@@ -140,7 +140,7 @@
         "version": null
       },
       {
-        "description": "Certified builds of OpenJDK",
+        "description": "Open-source Java Development Kit",
         "input": "nixpkgs",
         "license": null,
         "pname": "jdk11",
