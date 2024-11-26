@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::LazyLock;
 
-use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
@@ -93,6 +92,38 @@ pub trait BuildEnv {
 }
 
 pub struct BuildEnvNix;
+
+impl BuildEnvNix {
+    fn base_command(&self) -> Command {
+        let mut nix_build_command = Command::new(&*NIX_BIN);
+        // Override nix config to use flake commands,
+        // allow impure language features such as `builtins.storePath`,
+        // and use the auto store (which is used by the preceding `pkgdb realise` command)
+        // TODO: formalize this in a config file,
+        // and potentially disable other user configs (allowing specific overrides)
+        nix_build_command.args([
+            "--option",
+            "extra-experimental-features",
+            "nix-command flakes",
+        ]);
+        nix_build_command.args(["--option", "pure-eval", "false"]);
+
+        match std::env::var("_FLOX_NIX_STORE_URL").ok().as_deref() {
+            None | Some("") => {
+                debug!("using 'auto' store");
+            },
+            Some(store_url) => {
+                debug!(%store_url, "overriding Nix store URL");
+                nix_build_command.args(["--option", "store", store_url]);
+            },
+        }
+
+        // we generally want to see more logs (we can always filter them out)
+        nix_build_command.arg("--print-build-logs");
+
+        nix_build_command
+    }
+}
 
 impl BuildEnv for BuildEnvNix {
     fn build(
@@ -193,41 +224,5 @@ impl BuildEnv for BuildEnvNix {
         }
 
         Ok(())
-    }
-}
-
-impl BuildEnvNix {
-    fn base_command(&self) -> Command {
-        let mut nix_build_command = Command::new(&*NIX_BIN);
-        let store = std::env::var("_FLOX_NIX_STORE_URL")
-            .ok()
-            .and_then(|value| {
-                if value.is_empty() {
-                    debug!("using 'auto' store");
-                    None
-                } else {
-                    let store_uri = value.to_string();
-                    debug!(%store_uri, "overriding Nix store");
-                    Some(store_uri)
-                }
-            })
-            .unwrap_or(String::from("auto"));
-
-        // Override nix config to use flake commands,
-        // allow impure language features such as `builtins.storePath`,
-        // and use the auto store (which is used by the preceding `pkgdb realise` command)
-        // TODO: formalize this in a config file,
-        // and potentially disable other user configs (allowing specific overrides)
-        let nix_config = formatdoc! {"
-            experimental-features = nix-command flakes
-            pure-eval = false
-            store = {store}
-        "};
-
-        nix_build_command.env("NIX_CONFIG", nix_config);
-        // we generally want to see more logs (we can always filter them out)
-        nix_build_command.arg("--print-build-logs");
-
-        nix_build_command
     }
 }
