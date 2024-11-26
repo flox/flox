@@ -9,6 +9,7 @@ mod general;
 mod init;
 mod install;
 mod list;
+mod lock_manifest;
 mod publish;
 mod pull;
 mod push;
@@ -909,6 +910,9 @@ enum InternalCommands {
     /// Publish packages
     #[bpaf(command, hide, footer("Run 'man flox-publish' for more details."))]
     Publish(#[bpaf(external(publish::publish))] publish::Publish),
+    /// Lock a manifest file
+    #[bpaf(command, hide)]
+    LockManifest(#[bpaf(external(lock_manifest::lock_manifest))] lock_manifest::LockManifest),
 }
 
 impl InternalCommands {
@@ -918,6 +922,7 @@ impl InternalCommands {
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
             InternalCommands::Build(args) => args.handle(config, flox).await?,
             InternalCommands::Publish(args) => args.handle(config, flox).await?,
+            InternalCommands::LockManifest(args) => args.handle(flox).await?,
         }
         Ok(())
     }
