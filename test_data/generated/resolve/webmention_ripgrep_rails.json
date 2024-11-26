@@ -11,12 +11,12 @@
             "attr_path": "rubyPackages_3_2.rails",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/sdrwpasa6vf3a1z3jjcyfljv8qfvdj4p-ruby3.2-rails-7.1.3.4.drv",
+            "derivation": "/nix/store/lqgp83jfawdmml07cnj5q2kvr8jpp2q9-ruby3.2-rails-7.1.3.4.drv",
             "description": null,
             "insecure": false,
             "install_id": "bar",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
             "name": "ruby3.2-rails-7.1.3.4",
             "outputs": [
               {
@@ -28,11 +28,12 @@
               "out"
             ],
             "pname": "rails",
-            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
-            "rev_count": 708622,
-            "rev_date": "2024-11-15T13:07:34Z",
-            "scrape_date": "2024-11-17T03:59:12Z",
+            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "rev_count": 710087,
+            "rev_date": "2024-11-19T11:04:08Z",
+            "scrape_date": "2024-11-21T04:00:36Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -43,12 +44,12 @@
             "attr_path": "rubyPackages_3_2.rails",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/04c3vni8sa497pj2g5smfj01wg4g35z2-ruby3.2-rails-7.1.3.4.drv",
+            "derivation": "/nix/store/1ss670h3mzqyppx1hmmxzvy6pfc64sy2-ruby3.2-rails-7.1.3.4.drv",
             "description": null,
             "insecure": false,
             "install_id": "bar",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
             "name": "ruby3.2-rails-7.1.3.4",
             "outputs": [
               {
@@ -60,11 +61,12 @@
               "out"
             ],
             "pname": "rails",
-            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
-            "rev_count": 708622,
-            "rev_date": "2024-11-15T13:07:34Z",
-            "scrape_date": "2024-11-17T03:59:12Z",
+            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "rev_count": 710087,
+            "rev_date": "2024-11-19T11:04:08Z",
+            "scrape_date": "2024-11-21T04:00:36Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -75,12 +77,12 @@
             "attr_path": "rubyPackages_3_2.rails",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/w90dyvlqc21zn9s7shvpdfmxqlr93aaf-ruby3.2-rails-7.1.3.4.drv",
+            "derivation": "/nix/store/xh4j6qnm2j8z5z0ilwja53n6281hqv8m-ruby3.2-rails-7.1.3.4.drv",
             "description": null,
             "insecure": false,
             "install_id": "bar",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
             "name": "ruby3.2-rails-7.1.3.4",
             "outputs": [
               {
@@ -92,11 +94,12 @@
               "out"
             ],
             "pname": "rails",
-            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
-            "rev_count": 708622,
-            "rev_date": "2024-11-15T13:07:34Z",
-            "scrape_date": "2024-11-17T03:59:12Z",
+            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "rev_count": 710087,
+            "rev_date": "2024-11-19T11:04:08Z",
+            "scrape_date": "2024-11-21T04:00:36Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -107,12 +110,12 @@
             "attr_path": "rubyPackages_3_2.rails",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/fb82p3w8iv50q871895q6lz60z56jfqs-ruby3.2-rails-7.1.3.4.drv",
+            "derivation": "/nix/store/9wg4ap6g0jhiq6v9b0jwdq3k6gy5xh6f-ruby3.2-rails-7.1.3.4.drv",
             "description": null,
             "insecure": false,
             "install_id": "bar",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
             "name": "ruby3.2-rails-7.1.3.4",
             "outputs": [
               {
@@ -124,11 +127,12 @@
               "out"
             ],
             "pname": "rails",
-            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
-            "rev_count": 708622,
-            "rev_date": "2024-11-15T13:07:34Z",
-            "scrape_date": "2024-11-17T03:59:12Z",
+            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "rev_count": 710087,
+            "rev_date": "2024-11-19T11:04:08Z",
+            "scrape_date": "2024-11-21T04:00:36Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
@@ -139,12 +143,12 @@
             "attr_path": "rubyPackages_3_2.webmention",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/0b2llvhx4y01a2v3vwhvs6xnkgh5b7gg-ruby3.2-webmention-7.0.0.drv",
+            "derivation": "/nix/store/pfr9casl48z0c1xcwq9ky061zdlgzl81-ruby3.2-webmention-7.0.0.drv",
             "description": null,
             "insecure": false,
             "install_id": "foo",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
             "name": "ruby3.2-webmention-7.0.0",
             "outputs": [
               {
@@ -156,11 +160,12 @@
               "out"
             ],
             "pname": "webmention",
-            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
-            "rev_count": 708622,
-            "rev_date": "2024-11-15T13:07:34Z",
-            "scrape_date": "2024-11-17T03:59:12Z",
+            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "rev_count": 710087,
+            "rev_date": "2024-11-19T11:04:08Z",
+            "scrape_date": "2024-11-21T04:00:36Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -171,12 +176,12 @@
             "attr_path": "rubyPackages_3_2.webmention",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/qpag184caxm5g0lxwadww0my0yb1d3gi-ruby3.2-webmention-7.0.0.drv",
+            "derivation": "/nix/store/ga01mm3n9pjpy4b8q710zm37prjkrhqd-ruby3.2-webmention-7.0.0.drv",
             "description": null,
             "insecure": false,
             "install_id": "foo",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
             "name": "ruby3.2-webmention-7.0.0",
             "outputs": [
               {
@@ -188,11 +193,12 @@
               "out"
             ],
             "pname": "webmention",
-            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
-            "rev_count": 708622,
-            "rev_date": "2024-11-15T13:07:34Z",
-            "scrape_date": "2024-11-17T03:59:12Z",
+            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "rev_count": 710087,
+            "rev_date": "2024-11-19T11:04:08Z",
+            "scrape_date": "2024-11-21T04:00:36Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -203,12 +209,12 @@
             "attr_path": "rubyPackages_3_2.webmention",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/diinfgqpdxdp5r48i17kwjdn0afazcya-ruby3.2-webmention-7.0.0.drv",
+            "derivation": "/nix/store/rfipw72yhqrlnz91f1vigcf88v2blwy9-ruby3.2-webmention-7.0.0.drv",
             "description": null,
             "insecure": false,
             "install_id": "foo",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
             "name": "ruby3.2-webmention-7.0.0",
             "outputs": [
               {
@@ -220,11 +226,12 @@
               "out"
             ],
             "pname": "webmention",
-            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
-            "rev_count": 708622,
-            "rev_date": "2024-11-15T13:07:34Z",
-            "scrape_date": "2024-11-17T03:59:12Z",
+            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "rev_count": 710087,
+            "rev_date": "2024-11-19T11:04:08Z",
+            "scrape_date": "2024-11-21T04:00:36Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -235,12 +242,12 @@
             "attr_path": "rubyPackages_3_2.webmention",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/yzvk0p6b0jycyyxji6kh4jm5sq16vzjf-ruby3.2-webmention-7.0.0.drv",
+            "derivation": "/nix/store/vccll66nvihmpzsjnlna209wq9r8gpy9-ruby3.2-webmention-7.0.0.drv",
             "description": null,
             "insecure": false,
             "install_id": "foo",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
             "name": "ruby3.2-webmention-7.0.0",
             "outputs": [
               {
@@ -252,11 +259,12 @@
               "out"
             ],
             "pname": "webmention",
-            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
-            "rev_count": 708622,
-            "rev_date": "2024-11-15T13:07:34Z",
-            "scrape_date": "2024-11-17T03:59:12Z",
+            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "rev_count": 710087,
+            "rev_date": "2024-11-19T11:04:08Z",
+            "scrape_date": "2024-11-21T04:00:36Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
@@ -267,12 +275,12 @@
             "attr_path": "ripgrep",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/4w05s7d7w0rizpraysb4hdxbzc37xbw5-ripgrep-14.1.1.drv",
+            "derivation": "/nix/store/kdj55pb6gdkb1bbars63h5nssnl8ssmx-ripgrep-14.1.1.drv",
             "description": "Utility that combines the usability of The Silver Searcher with the raw speed of grep",
             "insecure": false,
             "install_id": "ripgrep",
             "license": "[ Unlicense, MIT ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
             "name": "ripgrep-14.1.1",
             "outputs": [
               {
@@ -284,11 +292,12 @@
               "out"
             ],
             "pname": "ripgrep",
-            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
-            "rev_count": 708622,
-            "rev_date": "2024-11-15T13:07:34Z",
-            "scrape_date": "2024-11-17T03:59:12Z",
+            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "rev_count": 710087,
+            "rev_date": "2024-11-19T11:04:08Z",
+            "scrape_date": "2024-11-21T04:00:36Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -299,12 +308,12 @@
             "attr_path": "ripgrep",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/d4ph5d7bbmfhw4lwab250jr377hhhw8y-ripgrep-14.1.1.drv",
+            "derivation": "/nix/store/8y58pq010yc2dj0migc5x1x6gnxaxb2a-ripgrep-14.1.1.drv",
             "description": "Utility that combines the usability of The Silver Searcher with the raw speed of grep",
             "insecure": false,
             "install_id": "ripgrep",
             "license": "[ Unlicense, MIT ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
             "name": "ripgrep-14.1.1",
             "outputs": [
               {
@@ -316,11 +325,12 @@
               "out"
             ],
             "pname": "ripgrep",
-            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
-            "rev_count": 708622,
-            "rev_date": "2024-11-15T13:07:34Z",
-            "scrape_date": "2024-11-17T03:59:12Z",
+            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "rev_count": 710087,
+            "rev_date": "2024-11-19T11:04:08Z",
+            "scrape_date": "2024-11-21T04:00:36Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -331,12 +341,12 @@
             "attr_path": "ripgrep",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/ci292668w1nvvmy9cl3ihxzvg84vhbx9-ripgrep-14.1.1.drv",
+            "derivation": "/nix/store/bzd6zhr1a5rz7qh6r5jqk10ll84czb9f-ripgrep-14.1.1.drv",
             "description": "Utility that combines the usability of The Silver Searcher with the raw speed of grep",
             "insecure": false,
             "install_id": "ripgrep",
             "license": "[ Unlicense, MIT ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
             "name": "ripgrep-14.1.1",
             "outputs": [
               {
@@ -348,11 +358,12 @@
               "out"
             ],
             "pname": "ripgrep",
-            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
-            "rev_count": 708622,
-            "rev_date": "2024-11-15T13:07:34Z",
-            "scrape_date": "2024-11-17T03:59:12Z",
+            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "rev_count": 710087,
+            "rev_date": "2024-11-19T11:04:08Z",
+            "scrape_date": "2024-11-21T04:00:36Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -363,12 +374,12 @@
             "attr_path": "ripgrep",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/nszza569xjv1l21988zn8nrb2qf8f5l8-ripgrep-14.1.1.drv",
+            "derivation": "/nix/store/kin9b605pmn90l92y7p5nirzrvvfifna-ripgrep-14.1.1.drv",
             "description": "Utility that combines the usability of The Silver Searcher with the raw speed of grep",
             "insecure": false,
             "install_id": "ripgrep",
             "license": "[ Unlicense, MIT ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
             "name": "ripgrep-14.1.1",
             "outputs": [
               {
@@ -380,11 +391,12 @@
               "out"
             ],
             "pname": "ripgrep",
-            "rev": "5e4fbfb6b3de1aa2872b76d49fafc942626e2add",
-            "rev_count": 708622,
-            "rev_date": "2024-11-15T13:07:34Z",
-            "scrape_date": "2024-11-17T03:59:12Z",
+            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "rev_count": 710087,
+            "rev_date": "2024-11-19T11:04:08Z",
+            "scrape_date": "2024-11-21T04:00:36Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
@@ -392,7 +404,7 @@
             "version": "14.1.1"
           }
         ],
-        "page": 708622,
+        "page": 710087,
         "url": ""
       }
     }
