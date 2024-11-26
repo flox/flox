@@ -608,7 +608,7 @@ mod tests {
     };
     use flox_rust_sdk::models::environment::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
     use flox_rust_sdk::models::pkgdb::error_codes::PACKAGE_BUILD_FAILURE;
-    use flox_rust_sdk::models::pkgdb::{error_codes, PkgDbError};
+    use flox_rust_sdk::models::pkgdb::PkgDbError;
     use flox_rust_sdk::providers::buildenv::BuildEnvError;
     use tempfile::tempdir_in;
 
@@ -616,11 +616,7 @@ mod tests {
 
     fn incompatible_system_result() -> Result<(), EnvironmentError> {
         Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
-            BuildEnvError::Realise(PkgDbError {
-                exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
-                category_message: "category_message".to_string(),
-                context_message: None,
-            }),
+            BuildEnvError::LockfileIncompatible { systems: vec![] },
         )))
     }
 
