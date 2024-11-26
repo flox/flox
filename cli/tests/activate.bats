@@ -3296,7 +3296,7 @@ Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
 }
 
-# bats test_tags=activate,activate:attach
+# bats test_tags=activate,activate:attach,bats:focus
 @test "version: upgrades the activations.json version" {
   project_setup
 
