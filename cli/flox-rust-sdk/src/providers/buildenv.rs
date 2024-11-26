@@ -13,6 +13,7 @@ use crate::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
 use crate::models::lockfile::{
     LockedPackageCatalog,
     LockedPackageFlake,
+    LockedPackageStorePath,
 };
 use crate::utils::CommandExt;
 
@@ -271,6 +272,22 @@ impl BuildEnvNix {
             });
         }
 
+        Ok(())
+    }
+
+    /// Realise a package from a store path.
+    /// [LockedPackageStorePath] is a locked package from a store path.
+    /// The package is realised by checking if the store paths are valid,
+    /// if the store path is not valid (and the store lacks the ability to reproduce it),
+    /// This function will return an error.
+    fn realise_store_path(&self, locked: &LockedPackageStorePath) -> Result<(), BuildEnvError> {
+        let valid = self.check_store_path([&locked.store_path])?;
+        if !valid {
+            return Err(BuildEnvError::Realise2 {
+                install_id: locked.install_id.clone(),
+                message: format!("'{}' is not available", locked.store_path),
+            });
+        }
         Ok(())
     }
 
