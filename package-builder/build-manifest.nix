@@ -3,6 +3,7 @@
   # this is overridden to point to the nixpkgs used to build flox by the caller
   nixpkgs-url ? "github:flox/nixpkgs/stable",
   pkgs ? (builtins.getFlake nixpkgs-url).legacyPackages.${builtins.currentSystem},
+  t3 ? "@t3@",
   name,
   flox-env, # environment from which package is built
   build-wrapper-env, # environment with which to wrap contents of bin, sbin
@@ -24,6 +25,7 @@ let
     build-wrapper-env-package
     flox-env-package
   ] ++ (map (d: builtins.storePath d) buildDeps);
+  t3-package = builtins.storePath t3;
   install-prefix-contents = /. + install-prefix;
   buildScript-contents = /. + buildScript;
   buildCache-tar-contents = if (buildCache == null) then null else (/. + buildCache);
@@ -56,6 +58,7 @@ pkgs.runCommandNoCC name
         gnused
         makeWrapper
       ]
+      ++ [ t3-package ]
       ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ darwin.autoSignDarwinBinariesHook ];
     outputs = [ "out" ] ++ pkgs.lib.optionals (buildCache != null) [ "buildCache" ];
     # We don't want to allow build outputs to reference the "develop" environment
@@ -142,10 +145,12 @@ pkgs.runCommandNoCC name
                 # flox-activations needs runtime dir for activation state dir
                 # TMP will be set to something like
                 # /private/tmp/nix-build-file-0.0.0.drv-0
+                # N.B. not using t3 --forcecolor option because Nix sandbox
+                # strips color codes from output anyway.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --mode run --turbo -- \
                     ${build-wrapper-env-package}/activate --env ${build-wrapper-env-package} --turbo -- \
-                      bash -e ${buildScript-contents}
+                      ${t3-package}/bin/t3 --relative $log -- bash -e ${buildScript-contents}
               ''
             else
               ''
@@ -159,7 +164,7 @@ pkgs.runCommandNoCC name
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --mode run --turbo -- \
                     ${build-wrapper-env-package}/activate --env ${build-wrapper-env-package} --turbo -- \
-                      bash -e ${buildScript-contents} || \
+                      ${t3-package}/bin/t3 --relative $log -- bash -e ${buildScript-contents} || \
                 ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
           }

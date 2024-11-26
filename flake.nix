@@ -27,6 +27,9 @@
   inputs.fenix.url = "github:nix-community/fenix";
   inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
 
+  inputs.t3-src.url = "github:flox/t3";
+  inputs.t3-src.flake = false;
+
   # -------------------------------------------------------------------------- #
 
   outputs =
@@ -57,6 +60,7 @@
           nix = final.callPackage ./pkgs/nix { };
 
           cpp-semver = final.callPackage ./pkgs/cpp-semver { };
+          t3 = final.callPackage ./pkgs/t3 { inherit (inputs) t3-src; };
         })
         inputs.sqlite3pp.overlays.default
         inputs.fenix.overlays.default

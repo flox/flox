@@ -475,7 +475,7 @@ mod tests {
             {package_name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
         "#};
         assert!(
-            output.stdout.contains(&expected_output),
+            output.stderr.contains(&expected_output),
             "{expected_output}"
         );
     }
@@ -508,11 +508,11 @@ mod tests {
             {package_name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
         "#};
         assert!(
-            output.stdout.contains(&expected_output),
+            output.stderr.contains(&expected_output),
             "{expected_output}"
         );
         assert!(
-            !output.stdout.contains("failed to produce output path"),
+            !output.stderr.contains("failed to produce output path"),
             "nix's own error for empty output path is bypassed"
         );
     }
@@ -553,7 +553,7 @@ mod tests {
             {package_name}>   - not-bin/hello
         "#};
         assert!(
-            output.stdout.contains(&expected_output),
+            output.stderr.contains(&expected_output),
             "{expected_output}"
         );
     }
@@ -595,7 +595,7 @@ mod tests {
             {package_name}>   - not-bin/hello
         "#};
         assert!(
-            output.stdout.contains(&expected_output),
+            output.stderr.contains(&expected_output),
             "{expected_output}"
         );
     }
@@ -680,7 +680,7 @@ mod tests {
         // This file is not accessible from a pure build.
         fs::write(env_path.join(&file_name), &file_content).unwrap();
         let output = assert_build_status(&flox, &mut env, &package_name, false);
-        assert!(output.stdout.contains(&format!(
+        assert!(output.stderr.contains(&format!(
             "cp: cannot stat '{file_name}': No such file or directory",
         )));
 

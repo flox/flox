@@ -37,6 +37,7 @@ __gnused := @gnused@
 __gnutar := @gnutar@
 __jq := @jq@
 __nix := @nix@
+__t3 := @t3@
 
 # Access all required utilities by way of variables so that we don't depend
 # on anything from the user's PATH in the packaged version of flox. Note that
@@ -63,6 +64,7 @@ _sed := $(call __package_bin,$(__gnused),sed)
 _sha256sum := $(call __package_bin,$(__coreutils),sha256sum)
 _tar := $(call __package_bin,$(__gnutar),tar)
 _tee := $(call __package_bin,$(__coreutils),tee)
+_t3 := $(call __package_bin,$(__t3),t3) --relative $(if $(NO_COLOR),,--forcecolor)
 _uname := $(call __package_bin,$(__coreutils),uname)
 
 # Identify path to build-manifest.nix, in same directory as this Makefile.
@@ -237,15 +239,15 @@ define BUILD_local_template =
 	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode dev --turbo -- \
 	    $(_env) -i out=$(_out) $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
 	      $(_build_wrapper_env)/activate --env $(_build_wrapper_env) --mode dev --turbo -- \
-	        $(_bash) -e $($(_pvarname)_buildScript)
-	$(_V_) set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
+	        $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $($(_pvarname)_buildScript)
+	$(_V_) $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr name "$(_name)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
 	  --argstr build-wrapper-env "$(_build_wrapper_env)" \
 	  --argstr install-prefix "$(_out)" \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  --out-link "result-$(_pname)" \
-	  2>&1 | $(_tee) $($(_pvarname)_logfile)
+	  2>&1 | $(_tee) -a $($(_pvarname)_logfile)
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
