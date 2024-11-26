@@ -65,6 +65,7 @@ REPO_ROOT    := $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
 
 PREFIX ?= $(PKGDB_ROOT)/build
 BINDIR ?= $(PREFIX)/bin
+LIBDIR ?= $(PREFIX)/lib
 
 
 # ---------------------------------------------------------------------------- #
@@ -174,6 +175,7 @@ SRCS           = $(call rwildcard,src,*.cc)
 test_SRCS      = $(sort $(wildcard tests/*.cc))
 ALL_SRCS       = $(SRCS) $(test_SRCS)
 BINS           = bin/pkgdb
+LIBS           = lib/nix-plugins/wrapped-nixpkgs-input$(libExt)
 TEST_UTILS     = $(addprefix tests/,is_sqlite3)
 TESTS          = $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
 TEST_DATA      =
@@ -415,18 +417,24 @@ fullclean: clean
 # Install Targets
 # ---------------
 
-.PHONY: install install-bin
+.PHONY: install install-bin install-lib
 
 #: Install binaries and include files
-install: install-bin
+install: install-bin install-lib
 
 $(BINDIR)/%: bin/%
+	$(MKDIR_P) $(@D);
+	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
+
+$(LIBDIR)/%: lib/%
 	$(MKDIR_P) $(@D);
 	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
 
 #: Install binaries
 install-bin: $(addprefix $(BINDIR)/,$(patsubst bin/%,%,$(BINS)))
 
+#: Install libraries
+install-lib: $(addprefix $(LIBDIR)/,$(patsubst lib/%,%,$(LIBS)))
 
 # ---------------------------------------------------------------------------- #
 
@@ -629,6 +637,10 @@ $(BINS): %: $(SRCS:.cc=.o)
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
 
 
+$(LIBS): %: $(SRCS:.cc=.o)
+	$(MKDIR_P) $(@D);
+	$(CXX) $(filter %.o,$^) $(LDFLAGS) -shared -o $@;
+
 # ---------------------------------------------------------------------------- #
 
 $(test_SRCS:.cc=.o): CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
@@ -645,15 +657,16 @@ $(TESTS) $(TEST_UTILS): tests/%: tests/%.o tests/test.hh
 
 #: Build binaries
 bin: $(BINS)
+lib: $(LIBS)
 
 #: Build test executables and resources
 tests: $(TESTS) $(TEST_UTILS)
 
 #: Build binaries, tests, and generated `.gitignore' files
-all: bin tests ignores
+all: bin lib tests ignores
 
 #: Build binaries, and generated `.gitignore' files
-most: bin ignores
+most: bin lib ignores
 
 
 # ---------------------------------------------------------------------------- #
