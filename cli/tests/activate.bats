@@ -3319,7 +3319,10 @@ EOF
   ACTIVATIONS_JSON=$(cat activations_json)
 
   # Wait for the "start" to exit.
+  # Add some output to the buffer to debug later assertion failures.
+  echo "$(date -u +'%FT%T.%6NZ'): Initial activation finished."
   wait_for_watchdogs "$PROJECT_DIR"
+  cat "${PROJECT_DIR}"/.flox/log/watchdog.*
 
   # Old version should still be recorded.
   jq --exit-status '.version == 0' "$ACTIVATIONS_JSON"
