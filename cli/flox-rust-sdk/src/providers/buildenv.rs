@@ -12,6 +12,7 @@ use tracing::debug;
 use crate::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
 use crate::models::lockfile::{
     LockedPackageCatalog,
+    LockedPackageFlake,
 };
 use crate::utils::CommandExt;
 
@@ -198,6 +199,57 @@ impl BuildEnvNix {
 
             format!("{}#{}", locked_url, attrpath)
         };
+
+        nix_build_command.arg("build");
+        nix_build_command.arg("--no-write-lock-file");
+        nix_build_command.arg("--no-update-lock-file");
+        nix_build_command.args(["--option", "pure-eval", "true"]);
+        nix_build_command.arg("--no-link");
+        nix_build_command.arg(&installable);
+
+        debug!(%installable, cmd=%nix_build_command.display(), "building catalog package:");
+
+        let output = nix_build_command
+            .output()
+            .map_err(BuildEnvError::CallNixBuild)?;
+
+        if !output.status.success() {
+            return Err(BuildEnvError::Realise2 {
+                install_id: locked.install_id.clone(),
+                message: String::from_utf8_lossy(&output.stderr).to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Realise a package from a flake.
+    /// [LockedPackageFlake] is a locked package from a flake installable.
+    /// The package is realised by checking if the store paths are valid,
+    /// and otherwise building the package to create valid store paths.
+    /// Packages are built by optimistically joining the flake url and attr path,
+    /// which has been previously evaluated successfully during locking,
+    /// and building the package with essentially `nix build <flake-url>#<attr-path>^*`.
+    /// We set `--option pure-eval true` to avoid improve reproducibility,
+    /// and allow the use of the eval-cache to avoid costly re-evaluations.
+    fn realise_flakes(&self, locked: &LockedPackageFlake) -> Result<(), BuildEnvError> {
+        // check if all store paths are valid, if so, return without eval
+        let all_valid = self.check_store_path(locked.locked_installable.outputs.values())?;
+        if all_valid {
+            return Ok(());
+        }
+
+        let mut nix_build_command = self.base_command();
+
+        // naïve url construction
+        let installable = {
+            let locked_url = &locked.locked_installable.locked_url;
+            let attr_path = &locked.locked_installable.locked_flake_attr_path;
+
+            format!("{}#{}^*", locked_url, attr_path)
+        };
+
+        println!("building flake package: {}", installable);
 
         nix_build_command.arg("build");
         nix_build_command.arg("--no-write-lock-file");
