@@ -230,7 +230,7 @@ define BUILD_local_template =
   .INTERMEDIATE: $(_pname)_local_build
   $(_pname)_local_build: $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
-	@echo "Building $(_name) in local mode"
+	@echo "Building $(_name) in local (sandbox $(_sandbox)) mode"
 	$(_VV_) $(_rm) -rf $(_out)
 	$(_V_) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
@@ -246,7 +246,7 @@ define BUILD_local_template =
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  --out-link "result-$(_pname)" \
 	  2>&1 | $(_tee) $($(_pvarname)_logfile)
-	@echo "Completed build of $(_name) in local mode" && echo ""
+	@echo "Completed build of $(_name) in local (sandbox $(_sandbox)) mode" && echo ""
 
 endef
 
@@ -311,7 +311,7 @@ define BUILD_nix_sandbox_template =
 	  $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
 	  --out-link "result-$(_pname)" \
 	  '^*' 2>&1 | $(_tee) $($(_pvarname)_logfile)
-	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
+	@echo "Completed build of $(_name) in Nix sandbox (pure) mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
 	@# mind that the symlink will remain unchanged in the event of an
@@ -413,11 +413,11 @@ endef
 # caching modes.
 $(foreach build,$(BUILDS), \
   $(eval _pname = $(notdir $(build))) \
-  $(eval _sandbox = $(shell \
-    $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK))) \
-  $(if $(filter null off,$(_sandbox)), \
-    $(eval $(call BUILD_template,local)), \
-    $(eval $(call BUILD_template,nix_sandbox))))
+  $(eval _sandbox = $(if $(SANDBOX_TESTING),$(SANDBOX_TESTING),$(strip \
+    $(shell $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK))))) \
+  $(if $(filter pure,$(_sandbox)), \
+    $(eval $(call BUILD_template,nix_sandbox)), \
+    $(eval $(call BUILD_template,local))))
 
 # Finally, we create the "build" target to build all known packages.
 .PHONY: build
