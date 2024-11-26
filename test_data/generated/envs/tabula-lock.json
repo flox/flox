@@ -1,0 +1,126 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "tabula": {
+        "pkg-path": "tabula"
+      }
+    },
+    "hook": {},
+    "profile": {},
+    "options": {
+      "allow": {
+        "broken": true,
+        "licenses": []
+      },
+      "semver": {}
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "tabula",
+      "broken": true,
+      "derivation": "/nix/store/jr4gbig7m6myfmq7qhmjz1k223kd0qfb-tabula-1.2.1.drv",
+      "description": "Tool for liberating data tables locked inside PDF files",
+      "install_id": "tabula",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=693bc46d169f5af9c992095736e82c3488bf7dbb",
+      "name": "tabula-1.2.1",
+      "pname": "tabula",
+      "rev": "693bc46d169f5af9c992095736e82c3488bf7dbb",
+      "rev_count": 652902,
+      "rev_date": "2024-07-14T11:43:13Z",
+      "scrape_date": "2024-07-16T03:03:37Z",
+      "unfree": false,
+      "version": "1.2.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/jh5dlf45nfl71ki3w1sm2db20bsb22hf-tabula-1.2.1"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "tabula",
+      "broken": true,
+      "derivation": "/nix/store/d63f2d6759s0hlrsr4djffaj5a2m6lgg-tabula-1.2.1.drv",
+      "description": "Tool for liberating data tables locked inside PDF files",
+      "install_id": "tabula",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=693bc46d169f5af9c992095736e82c3488bf7dbb",
+      "name": "tabula-1.2.1",
+      "pname": "tabula",
+      "rev": "693bc46d169f5af9c992095736e82c3488bf7dbb",
+      "rev_count": 652902,
+      "rev_date": "2024-07-14T11:43:13Z",
+      "scrape_date": "2024-07-16T03:03:37Z",
+      "unfree": false,
+      "version": "1.2.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/321p52r3hlb4rs5siz3mpkayi51pdr1s-tabula-1.2.1"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "tabula",
+      "broken": true,
+      "derivation": "/nix/store/x7w3c990zm7j7lri862y8l2c9ix8arnp-tabula-1.2.1.drv",
+      "description": "Tool for liberating data tables locked inside PDF files",
+      "install_id": "tabula",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=693bc46d169f5af9c992095736e82c3488bf7dbb",
+      "name": "tabula-1.2.1",
+      "pname": "tabula",
+      "rev": "693bc46d169f5af9c992095736e82c3488bf7dbb",
+      "rev_count": 652902,
+      "rev_date": "2024-07-14T11:43:13Z",
+      "scrape_date": "2024-07-16T03:03:37Z",
+      "unfree": false,
+      "version": "1.2.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/vkk5l85hg9kh73l1605r78555cafz711-tabula-1.2.1"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "tabula",
+      "broken": true,
+      "derivation": "/nix/store/p0v29x1mh8hvffidzz1m4nbsvj68nm1x-tabula-1.2.1.drv",
+      "description": "Tool for liberating data tables locked inside PDF files",
+      "install_id": "tabula",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=693bc46d169f5af9c992095736e82c3488bf7dbb",
+      "name": "tabula-1.2.1",
+      "pname": "tabula",
+      "rev": "693bc46d169f5af9c992095736e82c3488bf7dbb",
+      "rev_count": 652902,
+      "rev_date": "2024-07-14T11:43:13Z",
+      "scrape_date": "2024-07-16T03:03:37Z",
+      "unfree": false,
+      "version": "1.2.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/k0dr29gqzan7m121y6ws0qxranklxfg9-tabula-1.2.1"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}
