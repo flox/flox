@@ -1,4 +1,5 @@
 use std::error;
+use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
 
@@ -88,26 +89,34 @@ pub struct CheckedBuildMetadata {
     _private: (),
 }
 
-#[allow(async_fn_in_trait)]
 pub trait BinaryCache {
-    async fn upload(&self, path: &str) -> Result<(), PublishError>;
-    fn cache_uri(&self) -> &Url;
+    fn upload(&self, path: &str) -> Result<(), PublishError>;
+    fn cache_url(&self) -> &Url;
 }
 
 pub struct NixCopyCache {
-    pub uri: Url,
-    pub key_file: String,
+    pub url: Url,
+    pub key_file: PathBuf,
 }
 
 impl BinaryCache for NixCopyCache {
-    async fn upload(&self, path: &str) -> Result<(), PublishError> {
-        debug!("Uploading {} to cache...", path);
-        let uri_with_key = format!("{}?secret-key={}", self.uri.as_str(), self.key_file);
+    fn upload(&self, path: &str) -> Result<(), PublishError> {
+        let mut url = self.url.clone();
+        let url_with_key = url
+            .query_pairs_mut()
+            .append_pair("secret-key", &self.key_file.to_string_lossy())
+            .finish();
+        debug!(
+            "Uploading {path} to cache {cache}...",
+            path = path,
+            cache = url_with_key
+        );
+
         let mut copy_command = Command::new(&*NIX_BIN);
         copy_command
             .arg("copy")
             .arg("--to")
-            .arg(uri_with_key)
+            .arg(url_with_key.to_string())
             .arg(path);
         let output = copy_command
             .output()
@@ -120,18 +129,18 @@ impl BinaryCache for NixCopyCache {
         }
     }
 
-    fn cache_uri(&self) -> &Url {
-        &self.uri
+    fn cache_url(&self) -> &Url {
+        &self.url
     }
 }
 
 pub struct MockCache {
-    pub uri: Url,
+    pub url: Url,
     pub error_msg: Option<String>,
 }
 
 impl BinaryCache for MockCache {
-    async fn upload(&self, _path: &str) -> Result<(), PublishError> {
+    fn upload(&self, _path: &str) -> Result<(), PublishError> {
         if let Some(msg) = &self.error_msg {
             Err(PublishError::CacheUploadError(msg.to_string()))
         } else {
@@ -139,8 +148,8 @@ impl BinaryCache for MockCache {
         }
     }
 
-    fn cache_uri(&self) -> &Url {
-        &self.uri
+    fn cache_url(&self) -> &Url {
+        &self.url
     }
 }
 
@@ -219,11 +228,11 @@ where
             rev: self.env_metadata.build_repo_ref.rev.clone(),
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
             rev_date: self.env_metadata.build_repo_ref.rev_date,
-            cache_uri: self.cache.map(|c| c.cache_uri().to_string()),
+            cache_uri: self.cache.map(|c| c.cache_url().to_string()),
         };
 
         if let Some(cache) = self.cache {
-            cache.upload(&self.build_metadata.drv_path).await?
+            cache.upload(&self.build_metadata.drv_path)?
         }
 
         debug!("Publishing build in catalog...");
@@ -366,6 +375,8 @@ pub mod tests {
     const EXAMPLE_PACKAGE_NAME: &str = "mypkg";
     const EXAMPLE_MANIFEST: &str = "envs/publish-simple";
 
+    use std::io::Write;
+
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -386,6 +397,36 @@ pub mod tests {
         let remote_uri = format!("file://{}", tempdir_handle.path().display());
 
         (tempdir_handle, repo, remote_uri)
+    }
+
+    fn local_nix_cache() -> (tempfile::NamedTempFile, NixCopyCache) {
+        // Returns a temp local cache and signing key file to use in testing publish
+        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+        let mut temp_key_file =
+            tempfile::NamedTempFile::new().expect("Should create named temp file");
+
+        let mut key_command = Command::new(&*NIX_BIN);
+        key_command
+            .arg("key")
+            .arg("generate-secret")
+            .arg("--key-name")
+            .arg("cli-test");
+        let output = key_command
+            .output()
+            .map_err(|e| PublishError::CacheUploadError(e.to_string()))
+            .expect("Should generate key");
+        // write the key to the file
+        temp_key_file
+            .write(&output.stdout)
+            .expect("Should write key to file");
+        temp_key_file.flush().expect("Should flush key file");
+
+        let cache_url = format!("file://{}", tempdir_handle.path().display());
+        let key_file_path = temp_key_file.path().to_path_buf();
+        (temp_key_file, NixCopyCache {
+            url: Url::parse(&cache_url).unwrap(),
+            key_file: key_file_path,
+        })
     }
 
     fn example_path_environment(
@@ -418,7 +459,7 @@ pub mod tests {
         let (mut env, _git) = example_path_environment(&flox, None);
 
         let meta = check_environment_metadata(&flox, &mut env);
-        assert_eq!(meta.is_err(), true);
+        meta.expect_err("Should fail due to not being a git repo");
     }
 
     #[test]
@@ -489,13 +530,13 @@ pub mod tests {
             _builder: None,
         };
 
-        let _res = publish_provider.publish(&client, &catalog_name).await;
+        let res = publish_provider.publish(&client, &catalog_name).await;
 
-        assert!(_res.is_ok());
+        assert!(res.is_ok());
     }
 
     #[tokio::test]
-    async fn test_upload_to_cache() {
+    async fn test_upload_to_cache_failed() {
         let (flox, _temp_dir_handle) = flox_instance();
         let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
         let (mut env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
@@ -512,9 +553,9 @@ pub mod tests {
             check_build_metadata(&env, EXAMPLE_PACKAGE_NAME, &flox.system).unwrap(),
         );
 
-        // It's a lot easier to detect an error than a no-op success, so we test that case here.
+        // Test an expected failure from the Mock
         let cache = Some(MockCache {
-            uri: Url::parse("s3://my-cool-cache").unwrap(),
+            url: Url::parse("s3://my-cool-cache").unwrap(),
             error_msg: Some("Something went wrong".to_string()),
         });
 
@@ -525,14 +566,49 @@ pub mod tests {
             _builder: None,
         };
 
-        let _res = publish_provider.publish(&client, &catalog_name).await;
-        assert!(!_res.is_ok());
+        let res = publish_provider.publish(&client, &catalog_name).await;
+        let err = res.expect_err("Should fail due to cache error");
+        assert_eq!(
+            err.to_string(),
+            "Failed to upload to cache: Something went wrong"
+        );
+    }
 
-        if let Err(e) = _res {
-            assert_eq!(
-                e.to_string(),
-                "Failed to upload to cache: Something went wrong"
-            );
-        }
+    #[tokio::test]
+    async fn test_upload_to_local_cache() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
+        let (mut env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
+
+        // Do the build to ensure it's been run.  We just want to find the outputs
+        assert_build_status(&flox, &mut env, EXAMPLE_PACKAGE_NAME, true);
+
+        let client = Client::Mock(MockClient::new(None::<String>).unwrap());
+        let token = create_test_token("test");
+        let catalog_name = token.handle().to_string();
+
+        let (env_metadata, build_metadata) = (
+            check_environment_metadata(&flox, &mut env).unwrap(),
+            check_build_metadata(&env, EXAMPLE_PACKAGE_NAME, &flox.system).unwrap(),
+        );
+
+        let (_key_file, cache) = local_nix_cache();
+        let publish_provider = PublishProvider::<&FloxBuildMk, &NixCopyCache> {
+            build_metadata,
+            env_metadata,
+            cache: Some(&cache),
+            _builder: None,
+        };
+
+        // the 'cache' should be non existent before the publish
+        let cache_path = cache.url.to_file_path().unwrap();
+        assert!(std::fs::read_dir(&cache_path).is_err());
+
+        let res = publish_provider.publish(&client, &catalog_name).await;
+        assert!(res.is_ok());
+
+        // The 'cache' should be non-empty after the publish
+        let entries = std::fs::read_dir(&cache_path).unwrap();
+        assert!(entries.count() != 0);
     }
 }
