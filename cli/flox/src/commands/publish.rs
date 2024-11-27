@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
@@ -27,14 +29,20 @@ pub struct Publish {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    #[bpaf(long)]
-    cache: Option<Url>,
-
-    #[bpaf(long)]
-    key_file: Option<String>,
+    #[bpaf(external(cache_args), optional)]
+    cache: Option<CacheArgs>,
 
     #[bpaf(external(publish_target))]
     publish_target: PublishTarget,
+}
+
+#[derive(Debug, Bpaf, Clone)]
+struct CacheArgs {
+    #[bpaf(long("cache"))]
+    url: Url,
+
+    #[bpaf(long("signing-key"))]
+    key_file: PathBuf,
 }
 
 #[derive(Debug, Bpaf, Clone)]
@@ -53,16 +61,11 @@ impl Publish {
         }
 
         let PublishTarget { target } = self.publish_target;
-        if self.cache.is_some() && self.key_file.is_none() {
-            bail!("--cache requires a signing key to be provided via --key-file.");
-        }
-        {
-            let env = self
-                .environment
-                .detect_concrete_environment(&flox, "Publish")?;
+        let env = self
+            .environment
+            .detect_concrete_environment(&flox, "Publish")?;
 
-            Self::publish(flox, env, target, self.cache, self.key_file).await
-        }
+        Self::publish(flox, env, target, self.cache).await
     }
 
     #[instrument(name = "publish", skip_all, fields(package))]
@@ -70,8 +73,7 @@ impl Publish {
         mut flox: Flox,
         mut env: ConcreteEnvironment,
         package: String,
-        cache_uri: Option<Url>,
-        key_file: Option<String>,
+        cache_args: Option<CacheArgs>,
     ) -> Result<()> {
         subcommand_metric!("publish");
 
@@ -89,10 +91,10 @@ impl Publish {
         let build_metadata =
             check_build_metadata(&env, &package, &flox.system).or_else(|e| bail!(e.to_string()))?;
 
-        let cache = match (cache_uri, key_file) {
-            (Some(uri), Some(key_file)) => Some(NixCopyCache { uri, key_file }),
-            _ => None,
-        };
+        let cache = cache_args.map(|args| NixCopyCache {
+            url: args.url,
+            key_file: args.key_file,
+        });
 
         let publish_provider = PublishProvider::<&FloxBuildMk, &NixCopyCache> {
             build_metadata,
