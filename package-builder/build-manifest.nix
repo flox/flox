@@ -27,13 +27,22 @@ let
   install-prefix-contents = /. + install-prefix;
   buildScript-contents = /. + buildScript;
   buildCache-tar-contents = if (buildCache == null) then null else (/. + buildCache);
-  dollar_out_error_and_exit = ''
-    echo "❌ ERROR: Build command did not copy outputs to '\$out'." 1>&2
-    echo "- copy a single file with 'mkdir -p \$out/bin && cp file \$out/bin'" 1>&2
-    echo "- copy a bin directory with 'mkdir \$out && cp -r bin \$out'" 1>&2
-    echo "- copy multiple files with 'mkdir -p \$out/bin && cp bin/* \$out/bin'" 1>&2
-    echo "- copy files from an Autotools project with 'make install PREFIX=\$out'" 1>&2
-    exit 1
+
+  dollar_out_bin_copy_hints = ''
+    echo "  - copy a single file with 'mkdir -p \$out/bin && cp file \$out/bin'" 1>&2
+    echo "  - copy a bin directory with 'mkdir \$out && cp -r bin \$out'" 1>&2
+    echo "  - copy multiple files with 'mkdir -p \$out/bin && cp bin/* \$out/bin'" 1>&2
+    echo "  - copy files from an Autotools project with 'make install PREFIX=\$out'" 1>&2
+  '';
+  dollar_out_error = ''
+    echo "❌  ERROR: Build command did not copy outputs to '\$out'." 1>&2
+    ${dollar_out_bin_copy_hints}
+  '';
+  dollar_out_no_bin_warning = ''
+    echo "⚠️  WARNING: No executables found in '\$out/bin'." 1>&2
+    echo "Only executables in '\$out/bin' will be available on the PATH." 1>&2
+    echo "If your build produces executables, make sure they are copied to '\$out/bin'." 1>&2
+    ${dollar_out_bin_copy_hints}
   '';
 in
 pkgs.runCommandNoCC name
@@ -42,7 +51,7 @@ pkgs.runCommandNoCC name
     nativeBuildInputs =
       with pkgs;
       [
-        findutils
+        fd
         gnutar
         gnused
         makeWrapper
@@ -57,7 +66,10 @@ pkgs.runCommandNoCC name
     (
       if (buildScript == null) then
         if !builtins.pathExists install-prefix then
-          "${dollar_out_error_and_exit}"
+          ''
+            ${dollar_out_error}
+            exit 1
+          ''
         else
           ''
             # If no build script is provided copy the contents of install prefix
@@ -150,8 +162,35 @@ pkgs.runCommandNoCC name
     + ''
       # Check that the build populated $out.
       if [ ! -e "$out" ]; then
-        ${dollar_out_error_and_exit}
+        ${dollar_out_error}
+        exit 1
       fi
+
+      # Check if there are binaries in $out/bin
+      mapfile -t binaries_in_bin < <(
+        fd --base-directory "$out" './bin/*' --type executable \
+        fd --base-directory "$out" './sbin/*' --type executable
+      )
+      if [ "''${#binaries_in_bin[@]}" -eq 0 ]; then
+        ${dollar_out_no_bin_warning}
+
+        # Check if there are executables in $out that are not in $out/bin
+        mapfile -t binaries_not_in_bin < <(
+          fd --base-directory "$out" -u --type executable \
+            --exclude ./bin/ \
+            --exclude ./sbin/ \
+            | sort )
+        if [ "''${#binaries_not_in_bin[@]}" -gt 0 ]; then
+          # [sic] ignored in 'nix build -L' output:
+          # <https://github.com/NixOS/nix/issues/11991>
+          echo "" 1>&2
+          echo "HINT: The following executables were found outside of '\$out/bin':" 1>&2
+          for binary in "''${binaries_not_in_bin[@]}"; do
+            echo "  - $binary" 1>&2
+          done
+        fi
+      fi
+
       # Start by patching shebangs in bin and sbin directories, making sure to
       # prefer the build wrapper environment over the "develop" environment.
       for dir in $out/bin $out/sbin; do
@@ -188,6 +227,6 @@ pkgs.runCommandNoCC name
       # compression is stable on both Mac and Linux, but that can be slow,
       # and we probably don't actually need to compress the build cache
       # because we actively delete the old copy as we create a new one.
-      find . -type f | sort | tar -c --no-recursion -f $buildCache -T -
+      fd -u --type file | sort | tar -c --no-recursion -f $buildCache -T -
     ''
   )
