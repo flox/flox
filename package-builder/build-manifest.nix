@@ -55,6 +55,7 @@ pkgs.runCommandNoCC name
   }
   (
     (
+      # Assume this script was called after an impure/non-sandboxed build.
       if (buildScript == null) then
         if !builtins.pathExists install-prefix then
           "${dollar_out_error_and_exit}"
@@ -75,6 +76,7 @@ pkgs.runCommandNoCC name
               signDarwinBinariesInAllOutputs
             ''}
           ''
+      # Assume we perform a full sandboxed build.
       else
         ''
           # Print the checksums of the inputs to the build script.
@@ -90,6 +92,10 @@ pkgs.runCommandNoCC name
           # pure or impure mode occurs outside of this script as the derivation
           # is instantiated.
           source $stdenv/setup # is this necessary?
+
+          # Set HOME to a _writable_ directory in the build sandbox.
+          # <https://github.com/flox/flox/issues/2092>
+          export HOME="$PWD"
 
           # We are currently in /build, and TMPDIR is also set to /build, so
           # we need to extract the source and work in a subdirectory to avoid

@@ -587,9 +587,14 @@ mod tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
 
+        let _git = GitCommandProvider::init(&env_path, false).unwrap();
+
         // This file is not accessible from a pure build.
         fs::write(env_path.join(&file_name), &file_content).unwrap();
-        assert_build_status(&flox, &mut env, &package_name, false);
+        let output = assert_build_status(&flox, &mut env, &package_name, false);
+        assert!(output.stdout.contains(&format!(
+            "cp: cannot stat '{file_name}': No such file or directory",
+        )));
 
         let dir = result_dir(&env_path, &package_name);
         assert!(!dir.exists());
@@ -619,6 +624,45 @@ mod tests {
         fs::write(env_path.join(&file_name), &file_content).unwrap();
         assert_build_status(&flox, &mut env, &package_name, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    /// Test that buildscripts in the sandbox can write to $HOME
+    /// and $HOME is in the sandbox.
+    /// In the Nix sandbox $HOME is usually set to `/homeless-shelter`,
+    /// does not exist, and cannot be written to.
+    /// In turn, any tool attempting to write to $HOME will experience errors to do so.
+    /// We set $HOME to another writable location in the sandbox,
+    /// to ensure such errors do not occur.
+    #[test]
+    fn build_sandbox_pure_can_write_home() {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let file_content = String::from("some content");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "pure"
+            command = """
+                mkdir $out
+                echo -n "{file_content}" > "$HOME/{file_name}"
+                cp "$HOME/{file_name}" "$out/{file_name}"
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let _git = GitCommandProvider::init(&env_path, false).unwrap();
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_file(&env_path, &package_name, &file_name, &file_content);
+
+        // Asserts that the build script did not write to the actual $HOME
+        let actual_home = std::env::var("HOME").unwrap();
+        assert!(!Path::new(&actual_home).join(&file_name).exists());
     }
 
     #[test]
