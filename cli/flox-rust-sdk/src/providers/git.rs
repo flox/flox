@@ -1320,7 +1320,7 @@ pub mod tests {
         repo.checkout("branch_1", true).unwrap();
 
         let new_filename = "dummy";
-        commit_file(&repo, &new_filename);
+        commit_file(&repo, new_filename);
         let hash_1 = repo.branch_hash("branch_1").unwrap();
         let ct = repo.rev_count("HEAD").unwrap();
         let date = repo.rev_date("HEAD").unwrap();

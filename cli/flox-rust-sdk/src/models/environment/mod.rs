@@ -739,8 +739,6 @@ fn services_socket_path(id: &str, flox: &Flox) -> Result<PathBuf, EnvironmentErr
 
 #[cfg(test)]
 mod test {
-    #[cfg(target_os = "linux")]
-    use std::os::unix::fs::PermissionsExt;
     use std::str::FromStr;
     use std::time::Duration;
 

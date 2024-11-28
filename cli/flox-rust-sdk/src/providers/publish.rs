@@ -417,7 +417,7 @@ pub mod tests {
             .expect("Should generate key");
         // write the key to the file
         temp_key_file
-            .write(&output.stdout)
+            .write_all(&output.stdout)
             .expect("Should write key to file");
         temp_key_file.flush().expect("Should flush key file");
 
@@ -433,7 +433,7 @@ pub mod tests {
         flox: &Flox,
         remote: Option<&String>,
     ) -> (PathEnvironment, GitCommandProvider) {
-        let env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join(EXAMPLE_MANIFEST));
+        let env = new_path_environment_from_env_files(flox, GENERATED_DATA.join(EXAMPLE_MANIFEST));
 
         let git = GitCommandProvider::init(
             env.parent_path().expect("Parent path must be accessible"),
