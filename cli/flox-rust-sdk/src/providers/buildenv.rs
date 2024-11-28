@@ -437,6 +437,9 @@ impl BuildEnv for BuildEnvNix {
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
+        // Note: currently used in a single integration test to verify,
+        // that the buildenv is not called a second time for remote environments,
+        // that have already been built at the current revision.
         if env::var("_FLOX_TESTING_NO_BUILD").is_ok() {
             panic!("Can't build when _FLOX_TESTING_NO_BUILD is set");
         }
