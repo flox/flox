@@ -854,3 +854,49 @@ mod realise_flakes_tests {
         assert!(result.is_ok(), "failed to skip building flake");
     }
 }
+
+#[cfg(test)]
+mod realise_store_path_tests {
+    use super::*;
+    use crate::models::manifest::DEFAULT_PRIORITY;
+
+    fn mock_store_path(valid: bool) -> LockedPackageStorePath {
+        LockedPackageStorePath {
+            install_id: "mock".to_string(),
+            store_path: if valid {
+                env!("GIT_PKG").to_string()
+            } else {
+                "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string()
+            },
+            system: env!("NIX_TARGET_SYSTEM").to_string(),
+            priority: DEFAULT_PRIORITY,
+        }
+    }
+
+    #[test]
+    fn store_path_build_success_if_valid() {
+        let buildenv = BuildEnvNix;
+        let locked = mock_store_path(true);
+
+        // show that the store path is valid
+        assert!(buildenv.check_store_path([&locked.store_path]).unwrap());
+
+        buildenv
+            .realise_store_path(&locked)
+            .expect("an existing store path should realise");
+    }
+
+    #[test]
+    fn store_path_build_failure_if_invalid() {
+        let buildenv = BuildEnvNix;
+        let locked = mock_store_path(false);
+
+        // show that the store path is invalid
+        assert!(!buildenv.check_store_path([&locked.store_path]).unwrap());
+
+        let result = buildenv
+            .realise_store_path(&locked)
+            .expect_err("invalid store path should fail to realise");
+        assert!(matches!(result, BuildEnvError::Realise2 { .. }));
+    }
+}
