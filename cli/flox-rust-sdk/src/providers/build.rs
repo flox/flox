@@ -467,15 +467,17 @@ mod tests {
 
         let output = assert_build_status(&flox, &mut env, &package_name, false);
 
-        // Weird string formatting because indoc strips leading whitespace
-        assert!(output.stdout.contains(
-            r#"
-       > ❌ ERROR: Build command did not copy outputs to '$out'.
-       > - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
-       > - copy a bin directory with 'mkdir $out && cp -r bin $out'
-       > - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
-       > - copy files from an Autotools project with 'make install PREFIX=$out'"#
-        ));
+        let expected_output = formatdoc! {r#"
+            {package_name}> ❌  ERROR: Build command did not copy outputs to '$out'.
+            {package_name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
+            {package_name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
+            {package_name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
+            {package_name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
+        "#};
+        assert!(
+            output.stdout.contains(&expected_output),
+            "{expected_output}"
+        );
     }
 
     #[test]
@@ -497,18 +499,104 @@ mod tests {
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
         let output = assert_build_status(&flox, &mut env, &package_name, false);
-        // Weird string formatting because indoc strips leading whitespace
-        assert!(output.stdout.contains(
-            r#"
-       > ❌ ERROR: Build command did not copy outputs to '$out'.
-       > - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
-       > - copy a bin directory with 'mkdir $out && cp -r bin $out'
-       > - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
-       > - copy files from an Autotools project with 'make install PREFIX=$out'"#
-        ));
+
+        let expected_output = formatdoc! {r#"
+            {package_name}> ❌  ERROR: Build command did not copy outputs to '$out'.
+            {package_name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
+            {package_name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
+            {package_name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
+            {package_name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
+        "#};
+        assert!(
+            output.stdout.contains(&expected_output),
+            "{expected_output}"
+        );
         assert!(
             !output.stdout.contains("failed to produce output path"),
             "nix's own error for empty output path is bypassed"
+        );
+    }
+
+    #[test]
+    fn build_no_bin_in_out_bin_sandbox_off() {
+        let package_name = String::from("foo");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = '''
+                mkdir -p $out/not-bin
+                touch $out/not-bin/hello
+                chmod +x $out/not-bin/hello
+            '''
+            sandbox = "off"
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // expect the build to succeed
+        let output = assert_build_status(&flox, &mut env, &package_name, true);
+
+        // [sic] newline before 'HINT: ...' ignored in 'nix build -L' output:
+        // <https://github.com/NixOS/nix/issues/11991>
+        let expected_output = formatdoc! {r#"
+            {package_name}> ⚠️  WARNING: No executables found in '$out/bin'.
+            {package_name}> Only executables in '$out/bin' will be available on the PATH.
+            {package_name}> If your build produces executables, make sure they are copied to '$out/bin'.
+            {package_name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
+            {package_name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
+            {package_name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
+            {package_name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
+            {package_name}> HINT: The following executables were found outside of '$out/bin':
+            {package_name}>   - not-bin/hello
+        "#};
+        assert!(
+            output.stdout.contains(&expected_output),
+            "{expected_output}"
+        );
+    }
+
+    #[test]
+    fn build_no_bin_in_out_bin_sandbox_pure() {
+        let package_name = String::from("foo");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = '''
+                mkdir -p $out/not-bin
+                touch $out/not-bin/hello
+                chmod +x $out/not-bin/hello
+            '''
+            sandbox = "pure"
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        let _git = GitCommandProvider::init(env.parent_path().unwrap(), false).unwrap();
+        // expect the build to succeed
+        let output = assert_build_status(&flox, &mut env, &package_name, true);
+
+        // [sic] newline before 'HINT: ...' ignored in 'nix build -L' output:
+        // <https://github.com/NixOS/nix/issues/11991>
+        let expected_output = formatdoc! {r#"
+            {package_name}> ⚠️  WARNING: No executables found in '$out/bin'.
+            {package_name}> Only executables in '$out/bin' will be available on the PATH.
+            {package_name}> If your build produces executables, make sure they are copied to '$out/bin'.
+            {package_name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
+            {package_name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
+            {package_name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
+            {package_name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
+            {package_name}> HINT: The following executables were found outside of '$out/bin':
+            {package_name}>   - not-bin/hello
+        "#};
+        assert!(
+            output.stdout.contains(&expected_output),
+            "{expected_output}"
         );
     }
 
