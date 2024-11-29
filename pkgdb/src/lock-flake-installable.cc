@@ -11,8 +11,8 @@
 
 #include <nix/attr-path.hh>
 #include <nix/eval.hh>
+#include <nix/flake/flake.hh>
 #include <nix/installable-flake.hh>
-#include <nix/value-to-json.hh>
 
 #include "flox/lock-flake-installable.hh"
 
@@ -46,12 +46,10 @@ LockFlakeInstallableCommand::LockFlakeInstallableCommand()
 /* -------------------------------------------------------------------------- */
 
 int
-LockFlakeInstallableCommand::run()
+LockFlakeInstallableCommand::run( const nix::ref<nix::EvalState> & state )
 {
-  auto state = this->getState();
-
   auto lockedInstallable
-    = lockFlakeInstallable( this->getState(), this->system, this->installable );
+    = lockFlakeInstallable( state, this->system, this->installable );
 
   printf( "%s\n", nlohmann::json( lockedInstallable ).dump( 2 ).c_str() );
 

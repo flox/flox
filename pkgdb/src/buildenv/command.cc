@@ -62,15 +62,13 @@ BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
 /* -------------------------------------------------------------------------- */
 
 int
-BuildEnvCommand::run()
+BuildEnvCommand::run( nix::ref<nix::EvalState> & state )
 {
 
   debugLog( "lockfile: " + this->lockfileContent.dump( 2 ) );
 
   auto system = this->system.value_or( nix::settings.thisSystem.get() );
 
-  auto store = this->getStore();
-  auto state = this->getState();
 
   debugLog( "building environment" );
 
@@ -79,7 +77,7 @@ BuildEnvCommand::run()
                                   this->serviceConfigPath,
                                   system );
 
-  debugLog( "built environment: " + store->printStorePath( storePath ) );
+  debugLog( "built environment: " + state->store->printStorePath( storePath ) );
 
   if ( buildContainer )
     {
@@ -93,14 +91,14 @@ BuildEnvCommand::run()
         this->containerTag.value_or( "latest" ) );
 
       debugLog( "built container builder: "
-                + store->printStorePath( containerBuilderStorePath ) );
+                + state->store->printStorePath( containerBuilderStorePath ) );
 
       storePath = containerBuilderStorePath;
     };
 
   /* Print the resulting store path */
   nlohmann::json result
-    = { { "store_path", store->printStorePath( storePath ) } };
+    = { { "store_path", state->store->printStorePath( storePath ) } };
   std::cout << result.dump() << '\n';
 
   return EXIT_SUCCESS;

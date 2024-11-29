@@ -17,17 +17,20 @@
 #include <unistd.h>
 
 #include <nix/error.hh>
+#include <nix/eval.hh>
+#include <nix/shared.hh>
+#include <nix/store-api.hh>
+
 #include <nix/util.hh>
-#include <nlohmann/json.hpp>
+
 
 #include "flox/buildenv/command.hh"
-#include "flox/core/command.hh"
+#include "flox/buildenv/realise.hh"
 #include "flox/core/exceptions.hh"
+#include "flox/core/util.hh"
 #include "flox/eval.hh"
-#include "flox/linkenv/command.hh"
 #include "flox/lock-flake-installable.hh"
 #include "flox/pkgdb/metrics.hh"
-#include "flox/realisepkgs/command.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -94,24 +97,20 @@ setVerbosityFromEnv()
 int
 run( int argc, char * argv[] )
 {
+
   /* Define arg parsers. */
 
   flox::command::VerboseParser prog( "pkgdb", FLOX_PKGDB_VERSION );
   prog.add_description( "CRUD operations for package metadata" );
 
-  flox::realisepkgs::RealisePkgsCommand cmdRealisePkgs;
-  prog.add_subparser( cmdRealisePkgs.getParser() );
+  flox::LockFlakeInstallableCommand cmdLock;
+  prog.add_subparser( cmdLock.getParser() );
 
   flox::buildenv::BuildEnvCommand cmdBuildEnv;
   prog.add_subparser( cmdBuildEnv.getParser() );
 
-  flox::LockFlakeInstallableCommand cmdLock;
-  prog.add_subparser( cmdLock.getParser() );
-
-  flox::linkenv::LinkEnvCommand cmdLinkEnv;
-  prog.add_subparser( cmdLinkEnv.getParser() );
-
-  // Only used in tests
+  // used for bats tests, may be redundantly covered through
+  // tests in `buildnev.rs` or can be reimplmented there.
   flox::EvalCommand cmdEval;
   prog.add_subparser( cmdEval.getParser() );
 
@@ -131,21 +130,32 @@ run( int argc, char * argv[] )
   // We wait to init here so we have verbosity.
   flox::sentryReporting.init( nix::verbosity >= nix::lvlDebug );
 
-  /* Run subcommand */
-  if ( prog.is_subcommand_used( "buildenv" ) ) { return cmdBuildEnv.run(); }
-  if ( prog.is_subcommand_used( cmdRealisePkgs.getParser() ) )
+  // Initialize nix (and load config);
+  nix::initNix();
+  nix::initGC();
+
+  if ( const char * rawStoreURI = std::getenv( "_FLOX_NIX_STORE_URL" ) )
     {
-      return cmdRealisePkgs.run();
+      auto providedStoreURI  = std::string( rawStoreURI );
+      nix::settings.storeUri = providedStoreURI;
     }
+  auto store = nix::openStore();
+  auto state = nix::make_ref<nix::EvalState>( nix::SearchPath(), store, store );
+
+
+  /* Run subcommand */
   if ( prog.is_subcommand_used( cmdLock.getParser() ) )
     {
-      return cmdLock.run();
+      return cmdLock.run( state );
     }
-  if ( prog.is_subcommand_used( cmdLinkEnv.getParser() ) )
+  else if ( prog.is_subcommand_used( cmdBuildEnv.getParser() ) )
     {
-      return cmdLinkEnv.run();
+      return cmdBuildEnv.run( state );
     }
-  if ( prog.is_subcommand_used( "eval" ) ) { return cmdEval.run(); }
+  else if ( prog.is_subcommand_used( cmdEval.getParser() ) )
+    {
+      return cmdEval.run( *state );
+    }
 
   // TODO: better error for this,
   // likely only occurs if we add a new command without handling it (?)

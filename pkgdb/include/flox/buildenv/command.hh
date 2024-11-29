@@ -28,7 +28,7 @@ namespace flox::buildenv {
 /* -------------------------------------------------------------------------- */
 
 /** @brief Evaluate and build a locked environment. */
-class BuildEnvCommand : NixState
+class BuildEnvCommand
 {
 
 private:
@@ -59,7 +59,7 @@ public:
    * @return `EXIT_SUCCESS` or `EXIT_FAILURE`.
    */
   int
-  run();
+  run( nix::ref<nix::EvalState> & state);
 
 
 }; /* End struct `BuildEnvCommand' */

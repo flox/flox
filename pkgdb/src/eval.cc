@@ -96,21 +96,20 @@ EvalCommand::EvalCommand() : parser( "eval" )
 /* -------------------------------------------------------------------------- */
 
 int
-EvalCommand::run()
+EvalCommand::run( nix::EvalState & state )
 {
-  auto   state = this->getState();
-  auto * value = state->allocValue();
+  auto * value = state.allocValue();
   if ( this->file.has_value() )
     {
       if ( ( *this->file ) == "-" )
         {
-          auto * expr = state->parseStdin();
-          state->eval( expr, *value );
+          auto * expr = state.parseStdin();
+          state.eval( expr, *value );
         }
       else
         {
-          state->evalFile(
-            state->rootPath( nix::CanonPath( this->file->string() ) ),
+          state.evalFile(
+            state.rootPath( nix::CanonPath( this->file->string() ) ),
             *value );
         }
     }
@@ -121,10 +120,10 @@ EvalCommand::run()
           throw FloxException(
             "you must provide a file or expression to evaluate" );
         }
-      auto * expr = state->parseExprFromString(
+      auto * expr = state.parseExprFromString(
         *this->expr,
-        state->rootPath( nix::CanonPath::fromCwd() ) );
-      state->eval( expr, *value );
+        state.rootPath( nix::CanonPath::fromCwd() ) );
+      state.eval( expr, *value );
     }
 
   nix::NixStringContext context;
@@ -132,22 +131,22 @@ EvalCommand::run()
   switch ( this->style )
     {
       case STYLE_VALUE:
-        state->forceValueDeep( *value );
-        nix::logger->cout( "%s", nix::printValue( *state, *value ) );
+        state.forceValueDeep( *value );
+        nix::logger->cout( "%s", nix::printValue( state, *value ) );
         break;
 
       case STYLE_RAW:
         nix::writeFull(
           STDOUT_FILENO,
-          *state->coerceToString( nix::noPos,
-                                  *value,
-                                  context,
-                                  "while generate eval command output" ) );
+          *state.coerceToString( nix::noPos,
+                                 *value,
+                                 context,
+                                 "while generate eval command output" ) );
         break;
 
       case STYLE_JSON:
         nix::logger->cout( "%s",
-                           nix::printValueAsJSON( *state,
+                           nix::printValueAsJSON( state,
                                                   true,
                                                   *value,
                                                   nix::noPos,

@@ -14,8 +14,7 @@
 #include <argparse/argparse.hpp>
 
 #include "flox/core/command.hh"
-#include "flox/core/nix-state.hh"
-
+#include <nix/globals.hh>
 
 /* -------------------------------------------------------------------------- */
 
@@ -24,7 +23,7 @@ namespace flox {
 /* -------------------------------------------------------------------------- */
 
 /** @brief Lock a flake installable for flox */
-class LockFlakeInstallableCommand : flox::NixState
+class LockFlakeInstallableCommand
 {
 
 private:
@@ -49,7 +48,7 @@ public:
    * @return `EXIT_SUCCESS` or `EXIT_FAILURE`.
    */
   int
-  run();
+  run( const nix::ref<nix::EvalState> & state );
 };
 
 

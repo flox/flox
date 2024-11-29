@@ -14,8 +14,7 @@
 #include <argparse/argparse.hpp>
 
 #include "flox/core/command.hh"
-#include "flox/core/nix-state.hh"
-
+#include <nix/eval.hh>
 
 /* -------------------------------------------------------------------------- */
 
@@ -24,7 +23,7 @@ namespace flox {
 /* -------------------------------------------------------------------------- */
 
 /** @brief Evaluate a `nix` expression with `flox` extensions. */
-class EvalCommand : flox::NixState
+class EvalCommand
 {
 
 private:
@@ -57,7 +56,7 @@ public:
    * @return `EXIT_SUCCESS` or `EXIT_FAILURE`.
    */
   int
-  run();
+  run( nix::EvalState & state );
 
 
 }; /* End class `EvalCommand' */
