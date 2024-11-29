@@ -17,7 +17,7 @@
 
 #include "flox/core/exceptions.hh"
 #include "flox/core/types.hh"
-#include "flox/registry.hh"
+// #include "flox/registry.hh"
 #include "flox/resolver/manifest-raw.hh"
 
 
@@ -73,11 +73,6 @@ struct LockedInputRaw
   {
     return nix::FlakeRef::fromAttrs(
       nix::fetchers::jsonToAttrs( this->attrs ) );
-  }
-
-  explicit operator RegistryInput() const
-  {
-    return RegistryInput( static_cast<nix::FlakeRef>( *this ) );
   }
 
   [[nodiscard]] bool
@@ -190,7 +185,6 @@ struct LockfileRaw
 {
 
   ManifestRaw                                manifest;
-  RegistryRaw                                registry;
   std::unordered_map<System, SystemPackages> packages;
   unsigned                                   lockfileVersion = 0;
 

@@ -96,12 +96,12 @@ parseInstallable( const std::string & installableStr )
  * located or the flakeref could not be locked
  */
 static flox::Cursor
-getDerivationCursor( const nix::ref<nix::EvalState> & state,
-                     nix::InstallableFlake &          installable )
+getDerivationCursor( nix::EvalState &        state,
+                     nix::InstallableFlake & installable )
 {
   try
     {
-      auto cursor = installable.getCursor( *state );
+      auto cursor = installable.getCursor( state );
       return cursor;
     }
   catch ( const nix::Error & e )
@@ -142,8 +142,7 @@ getLockedFlake( nix::InstallableFlake & installable )
  * @return The license string or id if found or `std::nullopt` otherwise
  */
 static std::optional<std::string>
-readLicenseStringOrId( const nix::ref<nix::EvalState> & state,
-                       nix::Value *                     licenseValue )
+readLicenseStringOrId( nix::EvalState & state, nix::Value * licenseValue )
 {
   if ( licenseValue->type() == nix::ValueType::nString )
     {
@@ -152,7 +151,7 @@ readLicenseStringOrId( const nix::ref<nix::EvalState> & state,
   else if ( licenseValue->type() == nix::ValueType::nAttrs )
     {
       auto licenseIdValue
-        = licenseValue->attrs->find( state->symbols.create( "spdxId" ) );
+        = licenseValue->attrs->find( state.symbols.create( "spdxId" ) );
 
       if ( licenseIdValue != licenseValue->attrs->end()
            && licenseIdValue->value->type() == nix::ValueType::nString )
@@ -197,6 +196,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     .inputUpdates          = std::set<nix::flake::InputPath> {}
   };
 
+
   nix::InstallableFlake installable = nix::InstallableFlake(
     // The `cmd` argument is only used in nix to raise an error
     // if `--arg` was used in the same command.
@@ -236,7 +236,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 
   auto flakeDescription = lockedFlake->flake.description;
 
-  auto cursor = getDerivationCursor( state, installable );
+  auto cursor = getDerivationCursor( *state, installable );
 
   auto lockedAttrPath = cursor->getAttrPathStr();
   debugLog( nix::fmt( "locked attr path: '%s'", lockedAttrPath ) );
@@ -424,14 +424,14 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
               {
                 state->forceValueDeep( *licenseValueInner );
                 if ( auto licenseString
-                     = readLicenseStringOrId( state, licenseValueInner ) )
+                     = readLicenseStringOrId( *state, licenseValueInner ) )
                   {
                     licenseStrings.push_back( *licenseString );
                   }
               }
           }
         else if ( auto licenseString
-                  = readLicenseStringOrId( state, &licenseValue ) )
+                  = readLicenseStringOrId( *state, &licenseValue ) )
           {
             licenseStrings.push_back( *licenseString );
           }

@@ -24,7 +24,6 @@
 #include <nlohmann/json.hpp>
 
 #include "flox/core/exceptions.hh"
-#include "flox/core/types.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -255,29 +254,6 @@ getDefaultSubtrees()
   return defaultSubtrees;
 }
 
-
-/* -------------------------------------------------------------------------- */
-
-/**
- * @brief Detect if a path is a SQLite3 database file.
- * @param dbPath Absolute path.
- * @return `true` iff @a path is a SQLite3 database file.
- */
-[[nodiscard]] bool
-isSQLiteDb( const std::string & dbPath );
-
-
-/* -------------------------------------------------------------------------- */
-
-/**
- * @brief Predicate to detect failing SQLite3 return codes.
- * @param rcode A SQLite3 _return code_.
- * @return `true` iff @a rcode is a SQLite3 error.
- */
-bool
-isSQLError( int rcode );
-
-
 /* -------------------------------------------------------------------------- */
 
 /**
@@ -298,26 +274,6 @@ parseFlakeRef( const std::string & flakeRef );
  */
 [[nodiscard]] nlohmann::json
 parseOrReadJSONObject( const std::string & jsonOrPath );
-
-
-/* -------------------------------------------------------------------------- */
-
-/** @brief Convert a TOML string to JSON. */
-[[nodiscard]] nlohmann::json
-tomlToJSON( std::string_view toml );
-
-
-/* -------------------------------------------------------------------------- */
-
-/**
- * @brief Read a file and coerce its contents to JSON based on its extension.
- *
- * Files with the extension `.json` are parsed directly.
- * Files with the extension `.yaml` or `.yml` are converted to JSON from YAML.
- * Files with the extension `.toml` are converted to JSON from TOML.
- */
-[[nodiscard]] nlohmann::json
-readAndCoerceJSON( const std::filesystem::path & path );
 
 
 /* -------------------------------------------------------------------------- */
@@ -453,10 +409,6 @@ merge_vectors( const std::vector<T> & lower, const std::vector<T> & higher )
 
 
 /* -------------------------------------------------------------------------- */
-
-/** @brief Convert a @a AttrPathGlob to a string for display. */
-[[nodiscard]] std::string
-displayableGlobbedPath( const AttrPathGlob & attrs );
 
 /** @brief Get available system memory in kb */
 [[nodiscard]] long

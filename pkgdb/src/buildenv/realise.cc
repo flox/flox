@@ -30,9 +30,9 @@
 #include <nlohmann/json.hpp>
 
 #include "flox/buildenv/realise.hh"
+#include "flox/core/util.hh"
 #include "flox/fetchers/wrapped-nixpkgs-input.hh"
 #include "flox/resolver/lockfile.hh"
-
 
 /* -------------------------------------------------------------------------- */
 
@@ -89,7 +89,7 @@ addDirToStore( nix::EvalState &    state,
 
   auto narHash = hashString( nix::htSHA256, sink.s );
   nix::ValidPathInfo info {
-            *state.store,
+          *state.store,
             "environment",
             nix::FixedOutputInfo {
                 .method = nix::FileIngestionMethod::Recursive,
@@ -171,13 +171,13 @@ createEnvironmentStorePath(
 /* -------------------------------------------------------------------------- */
 
 std::optional<nix::ref<nix::eval_cache::AttrCursor>>
-maybeGetCursor( nix::ref<nix::EvalState> &              state,
+maybeGetCursor( nix::EvalState &                        state,
                 nix::ref<nix::eval_cache::AttrCursor> & cursor,
                 const std::string &                     attr )
 {
   debugLog(
     nix::fmt( "getting attr cursor '%s.%s", cursor->getAttrPathStr(), attr ) );
-  auto        symbol = state->symbols.create( attr );
+  auto        symbol = state.symbols.create( attr );
   MaybeCursor maybeCursor;
   try
     {
@@ -199,12 +199,12 @@ maybeGetCursor( nix::ref<nix::EvalState> &              state,
 /* -------------------------------------------------------------------------- */
 
 nix::ref<nix::eval_cache::AttrCursor>
-getPackageCursor( nix::ref<nix::EvalState> &      state,
+getPackageCursor( nix::EvalState &                state,
                   const nix::flake::LockedFlake & flake,
                   const flox::AttrPath &          attrpath )
 {
   auto evalCache
-    = nix::openEvalCache( *state,
+    = nix::openEvalCache( state,
                           std::make_shared<nix::flake::LockedFlake>( flake ) );
   auto                     cursor = evalCache->getRoot();
   std::vector<std::string> seen;
@@ -232,7 +232,7 @@ getPackageCursor( nix::ref<nix::EvalState> &      state,
 /* -------------------------------------------------------------------------- */
 
 std::optional<std::string>
-maybeGetStringAttr( nix::ref<nix::EvalState> &              state,
+maybeGetStringAttr( nix::EvalState &                        state,
                     nix::ref<nix::eval_cache::AttrCursor> & cursor,
                     const std::string &                     attr )
 {
@@ -248,7 +248,7 @@ maybeGetStringAttr( nix::ref<nix::EvalState> &              state,
 /* -------------------------------------------------------------------------- */
 
 std::optional<std::vector<std::string>>
-maybeGetStringListAttr( nix::ref<nix::EvalState> &              state,
+maybeGetStringListAttr( nix::EvalState &                        state,
                         nix::ref<nix::eval_cache::AttrCursor> & cursor,
                         const std::string &                     attr )
 {
@@ -265,7 +265,7 @@ maybeGetStringListAttr( nix::ref<nix::EvalState> &              state,
 /* -------------------------------------------------------------------------- */
 
 std::optional<bool>
-maybeGetBoolAttr( nix::ref<nix::EvalState> &              state,
+maybeGetBoolAttr( nix::EvalState &                        state,
                   nix::ref<nix::eval_cache::AttrCursor> & cursor,
                   const std::string &                     attr )
 {
@@ -281,7 +281,7 @@ maybeGetBoolAttr( nix::ref<nix::EvalState> &              state,
 /* -------------------------------------------------------------------------- */
 
 OutputsOrMissingOutput
-getOutputsOutpaths( nix::ref<nix::EvalState> &              state,
+getOutputsOutpaths( nix::EvalState &                        state,
                     nix::ref<nix::eval_cache::AttrCursor> & pkgCursor,
                     const std::vector<std::string> &        names )
 {
@@ -320,7 +320,7 @@ getOutputsOutpaths( nix::ref<nix::EvalState> &              state,
 /* -------------------------------------------------------------------------- */
 
 std::string
-tryEvaluatePackageOutPath( nix::ref<nix::EvalState> &              state,
+tryEvaluatePackageOutPath( nix::EvalState &                        state,
                            const std::string &                     packageName,
                            const std::string &                     system,
                            nix::ref<nix::eval_cache::AttrCursor> & cursor )
@@ -361,17 +361,15 @@ tryEvaluatePackageOutPath( nix::ref<nix::EvalState> &              state,
        */
       try
         {
-          debugLog(
-            "evaluating outPath uncached to get full error message" ) auto
-            vPackage
-            = cursor->forceValue();
-          state->forceAttrs( vPackage, nix::noPos, "while evaluating package" );
+          debugLog( "evaluating outPath uncached to get full error message" );
+          auto vPackage = cursor->forceValue();
+          state.forceAttrs( vPackage, nix::noPos, "while evaluating package" );
           // expected to fail
           auto * aOutPath
-            = vPackage.attrs->get( state->symbols.create( "outPath" ) );
-          state->forceString( *aOutPath->value,
-                              aOutPath->pos,
-                              "while evaluating outPath" );
+            = vPackage.attrs->get( state.symbols.create( "outPath" ) );
+          state.forceString( *aOutPath->value,
+                             aOutPath->pos,
+                             "while evaluating outPath" );
           /**
            * this should only be reachable if we have a cached eval failure,
            * that evaluates successfully at a later time.
@@ -395,15 +393,14 @@ tryEvaluatePackageOutPath( nix::ref<nix::EvalState> &              state,
 /* -------------------------------------------------------------------------- */
 
 nix::ref<nix::eval_cache::AttrCursor>
-evalCacheCursorForInput( nix::ref<nix::EvalState> &             state,
+evalCacheCursorForInput( nix::EvalState &                       state,
                          const flox::resolver::LockedInputRaw & input,
                          const flox::AttrPath &                 attrPath )
 {
   auto packageInputRef = nix::FlakeRef::fromAttrs( input.attrs );
 
-  auto packageFlake = nix::flake::lockFlake( *state,
-                                             packageInputRef,
-                                             nix::flake::LockFlags {} );
+  auto packageFlake
+    = nix::flake::lockFlake( state, packageInputRef, nix::flake::LockFlags {} );
 
   auto cursor = getPackageCursor( state, packageFlake, attrPath );
   return cursor;
@@ -413,7 +410,7 @@ evalCacheCursorForInput( nix::ref<nix::EvalState> &             state,
 /* -------------------------------------------------------------------------- */
 
 std::unordered_map<std::string, std::string>
-outpathsForPackageOutputs( nix::ref<nix::EvalState> &              state,
+outpathsForPackageOutputs( nix::EvalState &                        state,
                            const std::string &                     packageName,
                            nix::ref<nix::eval_cache::AttrCursor> & pkgCursor )
 {
@@ -453,7 +450,7 @@ outpathsForPackageOutputs( nix::ref<nix::EvalState> &              state,
 
 std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
 collectRealisedOutputs(
-  nix::ref<nix::EvalState> &                     state,
+  nix::EvalState &                               state,
   const BuildenvLockedPackage &                  lockedPackage,
   const std::string &                            parentOutpath,
   std::unordered_map<std::string, std::string> & outputsToOutpaths )
@@ -465,9 +462,9 @@ collectRealisedOutputs(
       debugLog( nix::fmt( "processing output '%s' of '%s'",
                           name,
                           lockedPackage.installId ) );
-      auto outpathForOutput = state->store->parseStorePath( outpathStr );
+      auto outpathForOutput = state.store->parseStorePath( outpathStr );
       buildenv::RealisedPackage pkg(
-        state->store->printStorePath( outpathForOutput ),
+        state.store->printStorePath( outpathForOutput ),
         true,
         buildenv::Priority( lockedPackage.priority,
                             parentOutpath,
@@ -481,7 +478,7 @@ collectRealisedOutputs(
 /* -------------------------------------------------------------------------- */
 
 std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
-getRealisedOutputs( nix::ref<nix::EvalState> &    state,
+getRealisedOutputs( nix::EvalState &              state,
                     const BuildenvLockedPackage & lockedPackage,
                     const System &                system )
 {
@@ -526,7 +523,7 @@ getRealisedOutputs( nix::ref<nix::EvalState> &    state,
     {
       try
         {
-          state->store->ensurePath( outPath );
+          state.store->ensurePath( outPath );
         }
       catch ( const nix::Error & e )
         {
@@ -545,7 +542,7 @@ getRealisedOutputs( nix::ref<nix::EvalState> &    state,
       try
         {
           auto storePathWithOutputs = nix::StorePathWithOutputs { drvPath, {} };
-          state->store->buildPaths(
+          state.store->buildPaths(
             nix::toDerivedPaths( { storePathWithOutputs } ) );
         }
       catch ( const nix::Error & e )
@@ -888,7 +885,7 @@ makeActivationScriptsPackageDir( nix::EvalState & state )
  * @return The store path of the environment.
  */
 nix::StorePath
-createFloxEnv( nix::ref<nix::EvalState> &         state,
+createFloxEnv( nix::EvalState &                   state,
                const nlohmann::json &             lockfileContent,
                const std::optional<std::string> & serviceConfigPath,
                const System &                     system )
@@ -930,7 +927,7 @@ createFloxEnv( nix::ref<nix::EvalState> &         state,
 
   // Add the environment's activation scripts to the environment
   auto [activationScriptPackage, activationScriptReferences]
-    = makeActivationScripts( *state, lockfile );
+    = makeActivationScripts( state, lockfile );
 
   pkgs.push_back( activationScriptPackage );
   references.insert( activationScriptReferences.begin(),
@@ -938,25 +935,25 @@ createFloxEnv( nix::ref<nix::EvalState> &         state,
 
   // Add the scripts with our activation logic to the environment
   auto [profileScriptsPath, profileScriptsReference]
-    = makeActivationScriptsPackageDir( *state );
+    = makeActivationScriptsPackageDir( state );
 
   pkgs.push_back( profileScriptsPath );
   references.insert( profileScriptsReference );
 
   auto [packageBuildsPackage, packageBuildsReferences]
-    = makePackageBuildScripts( *state, lockfile );
+    = makePackageBuildScripts( state, lockfile );
 
   pkgs.push_back( packageBuildsPackage );
   references.insert( packageBuildsReferences.begin(),
                      packageBuildsReferences.end() );
 
   auto [lockfilePackage, lockfileReferences]
-    = makeLockfilePackage( *state, lockfileContent );
+    = makeLockfilePackage( state, lockfileContent );
 
   pkgs.push_back( lockfilePackage );
   references.insert( lockfileReferences.begin(), lockfileReferences.end() );
 
-  return createEnvironmentStorePath( *state,
+  return createEnvironmentStorePath( state,
                                      pkgs,
                                      references,
                                      storePathsToInstallIds,

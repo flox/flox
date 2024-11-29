@@ -16,9 +16,9 @@
 #include <nlohmann/json.hpp>
 
 #include "flox/core/command.hh"
-#include "flox/core/nix-state.hh"
 #include "flox/core/types.hh"
 #include "flox/core/util.hh"
+#include <nix/eval.hh>
 
 
 /* -------------------------------------------------------------------------- */
@@ -59,7 +59,7 @@ public:
    * @return `EXIT_SUCCESS` or `EXIT_FAILURE`.
    */
   int
-  run( nix::ref<nix::EvalState> & state);
+  run( nix::EvalState & state );
 
 
 }; /* End struct `BuildEnvCommand' */

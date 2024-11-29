@@ -139,7 +139,7 @@ FLOX_DEFINE_EXCEPTION( RequisitesTxtBuildFailure,
  * @return Either a known non-null reference or @a std::nullopt.
  */
 std::optional<nix::ref<nix::eval_cache::AttrCursor>>
-maybeGetCursor( nix::ref<nix::EvalState> &              state,
+maybeGetCursor( nix::EvalState &                        state,
                 nix::ref<nix::eval_cache::AttrCursor> & cursor,
                 const std::string &                     attr );
 
@@ -153,7 +153,7 @@ maybeGetCursor( nix::ref<nix::EvalState> &              state,
  * @return An eval cache cursor pointing at the attrpath.
  */
 nix::ref<nix::eval_cache::AttrCursor>
-getPackageCursor( nix::ref<nix::EvalState> &      state,
+getPackageCursor( nix::EvalState &                state,
                   const nix::flake::LockedFlake & flake,
                   const flox::AttrPath &          attrpath );
 
@@ -168,7 +168,7 @@ getPackageCursor( nix::ref<nix::EvalState> &      state,
  * the @a std::string representing the attribute.
  */
 std::optional<std::string>
-maybeGetStringAttr( nix::ref<nix::EvalState> &              state,
+maybeGetStringAttr( nix::EvalState &                        state,
                     nix::ref<nix::eval_cache::AttrCursor> & cursor,
                     const std::string &                     attr );
 
@@ -183,7 +183,7 @@ maybeGetStringAttr( nix::ref<nix::EvalState> &              state,
  * std::nullopt if the cursor didn't point to an attrset.
  */
 std::optional<std::vector<std::string>>
-maybeGetStringListAttr( nix::ref<nix::EvalState> &              state,
+maybeGetStringListAttr( nix::EvalState &                        state,
                         nix::ref<nix::eval_cache::AttrCursor> & cursor,
                         const std::string &                     attr );
 
@@ -198,7 +198,7 @@ maybeGetStringListAttr( nix::ref<nix::EvalState> &              state,
  * the @a std::string representing the attribute.
  */
 std::optional<bool>
-maybeGetBoolAttr( nix::ref<nix::EvalState> &              state,
+maybeGetBoolAttr( nix::EvalState &                        state,
                   nix::ref<nix::eval_cache::AttrCursor> & cursor,
                   const std::string &                     attr );
 
@@ -215,7 +215,7 @@ using OutputsOrMissingOutput
  * @return A map of output names to store paths or the first missing output.
  */
 OutputsOrMissingOutput
-getOutputsOutpaths( nix::ref<nix::EvalState> &              state,
+getOutputsOutpaths( nix::EvalState &                        state,
                     nix::ref<nix::eval_cache::AttrCursor> & pkgCursor,
                     const std::vector<std::string> &        names );
 
@@ -233,7 +233,7 @@ getOutputsOutpaths( nix::ref<nix::EvalState> &              state,
  * @return The @a std::string of the requested store path
  */
 std::string
-tryEvaluatePackageOutPath( nix::ref<nix::EvalState> &              state,
+tryEvaluatePackageOutPath( nix::EvalState &                        state,
                            const std::string &                     packageName,
                            const std::string &                     system,
                            nix::ref<nix::eval_cache::AttrCursor> & cursor );
@@ -250,7 +250,7 @@ tryEvaluatePackageOutPath( nix::ref<nix::EvalState> &              state,
  * @return The cursor.
  */
 nix::ref<nix::eval_cache::AttrCursor>
-evalCacheCursorForInput( nix::ref<nix::EvalState> &             state,
+evalCacheCursorForInput( nix::EvalState &                       state,
                          const flox::resolver::LockedInputRaw & input,
                          const flox::AttrPath &                 attrPath );
 
@@ -266,7 +266,7 @@ evalCacheCursorForInput( nix::ref<nix::EvalState> &             state,
  * @return The output-to-storePath mapping.
  */
 std::unordered_map<std::string, std::string>
-outpathsForPackageOutputs( nix::ref<nix::EvalState> &              state,
+outpathsForPackageOutputs( nix::EvalState &                        state,
                            const std::string &                     packageName,
                            nix::ref<nix::eval_cache::AttrCursor> & pkgCursor );
 
@@ -287,7 +287,7 @@ outpathsForPackageOutputs( nix::ref<nix::EvalState> &              state,
  */
 std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
 collectRealisedOutputs(
-  nix::ref<nix::EvalState> &                     state,
+  nix::EvalState &                               state,
   const std::string &                            packageName,
   const flox::resolver::LockedPackageRaw &       lockedPackage,
   const std::string &                            parentOutpath,
@@ -306,7 +306,7 @@ collectRealisedOutputs(
  * whether the package is cached.
  */
 bool
-ensurePackageIsAllowed( nix::ref<nix::EvalState> &              state,
+ensurePackageIsAllowed( nix::EvalState &                        state,
                         nix::ref<nix::eval_cache::AttrCursor> & cursor,
                         const std::string &                     packageName,
                         const flox::resolver::Options::Allows & allows );
@@ -324,7 +324,7 @@ ensurePackageIsAllowed( nix::ref<nix::EvalState> &              state,
  * @return The list of packages generated from the locked package.
  */
 std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
-getRealisedOutputs( nix::ref<nix::EvalState> &         state,
+getRealisedOutputs( nix::EvalState &                   state,
                     const std::string &                packageName,
                     const resolver::LockedPackageRaw & lockedPackage,
                     const System &                     system );
@@ -340,7 +340,7 @@ getRealisedOutputs( nix::ref<nix::EvalState> &         state,
  * @return `StorePath` to the environment.
  */
 nix::StorePath
-createFloxEnv( nix::ref<nix::EvalState> &         state,
+createFloxEnv( nix::EvalState &                   state,
                const nlohmann::json &             lockfile,
                const std::optional<std::string> & serviceConfigPath,
                const System &                     system );

@@ -9,8 +9,7 @@
 
 #pragma once
 
-#include "flox/core/nix-state.hh"
-
+#include <nix/eval.hh>
 
 /* -------------------------------------------------------------------------- */
 

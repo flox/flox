@@ -25,7 +25,6 @@
 
 #include "flox/core/types.hh"
 #include "flox/core/util.hh"
-#include "flox/registry.hh"
 #include "flox/resolver/manifest-raw.hh"
 
 
@@ -173,35 +172,6 @@ to_json( nlohmann::json & jto, const Options & opts )
 }
 
 /* -------------------------------------------------------------------------- */
-
-void
-from_json( const nlohmann::json & jfrom, GlobalManifestRaw & manifest )
-{
-  assertIsJSONObject<InvalidManifestFileException>( jfrom, "global manifest" );
-
-  for ( const auto & [key, value] : jfrom.items() )
-    {
-      if ( key == "registry" ) { value.get_to( manifest.registry ); }
-      else if ( key == "options" ) { value.get_to( manifest.options ); }
-      else
-        {
-          throw InvalidManifestFileException(
-            "unrecognized global manifest field: '" + key + "'." );
-        }
-    }
-  manifest.check();
-}
-
-
-void
-to_json( nlohmann::json & jto, const GlobalManifestRaw & manifest )
-{
-  manifest.check();
-  jto = nlohmann::json::object();
-
-  if ( manifest.options.has_value() ) { jto["options"] = *manifest.options; }
-  if ( manifest.registry.has_value() ) { jto["registry"] = *manifest.registry; }
-}
 
 
 /* -------------------------------------------------------------------------- */
@@ -439,7 +409,6 @@ from_json( const nlohmann::json & jfrom, ManifestRaw & manifest )
         {
           /* don't need to get these from the lockfile */
         }
-      else if ( key == "registry" ) { value.get_to( manifest.registry ); }
       else if ( key == "vars" )
         {
           if ( value.is_null() )
@@ -473,8 +442,6 @@ to_json( nlohmann::json & jto, const ManifestRaw & manifest )
 
   if ( manifest.options.has_value() ) { jto["options"] = *manifest.options; }
 
-  if ( manifest.registry.has_value() ) { jto["registry"] = *manifest.registry; }
-
   if ( manifest.vars.has_value() ) { jto["vars"] = *manifest.vars; }
 
   if ( manifest.profile.has_value() ) { jto["profile"] = *manifest.profile; }
@@ -488,20 +455,7 @@ to_json( nlohmann::json & jto, const ManifestRaw & manifest )
 void
 ManifestRaw::check() const
 {
-  GlobalManifestRaw::check();
   if ( this->hook.has_value() ) { this->hook->check(); }
-  if ( this->registry.has_value() )
-    {
-      for ( const auto & [name, input] : this->registry->inputs )
-        {
-          if ( input.getFlakeRef()->input.getType() == "indirect" )
-            {
-              throw InvalidManifestFileException(
-                "manifest 'registry.inputs." + name
-                + ".from.type' may not be \"indirect\"." );
-            }
-        }
-    }
 }
 
 

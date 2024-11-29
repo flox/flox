@@ -27,44 +27,15 @@ BuildenvLockfile::load_from_content( const nlohmann::json & jfrom )
 
   switch ( version )
     {
-      case 0: this->from_v0_content( jfrom ); break;
       case 1: this->from_v1_content( jfrom ); break;
       default:
         throw resolver::InvalidLockfileException(
           "unsupported lockfile version",
-          "only v0 and v1 are supported" );
+          "only v1 is supported" );
     }
 }
 
 /* -------------------------------------------------------------------------- */
-
-void
-BuildenvLockfile::from_v0_content( const nlohmann::json & jfrom )
-{
-  resolver::LockfileRaw lockfileRaw = resolver::LockfileRaw();
-  jfrom.get_to( lockfileRaw );
-  this->manifest = lockfileRaw.manifest;
-  for ( auto [system, systemPackages] : lockfileRaw.packages )
-    {
-      for ( auto [installId, lockedPackage] : systemPackages )
-        {
-          if ( lockedPackage.has_value() )
-            {
-              resolver::LockedInputRaw input = resolver::LockedInputRaw();
-              input.attrs = flox::githubAttrsToFloxNixpkgsAttrs(
-                lockedPackage->input.attrs );
-              input.url = nix::FlakeRef::fromAttrs( input.attrs ).to_string();
-
-              this->packages.emplace_back(
-                BuildenvLockedPackage { system,
-                                        installId,
-                                        input,
-                                        lockedPackage->attrPath,
-                                        lockedPackage->priority } );
-            }
-        }
-    }
-}
 
 
 /* -------------------------------------------------------------------------- */

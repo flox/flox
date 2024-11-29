@@ -11,6 +11,7 @@
 
 #include "flox/buildenv/command.hh"
 #include "flox/buildenv/realise.hh"
+#include "flox/core/util.hh"
 #include "flox/resolver/lockfile.hh"
 
 /* -------------------------------------------------------------------------- */

@@ -21,7 +21,6 @@
 
 #include "flox/core/command.hh"
 #include "flox/core/types.hh"
-#include "flox/registry.hh"
 
 
 /* -------------------------------------------------------------------------- */

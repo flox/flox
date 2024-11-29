@@ -20,10 +20,10 @@
 #include <utility>
 #include <vector>
 
+#include <nix/globals.hh>
 #include <nlohmann/json.hpp>
 
 #include "flox/core/exceptions.hh"
-#include "flox/core/nix-state.hh"
 #include "flox/core/types.hh"
 
 
@@ -89,91 +89,6 @@ from_json( const nlohmann::json & jfrom, Options & opts );
 /** @brief Convert a @a flox::resolver::Options to a JSON Object. */
 void
 to_json( nlohmann::json & jto, const Options & opts );
-
-
-/* -------------------------------------------------------------------------- */
-
-/**
- * @brief A _global_ manifest containing only `registry` and `options` fields
- *        in its _raw_ form.
- *
- * This _raw_ struct is defined to generate parsers, and its declarations simply
- * represent what is considered _valid_.
- * On its own, it performs no real work, other than to validate the input.
- *
- * @see flox::resolver::GlobalManifest
- */
-struct GlobalManifestRaw
-{
-  /** A collection of _inputs_ to find packages. */
-  std::optional<RegistryRaw> registry;
-
-  /** @brief Options controlling environment and search behaviors. */
-  std::optional<Options> options;
-
-
-  virtual ~GlobalManifestRaw()                   = default;
-  GlobalManifestRaw()                            = default;
-  GlobalManifestRaw( const GlobalManifestRaw & ) = default;
-  GlobalManifestRaw( GlobalManifestRaw && )      = default;
-
-  explicit GlobalManifestRaw( std::optional<RegistryRaw> registry,
-                              std::optional<Options> options = std::nullopt )
-    : registry( std::move( registry ) ), options( std::move( options ) )
-  {}
-
-  explicit GlobalManifestRaw( std::optional<Options> options )
-    : options( std::move( options ) )
-  {}
-
-  GlobalManifestRaw &
-  operator=( const GlobalManifestRaw & )
-    = default;
-  GlobalManifestRaw &
-  operator=( GlobalManifestRaw && )
-    = default;
-
-  /**
-   * @brief Validate manifest fields, throwing an exception if its contents
-   *        are invalid.
-   */
-  virtual void
-  check() const
-  {}
-
-  virtual void
-  clear()
-  {
-    this->registry = std::nullopt;
-    this->options  = std::nullopt;
-  }
-
-  /**
-   * @brief Get the list of systems requested by the manifest.
-   *
-   * Default to the current system if systems is not specified.
-   */
-  [[nodiscard]] std::vector<System>
-  getSystems() const
-  {
-    if ( this->options.has_value() && this->options->systems.has_value() )
-      {
-        return *this->options->systems;
-      }
-    return std::vector<System> { nix::settings.thisSystem.get() };
-  }
-}; /* End struct `GlobalManifestRaw' */
-
-
-/* -------------------------------------------------------------------------- */
-
-/** @brief Convert a JSON object to a @a flox::resolver::GlobalManifestRaw. */
-void
-from_json( const nlohmann::json & jfrom, GlobalManifestRaw & manifest );
-
-/** @brief Convert a @a flox::resolver::GlobalManifestRaw to a JSON object. */
-void
-to_json( nlohmann::json & jto, const GlobalManifestRaw & manifest );
 
 /* -------------------------------------------------------------------------- */
 
@@ -250,7 +165,7 @@ from_json( const nlohmann::json & jfrom, BuildDescriptorRaw & profile );
  *
  * @see flox::resolver::Manifest
  */
-struct ManifestRaw : public GlobalManifestRaw
+struct ManifestRaw
 {
   std::optional<std::unordered_map<std::string, std::string>> vars;
 
@@ -260,18 +175,12 @@ struct ManifestRaw : public GlobalManifestRaw
 
   std::optional<std::unordered_map<std::string, BuildDescriptorRaw>> build;
 
-  ~ManifestRaw() override            = default;
+  std::optional<Options> options;
+
+  ~ManifestRaw()                     = default;
   ManifestRaw()                      = default;
   ManifestRaw( const ManifestRaw & ) = default;
   ManifestRaw( ManifestRaw && )      = default;
-
-  explicit ManifestRaw( const GlobalManifestRaw & globalManifestRaw )
-    : GlobalManifestRaw( globalManifestRaw )
-  {}
-
-  explicit ManifestRaw( GlobalManifestRaw && globalManifestRaw )
-    : GlobalManifestRaw( globalManifestRaw )
-  {}
 
   ManifestRaw &
   operator=( const ManifestRaw & )
@@ -281,19 +190,6 @@ struct ManifestRaw : public GlobalManifestRaw
   operator=( ManifestRaw && )
     = default;
 
-  ManifestRaw &
-  operator=( const GlobalManifestRaw & globalManifestRaw )
-  {
-    GlobalManifestRaw::operator=( globalManifestRaw );
-    return *this;
-  }
-
-  ManifestRaw &
-  operator=( GlobalManifestRaw && globalManifestRaw )
-  {
-    GlobalManifestRaw::operator=( globalManifestRaw );
-    return *this;
-  }
 
   /**
    * @brief Validate manifest fields, throwing an exception if its contents
@@ -304,19 +200,32 @@ struct ManifestRaw : public GlobalManifestRaw
    * - @a hook is valid.
    */
   void
-  check() const override;
+  check() const;
 
   void
-  clear() override
+  clear()
   {
-    /* From `GlobalManifestRaw' */
-    this->options  = std::nullopt;
-    this->registry = std::nullopt;
     /* From `ManifestRaw' */
     this->vars    = std::nullopt;
     this->hook    = std::nullopt;
     this->profile = std::nullopt;
     this->build   = std::nullopt;
+    this->options = std::nullopt;
+  }
+
+  /**
+   * @brief Get the list of systems requested by the manifest.
+   *
+   * Default to the current system if systems is not specified.
+   */
+  [[nodiscard]] std::vector<System>
+  getSystems() const
+  {
+    if ( this->options.has_value() && this->options->systems.has_value() )
+      {
+        return *this->options->systems;
+      }
+    return std::vector<System> { nix::settings.thisSystem.get() };
   }
 
   /**
@@ -326,6 +235,7 @@ struct ManifestRaw : public GlobalManifestRaw
    */
   [[nodiscard]] nlohmann::json
   diff( const ManifestRaw & old ) const;
+
 
 }; /* End struct `ManifestRaw' */
 
@@ -341,16 +251,6 @@ void
 to_json( nlohmann::json & jto, const ManifestRaw & manifest );
 
 /* -------------------------------------------------------------------------- */
-
-/**
- * @brief Restrict types to those derived from
- *        @a flox::resolver::GlobalManifestRaw or
- *        @a flox::resolver::GlobalManifestRawGA. */
-template<typename RawType>
-concept manifest_raw_type = std::derived_from<RawType, GlobalManifestRaw>;
-
-static_assert( manifest_raw_type<GlobalManifestRaw> );
-static_assert( manifest_raw_type<ManifestRaw> );
 
 
 /* -------------------------------------------------------------------------- */

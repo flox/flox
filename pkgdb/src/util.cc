@@ -25,7 +25,6 @@
 #endif
 
 #include <nlohmann/json.hpp>
-#include <sqlite3pp.hh>
 
 #include "flox/core/exceptions.hh"
 #include "flox/core/types.hh"
@@ -35,62 +34,6 @@
 /* -------------------------------------------------------------------------- */
 
 namespace flox {
-
-/* -------------------------------------------------------------------------- */
-
-bool
-isSQLiteDb( const std::string & dbPath )
-{
-  std::filesystem::path path( dbPath );
-  if ( ! std::filesystem::exists( path ) ) { return false; }
-  if ( std::filesystem::is_directory( path ) ) { return false; }
-
-  /* Read file magic */
-  static const char expectedMagic[16] = "SQLite format 3";  // NOLINT
-
-  char buffer[16];  // NOLINT
-  std::memset( &buffer[0], '\0', sizeof( buffer ) );
-  FILE * filep = fopen( dbPath.c_str(), "rb" );
-
-  std::clearerr( filep );
-
-  const size_t nread
-    = std::fread( &buffer[0], sizeof( buffer[0] ), sizeof( buffer ), filep );
-  if ( nread != sizeof( buffer ) )
-    {
-      if ( std::feof( filep ) != 0 )
-        {
-          std::fclose( filep );  // NOLINT
-          return false;
-        }
-      if ( std::ferror( filep ) != 0 )
-        {
-          std::fclose( filep );  // NOLINT
-          throw flox::FloxException( "Failed to read file " + dbPath );
-        }
-      std::fclose( filep );  // NOLINT
-      return false;
-    }
-  std::fclose( filep );  // NOLINT
-  return std::string_view( &buffer[0] )
-         == std::string_view( &expectedMagic[0] );
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-bool
-isSQLError( int rcode )
-{
-  switch ( rcode )
-    {
-      case SQLITE_OK:
-      case SQLITE_ROW:
-      case SQLITE_DONE: return false; break;
-      default: return true; break;
-    }
-}
-
 
 /* -------------------------------------------------------------------------- */
 
@@ -119,36 +62,6 @@ parseOrReadJSONObject( const std::string & jsonOrPath )
 
 
 /* -------------------------------------------------------------------------- */
-
-nlohmann::json
-readAndCoerceJSON( const std::filesystem::path & path )
-{
-  if ( ! std::filesystem::exists( path ) )
-    {
-      throw flox::FloxException( "File '" + path.string()
-                                 + "' does not exist" );
-    }
-
-  std::ifstream ifs( path );
-  auto          ext = path.extension();
-  if ( ( ext == ".json" ) || ( ext == ".lock" ) )
-    {
-      return nlohmann::json::parse( ifs );
-    }
-
-  /* Read file to buffer */
-  std::ostringstream oss;
-  if ( ext == ".toml" )
-    {
-      oss << ifs.rdbuf();
-      return tomlToJSON( oss.str() );
-    }
-  else
-    {
-      throw flox::FloxException( "Cannot convert file extension '"
-                                 + ext.string() + "' to JSON" );
-    }
-}
 
 
 /* -------------------------------------------------------------------------- */
@@ -322,21 +235,6 @@ extract_json_errmsg( nlohmann::json::exception & err )
 
 
 /* -------------------------------------------------------------------------- */
-
-std::string
-displayableGlobbedPath( const flox::AttrPathGlob & attrs )
-{
-  std::stringstream oss;
-  bool              first = true;
-  for ( const auto & attr : attrs )
-    {
-      if ( first ) { first = false; }
-      else { oss << '.'; }
-      oss << attr.value_or( "*" );
-    }
-  return oss.str();
-}
-
 
 #ifdef __APPLE__
 // Sysctl is only used for darwin

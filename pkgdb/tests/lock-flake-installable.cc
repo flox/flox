@@ -10,7 +10,11 @@
 #include "flox/core/util.hh"
 #include "test.hh"
 #include <fstream>
+#include <nix/eval.hh>
 #include <nix/flake/flake.hh>
+#include <nix/search-path.hh>
+#include <nix/shared.hh>
+#include <nix/store-api.hh>
 
 /* -------------------------------------------------------------------------- */
 
@@ -367,8 +371,10 @@ main( int argc, char * argv[] )
     }
 
   /* Initialize `nix' */
-  flox::NixState nstate;
-  auto           state = nstate.getState();
+  nix::initNix();
+  nix::initGC();
+  auto store = nix::openStore();
+  auto state = nix::make_ref<nix::EvalState>( nix::SearchPath(), store, store );
 
   std::string system = nix::nativeSystem;
 

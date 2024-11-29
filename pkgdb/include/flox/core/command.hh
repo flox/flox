@@ -17,7 +17,6 @@
 #include <nix/flake/flakeref.hh>
 
 #include "flox/core/exceptions.hh"
-#include "flox/core/nix-state.hh"
 #include "flox/core/types.hh"
 #include "flox/core/util.hh"
 

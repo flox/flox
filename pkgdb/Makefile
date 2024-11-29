@@ -176,10 +176,10 @@ test_SRCS      = $(sort $(wildcard tests/*.cc))
 ALL_SRCS       = $(SRCS) $(test_SRCS)
 BINS           = bin/pkgdb
 LIBS           = lib/wrapped-nixpkgs-input$(libExt)
-TEST_UTILS     = $(addprefix tests/,is_sqlite3)
-TESTS          = $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
+# TEST_UTILS     = $(addprefix tests/,is_sqlite3)
+TESTS          = $(test_SRCS:.cc=)
 TEST_DATA      =
-ALL_BINS       = $(TESTS) $(TEST_UTILS) $(BINS)
+ALL_BINS       = $(TESTS) $(BINS)
 CLEANDIRS      =
 CLEANFILES     = $(ALL_SRCS:.cc=.o) $(ALL_BINS)
 FULLCLEANDIRS  =
@@ -597,9 +597,8 @@ cc-check: $(TESTS:.cc=)
 #: Run all bats tests
 PKGDB_BATS_FILES ?= "$(PKGDB_ROOT)/tests"
 PKGDB_BATS_OPTS ?= ""
-bats-check: bin $(TEST_UTILS)
+bats-check: bin
 	PKGDB_BIN="$(PKGDB_ROOT)/bin/pkgdb"                          \
-	PKGDB_IS_SQLITE3_BIN="$(PKGDB_ROOT)/tests/is_sqlite3"        \
 	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_ROOT)/tests/search-params"  \
 	  $(BATS) --print-output-on-failure --verbose-run --timing   \
 	          $(PKGDB_BATS_OPTS) "$(PKGDB_BATS_FILES)";
@@ -644,8 +643,8 @@ $(LIBS): %: $(SRCS:.cc=.o)
 # ---------------------------------------------------------------------------- #
 
 $(test_SRCS:.cc=.o): CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
-$(TESTS) $(TEST_UTILS): tests/%: $(filter-out src/main.o,$(SRCS:.cc=.o))
-$(TESTS) $(TEST_UTILS): tests/%: tests/%.o tests/test.hh
+$(TESTS): tests/%: $(filter-out src/main.o,$(SRCS:.cc=.o))
+$(TESTS): tests/%: tests/%.o tests/test.hh
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
 
 # ---------------------------------------------------------------------------- #
@@ -660,7 +659,7 @@ bin: $(BINS)
 lib: $(LIBS)
 
 #: Build test executables and resources
-tests: $(TESTS) $(TEST_UTILS)
+tests: $(TESTS)
 
 #: Build binaries, tests, and generated `.gitignore' files
 all: bin lib tests ignores

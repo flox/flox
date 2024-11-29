@@ -52,13 +52,6 @@ struct BuildenvLockfile
   load_from_content( const nlohmann::json & jfrom );
 
   /** @brief Helper to convert a JSON object to a
-   *         @a flox::buildenv::BuildenvLockfile assuming the content is a V0
-   *         lockfile.
-   * */
-  void
-  from_v0_content( const nlohmann::json & jfrom );
-
-  /** @brief Helper to convert a JSON object to a
    *         @a flox::buildenv::BuildenvLockfile assuming the content is a V1
    *         lockfile.
    * */

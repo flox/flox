@@ -8,10 +8,13 @@
 #include <iostream>
 
 #include <nix/attrs.hh>
+#include <nix/eval.hh>
+#include <nix/search-path.hh>
+#include <nix/shared.hh>
+#include <nix/store-api.hh>
 #include <nix/url.hh>
 #include <nlohmann/json.hpp>
 
-#include "flox/core/nix-state.hh"
 #include "flox/core/util.hh"
 #include "flox/fetchers/wrapped-nixpkgs-input.hh"
 #include "test.hh"
@@ -114,8 +117,10 @@ main()
 #define RUN_TEST( ... ) _RUN_TEST( exitCode, __VA_ARGS__ )
 
   /* Initialize `nix' */
-  flox::NixState nstate;
-  auto           state = nstate.getState();
+  nix::initNix();
+  nix::initGC();
+  auto store = nix::openStore();
+  auto state = nix::make_ref<nix::EvalState>( nix::SearchPath(), store, store );
 
   RUN_TEST( URLRoundtrip );
   RUN_TEST( inputFromAttrs );

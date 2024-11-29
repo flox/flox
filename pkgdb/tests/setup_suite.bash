@@ -117,6 +117,8 @@ misc_vars_setup() {
   # NOTE: Keep in line with `../src/registry/wrapped-nixpkgs-input.cc`
   export FLOX_NIXPKGS_VERSION="0";
 
+  export HOME="$BATS_SUITE_TMPDIR/home";
+
   export __PD_RAN_MISC_VARS_SETUP=:
 }
 

@@ -25,6 +25,7 @@
 #include <nix/attrs.hh>
 #include <nix/cache.hh>
 #include <nix/error.hh>
+#include <nix/eval.hh>
 #include <nix/fetchers.hh>
 #include <nix/flake/flake.hh>
 #include <nix/flake/flakeref.hh>
@@ -33,17 +34,15 @@
 #include <nix/logging.hh>
 #include <nix/path.hh>
 #include <nix/ref.hh>
+#include <nix/search-path.hh>
 #include <nix/store-api.hh>
 #include <nix/types.hh>
 #include <nix/url-parts.hh>
 #include <nix/url.hh>
 #include <nix/util.hh>
 
-#include "flox/core/nix-state.hh"
 #include "flox/core/util.hh"
 #include "flox/fetchers/wrapped-nixpkgs-input.hh"
-#include "flox/flox-flake.hh"
-
 
 /* -------------------------------------------------------------------------- */
 
@@ -514,7 +513,7 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
       return { std::move( res->second ), input };
     }
 
-  auto state = nix::EvalState( nix::SearchPath(), store, store );
+  nix::EvalState state = nix::EvalState( nix::SearchPath(), store, store );
 
   /* Otherwise create our flake and add it the `nix' store. */
   auto flakeDir = createWrappedFlakeDir(
