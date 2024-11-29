@@ -14,7 +14,7 @@ pre-commit-hooks.lib.${system}.run {
   src = builtins.path { path = ./.; };
   default_stages = [
     "manual"
-    "push"
+    "pre-push"
   ];
   hooks = {
     nixfmt-rfc-style = {
