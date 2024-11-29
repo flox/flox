@@ -54,8 +54,10 @@ pre-commit-hooks.lib.${system}.run {
       enable = true;
       settings = {
         denyWarnings = true;
-        # ensure that #[cfg(test)] is linted as well
-        extraArgs = "--tests";
+        # '--tests': ensure that #[cfg(test)] is linted as well
+        # '--workspace': lint all packages in the workspace
+        # '--no-deps': don't lint dependencies
+        extraArgs = "--tests --workspace --no-deps";
       };
     };
     commitizen = {
