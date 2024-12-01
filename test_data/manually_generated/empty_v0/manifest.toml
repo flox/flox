@@ -1,7 +1,0 @@
-# This was generated with
-# flox init
-# FLOX_FEATURES_USE_CATALOG=false flox edit -f ./test_data/manually_generated/empty_v0/manifest.toml
-# cp .flox/env/manifest.lock test_data/manually_generated/empty_v0/manifest.lock
-
-[options]
-systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
