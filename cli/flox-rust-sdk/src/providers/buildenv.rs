@@ -900,3 +900,262 @@ mod realise_store_path_tests {
         assert!(matches!(result, BuildEnvError::Realise2 { .. }));
     }
 }
+
+#[cfg(test)]
+mod buildenv_tests {
+    use std::collections::HashSet;
+    use std::os::unix::fs::PermissionsExt;
+
+    use regex::Regex;
+
+    use super::*;
+    use crate::providers::catalog::{GENERATED_DATA, MANUALLY_GENERATED};
+
+    trait PathExt {
+        fn is_executable_file(&self) -> bool;
+    }
+
+    impl PathExt for Path {
+        fn is_executable_file(&self) -> bool {
+            self.is_file() && self.metadata().unwrap().permissions().mode() & 0o111 != 0
+        }
+    }
+
+    static BUILDENV_RESULT_SIMPLE_PACKAGE: LazyLock<BuildEnvOutputs> = LazyLock::new(|| {
+        let buildenv = BuildEnvNix;
+        let lockfile_path = GENERATED_DATA.join("envs/hello/manifest.lock");
+        buildenv.build(&lockfile_path, None).unwrap()
+    });
+
+    #[test]
+    fn build_contains_binaries() {
+        let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
+        let runtime = &result.runtime;
+        assert!(runtime.join("bin/hello").exists());
+        assert!(runtime.join("bin/hello").is_executable_file());
+
+        let develop = result.develop.as_ref();
+        assert!(develop.join("bin/hello").exists());
+        assert!(develop.join("bin/hello").is_executable_file());
+    }
+
+    #[test]
+    fn build_contains_activate_files() {
+        let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
+        let runtime = &result.runtime;
+        assert!(runtime.join("activate.d/bash").exists());
+        assert!(runtime.join("activate.d/zsh").exists());
+        assert!(runtime.join("etc/profile.d").is_dir());
+
+        let develop = &result.develop;
+        assert!(develop.join("activate.d/bash").exists());
+        assert!(develop.join("activate.d/zsh").exists());
+        assert!(develop.join("etc/profile.d").is_dir());
+    }
+
+    #[test]
+    fn build_contains_lockfile() {
+        let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
+        let runtime = &result.runtime;
+        assert!(runtime.join("manifest.lock").exists());
+
+        let develop = &result.develop;
+        assert!(develop.join("manifest.lock").exists());
+    }
+    #[test]
+    fn build_contains_build_script_and_output() {
+        let buildenv = BuildEnvNix;
+        let lockfile_path = GENERATED_DATA.join("envs/build-noop/manifest.lock");
+        let result = buildenv.build(&lockfile_path, None).unwrap();
+
+        let runtime = result.runtime.as_ref();
+        let develop = result.develop.as_ref();
+        let build_hello = result.manifest_build_runtimes.get("build-hello").unwrap();
+
+        assert!(runtime.join("package-builds.d/hello").exists());
+        assert!(develop.join("package-builds.d/hello").exists());
+        assert!(build_hello.join("package-builds.d/hello").exists());
+    }
+
+    #[test]
+    fn build_on_activate_lockfile() {
+        let buildenv = BuildEnvNix;
+        let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/on-activate/manifest.lock");
+        let result = buildenv.build(&lockfile_path, None).unwrap();
+
+        let runtime = &result.runtime;
+        assert!(runtime.join("activate.d/hook-on-activate").exists());
+
+        let develop = &result.develop;
+        assert!(develop.join("activate.d/hook-on-activate").exists());
+    }
+
+    #[test]
+    fn verify_contents_of_requisites_txt() {
+        let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
+
+        let runtime = result.runtime.as_ref();
+        let develop = result.develop.as_ref();
+
+        for out_path in [runtime, develop] {
+            let requisites_path = out_path.join("requisites.txt");
+            assert!(requisites_path.exists());
+
+            let requisites: HashSet<String> = std::fs::read_to_string(&requisites_path)
+                .unwrap()
+                .lines()
+                .map(String::from)
+                .collect();
+
+            let output = Command::new("nix-store")
+                .arg("-qR")
+                .arg(out_path)
+                .output()
+                .expect("failed to execute process");
+
+            assert!(output.status.success());
+
+            let store_paths: HashSet<String> = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(String::from)
+                .collect();
+
+            assert_eq!(requisites, store_paths);
+        }
+    }
+
+    #[test]
+    fn detects_conflicting_packages() {
+        let buildenv = BuildEnvNix;
+        let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict.json");
+        let result = buildenv.build(&lockfile_path, None);
+        let err = result.expect_err("conflicting packages should fail to build");
+
+        let BuildEnvError::Build(output) = err else {
+            panic!("expected build to fail, got {}", err);
+        };
+
+        let output_matches = Regex::new("error: collision between .*-vim-.* and .*-vim-.*")
+            .unwrap()
+            .is_match(&output);
+
+        assert!(
+            output_matches,
+            "expected output to contain a conflict message: {output}"
+        );
+    }
+
+    #[test]
+    fn resolves_conflicting_packages_with_priority() {
+        let buildenv = BuildEnvNix;
+        let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict-resolved.json");
+        let result = buildenv.build(&lockfile_path, None);
+        assert!(
+            result.is_ok(),
+            "conflicting packages should be resolved by priority"
+        );
+    }
+
+    /// Single quotes in variables should be escaped.
+    /// Similarly accidentally escaped single quotes like
+    ///
+    /// ```text
+    /// [vars]
+    /// singlequoteescaped = "\\'baz"
+    /// ```
+    /// should be escaped and printed as   `\'baz` (literally)
+    #[test]
+    fn environment_escapes_variables() {
+        let buildenv = BuildEnvNix;
+        let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/vars_escape/manifest.lock");
+        let result = buildenv.build(&lockfile_path, None).unwrap();
+
+        let runtime = result.runtime.as_ref();
+        let develop = result.develop.as_ref();
+
+        for envrc_path in [
+            runtime.join("activate.d/envrc"),
+            develop.join("activate.d/envrc"),
+        ] {
+            assert!(envrc_path.exists());
+            let content = std::fs::read_to_string(&envrc_path).unwrap();
+            assert!(content.contains(r#"export singlequotes="'bar'""#));
+            assert!(content.contains(r#"export singlequoteescaped="\'baz""#));
+        }
+    }
+
+    #[test]
+    fn verify_build_closure_contains_only_toplevel_packages() {
+        let buildenv = BuildEnvNix;
+        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-all-toplevel.json");
+        let result = buildenv.build(&lockfile_path, None).unwrap();
+
+        let runtime = result.runtime.as_ref();
+        let develop = result.develop.as_ref();
+        let build_myhello = result.manifest_build_runtimes.get("build-myhello").unwrap();
+
+        assert!(runtime.join("bin/hello").is_executable_file());
+        assert!(develop.join("bin/hello").is_executable_file());
+        assert!(build_myhello.join("bin/hello").is_executable_file());
+
+        assert!(runtime.join("bin/coreutils").is_executable_file());
+        assert!(develop.join("bin/coreutils").is_executable_file());
+        assert!(build_myhello.join("bin/coreutils").is_executable_file());
+
+        assert!(runtime.join("bin/vim").is_executable_file());
+        assert!(develop.join("bin/vim").is_executable_file());
+        assert!(!build_myhello.join("bin/vim").exists());
+    }
+
+    #[test]
+    fn verify_build_closure_contains_only_hello_with_runtime_packages_attribute() {
+        let buildenv = BuildEnvNix;
+        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-only-hello.json");
+        let result = buildenv.build(&lockfile_path, None).unwrap();
+
+        let runtime = result.runtime.as_ref();
+        let develop = result.develop.as_ref();
+        let build_myhello = result.manifest_build_runtimes.get("build-myhello").unwrap();
+
+        assert!(runtime.join("bin/hello").is_executable_file());
+        assert!(develop.join("bin/hello").is_executable_file());
+        assert!(build_myhello.join("bin/hello").is_executable_file());
+
+        assert!(runtime.join("bin/coreutils").is_executable_file());
+        assert!(develop.join("bin/coreutils").is_executable_file());
+        assert!(!build_myhello.join("bin/coreutils").exists());
+
+        assert!(runtime.join("bin/vim").is_executable_file());
+        assert!(develop.join("bin/vim").is_executable_file());
+        assert!(!build_myhello.join("bin/vim").exists());
+    }
+
+    #[test]
+    fn verify_build_closure_can_only_select_toplevel_packages_from_runtime_packages_attribute() {
+        let buildenv = BuildEnvNix;
+        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-toplevel.json");
+        let result = buildenv.build(&lockfile_path, None);
+        let err = result.expect_err("build should fail if non-toplevel packages are selected");
+
+        let BuildEnvError::Build(output) = err else {
+            panic!("expected build to fail, got {}", err);
+        };
+
+        assert!(output.contains("error: package 'vim' is not in 'toplevel' pkg-group"));
+    }
+
+    #[test]
+    fn verify_build_closure_cannot_select_nonexistent_packages_in_runtime_packages_attribute() {
+        let buildenv = BuildEnvNix;
+        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-found.json");
+        let result = buildenv.build(&lockfile_path, None);
+        let err = result.expect_err("build should fail if nonexistent packages are selected");
+
+        let BuildEnvError::Build(output) = err else {
+            panic!("expected build to fail, got {}", err);
+        };
+
+        assert!(output
+            .contains("error: package 'goodbye' not found in '[install]' section of manifest"));
+    }
+}
