@@ -245,9 +245,13 @@ export _zdotdir="__OUT__/activate.d/zdotdir"
 ################################################################################
 ################################################################################
 
+# is_interactive="true"
+# if [ ! -t 1 ]; then
+#   is_interactive="false"
+# fi
 declare -a args=("--env" "$FLOX_ENV" "--fallback-flox-env-path" "$($_dirname -- "${BASH_SOURCE[0]}")" "--shell-pid" "$$" "$@")
 to_eval=$(flox-activations "--runtime-dir" "$FLOX_RUNTIME_DIR" activate-phase1 "${args[@]}")
-echo "$to_eval" "$FLOX_ENV/../../evaled.txt"
+echo "$to_eval" >&2
 eval "$to_eval"
 
 if [ "$_FLOX_ATTACH" == true ]; then

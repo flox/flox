@@ -202,12 +202,51 @@ fn prepend_man_dirs_to_manpath(flox_env_dirs: &[PathBuf], path_dirs: &[PathBuf])
     dirs
 }
 
+fn section_header(mut buffer: impl Write, title: &str) -> Result<(), Error> {
+    static SEPARATOR: [u8; 80] = [b'#'; 80];
+    buffer.write_all(&SEPARATOR)?;
+    buffer.write_all(&format!("\n# {title}\n").as_bytes())?;
+    buffer.write_all(&SEPARATOR)?;
+    buffer.write_all(&[b'\n'])?;
+    Ok(())
+}
+
+// The interface between flox and the activate script has three parts:
+// - Arguments passed to the activate script itself
+// - Environment variables inherited from potentially an outer activation
+// - Environment variables set by the flox CLI
+// Internally the activate script has a second set of environment variables
+// that is uses as an interface to child scripts that it sources. Examples:
+// - start.bash/attach.bash
+// - attach-*.bash
+// - etc
+
+// VARS
+
+// CLI -> activation
+// - FLOX_ENV: points at rendered env store path
+// - FLOX_ENV_DESCRIPTION: a displayable name for this environment
+// - FLOX_SHELL: which user shell to exec
+// - FLOX_RUNTIME_DIR: Used to store sockets, ~/.cache/flox/run
+// - FLOX_PROMPT_ENVIRONMENTS: user-facing list of activated environments
+
+// activation internal use
+// - _FLOX_ENV_ACTIVATION_MODE: "dev" or "run"
+// - _FLOX_ACTIVATE_STORE_PATH: points at the interpreter to use?
+// - FLOX_ACTIVATION_STATE_DIR: where the activations.json lives
+// - FLOX_ACTIVATION_ID: the UUID for this activated store path
+// - FLOX_TURBO: don't exec user shell
+
+// activation -> next activation
+
 pub fn phase_one(args: &Phase1Args) -> Result<Vec<u8>, Error> {
     let mut buffer = Vec::new();
+    section_header(&mut buffer, "Prompt defaults")?;
     reexport_with_default(&mut buffer, "FLOX_PROMPT_ENVIRONMENTS", "")?;
     reexport_with_default(&mut buffer, "_FLOX_SET_PROMPT", "true")?;
     reexport_with_default(&mut buffer, "FLOX_PROMPT_COLOR_1", "99")?;
     reexport_with_default(&mut buffer, "FLOX_PROMPT_COLOR_2", "141")?;
+    section_header(&mut buffer, "Exported args")?;
     export_var_value(
         &mut buffer,
         "_FLOX_ENV_ACTIVATION_MODE",
@@ -238,6 +277,7 @@ pub fn phase_one(args: &Phase1Args) -> Result<Vec<u8>, Error> {
     };
     let runtime_dir_str = std::env::var("FLOX_RUNTIME_DIR")?;
     let runtime_dir = Path::new(runtime_dir_str.as_str());
+    section_header(&mut buffer, "Start or attach")?;
     start_or_attach_args.handle_with_retries(3, runtime_dir, &mut buffer)?;
     export_var(&mut buffer, "_FLOX_ACTIVATION_STATE_DIR")?;
     export_var(&mut buffer, "_FLOX_ACTIVATION_ID")?;
@@ -254,7 +294,32 @@ pub fn phase_one(args: &Phase1Args) -> Result<Vec<u8>, Error> {
         .map(|p| p.to_string_lossy().to_string())
         .collect::<Vec<_>>()
         .join(":");
+    section_header(&mut buffer, "Set PATH")?;
     export_var_value(&mut buffer, "PATH", new_path_dirs.as_str())?;
     export_var_value(&mut buffer, "MANPATH", new_manpath_dirs.as_str())?;
     Ok(buffer)
+}
+
+fn attach(
+    mut buffer: impl Write,
+    activation_state_dir: &Path,
+    is_interactive: bool,
+    description: &str,
+) -> Result<(), Error> {
+    if is_interactive {
+        eprintln!("✅ Attached to existing activation of environment '{description}'");
+        eprintln!("To stop using this environment, type 'exit'");
+        eprintln!();
+    }
+    let del_envs_path = activation_state_dir.join("del.env");
+    let del_envs_contents = std::fs::read_to_string(&del_envs_path)?;
+    for var in del_envs_contents.lines() {
+        buffer.write_all(format!("unset {var};\n").as_bytes())?;
+    }
+    let add_envs_path = activation_state_dir.join("add.env");
+    let add_envs_contents = std::fs::read_to_string(&add_envs_path)?;
+    for var in add_envs_contents.lines() {
+        buffer.write_all(format!("export {var};\n").as_bytes())?;
+    }
+    Ok(())
 }
