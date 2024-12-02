@@ -8,6 +8,7 @@
   flox-env, # environment from which package is built
   build-wrapper-env, # environment with which to wrap contents of bin, sbin
   install-prefix ? null, # optional
+  logfile ? null, # optional
   srcTarball ? null, # optional
   buildDeps ? [ ], # optional
   buildScript ? null, # optional
@@ -26,6 +27,7 @@ let
     flox-env-package
   ] ++ (map (d: builtins.storePath d) buildDeps);
   install-prefix-contents = /. + install-prefix;
+  logfile-contents = /. + logfile;
   buildScript-contents = /. + buildScript;
   buildCache-tar-contents = if (buildCache == null) then null else (/. + buildCache);
 
@@ -58,7 +60,10 @@ pkgs.runCommandNoCC name
         makeWrapper
       ]
       ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ darwin.autoSignDarwinBinariesHook ];
-    outputs = [ "out" ] ++ pkgs.lib.optionals (buildCache != null) [ "buildCache" ];
+    outputs = [
+      "out"
+      "log"
+    ] ++ pkgs.lib.optionals (buildCache != null) [ "buildCache" ];
     # We don't want to allow build outputs to reference the "develop" environment
     # because they should get everything they need at runtime from the build wrapper env.
     disallowedReferences = [ flox-env-package ]; # XXX too easy to leak into output.
@@ -67,6 +72,7 @@ pkgs.runCommandNoCC name
     (
       # Assume this script was called after an impure/non-sandboxed build.
       if (buildScript == null) then
+        # local mode
         if !builtins.pathExists install-prefix then
           ''
             ${dollar_out_error}
@@ -88,9 +94,12 @@ pkgs.runCommandNoCC name
             ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
               signDarwinBinariesInAllOutputs
             ''}
+            # Also copy the provided logfile to the $log output.
+            cp ${logfile-contents} $log
           ''
       # Assume we perform a full sandboxed build.
       else
+        # sandbox mode
         ''
           # Print the checksums of the inputs to the build script.
           echo "---"
@@ -146,7 +155,7 @@ pkgs.runCommandNoCC name
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --mode run --turbo -- \
                     ${build-wrapper-env-package}/activate --env ${build-wrapper-env-package} --turbo -- \
-                      ${t3}/bin/t3 --forcecolor --ts /dev/null -- bash -e ${buildScript-contents}
+                      ${t3}/bin/t3 --forcecolor --ts $log -- bash -e ${buildScript-contents}
               ''
             else
               ''
@@ -160,7 +169,7 @@ pkgs.runCommandNoCC name
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --mode run --turbo -- \
                     ${build-wrapper-env-package}/activate --env ${build-wrapper-env-package} --turbo -- \
-                      bash -e ${buildScript-contents} || \
+                      ${t3}/bin/t3 --forcecolor --ts $log -- bash -e ${buildScript-contents} || \
                 ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
           }
