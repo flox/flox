@@ -175,7 +175,7 @@ impl BuildEnvNix {
     /// 3. building the package with essentially
     ///    `nix build <flox-nixpkgs-url>#<resolved attr path>^*`,
     ///    which will realise the locked output paths.
-    ///    We set `--option pure-eval true` to avoid improve reproducibility
+    ///    We set `--option pure-eval true` to improve reproducibility
     ///    of the locked outputs, and allow the use of the eval-cache
     ///    to avoid costly re-evaluations.
     ///
