@@ -46,6 +46,7 @@ __t3 := @t3@
 # the required tool from the PATH for use in the developer environment.
 __package_bin = $(if $(filter @%@,$(1)),$(2),$(1)/bin/$(2))
 _bash := $(call __package_bin,$(__bashInteractive),bash)
+_cat := $(call __package_bin,$(__coreutils),cat)
 _cp := $(call __package_bin,$(__coreutils),cp)
 _cut := $(call __package_bin,$(__coreutils),cut)
 _env := $(call __package_bin,$(__coreutils),env)
@@ -373,7 +374,9 @@ define BUILD_template =
   .PRECIOUS: $($(_pvarname)_buildScript)
   $($(_pvarname)_buildScript): $(build) FORCE
 	@echo "Rendering $(_pname) build script to $$@"
-	$(_VV_) $(_cp) --no-preserve=mode $$< $$@.new
+	@# Always echo lines in the build script as they are invoked.
+	$(_VV_) echo "set -x" > $$@.new
+	$(_VV_) $(_cat) $$< >> $$@.new
 	$(_VV_) for i in $$^; do \
 	  if [ "$$$$i" != "FORCE" -a -L "$$$$i" ]; then \
 	    outpath="$$$$($(_readlink) $$$$i)"; \
