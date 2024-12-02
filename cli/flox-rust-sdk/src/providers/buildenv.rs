@@ -193,7 +193,7 @@ impl BuildEnvNix {
 
         let mut nix_build_command = self.base_command();
 
-        // for now assume the plugin is relative relative to the pkgdb binary
+        // for now assume the plugin is located relative to the pkgdb binary
         // <pkgdb>
         // ├── bin
         // │   └── pkgdb
