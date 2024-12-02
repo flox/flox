@@ -35,6 +35,7 @@
   parallel,
   podman,
   procps,
+  pstree,
   unixtools,
   which,
   writeShellScriptBin,
@@ -83,6 +84,7 @@ let
       nix
       openssh
       parallel
+      pstree
       unixtools.util-linux
       which
       yq
