@@ -13,6 +13,8 @@ use time::{Duration, OffsetDateTime};
 
 use crate::Error;
 
+pub const DEFAULT_RETRIES: usize = 3;
+
 #[derive(Debug, Args)]
 pub struct StartOrAttachArgs {
     #[arg(help = "The PID of the shell registering interest in the activation.")]
@@ -29,10 +31,17 @@ pub struct StartOrAttachArgs {
 impl StartOrAttachArgs {
     // Returns activation_id for use in tests
     pub fn handle(self, runtime_dir: &Path) -> Result<String, anyhow::Error> {
-        let mut retries = 3;
+        self.handle_with_retries(DEFAULT_RETRIES, runtime_dir, std::io::stdout())
+    }
 
+    pub fn handle_with_retries(
+        &self,
+        mut retries: usize,
+        runtime_dir: &Path,
+        mut output: impl Write,
+    ) -> Result<String, anyhow::Error> {
         loop {
-            let result = self.handle_inner(runtime_dir, attach, start, std::io::stdout());
+            let result = self.handle_inner(runtime_dir, attach, start, &mut output);
 
             let Err(err) = result else {
                 return result;

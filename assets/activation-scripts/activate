@@ -26,221 +26,229 @@ export _zdotdir="__OUT__/activate.d/zdotdir"
 
 # Top-level Flox environment activation script.
 
-# Ensure mandatory environment variables are defined as required by
-# other scripts. For example, we provide defaults for the following
-# variables as required by the various set-prompt scripts, and tcsh
-# in particular does not tolerate references to undefined variables.
-export FLOX_PROMPT_ENVIRONMENTS="${FLOX_PROMPT_ENVIRONMENTS:-}"
-export _FLOX_SET_PROMPT="${_FLOX_SET_PROMPT:-true}"
-export FLOX_PROMPT_COLOR_1="${FLOX_PROMPT_COLOR_1:-99}"
-export FLOX_PROMPT_COLOR_2="${FLOX_PROMPT_COLOR_2:-141}"
+# # Ensure mandatory environment variables are defined as required by
+# # other scripts. For example, we provide defaults for the following
+# # variables as required by the various set-prompt scripts, and tcsh
+# # in particular does not tolerate references to undefined variables.
+# export FLOX_PROMPT_ENVIRONMENTS="${FLOX_PROMPT_ENVIRONMENTS:-}"
+# export _FLOX_SET_PROMPT="${_FLOX_SET_PROMPT:-true}"
+# export FLOX_PROMPT_COLOR_1="${FLOX_PROMPT_COLOR_1:-99}"
+# export FLOX_PROMPT_COLOR_2="${FLOX_PROMPT_COLOR_2:-141}"
 
-# Parse command-line arguments.
-OPTIONS="e:c:m:"
-LONGOPTS="command:,env:,mode:,noprofile,turbo"
-USAGE="Usage: $0 [-c \"<cmd> <args>\"] [(-e|--env) <env>] [--turbo] [--noprofile] [(-m|--mode) (dev|run)]"
+# # Parse command-line arguments.
+# OPTIONS="e:c:m:"
+# LONGOPTS="command:,env:,mode:,noprofile,turbo"
+# USAGE="Usage: $0 [-c \"<cmd> <args>\"] [(-e|--env) <env>] [--turbo] [--noprofile] [(-m|--mode) (dev|run)]"
 
-PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@")
-# shellcheck disable=SC2181
-if [[ $? -ne 0 ]]; then
-  echo "Failed to parse options."
-  exit 1
-fi
+# PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@")
+# # shellcheck disable=SC2181
+# if [[ $? -ne 0 ]]; then
+#   echo "Failed to parse options."
+#   exit 1
+# fi
 
-# Use eval to remove quotes and replace them with spaces.
-eval set -- "$PARSED"
+# # Use eval to remove quotes and replace them with spaces.
+# eval set -- "$PARSED"
 
-# Set default values for options.
-FLOX_CMD=""
-FLOX_TURBO="${FLOX_TURBO:-}"
-FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
-_FLOX_ENV_ACTIVATION_MODE="dev"
-while true; do
-  case "$1" in
-    -c | --command)
-      shift
-      if [ -z "${1:-}" ]; then
-        echo "Option -c requires an argument." >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      FLOX_CMD="$1"
-      shift
-      ;;
-    -e | --env)
-      shift
-      if [ -z "${1:-}" ] || [ ! -d "$1" ]; then
-        echo "Option --env requires a valid environment path as an argument." >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      FLOX_ENV="$1"
-      shift
-      ;;
-    -m | --mode)
-      shift
-      if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ]; }; then
-        echo "Option --mode requires 'dev' or 'run' as an argument." >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      _FLOX_ENV_ACTIVATION_MODE="$1"
-      shift
-      ;;
-    --turbo)
-      FLOX_TURBO="true"
-      shift
-      ;;
-    --noprofile)
-      FLOX_NOPROFILE="true"
-      shift
-      ;;
-    --)
-      shift
-      break
-      ;;
-    -*)
-      echo "Invalid option: $1" >&2
-      echo "$USAGE" >&2
-      exit 1
-      ;;
-  esac
-done
+# # Set default values for options.
+# FLOX_CMD=""
+# FLOX_TURBO="${FLOX_TURBO:-}"
+# FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
+# _FLOX_ENV_ACTIVATION_MODE="dev"
+# while true; do
+#   case "$1" in
+#     -c | --command)
+#       shift
+#       if [ -z "${1:-}" ]; then
+#         echo "Option -c requires an argument." >&2
+#         echo "$USAGE" >&2
+#         exit 1
+#       fi
+#       FLOX_CMD="$1"
+#       shift
+#       ;;
+#     -e | --env)
+#       shift
+#       if [ -z "${1:-}" ] || [ ! -d "$1" ]; then
+#         echo "Option --env requires a valid environment path as an argument." >&2
+#         echo "$USAGE" >&2
+#         exit 1
+#       fi
+#       FLOX_ENV="$1"
+#       shift
+#       ;;
+#     -m | --mode)
+#       shift
+#       if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ]; }; then
+#         echo "Option --mode requires 'dev' or 'run' as an argument." >&2
+#         echo "$USAGE" >&2
+#         exit 1
+#       fi
+#       _FLOX_ENV_ACTIVATION_MODE="$1"
+#       shift
+#       ;;
+#     --turbo)
+#       FLOX_TURBO="true"
+#       shift
+#       ;;
+#     --noprofile)
+#       FLOX_NOPROFILE="true"
+#       shift
+#       ;;
+#     --)
+#       shift
+#       break
+#       ;;
+#     -*)
+#       echo "Invalid option: $1" >&2
+#       echo "$USAGE" >&2
+#       exit 1
+#       ;;
+#   esac
+# done
 
-# Convert the provided command string into an array of arguments in "$@".
-# Henceforth in the script it is assumed that these are the arguments to be
-# invoked either by this shell (with FLOX_TURBO) or with the chosen userShell.
-if [ -n "$FLOX_CMD" ]; then
-  # Throw an error if passed additional arguments along with the -c arg.
-  if [ $# -gt 0 ]; then
-    echo "Unexpected arguments provided with -c argument: $*" >&2
-    echo "$USAGE" >&2
-    exit 1
-  fi
+# # Convert the provided command string into an array of arguments in "$@".
+# # Henceforth in the script it is assumed that these are the arguments to be
+# # invoked either by this shell (with FLOX_TURBO) or with the chosen userShell.
+# if [ -n "$FLOX_CMD" ]; then
+#   # Throw an error if passed additional arguments along with the -c arg.
+#   if [ $# -gt 0 ]; then
+#     echo "Unexpected arguments provided with -c argument: $*" >&2
+#     echo "$USAGE" >&2
+#     exit 1
+#   fi
 
-  # Set $@ to reflect the command to be invoked.
-  set -- "$FLOX_CMD"
-fi
+#   # Set $@ to reflect the command to be invoked.
+#   set -- "$FLOX_CMD"
+# fi
 
-# Set FLOX_ENV as the path by which all flox scripts can make reference to
-# the environment to which they belong. Use this to define the path to the
-# activation scripts directory.
-# TODO: reconcile with CLI which should be setting this. We must override
-#       the value coming from the CLI for now because it won't be set for
-#       container invocations, and it would have the incorrect value for
-#       nested flox activations.
-_FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
-export FLOX_ENV="${FLOX_ENV:-$_FLOX_ENV}"
+# # Set FLOX_ENV as the path by which all flox scripts can make reference to
+# # the environment to which they belong. Use this to define the path to the
+# # activation scripts directory.
+# # TODO: reconcile with CLI which should be setting this. We must override
+# #       the value coming from the CLI for now because it won't be set for
+# #       container invocations, and it would have the incorrect value for
+# #       nested flox activations.
+# _FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
+# export FLOX_ENV="${FLOX_ENV:-$_FLOX_ENV}"
 
-# Set a default for _FLOX_ACTIVATE_STORE_PATH for container and build
-# invocations
-if [ -z "${_FLOX_ACTIVATE_STORE_PATH:-}" ]; then
-  _FLOX_ACTIVATE_STORE_PATH="$("$_readlink" -f "$FLOX_ENV")"
-fi
+# # Set a default for _FLOX_ACTIVATE_STORE_PATH for container and build
+# # invocations
+# if [ -z "${_FLOX_ACTIVATE_STORE_PATH:-}" ]; then
+#   _FLOX_ACTIVATE_STORE_PATH="$("$_readlink" -f "$FLOX_ENV")"
+# fi
 
-# The rust CLI contains sophisticated logic to set $FLOX_SHELL based on the
-# process listening on STDOUT, but that won't happen when activating from
-# the top-level activation script, so fall back to $SHELL as a default.
-declare -r _flox_shell="${FLOX_SHELL:-$SHELL}"
-# Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
-unset FLOX_SHELL
+# # The rust CLI contains sophisticated logic to set $FLOX_SHELL based on the
+# # process listening on STDOUT, but that won't happen when activating from
+# # the top-level activation script, so fall back to $SHELL as a default.
+# declare -r _flox_shell="${FLOX_SHELL:-$SHELL}"
+# # Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
+# unset FLOX_SHELL
 
-# Bail if the shell is unsupported.
-case "$_flox_shell" in
-  *bash) ;;
-  *fish) ;;
-  *tcsh) ;;
-  *zsh) ;;
-  *)
-    echo "Unsupported shell: $_flox_shell" >&2
-    exit 1
-    ;;
-esac
+# # Bail if the shell is unsupported.
+# case "$_flox_shell" in
+#   *bash) ;;
+#   *fish) ;;
+#   *tcsh) ;;
+#   *zsh) ;;
+#   *)
+#     echo "Unsupported shell: $_flox_shell" >&2
+#     exit 1
+#     ;;
+# esac
 
-# The CLI is responsible for erroring if the environment is already active.
-# We can start-or-attach no matter what
+# # The CLI is responsible for erroring if the environment is already active.
+# # We can start-or-attach no matter what
 
-# TODO: we could restore _start_env from the prior activation when performing an ephemeral activation
+# # TODO: we could restore _start_env from the prior activation when performing an ephemeral activation
 
-# sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
-# Don't eval on one line so that we exit if flox-activations fails
-to_eval="$($_flox_activations \
-  --runtime-dir "$FLOX_RUNTIME_DIR" \
-  start-or-attach \
-  --pid "$$" --flox-env "$FLOX_ENV" --store-path "$_FLOX_ACTIVATE_STORE_PATH")"
+# # sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
+# # Don't eval on one line so that we exit if flox-activations fails
+# to_eval="$($_flox_activations \
+#   --runtime-dir "$FLOX_RUNTIME_DIR" \
+#   start-or-attach \
+#   --pid "$$" --flox-env "$FLOX_ENV" --store-path "$_FLOX_ACTIVATE_STORE_PATH")"
+# eval "$to_eval"
+# export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
+
+# # Now that we support attaching to an environment we can no longer rely on
+# # the environment variable replay for setting the PATH and MANPATH variables,
+# # and must instead infer them from the FLOX_ENV_DIRS variable maintained for
+# # us by the flox CLI.
+
+# # Set IFS=: for this portion of the script.
+# _save_IFS="$IFS"
+# IFS=":"
+
+# # Get an iterable array of FLOX_ENV_DIRS.
+# declare -a _FLOX_ENV_DIRS
+# # If there's an outer activation with the CLI followed by an inner activation
+# # with just the activate script (this could happen e.g. for a build),
+# # we need to combine $FLOX_ENV and $FLOX_ENV_DIRS.
+# # If $FLOX_ENV is already in $FLOX_ENV_DIRS, the deduplication logic below will
+# # handle that
+# # shellcheck disable=SC2206
+# _FLOX_ENV_DIRS=($FLOX_ENV ${FLOX_ENV_DIRS:-})
+
+# # Set the PATH environment variable.
+# declare _prepend_path=""
+# for i in "${_FLOX_ENV_DIRS[@]}"; do
+#   _prepend_path="$_prepend_path${_prepend_path:+:}$i/bin:$i/sbin"
+# done
+# PATH="$_prepend_path${PATH:+:$PATH}"
+
+# # Set the man(1) search path.
+# # The search path for manual pages is determined
+# # from the MANPATH environment variable in a non-standard way:
+# #
+# # 1) If MANPATH begins with a colon, it is appended to the default list;
+# # 2) if it ends with a colon, it is prepended to the default list;
+# # 3) or if it contains two adjacent colons,
+# #    the standard search path is inserted between the colons.
+# # 4) If none of these conditions are met, it overrides the standard search path.
+# #
+# # In order for man(1) to find manual pages not defined in the flox environment,
+# # we ensure that we prepend the flox search path _with_ a colon in all cases.
+# #
+# # Thus, the man pages defined in the flox environment are searched first,
+# # and default search paths still apply.
+# # Additionally, decisions made by the user by setting the MANPATH variable
+# # are not overridden by the flox environment:
+# # - If MANPATH starts with `:` we now have `::` -> rule 1/3,
+# #   the defaults are inserted in between,
+# #   i.e. in front of MANPATH, but FLOXENV will take precedence in any case
+# # - If MANPATH ends with `:` we end with `:` -> rule 2,
+# #   the defaults are appended (no change)
+# # - If MANPATH does not start or end with `:`, -> rule 4,
+# #   FLOX_ENV:MANPATH replaces the defaults (no change)
+# declare _prepend_manpath=""
+# for i in "${_FLOX_ENV_DIRS[@]}"; do
+#   _prepend_manpath="$_prepend_manpath${_prepend_manpath:+:}$i/share/man"
+# done
+# MANPATH="$_prepend_manpath:${MANPATH:+$MANPATH}"
+
+# # Restore IFS.
+# IFS="$_save_IFS"
+# unset _save_IFS
+
+# # Remove duplicates from PATH and MANPATH. Note we must use `echo` and not
+# # `echo -n` in the command below so that trailing ":" characters are followed
+# # by a newline and treated by awk as an empty field.
+# declare _awkScript _nodup_PATH _nodup_MANPATH
+# # shellcheck disable=SC2016
+# _awkScript='BEGIN { RS = ":"; } { if (A[$0]) {} else { A[$0]=1; printf(((NR==1) ? "" : ":") $0); } }'
+# _nodup_PATH="$(echo "$PATH" | "$_nawk" "$_awkScript")"
+# _nodup_MANPATH="$(echo "$MANPATH" | "$_nawk" "$_awkScript")"
+# export PATH="${_nodup_PATH}"
+# export MANPATH="${_nodup_MANPATH}"
+
+################################################################################
+################################################################################
+
+declare -a args=("--env" "$FLOX_ENV" "--fallback-flox-env-path" "$($_dirname -- "${BASH_SOURCE[0]}")" "--shell-pid" "$$" "$@")
+to_eval=$(flox-activations "--runtime-dir" "$FLOX_RUNTIME_DIR" activate-phase1 "${args[@]}")
+echo "$to_eval" "$FLOX_ENV/../../evaled.txt"
 eval "$to_eval"
-export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
-
-# Now that we support attaching to an environment we can no longer rely on
-# the environment variable replay for setting the PATH and MANPATH variables,
-# and must instead infer them from the FLOX_ENV_DIRS variable maintained for
-# us by the flox CLI.
-
-# Set IFS=: for this portion of the script.
-_save_IFS="$IFS"
-IFS=":"
-
-# Get an iterable array of FLOX_ENV_DIRS.
-declare -a _FLOX_ENV_DIRS
-# If there's an outer activation with the CLI followed by an inner activation
-# with just the activate script (this could happen e.g. for a build),
-# we need to combine $FLOX_ENV and $FLOX_ENV_DIRS.
-# If $FLOX_ENV is already in $FLOX_ENV_DIRS, the deduplication logic below will
-# handle that
-# shellcheck disable=SC2206
-_FLOX_ENV_DIRS=($FLOX_ENV ${FLOX_ENV_DIRS:-})
-
-# Set the PATH environment variable.
-declare _prepend_path=""
-for i in "${_FLOX_ENV_DIRS[@]}"; do
-  _prepend_path="$_prepend_path${_prepend_path:+:}$i/bin:$i/sbin"
-done
-PATH="$_prepend_path${PATH:+:$PATH}"
-
-# Set the man(1) search path.
-# The search path for manual pages is determined
-# from the MANPATH environment variable in a non-standard way:
-#
-# 1) If MANPATH begins with a colon, it is appended to the default list;
-# 2) if it ends with a colon, it is prepended to the default list;
-# 3) or if it contains two adjacent colons,
-#    the standard search path is inserted between the colons.
-# 4) If none of these conditions are met, it overrides the standard search path.
-#
-# In order for man(1) to find manual pages not defined in the flox environment,
-# we ensure that we prepend the flox search path _with_ a colon in all cases.
-#
-# Thus, the man pages defined in the flox environment are searched first,
-# and default search paths still apply.
-# Additionally, decisions made by the user by setting the MANPATH variable
-# are not overridden by the flox environment:
-# - If MANPATH starts with `:` we now have `::` -> rule 1/3,
-#   the defaults are inserted in between,
-#   i.e. in front of MANPATH, but FLOXENV will take precedence in any case
-# - If MANPATH ends with `:` we end with `:` -> rule 2,
-#   the defaults are appended (no change)
-# - If MANPATH does not start or end with `:`, -> rule 4,
-#   FLOX_ENV:MANPATH replaces the defaults (no change)
-declare _prepend_manpath=""
-for i in "${_FLOX_ENV_DIRS[@]}"; do
-  _prepend_manpath="$_prepend_manpath${_prepend_manpath:+:}$i/share/man"
-done
-MANPATH="$_prepend_manpath:${MANPATH:+$MANPATH}"
-
-# Restore IFS.
-IFS="$_save_IFS"
-unset _save_IFS
-
-# Remove duplicates from PATH and MANPATH. Note we must use `echo` and not
-# `echo -n` in the command below so that trailing ":" characters are followed
-# by a newline and treated by awk as an empty field.
-declare _awkScript _nodup_PATH _nodup_MANPATH
-# shellcheck disable=SC2016
-_awkScript='BEGIN { RS = ":"; } { if (A[$0]) {} else { A[$0]=1; printf(((NR==1) ? "" : ":") $0); } }'
-_nodup_PATH="$(echo "$PATH" | "$_nawk" "$_awkScript")"
-_nodup_MANPATH="$(echo "$MANPATH" | "$_nawk" "$_awkScript")"
-export PATH="${_nodup_PATH}"
-export MANPATH="${_nodup_MANPATH}"
 
 if [ "$_FLOX_ATTACH" == true ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d

@@ -1,6 +1,8 @@
+use std::io::Write;
+
 use clap::Parser;
 use flox_activations::cli::Cli;
-use flox_activations::{cli, Error};
+use flox_activations::{activate, cli, Error};
 use log::debug;
 
 fn main() -> Result<(), Error> {
@@ -17,6 +19,11 @@ fn main() -> Result<(), Error> {
         },
         cli::Command::SetReady(args) => args.handle(runtime_dir)?,
         cli::Command::Attach(args) => args.handle(runtime_dir)?,
+        cli::Command::ActivatePhase1(args) => {
+            let buffer = activate::phase_one(&args)?;
+            let mut stdout = std::io::stdout();
+            stdout.write_all(&buffer)?;
+        },
     }
     Ok(())
 }

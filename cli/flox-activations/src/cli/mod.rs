@@ -10,6 +10,8 @@ mod start_or_attach;
 pub use set_ready::SetReadyArgs;
 pub use start_or_attach::StartOrAttachArgs;
 
+use crate::activate::Phase1Args;
+
 const SHORT_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 
@@ -33,6 +35,8 @@ pub enum Command {
     SetReady(SetReadyArgs),
     #[command(about = "Attach to an existing activation.")]
     Attach(AttachArgs),
+    #[command(about = "activate: phase 1")]
+    ActivatePhase1(Phase1Args),
 }
 
 #[cfg(test)]

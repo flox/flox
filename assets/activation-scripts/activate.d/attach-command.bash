@@ -20,6 +20,7 @@ export _FLOX_RESTORE_PATH="$PATH"
 export _FLOX_RESTORE_MANPATH="$MANPATH"
 
 # "-c" command mode: pass both [2] arguments unaltered to shell invocation
+# shellcheck disable=SC2154
 case "$_flox_shell" in
   *bash)
     if [ -n "$FLOX_NOPROFILE" ]; then
