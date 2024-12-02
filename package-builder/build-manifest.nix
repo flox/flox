@@ -60,7 +60,14 @@ pkgs.runCommandNoCC name
       ]
       ++ [ t3-package ]
       ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ darwin.autoSignDarwinBinariesHook ];
-    outputs = [ "out" ] ++ pkgs.lib.optionals (buildCache != null) [ "buildCache" ];
+    outputs =
+      [
+        "out"
+      ]
+      ++ pkgs.lib.optionals (buildScript != null) [
+        "log"
+      ]
+      ++ pkgs.lib.optionals (buildCache != null) [ "buildCache" ];
     # We don't want to allow build outputs to reference the "develop" environment
     # because they should get everything they need at runtime from the build wrapper env.
     disallowedReferences = [ flox-env-package ]; # XXX too easy to leak into output.
@@ -69,6 +76,7 @@ pkgs.runCommandNoCC name
     (
       # Assume this script was called after an impure/non-sandboxed build.
       if (buildScript == null) then
+        # local mode
         if !builtins.pathExists install-prefix then
           ''
             ${dollar_out_error}
@@ -93,6 +101,7 @@ pkgs.runCommandNoCC name
           ''
       # Assume we perform a full sandboxed build.
       else
+        # sandbox mode
         ''
           # Print the checksums of the inputs to the build script.
           echo "---"
