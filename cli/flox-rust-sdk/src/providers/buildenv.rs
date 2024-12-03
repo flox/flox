@@ -288,7 +288,7 @@ impl BuildEnvNix {
         nix_build_command.arg("--no-link");
         nix_build_command.arg(&installable);
 
-        debug!(%installable, cmd=%nix_build_command.display(), "building catalog package:");
+        debug!(%installable, cmd=%nix_build_command.display(), "building flake package:");
 
         let output = nix_build_command
             .output()
