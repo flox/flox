@@ -217,8 +217,8 @@ impl BuildEnvNix {
                 .ancestors()
                 .nth(2)
                 .expect("pkgdb is in '<store-path>/bin'")
-                .join("lib")
-                .join(format!("wrapped-nixpkgs-input{}", env!("libExt")));
+                .join("lib/nix-plugins");
+
             nix_build_command.args([
                 "--option",
                 "extra-plugin-files",
