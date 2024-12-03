@@ -33,6 +33,18 @@ static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
         .into()
 });
 
+/// Profix of locked_url of catalog packages that are from the nixpkgs base-catalog.
+/// This url was meant to serve as a flake reference to the Flox hosted mirror of nixpkgs,
+/// but is both ill formatted and does not provide the necessary overrides
+/// to allow evaluating packages without common evaluation checks, such as unfree and broken.
+const NIXPKGS_CATALOG_URL_PREFIX: &str = "https://github.com/flox/nixpkgs?rev=";
+
+/// The base flake reference invoking the `flox-nixpkgs` fetcher.
+/// This is a bridge to the Flox hosted mirror of nixpkgs flake,
+/// which enables building packages without common evaluation checks,
+/// such as unfree and broken.
+const FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE: &str = "flox-nixpkgs:v0/flox";
+
 #[derive(Debug, Error)]
 pub enum BuildEnvError {
     /// An error that occurred while realising the packages in the lockfile.
