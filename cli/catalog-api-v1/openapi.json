@@ -919,6 +919,53 @@
         }
       }
     },
+    "/api/v1/catalog/store": {
+      "post": {
+        "tags": [
+          "store"
+        ],
+        "summary": "Get store info for a list of derivations",
+        "description": "Get store info for a list of derivations\n\nBody Parameters:\n- **StoreInfoRequest**: A list of derivation paths\n\nReturns:\n- **StoreInfoResponse**: a map of derivation path to a list of store info objects",
+        "operationId": "get_store_info_api_v1_catalog_store_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoreInfoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The list of store info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreInfoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request parameters are invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/metrics/": {
       "get": {
         "summary": "Handle Metrics",
@@ -2015,6 +2062,54 @@
           "url": {
             "type": "string",
             "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "StoreInfo"
+      },
+      "StoreInfoRequest": {
+        "properties": {
+          "drv_paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Drv Paths"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drv_paths"
+        ],
+        "title": "StoreInfoRequest"
+      },
+      "StoreInfoResponse": {
+        "properties": {
+          "items": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/StoreInfo"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "StoreInfoResponse"
+      },
+      "StoreInfo_Deprecated": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
           },
           "auth_token": {
             "type": "string",
@@ -2026,7 +2121,7 @@
           "url",
           "auth_token"
         ],
-        "title": "StoreInfo"
+        "title": "StoreInfo_Deprecated"
       },
       "SystemEnum": {
         "type": "string",
@@ -2174,13 +2269,11 @@
       "UserBuildCreationResponse": {
         "properties": {
           "store": {
-            "$ref": "#/components/schemas/StoreInfo"
+            "nullable": true,
+            "$ref": "#/components/schemas/StoreInfo_Deprecated"
           }
         },
         "type": "object",
-        "required": [
-          "store"
-        ],
         "title": "UserBuildCreationResponse"
       },
       "UserBuildList-Input": {
