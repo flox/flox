@@ -210,7 +210,8 @@ impl BuildEnvNix {
         // ├── bin
         // │   └── pkgdb
         // └── lib
-        //     └── wrapped-nixpkgs-input.(so|dylib)
+        //     └── nix-plugins
+        //          └── wrapped-nixpkgs-input.(so|dylib)
         {
             let pkgdb_lib_dir = Path::new(&*PKGDB_BIN)
                 .ancestors()
