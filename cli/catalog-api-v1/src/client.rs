@@ -2034,6 +2034,35 @@ pub mod types {
     ///  "title": "StoreInfo",
     ///  "type": "object",
     ///  "required": [
+    ///    "url"
+    ///  ],
+    ///  "properties": {
+    ///    "url": {
+    ///      "title": "Url",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct StoreInfo {
+        pub url: String,
+    }
+    impl From<&StoreInfo> for StoreInfo {
+        fn from(value: &StoreInfo) -> Self {
+            value.clone()
+        }
+    }
+    ///StoreInfoDeprecated
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "StoreInfo_Deprecated",
+    ///  "type": "object",
+    ///  "required": [
     ///    "auth_token",
     ///    "url"
     ///  ],
@@ -2051,12 +2080,79 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct StoreInfo {
+    pub struct StoreInfoDeprecated {
         pub auth_token: String,
         pub url: String,
     }
-    impl From<&StoreInfo> for StoreInfo {
-        fn from(value: &StoreInfo) -> Self {
+    impl From<&StoreInfoDeprecated> for StoreInfoDeprecated {
+        fn from(value: &StoreInfoDeprecated) -> Self {
+            value.clone()
+        }
+    }
+    ///StoreInfoRequest
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "StoreInfoRequest",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "drv_paths"
+    ///  ],
+    ///  "properties": {
+    ///    "drv_paths": {
+    ///      "title": "Drv Paths",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct StoreInfoRequest {
+        pub drv_paths: Vec<String>,
+    }
+    impl From<&StoreInfoRequest> for StoreInfoRequest {
+        fn from(value: &StoreInfoRequest) -> Self {
+            value.clone()
+        }
+    }
+    ///StoreInfoResponse
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "StoreInfoResponse",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "type": "array",
+    ///        "items": {
+    ///          "$ref": "#/components/schemas/StoreInfo"
+    ///        }
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct StoreInfoResponse {
+        pub items: std::collections::HashMap<String, Vec<StoreInfo>>,
+    }
+    impl From<&StoreInfoResponse> for StoreInfoResponse {
+        fn from(value: &StoreInfoResponse) -> Self {
             value.clone()
         }
     }
@@ -2157,12 +2253,9 @@ pub mod types {
     ///{
     ///  "title": "UserBuildCreationResponse",
     ///  "type": "object",
-    ///  "required": [
-    ///    "store"
-    ///  ],
     ///  "properties": {
     ///    "store": {
-    ///      "$ref": "#/components/schemas/StoreInfo"
+    ///      "$ref": "#/components/schemas/StoreInfo_Deprecated"
     ///    }
     ///  }
     ///}
@@ -2170,7 +2263,8 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct UserBuildCreationResponse {
-        pub store: StoreInfo,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub store: Option<StoreInfoDeprecated>,
     }
     impl From<&UserBuildCreationResponse> for UserBuildCreationResponse {
         fn from(value: &UserBuildCreationResponse) -> Self {
@@ -3614,6 +3708,44 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             404u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get store info for a list of derivations
+
+Get store info for a list of derivations
+
+Body Parameters:
+- **StoreInfoRequest**: A list of derivation paths
+
+Returns:
+- **StoreInfoResponse**: a map of derivation path to a list of store info objects
+
+Sends a `POST` request to `/api/v1/catalog/store`
+
+*/
+    pub async fn get_store_info_api_v1_catalog_store_post<'a>(
+        &'a self,
+        body: &'a types::StoreInfoRequest,
+    ) -> Result<ResponseValue<types::StoreInfoResponse>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/store", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
             422u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
