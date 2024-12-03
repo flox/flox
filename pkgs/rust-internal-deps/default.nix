@@ -29,7 +29,6 @@ let
     GIT_PKG = gitMinimal;
     NIX_BIN = "${nix}/bin/nix";
     PKGDB_BIN = if flox-pkgdb == null then "pkgdb" else "${flox-pkgdb}/bin/pkgdb";
-    libExt = targetPlatform.extensions.sharedLibrary;
 
     # develop with `flox-package-builder.devShellHook`
     FLOX_BUILD_MK = "${flox-package-builder}/libexec/flox-build.mk";
