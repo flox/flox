@@ -215,10 +215,9 @@ impl BuildEnvNix {
 
         let installable = {
             let mut locked_url = locked.locked_url.to_string();
-            if let Some(revision_suffix) =
-                locked_url.strip_prefix("https://github.com/flox/nixpkgs?rev=")
-            {
-                locked_url = format!("flox-nixpkgs:v0/flox/{revision_suffix}");
+
+            if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
+                locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
             } else {
                 todo!(
                     "Building non-nixpkgs catalog packages is not yet supported.\n\
