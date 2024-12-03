@@ -339,11 +339,11 @@ impl BuildEnvNix {
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<bool, BuildEnvError> {
         let mut cmd = self.base_command();
-        cmd.arg("path-info");
+        cmd.arg("build");
         cmd.args(paths);
 
         // avoid trying to substitute, we want to return as soon as possible
-        cmd.arg("--offline");
+        // cmd.arg("--offline");
 
 
         debug!(cmd=%cmd.display(), "checking store paths");
