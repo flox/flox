@@ -281,8 +281,6 @@ impl BuildEnvNix {
             format!("{}#{}^*", locked_url, attr_path)
         };
 
-        println!("building flake package: {}", installable);
-
         nix_build_command.arg("build");
         nix_build_command.arg("--no-write-lock-file");
         nix_build_command.arg("--no-update-lock-file");
