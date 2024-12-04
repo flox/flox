@@ -176,9 +176,7 @@ impl Edit {
         let result = match contents {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
-            Some(new_manifest) => environment
-                .edit(flox, new_manifest)
-                .map_err(apply_doc_link_for_unsupported_packages)?,
+            Some(new_manifest) => Self::edit_with_spinner(flox, environment, new_manifest).await?,
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
             None => Self::interactive_edit(flox, environment).await?,
@@ -211,6 +209,21 @@ impl Edit {
         }
 
         Ok(())
+    }
+
+    /// Edit the environment, showing a spinner when supported.
+    async fn edit_with_spinner(
+        flox: &Flox,
+        environment: &mut dyn Environment,
+        new_manifest: String,
+    ) -> Result<EditResult, EnvironmentError> {
+        Dialog {
+            message: "Building environment...",
+            help_message: None,
+            typed: Spinner::new(|| environment.edit(flox, new_manifest)),
+        }
+        .spin()
+        .map_err(apply_doc_link_for_unsupported_packages)
     }
 
     /// Interactively edit the manifest file
@@ -246,15 +259,7 @@ impl Edit {
         // decides to stop.
         loop {
             let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor, &args)?;
-
-            let result = Dialog {
-                message: "Building environment...",
-                help_message: None,
-                typed: Spinner::new(|| environment.edit(flox, new_manifest.clone())),
-            }
-            .spin()
-            .map_err(apply_doc_link_for_unsupported_packages);
-
+            let result = Self::edit_with_spinner(flox, environment, new_manifest.clone()).await;
             match Self::make_interactively_recoverable(result)? {
                 Ok(result) => return Ok(result),
 
