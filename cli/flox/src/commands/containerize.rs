@@ -1,9 +1,10 @@
+use std::convert::Infallible;
 use std::fmt::Display;
-use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::str::FromStr;
+use std::{fs, io};
 
 use anyhow::{anyhow, Context, Result};
 use bpaf::Bpaf;
@@ -84,7 +85,7 @@ enum OutputTarget {
             argument("file"),
             help("File to write the container image to. '-' to write to stdout.")
         )]
-        PathBuf,
+        FileOrStdout,
     ),
     Runtime(
         #[bpaf(
@@ -96,12 +97,30 @@ enum OutputTarget {
     ),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FileOrStdout {
+    File(PathBuf),
+    Stdout,
+}
+
+impl FromStr for FileOrStdout {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        if s == "-" {
+            Ok(FileOrStdout::Stdout)
+        } else {
+            Ok(FileOrStdout::File(PathBuf::from(s)))
+        }
+    }
+}
+
 impl OutputTarget {
     fn detect_or_default(env_name: impl AsRef<str>) -> Self {
-        let default_to_file = OutputTarget::File(PathBuf::from(format!(
+        let default_to_file = OutputTarget::File(FileOrStdout::File(PathBuf::from(format!(
             "{}-container.tar",
             env_name.as_ref()
-        )));
+        ))));
 
         let path_var = match std::env::var("PATH") {
             Err(e) => {
@@ -127,12 +146,7 @@ impl OutputTarget {
 
     fn to_writer(&self) -> Result<Box<dyn ContainerSink>> {
         let writer: Box<dyn ContainerSink> = match self {
-            OutputTarget::File(path) => {
-                let path = match path {
-                    path if path == Path::new("-") => Path::new("/dev/stdout"),
-                    path => path,
-                };
-
+            OutputTarget::File(FileOrStdout::File(path)) => {
                 let file = fs::OpenOptions::new()
                     .write(true)
                     .create(true)
@@ -142,6 +156,7 @@ impl OutputTarget {
 
                 Box::new(file)
             },
+            OutputTarget::File(FileOrStdout::Stdout) => Box::new(io::stdout()),
             OutputTarget::Runtime(runtime) => Box::new(runtime.to_writer()?),
         };
 
@@ -152,7 +167,8 @@ impl OutputTarget {
 impl Display for OutputTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            OutputTarget::File(path) => write!(f, "file '{}'", path.display()),
+            OutputTarget::File(FileOrStdout::File(path)) => write!(f, "file '{}'", path.display()),
+            OutputTarget::File(FileOrStdout::Stdout) => write!(f, "stdout"),
             OutputTarget::Runtime(runtime) => write!(f, "{runtime}"),
         }
     }
@@ -175,6 +191,13 @@ trait ContainerSink: Write + Send {
 impl ContainerSink for fs::File {
     fn wait(&mut self) -> Result<()> {
         self.sync_all()?;
+        Ok(())
+    }
+}
+
+impl ContainerSink for io::Stdout {
+    fn wait(&mut self) -> Result<()> {
+        self.flush()?;
         Ok(())
     }
 }
@@ -274,7 +297,8 @@ mod tests {
     fn detect_runtime_in_path() {
         let tempdir = tempfile::tempdir().unwrap();
 
-        let default_target = OutputTarget::File(PathBuf::from("test-container.tar"));
+        let default_target =
+            OutputTarget::File(FileOrStdout::File(PathBuf::from("test-container.tar")));
         let docker_target = OutputTarget::Runtime(Runtime::Docker);
         let podman_target = OutputTarget::Runtime(Runtime::Podman);
 
