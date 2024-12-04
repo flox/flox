@@ -102,6 +102,7 @@
           flox-package-builder = callPackage ./pkgs/flox-package-builder { };
 
           # Package Database Utilities: scrape, search, and resolve.
+          flox-test-shells = callPackage ./pkgs/flox-test-shells { };
           flox-pkgdb = callPackage ./pkgs/flox-pkgdb { };
           flox-buildenv = callPackage ./pkgs/flox-buildenv { };
           flox-watchdog = callPackage ./pkgs/flox-watchdog { }; # Flox Command Line Interface ( development build ).

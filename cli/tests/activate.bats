@@ -230,9 +230,11 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:path,activate:path:bash
+# bats test_tags=bats:focus
 @test "bash: interactive activate puts package in path" {
   project_setup
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  echo "HOME is $HOME" >&3
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"

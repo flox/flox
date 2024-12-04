@@ -37,6 +37,7 @@ use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, warn};
 use once_cell::sync::Lazy;
+use uuid::Uuid;
 
 use super::services::ServicesEnvironment;
 use super::{
@@ -343,6 +344,11 @@ impl Activate {
             .unwrap_or(utils::colors::INDIGO_300.to_ansi256().to_string());
 
         let mut exports = HashMap::from([
+            // This serves no purpose in production, we only set it so that a watchdog
+            // or process-compose started from this activation will also contain this
+            // environment variable. Then in tests we look for processes that have this
+            // same value in their environment to know which ones came from this activation.
+            ("_FLOX_ACTIVATION_UUID", Uuid::new_v4().to_string()),
             (FLOX_ENV_VAR, mode_link_path.to_string_lossy().to_string()),
             (
                 FLOX_ACTIVE_ENVIRONMENTS_VAR,

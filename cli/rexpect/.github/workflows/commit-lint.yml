@@ -1,0 +1,25 @@
+on:
+  pull_request:
+
+name: Pull Request Checks
+
+jobs:
+  block-fixup:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Block fixup commit merge
+      uses: 13rac1/block-fixup-merge-action@v2.0.0
+
+  commit-lint:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - run: pip install gitlint
+      - run: gitlint --commits $(git merge-base origin/master HEAD)..HEAD

@@ -5,6 +5,7 @@
   hivemind,
   just,
   yq,
+  bashInteractive,
   lib,
   mkShell,
   procps,
@@ -19,6 +20,7 @@
   flox-pkgdb,
   flox-manpages,
   flox-package-builder,
+  flox-test-shells,
   stdenv,
   ci ? false,
   GENERATED_DATA ? ./../../test_data/generated,
@@ -54,6 +56,7 @@ let
       cargo-nextest
       procps
       pstree
+      bashInteractive
     ]
     ++ lib.optionals stdenv.isLinux [
       # The python3Packages.mitmproxy-macos package is broken on mac:
@@ -74,6 +77,11 @@ mkShell (
         flox-watchdog = null;
       })
     ];
+
+    FLOX_SHELL_BASH = "${flox-test-shells}/bin/bash";
+    FLOX_SHELL_ZSH = "${flox-test-shells}/bin/zsh";
+    FLOX_SHELL_FISH = "${flox-test-shells}/bin/fish";
+    FLOX_SHELL_TCSH = "${flox-test-shells}/bin/tcsh";
 
     packages = ciPackages ++ lib.optionals (!ci) devPackages;
 

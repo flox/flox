@@ -482,3 +482,29 @@ post_cmd = '''
     cp .flox/env/manifest.toml "$env_dir/manifest.toml"
     cp .flox/env/manifest.lock "$env_dir/manifest.lock"
 '''
+
+[envs.empty]
+skip_if_output_exists = "envs/empty"
+files = ["envs/empty/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/empty"
+    mkdir -p "$env_dir"
+    cp manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+'''
+
+[envs.sleeping_services]
+skip_if_output_exists = "envs/sleeping_services"
+files = ["envs/sleeping_services/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/sleeping_services"
+    mkdir -p "$env_dir"
+    cp manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+'''

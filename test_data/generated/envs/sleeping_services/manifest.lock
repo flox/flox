@@ -1,0 +1,37 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "hook": {},
+    "profile": {},
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "x86_64-darwin",
+        "aarch64-linux",
+        "x86_64-linux"
+      ],
+      "allow": {
+        "licenses": []
+      },
+      "semver": {}
+    },
+    "services": {
+      "sleeper_1": {
+        "command": "sleep 999999",
+        "vars": null,
+        "is-daemon": null,
+        "shutdown": null,
+        "systems": null
+      },
+      "sleeper_2": {
+        "command": "sleep 999999",
+        "vars": null,
+        "is-daemon": null,
+        "shutdown": null,
+        "systems": null
+      }
+    }
+  },
+  "packages": []
+}

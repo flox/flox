@@ -20,3 +20,9 @@ tracing.workspace = true
 tempfile.workspace = true
 time.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+uuid.workspace = true
+
+[features]
+proc_status = []
