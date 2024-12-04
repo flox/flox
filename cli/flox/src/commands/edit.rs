@@ -141,7 +141,7 @@ impl Edit {
                 environment.reset_local_env_to_current_generation(&flox)?;
 
                 Dialog {
-                    message: "Building environment",
+                    message: "Building environment...",
                     help_message: None,
                     typed: Spinner::new(|| {
                         // The current generation already has a lock,
