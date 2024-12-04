@@ -248,7 +248,7 @@ impl Edit {
             let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor, &args)?;
 
             let result = Dialog {
-                message: "Building environment to validate edit...",
+                message: "Building environment...",
                 help_message: None,
                 typed: Spinner::new(|| environment.edit(flox, new_manifest.clone())),
             }
