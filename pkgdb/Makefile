@@ -174,7 +174,8 @@ SRCS           = $(call rwildcard,src,*.cc)
 test_SRCS      = $(sort $(wildcard tests/*.cc))
 ALL_SRCS       = $(SRCS) $(test_SRCS)
 BINS           = bin/pkgdb
-LIBS           = lib/nix-plugins/wrapped-nixpkgs-input$(libExt)
+LIBS           = lib/nix-plugins/wrapped-nixpkgs-input$(libExt) \
+								 lib/nix-plugins/lock-flake-installable$(libExt)
 TEST_UTILS     = $(addprefix tests/,is_sqlite3)
 TESTS          = $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
 TEST_DATA      =
