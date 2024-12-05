@@ -28,6 +28,8 @@ on:
   push:
     branches:
       - "main"
+    tags:
+      - '*'
   pull_request:
   merge_group:
 
@@ -319,7 +321,7 @@ jobs:
 
   trigger-flox-installers-workflow:
     name: "Build installers"
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    if: ${{ github.base_ref == 'refs/heads/main' && github.event_name == 'push' }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 120
 
@@ -344,7 +346,7 @@ jobs:
           github_token:       "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
           github_user:        "floxbot"
           workflow_file_name: "ci.yml"
-          ref:                "main"
+          ref:                "${{ github.ref_name }}"
           wait_interval:      10
           client_payload:     '{"FLOX_SRC":"github:flox/flox/${{ github.event.pull_request.head.sha || github.sha }}"}'
           propagate_failure:  true
@@ -376,7 +378,7 @@ jobs:
     runs-on: "ubuntu-latest"
     timeout-minutes: 30
 
-    if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    if: ${{ failure() && github.base_ref == 'refs/heads/main' && github.event_name == 'push' }}
 
     needs:
       - "nix-build"
@@ -396,7 +398,7 @@ jobs:
       - name: "Slack Notification"
         uses: "rtCamp/action-slack-notify@v2"
         env:
-          SLACK_TITLE:      "Something broke CI for flox/flox on main"
+          SLACK_TITLE:      "Something broke CI for flox/flox on ${{ github.ref_name }}"
           SLACK_FOOTER:     "Thank you for caring"
           SLACK_WEBHOOK:    "${{ secrets.MANAGED_SLACK_WEBHOOK }}"
           SLACK_USERNAME:   "GitHub"
