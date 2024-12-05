@@ -33,6 +33,7 @@ let
     # develop with `flox-package-builder.devShellHook`
     FLOX_BUILD_MK = "${flox-package-builder}/libexec/flox-build.mk";
     FLOX_BUILDENV_NIX = "${flox-buildenv}/lib/buildenv.nix";
+    FLOX_MK_CONTAINER_NIX = ./../../mkContainer/mkContainer.nix;
 
     GNUMAKE_BIN = "${gnumake}/bin/make";
 

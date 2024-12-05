@@ -27,7 +27,7 @@ static GNUMAKE_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
         .into()
 });
 
-static BUILDTIME_NIXPKGS_URL: LazyLock<String> = LazyLock::new(|| {
+pub(super) static BUILDTIME_NIXPKGS_URL: LazyLock<String> = LazyLock::new(|| {
     std::env::var("COMMON_NIXPKGS_URL").unwrap_or_else(|_| env!("COMMON_NIXPKGS_URL").to_string())
 });
 
