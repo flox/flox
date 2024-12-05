@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Debug;
+use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
@@ -9,6 +10,7 @@ use serde_with::skip_serializing_none;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
+use super::buildenv::NIX_BIN;
 use crate::models::manifest::{ManifestPackageDescriptorFlake, DEFAULT_PRIORITY};
 use crate::models::pkgdb::{
     call_pkgdb,
@@ -119,11 +121,12 @@ pub trait InstallableLocker {
 pub enum InstallableLockerImpl {
     Pkgdb(Pkgdb),
     Mock(InstallableLockerMock),
+    Nix(Nix),
 }
 
 impl Default for InstallableLockerImpl {
     fn default() -> Self {
-        InstallableLockerImpl::Pkgdb(Pkgdb)
+        InstallableLockerImpl::Nix(Nix)
     }
 }
 /// A wrapper for (eventually) various `pkgdb` commands
@@ -271,6 +274,80 @@ impl InstallableLocker for InstallableLockerMock {
         }
 
         mocked_result
+    }
+}
+
+#[derive(Debug)]
+pub struct Nix;
+impl InstallableLocker for Nix {
+    #[instrument(skip_all, fields(
+        system = system.as_ref(),
+        descriptor = descriptor.flake,
+        progress = format!(
+            "Locking flake installable '{}' for '{}'",
+            descriptor.flake, system.as_ref())
+    ))]
+    fn lock_flake_installable(
+        &self,
+        system: impl AsRef<str>,
+        descriptor: &ManifestPackageDescriptorFlake,
+    ) -> Result<LockedInstallable, FlakeInstallableError> {
+        let mut command = Command::new(&*NIX_BIN);
+        command.args([
+            "--option",
+            "extra-experimental-features",
+            "nix-command flakes",
+        ]);
+
+        // for now assume the plugins are located relative to the pkgdb binary
+        // <pkgdb>
+        // ├── bin
+        // │   └── pkgdb
+        // └── lib
+        //     └── nix-plugins
+        {
+            let pkgdb_lib_dir = Path::new(&*PKGDB_BIN)
+                .ancestors()
+                .nth(2)
+                .expect("pkgdb is in '<store-path>/bin'")
+                .join("lib/nix-plugins");
+
+            command.args([
+                "--option",
+                "extra-plugin-files",
+                &pkgdb_lib_dir.to_string_lossy(),
+            ]);
+        }
+
+        command.args(["--option", "pure-eval", "false"]);
+        command.arg("eval");
+        command.arg("--no-update-lock-file");
+        command.arg("--no-write-lock-file");
+        command.arg("--json");
+        command.args(["--system", system.as_ref()]);
+        command.args([
+            "--expr",
+            &format!(r#"builtins.lockFlakeInstallable "{}""#, descriptor.flake),
+        ]);
+
+        debug!(cmd=%command.display(), "running nix evaluation");
+
+        let output = command
+            .output()
+            .map_err(|e| FlakeInstallableError::NixError(e.to_string()))?;
+
+        if !output.status.success() {
+            return Err(FlakeInstallableError::LockInstallable(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+
+        let mut lock = serde_json::from_slice(&output.stdout)
+            .map_err(FlakeInstallableError::DeserializeLockedInstallable)?;
+
+        set_priority(&mut lock, descriptor);
+
+        Ok(lock)
     }
 }
 
