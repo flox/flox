@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
 
+use super::catalog::ClientTrait;
 use crate::data::System;
 use crate::models::lockfile::{
     LockedPackage,
@@ -106,6 +107,7 @@ pub struct BuiltStorePath(PathBuf);
 pub trait BuildEnv {
     fn build(
         &self,
+        client: &impl ClientTrait,
         lockfile: &Path,
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError>;
@@ -158,7 +160,12 @@ impl BuildEnvNix {
     /// See the individual realisation functions for more details.
     // todo: return actual store paths built,
     // necessary when building manifest builds.
-    fn realise_lockfile(&self, lockfile: &Lockfile, system: &System) -> Result<(), BuildEnvError> {
+    fn realise_lockfile(
+        &self,
+        _client: &impl ClientTrait,
+        lockfile: &Lockfile,
+        system: &System,
+    ) -> Result<(), BuildEnvError> {
         for package in lockfile.packages.iter() {
             if package.system() != system {
                 continue;
@@ -203,6 +210,12 @@ impl BuildEnvNix {
         if all_valid {
             return Ok(());
         }
+
+        // Before building, if this is a custom package, see if we have store
+        // info in the catalog.
+        // TODO - The API call accepts multiple, so an optimization
+        // is to collect these for the whole lockfile ahead of time and ask for
+        // them all at once.
 
         let mut nix_build_command = self.base_command();
 
@@ -434,6 +447,7 @@ impl BuildEnvNix {
 impl BuildEnv for BuildEnvNix {
     fn build(
         &self,
+        client: &impl ClientTrait,
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
@@ -479,7 +493,7 @@ impl BuildEnv for BuildEnvNix {
         // This will prevent failures due to e.g. non-deterministic,
         // non-sandboxed manifest builds which may produce different store paths,
         // than previously locked in the lockfile.
-        self.realise_lockfile(&lockfile, &env!("NIX_TARGET_SYSTEM").to_string())?;
+        self.realise_lockfile(client, &lockfile, &env!("NIX_TARGET_SYSTEM").to_string())?;
 
         // Build the lockfile by evaluating and building the `buildenv.nix` expression.
         let outputs = self.call_buildenv_nix(lockfile_path, service_config_path)?;
@@ -947,7 +961,7 @@ mod buildenv_tests {
     use regex::Regex;
 
     use super::*;
-    use crate::providers::catalog::{GENERATED_DATA, MANUALLY_GENERATED};
+    use crate::providers::catalog::{MockClient, GENERATED_DATA, MANUALLY_GENERATED};
 
     trait PathExt {
         fn is_executable_file(&self) -> bool;
@@ -962,7 +976,8 @@ mod buildenv_tests {
     static BUILDENV_RESULT_SIMPLE_PACKAGE: LazyLock<BuildEnvOutputs> = LazyLock::new(|| {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/hello/manifest.lock");
-        buildenv.build(&lockfile_path, None).unwrap()
+        let client = MockClient::new(None::<String>).unwrap();
+        buildenv.build(&client, &lockfile_path, None).unwrap()
     });
 
     #[test]
@@ -1004,7 +1019,8 @@ mod buildenv_tests {
     fn build_contains_build_script_and_output() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/build-noop/manifest.lock");
-        let result = buildenv.build(&lockfile_path, None).unwrap();
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = result.runtime.as_ref();
         let develop = result.develop.as_ref();
@@ -1019,7 +1035,8 @@ mod buildenv_tests {
     fn build_on_activate_lockfile() {
         let buildenv = BuildEnvNix;
         let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/on-activate/manifest.lock");
-        let result = buildenv.build(&lockfile_path, None).unwrap();
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = &result.runtime;
         assert!(runtime.join("activate.d/hook-on-activate").exists());
@@ -1066,7 +1083,8 @@ mod buildenv_tests {
     fn detects_conflicting_packages() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict.json");
-        let result = buildenv.build(&lockfile_path, None);
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("conflicting packages should fail to build");
 
         let BuildEnvError::Build(output) = err else {
@@ -1087,7 +1105,8 @@ mod buildenv_tests {
     fn resolves_conflicting_packages_with_priority() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict-resolved.json");
-        let result = buildenv.build(&lockfile_path, None);
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None);
         assert!(
             result.is_ok(),
             "conflicting packages should be resolved by priority"
@@ -1106,7 +1125,8 @@ mod buildenv_tests {
     fn environment_escapes_variables() {
         let buildenv = BuildEnvNix;
         let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/vars_escape/manifest.lock");
-        let result = buildenv.build(&lockfile_path, None).unwrap();
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = result.runtime.as_ref();
         let develop = result.develop.as_ref();
@@ -1126,7 +1146,8 @@ mod buildenv_tests {
     fn verify_build_closure_contains_only_toplevel_packages() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-all-toplevel.json");
-        let result = buildenv.build(&lockfile_path, None).unwrap();
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = result.runtime.as_ref();
         let develop = result.develop.as_ref();
@@ -1149,7 +1170,8 @@ mod buildenv_tests {
     fn verify_build_closure_contains_only_hello_with_runtime_packages_attribute() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-only-hello.json");
-        let result = buildenv.build(&lockfile_path, None).unwrap();
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = result.runtime.as_ref();
         let develop = result.develop.as_ref();
@@ -1172,7 +1194,8 @@ mod buildenv_tests {
     fn verify_build_closure_can_only_select_toplevel_packages_from_runtime_packages_attribute() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-toplevel.json");
-        let result = buildenv.build(&lockfile_path, None);
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("build should fail if non-toplevel packages are selected");
 
         let BuildEnvError::Build(output) = err else {
@@ -1186,7 +1209,8 @@ mod buildenv_tests {
     fn verify_build_closure_cannot_select_nonexistent_packages_in_runtime_packages_attribute() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-found.json");
-        let result = buildenv.build(&lockfile_path, None);
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("build should fail if nonexistent packages are selected");
 
         let BuildEnvError::Build(output) = err else {
