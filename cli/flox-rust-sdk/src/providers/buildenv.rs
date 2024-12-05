@@ -6,6 +6,7 @@ use std::process::Command;
 use std::sync::LazyLock;
 
 use flox_core::canonical_path::CanonicalPath;
+use pollster::FutureExt as _;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
@@ -20,6 +21,7 @@ use crate::models::lockfile::{
     Lockfile,
 };
 use crate::models::pkgdb::{PkgDbError, PKGDB_BIN};
+use crate::providers::catalog::CatalogClientError;
 use crate::utils::CommandExt;
 
 pub static NIX_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -77,6 +79,14 @@ pub enum BuildEnvError {
     /// An error that occurred while linking a store path.
     #[error("Failed to link environment: {0}")]
     Link(String),
+
+    /// An error that occurred while calling the client
+    #[error("Unexpected error calling the catalog client")]
+    CatalogError(#[source] CatalogClientError),
+
+    /// An error that occurred while accessing the cache
+    #[error("Unexpected error accessing cache: {0}")]
+    CacheError(String),
 
     /// An error that occurred while calling nix build.
     #[error("Failed to call 'nix build'")]
@@ -162,7 +172,7 @@ impl BuildEnvNix {
     // necessary when building manifest builds.
     fn realise_lockfile(
         &self,
-        _client: &impl ClientTrait,
+        client: &impl ClientTrait,
         lockfile: &Lockfile,
         system: &System,
     ) -> Result<(), BuildEnvError> {
@@ -171,12 +181,71 @@ impl BuildEnvNix {
                 continue;
             }
             match package {
-                LockedPackage::Catalog(locked) => self.realise_nixpkgs(locked)?,
+                LockedPackage::Catalog(locked) => self.realise_nixpkgs(client, locked)?,
                 LockedPackage::Flake(locked) => self.realise_flakes(locked)?,
                 LockedPackage::StorePath(locked) => self.realise_store_path(locked)?,
             }
         }
         Ok(())
+    }
+
+    /// Try to substitute a custom package by copying it from an associated store.
+    ///
+    /// Query the associated store(s) that contain the package from the catalog.
+    /// Then attempt to download the package closure from each store in order,
+    /// until successful.
+    /// Returns `true` if all outputs were found and downloaded, `false` otherwise.
+    fn try_substitute_custom_pkg(
+        &self,
+        client: &impl ClientTrait,
+        locked: &LockedPackageCatalog,
+    ) -> Result<bool, BuildEnvError> {
+        // TODO - The API call accepts multiple, so an optimization is to
+        // collect these for the whole lockfile ahead of time and ask for them
+        // all at once.
+        let paths: Vec<String> = locked.outputs.values().map(|s| s.to_string()).collect();
+        let store_locations = client
+            .get_store_info(paths)
+            .block_on()
+            .map_err(BuildEnvError::CatalogError)?;
+
+        // Try downloading each output from the store location provided.  If we
+        // are missing store info for any, we should return false.
+        // TODO - It is possible not _all_ are missing. For now, we'll just
+        // assume they are all missing, noting custom packages only have one
+        // output currently.  Also to note: if all the outputs were valid
+        // locally, we would not get here as that check happens before this is
+        // called within `realise_nixpkgs`.
+        let mut all_found = true;
+        'path_loop: for (path, locations) in store_locations.iter() {
+            // If there are no locations
+            for location in locations {
+                // nix copy
+                let mut copy_command = Command::new(&*NIX_BIN);
+                copy_command
+                    .arg("copy")
+                    .arg("--from")
+                    .arg(&location.url)
+                    .arg(path);
+                let output = copy_command
+                    .output()
+                    .map_err(|e| BuildEnvError::CacheError(e.to_string()))?;
+                if !output.status.success() {
+                    // If we failed, log the error and try the next location.
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    debug!(%path, %location.url, %stderr, "Failed to copy package from store");
+                } else {
+                    // If we suceeded, then we can continue with the nex path
+                    debug!(%path, %location.url, "Succesfully copied package from store");
+                    continue 'path_loop;
+                }
+            }
+            // If we get here, we could not download the current path from anywhere
+            debug!(%path, "Failed to copy path from any provided location");
+            all_found = false;
+        }
+
+        Ok(all_found)
     }
 
     /// Realise a package from the (nixpkgs) catalog.
@@ -202,20 +271,40 @@ impl BuildEnvNix {
     /// this function is currently assumes that the package is from the nixpkgs base-catalog.
     /// Currently the type is distinguished by the [LockedPackageCatalog::locked_url].
     /// If this does not indicate a nixpkgs package, the function will currently panic!
-    fn realise_nixpkgs(&self, locked: &LockedPackageCatalog) -> Result<(), BuildEnvError> {
-        // check if all store paths are valid, or can be substituted
-        // if so, return without eval
+    fn realise_nixpkgs(
+        &self,
+        client: &impl ClientTrait,
+        locked: &LockedPackageCatalog,
+    ) -> Result<(), BuildEnvError> {
+        // Check if all store paths are valid, or can be substituted.
         let all_valid = self.check_store_path_with_substituters(locked.outputs.values())?;
 
+        // If so, return without eval.
         if all_valid {
             return Ok(());
         }
 
-        // Before building, if this is a custom package, see if we have store
-        // info in the catalog.
-        // TODO - The API call accepts multiple, so an optimization
-        // is to collect these for the whole lockfile ahead of time and ask for
-        // them all at once.
+        let installable = {
+            let mut locked_url = locked.locked_url.to_string();
+
+            if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
+                locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
+            } else {
+                debug!(?locked.attr_path, "Trying to substitute custom package");
+                let all_found = self.try_substitute_custom_pkg(client, locked)?;
+                // We asked for all the outputs for the package, got store info for
+                // each, and were able to substitute them all.  If so, then we're done here.
+                if all_found {
+                    return Ok(());
+                };
+                panic!("Building custom packages is not yet supported");
+            }
+
+            // build all out paths
+            let attrpath = format!("legacyPackages.{}.{}^*", locked.system, locked.attr_path);
+
+            format!("{}#{}", locked_url, attrpath)
+        };
 
         let mut nix_build_command = self.base_command();
 
@@ -239,24 +328,6 @@ impl BuildEnvNix {
                 &pkgdb_lib_dir.to_string_lossy(),
             ]);
         }
-
-        let installable = {
-            let mut locked_url = locked.locked_url.to_string();
-
-            if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
-                locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
-            } else {
-                todo!(
-                    "Building non-nixpkgs catalog packages is not yet supported.\n\
-                    Pending implementation and decisions regarding representation in the lockfile"
-                );
-            }
-
-            // build all out paths
-            let attrpath = format!("legacyPackages.{}.{}^*", locked.system, locked.attr_path);
-
-            format!("{}#{}", locked_url, attrpath)
-        };
 
         nix_build_command.arg("build");
         nix_build_command.arg("--no-write-lock-file");
@@ -536,7 +607,7 @@ mod realise_nixpkgs_tests {
 
     use super::*;
     use crate::models::lockfile;
-    use crate::providers::catalog::GENERATED_DATA;
+    use crate::providers::catalog::{MockClient, StoreInfo, StoreInfoResponse, GENERATED_DATA};
 
     /// Read a single locked package for the current system from a mock lockfile.
     /// This is a helper function to avoid repetitive boilerplate in the tests.
@@ -557,6 +628,23 @@ mod realise_nixpkgs_tests {
         locked_package.expect("no locked package found")
     }
 
+    fn locked_custom_package(store_path: Option<&str>) -> LockedPackageCatalog {
+        let mut locked_package =
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        // Set the attr_path to something that looks like a custom package.
+        locked_package.attr_path = "custom_catalog/hello".to_string();
+        locked_package.locked_url =
+            "github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string();
+
+        // replace the store path with a known invalid one, to trigger an attempt to rebuild
+        let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid";
+        let _original_store_path = std::mem::replace(
+            locked_package.outputs.get_mut("out").unwrap(),
+            store_path.unwrap_or(invalid_store_path).to_string(),
+        );
+        locked_package
+    }
+
     /// When a package is not available in the store, it should be built from its derivation.
     /// This test sets a known invalid store path to trigger a rebuild of the 'hello' package.
     /// Since we're unable to provide unique store paths for each test run,
@@ -565,6 +653,7 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_build_reproduce_if_invalid() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let client = MockClient::new(None::<String>).unwrap();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -579,7 +668,7 @@ mod realise_nixpkgs_tests {
 
         let buildenv = BuildEnvNix;
 
-        let result = buildenv.realise_nixpkgs(&locked_package);
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
         assert!(result.is_ok());
 
         // Note: per the above this may be incidentally true
@@ -593,17 +682,18 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_skip_eval_if_valid() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let client = MockClient::new(None::<String>).unwrap();
 
         // build the package to ensure it is in the store
         let buildenv = BuildEnvNix;
         buildenv
-            .realise_nixpkgs(&locked_package)
+            .realise_nixpkgs(&client, &locked_package)
             .expect("'hello' package should build");
 
         // replace the attr_path with one that is known to fail to evaluate
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
         buildenv
-            .realise_nixpkgs(&locked_package)
+            .realise_nixpkgs(&client, &locked_package)
             .expect("'hello' package should be realised without eval/build");
     }
 
@@ -619,6 +709,7 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_eval_failure() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let client = MockClient::new(None::<String>).unwrap();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -631,7 +722,7 @@ mod realise_nixpkgs_tests {
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
 
         let buildenv = BuildEnvNix;
-        let result = buildenv.realise_nixpkgs(&locked_package);
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
         let err = result.expect_err("realising nixpkgs#AAAAAASomeThingsFailToEvaluate should fail");
         assert!(matches!(err, BuildEnvError::Realise2 { .. }));
     }
@@ -649,6 +740,7 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_build_unfree() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello-unfree-lock.json"));
+        let client = MockClient::new(None::<String>).unwrap();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -658,7 +750,7 @@ mod realise_nixpkgs_tests {
         );
 
         let buildenv = BuildEnvNix;
-        let result = buildenv.realise_nixpkgs(&locked_package);
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
         assert!(result.is_ok(), "{}", result.unwrap_err());
     }
 
@@ -676,6 +768,7 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_build_broken() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/tabula-lock.json"));
+        let client = MockClient::new(None::<String>).unwrap();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -685,8 +778,101 @@ mod realise_nixpkgs_tests {
         );
 
         let buildenv = BuildEnvNix;
-        let result = buildenv.realise_nixpkgs(&locked_package);
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
         assert!(result.is_ok(), "{}", result.unwrap_err());
+    }
+
+    #[test]
+    fn nixpkgs_custom_pkg_no_matching_response() {
+        let locked_package = locked_custom_package(None);
+        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut resp = StoreInfoResponse {
+            items: std::collections::HashMap::new(),
+        };
+
+        resp.items
+            .insert(locked_package.outputs["out"].clone(), vec![StoreInfo {
+                url: "https://example.com".to_string(),
+            }]);
+        client.push_store_info_response(resp);
+
+        let buildenv = BuildEnvNix;
+        let subst_resp = buildenv
+            .try_substitute_custom_pkg(&client, &locked_package)
+            .unwrap();
+        assert!(!subst_resp);
+    }
+
+    #[test]
+    fn nixpkgs_custom_pkg_no_cache_info() {
+        let locked_package = locked_custom_package(None);
+        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut resp = StoreInfoResponse {
+            items: std::collections::HashMap::new(),
+        };
+        let fake_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
+        resp.items.insert(fake_store_path.clone(), vec![]);
+        client.push_store_info_response(resp);
+
+        let buildenv = BuildEnvNix;
+        let subst_resp = buildenv
+            .try_substitute_custom_pkg(&client, &locked_package)
+            .unwrap();
+        assert!(!subst_resp);
+    }
+
+    #[test]
+    fn nixpkgs_custom_pkg_cache_download_success() {
+        let real_storepath = env!("NIX_BIN").to_string();
+        let locked_package = locked_custom_package(Some(&real_storepath));
+        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut resp = StoreInfoResponse {
+            items: std::collections::HashMap::new(),
+        };
+
+        // This is a trick for a known storepath
+        resp.items.insert(real_storepath.clone(), vec![
+            // Put something invalid first, to test that we try all locations
+            StoreInfo {
+                url: "blasphemy*".to_string(),
+            },
+            StoreInfo {
+                url: "daemon".to_string(),
+            },
+        ]);
+        client.push_store_info_response(resp);
+
+        let buildenv = BuildEnvNix;
+        let subst_resp = buildenv
+            .try_substitute_custom_pkg(&client, &locked_package)
+            .unwrap();
+        assert!(subst_resp);
+    }
+
+    #[test]
+    #[should_panic = "Building custom packages is not yet supported"]
+    fn nixpkgs_custom_pkg_cache_download_failure() {
+        let locked_package = locked_custom_package(None);
+        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut resp = StoreInfoResponse {
+            items: std::collections::HashMap::new(),
+        };
+
+        // This is a trick for a known storepath
+        resp.items
+            .insert(locked_package.outputs["out"].clone(), vec![
+                // Put something invalid first, to test that we try all locations
+                StoreInfo {
+                    url: "blasphemy*".to_string(),
+                },
+                StoreInfo {
+                    url: "daemon".to_string(),
+                },
+            ]);
+        client.push_store_info_response(resp);
+
+        let buildenv = BuildEnvNix;
+        let _result = buildenv.realise_nixpkgs(&client, &locked_package);
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,

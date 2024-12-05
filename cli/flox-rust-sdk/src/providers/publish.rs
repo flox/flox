@@ -105,6 +105,9 @@ impl BinaryCache for NixCopyCache {
         let url_with_key = url
             .query_pairs_mut()
             .append_pair("secret-key", &self.key_file.to_string_lossy())
+            .append_pair("ls-compression", "zstd")
+            .append_pair("compression", "zstd")
+            .append_pair("write-nar-listing", "true")
             .finish();
         debug!(
             "Uploading {path} to cache {cache}...",
@@ -267,6 +270,7 @@ pub fn check_build_metadata(
         .map_err(|e| PublishError::NonexistentOutputs(e.to_string()))?;
 
     Ok(CheckedBuildMetadata {
+        // TODO - This is technically incorrect.  Need to eval `ATTRIBUTE.drv_path`?
         drv_path: store_dir.to_string_lossy().to_string(),
         outputs: vec![catalog_api_v1::types::Output {
             name: "bin".to_string(),
