@@ -12,9 +12,11 @@
 #include <nix/attr-path.hh>
 #include <nix/eval.hh>
 #include <nix/installable-flake.hh>
+#include <nix/primops.hh>
 #include <nix/value-to-json.hh>
 
 #include "flox/lock-flake-installable.hh"
+#include <nix/json-to-value.hh>
 
 
 /* -------------------------------------------------------------------------- */
@@ -549,6 +551,43 @@ from_json( const nlohmann::json & jfrom, LockedInstallable & to )
   if ( jfrom.contains( "priority" ) ) { to.priority = jfrom.at( "priority" ); }
 }
 
+
+void
+prim_lockFlakeInstallable( nix::EvalState &  state,
+                           const nix::PosIdx pos,
+                           nix::Value **     args,
+                           nix::Value &      value )
+{
+
+
+  nix::NixStringContext context;
+
+  if ( args[0]->isThunk() && args[0]->isTrivial() )
+    {
+      state.forceValue( *args[1], pos );
+    }
+
+  auto state2 = nix::make_ref<nix::EvalState>( nix::SearchPath(),
+                                               state.store,
+                                               state.store );
+
+  auto system = nix::settings.thisSystem.get();
+
+  auto lockedInstallable
+    = lockFlakeInstallable( state2, system, std::string( args[0]->str() ) );
+
+  auto lockedInstallableJson = nlohmann::json( lockedInstallable );
+  nix::parseJSON( state, lockedInstallableJson.dump(), value );
+}
+
+
+static const nix::RegisterPrimOp
+  primop_lockFlakeInstallable( { .name  = "__lockFlakeInstallable",
+                                 .args  = { "flakeInstallable" },
+                                 .arity = 0,
+                                 .doc   = R"(    )",
+                                 .fun   = prim_lockFlakeInstallable,
+                                 .experimentalFeature = nix::Xp::Flakes } );
 
 /* -------------------------------------------------------------------------- */
 
