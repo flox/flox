@@ -40,8 +40,8 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-#ifndef ACTIVATION_SCRIPTS_PACKAGE_DIR
-#  error "ACTIVATION_SCRIPTS_PACKAGE_DIR must be set"
+#ifndef ACTIVATION_SCRIPTS_PACKAGE
+#  error "ACTIVATION_SCRIPTS_PACKAGE must be set"
 #endif
 
 #ifndef CONTAINER_BUILDER_PATH
@@ -794,7 +794,7 @@ makeActivationScripts( nix::EvalState &         state,
   auto            references = nix::StorePathSet();
   references.insert( activationStorePath );
   references.insert(
-    state.store->parseStorePath( ACTIVATION_SCRIPTS_PACKAGE_DIR ) );
+    state.store->parseStorePath( ACTIVATION_SCRIPTS_PACKAGE ) );
   references.insert( state.store->parseStorePath( FLOX_BASH_PKG ) );
   references.insert( state.store->parseStorePath( FLOX_CACERT_PKG ) );
 
@@ -864,11 +864,11 @@ makeActivationScriptsPackageDir( nix::EvalState & state )
 {
   /* Insert activation scripts.
    * The store path is provided at compile time via the
-   * `ACTIVATION_SCRIPTS_PACKAGE_DIR' environment variable. */
+   * `ACTIVATION_SCRIPTS_PACKAGE' environment variable. */
   debugLog( nix::fmt( "adding activation scripts to store, path=%s",
-                      ACTIVATION_SCRIPTS_PACKAGE_DIR ) );
+                      ACTIVATION_SCRIPTS_PACKAGE ) );
   auto profileScriptsPath
-    = state.store->parseStorePath( ACTIVATION_SCRIPTS_PACKAGE_DIR );
+    = state.store->parseStorePath( ACTIVATION_SCRIPTS_PACKAGE );
   state.store->ensurePath( profileScriptsPath );
   RealisedPackage realised( state.store->printStorePath( profileScriptsPath ),
                             true,
