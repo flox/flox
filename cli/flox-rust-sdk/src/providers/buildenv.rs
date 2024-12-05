@@ -226,21 +226,25 @@ impl BuildEnvNix {
         }
 
         // TODO, need a better way to differentiate between nixpkgs and custom packages
+        // Only NEED to do this checking for custom packages.
         if locked.attr_path.as_str().contains('/') {
             // Before building, if this is a custom package, see if we have store
             // info in the catalog.
             // TODO - The API call accepts multiple, so an optimization
             // is to collect these for the whole lockfile ahead of time and ask for
             // them all at once.
-            // TODO - ONLY make this call for custom packages (catalog != 'nixpkgs')
             let paths: Vec<String> = locked.outputs.values().map(|s| s.to_string()).collect();
             let _store_locations = client
                 .get_store_info(paths)
                 .block_on()
                 .map_err(BuildEnvError::CatalogError)?;
 
-            // copy those paths that are missing... which are missing, do we need to
-            // check yet again?  For now, we'll just assume they are all missing.
+            // For the missing paths that we requested, try downloading from the store location provided.
+            // If we are missing store info for any that we asked for (implying they are not yet present),
+            // we should continue on with later code which may attempt to build them locally.
+            // TODO - Which are missing? Do we need to check them all again?  For now,
+            // we'll just assume they are all missing, and custom packages only
+            // have one output currently.
             let mut missing_store_info = false;
             for (path, locations) in _store_locations.iter() {
                 if !locations.is_empty() {
@@ -263,7 +267,7 @@ impl BuildEnvNix {
                 };
             }
             // We had store info and were able to download from the cache everything
-            // that we asked for that was missing.
+            // that we asked for that was missing, so we can return early.
             if !missing_store_info {
                 return Ok(());
             }
