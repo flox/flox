@@ -27,7 +27,7 @@ on:
         default: "bryanhonof,tomberek,garbas"
   push:
     branches:
-      - "main"
+      - "test-build-on-tag"
     tags:
       - '*'
   pull_request:
@@ -67,7 +67,7 @@ jobs:
     - uses: dorny/paths-filter@v3
       id: filter
       with:
-        base: ${{ github.event.merge_group.base_ref || 'main' }}
+        base: ${{ github.event.merge_group.base_ref || 'test-build-on-tag' }}
         ref: ${{ github.event.merge_group.head_ref || github.ref }}
         filters: |
           pkgdb:
@@ -321,7 +321,7 @@ jobs:
 
   trigger-flox-installers-workflow:
     name: "Build installers"
-    if: ${{ github.base_ref == 'refs/heads/main' && github.event_name == 'push' }}
+    if: ${{ github.base_ref == 'refs/heads/test-build-on-tag' && github.event_name == 'push' }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 120
 
