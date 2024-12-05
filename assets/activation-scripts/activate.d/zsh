@@ -1,6 +1,11 @@
 _sed="@gnused@/bin/sed"
 
 echo "In zsh init script" >&2
+echo "PATH:" >&2
+echo "$PATH" >&2
+echo "FLOX_RESTORE_PATH:" >&2
+echo "$_FLOX_RESTORE_PATH" >&2
+echo "" >&2
 
 # Confirm _flox_activate_tracelevel is defined before proceeding.
 if [ -z "${_flox_activate_tracelevel:=}" ]; then
@@ -73,6 +78,12 @@ if [ -n "$_FLOX_RESTORE_MANPATH" ]; then
   export MANPATH="$_FLOX_RESTORE_MANPATH"
   unset _FLOX_RESTORE_MANPATH
 fi
+echo "Restored PATHs" >&2
+echo "PATH:" >&2
+echo "$PATH" >&2
+echo "FLOX_RESTORE_PATH:" >&2
+echo "$_FLOX_RESTORE_PATH" >&2
+echo "" >&2
 
 # Set the prompt if we're in an interactive shell.
 if [[ -o interactive ]]; then
