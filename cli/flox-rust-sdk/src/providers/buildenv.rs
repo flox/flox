@@ -981,12 +981,12 @@ mod buildenv_tests {
     fn build_contains_activate_files() {
         let result = &*BUILDENV_RESULT_SIMPLE_PACKAGE;
         let runtime = &result.runtime;
-        assert!(runtime.join("activate.d/bash").exists());
+        assert!(runtime.join("activate.d/start.bash").exists());
         assert!(runtime.join("activate.d/zsh").exists());
         assert!(runtime.join("etc/profile.d").is_dir());
 
         let develop = &result.develop;
-        assert!(develop.join("activate.d/bash").exists());
+        assert!(develop.join("activate.d/start.bash").exists());
         assert!(develop.join("activate.d/zsh").exists());
         assert!(develop.join("etc/profile.d").is_dir());
     }
