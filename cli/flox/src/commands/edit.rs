@@ -59,13 +59,13 @@ pub enum EditAction {
         name: EnvironmentName,
     },
 
-    /// Create a new generation from the current local environment
+    /// Commit local environment changes to a new generation
     ///
     /// (Only available for managed environments)
     #[bpaf(long, short)]
     Sync,
 
-    /// Reset the environment to the current generation
+    /// Discard local changes and reset to the latest generation
     ///
     /// (Only available for managed environments)
     #[bpaf(long)]

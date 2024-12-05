@@ -500,7 +500,10 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
 
         ManagedEnvironmentError::CheckoutOutOfSync => indoc! {"
             Your environment has changes that are not yet synced to a generation.
-            Use 'flox edit --reset' or 'flox edit --sync' after modifying '.flox/env/manifest.toml'
+
+            To resolve this issue, run either
+            * 'flox edit --sync' to commit your local changes to a new generation
+            * 'flox edit --reset' to discard your local changes and reset to the latest generation
         "}
         .to_string(),
 
