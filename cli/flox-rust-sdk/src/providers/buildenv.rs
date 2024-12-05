@@ -225,45 +225,48 @@ impl BuildEnvNix {
             return Ok(());
         }
 
-        // Before building, if this is a custom package, see if we have store
-        // info in the catalog.
-        // TODO - The API call accepts multiple, so an optimization
-        // is to collect these for the whole lockfile ahead of time and ask for
-        // them all at once.
-        // TODO - ONLY make this call for custom packages (catalog != 'nixpkgs')
-        let paths: Vec<String> = locked.outputs.values().map(|s| s.to_string()).collect();
-        let _store_locations = client
-            .get_store_info(paths)
-            .block_on()
-            .map_err(BuildEnvError::CatalogError)?;
+        // TODO, need a better way to differentiate between nixpkgs and custom packages
+        if locked.attr_path.as_str().contains('/') {
+            // Before building, if this is a custom package, see if we have store
+            // info in the catalog.
+            // TODO - The API call accepts multiple, so an optimization
+            // is to collect these for the whole lockfile ahead of time and ask for
+            // them all at once.
+            // TODO - ONLY make this call for custom packages (catalog != 'nixpkgs')
+            let paths: Vec<String> = locked.outputs.values().map(|s| s.to_string()).collect();
+            let _store_locations = client
+                .get_store_info(paths)
+                .block_on()
+                .map_err(BuildEnvError::CatalogError)?;
 
-        // copy those paths that are missing... which are missing, do we need to
-        // check yet again?  For now, we'll just assume they are all missing.
-        let mut missing_store_info = false;
-        for (path, locations) in _store_locations.iter() {
-            if !locations.is_empty() {
-                // nix copy
-                let mut copy_command = Command::new(&*NIX_BIN);
-                copy_command
-                    .arg("copy")
-                    .arg("--from")
-                    .arg(&locations[0].url)
-                    .arg(path);
-                let output = copy_command
-                    .output()
-                    .map_err(|e| BuildEnvError::CacheError(e.to_string()))?;
-                if !output.status.success() {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    return Err(BuildEnvError::CacheError(stderr.to_string()));
-                }
-            } else {
-                missing_store_info = true;
-            };
-        }
-        // We had store info and were able to download from the cache everything
-        // that we asked for that was missing.
-        if !missing_store_info {
-            return Ok(());
+            // copy those paths that are missing... which are missing, do we need to
+            // check yet again?  For now, we'll just assume they are all missing.
+            let mut missing_store_info = false;
+            for (path, locations) in _store_locations.iter() {
+                if !locations.is_empty() {
+                    // nix copy
+                    let mut copy_command = Command::new(&*NIX_BIN);
+                    copy_command
+                        .arg("copy")
+                        .arg("--from")
+                        .arg(&locations[0].url)
+                        .arg(path);
+                    let output = copy_command
+                        .output()
+                        .map_err(|e| BuildEnvError::CacheError(e.to_string()))?;
+                    if !output.status.success() {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        return Err(BuildEnvError::CacheError(stderr.to_string()));
+                    }
+                } else {
+                    missing_store_info = true;
+                };
+            }
+            // We had store info and were able to download from the cache everything
+            // that we asked for that was missing.
+            if !missing_store_info {
+                return Ok(());
+            }
         }
 
         let mut nix_build_command = self.base_command();
@@ -744,6 +747,90 @@ mod realise_nixpkgs_tests {
         let buildenv = BuildEnvNix;
         let result = buildenv.realise_nixpkgs(&client, &locked_package);
         assert!(result.is_ok(), "{}", result.unwrap_err());
+    }
+
+    use crate::providers::catalog::{StoreInfo, StoreInfoResponse};
+
+    #[test]
+    fn nixpkgs_custom_pkg_no_matching_response() {
+        let mut locked_package =
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut resp = StoreInfoResponse {
+            items: std::collections::HashMap::new(),
+        };
+        resp.items.insert(
+            "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+            vec![StoreInfo {
+                url: "https://example.com".to_string(),
+            }],
+        );
+        client.push_store_info_response(resp);
+
+        // Set the attr_path to something that looks like a custom package.
+        locked_package.attr_path = "custom_catalog/hello".to_string();
+        // replace the store path with a known invalid one, to trigger an attempt to rebuild
+        let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
+        let _original_store_path = std::mem::replace(
+            locked_package.outputs.get_mut("out").unwrap(),
+            invalid_store_path,
+        );
+
+        let buildenv = BuildEnvNix;
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn nixpkgs_custom_pkg_no_cache_info() {
+        let mut locked_package =
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut resp = StoreInfoResponse {
+            items: std::collections::HashMap::new(),
+        };
+        let fake_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
+        resp.items.insert(fake_store_path.clone(), vec![]);
+        client.push_store_info_response(resp);
+
+        // Set the attr_path to something that looks like a custom package.
+        locked_package.attr_path = "custom_catalog/hello".to_string();
+        // replace the store path with a known invalid one, to trigger an attempt to rebuild
+        let _original_store_path = std::mem::replace(
+            locked_package.outputs.get_mut("out").unwrap(),
+            fake_store_path,
+        );
+
+        let buildenv = BuildEnvNix;
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn nixpkgs_custom_pkg_cache_download_attempt() {
+        let mut locked_package =
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut resp = StoreInfoResponse {
+            items: std::collections::HashMap::new(),
+        };
+        let fake_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
+        resp.items.insert(fake_store_path.clone(), vec![StoreInfo {
+            url: "S3://flox-user-catalog-dev/store".to_string(),
+        }]);
+        client.push_store_info_response(resp);
+
+        // Set the attr_path to something that looks like a custom package.
+        locked_package.attr_path = "custom_catalog/hello".to_string();
+        // replace the store path with a known invalid one, to trigger an attempt to rebuild
+        let _original_store_path = std::mem::replace(
+            locked_package.outputs.get_mut("out").unwrap(),
+            fake_store_path,
+        );
+
+        let buildenv = BuildEnvNix;
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
+        assert!(matches!(result.unwrap_err(), BuildEnvError::CacheError(_)));
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
