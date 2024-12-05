@@ -255,9 +255,9 @@ impl<State> CoreEnvironment<State> {
             .map_err(CoreEnvironmentError::LockedManifest)?;
 
         let service_config_path = maybe_make_service_config_file(flox, &lockfile)?;
-        let client = catalog::MockClient::new(None::<String>).unwrap();
 
-        let outputs = BuildEnvNix.build(&client, &lockfile_path, service_config_path)?;
+        let outputs =
+            BuildEnvNix.build(&flox.catalog_client, &lockfile_path, service_config_path)?;
         debug!(?outputs, "built environment");
         Ok(outputs)
     }

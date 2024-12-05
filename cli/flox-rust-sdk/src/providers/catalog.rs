@@ -256,6 +256,14 @@ impl MockClient {
             .push_back(Response::Search(resp));
     }
 
+    /// Push a new response into the list of mock responses
+    pub fn push_store_info_response(&mut self, resp: StoreInfoResponse) {
+        self.mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .push_back(Response::GetStoreInfo(resp));
+    }
+
     /// Push an API error into the list of mock responses
     pub fn push_error_response(&mut self, err: ErrorResponse, status_code: u16) {
         let generic_resp = GenericResponse {
@@ -703,19 +711,11 @@ impl ClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::Resolve(resp)) => Ok(resp),
-            Some(Response::Search(_)) => {
-                panic!("found search response, expected resolve response");
-            },
-            Some(Response::GetStoreInfo(_)) => {
-                panic!("found get_store_info response, expected resolve response");
-            },
             Some(Response::Error(err)) => Err(ResolveError::Resolve(
                 err.try_into()
                     .expect("couldn't convert mock error response"),
             )),
-            None => {
-                panic!("expected mock response, found nothing");
-            },
+            _ => panic!("expected resolve response, found {:?}", &mock_resp),
         }
     }
 
@@ -732,19 +732,11 @@ impl ClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::Search(resp)) => Ok(resp),
-            Some(Response::Resolve(_)) => {
-                panic!("found resolve response, expected search response");
-            },
-            Some(Response::GetStoreInfo(_)) => {
-                panic!("found get_store_info response, expected resolve response");
-            },
             Some(Response::Error(err)) => Err(SearchError::Search(
                 err.try_into()
                     .expect("couldn't convert mock error response"),
             )),
-            None => {
-                panic!("expected mock response, found nothing");
-            },
+            _ => panic!("expected resolve response, found {:?}", &mock_resp),
         }
     }
 
@@ -759,19 +751,11 @@ impl ClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::Search(resp)) => Ok(resp),
-            Some(Response::Resolve(_)) => {
-                panic!("found resolve response, expected search response");
-            },
-            Some(Response::GetStoreInfo(_)) => {
-                panic!("found get_store_info response, expected resolve response");
-            },
             Some(Response::Error(err)) => Err(VersionsError::Versions(
                 err.try_into()
                     .expect("couldn't convert mock error response"),
             )),
-            None => {
-                panic!("expected mock response, found nothing");
-            },
+            _ => panic!("expected resolve response, found {:?}", &mock_resp),
         }
     }
 
@@ -811,18 +795,7 @@ impl ClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::GetStoreInfo(resp)) => Ok(resp.items),
-            Some(Response::Resolve(_)) => {
-                panic!("found resolve response, expected search response");
-            },
-            Some(Response::Search(_)) => {
-                panic!("found search response, expected resolve response");
-            },
-            Some(Response::Error(_)) => {
-                panic!("expected mock response, found error");
-            },
-            None => {
-                panic!("expected mock response, found nothing");
-            },
+            _ => panic!("expected get_store_info response, found {:?}", &mock_resp),
         }
     }
 }
