@@ -6,9 +6,11 @@ use std::process::{Child, Command, Stdio};
 use std::str::FromStr;
 use std::{fs, io};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerNix};
 use tracing::{debug, instrument};
 
 use super::{environment_select, EnvironmentSelect};
@@ -16,6 +18,8 @@ use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
 use crate::utils::openers::first_in_path;
+
+mod macos_containerize_proxy;
 
 // Containerize an environment
 #[derive(Bpaf, Clone, Debug)]
@@ -40,8 +44,7 @@ impl Containerize {
 
         let mut env = self
             .environment
-            .detect_concrete_environment(&flox, "Containerize")?
-            .into_dyn_environment();
+            .detect_concrete_environment(&flox, "Containerize")?;
 
         let output = self
             .output
@@ -52,19 +55,36 @@ impl Containerize {
             None => "latest",
         };
 
-        let builder = Dialog {
-            message: &format!("Building container for environment {}...", env.name()),
+        let built_environment = Dialog {
+            message: &format!("Building environment {}...", env.name()),
             help_message: None,
-            typed: Spinner::new(|| env.build_container(&flox, output_tag)),
+            typed: Spinner::new(|| env.build(&flox)),
         }
         .spin()?;
+
+        let source = if std::env::consts::OS == "linux" {
+            // this method is only executed on linux
+            #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
+            let builder = MkContainerNix::new(built_environment.develop);
+
+            Dialog {
+                message: &format!("Creating container builder for {}...", env.name()),
+                help_message: None,
+                typed: Spinner::new(|| {
+                    builder.create_container_source(env.name().as_ref(), output_tag)
+                }),
+            }
+            .spin()?
+        } else {
+            bail!("🚧 MacOS container builder in construction 🚧")
+        };
 
         Dialog {
             message: &format!("Writing container to {output}...",),
             help_message: None,
             typed: Spinner::new(|| {
                 let mut writer = output.to_writer()?;
-                builder.stream_container(&mut writer)?;
+                source.stream_container(&mut writer)?;
                 writer.wait()?;
                 anyhow::Ok(())
             }),
