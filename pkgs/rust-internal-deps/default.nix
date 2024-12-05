@@ -73,6 +73,7 @@ in
       cp -rf --no-preserve=mode ${flox-src}/flox-rust-sdk/* ./flox-rust-sdk
       cp -rf --no-preserve=mode ${flox-src}/catalog-api-v1/* ./catalog-api-v1
       cp -rf --no-preserve=mode ${flox-src}/flox-core/* ./flox-core
+      cp -rf --no-preserve=mode ${flox-src}/flox-test-utils/* ./flox-test-utils
     '';
 
     # runtime dependencies

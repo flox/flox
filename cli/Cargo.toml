@@ -1,5 +1,14 @@
 [workspace]
-members = ["flox", "flox-rust-sdk", "catalog-api-v1", "mk_data", "flox-watchdog", "flox-activations", "flox-core"]
+members = [
+    "flox",
+    "flox-rust-sdk",
+    "catalog-api-v1",
+    "mk_data",
+    "flox-watchdog",
+    "flox-activations",
+    "flox-core",
+    "flox-test-utils"
+]
 default-members = ["flox", "flox-watchdog", "flox-activations"]
 
 resolver = "2"

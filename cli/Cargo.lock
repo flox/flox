@@ -1139,6 +1139,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "flox-test-utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "indoc",
+ "nix",
+ "serde_json",
+ "temp-env",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "flox-watchdog"
 version = "0.0.0"
 dependencies = [
