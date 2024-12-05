@@ -47,13 +47,10 @@ which replaces the contents of the manifest with those of the provided file.
 When using environments that were pushed to or pulled from FloxHub,
 changes to the local manifest in `.flox/env/manifest.toml`
 will block the use of the environment commands
-`flox {install, uninstall, edit, upgrade}`.
-In this case, a new generation has to be created from the local manifest first
-or the changes discarded.
-Run `flox edit --reset` to discard local changes
-and reset to the current latest generation,
-or `flox edit --sync` to create a new generation.
+`flox {install, uninstall, edit, upgrade}`. To proceed, you can run either:
 
+- `flox edit --sync` to commit your local changes to a new generation
+- `flox edit --reset` to discard your local changes and reset to the latest generation
 
 # OPTIONS
 
