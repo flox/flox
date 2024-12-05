@@ -8,6 +8,11 @@ _readlink="@coreutils@/bin/readlink"
 
 set -euo pipefail
 
+echo "Path before activation" >&2
+echo "PATH:" >&2
+echo "$PATH" >&2
+echo "" >&2
+
 # Trace levels supported by activation scripts:
 #   1. (-v) top-level activate script
 #   2. (-vv) language-specific profile scripts
