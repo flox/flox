@@ -1685,6 +1685,13 @@ pub(crate) mod tests {
         ) -> Result<(), CatalogClientError> {
             unreachable!("publish_build should not be called");
         }
+
+        async fn get_store_info(
+            &self,
+            _derivations: Vec<String>,
+        ) -> Result<HashMap<String, Vec<catalog::StoreInfo>>, CatalogClientError> {
+            unreachable!("get_store_info should not be called");
+        }
     }
 
     /// A mock locker that panics if any of its methods are called
