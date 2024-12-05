@@ -3632,3 +3632,64 @@ EOF
 )
   assert_success
 }
+
+@test "bash: activation in .bashrc doesn't break aliases" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d default
+  MANIFEST_CONTENTS_DEFAULT="$(cat << "EOF"
+    version = 1
+
+    [profile]
+    bash = """
+      alias default_alias="echo Hello default!"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_DEFAULT" | "$FLOX_BIN" edit -d default -f -
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS_PROJECT="$(cat << "EOF"
+    version = 1
+
+    [profile]
+    bash = """
+      alias project_alias="echo Hello project!"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
+
+  echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" >"$HOME/.bashrc.extra"
+  FLOX_SHELL="bash" NO_COLOR=1 run expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
+  assert_success
+  assert_output --partial "project_alias is aliased to \`echo Hello project!'"
+  assert_output --partial "default_alias is aliased to \`echo Hello default!'"
+}
+
+@test "bash: activation in .bashrc creates correct PATH ordering" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d default
+  MANIFEST_CONTENTS_DEFAULT="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_DEFAULT" | "$FLOX_BIN" edit -d default -f -
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS_PROJECT="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
+
+  echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" >"$HOME/.bashrc.extra"
+  FLOX_SHELL="bash" NO_COLOR=1 run expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "$PATH"'
+  assert_success
+  assert_output --regexp "project/.flox/run/.*.project.dev/bin.*default/.flox/run/.*.default.dev/bin"
+}
