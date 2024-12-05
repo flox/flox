@@ -85,10 +85,10 @@ teardown_file() {
   assert_equal "${#lines[@]}" 1 # 1 result
   runtime_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.runtime')
   develop_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.develop')
-  assert test -f "${runtime_outPath}/activate.d/bash"
+  assert test -f "${runtime_outPath}/activate.d/start.bash"
   assert test -f "${runtime_outPath}/activate.d/zsh"
   assert test -d "${runtime_outPath}/etc/profile.d"
-  assert test -f "${develop_outPath}/activate.d/bash"
+  assert test -f "${develop_outPath}/activate.d/start.bash"
   assert test -f "${develop_outPath}/activate.d/zsh"
   assert test -d "${develop_outPath}/etc/profile.d"
 }

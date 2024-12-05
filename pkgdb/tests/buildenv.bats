@@ -98,7 +98,7 @@ setup_file() {
     "$LOCKFILES/single-package/manifest.lock"
   assert_success
   store_path=$(echo "$output" | jq -er '.store_path')
-  assert "$TEST" -f "${store_path}/activate.d/bash"
+  assert "$TEST" -f "${store_path}/activate.d/start.bash"
   assert "$TEST" -f "${store_path}/activate.d/zsh"
   assert "$TEST" -d "${store_path}/etc/profile.d"
 }

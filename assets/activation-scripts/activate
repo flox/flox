@@ -24,6 +24,9 @@ export _profile_d="__OUT__/etc/profile.d"
 export _tcsh_home="__OUT__/activate.d/tcsh_home"
 export _zdotdir="__OUT__/activate.d/zdotdir"
 
+# shellcheck source-path=SCRIPTDIR/activate.d
+source "${_activate_d}/generate-bash-startup-commands.bash"
+
 # Top-level Flox environment activation script.
 
 # Ensure mandatory environment variables are defined as required by

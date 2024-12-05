@@ -15,14 +15,8 @@ expiring_pid="$$"
 # script fragment when represented on a single line.
 case "$_flox_shell" in
   *bash)
-    echo "export _FLOX_RESTORE_PATH=\"$PATH\";"
-    echo "export _FLOX_RESTORE_MANPATH=\"$MANPATH\";"
     echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
-    echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
-    echo "export FLOX_ENV=\"$FLOX_ENV\";"
-    echo "export _FLOX_ACTIVATION_STATE_DIR=\"$_FLOX_ACTIVATION_STATE_DIR\";"
-    echo "export _activate_d=\"$_activate_d\";"
-    echo "source '$_activate_d/bash';"
+    generate_bash_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$PATH" "$MANPATH" "$_activate_d" "$FLOX_ENV"
     ;;
   *fish)
     echo "set -gx _FLOX_RESTORE_PATH \"$PATH\";"

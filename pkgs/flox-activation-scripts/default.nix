@@ -85,11 +85,11 @@ runCommandNoCC "flox-activation-scripts"
     # That's the build done, now shellcheck the results.
     ${shellcheck}/bin/shellcheck --external-sources --check-sourced \
       $out/activate \
-      $out/activate.d/bash \
+      $out/activate.d/generate-bash-startup-commands.bash \
       $out/activate.d/set-prompt.bash \
       $out/etc/profile.d/* \
       $build_wrapper/activate \
-      $build_wrapper/activate.d/bash \
+      $build_wrapper/activate.d/generate-bash-startup-commands.bash \
       $build_wrapper/activate.d/set-prompt.bash \
       $build_wrapper/etc/profile.d/*
 
