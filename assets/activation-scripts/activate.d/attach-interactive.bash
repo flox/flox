@@ -10,8 +10,12 @@ case "$_flox_shell" in
     if [ -n "$FLOX_NOPROFILE" ]; then
       exec "$_flox_shell" --noprofile --norc
     else
+      RCFILE="$(@coreutils@/bin/mktemp -p "$_FLOX_ACTIVATION_STATE_DIR")"
+      generate_bash_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$PATH" "$MANPATH" "$_activate_d" "$FLOX_ENV" > "$RCFILE"
+      # self destruct
+      echo "@coreutils@/bin/rm '$RCFILE'" >> "$RCFILE"
       if [ -t 1 ]; then
-        exec "$_flox_shell" --noprofile --rcfile "$_activate_d/bash"
+        exec "$_flox_shell" --noprofile --rcfile "$RCFILE"
       else
         # The bash --rcfile option only works for interactive shells
         # so we need to cobble together our own means of sourcing our
@@ -19,7 +23,7 @@ case "$_flox_shell" in
         # XXX Is this case even a thing? What's the point of activating with
         #     no command to be invoked and no controlling terminal from which
         #     to issue commands?!? A broken docker experience maybe?!?
-        exec "$_flox_shell" --noprofile --norc -s <<< "source $_activate_d/bash"
+        exec "$_flox_shell" --noprofile --norc -s <<< "source $RCFILE"
       fi
     fi
     ;;
