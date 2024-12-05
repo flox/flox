@@ -27,28 +27,76 @@ restore_saved_vars() {
     export _FLOX_RESTORE_MANPATH="$_save_FLOX_RESTORE_MANPATH"
 }
 
+echo "in zshrc" >&2
+
+echo "PATH:" >&2
+echo "$PATH" >&2
+echo "FLOX_RESTORE_PATH:" >&2
+echo "$_FLOX_RESTORE_PATH" >&2
+echo "" >&2
+
 if [ -f /etc/zshrc ]
 then
+    echo "/etc/zshrc existed" >&2
     if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
     then
+        echo "sourcing /etc/zshrc" >&2
         ZDOTDIR="$FLOX_ORIG_ZDOTDIR" FLOX_ORIG_ZDOTDIR= source /etc/zshrc
+        echo "PATH:" >&2
+        echo "$PATH" >&2
+        echo "FLOX_RESTORE_PATH:" >&2
+        echo "$_FLOX_RESTORE_PATH" >&2
+        echo "" >&2
     else
+        echo "sourcing /etc/zshrc with ZDOTDIR unset" >&2
         ZDOTDIR= source /etc/zshrc
+        echo "PATH:" >&2
+        echo "$PATH" >&2
+        echo "FLOX_RESTORE_PATH:" >&2
+        echo "$_FLOX_RESTORE_PATH" >&2
+        echo "" >&2
     fi
     restore_saved_vars
 fi
 
+echo "Restored vars" >&2
+echo "PATH:" >&2
+echo "$PATH" >&2
+echo "FLOX_RESTORE_PATH:" >&2
+echo "$_FLOX_RESTORE_PATH" >&2
+echo "" >&2
+
 zshrc="${FLOX_ORIG_ZDOTDIR:-$HOME}/.zshrc"
 if [ -f "$zshrc" ]
 then
+    echo "local zshrc existed" >&2
     if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
     then
+        echo "sourcing local zshrc" >&2
         ZDOTDIR="$FLOX_ORIG_ZDOTDIR" FLOX_ORIG_ZDOTDIR= source "$zshrc"
+        echo "PATH:" >&2
+        echo "$PATH" >&2
+        echo "FLOX_RESTORE_PATH:" >&2
+        echo "$_FLOX_RESTORE_PATH" >&2
+        echo "" >&2
     else
+        echo "sourcing local zshrc without ZDOTDIR set" >&2
         ZDOTDIR= source "$zshrc"
+        echo "PATH:" >&2
+        echo "$PATH" >&2
+        echo "FLOX_RESTORE_PATH:" >&2
+        echo "$_FLOX_RESTORE_PATH" >&2
+        echo "" >&2
     fi
     restore_saved_vars
 fi
+
+echo "Restored vars" >&2
+echo "PATH:" >&2
+echo "$PATH" >&2
+echo "FLOX_RESTORE_PATH:" >&2
+echo "$_FLOX_RESTORE_PATH" >&2
+echo "" >&2
 
 # Bring in the Nix and Flox environment customizations, but _not_ if this is
 # a login shell. If this is a login shell then the neighbouring .zlogin file

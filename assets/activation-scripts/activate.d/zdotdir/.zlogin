@@ -7,12 +7,17 @@
 # bashrc launches an inner nested activation which unsets it.
 _save_flox_activate_tracelevel="$_flox_activate_tracelevel"
 
+echo "in zlogin" >&2
+
 if [ -f /etc/zlogin ]
 then
+    echo "/etc/zlogin existed" >&2
     if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
     then
+        echo "sourcing /etc/zlogin" >&2
         ZDOTDIR="$FLOX_ORIG_ZDOTDIR" FLOX_ORIG_ZDOTDIR= source /etc/zlogin
     else
+        echo "sourcing /etc/zlogin without ZDOTDIR set" >&2
         ZDOTDIR= source /etc/zlogin
     fi
     export _flox_activate_tracelevel="$_save_flox_activate_tracelevel"
@@ -21,10 +26,13 @@ fi
 zlogin="${FLOX_ORIG_ZDOTDIR:-$HOME}/.zlogin"
 if [ -f "$zlogin" ]
 then
+    echo "local zlogin existed" >&2
     if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
     then
+        echo "sourcing local zlogin" >&2
         ZDOTDIR="$FLOX_ORIG_ZDOTDIR" FLOX_ORIG_ZDOTDIR= source "$zlogin"
     else
+        echo "sourcing local zlogin without ZDOTDIR set" >&2
         ZDOTDIR= source "$zlogin"
     fi
     export _flox_activate_tracelevel="$_save_flox_activate_tracelevel"

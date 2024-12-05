@@ -1,5 +1,7 @@
 _sed="@gnused@/bin/sed"
 
+echo "In zsh init script" >&2
+
 # Confirm _flox_activate_tracelevel is defined before proceeding.
 if [ -z "${_flox_activate_tracelevel:=}" ]; then
   echo 'WARNING (zsh): _flox_activate_tracelevel not defined .. defaulting to 0' >&2

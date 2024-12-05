@@ -7,12 +7,17 @@
 # bashrc launches an inner nested activation which unsets it.
 _save_flox_activate_tracelevel="$_flox_activate_tracelevel"
 
+echo "In zshenv" >&2
+
 if [ -f /etc/zshenv ]
 then
+    echo "/etc/zshenv existed" >&2
     if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
     then
+        echo "sourcing /etc/zshenv" >&2
         ZDOTDIR="$FLOX_ORIG_ZDOTDIR" FLOX_ORIG_ZDOTDIR= source /etc/zshenv
     else
+        echo "sourcing /etc/zshenv with ZDOTDIR unset" >&2
         ZDOTDIR= source /etc/zshenv
     fi
     export _flox_activate_tracelevel="$_save_flox_activate_tracelevel"
@@ -21,10 +26,13 @@ fi
 zshenv="${FLOX_ORIG_ZDOTDIR:-$HOME}/.zshenv"
 if [ -f "$zshenv" ]
 then
+    echo "local zshenv existed" >&2
     if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
     then
+        echo "sourcing local zshenv" >&2
         ZDOTDIR="$FLOX_ORIG_ZDOTDIR" FLOX_ORIG_ZDOTDIR= source "$zshenv"
     else
+        echo "sourcing local zshenv with ZDOTDIR unset" >&2
         ZDOTDIR= source "$zshenv"
     fi
     export _flox_activate_tracelevel="$_save_flox_activate_tracelevel"
