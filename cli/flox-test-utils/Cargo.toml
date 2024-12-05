@@ -1,0 +1,20 @@
+[package]
+name = "flox-test-utils"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+# rexpect.workspace = true
+tempfile.workspace = true
+nix.workspace = true
+indoc.workspace = true
+temp-env.workspace = true
+dirs.workspace = true
+serde_json.workspace = true
+
+# flox-core = { workspace = true, features = ["proc_status"]}
+
+# [patches.crates-io]
+# rexpect = { path = "/home/zmitchell/src/rexpect" }
