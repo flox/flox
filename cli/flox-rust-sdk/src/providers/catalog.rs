@@ -256,6 +256,14 @@ impl MockClient {
             .push_back(Response::Search(resp));
     }
 
+    /// Push a new response into the list of mock responses
+    pub fn push_store_info_response(&mut self, resp: StoreInfoResponse) {
+        self.mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .push_back(Response::GetStoreInfo(resp));
+    }
+
     /// Push an API error into the list of mock responses
     pub fn push_error_response(&mut self, err: ErrorResponse, status_code: u16) {
         let generic_resp = GenericResponse {
