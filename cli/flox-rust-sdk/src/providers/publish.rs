@@ -105,6 +105,9 @@ impl BinaryCache for NixCopyCache {
         let url_with_key = url
             .query_pairs_mut()
             .append_pair("secret-key", &self.key_file.to_string_lossy())
+            .append_pair("ls-compression", "zstd")
+            .append_pair("compression", "zstd")
+            .append_pair("write-nar-listing", "true")
             .finish();
         debug!(
             "Uploading {path} to cache {cache}...",
