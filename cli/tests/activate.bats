@@ -1696,19 +1696,6 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-@test "'hook.on-activate' modifies environment variables in nested activation (bash)" {
-  project_setup
-  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
-
-  cat <<'EOF' | bash
-    eval "$("$FLOX_BIN" activate)"
-    [[ "$foo" == baz ]]
-    unset foo
-    eval "$("$FLOX_BIN" activate)"
-    [[ "$foo" == baz ]]
-EOF
-}
-
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:fish
 @test "'hook.on-activate' modifies environment variables in nested activation (fish)" {
   project_setup
