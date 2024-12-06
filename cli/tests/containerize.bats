@@ -212,16 +212,7 @@ function skip_if_linux() {
   assert_line --partial "Loaded image:"
 }
 
-# bats test_tags=containerize:run-container-i
-@test "container can be run with 'podman/docker run' with/without -i'" {
-  skip_if_not_linux
-
-  env_setup_catalog
-
-  CONTAINER_ID="$("$FLOX_BIN" containerize -f - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
-  run --separate-stderr podman run -q -i "$CONTAINER_ID" -c 'echo $foo'
-  assert_success
-
+function assert_container_output() {
   # check:
   # (1) if the variable `foo = bar` is set in the container
   #   - printed to STDOUT by the container invocation
@@ -244,26 +235,24 @@ function skip_if_linux() {
   store_path_line="$(($n_stderr_lines - 2))"
   assert_regex "${stderr_lines[$store_path_line]}" "\/nix\/store\/.*\/bin\/hello"
   assert_equal "${stderr_lines[$hello_line]}" "Hello, world!"
+}
+
+# bats test_tags=containerize:run-container-i
+@test "container can be run with 'podman/docker run' with/without -i'" {
+  skip_if_not_linux
+
+  env_setup_catalog
+
+  CONTAINER_ID="$("$FLOX_BIN" containerize -f - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
+
+  run --separate-stderr podman run -q -i "$CONTAINER_ID" -c 'echo $foo'
+  assert_success
+  assert_container_output
 
   # Next, test without "-i'
   run --separate-stderr podman run "$CONTAINER_ID" -c 'echo $foo'
   assert_success
-
-  assert_equal "${#lines[@]}" 1 # 1 result
-  assert_equal "${lines[0]}" "bar"
-
-  # Podman generates some errors/warnings about UIDs/GIDs due to how the rootless
-  # setup works: https://github.com/containers/podman/issues/15611
-  # Another error you may see is that the container file already exists, which is
-  # harmless and can be ignored.
-  # So, we can't rely on the *number* of stderr lines, but we know the lines we
-  # care about will be the last two lines.
-
-  n_stderr_lines="${#stderr_lines[@]}"
-  hello_line="$(($n_stderr_lines - 1))"
-  store_path_line="$(($n_stderr_lines - 2))"
-  assert_regex "${stderr_lines[$store_path_line]}" "\/nix\/store\/.*\/bin\/hello"
-  assert_equal "${stderr_lines[$hello_line]}" "Hello, world!"
+  assert_container_output
 }
 
 # ---------------------------------------------------------------------------- #
