@@ -282,10 +282,13 @@ impl BuildEnvNix {
         }
 
         // Check if this is a custom package
-        // TODO - need to update lockfile to differentiate between custom and nixpkgs packages
+        // TODO - need to update lockfile to differentiate between custom and
+        // nixpkgs packages, this is broken since the attr path in the lockfile
+        // comes back as only the path portion and not the catalog.
         let (catalog, _attr_path) = Self::parse_pkg_path(&locked.attr_path);
         // If it is, then try to realise the outputs using the catalog info before proceeding.
         if catalog.is_some() {
+            debug!(?catalog, ?_attr_path, "Trying to realize custom package");
             let all_found = Self::try_realise_custom_pkg(client, locked)?;
             // We asked for all the outputs for the package, got store info for
             // each, and were able to download them all.  If so, then we're done here.
@@ -636,6 +639,26 @@ mod realise_nixpkgs_tests {
                 _ => None,
             });
         locked_package.expect("no locked package found")
+    }
+
+    #[test]
+    fn parse_pkg_path_tests() {
+        assert_eq!(
+            BuildEnvNix::parse_pkg_path("foo/bar"),
+            (Some("foo".to_string()), "bar".to_string())
+        );
+        assert_eq!(
+            BuildEnvNix::parse_pkg_path("foo.bar"),
+            (None, "foo.bar".to_string())
+        );
+        assert_eq!(
+            BuildEnvNix::parse_pkg_path("foo"),
+            (None, "foo".to_string())
+        );
+        assert_eq!(
+            BuildEnvNix::parse_pkg_path("foo/bar/baz"),
+            (Some("foo".to_string()), "bar/baz".to_string())
+        );
     }
 
     /// When a package is not available in the store, it should be built from its derivation.
