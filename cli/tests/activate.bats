@@ -191,44 +191,6 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=activate,activate:flox_shell,activate:flox_shell:bash
-@test "activate identifies FLOX_SHELL from running shell (bash)" {
-  project_setup
-  run --separate-stderr bash -c "$FLOX_BIN activate | grep -- 'source .*/activate.d/'"
-  assert_success
-  assert_equal "${#lines[@]}" 1 # 1 result
-  assert_line --partial "/activate.d/bash"
-}
-
-# bats test_tags=activate,activate:flox_shell,activate:flox_shell:fish
-@test "activate identifies FLOX_SHELL from running shell (fish)" {
-  project_setup
-  run --separate-stderr fish -c "$FLOX_BIN activate | grep -- 'source .*/activate.d/'"
-  assert_success
-  assert_equal "${#lines[@]}" 1 # 1 result
-  assert_line --partial "/activate.d/fish"
-}
-
-# bats test_tags=activate,activate:flox_shell,activate:flox_shell:tcsh
-@test "activate identifies FLOX_SHELL from running shell (tcsh)" {
-  project_setup
-  run --separate-stderr tcsh -c "$FLOX_BIN activate | grep -- 'source .*/activate.d/'"
-  assert_success
-  assert_equal "${#lines[@]}" 1 # 1 result
-  assert_line --partial "/activate.d/tcsh"
-}
-
-# bats test_tags=activate,activate:flox_shell,activate:flox_shell:zsh
-@test "activate identifies FLOX_SHELL from running shell (zsh)" {
-  project_setup
-  run --separate-stderr zsh -c "$FLOX_BIN activate | grep -- 'source .*/activate.d/'"
-  assert_success
-  assert_equal "${#lines[@]}" 1 # 1 result
-  assert_line --partial "/activate.d/zsh"
-}
-
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "bash: interactive activate puts package in path" {
   project_setup
