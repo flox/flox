@@ -595,7 +595,7 @@ mod realise_nixpkgs_tests {
 
     use super::*;
     use crate::models::lockfile;
-    use crate::providers::catalog::{MockClient, GENERATED_DATA};
+    use crate::providers::catalog::{MockClient, StoreInfo, StoreInfoResponse, GENERATED_DATA};
 
     /// Read a single locked package for the current system from a mock lockfile.
     /// This is a helper function to avoid repetitive boilerplate in the tests.
@@ -752,8 +752,6 @@ mod realise_nixpkgs_tests {
         let result = buildenv.realise_nixpkgs(&client, &locked_package);
         assert!(result.is_ok(), "{}", result.unwrap_err());
     }
-
-    use crate::providers::catalog::{StoreInfo, StoreInfoResponse};
 
     #[test]
     fn nixpkgs_custom_pkg_no_matching_response() {

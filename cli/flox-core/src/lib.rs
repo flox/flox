@@ -70,3 +70,7 @@ pub fn traceable_path(p: impl AsRef<Path>) -> impl tracing::Value {
     let path = p.as_ref();
     path.display().to_string()
 }
+
+pub fn print_type<T>(_: &T) {
+    println!("{:?}", std::any::type_name::<T>());
+}
