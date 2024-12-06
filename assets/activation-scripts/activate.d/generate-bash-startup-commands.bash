@@ -19,30 +19,35 @@ generate_bash_startup_commands() {
   shift
   FLOX_ENV="${1?}"
   shift
+  _FLOX_ACTIVATION_PROFILE_ONLY="${1?}"
+  shift
 
   if [ "$_flox_activate_tracelevel" -ge 2 ]; then
     echo "set -x;"
   fi
 
-  # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
-  # so source that here, but not if we're already in the process of sourcing
-  # bashrc in a parent process.
-  if [ -f ~/.bashrc ] && [ -z "${_flox_already_sourcing_bashrc:=}" ]; then
-    echo "export _flox_already_sourcing_bashrc=1;"
-    echo "source ~/.bashrc;"
-    echo "unset _flox_already_sourcing_bashrc;"
-  fi
+  if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" != true ]; then
+    # TODO: should we skip this for in-place activations?
+    # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
+    # so source that here, but not if we're already in the process of sourcing
+    # bashrc in a parent process.
+    if [ -f ~/.bashrc ] && [ -z "${_flox_already_sourcing_bashrc:=}" ]; then
+      echo "export _flox_already_sourcing_bashrc=1;"
+      echo "source ~/.bashrc;"
+      echo "unset _flox_already_sourcing_bashrc;"
+    fi
 
-  # Restore environment variables set in the previous bash initialization.
-  $_sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
-  $_sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
+    # Restore environment variables set in the previous bash initialization.
+    $_sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
+    $_sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
 
-  # Restore PATH and MANPATH if set in one of the attach scripts.
-  if [ -n "$_FLOX_RESTORE_PATH" ]; then
-    echo "export PATH='$_FLOX_RESTORE_PATH';"
-  fi
-  if [ -n "$_FLOX_RESTORE_MANPATH" ]; then
-    echo "export MANPATH='$_FLOX_RESTORE_MANPATH';"
+    # Restore PATH and MANPATH if set in one of the attach scripts.
+    if [ -n "$_FLOX_RESTORE_PATH" ]; then
+      echo "export PATH='$_FLOX_RESTORE_PATH';"
+    fi
+    if [ -n "$_FLOX_RESTORE_MANPATH" ]; then
+      echo "export MANPATH='$_FLOX_RESTORE_MANPATH';"
+    fi
   fi
 
   # Set the prompt if we're in an interactive shell.

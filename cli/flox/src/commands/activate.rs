@@ -277,7 +277,9 @@ impl Activate {
         };
 
         // Detect if the current environment is already active
-        if flox_active_environments.is_active(&now_active) {
+        // For in-place and command (but not ephemeral) activations, if the
+        // environment is already active, we only want to re-run profile scripts
+        let profile_only = if flox_active_environments.is_active(&now_active) {
             debug!(
                 "Environment is already active: environment={}. Not adding to active environments",
                 now_active.bare_description()?
@@ -288,10 +290,12 @@ impl Activate {
                     now_active.message_description()?
                 ));
             }
+            !is_ephemeral
         } else {
             // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
             flox_active_environments.set_last_active(now_active.clone());
-        }
+            false
+        };
 
         // Set FLOX_ENV_DIRS and FLOX_ENV_LIB_DIRS
 
@@ -406,6 +410,7 @@ impl Activate {
                 FLOX_RUNTIME_DIR_VAR,
                 flox.runtime_dir.to_string_lossy().to_string(),
             ),
+            ("_FLOX_ACTIVATION_PROFILE_ONLY", profile_only.to_string()),
         ]);
 
         if is_ephemeral {

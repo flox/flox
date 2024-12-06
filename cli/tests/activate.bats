@@ -1406,7 +1406,7 @@ EOF
   assert_success
   # check that env vars are set for compatibility with nix built software
   assert_line --partial "export NIX_SSL_CERT_FILE="
-  assert_line --partial "activate.d/bash"
+  assert_line --partial "set-prompt.bash"
 }
 
 # bats test_tags=activate,activate:inplace-prints
@@ -1796,7 +1796,7 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-@test "'hook.on-activate' unsets environment variables in nested activation (bash)" {
+@test "'hook.on-activate' unsets environment variables for in-place activation (bash)" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -1811,9 +1811,6 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   cat <<'EOF' | bash
-    export foo=baz
-    eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
-    [[ -z "${foo:-}" ]]
     export foo=baz
     eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
     [[ -z "${foo:-}" ]]
@@ -3633,7 +3630,7 @@ EOF
   assert_success
 }
 
-@test "bash: activation in .bashrc doesn't break aliases" {
+@test "bash: repeat activation in .bashrc doesn't break aliases" {
   # We don't need an environment, but we do need wait_for_watchdogs to have a
   # PROJECT_DIR to look for
   project_setup_common
@@ -3663,13 +3660,18 @@ EOF
   echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
 
   echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" >"$HOME/.bashrc.extra"
-  FLOX_SHELL="bash" NO_COLOR=1 run expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
+  run bash -i <(cat <<'EOF'
+    set -euo pipefail
+    type default_alias > /dev/null # to double check we loaded .bashrc
+    FLOX_SHELL="bash" NO_COLOR=1 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
+EOF
+)
   assert_success
   assert_output --partial "project_alias is aliased to \`echo Hello project!'"
   assert_output --partial "default_alias is aliased to \`echo Hello default!'"
 }
 
-@test "bash: activation in .bashrc creates correct PATH ordering" {
+@test "bash: repeat activation in .bashrc creates correct PATH ordering" {
   # We don't need an environment, but we do need wait_for_watchdogs to have a
   # PROJECT_DIR to look for
   project_setup_common
@@ -3689,7 +3691,15 @@ EOF
   echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
 
   echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" >"$HOME/.bashrc.extra"
-  FLOX_SHELL="bash" NO_COLOR=1 run expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "$PATH"'
+  run bash -i <(cat <<'EOF'
+    set -euo pipefail
+    if ! [[ "$PATH" =~ default/.flox/run/.*.default.dev/bin ]]; then # to double check we loaded .bashrc
+      echo "default not in PATH: $PATH"
+      exit 1
+    fi
+    FLOX_SHELL="bash" NO_COLOR=1 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "$PATH"'
+EOF
+)
   assert_success
   assert_output --regexp "project/.flox/run/.*.project.dev/bin.*default/.flox/run/.*.default.dev/bin"
 }
