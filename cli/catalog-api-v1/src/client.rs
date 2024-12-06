@@ -281,6 +281,40 @@ pub mod types {
             value.clone()
         }
     }
+    ///CatalogShareInfo
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CatalogShareInfo",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "allow_read_users": {
+    ///      "title": "Allow Read Users",
+    ///      "default": [],
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct CatalogShareInfo {
+        #[serde(default = "defaults::catalog_share_info_allow_read_users")]
+        pub allow_read_users: Option<Vec<String>>,
+    }
+    impl From<&CatalogShareInfo> for CatalogShareInfo {
+        fn from(value: &CatalogShareInfo) -> Self {
+            value.clone()
+        }
+    }
     ///CatalogStatus
     ///
     /// <details><summary>JSON schema</summary>
@@ -2932,6 +2966,9 @@ pub mod types {
     }
     /// Generation of default values for serde.
     pub mod defaults {
+        pub(super) fn catalog_share_info_allow_read_users() -> Option<Vec<String>> {
+            Some(vec![])
+        }
         pub(super) fn package_descriptor_allow_broken() -> Option<bool> {
             Some(false)
         }
@@ -3705,6 +3742,151 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             400u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get usernames that have read access to a catalog
+
+Get the list of usernames with read access to a catalog
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+
+Returns:
+- **CatalogShareInfo**: The users with read access to the catalog
+
+Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing`
+
+*/
+    pub async fn get_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_get<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+    ) -> Result<ResponseValue<types::CatalogShareInfo>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/sharing", self.baseurl, encode_path(&
+            catalog_name.to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Add usernames to the read access list for a catalog
+
+Add usernames to the read access list for a catalog
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+
+Body Content:
+- **CatalogShareInfo**: The users to add to the read access list
+
+Returns:
+- **CatalogShareInfo**: The users with read access to the catalog
+
+Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/add-read-users`
+
+*/
+    pub async fn add_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_add_read_users_post<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        body: &'a types::CatalogShareInfo,
+    ) -> Result<ResponseValue<types::CatalogShareInfo>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/sharing/add-read-users", self.baseurl,
+            encode_path(& catalog_name.to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Remove usernames from the read access list for a catalog
+
+Remove usernames from the read access list for a catalog
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+
+Body Content:
+- **CatalogShareInfo**: The users to remove from the read access list
+
+Returns:
+- **CatalogShareInfo**: The users with read access to the catalog
+
+Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/remove-read-users`
+
+*/
+    pub async fn remove_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_remove_read_users_post<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        body: &'a types::CatalogShareInfo,
+    ) -> Result<ResponseValue<types::CatalogShareInfo>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/sharing/remove-read-users", self.baseurl,
+            encode_path(& catalog_name.to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
             404u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }

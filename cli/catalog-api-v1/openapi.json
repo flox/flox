@@ -919,6 +919,203 @@
         }
       }
     },
+    "/api/v1/catalog/catalogs/{catalog_name}/sharing": {
+      "get": {
+        "tags": [
+          "user_catalogs"
+        ],
+        "summary": "Get usernames that have read access to a catalog",
+        "description": "Get the list of usernames with read access to a catalog\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nReturns:\n- **CatalogShareInfo**: The users with read access to the catalog",
+        "operationId": "get_catalog_sharing_api_v1_catalog_catalogs__catalog_name__sharing_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The list of usernames with read access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogShareInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog with the given name was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The catalog name is invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/catalogs/{catalog_name}/sharing/add-read-users": {
+      "post": {
+        "tags": [
+          "user_catalogs"
+        ],
+        "summary": "Add usernames to the read access list for a catalog",
+        "description": "Add usernames to the read access list for a catalog\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nBody Content:\n- **CatalogShareInfo**: The users to add to the read access list\n\nReturns:\n- **CatalogShareInfo**: The users with read access to the catalog",
+        "operationId": "add_catalog_sharing_api_v1_catalog_catalogs__catalog_name__sharing_add_read_users_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogShareInfo"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The list of usernames with read access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogShareInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog with the given name was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The catalog name is invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/catalogs/{catalog_name}/sharing/remove-read-users": {
+      "post": {
+        "tags": [
+          "user_catalogs"
+        ],
+        "summary": "Remove usernames from the read access list for a catalog",
+        "description": "Remove usernames from the read access list for a catalog\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nBody Content:\n- **CatalogShareInfo**: The users to remove from the read access list\n\nReturns:\n- **CatalogShareInfo**: The users with read access to the catalog",
+        "operationId": "remove_catalog_sharing_api_v1_catalog_catalogs__catalog_name__sharing_remove_read_users_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogShareInfo"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The list of usernames with read access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogShareInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog with the given name was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The catalog name is invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/store": {
       "post": {
         "tags": [
@@ -1113,6 +1310,21 @@
           "system": "x86_64-linux",
           "version": "1.0"
         }
+      },
+      "CatalogShareInfo": {
+        "properties": {
+          "allow_read_users": {
+            "title": "Allow Read Users",
+            "default": [],
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object",
+        "title": "CatalogShareInfo"
       },
       "CatalogStatus": {
         "properties": {
