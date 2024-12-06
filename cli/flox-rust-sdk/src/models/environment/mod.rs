@@ -16,7 +16,6 @@ use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
-use super::container_builder::ContainerBuilder;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::{LockedManifestError, Lockfile};
@@ -105,13 +104,6 @@ pub struct UninstallationAttempt {
 
 #[enum_dispatch]
 pub trait Environment: Send {
-    /// Create a container image from the environment, tagged with the given tag
-    fn build_container(
-        &mut self,
-        flox: &Flox,
-        tag: &str,
-    ) -> Result<ContainerBuilder, EnvironmentError>;
-
     /// Install packages to the environment atomically
     fn install(
         &mut self,

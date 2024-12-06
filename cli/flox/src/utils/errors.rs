@@ -328,24 +328,6 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             format!("{message}: {caught}")
         },
 
-        CoreEnvironmentError::CallContainerBuilder(_) => formatdoc! {"
-            Failed to call container builder.
-
-            Successfully created a container builder for you environment,
-            but failed to call it.
-        "},
-
-        // todo: enrich with path
-        CoreEnvironmentError::WriteContainer(err) => formatdoc! {"
-            Failed to write container: {err}
-
-            Please ensure that you have write permissions to
-            the destination file.
-        "},
-
-        // this is a BUG
-        CoreEnvironmentError::ParseBuildEnvOutput(_) => display_chain(err),
-
         CoreEnvironmentError::BuildEnv(BuildEnvError::Realise(PkgDbError {
             exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
             context_message: Some(ContextMsgError { message, .. }),
@@ -391,18 +373,9 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             {err}
         ", err = display_chain(err)},
 
-        // todo: to be removed
-        CoreEnvironmentError::PkgdbBuildEnv(pkgdb_error) => {
-            format_pkgdb_error(pkgdb_error, err, "Failed to build environment.")
-        },
-
         CoreEnvironmentError::LockedManifest(locked_manifest_error) => {
             format_locked_manifest_error(locked_manifest_error)
         },
-
-        CoreEnvironmentError::ContainerizeUnsupportedSystem(system) => formatdoc! {"
-            'containerize' is currently only supported on linux (found {system}).
-        "},
 
         CoreEnvironmentError::UpgradeFailedCatalog(err) => match err {
             UpgradeError::PkgNotFound(err) => err.to_string(),

@@ -44,7 +44,6 @@ use super::{
 };
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
-use crate::models::container_builder::ContainerBuilder;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
@@ -177,21 +176,6 @@ impl Environment for PathEnvironment {
     fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         Ok(env_view.ensure_locked(flox)?)
-    }
-
-    /// This will lock the environment if it is not already locked.
-    fn build_container(
-        &mut self,
-        flox: &Flox,
-        tag: &str,
-    ) -> Result<ContainerBuilder, EnvironmentError> {
-        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
-        env_view.ensure_locked(flox)?;
-        let lockfile_path = CanonicalPath::new(env_view.lockfile_path())
-            .expect("a locked environment must have a lockfile");
-
-        let builder = CoreEnvironment::build_container(lockfile_path, self.name().as_ref(), tag)?;
-        Ok(builder)
     }
 
     /// Install packages to the environment atomically
