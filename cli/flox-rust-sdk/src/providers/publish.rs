@@ -31,7 +31,7 @@ pub enum PublishError {
     UnsupportedEnvironmentState(String),
 
     #[error("There was an error communicating with the catalog")]
-    CatalogError(#[source] Box<dyn error::Error + Send>),
+    CatalogError(#[source] Box<dyn error::Error + Send + Sync>),
 
     #[error("Could not identify user from authentication info")]
     Unauthenticated,
