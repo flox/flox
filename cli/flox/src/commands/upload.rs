@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::publish::{BinaryCache, NixCopyCache};
@@ -17,8 +17,8 @@ pub struct Upload {
     #[bpaf(external(cache_args))]
     cache: CacheArgs,
 
-    #[bpaf(external(upload_store_path))]
-    store_path: UploadStorePath,
+    #[bpaf(positional("store-path"))]
+    store_path: PathBuf,
 }
 
 #[derive(Debug, Bpaf, Clone)]
@@ -30,27 +30,18 @@ struct CacheArgs {
     key_file: PathBuf,
 }
 
-#[derive(Debug, Bpaf, Clone)]
-struct UploadStorePath {
-    /// The store path to upload.
-    #[bpaf(positional("store-path"))]
-    store_path: PathBuf,
-}
-
 impl Upload {
+    #[instrument(name = "upload", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         if !config.features.unwrap_or_default().upload {
             message::plain("🚧 👷 heja, a new command is in construction here, stay tuned!");
             bail!("'upload' feature is not enabled.");
         }
 
-        let UploadStorePath { store_path } = self.store_path;
-
-        Self::upload(flox, store_path, self.cache).await
+        Self::upload(flox, self.store_path, self.cache)
     }
 
-    #[instrument(name = "upload", skip_all, fields(package))]
-    async fn upload(mut _flox: Flox, store_path: PathBuf, cache_args: CacheArgs) -> Result<()> {
+    fn upload(mut _flox: Flox, store_path: PathBuf, cache_args: CacheArgs) -> Result<()> {
         subcommand_metric!("upload");
 
         let store_path = validate_store_path(store_path)?;
@@ -60,19 +51,18 @@ impl Upload {
             key_file: cache_args.key_file,
         };
 
-        let result = Dialog {
+        Dialog {
             message: &format!("Uploading store path {}...", store_path.display()),
             help_message: None,
             typed: Spinner::new(|| cache.upload(&store_path.to_string_lossy())),
         }
-        .spin();
-        match result {
-            Ok(_) => message::updated(format!(
-                "Store path {} uploaded successfully.",
-                store_path.display()
-            )),
-            Err(e) => bail!("Failed to upload artifact: {}", e.to_string()),
-        }
+        .spin()
+        .context("Failed to upload artifact")?;
+
+        message::updated(format!(
+            "Store path {} uploaded successfully.",
+            store_path.display()
+        ));
 
         Ok(())
     }
