@@ -267,6 +267,7 @@ pub fn check_build_metadata(
         .map_err(|e| PublishError::NonexistentOutputs(e.to_string()))?;
 
     Ok(CheckedBuildMetadata {
+        // TODO - This is technically incorrect.  Need to eval `ATTRIBUTE.drv_path`?
         drv_path: store_dir.to_string_lossy().to_string(),
         outputs: vec![catalog_api_v1::types::Output {
             name: "bin".to_string(),
