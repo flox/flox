@@ -11,6 +11,8 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerNix};
+use indoc::indoc;
+use macos_containerize_proxy::ContainerizeProxy;
 use tracing::{debug, instrument};
 
 use super::{environment_select, EnvironmentSelect};
@@ -76,7 +78,16 @@ impl Containerize {
             }
             .spin()?
         } else {
-            bail!("🚧 MacOS container builder in construction 🚧")
+            let env_path = env.parent_path()?;
+            let Some(container_runtime) = Runtime::detect_from_path() else {
+                bail!(indoc! {r#"
+                    No container runtime found in PATH.
+
+                    Exporting a container on macOS requires Docker or Podman to be installed.
+                "#});
+            };
+            let builder = ContainerizeProxy::new(env_path, container_runtime);
+            builder.create_container_source(env.name().as_ref(), output_tag)?
         };
 
         Dialog {
@@ -142,24 +153,10 @@ impl OutputTarget {
             env_name.as_ref()
         ))));
 
-        let path_var = match std::env::var("PATH") {
-            Err(e) => {
-                debug!("Could not read PATH variable: {e}");
-                return default_to_file;
-            },
-            Ok(path) => path,
-        };
-
-        let Some((_, runtime)) =
-            first_in_path(["docker", "podman"], std::env::split_paths(&path_var))
-        else {
-            debug!("No container runtime found in PATH");
+        let Some(runtime) = Runtime::detect_from_path() else {
+            debug!("No container runtime found in PATH, defaulting to file");
             return default_to_file;
         };
-
-        debug!(runtime, "Detected container runtime");
-        let runtime =
-            Runtime::from_str(runtime).expect("Should search for valid runtime names only");
 
         OutputTarget::Runtime(runtime)
     }
@@ -259,6 +256,30 @@ enum Runtime {
 }
 
 impl Runtime {
+    /// Detect the container runtime from the PATH environment variable.
+    fn detect_from_path() -> Option<Self> {
+        let path_var = match std::env::var("PATH") {
+            Err(e) => {
+                debug!("Could not read PATH variable: {e}");
+                return None;
+            },
+            Ok(path) => path,
+        };
+
+        let Some((_, runtime)) =
+            first_in_path(["docker", "podman"], std::env::split_paths(&path_var))
+        else {
+            debug!("No container runtime found in PATH");
+            return None;
+        };
+
+        debug!(runtime, "Detected container runtime");
+        let runtime =
+            Runtime::from_str(runtime).expect("Should search for valid runtime names only");
+
+        Some(runtime)
+    }
+
     /// Get a writer to the registry,
     /// Essentially spawns a `docker load` or `podman load` process
     /// and returns a handle to its stdin.
@@ -275,6 +296,15 @@ impl Runtime {
             .context(format!("Failed to call runtime {cmd}"))?;
 
         Ok(RuntimeSink { child })
+    }
+
+    fn to_command(&self) -> Command {
+        let cmd = match self {
+            Runtime::Docker => "docker",
+            Runtime::Podman => "podman",
+        };
+
+        Command::new(cmd)
     }
 }
 
