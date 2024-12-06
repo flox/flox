@@ -86,6 +86,14 @@ impl From<ParseIntError> for VersionParseError {
     }
 }
 
+impl FloxVersion {
+    /// Returns the base semantic version string (major.minor.patch) without any
+    /// suffixes (release candidate, commit ref, etc).
+    pub fn base_semver(&self) -> String {
+        format!("{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
 impl FromStr for FloxVersion {
     type Err = VersionParseError;
 
@@ -205,7 +213,7 @@ impl PartialOrd for FloxVersion {
 impl fmt::Display for FloxVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Start with the mandatory major.minor.patch part
-        let mut version_str = format!("{}.{}.{}", self.major, self.minor, self.patch);
+        let mut version_str = self.base_semver();
 
         // If there is a pre-release name (e.g., "rc"), include it
         if let Some(ref pre_name) = self.pre_name {
@@ -241,6 +249,22 @@ impl fmt::Display for FloxVersion {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn base_semver_omits_suffixes() {
+        let version = FloxVersion {
+            major: 1,
+            minor: 2,
+            patch: 3,
+            pre_name: Some(PreReleaseName::RC),
+            pre_number: Some(1),
+            num_of_commits: Some(10),
+            commit_vcs: Some('g'),
+            commit_sha: Some("b91c3f1".to_string()),
+            is_dirty: true,
+        };
+        assert_eq!(version.base_semver(), "1.2.3");
+    }
 
     #[test]
     fn test_parse_standard_version() {
