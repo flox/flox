@@ -128,16 +128,20 @@ function skip_if_linux() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=containerize:unsupported
-@test "building a container fails on macos" {
+# TODO: Implement happy path tests for macOS in
+# https://github.com/flox/flox/issues/2466
 
+# bats test_tags=containerize:macos
+@test "runtime is required for proxy container on macos" {
   skip_if_linux
 
   "$FLOX_BIN" init
 
-  run "$FLOX_BIN" containerize
+  run bash -c 'PATH= "$FLOX_BIN" containerize' 3>&-
   assert_failure
-  assert_output --partial "🚧 MacOS container builder in construction 🚧"
+  assert_output "❌ ERROR: No container runtime found in PATH.
+
+Exporting a container on macOS requires Docker or Podman to be installed."
 }
 
 # bats test_tags=containerize:default-to-file

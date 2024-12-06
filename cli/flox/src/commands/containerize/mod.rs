@@ -11,6 +11,8 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerNix};
+use indoc::indoc;
+use macos_containerize_proxy::ContainerizeProxy;
 use tracing::{debug, instrument};
 
 use super::{environment_select, EnvironmentSelect};
@@ -76,7 +78,16 @@ impl Containerize {
             }
             .spin()?
         } else {
-            bail!("🚧 MacOS container builder in construction 🚧")
+            let env_path = env.parent_path()?;
+            let Some(container_runtime) = Runtime::detect_from_path() else {
+                bail!(indoc! {r#"
+                    No container runtime found in PATH.
+
+                    Exporting a container on macOS requires Docker or Podman to be installed.
+                "#});
+            };
+            let builder = ContainerizeProxy::new(env_path, container_runtime);
+            builder.create_container_source(env.name().as_ref(), output_tag)?
         };
 
         Dialog {
@@ -285,6 +296,15 @@ impl Runtime {
             .context(format!("Failed to call runtime {cmd}"))?;
 
         Ok(RuntimeSink { child })
+    }
+
+    fn to_command(&self) -> Command {
+        let cmd = match self {
+            Runtime::Docker => "docker",
+            Runtime::Podman => "podman",
+        };
+
+        Command::new(cmd)
     }
 }
 
