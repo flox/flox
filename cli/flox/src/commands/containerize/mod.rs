@@ -142,24 +142,10 @@ impl OutputTarget {
             env_name.as_ref()
         ))));
 
-        let path_var = match std::env::var("PATH") {
-            Err(e) => {
-                debug!("Could not read PATH variable: {e}");
-                return default_to_file;
-            },
-            Ok(path) => path,
-        };
-
-        let Some((_, runtime)) =
-            first_in_path(["docker", "podman"], std::env::split_paths(&path_var))
-        else {
-            debug!("No container runtime found in PATH");
+        let Some(runtime) = Runtime::detect_from_path() else {
+            debug!("No container runtime found in PATH, defaulting to file");
             return default_to_file;
         };
-
-        debug!(runtime, "Detected container runtime");
-        let runtime =
-            Runtime::from_str(runtime).expect("Should search for valid runtime names only");
 
         OutputTarget::Runtime(runtime)
     }
@@ -259,6 +245,30 @@ enum Runtime {
 }
 
 impl Runtime {
+    /// Detect the container runtime from the PATH environment variable.
+    fn detect_from_path() -> Option<Self> {
+        let path_var = match std::env::var("PATH") {
+            Err(e) => {
+                debug!("Could not read PATH variable: {e}");
+                return None;
+            },
+            Ok(path) => path,
+        };
+
+        let Some((_, runtime)) =
+            first_in_path(["docker", "podman"], std::env::split_paths(&path_var))
+        else {
+            debug!("No container runtime found in PATH");
+            return None;
+        };
+
+        debug!(runtime, "Detected container runtime");
+        let runtime =
+            Runtime::from_str(runtime).expect("Should search for valid runtime names only");
+
+        Some(runtime)
+    }
+
     /// Get a writer to the registry,
     /// Essentially spawns a `docker load` or `podman load` process
     /// and returns a handle to its stdin.
