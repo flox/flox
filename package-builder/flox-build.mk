@@ -37,6 +37,7 @@ __gnused := @gnused@
 __gnutar := @gnutar@
 __jq := @jq@
 __nix := @nix@
+__t3 := @t3@
 
 # Access all required utilities by way of variables so that we don't depend
 # on anything from the user's PATH in the packaged version of flox. Note that
@@ -45,6 +46,7 @@ __nix := @nix@
 # the required tool from the PATH for use in the developer environment.
 __package_bin = $(if $(filter @%@,$(1)),$(2),$(1)/bin/$(2))
 _bash := $(call __package_bin,$(__bashInteractive),bash)
+_cat := $(call __package_bin,$(__coreutils),cat)
 _cp := $(call __package_bin,$(__coreutils),cp)
 _cut := $(call __package_bin,$(__coreutils),cut)
 _env := $(call __package_bin,$(__coreutils),env)
@@ -62,7 +64,7 @@ _rm := $(call __package_bin,$(__coreutils),rm)
 _sed := $(call __package_bin,$(__gnused),sed)
 _sha256sum := $(call __package_bin,$(__coreutils),sha256sum)
 _tar := $(call __package_bin,$(__gnutar),tar)
-_tee := $(call __package_bin,$(__coreutils),tee)
+_t3 := $(call __package_bin,$(__t3),t3)
 _uname := $(call __package_bin,$(__coreutils),uname)
 
 # Identify path to build-manifest.nix, in same directory as this Makefile.
@@ -222,6 +224,9 @@ define BUILD_local_template =
   # directory and FLOX_ENV.
   $(eval _out = /tmp/store_$($(_pvarname)_hash)-$(_name))
 
+  # Prepare temporary log file for capturing build output for inspection.
+  $(eval $(_pvarname)_logfile := $(shell $(_mktemp) --dry-run --suffix=-build-$(_pname).log))
+
   # Make sure to invoke the build script in a nested activation of both the
   # "develop" and "build wrapper" environments, and that the build wrapper
   # environment is the "inner" activation preferred for sourcing commands,
@@ -237,15 +242,16 @@ define BUILD_local_template =
 	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode dev --turbo -- \
 	    $(_env) -i out=$(_out) $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
 	      $(_build_wrapper_env)/activate --env $(_build_wrapper_env) --mode dev --turbo -- \
-	        $(_bash) -e $($(_pvarname)_buildScript)
+	        $(_t3) --forcecolor --ts $($(_pvarname)_logfile) -- $(_bash) -e $($(_pvarname)_buildScript)
 	$(_V_) set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr name "$(_name)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
 	  --argstr build-wrapper-env "$(_build_wrapper_env)" \
 	  --argstr install-prefix "$(_out)" \
+	  --argstr logfile "$($(_pvarname)_logfile)" \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  --out-link "result-$(_pname)" \
-	  2>&1 | $(_tee) $($(_pvarname)_logfile)
+	  '^*'
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -310,7 +316,7 @@ define BUILD_nix_sandbox_template =
 	  --argstr buildScript "$($(_pvarname)_buildScript)" \
 	  $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
 	  --out-link "result-$(_pname)" \
-	  '^*' 2>&1 | $(_tee) $($(_pvarname)_logfile)
+	  '^*'
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
@@ -367,8 +373,10 @@ define BUILD_template =
   .PRECIOUS: $($(_pvarname)_buildScript)
   $($(_pvarname)_buildScript): $(build) FORCE
 	@echo "Rendering $(_pname) build script to $$@"
-	@$(_cp) --no-preserve=mode $$< $$@.new
-	@for i in $$^; do \
+	@# Always echo lines in the build script as they are invoked.
+	$(_VV_) echo "set -x" > $$@.new
+	$(_VV_) $(_cat) $$< >> $$@.new
+	$(_VV_) for i in $$^; do \
 	  if [ "$$$$i" != "FORCE" -a -L "$$$$i" ]; then \
 	    outpath="$$$$($(_readlink) $$$$i)"; \
 	    if [ -n "$$$$outpath" ]; then \
@@ -377,25 +385,27 @@ define BUILD_template =
 	    fi; \
 	  fi; \
 	done
-	@$(_mv) -f $$@.new $$@
-
-  # Prepare temporary log file for capturing build output for inspection.
-  $(eval $(_pvarname)_logfile := $(shell $(_mktemp) --dry-run --suffix=-build-$(_pname).log))
+	$(_VV_) $(_mv) -f $$@.new $$@
 
   # Insert mode-specific template.
   $(call BUILD_$(_build_mode)_template)
 
   # Select the desired build mode as we declare the result symlink target.
   $(_result): $(_pname)_$(_build_mode)_build
-	@# Take this opportunity to fail the build if we spot fatal errors in the log.
-	@if $(_grep) -q "flox build failed (caching build dir)" $($(_pvarname)_logfile); then \
-	  echo "ERROR: flox build failed (see $($(_pvarname)_logfile))" 1>&2; \
+	@# Take this opportunity to fail the build if we spot fatal errors in the
+	@# build output. Recall that we force the Nix build to "succeed" in all
+	@# cases so that we can persist the buildCache, so when errors do happen
+	@# this is communicated by way of a $out that is 1) a file and 2) contains
+	@# the string "flox build failed (caching build dir)".
+	$(_VV_) if [ -f $(_result) ] && $(_grep) -q "flox build failed (caching build dir)" $(_result); then \
+	  echo "ERROR: flox build failed (see $(_result)-log)" 1>&2; \
 	  $(_rm) -f $$@; \
 	  exit 1; \
 	fi
 
-  # Create a target for cleaning up the result symlink.
+  # Create targets for cleaning up the result and log symlinks.
   $(eval $(call CLEAN_result_link_template,$(_result)))
+  $(eval $(call CLEAN_result_link_template,$(_result)-log))
 
   # Create a helper target for referring to the package by its name rather
   # than the [real] result symlink we're looking to create.
@@ -406,11 +416,7 @@ define BUILD_template =
   build_targets += $(_result)
 endef
 
-# It is expected that the sandbox and caching modes will be specified on a
-# per-build basis within the manifest, but in the meantime while we wait for
-# the manifest parser to be implemented we will grep for explicit "buildCache"
-# and "sandbox" settings within the build script for setting the build and
-# caching modes.
+# Glean the sandbox mode from manifest metadata.
 $(foreach build,$(BUILDS), \
   $(eval _pname = $(notdir $(build))) \
   $(eval _sandbox = $(shell \
