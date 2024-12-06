@@ -200,18 +200,6 @@ function skip_if_linux() {
   assert_line --partial "Failed to call runtime"
 }
 
-# bats test_tags=containerize:piped-to-stdout
-@test "container is written to stdout when '-f -' is passed" {
-  skip "duplicate of next test"
-  skip_if_not_linux
-
-  env_setup_catalog
-
-  run bash -c '"$FLOX_BIN" containerize -f - | podman load'
-  assert_success
-  assert_line --partial "Loaded image:"
-}
-
 function assert_container_output() {
   # check:
   # (1) if the variable `foo = bar` is set in the container
@@ -243,6 +231,7 @@ function assert_container_output() {
 
   env_setup_catalog
 
+  # Also tests writing to STDOUT with `-f -`
   CONTAINER_ID="$("$FLOX_BIN" containerize -f - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
 
   run --separate-stderr podman run -q -i "$CONTAINER_ID" -c 'echo $foo'
