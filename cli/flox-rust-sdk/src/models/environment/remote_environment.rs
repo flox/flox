@@ -23,7 +23,6 @@ use super::{
     GCROOTS_DIR_NAME,
 };
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
-use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment::RenderedEnvironmentLink;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
@@ -241,14 +240,6 @@ impl Environment for RemoteEnvironment {
     /// or error if the lockfile doesn't exist.
     fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
         self.inner.lockfile(flox)
-    }
-
-    fn build_container(
-        &mut self,
-        flox: &Flox,
-        tag: &str,
-    ) -> Result<ContainerBuilder, EnvironmentError> {
-        self.inner.build_container(flox, tag)
     }
 
     /// Install packages to the environment atomically

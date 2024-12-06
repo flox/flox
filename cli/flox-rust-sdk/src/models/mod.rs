@@ -1,5 +1,4 @@
 //# An attempt at defining a domain model for flox
-pub mod container_builder;
 pub mod env_registry;
 pub mod environment;
 pub mod environment_ref;
