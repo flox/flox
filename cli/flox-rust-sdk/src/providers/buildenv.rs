@@ -189,6 +189,62 @@ impl BuildEnvNix {
         Ok(())
     }
 
+    fn parse_pkg_path(ap: &str) -> (Option<String>, String) {
+        let parts: Vec<&str> = ap.split('/').collect();
+        if parts.len() == 1 || parts[0].contains('.') {
+            (None, ap.to_string())
+        } else {
+            (Some(parts[0].to_string()), parts[1..].join("/"))
+        }
+    }
+
+    fn try_realise_custom_pkg(
+        client: &impl ClientTrait,
+        locked: &LockedPackageCatalog,
+    ) -> Result<bool, BuildEnvError> {
+        // Before building, if this is a custom package, see if we have store
+        // info in the catalog.
+        // TODO - The API call accepts multiple, so an optimization
+        // is to collect these for the whole lockfile ahead of time and ask for
+        // them all at once.
+        let paths: Vec<String> = locked.outputs.values().map(|s| s.to_string()).collect();
+        let _store_locations = client
+            .get_store_info(paths)
+            .block_on()
+            .map_err(BuildEnvError::CatalogError)?;
+
+        // For the missing paths that we requested, try downloading from the store location provided.
+        // If we are missing store info for any that we asked for (implying they are not yet present),
+        // we should continue on with later code which may attempt to build them locally.
+        // TODO - Which are missing? Do we need to check them all again?  For now,
+        // we'll just assume they are all missing, and custom packages only
+        // have one output currently.
+        let mut all_found = true;
+        for (path, locations) in _store_locations.iter() {
+            if !locations.is_empty() {
+                // nix copy
+                let mut copy_command = Command::new(&*NIX_BIN);
+                copy_command
+                    .arg("copy")
+                    .arg("--from")
+                    .arg(&locations[0].url)
+                    .arg(path);
+                let output = copy_command
+                    .output()
+                    .map_err(|e| BuildEnvError::CacheError(e.to_string()))?;
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    return Err(BuildEnvError::CacheError(stderr.to_string()));
+                }
+            } else {
+                all_found = false;
+            };
+        }
+        // We had store info and were able to download from the cache everything
+        // that we asked for that was missing, so we can return early.
+        Ok(all_found)
+    }
+
     /// Realise a package from the (nixpkgs) catalog.
     /// [LockedPackageCatalog] is a locked package from the catalog.
     /// The package is realised by checking if the store paths are valid,
@@ -225,53 +281,18 @@ impl BuildEnvNix {
             return Ok(());
         }
 
-        // TODO, need a better way to differentiate between nixpkgs and custom packages
-        // Only NEED to do this checking for custom packages.
-        if locked.attr_path.as_str().contains('/') {
-            // Before building, if this is a custom package, see if we have store
-            // info in the catalog.
-            // TODO - The API call accepts multiple, so an optimization
-            // is to collect these for the whole lockfile ahead of time and ask for
-            // them all at once.
-            let paths: Vec<String> = locked.outputs.values().map(|s| s.to_string()).collect();
-            let _store_locations = client
-                .get_store_info(paths)
-                .block_on()
-                .map_err(BuildEnvError::CatalogError)?;
-
-            // For the missing paths that we requested, try downloading from the store location provided.
-            // If we are missing store info for any that we asked for (implying they are not yet present),
-            // we should continue on with later code which may attempt to build them locally.
-            // TODO - Which are missing? Do we need to check them all again?  For now,
-            // we'll just assume they are all missing, and custom packages only
-            // have one output currently.
-            let mut missing_store_info = false;
-            for (path, locations) in _store_locations.iter() {
-                if !locations.is_empty() {
-                    // nix copy
-                    let mut copy_command = Command::new(&*NIX_BIN);
-                    copy_command
-                        .arg("copy")
-                        .arg("--from")
-                        .arg(&locations[0].url)
-                        .arg(path);
-                    let output = copy_command
-                        .output()
-                        .map_err(|e| BuildEnvError::CacheError(e.to_string()))?;
-                    if !output.status.success() {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        return Err(BuildEnvError::CacheError(stderr.to_string()));
-                    }
-                } else {
-                    missing_store_info = true;
-                };
-            }
-            // We had store info and were able to download from the cache everything
-            // that we asked for that was missing, so we can return early.
-            if !missing_store_info {
+        // Check if this is a custom package
+        // TODO - need to update lockfile to differentiate between custom and nixpkgs packages
+        let (catalog, _attr_path) = Self::parse_pkg_path(&locked.attr_path);
+        // If it is, then try to realise the outputs using the catalog info before proceeding.
+        if catalog.is_some() {
+            let all_found = Self::try_realise_custom_pkg(client, locked)?;
+            // We asked for all the outputs for the package, got store info for
+            // each, and were able to download them all.  If so, then we're done here.
+            if all_found {
                 return Ok(());
-            }
-        }
+            };
+        };
 
         let mut nix_build_command = self.base_command();
 
@@ -302,9 +323,10 @@ impl BuildEnvNix {
             if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
                 locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
             } else {
-                // Currently, and incorrectly as I believe, the locked_url for
-                // custom packages is still the base catalog page, so this
-                // condition won't be triggered.  We're doing it above.
+                // Until the API and models are updated, the `lockfile_url`
+                // recorded a a custom a package will be the base catalog page.
+                // And this this path will not be hit.  For now, we're doing
+                // this above, based on parsing the pkg-path
                 todo!(
                     "Building non-nixpkgs catalog packages is not yet supported.\n\
                     Pending implementation and decisions regarding representation in the lockfile"
