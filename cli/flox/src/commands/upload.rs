@@ -32,23 +32,19 @@ struct CacheArgs {
 
 impl Upload {
     #[instrument(name = "upload", skip_all)]
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, _flox: Flox) -> Result<()> {
         if !config.features.unwrap_or_default().upload {
             message::plain("🚧 👷 heja, a new command is in construction here, stay tuned!");
             bail!("'upload' feature is not enabled.");
         }
 
-        Self::upload(flox, self.store_path, self.cache)
-    }
-
-    fn upload(mut _flox: Flox, store_path: PathBuf, cache_args: CacheArgs) -> Result<()> {
         subcommand_metric!("upload");
 
-        let store_path = validate_store_path(store_path)?;
+        let store_path = validate_store_path(self.store_path)?;
 
         let cache = NixCopyCache {
-            url: cache_args.url,
-            key_file: cache_args.key_file,
+            url: self.cache.url,
+            key_file: self.cache.key_file,
         };
 
         Dialog {
