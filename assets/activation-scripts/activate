@@ -174,21 +174,23 @@ to_eval="$($_flox_activations \
 eval "$to_eval"
 export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
 
-# shellcheck source-path=SCRIPTDIR/activate.d
-source "${_activate_d}/set-run-variables.bash"
+if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" != true ]; then
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/set-run-variables.bash"
 
-if [ "$_FLOX_ATTACH" == true ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/attach.bash"
-else
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/start.bash"
-fi
+  if [ "$_FLOX_ATTACH" == true ]; then
+    # shellcheck source-path=SCRIPTDIR/activate.d
+    source "${_activate_d}/attach.bash"
+  else
+    # shellcheck source-path=SCRIPTDIR/activate.d
+    source "${_activate_d}/start.bash"
+  fi
 
-# Start services before the shell or command is invoked
-if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/start-services.bash"
+  # Start services before the shell or command is invoked
+  if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
+    # shellcheck source-path=SCRIPTDIR/activate.d
+    source "${_activate_d}/start-services.bash"
+  fi
 fi
 
 # From this point on the activation process depends on the mode:

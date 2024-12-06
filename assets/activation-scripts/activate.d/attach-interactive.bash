@@ -11,7 +11,7 @@ case "$_flox_shell" in
       exec "$_flox_shell" --noprofile --norc
     else
       RCFILE="$(@coreutils@/bin/mktemp -p "$_FLOX_ACTIVATION_STATE_DIR")"
-      generate_bash_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$PATH" "$MANPATH" "$_activate_d" "$FLOX_ENV" > "$RCFILE"
+      generate_bash_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$PATH" "$MANPATH" "$_activate_d" "$FLOX_ENV" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" > "$RCFILE"
       # self destruct
       echo "@coreutils@/bin/rm '$RCFILE'" >> "$RCFILE"
       if [ -t 1 ]; then
