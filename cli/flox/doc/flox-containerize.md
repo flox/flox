@@ -32,6 +32,10 @@ the container is loaded into a supported runtime,
 If no supported runtime is found,
 the container is written to `./<env name>-container.tar` instead.
 
+**Note**: Exporting a container from macOS requires a supported runtime to be
+found because a proxy container is used to build the environment and image. You
+may be prompted for permissions to share files into the proxy container.
+
 Running the container will behave like running `flox activate`.
 Running the container interactively with `docker run -it <container id>`,
 will launch a bash subshell in the container
@@ -41,10 +45,6 @@ This is akin to `flox activate`.
 Running the container non-interactively with `docker run <container id>`
 allows you to run a command within the container without launching a subshell,
 similar to `flox activate --`.
-
-**Note**:
-The `containerize` command is currently **only available on Linux**.
-The produced container however can also run on macOS.
 
 # OPTIONS
 
