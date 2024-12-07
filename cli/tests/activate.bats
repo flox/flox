@@ -191,44 +191,6 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=activate,activate:flox_shell,activate:flox_shell:bash
-@test "activate identifies FLOX_SHELL from running shell (bash)" {
-  project_setup
-  run --separate-stderr bash -c "$FLOX_BIN activate | grep -- 'source .*/activate.d/'"
-  assert_success
-  assert_equal "${#lines[@]}" 1 # 1 result
-  assert_line --partial "/activate.d/bash"
-}
-
-# bats test_tags=activate,activate:flox_shell,activate:flox_shell:fish
-@test "activate identifies FLOX_SHELL from running shell (fish)" {
-  project_setup
-  run --separate-stderr fish -c "$FLOX_BIN activate | grep -- 'source .*/activate.d/'"
-  assert_success
-  assert_equal "${#lines[@]}" 1 # 1 result
-  assert_line --partial "/activate.d/fish"
-}
-
-# bats test_tags=activate,activate:flox_shell,activate:flox_shell:tcsh
-@test "activate identifies FLOX_SHELL from running shell (tcsh)" {
-  project_setup
-  run --separate-stderr tcsh -c "$FLOX_BIN activate | grep -- 'source .*/activate.d/'"
-  assert_success
-  assert_equal "${#lines[@]}" 1 # 1 result
-  assert_line --partial "/activate.d/tcsh"
-}
-
-# bats test_tags=activate,activate:flox_shell,activate:flox_shell:zsh
-@test "activate identifies FLOX_SHELL from running shell (zsh)" {
-  project_setup
-  run --separate-stderr zsh -c "$FLOX_BIN activate | grep -- 'source .*/activate.d/'"
-  assert_success
-  assert_equal "${#lines[@]}" 1 # 1 result
-  assert_line --partial "/activate.d/zsh"
-}
-
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "bash: interactive activate puts package in path" {
   project_setup
@@ -1406,7 +1368,7 @@ EOF
   assert_success
   # check that env vars are set for compatibility with nix built software
   assert_line --partial "export NIX_SSL_CERT_FILE="
-  assert_line --partial "activate.d/bash"
+  assert_line --partial "set-prompt.bash"
 }
 
 # bats test_tags=activate,activate:inplace-prints
@@ -1734,19 +1696,6 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-@test "'hook.on-activate' modifies environment variables in nested activation (bash)" {
-  project_setup
-  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
-
-  cat <<'EOF' | bash
-    eval "$("$FLOX_BIN" activate)"
-    [[ "$foo" == baz ]]
-    unset foo
-    eval "$("$FLOX_BIN" activate)"
-    [[ "$foo" == baz ]]
-EOF
-}
-
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:fish
 @test "'hook.on-activate' modifies environment variables in nested activation (fish)" {
   project_setup
@@ -1796,7 +1745,7 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-@test "'hook.on-activate' unsets environment variables in nested activation (bash)" {
+@test "'hook.on-activate' unsets environment variables for in-place activation (bash)" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -1811,9 +1760,6 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   cat <<'EOF' | bash
-    export foo=baz
-    eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
-    [[ -z "${foo:-}" ]]
     export foo=baz
     eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
     [[ -z "${foo:-}" ]]
@@ -3631,4 +3577,92 @@ EOF
 EOF
 )
   assert_success
+}
+
+@test "bash: repeat activation in .bashrc doesn't break aliases" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d default
+  MANIFEST_CONTENTS_DEFAULT="$(cat << "EOF"
+    version = 1
+
+    [profile]
+    bash = """
+      alias default_alias="echo Hello default!"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_DEFAULT" | "$FLOX_BIN" edit -d default -f -
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS_PROJECT="$(cat << "EOF"
+    version = 1
+
+    [profile]
+    bash = """
+      alias project_alias="echo Hello project!"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
+
+  echo "eval \"\$(flox activate -d '$PROJECT_DIR/default')\"" >"$HOME/.bashrc.extra"
+  # It would be better use bash -i to source .bashrc,
+  # but that causes the tests to background because bash -i tries to open
+  # /dev/tty.
+  # Instead `eval "$(flox activate -d default)"` manually to simulate sourcing
+  # .bashrc
+  run bash -i <(cat <<'EOF'
+    set -euo pipefail
+    eval "$(flox activate -d default)"
+    echo "$_FLOX_ACTIVE_ENVIRONMENTS"
+    # We can't double check the alias has been loaded because bash isn't
+    # interactive and discards it
+    FLOX_SHELL="bash" NO_COLOR=1 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
+EOF
+)
+  assert_success
+  assert_output --partial "project_alias is aliased to \`echo Hello project!'"
+  assert_output --partial "default_alias is aliased to \`echo Hello default!'"
+}
+
+@test "bash: repeat activation in .bashrc creates correct PATH ordering" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d default
+  MANIFEST_CONTENTS_DEFAULT="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_DEFAULT" | "$FLOX_BIN" edit -d default -f -
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS_PROJECT="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
+
+  echo "eval \"\$(flox activate -d '$PROJECT_DIR/default')\"" >"$HOME/.bashrc.extra"
+  # It would be better use bash -i to source .bashrc,
+  # but that causes the tests to background because bash -i tries to open
+  # /dev/tty.
+  # Instead `eval "$(flox activate -d default)"` manually to simulate sourcing
+  # .bashrc
+  run bash -i <(cat <<'EOF'
+    set -euo pipefail
+    eval "$(flox activate -d default)"
+    if ! [[ "$PATH" =~ default/.flox/run/.*.default.dev/bin ]]; then # to double check we activated the default environment
+      echo "default not in PATH: $PATH"
+      exit 1
+    fi
+    FLOX_SHELL="bash" NO_COLOR=1 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "$PATH"'
+EOF
+)
+  assert_success
+  assert_output --regexp "project/.flox/run/.*.project.dev/bin.*default/.flox/run/.*.default.dev/bin"
 }
