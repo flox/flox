@@ -3609,9 +3609,17 @@ EOF
   echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
 
   echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" >"$HOME/.bashrc.extra"
-  run bash -i <(cat <<'EOF'
+  # It would be better use bash -i to source .bashrc,
+  # but that causes the tests to background because bash -i tries to open
+  # /dev/tty.
+  # Instead `eval "$(flox activate -d default)"` manually to simulate sourcing
+  # .bashrc
+  run bash <(cat <<'EOF'
     set -euo pipefail
-    type default_alias > /dev/null # to double check we loaded .bashrc
+    eval "$("$FLOX_BIN" activate -d default)"
+    echo "$_FLOX_ACTIVE_ENVIRONMENTS"
+    # We can't double check the alias has been loaded because bash isn't
+    # interactive and discards it
     FLOX_SHELL="bash" NO_COLOR=1 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
 EOF
 )
@@ -3640,9 +3648,15 @@ EOF
   echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
 
   echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" >"$HOME/.bashrc.extra"
-  run bash -i <(cat <<'EOF'
+  # It would be better use bash -i to source .bashrc,
+  # but that causes the tests to background because bash -i tries to open
+  # /dev/tty.
+  # Instead `eval "$(flox activate -d default)"` manually to simulate sourcing
+  # .bashrc
+  run bash <(cat <<'EOF'
     set -euo pipefail
-    if ! [[ "$PATH" =~ default/.flox/run/.*.default.dev/bin ]]; then # to double check we loaded .bashrc
+    eval "$("$FLOX_BIN" activate -d default)"
+    if ! [[ "$PATH" =~ default/.flox/run/.*.default.dev/bin ]]; then # to double check we activated the default environment
       echo "default not in PATH: $PATH"
       exit 1
     fi
