@@ -23,7 +23,7 @@ generate_bash_startup_commands() {
   shift
 
   if [ "$_flox_activate_tracelevel" -ge 2 ]; then
-    echo "set -x"
+    echo "set -x;"
   fi
 
   if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" != true ]; then
