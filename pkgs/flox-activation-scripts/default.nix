@@ -38,7 +38,11 @@ let
     # Note that substitution doesn't work with variables containing "-"
     # so we need to create and use alternative names.
     process_compose = process-compose;
-    flox_activations = flox-activations;
+    flox_activations =
+      if flox-activations != null then
+        "${flox-activations}/bin/flox-activations"
+      else
+        "$FLOX_ACTIVATIONS_BIN";
     util_linux = util-linux;
     # Make clear when packages are not available on Darwin.
     ld_floxlib = if stdenv.isLinux then ld-floxlib else "__LINUX_ONLY__";

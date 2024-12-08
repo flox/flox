@@ -1,6 +1,5 @@
 {
   inputs,
-  gnused,
   lib,
   pkgsFor,
   rust-toolchain,
@@ -76,7 +75,6 @@ craneLib.buildPackage ({
         PATH="$( git rev-parse --show-toplevel; )/cli/target/debug":$PATH;
         REPO_ROOT="$( git rev-parse --show-toplevel; )";
       fi
-
     '';
   };
 })

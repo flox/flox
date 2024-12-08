@@ -1,19 +1,20 @@
 {
+  coreutils,
+  flox-buildenv,
+  flox-package-builder,
+  flox-mk-container ? ../../mkContainer/mkContainer.nix,
   flox-pkgdb,
+  flox-src,
   gitMinimal,
   gnumake,
   inputs,
-  coreutils,
   lib,
-  pkgsFor,
   nix,
+  pkgsFor,
   process-compose,
+  rust-external-deps,
   rust-toolchain,
   targetPlatform,
-  rust-external-deps,
-  flox-src,
-  flox-package-builder,
-  flox-buildenv,
 }:
 let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
@@ -22,38 +23,45 @@ let
   craneLib = (inputs.crane.mkLib pkgsFor).overrideToolchain rust-toolchain.toolchain;
 
   # build time environment variables
-  envs = {
-    # 3rd party CLIs
-    # we want to use our own binaries by absolute path
-    # rather than relying on or modifying the user's `PATH` variable
-    GIT_PKG = gitMinimal;
-    NIX_BIN = "${nix}/bin/nix";
-    PKGDB_BIN = if flox-pkgdb == null then "pkgdb" else "${flox-pkgdb}/bin/pkgdb";
+  envs =
+    {
+      # 3rd party CLIs
+      # we want to use our own binaries by absolute path
+      # rather than relying on or modifying the user's `PATH` variable
+      GIT_PKG = gitMinimal;
+      NIX_BIN = "${nix}/bin/nix";
+      GNUMAKE_BIN = "${gnumake}/bin/make";
+      SLEEP_BIN = "${coreutils}/bin/sleep";
+      PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
 
-    # develop with `flox-package-builder.devShellHook`
-    FLOX_BUILD_MK = "${flox-package-builder}/libexec/flox-build.mk";
-    FLOX_BUILDENV_NIX = "${flox-buildenv}/lib/buildenv.nix";
-    FLOX_MK_CONTAINER_NIX = ./../../mkContainer/mkContainer.nix;
+      # Used by `flox build' to access `stdenv` at a known version
+      # When utilities from nixpkgs are used by flox at runtime,
+      # they should be
+      # a) bundled at buildtime if possible (binaries/packages)
+      # b) use this version of nixpkgs i.e. (nix library utils such as `lib` and `runCommand`)
+      COMMON_NIXPKGS_URL = "path:${inputs.nixpkgs.outPath}";
 
-    GNUMAKE_BIN = "${gnumake}/bin/make";
+      # The current version of flox being built
+      inherit FLOX_VERSION;
 
-    SLEEP_BIN = "${coreutils}/bin/sleep";
+      # Reexport of the platform flox is being built for
+      NIX_TARGET_SYSTEM = targetPlatform.system;
+    }
+    # Our own tools
+    # In the dev shell these will be set dynamically
+    // lib.optionalAttrs (flox-buildenv != null) {
+      FLOX_BUILDENV_NIX = "${flox-buildenv}/lib/buildenv.nix";
+    }
+    // lib.optionalAttrs (flox-package-builder != null) {
+      FLOX_BUILD_MK = "${flox-package-builder}/libexec/flox-build.mk";
+    }
+    // lib.optionalAttrs (flox-pkgdb != null) {
+      PKGDB_BIN = "${flox-pkgdb}/bin/flox-pkgdb";
+    }
+    // lib.optionalAttrs (flox-mk-container != null) {
+      FLOX_MK_CONTAINER_NIX = "${flox-mk-container}";
+    };
 
-    PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
-
-    # Used by `flox build' to access `stdenv` at a known version
-    # When utilities from nixpkgs are used by flox at runtime,
-    # they should be
-    # a) bundled at buildtime if possible (binaries/packages)
-    # b) use this version of nixpkgs i.e. (nix library utils such as `lib` and `runCommand`)
-    COMMON_NIXPKGS_URL = "path:${inputs.nixpkgs.outPath}";
-
-    # The current version of flox being built
-    inherit FLOX_VERSION;
-
-    # Reexport of the platform flox is being built for
-    NIX_TARGET_SYSTEM = targetPlatform.system;
-  };
 in
 (craneLib.buildDepsOnly (
   {
