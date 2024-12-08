@@ -3,7 +3,6 @@
   darwin,
   coreutils,
   flox-activation-scripts,
-  flox-pkgdb,
   glibcLocalesUtf8,
   lib,
   nix,
@@ -53,7 +52,6 @@ runCommandNoCC "${pname}-${version}"
     # Substitutions for builder.pl.
     inherit (builtins) storeDir;
     perl = perl + "/bin/perl";
-    floxPkgdb = flox-pkgdb;
   }
   ''
     mkdir -p "$out/bin" "$out/lib"

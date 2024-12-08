@@ -9,6 +9,7 @@
 /.flox
 /autom4te.cache/
 /cli/target
+/build/*
 compile_commands.json
 result
 result-*
