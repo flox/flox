@@ -11,11 +11,7 @@
 # ---------------------------------------------------------------------------- #
 
 nix_options := "--extra-experimental-features nix-command \
- --extra-experimental-features flakes"
-PKGDB_BIN := "${PWD}/pkgdb/bin/pkgdb"
-FLOX_BIN := "${PWD}/cli/target/debug/flox"
-WATCHDOG_BIN := "${PWD}/cli/target/debug/flox-watchdog"
-GENERATED_DATA := "${PWD}/test_data/generated"
+                --extra-experimental-features flakes"
 INPUT_DATA := "${PWD}/test_data/input_data"
 cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo nextest run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
 
@@ -30,8 +26,8 @@ cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo nextest run --manifest-pa
 
 # Print the paths of all of the binaries
 @bins:
-    echo "{{PKGDB_BIN}}"
-    echo "{{FLOX_BIN}}"
+    echo "$PKGDB_BIN"
+    echo "$FLOX_BIN"
 
 # ---------------------------------------------------------------------------- #
 
@@ -52,16 +48,61 @@ build-cdb:
 @clean-pkgdb:
     make -C pkgdb -j 8 -s clean
 
-# Build only flox
-@build-cli: build-pkgdb
-    pushd cli; cargo build -q --workspace
+# ---------------------------------------------------------------------------- #
+# Nix built subsystems
 
-# Build just the data generator
-@build-data-gen:
-    pushd cli; cargo build -q -p mk_data; popd
+# Build the flox manpages
+@build-manpages:
+    nix {{nix_options}} build .#flox-manpages -o build/flox-manpages
+
+# Build the activation scripts
+@build-activation-scripts: build-activations
+    nix {{nix_options}} build \
+        '.#floxDevelopmentPackages.flox-activation-scripts^*' \
+        -o $FLOX_INTERPRETER
+
+# Build the flox package builder
+@build-package-builder:
+    nix {{nix_options}} build \
+        ".#floxDevelopmentPackages.flox-package-builder" \
+        -o "$FLOX_PACKAGE_BUILDER"
+
+# Build the flox buildenv
+@build-buildenv:
+    nix {{nix_options}} build \
+        ".#floxDevelopmentPackages.flox-buildenv" \
+        -o "$FLOX_BUILDENV"
+
+# ---------------------------------------------------------------------------- #
+# Cargo built subsystems
+
+# Build the flox activations binary
+@build-activations:
+    pushd cli; cargo build -p flox-activations
+
+# Build the flox watchdog binary
+@build-watchdog:
+    pushd cli; cargo build -p flox-watchdog
+
+
+# ---------------------------------------------------------------------------- #
+# Build the flox binary
+
+@build-cli: build-pkgdb build-package-builder build-activation-scripts build-watchdog build-buildenv
+    pushd cli; cargo build -p flox
+
+
 
 # Build the binaries
 build: build-cli
+
+clean-builds:
+    git checkout -- build/
+
+# ---------------------------------------------------------------------------- #
+# Build just the data generator
+@build-data-gen:
+    pushd cli; cargo build -p mk_data; popd
 
 # Generate test data
 @gen-data +mk_data_args="": build-data-gen
@@ -77,11 +118,11 @@ build: build-cli
 # Run the CLI integration test suite
 @integ-tests +bats_args="": build
     flox-cli-tests \
-        --pkgdb "{{PKGDB_BIN}}" \
-        --flox "{{FLOX_BIN}}" \
-        --watchdog "{{WATCHDOG_BIN}}" \
+        --pkgdb "$PKGDB_BIN" \
+        --flox "$FLOX_BIN" \
+        --watchdog "$WATCHDOG_BIN" \
         --input-data "{{INPUT_DATA}}" \
-        --generated-data "{{GENERATED_DATA}}" \
+        --generated-data "$GENERATED_DATA" \
         {{bats_args}}
 
 # Run the CLI integration test suite using Nix-built binaries
