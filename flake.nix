@@ -114,8 +114,49 @@
           flox-cli-tests = callPackage ./pkgs/flox-cli-tests { };
         };
 
+      overlays.development = final: prev: {
+        floxDevelopmentPackages = prev.lib.makeScope prev.newScope (self: {
+          rust-internal-deps = prev.rust-internal-deps.override {
+            flox-buildenv = null;
+            flox-package-builder = null;
+            flox-pkgdb = null;
+          };
+
+          flox-cli = prev.flox-cli.override {
+            flox-activation-scripts = null;
+            flox-watchdog = null;
+            rust-internal-deps = self.rust-internal-deps;
+          };
+          flox-watchdog = prev.flox-watchdog.override {
+            rust-internal-deps = self.rust-internal-deps;
+          };
+          flox-activations = prev.flox-activations.override { };
+          flox-activation-scripts = prev.flox-activation-scripts.override {
+            flox-activations = null;
+          };
+          flox-package-builder = prev.flox-package-builder.override { };
+          flox-buildenv = prev.flox-buildenv.override {
+            flox-pkgdb = null;
+          };
+          checksFor = checks.${prev.system};
+
+          flox-cli-tests = prev.flox-cli-tests.override {
+            PROJECT_TESTS_DIR = "/cli/tests";
+            PKGDB_BIN = null;
+            FLOX_BIN = null;
+            WATCHDOG_BIN = null;
+            FLOX_ACTIVATIONS_BIN = null;
+            BUILDENV_BIN = null;
+            flox-activation-scripts = null;
+          };
+        });
+      };
       # Composes dependency overlays and the overlay defined here.
-      overlays.default = nixpkgs.lib.composeExtensions overlays.deps overlays.flox;
+      overlays.default = nixpkgs.lib.composeManyExtensions [
+        overlays.deps
+        overlays.flox
+        overlays.development
+      ];
 
       # ------------------------------------------------------------------------ #
 
@@ -147,35 +188,16 @@
           pre-commit-check
           rust-external-deps
           rust-internal-deps
+          floxDevelopmentPackages
           ;
+
         default = pkgs.flox;
       }) pkgsContext;
 
       # ------------------------------------------------------------------------ #
-      devShells = builtins.mapAttrs (
-        system: pkgsBase:
-        let
-          pkgs = pkgsBase.extend (
-            final: prev: {
-              flox-cli-tests = prev.flox-cli-tests.override {
-                PROJECT_TESTS_DIR = "/cli/tests";
-                PKGDB_BIN = null;
-                FLOX_BIN = null;
-                WATCHDOG_BIN = null;
-                FLOX_ACTIVATIONS_BIN = null;
-              };
-              flox-cli = prev.flox-cli.override {
-                flox-pkgdb = null;
-                flox-watchdog = null;
-              };
-              checksFor = checks.${final.system};
-            }
-          );
-        in
-        {
-          default = pkgs.callPackage ./shells/default { };
-        }
-      ) pkgsContext;
+      devShells = builtins.mapAttrs (system: pkgsBase: {
+        default = pkgsBase.floxDevelopmentPackages.callPackage ./shells/default { };
+      }) pkgsContext;
     }; # End `outputs'
 
   # -------------------------------------------------------------------------- #

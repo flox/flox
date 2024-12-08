@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 _dirname="@coreutils@/bin/dirname"
-_flox_activations="@flox_activations@/bin/flox-activations"
 _getopt="@getopt@/bin/getopt"
 _nawk="@nawk@/bin/nawk"
 _readlink="@coreutils@/bin/readlink"
+_flox_activations="@flox_activations@"
 
 set -euo pipefail
 

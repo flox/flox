@@ -53,7 +53,7 @@ runCommandNoCC "${pname}-${version}"
     # Substitutions for builder.pl.
     inherit (builtins) storeDir;
     perl = perl + "/bin/perl";
-    floxPkgdb = flox-pkgdb;
+    pkgdb = if flox-pkgdb != null then "${flox-pkgdb}/bin/pkgdb" else "$PKGDB_BIN";
   }
   ''
     mkdir -p "$out/bin" "$out/lib"

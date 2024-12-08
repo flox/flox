@@ -39,12 +39,4 @@ stdenv.mkDerivation {
   # install the packages to $out/libexec/*
   makeFlags = [ "PREFIX=$(out)" ];
   doCheck = true;
-
-  passthru.devShellHook = ''
-    # Find the project root and set FLOX_BUILD_MK.
-    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      REPO_ROOT="$( git rev-parse --show-toplevel; )";
-      FLOX_BUILD_MK="$REPO_ROOT/package-builder/flox-build.mk";
-    fi
-  '';
 }
