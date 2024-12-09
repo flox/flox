@@ -73,7 +73,13 @@ use xdg::BaseDirectories;
 
 use self::envs::DisplayEnvironments;
 use crate::commands::general::update_config;
-use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE, FLOX_DIR_NAME};
+use crate::config::{
+    Config,
+    EnvironmentTrust,
+    FLOX_CONFIG_FILE,
+    FLOX_DIR_NAME,
+    FLOX_DISABLE_METRICS_VAR,
+};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::init::{
@@ -260,7 +266,7 @@ impl FloxArgs {
         } else {
             debug!("Metrics collection disabled");
             unsafe {
-                env::set_var("FLOX_DISABLE_METRICS", "true");
+                env::set_var(FLOX_DISABLE_METRICS_VAR, "true");
             }
         }
 
