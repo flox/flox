@@ -13,6 +13,8 @@ const FLOX_PROXY_IMAGE: &str = "ghcr.io/flox/flox";
 const MOUNT_ENV: &str = "/flox_env";
 const MOUNT_HOME: &str = "/flox_home";
 
+/// An implementation of [ContainerBuilder] for macOS that uses `flox
+/// containerize` within a proxy container of a given [Runtime].
 #[derive(Debug, Clone)]
 pub(crate) struct ContainerizeProxy {
     environment_path: PathBuf,
@@ -31,6 +33,10 @@ impl ContainerizeProxy {
 impl ContainerBuilder for ContainerizeProxy {
     type Error = Infallible;
 
+    /// Create a [ContainerSource] for macOS that streams the output via:
+    /// 1. `<container> run`
+    /// 2. `nix run`
+    /// 3. `flox containerize`
     fn create_container_source(
         &self,
         // Inferred from `self.environment_path` by flox _inside_ the container.
