@@ -6,6 +6,7 @@ use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
 
 use super::Runtime;
+use crate::config::FLOX_DISABLE_METRICS_VAR;
 
 const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE: &str = "ghcr.io/flox/flox";
@@ -67,6 +68,14 @@ impl ContainerBuilder for ContainerizeProxy {
                     home_dir.to_string_lossy(),
                     MOUNT_HOME
                 ),
+            ]);
+        }
+
+        // Honour FLOX_DISABLE_METRICS, if set.
+        if let Ok(disable_metrics) = std::env::var(FLOX_DISABLE_METRICS_VAR) {
+            command.args([
+                "--env",
+                &format!("{}={}", FLOX_DISABLE_METRICS_VAR, disable_metrics),
             ]);
         }
 
