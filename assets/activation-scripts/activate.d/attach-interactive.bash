@@ -23,7 +23,7 @@ case "$_flox_shell" in
         # XXX Is this case even a thing? What's the point of activating with
         #     no command to be invoked and no controlling terminal from which
         #     to issue commands?!? A broken docker experience maybe?!?
-        exec "$_flox_shell" --noprofile --norc -s <<< "source $RCFILE"
+        exec "$_flox_shell" --noprofile --norc -s <<< "source '$RCFILE'"
       fi
     fi
     ;;
@@ -31,7 +31,11 @@ case "$_flox_shell" in
     if [ -n "$FLOX_NOPROFILE" ]; then
       exec "$_flox_shell"
     else
-      exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $_activate_d/fish"
+      RCFILE="$(@coreutils@/bin/mktemp -p "$_FLOX_ACTIVATION_STATE_DIR")"
+      generate_fish_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$PATH" "$MANPATH" "$_activate_d" "$FLOX_ENV" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" > "$RCFILE"
+      # self destruct
+      echo "@coreutils@/bin/rm '$RCFILE'" >> "$RCFILE"
+      exec "$_flox_shell" --init-command "source '$RCFILE'"
     fi
     ;;
   *tcsh)

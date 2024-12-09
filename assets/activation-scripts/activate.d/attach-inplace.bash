@@ -19,14 +19,8 @@ case "$_flox_shell" in
     generate_bash_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$PATH" "$MANPATH" "$_activate_d" "$FLOX_ENV" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}"
     ;;
   *fish)
-    echo "set -gx _FLOX_RESTORE_PATH \"$PATH\";"
-    echo "set -gx _FLOX_RESTORE_MANPATH \"$MANPATH\";"
     echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$fish_pid --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
-    echo "set -gx _flox_activate_tracelevel \"$_flox_activate_tracelevel\";"
-    echo "set -gx FLOX_ENV \"$FLOX_ENV\";"
-    echo "set -gx _FLOX_ACTIVATION_STATE_DIR \"$_FLOX_ACTIVATION_STATE_DIR\";"
-    echo "set -gx _activate_d \"$_activate_d\";"
-    echo "source '$_activate_d/fish';"
+    generate_fish_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$PATH" "$MANPATH" "$_activate_d" "$FLOX_ENV" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}"
     ;;
   *tcsh)
     echo "setenv _FLOX_RESTORE_PATH \"$PATH\";"

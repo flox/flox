@@ -1379,7 +1379,7 @@ EOF
   assert_success
   # check that env vars are set for compatibility with nix built software
   assert_line --partial "set -gx NIX_SSL_CERT_FILE "
-  assert_line --partial "activate.d/fish"
+  assert_line --partial "set-prompt.fish"
 }
 
 # bats test_tags=activate,activate:inplace-prints
@@ -1668,7 +1668,7 @@ EOF
 }
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:fish
-@test "'hook.on-activate' modifies environment variables in nested activation (fish)" {
+@test "'hook.on-activate' modifies environment variables for first nested activation (fish)" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
@@ -1677,7 +1677,10 @@ EOF
     echo "$foo" | string match "baz"
     set -e foo
     eval "$("$FLOX_BIN" activate)"
-    echo "$foo" | string match "baz"
+    if set -q foo
+      echo "foo=$foo when it should be unset"
+      exit 1
+    end
 EOF
 }
 
@@ -1755,7 +1758,7 @@ EOF
 }
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:fish
-@test "'hook.on-activate' unsets environment variables in nested activation (fish)" {
+@test "'hook.on-activate' unsets environment variables for first nested activation (fish)" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -1778,10 +1781,7 @@ EOF
     end
     set -gx foo baz
     eval "$("$FLOX_BIN" activate)"
-    if set -q foo
-      echo "foo=$foo when it should be unset"
-      exit 1
-    end
+    echo "$foo" | string match "baz"
 EOF
 }
 
@@ -3651,7 +3651,7 @@ EOF
   run bash <(cat <<'EOF'
     set -euo pipefail
     eval "$("$FLOX_BIN" activate -d default)"
-    if ! [[ "$PATH" =~ default/.flox/run/.*.default.dev/bin ]]; then # to double check we activated the default environment
+    if ! [[ "$PATH" =~ $PROJECT_DIR/default/.flox/run/.*.default.dev/bin ]]; then # to double check we activated the default environment
       echo "default not in PATH: $PATH"
       exit 1
     fi
@@ -3659,5 +3659,86 @@ EOF
 EOF
 )
   assert_success
-  assert_output --regexp "project/.flox/run/.*.project.dev/bin.*default/.flox/run/.*.default.dev/bin"
+  assert_output --regexp "$PROJECT_DIR/project/.flox/run/.*.project.dev/bin.*$PROJECT_DIR/default/.flox/run/.*.default.dev/bin"
+}
+
+@test "fish: repeat activation in config.fish doesn't break aliases" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d default
+  MANIFEST_CONTENTS_DEFAULT="$(cat << "EOF"
+    version = 1
+
+    [profile]
+    fish = """
+      alias default_alias="echo Hello default!"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_DEFAULT" | "$FLOX_BIN" edit -d default -f -
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS_PROJECT="$(cat << "EOF"
+    version = 1
+
+    [profile]
+    fish = """
+      alias project_alias="echo Hello project!"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
+
+  echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" > "$HOME/.config/fish/config.fish.extra"
+  # config.fish rewrites PATH from flox-cli-tests
+  FISH="$(which fish)"
+  EXPECT="$(which expect)"
+  run fish <(cat <<EOF
+    if ! type default_alias 2&> /dev/null;
+      echo "default_alias not found"
+      exit 1
+    end
+    FLOX_SHELL="$FISH" NO_COLOR=1 "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
+EOF
+)
+  assert_success
+  assert_output --partial "project_alias is a function"
+  assert_output --partial "default_alias is a function with definition"
+}
+
+@test "fish: repeat activation in config.fish creates correct PATH ordering" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d default
+  MANIFEST_CONTENTS_DEFAULT="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_DEFAULT" | "$FLOX_BIN" edit -d default -f -
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS_PROJECT="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
+
+  echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" > "$HOME/.config/fish/config.fish.extra"
+  # config.fish rewrites PATH from flox-cli-tests
+  FISH="$(which fish)"
+  EXPECT="$(which expect)"
+  run fish <(cat <<EOF
+    if not string match -r -- '$PROJECT_DIR/default/.flox/run/.*\.default\.dev/bin' "\$PATH"
+      echo "default not in PATH: $PATH"
+      exit 1
+    end
+    FLOX_SHELL="$FISH" NO_COLOR=1 "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "\$PATH"'
+EOF
+)
+  assert_success
+  assert_output --regexp "$PROJECT_DIR/project/.flox/run/.*.project.dev/bin.*$PROJECT_DIR/default/.flox/run/.*.default.dev/bin"
 }
