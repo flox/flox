@@ -23,6 +23,8 @@ pub const FLOX_DIR_NAME: &str = "flox";
 const FLOX_CONFIG_DIR_VAR: &str = "FLOX_CONFIG_DIR";
 pub const FLOX_CONFIG_FILE: &str = "flox.toml";
 
+pub const FLOX_DISABLE_METRICS_VAR: &str = "FLOX_DISABLE_METRICS";
+
 #[derive(Clone, Debug, Deserialize, Default, Serialize)]
 pub struct Config {
     /// flox configuration options
