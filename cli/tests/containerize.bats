@@ -141,7 +141,7 @@ function skip_if_linux() {
   assert_failure
   assert_output "❌ ERROR: No container runtime found in PATH.
 
-Exporting a container from macOS requires Docker or Podman to be installed."
+Exporting a container on macOS requires Docker or Podman to be installed."
 }
 
 # bats test_tags=containerize:default-to-file
