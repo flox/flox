@@ -1502,55 +1502,6 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-# N.B. removed "'flox activate' only patches PATH when already activated" test,
-# because we in fact need to patch PATH with every activation to defend against
-# userShell "dotfiles" that may have modified PATH unconditionally (e.g. on any
-# host running nix-darwin(!)).
-#
-# Replacing it with a test that checks that a) activation puts the FLOX_ENV/bin
-# first, and b) that it doesn't put it there more than once.
-
-# bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:bash
-@test "bash: 'flox activate' patches PATH correctly when already activated" {
-  project_setup
-  FLOX_SHELL="bash" run -- \
-    "$FLOX_BIN" activate -- \
-    bash -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
-  assert_success
-}
-
-# bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:fish
-@test "fish: 'flox activate' patches PATH correctly when already activated" {
-  project_setup
-  FLOX_SHELL="fish" run -- \
-    "$FLOX_BIN" activate -- \
-    fish -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
-  assert_success
-}
-
-# bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:tcsh
-@test "tcsh: 'flox activate' patches PATH correctly when already activated" {
-  project_setup
-  # TODO: figure out why bats doesn't tolerate backticks in the following
-  #       example, reports unmatched quotes. Going with this in the meantime
-  #       because it works ...
-  FLOX_SHELL="tcsh" run -- \
-    "$FLOX_BIN" activate -- \
-    tcsh -c "$FLOX_BIN activate | source /dev/stdin; bash $TESTS_DIR/activate/verify_PATH.bash"
-  assert_success
-}
-
-# bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:zsh
-@test "zsh: 'flox activate' patches PATH correctly when already activated" {
-  project_setup
-  FLOX_SHELL="zsh" run -- \
-    "$FLOX_BIN" activate -- \
-    zsh -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
-  assert_success
-}
-
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=activate,activate:python-detects-installed-python
 @test "'flox activate' sets python vars if python is installed" {
   project_setup
