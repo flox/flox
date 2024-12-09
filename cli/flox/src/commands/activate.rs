@@ -413,16 +413,13 @@ impl Activate {
             ("_FLOX_ACTIVATION_PROFILE_ONLY", profile_only.to_string()),
         ]);
 
-        if is_ephemeral {
-            exports.insert("_FLOX_ACTIVATE_FORCE_REACTIVATE", "true".to_string());
-            if !services_to_start.is_empty() {
-                exports.insert(
-                    FLOX_SERVICES_TO_START_VAR,
-                    // Store JSON in an env var because bash doesn't
-                    // support storing arrays in env vars
-                    serde_json::to_string(&services_to_start)?,
-                );
-            }
+        if is_ephemeral && !services_to_start.is_empty() {
+            exports.insert(
+                FLOX_SERVICES_TO_START_VAR,
+                // Store JSON in an env var because bash doesn't
+                // support storing arrays in env vars
+                serde_json::to_string(&services_to_start)?,
+            );
         }
 
         let socket_path = environment.services_socket_path(&flox)?;
