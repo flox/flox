@@ -30,7 +30,8 @@ impl ContainerBuilder for ContainerizeProxy {
 
     fn create_container_source(
         &self,
-        _name: impl AsRef<str>, // Inferred from `self.environment_path`
+        // Inferred from `self.environment_path` by flox _inside_ the container.
+        _name: impl AsRef<str>,
         tag: impl AsRef<str>,
     ) -> Result<ContainerSource, Self::Error> {
         let env_mount = "/flox_env";
