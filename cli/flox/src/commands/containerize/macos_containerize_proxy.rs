@@ -10,6 +10,9 @@ use super::Runtime;
 const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE: &str = "ghcr.io/flox/flox";
 
+const MOUNT_ENV: &str = "/flox_env";
+const MOUNT_HOME: &str = "/flox_home";
+
 #[derive(Debug, Clone)]
 pub(crate) struct ContainerizeProxy {
     environment_path: PathBuf,
@@ -34,9 +37,6 @@ impl ContainerBuilder for ContainerizeProxy {
         _name: impl AsRef<str>,
         tag: impl AsRef<str>,
     ) -> Result<ContainerSource, Self::Error> {
-        let env_mount = "/flox_env";
-        let home_mount = "/flox_home";
-
         // Inception L1: Container runtime args.
         let mut command = self.container_runtime.to_command();
         command.arg("run");
@@ -46,20 +46,20 @@ impl ContainerBuilder for ContainerizeProxy {
             &format!(
                 "type=bind,source={},target={}",
                 self.environment_path.to_string_lossy(),
-                env_mount
+                MOUNT_ENV
             ),
         ]);
 
         // Honour config from the user's home directory on their host machine if
         // available.
         if let Some(home_dir) = home_dir() {
-            command.args(["--env", &format!("HOME={}", home_mount)]);
+            command.args(["--env", &format!("HOME={}", MOUNT_HOME)]);
             command.args([
                 "--mount",
                 &format!(
                     "type=bind,source={},target={}",
                     home_dir.to_string_lossy(),
-                    home_mount
+                    MOUNT_HOME
                 ),
             ]);
         }
@@ -95,7 +95,7 @@ impl ContainerBuilder for ContainerizeProxy {
 
         // Inception L3: Flox args.
         command.arg("containerize");
-        command.args(["--dir", env_mount]);
+        command.args(["--dir", MOUNT_ENV]);
         command.args(["--tag", tag.as_ref()]);
         command.args(["--file", "-"]);
 
