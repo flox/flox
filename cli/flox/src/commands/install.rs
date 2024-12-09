@@ -482,7 +482,7 @@ fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
     };
     let rc_file_names = match shell {
         Shell::Bash(_) => vec![".bashrc", ".profile"],
-        Shell::Zsh(_) => vec![".zshrc"],
+        Shell::Zsh(_) => vec![".zshenv"],
         Shell::Tcsh(_) => vec![".tcshrc"],
         Shell::Fish(_) => vec!["config.fish"],
     };
