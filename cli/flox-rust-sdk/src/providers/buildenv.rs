@@ -6,10 +6,12 @@ use std::process::Command;
 use std::sync::LazyLock;
 
 use flox_core::canonical_path::CanonicalPath;
+use pollster::FutureExt as _;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
 
+use super::catalog::ClientTrait;
 use crate::data::System;
 use crate::models::lockfile::{
     LockedPackage,
@@ -19,6 +21,7 @@ use crate::models::lockfile::{
     Lockfile,
 };
 use crate::models::pkgdb::{PkgDbError, PKGDB_BIN};
+use crate::providers::catalog::CatalogClientError;
 use crate::utils::CommandExt;
 
 pub static NIX_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -77,6 +80,14 @@ pub enum BuildEnvError {
     #[error("Failed to link environment: {0}")]
     Link(String),
 
+    /// An error that occurred while calling the client
+    #[error("Unexpected error calling the catalog client")]
+    CatalogError(#[source] CatalogClientError),
+
+    /// An error that occurred while calling the client
+    #[error("Unexpected error calling the catalog client")]
+    CacheError(String),
+
     /// An error that occurred while calling nix build.
     #[error("Failed to call 'nix build'")]
     CallNixBuild(#[source] std::io::Error),
@@ -106,6 +117,7 @@ pub struct BuiltStorePath(PathBuf);
 pub trait BuildEnv {
     fn build(
         &self,
+        client: &impl ClientTrait,
         lockfile: &Path,
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError>;
@@ -158,18 +170,69 @@ impl BuildEnvNix {
     /// See the individual realisation functions for more details.
     // todo: return actual store paths built,
     // necessary when building manifest builds.
-    fn realise_lockfile(&self, lockfile: &Lockfile, system: &System) -> Result<(), BuildEnvError> {
+    fn realise_lockfile(
+        &self,
+        client: &impl ClientTrait,
+        lockfile: &Lockfile,
+        system: &System,
+    ) -> Result<(), BuildEnvError> {
         for package in lockfile.packages.iter() {
             if package.system() != system {
                 continue;
             }
             match package {
-                LockedPackage::Catalog(locked) => self.realise_nixpkgs(locked)?,
+                LockedPackage::Catalog(locked) => self.realise_nixpkgs(client, locked)?,
                 LockedPackage::Flake(locked) => self.realise_flakes(locked)?,
                 LockedPackage::StorePath(locked) => self.realise_store_path(locked)?,
             }
         }
         Ok(())
+    }
+
+    /// Try to realise a custom package by asking for and downloading from the
+    /// recieved store info from the catalog.  Returns true if all outputs were
+    /// found and downloaedd, false otherwise.
+    fn try_realise_custom_pkg(
+        client: &impl ClientTrait,
+        locked: &LockedPackageCatalog,
+    ) -> Result<bool, BuildEnvError> {
+        // TODO - The API call accepts multiple, so an optimization is to
+        // collect these for the whole lockfile ahead of time and ask for them
+        // all at once.
+        let paths: Vec<String> = locked.outputs.values().map(|s| s.to_string()).collect();
+        let _store_locations = client
+            .get_store_info(paths)
+            .block_on()
+            .map_err(BuildEnvError::CatalogError)?;
+
+        // Try downloading each output from the store location provided.  If we
+        // are missing store info for any, we should return false.
+        // TODO - It is possible not all are missing. Do we need to check them
+        // each locally before attempting to download?  For now, we'll just
+        // assume they are all missing, noting custom packages only have one
+        // output currently.
+        let mut all_found = true;
+        for (path, locations) in _store_locations.iter() {
+            if !locations.is_empty() {
+                // nix copy
+                let mut copy_command = Command::new(&*NIX_BIN);
+                copy_command
+                    .arg("copy")
+                    .arg("--from")
+                    .arg(&locations[0].url)
+                    .arg(path);
+                let output = copy_command
+                    .output()
+                    .map_err(|e| BuildEnvError::CacheError(e.to_string()))?;
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    return Err(BuildEnvError::CacheError(stderr.to_string()));
+                }
+            } else {
+                all_found = false;
+            };
+        }
+        Ok(all_found)
     }
 
     /// Realise a package from the (nixpkgs) catalog.
@@ -195,14 +258,40 @@ impl BuildEnvNix {
     /// this function is currently assumes that the package is from the nixpkgs base-catalog.
     /// Currently the type is distinguished by the [LockedPackageCatalog::locked_url].
     /// If this does not indicate a nixpkgs package, the function will currently panic!
-    fn realise_nixpkgs(&self, locked: &LockedPackageCatalog) -> Result<(), BuildEnvError> {
-        // check if all store paths are valid, or can be substituted
-        // if so, return without eval
+    fn realise_nixpkgs(
+        &self,
+        client: &impl ClientTrait,
+        locked: &LockedPackageCatalog,
+    ) -> Result<(), BuildEnvError> {
+        // Check if all store paths are valid, or can be substituted.
         let all_valid = self.check_store_path_with_substituters(locked.outputs.values())?;
 
+        // If so, return without eval.
         if all_valid {
             return Ok(());
         }
+
+        let installable = {
+            let mut locked_url = locked.locked_url.to_string();
+
+            if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
+                locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
+            } else {
+                debug!(?locked.attr_path, "Trying to realize custom package");
+                let all_found = Self::try_realise_custom_pkg(client, locked)?;
+                // We asked for all the outputs for the package, got store info for
+                // each, and were able to download them all.  If so, then we're done here.
+                if all_found {
+                    return Ok(());
+                };
+                // TODO - Move on to trying to build locally.
+            }
+
+            // build all out paths
+            let attrpath = format!("legacyPackages.{}.{}^*", locked.system, locked.attr_path);
+
+            format!("{}#{}", locked_url, attrpath)
+        };
 
         let mut nix_build_command = self.base_command();
 
@@ -226,24 +315,6 @@ impl BuildEnvNix {
                 &pkgdb_lib_dir.to_string_lossy(),
             ]);
         }
-
-        let installable = {
-            let mut locked_url = locked.locked_url.to_string();
-
-            if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
-                locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
-            } else {
-                todo!(
-                    "Building non-nixpkgs catalog packages is not yet supported.\n\
-                    Pending implementation and decisions regarding representation in the lockfile"
-                );
-            }
-
-            // build all out paths
-            let attrpath = format!("legacyPackages.{}.{}^*", locked.system, locked.attr_path);
-
-            format!("{}#{}", locked_url, attrpath)
-        };
 
         nix_build_command.arg("build");
         nix_build_command.arg("--no-write-lock-file");
@@ -434,6 +505,7 @@ impl BuildEnvNix {
 impl BuildEnv for BuildEnvNix {
     fn build(
         &self,
+        client: &impl ClientTrait,
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
@@ -479,7 +551,7 @@ impl BuildEnv for BuildEnvNix {
         // This will prevent failures due to e.g. non-deterministic,
         // non-sandboxed manifest builds which may produce different store paths,
         // than previously locked in the lockfile.
-        self.realise_lockfile(&lockfile, &env!("NIX_TARGET_SYSTEM").to_string())?;
+        self.realise_lockfile(client, &lockfile, &env!("NIX_TARGET_SYSTEM").to_string())?;
 
         // Build the lockfile by evaluating and building the `buildenv.nix` expression.
         let outputs = self.call_buildenv_nix(lockfile_path, service_config_path)?;
@@ -522,7 +594,7 @@ mod realise_nixpkgs_tests {
 
     use super::*;
     use crate::models::lockfile;
-    use crate::providers::catalog::GENERATED_DATA;
+    use crate::providers::catalog::{MockClient, StoreInfo, StoreInfoResponse, GENERATED_DATA};
 
     /// Read a single locked package for the current system from a mock lockfile.
     /// This is a helper function to avoid repetitive boilerplate in the tests.
@@ -551,6 +623,7 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_build_reproduce_if_invalid() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let client = MockClient::new(None::<String>).unwrap();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -565,7 +638,7 @@ mod realise_nixpkgs_tests {
 
         let buildenv = BuildEnvNix;
 
-        let result = buildenv.realise_nixpkgs(&locked_package);
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
         assert!(result.is_ok());
 
         // Note: per the above this may be incidentally true
@@ -579,17 +652,18 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_skip_eval_if_valid() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let client = MockClient::new(None::<String>).unwrap();
 
         // build the package to ensure it is in the store
         let buildenv = BuildEnvNix;
         buildenv
-            .realise_nixpkgs(&locked_package)
+            .realise_nixpkgs(&client, &locked_package)
             .expect("'hello' package should build");
 
         // replace the attr_path with one that is known to fail to evaluate
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
         buildenv
-            .realise_nixpkgs(&locked_package)
+            .realise_nixpkgs(&client, &locked_package)
             .expect("'hello' package should be realised without eval/build");
     }
 
@@ -605,6 +679,7 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_eval_failure() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let client = MockClient::new(None::<String>).unwrap();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -617,7 +692,7 @@ mod realise_nixpkgs_tests {
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
 
         let buildenv = BuildEnvNix;
-        let result = buildenv.realise_nixpkgs(&locked_package);
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
         let err = result.expect_err("realising nixpkgs#AAAAAASomeThingsFailToEvaluate should fail");
         assert!(matches!(err, BuildEnvError::Realise2 { .. }));
     }
@@ -635,6 +710,7 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_build_unfree() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello-unfree-lock.json"));
+        let client = MockClient::new(None::<String>).unwrap();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -644,7 +720,7 @@ mod realise_nixpkgs_tests {
         );
 
         let buildenv = BuildEnvNix;
-        let result = buildenv.realise_nixpkgs(&locked_package);
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
         assert!(result.is_ok(), "{}", result.unwrap_err());
     }
 
@@ -662,6 +738,7 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_build_broken() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/tabula-lock.json"));
+        let client = MockClient::new(None::<String>).unwrap();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -671,8 +748,92 @@ mod realise_nixpkgs_tests {
         );
 
         let buildenv = BuildEnvNix;
-        let result = buildenv.realise_nixpkgs(&locked_package);
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
         assert!(result.is_ok(), "{}", result.unwrap_err());
+    }
+
+    #[test]
+    fn nixpkgs_custom_pkg_no_matching_response() {
+        let mut locked_package =
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut resp = StoreInfoResponse {
+            items: std::collections::HashMap::new(),
+        };
+        resp.items.insert(
+            "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+            vec![StoreInfo {
+                url: "https://example.com".to_string(),
+            }],
+        );
+        client.push_store_info_response(resp);
+
+        // Set the attr_path to something that looks like a custom package.
+        locked_package.attr_path = "custom_catalog/hello".to_string();
+        // replace the store path with a known invalid one, to trigger an attempt to rebuild
+        let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
+        let _original_store_path = std::mem::replace(
+            locked_package.outputs.get_mut("out").unwrap(),
+            invalid_store_path,
+        );
+
+        let buildenv = BuildEnvNix;
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn nixpkgs_custom_pkg_no_cache_info() {
+        let mut locked_package =
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut resp = StoreInfoResponse {
+            items: std::collections::HashMap::new(),
+        };
+        let fake_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
+        resp.items.insert(fake_store_path.clone(), vec![]);
+        client.push_store_info_response(resp);
+
+        // Set the attr_path to something that looks like a custom package.
+        locked_package.attr_path = "custom_catalog/hello".to_string();
+        // replace the store path with a known invalid one, to trigger an attempt to rebuild
+        let _original_store_path = std::mem::replace(
+            locked_package.outputs.get_mut("out").unwrap(),
+            fake_store_path,
+        );
+
+        let buildenv = BuildEnvNix;
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn nixpkgs_custom_pkg_cache_download_attempt() {
+        let mut locked_package =
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut resp = StoreInfoResponse {
+            items: std::collections::HashMap::new(),
+        };
+        let fake_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
+        resp.items.insert(fake_store_path.clone(), vec![StoreInfo {
+            url: "S3://flox-user-catalog-dev/store".to_string(),
+        }]);
+        client.push_store_info_response(resp);
+
+        // Set the attr_path and locked url to something that looks like a custom package.
+        locked_package.attr_path = "custom_catalog/hello".to_string();
+        locked_package.locked_url =
+            "github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string();
+        // replace the store path with a known invalid one, to trigger an attempt to rebuild
+        let _original_store_path = std::mem::replace(
+            locked_package.outputs.get_mut("out").unwrap(),
+            fake_store_path,
+        );
+
+        let buildenv = BuildEnvNix;
+        let result = buildenv.realise_nixpkgs(&client, &locked_package);
+        assert!(matches!(result.unwrap_err(), BuildEnvError::CacheError(_)));
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
@@ -947,7 +1108,7 @@ mod buildenv_tests {
     use regex::Regex;
 
     use super::*;
-    use crate::providers::catalog::{GENERATED_DATA, MANUALLY_GENERATED};
+    use crate::providers::catalog::{MockClient, GENERATED_DATA, MANUALLY_GENERATED};
 
     trait PathExt {
         fn is_executable_file(&self) -> bool;
@@ -962,7 +1123,8 @@ mod buildenv_tests {
     static BUILDENV_RESULT_SIMPLE_PACKAGE: LazyLock<BuildEnvOutputs> = LazyLock::new(|| {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/hello/manifest.lock");
-        buildenv.build(&lockfile_path, None).unwrap()
+        let client = MockClient::new(None::<String>).unwrap();
+        buildenv.build(&client, &lockfile_path, None).unwrap()
     });
 
     #[test]
@@ -1004,7 +1166,8 @@ mod buildenv_tests {
     fn build_contains_build_script_and_output() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/build-noop/manifest.lock");
-        let result = buildenv.build(&lockfile_path, None).unwrap();
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = result.runtime.as_ref();
         let develop = result.develop.as_ref();
@@ -1019,7 +1182,8 @@ mod buildenv_tests {
     fn build_on_activate_lockfile() {
         let buildenv = BuildEnvNix;
         let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/on-activate/manifest.lock");
-        let result = buildenv.build(&lockfile_path, None).unwrap();
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = &result.runtime;
         assert!(runtime.join("activate.d/hook-on-activate").exists());
@@ -1066,7 +1230,8 @@ mod buildenv_tests {
     fn detects_conflicting_packages() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict.json");
-        let result = buildenv.build(&lockfile_path, None);
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("conflicting packages should fail to build");
 
         let BuildEnvError::Build(output) = err else {
@@ -1087,7 +1252,8 @@ mod buildenv_tests {
     fn resolves_conflicting_packages_with_priority() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict-resolved.json");
-        let result = buildenv.build(&lockfile_path, None);
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None);
         assert!(
             result.is_ok(),
             "conflicting packages should be resolved by priority"
@@ -1106,7 +1272,8 @@ mod buildenv_tests {
     fn environment_escapes_variables() {
         let buildenv = BuildEnvNix;
         let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/vars_escape/manifest.lock");
-        let result = buildenv.build(&lockfile_path, None).unwrap();
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = result.runtime.as_ref();
         let develop = result.develop.as_ref();
@@ -1126,7 +1293,8 @@ mod buildenv_tests {
     fn verify_build_closure_contains_only_toplevel_packages() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-all-toplevel.json");
-        let result = buildenv.build(&lockfile_path, None).unwrap();
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = result.runtime.as_ref();
         let develop = result.develop.as_ref();
@@ -1149,7 +1317,8 @@ mod buildenv_tests {
     fn verify_build_closure_contains_only_hello_with_runtime_packages_attribute() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-only-hello.json");
-        let result = buildenv.build(&lockfile_path, None).unwrap();
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = result.runtime.as_ref();
         let develop = result.develop.as_ref();
@@ -1172,7 +1341,8 @@ mod buildenv_tests {
     fn verify_build_closure_can_only_select_toplevel_packages_from_runtime_packages_attribute() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-toplevel.json");
-        let result = buildenv.build(&lockfile_path, None);
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("build should fail if non-toplevel packages are selected");
 
         let BuildEnvError::Build(output) = err else {
@@ -1186,7 +1356,8 @@ mod buildenv_tests {
     fn verify_build_closure_cannot_select_nonexistent_packages_in_runtime_packages_attribute() {
         let buildenv = BuildEnvNix;
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-found.json");
-        let result = buildenv.build(&lockfile_path, None);
+        let client = MockClient::new(None::<String>).unwrap();
+        let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("build should fail if nonexistent packages are selected");
 
         let BuildEnvError::Build(output) = err else {

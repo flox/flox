@@ -264,7 +264,8 @@ impl<State> CoreEnvironment<State> {
 
         let service_config_path = maybe_make_service_config_file(flox, &lockfile)?;
 
-        let outputs = BuildEnvNix.build(&lockfile_path, service_config_path)?;
+        let outputs =
+            BuildEnvNix.build(&flox.catalog_client, &lockfile_path, service_config_path)?;
         debug!(?outputs, "built environment");
         Ok(outputs)
     }
