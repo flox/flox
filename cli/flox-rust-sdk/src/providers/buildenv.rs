@@ -189,36 +189,28 @@ impl BuildEnvNix {
         Ok(())
     }
 
-    fn parse_pkg_path(ap: &str) -> (Option<String>, String) {
-        let parts: Vec<&str> = ap.split('/').collect();
-        if parts.len() == 1 || parts[0].contains('.') {
-            (None, ap.to_string())
-        } else {
-            (Some(parts[0].to_string()), parts[1..].join("/"))
-        }
-    }
-
+    /// Try to realise a custom package by asking for and downloading from the
+    /// recieved store info from the catalog.  Returns true if all outputs were
+    /// found and downloaedd, false otherwise.
     fn try_realise_custom_pkg(
         client: &impl ClientTrait,
         locked: &LockedPackageCatalog,
     ) -> Result<bool, BuildEnvError> {
-        // Before building, if this is a custom package, see if we have store
-        // info in the catalog.
-        // TODO - The API call accepts multiple, so an optimization
-        // is to collect these for the whole lockfile ahead of time and ask for
-        // them all at once.
+        // TODO - The API call accepts multiple, so an optimization is to
+        // collect these for the whole lockfile ahead of time and ask for them
+        // all at once.
         let paths: Vec<String> = locked.outputs.values().map(|s| s.to_string()).collect();
         let _store_locations = client
             .get_store_info(paths)
             .block_on()
             .map_err(BuildEnvError::CatalogError)?;
 
-        // For the missing paths that we requested, try downloading from the store location provided.
-        // If we are missing store info for any that we asked for (implying they are not yet present),
-        // we should continue on with later code which may attempt to build them locally.
-        // TODO - Which are missing? Do we need to check them all again?  For now,
-        // we'll just assume they are all missing, and custom packages only
-        // have one output currently.
+        // Try downloading each output from the store location provided.  If we
+        // are missing store info for any, we should return false.
+        // TODO - It is possible not all are missing. Do we need to check them
+        // each locally before attempting to download?  For now, we'll just
+        // assume they are all missing, noting custom packages only have one
+        // output currently.
         let mut all_found = true;
         for (path, locations) in _store_locations.iter() {
             if !locations.is_empty() {
@@ -240,8 +232,6 @@ impl BuildEnvNix {
                 all_found = false;
             };
         }
-        // We had store info and were able to download from the cache everything
-        // that we asked for that was missing, so we can return early.
         Ok(all_found)
     }
 
@@ -273,28 +263,34 @@ impl BuildEnvNix {
         client: &impl ClientTrait,
         locked: &LockedPackageCatalog,
     ) -> Result<(), BuildEnvError> {
-        // check if all store paths are valid, or can be substituted
-        // if so, return without eval
+        // Check if all store paths are valid, or can be substituted.
         let all_valid = self.check_store_path_with_substituters(locked.outputs.values())?;
 
+        // If so, return without eval.
         if all_valid {
             return Ok(());
         }
 
-        // Check if this is a custom package
-        // TODO - need to update lockfile to differentiate between custom and
-        // nixpkgs packages, this is broken since the attr path in the lockfile
-        // comes back as only the path portion and not the catalog.
-        let (catalog, _attr_path) = Self::parse_pkg_path(&locked.attr_path);
-        // If it is, then try to realise the outputs using the catalog info before proceeding.
-        if catalog.is_some() {
-            debug!(?catalog, ?_attr_path, "Trying to realize custom package");
-            let all_found = Self::try_realise_custom_pkg(client, locked)?;
-            // We asked for all the outputs for the package, got store info for
-            // each, and were able to download them all.  If so, then we're done here.
-            if all_found {
-                return Ok(());
-            };
+        let installable = {
+            let mut locked_url = locked.locked_url.to_string();
+
+            if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
+                locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
+            } else {
+                debug!(?locked.attr_path, "Trying to realize custom package");
+                let all_found = Self::try_realise_custom_pkg(client, locked)?;
+                // We asked for all the outputs for the package, got store info for
+                // each, and were able to download them all.  If so, then we're done here.
+                if all_found {
+                    return Ok(());
+                };
+                // TODO - Move on to trying to build locally.
+            }
+
+            // build all out paths
+            let attrpath = format!("legacyPackages.{}.{}^*", locked.system, locked.attr_path);
+
+            format!("{}#{}", locked_url, attrpath)
         };
 
         let mut nix_build_command = self.base_command();
@@ -319,28 +315,6 @@ impl BuildEnvNix {
                 &pkgdb_lib_dir.to_string_lossy(),
             ]);
         }
-
-        let installable = {
-            let mut locked_url = locked.locked_url.to_string();
-
-            if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
-                locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
-            } else {
-                // Until the API and models are updated, the `lockfile_url`
-                // recorded a a custom a package will be the base catalog page.
-                // And this this path will not be hit.  For now, we're doing
-                // this above, based on parsing the pkg-path
-                todo!(
-                    "Building non-nixpkgs catalog packages is not yet supported.\n\
-                    Pending implementation and decisions regarding representation in the lockfile"
-                );
-            }
-
-            // build all out paths
-            let attrpath = format!("legacyPackages.{}.{}^*", locked.system, locked.attr_path);
-
-            format!("{}#{}", locked_url, attrpath)
-        };
 
         nix_build_command.arg("build");
         nix_build_command.arg("--no-write-lock-file");
@@ -641,26 +615,6 @@ mod realise_nixpkgs_tests {
         locked_package.expect("no locked package found")
     }
 
-    #[test]
-    fn parse_pkg_path_tests() {
-        assert_eq!(
-            BuildEnvNix::parse_pkg_path("foo/bar"),
-            (Some("foo".to_string()), "bar".to_string())
-        );
-        assert_eq!(
-            BuildEnvNix::parse_pkg_path("foo.bar"),
-            (None, "foo.bar".to_string())
-        );
-        assert_eq!(
-            BuildEnvNix::parse_pkg_path("foo"),
-            (None, "foo".to_string())
-        );
-        assert_eq!(
-            BuildEnvNix::parse_pkg_path("foo/bar/baz"),
-            (Some("foo".to_string()), "bar/baz".to_string())
-        );
-    }
-
     /// When a package is not available in the store, it should be built from its derivation.
     /// This test sets a known invalid store path to trigger a rebuild of the 'hello' package.
     /// Since we're unable to provide unique store paths for each test run,
@@ -867,8 +821,10 @@ mod realise_nixpkgs_tests {
         }]);
         client.push_store_info_response(resp);
 
-        // Set the attr_path to something that looks like a custom package.
+        // Set the attr_path and locked url to something that looks like a custom package.
         locked_package.attr_path = "custom_catalog/hello".to_string();
+        locked_package.locked_url =
+            "github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string();
         // replace the store path with a known invalid one, to trigger an attempt to rebuild
         let _original_store_path = std::mem::replace(
             locked_package.outputs.get_mut("out").unwrap(),
