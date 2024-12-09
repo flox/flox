@@ -1379,7 +1379,7 @@ EOF
   assert_success
   # check that env vars are set for compatibility with nix built software
   assert_line --partial "set -gx NIX_SSL_CERT_FILE "
-  assert_line --partial "activate.d/fish"
+  assert_line --partial "set-prompt.fish"
 }
 
 # bats test_tags=activate,activate:inplace-prints
@@ -3612,6 +3612,85 @@ EOF
       exit 1
     fi
     FLOX_SHELL="bash" NO_COLOR=1 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "$PATH"'
+EOF
+)
+  assert_success
+  assert_output --regexp "project/.flox/run/.*.project.dev/bin.*default/.flox/run/.*.default.dev/bin"
+}
+
+@test "fish: repeat activation in config.fish doesn't break aliases" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d default
+  MANIFEST_CONTENTS_DEFAULT="$(cat << "EOF"
+    version = 1
+
+    [profile]
+    fish = """
+      alias default_alias="echo Hello default!"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_DEFAULT" | "$FLOX_BIN" edit -d default -f -
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS_PROJECT="$(cat << "EOF"
+    version = 1
+
+    [profile]
+    fish = """
+      alias project_alias="echo Hello project!"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
+
+  echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" > "$HOME/.config/fish/config.fish.extra"
+  # config.fish removes fish from PATH
+  FISH="$(which fish)"
+  run fish <(cat <<EOF
+    if ! type default_alias 2&> /dev/null;
+      echo "default_alias not found"
+      exit 1
+    end
+    FLOX_SHELL="$FISH" NO_COLOR=1 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
+EOF
+)
+  assert_success
+  assert_output --partial "project_alias is a function"
+  assert_output --partial "default_alias is a function with definition"
+}
+
+@test "fish: repeat activation in config.fish creates correct PATH ordering" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d default
+  MANIFEST_CONTENTS_DEFAULT="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_DEFAULT" | "$FLOX_BIN" edit -d default -f -
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS_PROJECT="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
+
+  echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" > "$HOME/.config/fish/config.fish.extra"
+  # config.fish removes fish from PATH
+  FISH="$(which fish)"
+  run fish <(cat <<EOF
+    if not string match -r 'default/.flox/run/.*\.default\.dev/bin' -- "\$PATH"
+      echo "default not in PATH: $PATH"
+      exit 1
+    end
+    FLOX_SHELL="$FISH" NO_COLOR=1 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "\$PATH"'
 EOF
 )
   assert_success
