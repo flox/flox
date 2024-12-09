@@ -480,21 +480,24 @@ fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
         Shell::Tcsh(_) => r#"eval "`flox activate -d ~ -m run`""#,
         Shell::Fish(_) => "flox activate -d ~ -m run | source",
     };
-    let rc_file_name = match shell {
-        Shell::Bash(_) => ".bashrc",
-        Shell::Zsh(_) => ".zshrc",
-        Shell::Tcsh(_) => ".tcshrc",
-        Shell::Fish(_) => "config.fish",
+    let rc_file_names = match shell {
+        Shell::Bash(_) => vec![".bashrc", ".profile"],
+        Shell::Zsh(_) => vec![".zshrc"],
+        Shell::Tcsh(_) => vec![".tcshrc"],
+        Shell::Fish(_) => vec!["config.fish"],
     };
-    let msg = formatdoc! {"
-        The 'default' environment can be activated automatically for every new shell
-        by adding one line to your {rc_file_name} file:
-        {shell_cmd}
-    "};
+    let joined = rc_file_names.join(" and ");
+    let msg = |files: &[&str]| {
+        let file_or_files = if files.len() > 1 { "files" } else { "file" };
+        formatdoc! {"
+            The 'default' environment can be activated automatically for every new shell
+            by adding one line to your {joined} {file_or_files}:
+            {shell_cmd}
+        "}
+    };
 
-    message::plain(msg);
-    let prompt =
-        format!("Would you like Flox to add this configuration to your {rc_file_name} now?");
+    message::plain(msg(&rc_file_names));
+    let prompt = format!("Would you like Flox to add this configuration to {joined} now?");
     let (choice_idx, _) = Dialog {
         message: &prompt,
         help_message: None,
@@ -515,10 +518,12 @@ fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
         message::plain(&read_more_msg);
         return Ok(false);
     }
-    let rc_file_path = locate_rc_file(&shell, rc_file_name)?;
-    ensure_rc_file_exists(&rc_file_path)?;
-    add_activation_to_rc_file(&rc_file_path, shell_cmd)?;
-    message::updated(format!("Configuration added to your {rc_file_name} file."));
+    for rc_file_name in rc_file_names.iter() {
+        let rc_file_path = locate_rc_file(&shell, rc_file_name)?;
+        ensure_rc_file_exists(&rc_file_path)?;
+        add_activation_to_rc_file(&rc_file_path, shell_cmd)?;
+        message::updated(format!("Configuration added to your {rc_file_name} file."));
+    }
     message::plain(&restart_msg);
     message::plain(&read_more_msg);
     message::plain(""); // need a blank line before package installation result
@@ -558,6 +563,9 @@ fn add_activation_to_rc_file(
     cmd: impl AsRef<str>,
 ) -> Result<(), anyhow::Error> {
     let backup = path.as_ref().with_extension(".pre_flox");
+    if backup.exists() {
+        std::fs::remove_file(&backup).context("failed to remove old backup of RC file")?;
+    }
     std::fs::copy(&path, backup).context("failed to make backup of RC file")?;
     let mut file = std::fs::OpenOptions::new()
         .append(true)
