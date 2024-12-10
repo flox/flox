@@ -12,6 +12,9 @@ _save_FLOX_ORIG_ZDOTDIR="$FLOX_ORIG_ZDOTDIR"
 _save_ZDOTDIR="$ZDOTDIR"
 _save_activate_d="$_activate_d"
 _save_FLOX_ZSH_INIT_SCRIPT="$FLOX_ZSH_INIT_SCRIPT"
+_save_FLOX_RESTORE_PATH="$_FLOX_RESTORE_PATH"
+_save_FLOX_RESTORE_MANPATH="$_FLOX_RESTORE_MANPATH"
+_save_FLOX_ACTIVATION_PROFILE_ONLY="$_FLOX_ACTIVATION_PROFILE_ONLY"
 
 restore_saved_vars() {
     export _flox_activate_tracelevel="$_save_flox_activate_tracelevel"
@@ -21,6 +24,9 @@ restore_saved_vars() {
     export _activate_d="$_save_activate_d"
     export FLOX_ZSH_INIT_SCRIPT="$_save_FLOX_ZSH_INIT_SCRIPT"
     export _FLOX_ACTIVATION_STATE_DIR="$_save_FLOX_ACTIVATION_STATE_DIR"
+    export _FLOX_RESTORE_PATH="$_save_FLOX_RESTORE_PATH"
+    export _FLOX_RESTORE_MANPATH="$_save_FLOX_RESTORE_MANPATH"
+    export _FLOX_ACTIVATION_PROFILE_ONLY="$_save_FLOX_ACTIVATION_PROFILE_ONLY"
 }
 
 if [ -f /etc/zshrc ]
