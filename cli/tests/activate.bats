@@ -1668,12 +1668,14 @@ EOF
 
   cat <<'EOF' | tcsh -v
     eval "`$FLOX_BIN activate`"
-    if ( "$foo" != baz ) then
+    if ( "$foo" != "baz" ) then
+      echo "foo=$foo when it should be foo=baz"
       exit 1
     endif
     unsetenv foo
     eval "`$FLOX_BIN activate`"
-    if ( "$foo" != baz ) then
+    if ( "$foo" != "baz" ) then
+      echo "foo=$foo when it should be foo=baz"
       exit 1
     endif
 EOF
@@ -1684,13 +1686,18 @@ EOF
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
-  # TODO: this gives unhelpful failures
   cat <<'EOF' | zsh
     eval "$("$FLOX_BIN" activate)"
-    [[ "$foo" == baz ]]
+    if [[ "$foo" != "baz" ]]; then
+      echo "foo=$foo when it should be foo=baz"
+      exit 1
+    fi
     unset foo
     eval "$("$FLOX_BIN" activate)"
-    [[ "$foo" == baz ]]
+    if [[ "$foo" != "baz" ]]; then
+      echo "foo=$foo when it should be foo=baz"
+      exit 1
+    fi
 EOF
 }
 
@@ -1713,7 +1720,10 @@ EOF
   cat <<'EOF' | bash
     export foo=baz
     eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
-    [[ -z "${foo:-}" ]]
+    if [[ ! -z "${foo:-}" ]]; then
+      echo "foo=$foo when it should be unset"
+      exit 1
+    fi
 EOF
 }
 
@@ -1732,16 +1742,17 @@ EOF
 
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
-  # TODO: this gives unhelpful failures
   cat <<'EOF' | fish
     set -gx foo baz
     eval "$("$FLOX_BIN" activate)"
     if set -q foo
+      echo "foo=$foo when it should be unset"
       exit 1
     end
     set -gx foo baz
     eval "$("$FLOX_BIN" activate)"
     if set -q foo
+      echo "foo=$foo when it should be unset"
       exit 1
     end
 EOF
@@ -1762,16 +1773,17 @@ EOF
 
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
-  # TODO: this gives unhelpful failures
   cat <<'EOF' | tcsh
     setenv foo baz
     eval "`$FLOX_BIN activate`"
     if ( $?foo ) then
+      echo "foo=$foo when it should be unset"
       exit 1
     endif
     setenv foo baz
     eval "`$FLOX_BIN activate`"
     if ( $?foo ) then
+      echo "foo=$foo when it should be unset"
       exit 1
     endif
 EOF
@@ -1792,14 +1804,19 @@ EOF
 
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
-  # TODO: this gives unhelpful failures
   cat <<'EOF' | zsh
     export foo=baz
     eval "$("$FLOX_BIN" activate)"
-    [[ -z "${foo:-}" ]]
+    if [[ ! -z "${foo:-}" ]]; then
+      echo "foo=$foo when it should be unset"
+      exit 1
+    fi
     export foo=baz
     eval "$("$FLOX_BIN" activate)"
-    [[ -z "${foo:-}" ]]
+    if [[ ! -z "${foo:-}" ]]; then
+      echo "foo=$foo when it should be unset"
+      exit 1
+    fi
 EOF
 }
 
