@@ -62,7 +62,7 @@ fi
 
 # Binaries required for the script.
 declare _nix="@nix@/bin/nix --extra-experimental-features flakes --extra-experimental-features nix-command"
-declare _pkgdb="@floxPkgdb@/bin/pkgdb"
+declare _pkgdb="@pkgdb@"
 
 # Nicer name for referring to the manifest.
 declare manifestLock="$1"
