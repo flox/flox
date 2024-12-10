@@ -6,6 +6,7 @@ use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_rust_sdk::flox::{Flox, FloxhubToken};
+use flox_rust_sdk::providers::catalog::{CatalogClient, Client};
 use indoc::formatdoc;
 use log::debug;
 use oauth2::basic::BasicClient;
@@ -260,6 +261,14 @@ pub async fn login_flox(flox: &mut Flox) -> Result<()> {
         Some(token.clone()),
     )
     .context("Could not write token to config")?;
+
+    // If the catalog client is catalog (not a mock), update the token by
+    // creating a new client based on the old config with the updated token
+    if let Client::Catalog(client) = &flox.catalog_client {
+        let mut current_config = client.config.clone();
+        current_config.floxhub_token = Some(token.secret().to_string());
+        flox.catalog_client = CatalogClient::new(current_config).into()
+    }
 
     message::updated("Authentication complete");
     message::updated(format!("Logged in as {handle}"));
