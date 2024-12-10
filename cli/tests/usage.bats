@@ -84,6 +84,8 @@ EOF
   assert_line -n "$line" --regexp '^    push[ ]+[\w .,]+'
   line=$((line + 1))
   assert_line -n "$line" --regexp '^    pull[ ]+[\w .,]+'
+  line=$((line + 1))
+  assert_line -n "$line" --regexp '^    containerize[ ]+[\w .,]+'
 }
 
 @test "f5: command grouping changes 3: move lesser used or not polished commands to 'Additional Commands' section with help tip." {
