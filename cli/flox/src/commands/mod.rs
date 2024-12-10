@@ -19,6 +19,7 @@ mod show;
 mod uninstall;
 mod update;
 mod upgrade;
+mod upload;
 
 use std::collections::VecDeque;
 use std::fmt::Display;
@@ -910,6 +911,9 @@ enum InternalCommands {
     /// Publish packages
     #[bpaf(command, hide, footer("Run 'man flox-publish' for more details."))]
     Publish(#[bpaf(external(publish::publish))] publish::Publish),
+    /// Upload packages
+    #[bpaf(command, hide, footer("Run 'man flox-upload' for more details."))]
+    Upload(#[bpaf(external(upload::upload))] upload::Upload),
     /// Lock a manifest file
     #[bpaf(command, hide)]
     LockManifest(#[bpaf(external(lock_manifest::lock_manifest))] lock_manifest::LockManifest),
@@ -922,6 +926,7 @@ impl InternalCommands {
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
             InternalCommands::Build(args) => args.handle(config, flox).await?,
             InternalCommands::Publish(args) => args.handle(config, flox).await?,
+            InternalCommands::Upload(args) => args.handle(config, flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
         }
         Ok(())

@@ -77,6 +77,8 @@ pub struct Features {
     pub build: bool,
     #[serde(default)]
     pub publish: bool,
+    #[serde(default)]
+    pub upload: bool,
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, derive_more::Deref)]
