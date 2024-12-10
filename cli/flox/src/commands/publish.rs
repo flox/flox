@@ -103,24 +103,23 @@ impl Publish {
             _builder: None,
         };
 
-        ensure_floxhub_token(&mut flox).await?;
-        let token = flox
-            .floxhub_token
-            .as_ref()
-            .expect("should be authenticated to FloxHub");
-        let catalog_name = token.handle().to_string();
+        if let Some(token) = ensure_floxhub_token(&mut flox).await? {
+            let catalog_name = token.handle().to_string();
 
-        debug!("publishing package: {}", &package);
-        match publish_provider
-            .publish(&flox.catalog_client, &catalog_name)
-            .await
-        {
-            Ok(_) => message::updated(formatdoc! {"
-                Package published successfully.
+            debug!("publishing package: {}", &package);
+            match publish_provider
+                .publish(&flox.catalog_client, &catalog_name)
+                .await
+            {
+                Ok(_) => message::updated(formatdoc! {"
+                    Package published successfully.
 
-                Use 'flox install {catalog_name}/{package}' to install it.
-                "}),
-            Err(e) => bail!("Failed to publish package: {}", e.to_string()),
+                    Use 'flox install {catalog_name}/{package}' to install it.
+                    "}),
+                Err(e) => bail!("Failed to publish package: {}", e.to_string()),
+            }
+        } else {
+            bail!("Failed to get FloxHub token");
         }
 
         Ok(())
