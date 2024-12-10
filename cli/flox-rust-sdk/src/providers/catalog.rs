@@ -117,16 +117,24 @@ pub enum Client {
     Mock(MockClient),
 }
 
+#[derive(Debug, Clone)]
+pub struct CatalogClientConfig {
+    pub catalog_url: String,
+    pub floxhub_token: Option<String>,
+    pub extra_headers: Option<BTreeMap<String, String>>,
+}
+
 /// A client for the catalog service.
 ///
 /// This is a wrapper around the auto-generated APIClient.
 #[derive(Debug)]
 pub struct CatalogClient {
     client: APIClient,
+    pub config: CatalogClientConfig,
 }
 
 impl CatalogClient {
-    pub fn new(baseurl: &str, extra_headers: Option<BTreeMap<String, String>>) -> Self {
+    pub fn new(config: CatalogClientConfig) -> Self {
         // Remove the existing output file if it exists so we don't merge with
         // a previous `flox` invocation
         if let Ok(path_str) = std::env::var(FLOX_CATALOG_DUMP_DATA_VAR) {
@@ -134,16 +142,8 @@ impl CatalogClient {
             let _ = std::fs::remove_file(path);
         }
 
-        // convert to HeaderMap
-        let mut header_map = HeaderMap::new();
-        if let Some(headers) = extra_headers {
-            for (key, value) in headers {
-                header_map.insert(
-                    header::HeaderName::from_str(&key).unwrap(),
-                    header::HeaderValue::from_str(&value).unwrap(),
-                );
-            }
-        }
+        // Build the map of headers based on the config
+        let headers = Self::build_header_map(&config);
 
         let client = {
             let conn_timeout = std::time::Duration::from_secs(15);
@@ -152,11 +152,43 @@ impl CatalogClient {
                 .connect_timeout(conn_timeout)
                 .timeout(req_timeout)
                 .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
-                .default_headers(header_map)
+                .default_headers(headers)
         };
         Self {
-            client: APIClient::new_with_client(baseurl, client.build().unwrap()),
+            client: APIClient::new_with_client(&config.catalog_url, client.build().unwrap()),
+            config,
         }
+    }
+
+    pub fn build_header_map(config: &CatalogClientConfig) -> HeaderMap {
+        // let mut headers: BTreeMap<String, String> = BTreeMap::new();
+        let mut header_map = HeaderMap::new();
+        // Pass in a bool if we are running in CI, so requests can reflect this in the headers
+        if std::env::var("CI").is_ok() {
+            header_map.insert(
+                header::HeaderName::from_static("flox-ci"),
+                header::HeaderValue::from_static("true"),
+            );
+        };
+
+        // Authenticated requests (for custom catalogs) require a token.
+        if let Some(token) = config.floxhub_token.as_ref() {
+            header_map.insert(
+                header::HeaderName::from_static("Authorization"),
+                header::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap(),
+            );
+        };
+
+        if let Some(extra_headers) = &config.extra_headers {
+            for (key, value) in extra_headers {
+                header_map.insert(
+                    header::HeaderName::from_str(key).unwrap(),
+                    header::HeaderValue::from_str(value).unwrap(),
+                );
+            }
+        }
+
+        header_map
     }
 
     /// Serialize data to the file pointed to by FLOX_CATALOG_DUMP_DATA_VAR if
@@ -1345,6 +1377,14 @@ mod tests {
 
     use super::*;
 
+    fn client_config(url: &str) -> CatalogClientConfig {
+        CatalogClientConfig {
+            catalog_url: url.to_string(),
+            floxhub_token: None,
+            extra_headers: None,
+        }
+    }
+
     #[tokio::test]
     async fn resolve_response_with_new_message_type() {
         let user_message = "User consumable Message";
@@ -1375,7 +1415,7 @@ mod tests {
             then.status(200).json_body(json_response);
         });
 
-        let client = CatalogClient::new(&server.base_url(), None);
+        let client = CatalogClient::new(client_config(server.base_url().as_str()));
         let res = client.resolve(resolve_req).await.unwrap();
         match &res[0].msgs[0] {
             ResolutionMessage::Unknown(msg_struct) => {
@@ -1403,7 +1443,7 @@ mod tests {
             then.status(200).json_body_obj(empty_response);
         });
 
-        let client = CatalogClient::new(&server.base_url(), None);
+        let client = CatalogClient::new(client_config(server.base_url().as_str()));
         let _ = client.package_versions("some-package").await;
         mock.assert();
     }
@@ -1426,7 +1466,13 @@ mod tests {
             then.status(200).json_body_obj(empty_response);
         });
 
-        let client = CatalogClient::new(&server.base_url(), Some(extra_headers));
+        let config = CatalogClientConfig {
+            catalog_url: server.base_url().to_string(),
+            floxhub_token: None,
+            extra_headers: Some(extra_headers),
+        };
+
+        let client = CatalogClient::new(config);
         let _ = client.package_versions("some-package").await;
         mock.assert();
     }

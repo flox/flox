@@ -1611,7 +1611,7 @@ pub(super) async fn ensure_environment_trust(
 ///
 /// If the token is not present and we can prompt the user,
 /// run the login flow ([auth::login_flox]).
-pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<()> {
+pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<Option<FloxhubToken>> {
     match flox.floxhub_token {
         Some(ref token) => {
             log::debug!("floxhub token is present; logged in as {}", token.handle());
@@ -1638,7 +1638,7 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<()> {
         },
     };
 
-    Ok(())
+    Ok(flox.floxhub_token.clone())
 }
 
 pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
