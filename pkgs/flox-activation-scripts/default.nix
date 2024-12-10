@@ -87,11 +87,13 @@ runCommandNoCC "flox-activation-scripts"
       $out/activate \
       $out/activate.d/generate-bash-startup-commands.bash \
       $out/activate.d/generate-fish-startup-commands.bash \
+      $out/activate.d/generate-tcsh-startup-commands.bash \
       $out/activate.d/set-prompt.bash \
       $out/etc/profile.d/* \
       $build_wrapper/activate \
       $build_wrapper/activate.d/generate-bash-startup-commands.bash \
       $build_wrapper/activate.d/generate-fish-startup-commands.bash \
+      $build_wrapper/activate.d/generate-tcsh-startup-commands.bash \
       $build_wrapper/activate.d/set-prompt.bash \
       $build_wrapper/etc/profile.d/*
 
