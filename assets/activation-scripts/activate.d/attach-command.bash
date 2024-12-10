@@ -35,7 +35,7 @@ case "$_flox_shell" in
         # The bash --rcfile option only works for interactive shells
         # so we need to cobble together our own means of sourcing our
         # startup script for non-interactive shells.
-        exec "$_flox_shell" --noprofile --norc -s <<< "source $RCFILE && $*"
+        exec "$_flox_shell" --noprofile --norc -s <<< "source '$RCFILE' && $*"
       fi
     fi
     ;;
@@ -43,7 +43,11 @@ case "$_flox_shell" in
     if [ -n "$FLOX_NOPROFILE" ]; then
       exec "$_flox_shell" -c "$*"
     else
-      exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $_activate_d/fish" -c "$*"
+      RCFILE="$(@coreutils@/bin/mktemp -p "$_FLOX_ACTIVATION_STATE_DIR")"
+      generate_fish_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$PATH" "$MANPATH" "$_activate_d" "$FLOX_ENV" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" > "$RCFILE"
+      # self destruct
+      echo "@coreutils@/bin/rm '$RCFILE'" >> "$RCFILE"
+      exec "$_flox_shell" --init-command "source '$RCFILE'" -c "$*"
     fi
     ;;
   *tcsh)
