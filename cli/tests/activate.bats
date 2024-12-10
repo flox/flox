@@ -1705,11 +1705,12 @@ EOF
 }
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:zsh
-@test "'hook.on-activate' modifies environment variables in nested activation (zsh)" {
+@test "'hook.on-activate' modifies environment variables for first nested activation (zsh)" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
-  cat <<'EOF' | zsh
+  # RC files remove flox from PATH
+  cat <<'EOF' | FLOX_BIN="$(which "$FLOX_BIN")" zsh
     eval "$("$FLOX_BIN" activate)"
     if [[ "$foo" != "baz" ]]; then
       echo "foo=$foo when it should be foo=baz"
@@ -1717,8 +1718,8 @@ EOF
     fi
     unset foo
     eval "$("$FLOX_BIN" activate)"
-    if [[ "$foo" != "baz" ]]; then
-      echo "foo=$foo when it should be foo=baz"
+    if [[ ! -z "${foo:-}" ]]; then
+      echo "foo=$foo when it should be unset"
       exit 1
     fi
 EOF
@@ -1817,7 +1818,7 @@ EOF
 }
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:zsh
-@test "'hook.on-activate' unsets environment variables in nested activation (zsh)" {
+@test "'hook.on-activate' unsets environment variables for first nested activation (zsh)" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -1831,7 +1832,8 @@ EOF
 
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
-  cat <<'EOF' | zsh
+  # RC files remove flox from PATH
+  cat <<'EOF' | FLOX_BIN="$(which "$FLOX_BIN")" zsh
     export foo=baz
     eval "$("$FLOX_BIN" activate)"
     if [[ ! -z "${foo:-}" ]]; then
@@ -1840,8 +1842,8 @@ EOF
     fi
     export foo=baz
     eval "$("$FLOX_BIN" activate)"
-    if [[ ! -z "${foo:-}" ]]; then
-      echo "foo=$foo when it should be unset"
+    if [[ "$foo" != "baz" ]]; then
+      echo "foo=$foo when it should be foo=baz"
       exit 1
     fi
 EOF
@@ -3733,7 +3735,7 @@ EOF
   EXPECT="$(which expect)"
   run fish <(cat <<EOF
     if not string match -r -- '$PROJECT_DIR/default/.flox/run/.*\.default\.dev/bin' "\$PATH"
-      echo "default not in PATH: $PATH"
+      echo "default not in PATH: \$PATH"
       exit 1
     end
     FLOX_SHELL="$FISH" NO_COLOR=1 "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "\$PATH"'
@@ -3741,4 +3743,143 @@ EOF
 )
   assert_success
   assert_output --regexp "$PROJECT_DIR/project/.flox/run/.*.project.dev/bin.*$PROJECT_DIR/default/.flox/run/.*.default.dev/bin"
+}
+
+zsh_repeat_activation_aliases() {
+  init_files=("$@")
+
+  "$FLOX_BIN" init -d default
+  MANIFEST_CONTENTS_DEFAULT="$(cat << "EOF"
+    version = 1
+
+    [profile]
+    zsh = """
+      alias default_alias="echo Hello default!"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_DEFAULT" | "$FLOX_BIN" edit -d default -f -
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS_PROJECT="$(cat << "EOF"
+    version = 1
+
+    [profile]
+    zsh = """
+      alias project_alias="echo Hello project!"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
+
+  for init_file in "${init_files[@]}"; do
+    echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" >> "$HOME/.$init_file.extra"
+  done
+  ZSH="$(which zsh)"
+  EXPECT="$(which expect)"
+  run zsh -i <(cat <<EOF
+    set -euo pipefail
+    if ! type default_alias > /dev/null; then
+      echo "default_alias not found"
+      exit 1
+    fi
+    FLOX_SHELL="$ZSH" NO_COLOR=1 "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
+EOF
+)
+  assert_success
+  assert_output --partial "project_alias is an alias for echo Hello project!"
+  assert_output --partial "default_alias is an alias for echo Hello default!"
+}
+
+@test "zsh: repeat activation in .zshrc doesn't break aliases" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  zsh_repeat_activation_aliases zshrc
+}
+
+@test "zsh: repeat activation in .zshenv doesn't break aliases" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  zsh_repeat_activation_aliases zshenv
+}
+
+@test "zsh: repeat activation in .zshenv and .zshrc doesn't break aliases" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  zsh_repeat_activation_aliases zshenv zshrc
+}
+
+zsh_repeat_activation_PATH() {
+  init_files=("$@")
+
+  "$FLOX_BIN" init -d default
+  MANIFEST_CONTENTS_DEFAULT="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_DEFAULT" | "$FLOX_BIN" edit -d default -f -
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS_PROJECT="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
+
+  FLOX_BIN="$(which "$FLOX_BIN")"
+  for init_file in "${init_files[@]}"; do
+    echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" >> "$HOME/$init_file"
+  done
+  ZSH="$(which zsh)"
+  EXPECT="$(which expect)"
+  run zsh -i <(cat <<EOF
+    set -euo pipefail
+    if ! [[ "\$PATH" =~ $PROJECT_DIR/default/.flox/run/.*.default.dev/bin ]]; then # to double check we activated the default environment
+      echo "default not in PATH: \$PATH"
+      exit 1
+    fi
+    FLOX_SHELL="$ZSH" NO_COLOR=1 "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "\$PATH"'
+EOF
+)
+  assert_success
+  assert_output --regexp "$PROJECT_DIR/project/.flox/run/.*.project.dev/bin.*$PROJECT_DIR/default/.flox/run/.*.default.dev/bin"
+}
+
+@test "zsh: repeat activation in .zshrc creates correct PATH ordering" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  zsh_repeat_activation_PATH .zshrc.extra
+}
+
+@test "zsh: repeat activation in .zshenv creates correct PATH ordering" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  # For this test, we don't want .zshrc setting BADPATH since it runs after
+  # .zshenv
+  rm "$HOME/.zshrc"
+
+  zsh_repeat_activation_PATH .zshenv.extra
+}
+
+@test "zsh: repeat activation in .zshenv and .zshrc creates correct PATH ordering" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  # For this test, we don't want .zshrc setting BADPATH since it runs after
+  # .zshenv, and the activation in .zshrc is profile only so it wouldn't fix
+  # PATH
+  rm "$HOME/.zshrc"
+
+  zsh_repeat_activation_PATH .zshenv.extra .zshrc
 }
