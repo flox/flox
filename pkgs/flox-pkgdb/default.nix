@@ -147,7 +147,7 @@ stdenv.mkDerivation (
     configurePhase = ''
       runHook preConfigure;
       makeFlagsArray+=( "PREFIX=$out" );
-      makeFlagsArray+=( "ACTIVATION_SCRIPTS_PACKAGE_DIR=${flox-activation-scripts}" );
+      makeFlagsArray+=( "ACTIVATION_SCRIPTS_PACKAGE=${flox-activation-scripts}" );
       if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
         makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
       fi

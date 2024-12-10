@@ -354,26 +354,29 @@ endif # ifeq (Linux,$(OS))
 # Save path for most recent build of flox-activation-scripts package
 # in a file, and automatically rebuild that file when assets change,
 # or overwrite it with the value from the environment if defined.
-CLEANFILES += .ACTIVATION_SCRIPTS_PACKAGE_DIR
-ifdef ACTIVATION_SCRIPTS_PACKAGE_DIR
-  .ACTIVATION_SCRIPTS_PACKAGE_DIR: FORCE
+CLEANFILES += .ACTIVATION_SCRIPTS_PACKAGE
+ifdef ACTIVATION_SCRIPTS_PACKAGE
+  .ACTIVATION_SCRIPTS_PACKAGE: FORCE
 	@# Only update the file if the value has changed.
-	-rm -f $@.new
-	echo '$(ACTIVATION_SCRIPTS_PACKAGE_DIR)' > $@.new
-	( cmp $@ $@.new && rm $@.new ) || mv -f $@.new $@
+	ifneq ($(readlink <.ACTIVATION_SCRIPTS_PACKAGE),$(ACTIVATION_SCRIPTS_PACKAGE))
+		@echo update
+	  ln -sf '$(ACTIVATION_SCRIPTS_PACKAGE)' $@
+	else
+	  @echo noop
+	endif
 else
   _rebuild_paths = ../flake.nix ../flake.lock \
     ../assets/activation-scripts ../pkgs/flox-activation-scripts \
 		../cli/flox-activations
-  .ACTIVATION_SCRIPTS_PACKAGE_DIR: $(shell find $(_rebuild_paths) -type f)
-	$(NIX) build --print-out-paths .#flox-activation-scripts > $@
+  .ACTIVATION_SCRIPTS_PACKAGE: $(shell find $(_rebuild_paths) -type f)
+	$(NIX) build .#flox-activation-scripts --out-link $@
 endif
 
 # Rebuild realise.o whenever the activation scripts package changes.
-src/buildenv/realise.o: .ACTIVATION_SCRIPTS_PACKAGE_DIR
+src/buildenv/realise.o: .ACTIVATION_SCRIPTS_PACKAGE
 
 src/buildenv/realise.o: CXXFLAGS +=               \
-	'-DACTIVATION_SCRIPTS_PACKAGE_DIR="$(file <.ACTIVATION_SCRIPTS_PACKAGE_DIR)"'
+	'-DACTIVATION_SCRIPTS_PACKAGE="$(readlink <.ACTIVATION_SCRIPTS_PACKAGE)"'
 
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DCONTAINER_BUILDER_PATH="$(CONTAINER_BUILDER_PATH)"'
