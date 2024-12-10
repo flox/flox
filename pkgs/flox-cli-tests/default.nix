@@ -181,6 +181,8 @@ writeShellScriptBin PROJECT_NAME ''
     else
       "export FLOX_ACTIVATIONS_BIN='${FLOX_ACTIVATIONS_BIN}';"
   }
+  # TODO: we should probably make this an absolute path to avoid having to call
+  # which "$FLOX_BIN" in user_dotfiles_setup
   ${if FLOX_BIN == null then "export FLOX_BIN='flox';" else "export FLOX_BIN='${FLOX_BIN}';"}
   export PROCESS_COMPOSE_BIN='${process-compose}/bin/process-compose';
   export FLOX_INTERPRETER='${flox-activation-scripts}';

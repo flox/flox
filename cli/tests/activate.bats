@@ -20,6 +20,9 @@ load test_support.bash
 # disrupt flox's attempts to configure the environment. Please append to this
 # growing list of nightmare scenarios as you encounter them in the wild.
 user_dotfiles_setup() {
+  # Make sure FLOX_BIN is set to an absolute PATH so that setting BADPATH
+  # doesn't cause `flox` to be found in e.g. `/usr/local/bin`
+  export FLOX_BIN="$(which "$FLOX_BIN")"
   # N.B. $HOME is set to a test-isolated directory by `common_file_setup`,
   # `home_setup`, and `flox_vars_setup` so none of the files below should exist
   # and we abort if we find otherwise.
@@ -1709,8 +1712,7 @@ EOF
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
-  # RC files remove flox from PATH
-  cat <<'EOF' | FLOX_BIN="$(which "$FLOX_BIN")" zsh
+  cat <<'EOF' | zsh
     eval "$("$FLOX_BIN" activate)"
     if [[ "$foo" != "baz" ]]; then
       echo "foo=$foo when it should be foo=baz"
@@ -1832,8 +1834,7 @@ EOF
 
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
-  # RC files remove flox from PATH
-  cat <<'EOF' | FLOX_BIN="$(which "$FLOX_BIN")" zsh
+  cat <<'EOF' | zsh
     export foo=baz
     eval "$("$FLOX_BIN" activate)"
     if [[ ! -z "${foo:-}" ]]; then
@@ -3832,7 +3833,6 @@ EOF
   )"
   echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
 
-  FLOX_BIN="$(which "$FLOX_BIN")"
   for init_file in "${init_files[@]}"; do
     echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" >> "$HOME/$init_file"
   done
