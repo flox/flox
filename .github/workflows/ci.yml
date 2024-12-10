@@ -453,7 +453,7 @@ jobs:
         timeout-minutes: 30
         run: |
           git clean -xfd
-          ssh github@$REMOTE_SERVER \
+          ssh github@$REMOTE_SERVER_ADDRESS \
             -oLogLevel=ERROR \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
