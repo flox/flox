@@ -22,7 +22,6 @@ use catalog_api_v1::types::{
 };
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
-use flox_core::print_type;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
 use log::debug;
@@ -716,10 +715,7 @@ impl ClientTrait for MockClient {
                 err.try_into()
                     .expect("couldn't convert mock error response"),
             )),
-            _ => panic!(
-                "expected resolve response, found {:?}",
-                print_type(&mock_resp.unwrap())
-            ),
+            _ => panic!("expected resolve response, found {:?}", &mock_resp),
         }
     }
 
@@ -740,10 +736,7 @@ impl ClientTrait for MockClient {
                 err.try_into()
                     .expect("couldn't convert mock error response"),
             )),
-            _ => panic!(
-                "expected search response, found {:?}",
-                print_type(&mock_resp.unwrap())
-            ),
+            _ => panic!("expected resolve response, found {:?}", &mock_resp),
         }
     }
 
@@ -762,10 +755,7 @@ impl ClientTrait for MockClient {
                 err.try_into()
                     .expect("couldn't convert mock error response"),
             )),
-            _ => panic!(
-                "expected search response, found {:?}",
-                print_type(&mock_resp.unwrap())
-            ),
+            _ => panic!("expected resolve response, found {:?}", &mock_resp),
         }
     }
 
@@ -805,10 +795,7 @@ impl ClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::GetStoreInfo(resp)) => Ok(resp.items),
-            _ => panic!(
-                "expected get_store_info response, found {:?}",
-                print_type(&mock_resp.unwrap())
-            ),
+            _ => panic!("expected get_store_info response, found {:?}", &mock_resp),
         }
     }
 }

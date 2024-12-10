@@ -284,7 +284,7 @@ impl BuildEnvNix {
                 if all_found {
                     return Ok(());
                 };
-                // TODO - Move on to trying to build locally.
+                panic!("Building custom packages is not yet supported");
             }
 
             // build all out paths
@@ -615,6 +615,16 @@ mod realise_nixpkgs_tests {
         locked_package.expect("no locked package found")
     }
 
+    fn locked_custom_package() -> LockedPackageCatalog {
+        let mut locked_package =
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        // Set the attr_path to something that looks like a custom package.
+        locked_package.attr_path = "custom_catalog/hello".to_string();
+        locked_package.locked_url =
+            "github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string();
+        locked_package
+    }
+
     /// When a package is not available in the store, it should be built from its derivation.
     /// This test sets a known invalid store path to trigger a rebuild of the 'hello' package.
     /// Since we're unable to provide unique store paths for each test run,
@@ -754,8 +764,7 @@ mod realise_nixpkgs_tests {
 
     #[test]
     fn nixpkgs_custom_pkg_no_matching_response() {
-        let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut locked_package = locked_custom_package();
         let mut client = MockClient::new(None::<String>).unwrap();
         let mut resp = StoreInfoResponse {
             items: std::collections::HashMap::new(),
@@ -768,8 +777,6 @@ mod realise_nixpkgs_tests {
         );
         client.push_store_info_response(resp);
 
-        // Set the attr_path to something that looks like a custom package.
-        locked_package.attr_path = "custom_catalog/hello".to_string();
         // replace the store path with a known invalid one, to trigger an attempt to rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
         let _original_store_path = std::mem::replace(
@@ -783,9 +790,9 @@ mod realise_nixpkgs_tests {
     }
 
     #[test]
+    #[should_panic]
     fn nixpkgs_custom_pkg_no_cache_info() {
-        let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut locked_package = locked_custom_package();
         let mut client = MockClient::new(None::<String>).unwrap();
         let mut resp = StoreInfoResponse {
             items: std::collections::HashMap::new(),
@@ -794,8 +801,6 @@ mod realise_nixpkgs_tests {
         resp.items.insert(fake_store_path.clone(), vec![]);
         client.push_store_info_response(resp);
 
-        // Set the attr_path to something that looks like a custom package.
-        locked_package.attr_path = "custom_catalog/hello".to_string();
         // replace the store path with a known invalid one, to trigger an attempt to rebuild
         let _original_store_path = std::mem::replace(
             locked_package.outputs.get_mut("out").unwrap(),
@@ -803,14 +808,12 @@ mod realise_nixpkgs_tests {
         );
 
         let buildenv = BuildEnvNix;
-        let result = buildenv.realise_nixpkgs(&client, &locked_package);
-        assert!(result.is_err());
+        let _result = buildenv.realise_nixpkgs(&client, &locked_package);
     }
 
     #[test]
     fn nixpkgs_custom_pkg_cache_download_attempt() {
-        let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut locked_package = locked_custom_package();
         let mut client = MockClient::new(None::<String>).unwrap();
         let mut resp = StoreInfoResponse {
             items: std::collections::HashMap::new(),
@@ -821,10 +824,6 @@ mod realise_nixpkgs_tests {
         }]);
         client.push_store_info_response(resp);
 
-        // Set the attr_path and locked url to something that looks like a custom package.
-        locked_package.attr_path = "custom_catalog/hello".to_string();
-        locked_package.locked_url =
-            "github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string();
         // replace the store path with a known invalid one, to trigger an attempt to rebuild
         let _original_store_path = std::mem::replace(
             locked_package.outputs.get_mut("out").unwrap(),
