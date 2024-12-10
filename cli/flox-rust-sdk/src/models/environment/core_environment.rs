@@ -19,7 +19,6 @@ use super::{
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::container_builder::ContainerBuilder;
 use crate::models::lockfile::{LockedManifestError, LockedPackage, Lockfile, ResolutionFailure};
 use crate::models::manifest::{
     insert_packages,
@@ -30,14 +29,7 @@ use crate::models::manifest::{
     PackageToInstall,
     TomlEditError,
 };
-use crate::models::pkgdb::{
-    call_pkgdb,
-    error_codes,
-    BuildEnvResult,
-    CallPkgDbError,
-    PkgDbError,
-    PKGDB_BIN,
-};
+use crate::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError, PKGDB_BIN};
 use crate::providers::buildenv::{
     BuildEnv,
     BuildEnvError,
@@ -271,57 +263,6 @@ impl<State> CoreEnvironment<State> {
 }
 
 impl CoreEnvironment<()> {
-    /// Creates a [ContainerBuilder] from the environment.
-    ///
-    /// The sink is typically a [File](std::fs::File), [Stdout](std::io::Stdout)
-    /// but can be any type that implements [Write](std::io::Write).
-    ///
-    /// While container _images_ can be created on any platform,
-    /// only linux _containers_ can be run with `docker` or `podman`.
-    /// Building an environment for linux on a non-linux platform (macos),
-    /// will likely fail unless all packages in the environment can be substituted.
-    ///
-    /// There are mitigations for this, such as building within a VM or container.
-    /// Such solutions are out of scope at this point.
-    /// Until then, this function will error with [CoreEnvironmentError::ContainerizeUnsupportedSystem]
-    /// if the environment is not linux.
-    ///
-    /// CoreEnvironment can't know whether or not to lock an environment (e.g.
-    /// a RemoteEnvironment shouldn't have to be locked),
-    /// so force the caller to handle locking by taking lockfile_path as an
-    /// argument.
-    pub fn build_container(
-        lockfile_path: CanonicalPath,
-        name: &str,
-        tag: &str,
-    ) -> Result<ContainerBuilder, CoreEnvironmentError> {
-        if std::env::consts::OS != "linux" {
-            return Err(CoreEnvironmentError::ContainerizeUnsupportedSystem(
-                std::env::consts::OS.to_string(),
-            ));
-        }
-
-        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_cmd
-            .arg("buildenv")
-            .arg("--container")
-            .arg(name)
-            .arg("--container-tag")
-            .arg(tag)
-            .arg(lockfile_path);
-
-        // Locking flakes may require using `ssh` for private flakes,
-        // so don't clear PATH
-        let result: BuildEnvResult = serde_json::from_value(
-            call_pkgdb(pkgdb_cmd, false).map_err(CoreEnvironmentError::PkgdbBuildEnv)?,
-        )
-        .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
-
-        let store_path = PathBuf::from(result.store_path);
-
-        Ok(ContainerBuilder::new(store_path))
-    }
-
     /// Create a new out-link for the environment at the given path with a
     /// store-path obtained from [Self::build].
     pub fn link(
@@ -1023,23 +964,8 @@ pub enum CoreEnvironmentError {
     #[error("failed to upgrade environment")]
     UpgradeFailedCatalog(#[source] UpgradeError),
     // endregion
-
-    // region: pkgdb (container) builds - to be removed
-    #[error("failed to build environment")]
-    PkgdbBuildEnv(#[source] CallPkgDbError),
-    #[error("failed to parse buildenv output")]
-    ParseBuildEnvOutput(#[source] serde_json::Error),
-    #[error("failed to build container builder")]
-    CallContainerBuilder(#[source] std::io::Error),
-    // endregion
     #[error("package is unsupported for this system")]
     UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
-    #[error("failed to write container builder to sink")]
-    WriteContainer(#[source] std::io::Error),
-
-    // endregion
-    #[error("unsupported system to build container: {0}")]
-    ContainerizeUnsupportedSystem(String),
 
     #[error("could not automatically migrate manifest to version 1")]
     MigrateManifest(#[source] toml_edit::de::Error),

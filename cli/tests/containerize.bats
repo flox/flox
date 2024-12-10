@@ -137,7 +137,7 @@ function skip_if_linux() {
 
   run "$FLOX_BIN" containerize
   assert_failure
-  assert_output --partial "'containerize' is currently only supported on linux (found macos)."
+  assert_output --partial "🚧 MacOS container builder in construction 🚧"
 }
 
 # bats test_tags=containerize:default-to-file
