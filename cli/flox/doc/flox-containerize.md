@@ -4,10 +4,6 @@ section: 1
 header: "Flox User Manuals"
 ...
 
-```{.include}
-./include/experimental-warning.md
-```
-
 # NAME
 
 flox-containerize - export an environment as a container image

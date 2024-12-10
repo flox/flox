@@ -815,12 +815,7 @@ enum SharingCommands {
     #[bpaf(command, footer("Run 'man flox-pull' for more details."))]
     Pull(#[bpaf(external(pull::pull))] pull::Pull),
     /// Containerize an environment
-    #[bpaf(
-        command,
-        hide,
-        footer("Run 'man flox-containerize' for more details."),
-        header("This command is experimental and its behaviour is subject to change")
-    )]
+    #[bpaf(command, footer("Run 'man flox-containerize' for more details."))]
     Containerize(#[bpaf(external(containerize::containerize))] containerize::Containerize),
 }
 
