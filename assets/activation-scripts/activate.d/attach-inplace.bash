@@ -23,14 +23,8 @@ case "$_flox_shell" in
     generate_fish_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$PATH" "$MANPATH" "$_activate_d" "$FLOX_ENV" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}"
     ;;
   *tcsh)
-    echo "setenv _FLOX_RESTORE_PATH \"$PATH\";"
-    echo "setenv _FLOX_RESTORE_MANPATH \"$MANPATH\";"
     echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
-    echo "setenv _flox_activate_tracelevel \"$_flox_activate_tracelevel\";"
-    echo "setenv FLOX_ENV \"$FLOX_ENV\";"
-    echo "setenv _FLOX_ACTIVATION_STATE_DIR \"$_FLOX_ACTIVATION_STATE_DIR\";"
-    echo "setenv _activate_d \"$_activate_d\";"
-    echo "source '$_activate_d/tcsh';"
+    generate_tcsh_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$PATH" "$MANPATH" "$_activate_d" "$FLOX_ENV" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}"
     ;;
   # Any additions should probably be restored in zdotdir/* scripts
   *zsh)

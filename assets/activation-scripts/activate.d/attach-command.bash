@@ -56,7 +56,15 @@ case "$_flox_shell" in
     else
       export FLOX_ORIG_HOME="$HOME"
       export HOME="$_tcsh_home"
-      export FLOX_TCSH_INIT_SCRIPT="$_activate_d/tcsh"
+
+      # The tcsh implementation will source our custom `~/.tcshrc`,
+      # which eventually sources $FLOX_TCSH_INIT_SCRIPT after the normal initialization.
+      FLOX_TCSH_INIT_SCRIPT="$(@coreutils@/bin/mktemp -p "$_FLOX_ACTIVATION_STATE_DIR")"
+      generate_tcsh_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$PATH" "$MANPATH" "$_activate_d" "$FLOX_ENV" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" > "$FLOX_TCSH_INIT_SCRIPT"
+      # self destruct
+      echo "@coreutils@/bin/rm '$FLOX_TCSH_INIT_SCRIPT'" >> "$FLOX_TCSH_INIT_SCRIPT"
+      export FLOX_TCSH_INIT_SCRIPT
+
       exec "$_flox_shell" -m -c "$*"
     fi
     ;;

@@ -28,6 +28,8 @@ export _zdotdir="__OUT__/activate.d/zdotdir"
 source "${_activate_d}/generate-bash-startup-commands.bash"
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/generate-fish-startup-commands.bash"
+# shellcheck source-path=SCRIPTDIR/activate.d
+source "${_activate_d}/generate-tcsh-startup-commands.bash"
 
 # Top-level Flox environment activation script.
 
