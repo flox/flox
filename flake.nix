@@ -57,6 +57,7 @@
           nix = final.callPackage ./pkgs/nix { };
 
           cpp-semver = final.callPackage ./pkgs/cpp-semver { };
+          t3 = final.callPackage ./pkgs/t3 { };
         })
         inputs.sqlite3pp.overlays.default
         inputs.fenix.overlays.default
