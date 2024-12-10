@@ -1393,7 +1393,7 @@ EOF
   assert_success
   # check that env vars are set for compatibility with nix built software
   assert_line --partial "setenv NIX_SSL_CERT_FILE "
-  assert_line --partial "activate.d/tcsh"
+  assert_line --partial "set-prompt.tcsh"
 }
 
 # bats test_tags=activate,activate:inplace-prints
@@ -1688,7 +1688,7 @@ EOF
 }
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:tcsh
-@test "'hook.on-activate' modifies environment variables in nested activation (tcsh)" {
+@test "'hook.on-activate' modifies environment variables for first nested activation (tcsh)" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
@@ -1700,8 +1700,8 @@ EOF
     endif
     unsetenv foo
     eval "`$FLOX_BIN activate`"
-    if ( "$foo" != "baz" ) then
-      echo "foo=$foo when it should be foo=baz"
+    if ( $?foo ) then
+      echo "foo=$foo when it should be unset"
       exit 1
     endif
 EOF
@@ -1789,7 +1789,7 @@ EOF
 }
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:tcsh
-@test "'hook.on-activate' unsets environment variables in nested activation (tcsh)" {
+@test "'hook.on-activate' unsets environment variables for first nested activation (tcsh)" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -1812,8 +1812,8 @@ EOF
     endif
     setenv foo baz
     eval "`$FLOX_BIN activate`"
-    if ( $?foo ) then
-      echo "foo=$foo when it should be unset"
+    if ( "$foo" != "baz" ) then
+      echo "foo=$foo when it should be foo=baz"
       exit 1
     endif
 EOF
@@ -3659,6 +3659,102 @@ EOF
       exit 1
     fi
     FLOX_SHELL="bash" NO_COLOR=1 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "$PATH"'
+EOF
+)
+  assert_success
+  assert_output --regexp "project/.flox/run/.*.project.dev/bin.*default/.flox/run/.*.default.dev/bin"
+}
+
+@test "tcsh: repeat activation in .tcshrc doesn't break aliases" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d default
+  MANIFEST_CONTENTS_DEFAULT="$(cat << "EOF"
+    version = 1
+
+    [profile]
+    tcsh = """
+      alias default_alias echo "Hello default!";
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_DEFAULT" | "$FLOX_BIN" edit -d default -f -
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS_PROJECT="$(cat << "EOF"
+    version = 1
+
+    [profile]
+    tcsh = """
+      alias project_alias echo "Hello project!";
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
+
+  echo "eval \`$FLOX_BIN activate -d '$PROJECT_DIR/default'\`" > "$HOME/.tcshrc.extra"
+
+  # It would be better use tcsh -i to source .tcshrc,
+  # but that causes the tests to background because tcsh -i tries to open
+  # /dev/tty.
+  # Instead `flox activate -d default` manually to simulate sourcing
+  # .tcshrc
+
+  export TCSH="$(which tcsh)"
+  export EXPECT="$(which expect)"
+  run tcsh <(cat <<'EOF'
+    set alias_exists="`alias default_alias`"
+    if ("$alias_exists" == "") then
+      echo "default_alias not found"
+      exit 1
+    else
+    endif
+    setenv FLOX_SHELL "$TCSH"
+    setenv NO_COLOR 1
+    "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "which project_alias && which default_alias"
+EOF
+)
+  assert_success
+  assert_output --partial "project_alias: 	 aliased to echo Hello project!"
+  assert_output --partial "default_alias: 	 aliased to echo Hello default!"
+}
+
+@test "tcsh: repeat activation in .tcshrc creates correct PATH ordering" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init -d default
+  MANIFEST_CONTENTS_DEFAULT="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_DEFAULT" | "$FLOX_BIN" edit -d default -f -
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS_PROJECT="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
+
+  # It would be better use bash -i to source .bashrc,
+  # but that causes the tests to background because bash -i tries to open
+  # /dev/tty.
+  # Instead `eval "$(flox activate -d default)"` manually to simulate sourcing
+  # .bashrc
+
+  echo "eval \`$FLOX_BIN activate -d '$PROJECT_DIR/default'\`" > "$HOME/.tcshrc.extra"
+
+
+  export TCSH="$(which tcsh)"
+  export EXPECT="$(which expect)"
+  run tcsh  <(cat <<'EOF'
+    setenv FLOX_SHELL "$TCSH"
+    setenv NO_COLOR 1
+    "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "$PATH"'
 EOF
 )
   assert_success
