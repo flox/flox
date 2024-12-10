@@ -20,6 +20,9 @@ load test_support.bash
 # disrupt flox's attempts to configure the environment. Please append to this
 # growing list of nightmare scenarios as you encounter them in the wild.
 user_dotfiles_setup() {
+  # Make sure FLOX_BIN is set to an absolute PATH so that setting BADPATH
+  # doesn't cause `flox` to be found in e.g. `/usr/local/bin`
+  export FLOX_BIN="$(which "$FLOX_BIN")"
   # N.B. $HOME is set to a test-isolated directory by `common_file_setup`,
   # `home_setup`, and `flox_vars_setup` so none of the files below should exist
   # and we abort if we find otherwise.
@@ -3708,14 +3711,11 @@ EOF
       exit 1
     else
     endif
-    # We can't double check the alias has been loaded because bash isn't
-    # interactive and discards it
     setenv FLOX_SHELL "$TCSH"
     setenv NO_COLOR 1
     "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "which project_alias && which default_alias"
 EOF
 )
-  echo "$output" > /Users/zmitchell/src/flox/tcsh-profile-only/log.txt
   assert_success
   assert_output --partial "project_alias: 	 aliased to echo Hello project!"
   assert_output --partial "default_alias: 	 aliased to echo Hello default!"
@@ -3749,16 +3749,9 @@ EOF
   echo "eval \`$FLOX_BIN activate -d '$PROJECT_DIR/default'\`" > "$HOME/.tcshrc.extra"
 
 
-  TCSH="$(which tcsh)" \
-  EXPECT="$(which expect)" \
+  export TCSH="$(which tcsh)"
+  export EXPECT="$(which expect)"
   run tcsh  <(cat <<'EOF'
-
-    ## what might bew the tcsh syntax for this...
-    # if ! [[ "$PATH" =~ default/.flox/run/.*.default.dev/bin ]]; then # to double check we activated the default environment
-    #   echo "default not in PATH: $PATH"
-    #   exit 1
-    # fi
-
     setenv FLOX_SHELL "$TCSH"
     setenv NO_COLOR 1
     "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "$PATH"'
