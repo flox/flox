@@ -92,6 +92,11 @@ impl FloxVersion {
     pub fn base_semver(&self) -> String {
         format!("{}.{}.{}", self.major, self.minor, self.patch)
     }
+
+    /// Returns the commit SHA only.
+    pub fn commit_sha(&self) -> Option<String> {
+        self.commit_sha.clone()
+    }
 }
 
 impl FromStr for FloxVersion {
