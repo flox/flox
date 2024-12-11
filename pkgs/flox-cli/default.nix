@@ -3,7 +3,8 @@
   cacert,
   darwin,
   flox-activation-scripts,
-  flox-pkgdb,
+  flox-src,
+  flox-watchdog,
   gitMinimal,
   glibcLocalesUtf8,
   gnused,
@@ -14,12 +15,10 @@
   nix,
   pkgsFor,
   process-compose,
+  rust-internal-deps,
   rust-toolchain,
   rustfmt ? rust-toolchain.rustfmt,
   targetPlatform,
-  rust-internal-deps,
-  flox-watchdog,
-  flox-src,
 }:
 let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
@@ -38,12 +37,8 @@ let
       # rather than relying on or modifying the user's `PATH` variable
       GIT_PKG = gitMinimal;
 
-      # Our own tools
-      WATCHDOG_BIN =
-        if flox-watchdog == null then "flox-watchdog" else "${flox-watchdog}/libexec/flox-watchdog";
-      FLOX_INTERPRETER = flox-activation-scripts;
-
-      FLOX_ZDOTDIR = flox-activation-scripts + "/activate.d/zdotdir";
+      # todo: remove
+      # FLOX_ZDOTDIR = flox-activation-scripts + "/activate.d/zdotdir";
 
       # [sic] nix handles `BASH_` variables specially,
       # so we need to use a different name.
@@ -69,14 +64,22 @@ let
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
     }
-    // rust-internal-deps.passthru.envs
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";
       PATH_LOCALE = "${darwin.locale}/share/locale";
     }
     // lib.optionalAttrs hostPlatform.isLinux {
       LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
-    };
+    }
+    # Our own tools
+    # In the dev shell these will be set dynamically
+    // lib.optionalAttrs (flox-watchdog != null) {
+      WATCHDOG_BIN = flox-watchdog;
+    }
+    // lib.optionalAttrs (flox-activation-scripts != null) {
+      FLOX_INTERPRETER = flox-activation-scripts;
+    }
+    // rust-internal-deps.passthru.envs;
 in
 craneLib.buildPackage (
   {
@@ -156,8 +159,6 @@ craneLib.buildPackage (
     passthru = {
       inherit
         envs
-        flox-pkgdb
-        flox-watchdog
         pkgsFor # Needed to build installers
         ;
 
@@ -169,15 +170,6 @@ craneLib.buildPackage (
         RUST_SRC_PATH = "${rust-toolchain.rust-src}/lib/rustlib/src/rust/library";
         RUSTFMT = "${rustfmt}/bin/rustfmt";
       };
-
-      devShellHook = ''
-        #  # Find the project root and add the `bin' directory to `PATH'.
-        if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-          PATH="$( git rev-parse --show-toplevel; )/cli/target/debug":$PATH;
-          REPO_ROOT="$( git rev-parse --show-toplevel; )";
-        fi
-
-      '';
     };
   }
   // envs

@@ -1,6 +1,6 @@
 _comm="@coreutils@/bin/comm"
 _daemonize="@daemonize@/bin/daemonize"
-_flox_activations="@flox_activations@/bin/flox-activations"
+_flox_activations="@flox_activations@"
 _sed="@gnused@/bin/sed"
 _sort="@coreutils@/bin/sort"
 

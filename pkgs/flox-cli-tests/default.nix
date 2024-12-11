@@ -158,7 +158,7 @@ writeShellScriptBin PROJECT_NAME ''
   ${if NIX_BIN == null then "export NIX_BIN='nix';" else "export NIX_BIN='${NIX_BIN}';"}
   ${
     if BUILDENV_BIN == null then
-      ''export BUILDENV_BIN="$(command -v buildenv)";''
+      ''export BUILDENV_BIN="$PROJECT_ROOT_DIR/build/flox-buildenv/bin/buildenv";''
     else
       "export BUILDENV_BIN='${BUILDENV_BIN}';"
   }
@@ -177,7 +177,7 @@ writeShellScriptBin PROJECT_NAME ''
   }
   ${
     if FLOX_ACTIVATIONS_BIN == null then
-      "export FLOX_ACTIVATIONS_BIN='flox-activations';"
+      ''export FLOX_ACTIVATIONS_BIN="$(command -v flox-activations)";''
     else
       "export FLOX_ACTIVATIONS_BIN='${FLOX_ACTIVATIONS_BIN}';"
   }
@@ -185,7 +185,12 @@ writeShellScriptBin PROJECT_NAME ''
   # which "$FLOX_BIN" in user_dotfiles_setup
   ${if FLOX_BIN == null then "export FLOX_BIN='flox';" else "export FLOX_BIN='${FLOX_BIN}';"}
   export PROCESS_COMPOSE_BIN='${process-compose}/bin/process-compose';
-  export FLOX_INTERPRETER='${flox-activation-scripts}';
+  ${
+    if flox-activation-scripts == null then
+      ''export FLOX_INTERPRETER="$PROJECT_ROOT_DIR/build/flox-activation-scripts";''
+    else
+      ''export FLOX_INTERPRETER='${flox-activation-scripts}';''
+  }
 
   usage() {
         cat << EOF
