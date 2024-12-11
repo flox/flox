@@ -212,15 +212,7 @@ setup_pkgdb_env() {
 @test "upgrade for flake installable" {
   "$FLOX_BIN" init
 
-  MANIFEST_CONTENTS="$(cat << "EOF"
-  version = 1
-
-  [install]
-  hello.flake = "github:NixOS/nixpkgs#hello"
-EOF
-  )"
-
-  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+  run "$FLOX_BIN" install "github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#hello"
 
   run "$FLOX_BIN" upgrade
   assert_success
@@ -231,4 +223,15 @@ EOF
   run "$FLOX_BIN" upgrade
   assert_success
   assert_output "⬆️  Upgraded 'hello' in environment 'test'."
+}
+
+# bats test_tags=upgrade:flake:iid
+@test "upgrade for flake installable by iid" {
+  "$FLOX_BIN" init
+
+  run "$FLOX_BIN" install "github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#hello"
+
+  run "$FLOX_BIN" upgrade hello
+  assert_success
+  assert_output "ℹ️  The specified packages do not need to be upgraded in environment 'test'."
 }

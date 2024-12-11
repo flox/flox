@@ -504,16 +504,15 @@ fn pkg_or_group_found_in_manifest(
     descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
 ) -> bool {
     descriptors.iter().any(|(id, desc)| {
-        let ManifestPackageDescriptor::Catalog(ManifestPackageDescriptorCatalog {
-            pkg_group, ..
-        }) = desc
-        else {
-            return false;
+        let group = if let ManifestPackageDescriptor::Catalog(catalog) = desc {
+            catalog.pkg_group.as_deref()
+        } else {
+            None
         };
 
         let search_term = search_term.as_ref();
 
-        (search_term == id.as_str()) || (Some(search_term) == pkg_group.as_deref())
+        (search_term == id.as_str()) || (Some(search_term) == group)
     })
 }
 
