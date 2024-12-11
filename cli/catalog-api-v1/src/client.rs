@@ -2332,8 +2332,8 @@ pub mod types {
     ///      },
     ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
     ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-    ///      "rev_count": 1,
-    ///      "rev_date": "2021-09-01T00:00:00",
+    ///      "rev_count": 12345,
+    ///      "rev_date": "2021-09-01T00:00:00Z",
     ///      "url": "http://example.com"
     ///    }
     ///  ],
@@ -2492,8 +2492,8 @@ pub mod types {
     ///      },
     ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
     ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-    ///      "rev_count": 1,
-    ///      "rev_date": "2021-09-01T00:00:00",
+    ///      "rev_count": 12345,
+    ///      "rev_date": "2021-09-01T00:00:00Z",
     ///      "url": "http://example.com"
     ///    }
     ///  ],
