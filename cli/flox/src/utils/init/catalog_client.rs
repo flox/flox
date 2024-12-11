@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::bail;
 use flox_rust_sdk::providers::catalog::{
     CatalogClient,
+    CatalogClientConfig,
     Client,
     MockClient,
     FLOX_CATALOG_MOCK_DATA_VAR,
@@ -35,40 +36,37 @@ pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
         );
         Ok(MockClient::new(Some(path))?.into())
     } else {
-        let mut extra_headers: BTreeMap<String, String> = BTreeMap::new();
+        let mut client_config = CatalogClientConfig {
+            catalog_url: config
+                .flox
+                .catalog_url
+                .clone()
+                .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string()),
+            floxhub_token: config.flox.floxhub_token.clone(),
+            extra_headers: None,
+        };
 
         // If metrics are not disabled, pass along the metrics UUID so it can be
         // sent in catalog request headers, as well as the Sentry span info
         if !config.flox.disable_metrics {
-            extra_headers.insert(
+            let mut metrics_headers = BTreeMap::new();
+            metrics_headers.insert(
                 "flox-device-uuid".to_string(),
                 read_metrics_uuid(config).unwrap().to_string(),
             );
 
             if let Some(span) = sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
-                    extra_headers.insert(k.to_string(), v);
+                    metrics_headers.insert(k.to_string(), v);
                 }
             }
+            client_config.extra_headers = Some(metrics_headers);
         };
 
-        // Authenticated requests (for custom catalogs) require a token.
-        if let Some(token) = config.flox.floxhub_token.as_ref() {
-            extra_headers.insert("Authorization".to_string(), format!("Bearer {}", token));
-        };
-
-        // Pass in a bool if we are running in CI, so requests can reflect this in the headers
-        if std::env::var("CI").is_ok() {
-            extra_headers.insert("flox-ci".to_string(), "true".to_string());
-        };
-
-        // If not configured, use the default URL
-        let mut catalog_url = DEFAULT_CATALOG_URL.to_string();
-        if config.flox.catalog_url.is_some() {
-            catalog_url = config.flox.catalog_url.as_ref().unwrap().to_string();
-        }
-
-        debug!("using catalog client with url: {}", catalog_url);
-        Ok(CatalogClient::new(&catalog_url, Some(extra_headers)).into())
+        debug!(
+            "using catalog client with url: {}",
+            client_config.catalog_url
+        );
+        Ok(CatalogClient::new(client_config).into())
     }
 }
