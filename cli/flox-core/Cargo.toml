@@ -20,3 +20,7 @@ tracing.workspace = true
 tempfile.workspace = true
 time.workspace = true
 thiserror.workspace = true
+
+[features]
+default = ["proc_status"]
+proc_status = []
