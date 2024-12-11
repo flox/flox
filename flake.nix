@@ -120,6 +120,7 @@
             flox-buildenv = null;
             flox-package-builder = null;
             flox-pkgdb = null;
+            flox-mk-container = null;
           };
 
           flox-cli = prev.flox-cli.override {

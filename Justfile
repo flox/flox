@@ -36,7 +36,7 @@ build-cdb:
     @make -C pkgdb -j 8 -s cdb
 
 # Build only pkgdb
-@build-pkgdb:
+@build-pkgdb: build-activation-scripts
     make -C pkgdb -j 8;
 
 # Build pkgdb with debug symbols
