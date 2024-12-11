@@ -232,3 +232,21 @@ EOF
   assert_success
   assert_output "⬆️  Upgraded 'hello' in environment 'test'."
 }
+
+# bats test_tags=upgrade:flake:iid
+@test "upgrade for flake installable by iid" {
+  "$FLOX_BIN" init
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+  version = 1
+
+  [install]
+  hello.flake = "github:NixOS/nixpkgs#hello"
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  run "$FLOX_BIN" upgrade hello
+  assert_success
+}
