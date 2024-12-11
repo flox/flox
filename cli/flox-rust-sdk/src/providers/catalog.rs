@@ -81,6 +81,7 @@ pub enum Response {
     // Note that this variant _also_ works for `flox show`/`package_versions` since they return
     // the same type
     Search(SearchResults),
+    GetStoreInfo(StoreInfoResponse),
     Error(GenericResponse<ErrorResponse>),
 }
 
@@ -255,6 +256,14 @@ impl MockClient {
             .push_back(Response::Search(resp));
     }
 
+    /// Push a new response into the list of mock responses
+    pub fn push_store_info_response(&mut self, resp: StoreInfoResponse) {
+        self.mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .push_back(Response::GetStoreInfo(resp));
+    }
+
     /// Push an API error into the list of mock responses
     pub fn push_error_response(&mut self, err: ErrorResponse, status_code: u16) {
         let generic_resp = GenericResponse {
@@ -283,6 +292,9 @@ impl MockClient {
 
 pub type UserBuildInfo = api_types::UserBuildInput;
 pub type UserDerivationInfo = api_types::UserDerivationInput;
+pub type StoreInfoRequest = api_types::StoreInfoRequest;
+pub type StoreInfoResponse = api_types::StoreInfoResponse;
+pub type StoreInfo = api_types::StoreInfo;
 
 #[enum_dispatch]
 #[allow(async_fn_in_trait)]
@@ -329,6 +341,12 @@ pub trait ClientTrait {
         _package_name: impl AsRef<str> + Send + Sync,
         _build_info: &UserBuildInfo,
     ) -> Result<(), CatalogClientError>;
+
+    /// Get store info for a list of derivations
+    async fn get_store_info(
+        &self,
+        _derivations: Vec<String>,
+    ) -> Result<HashMap<String, Vec<StoreInfo>>, CatalogClientError>;
 }
 
 impl ClientTrait for CatalogClient {
@@ -569,6 +587,28 @@ impl ClientTrait for CatalogClient {
             })?;
         Ok(())
     }
+
+    /// Get store info for a list of derivations
+    async fn get_store_info(
+        &self,
+        derivations: Vec<String>,
+    ) -> Result<HashMap<String, Vec<StoreInfo>>, CatalogClientError> {
+        let body = StoreInfoRequest {
+            drv_paths: derivations.iter().map(|s| s.to_string()).collect(),
+        };
+        let response = self
+            .client
+            .get_store_info_api_v1_catalog_store_post(&body)
+            .await
+            .map_err(|e| match e {
+                APIError::ErrorResponse(err) => {
+                    CatalogClientError::UnexpectedError(APIError::ErrorResponse(err))
+                },
+                _ => CatalogClientError::UnexpectedError(e),
+            })?;
+        let store_info = response.into_inner();
+        Ok(store_info.items)
+    }
 }
 
 /// Collects a stream of search results into a container, returning the total count as well.
@@ -671,16 +711,11 @@ impl ClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::Resolve(resp)) => Ok(resp),
-            Some(Response::Search(_)) => {
-                panic!("found search response, expected resolve response");
-            },
             Some(Response::Error(err)) => Err(ResolveError::Resolve(
                 err.try_into()
                     .expect("couldn't convert mock error response"),
             )),
-            None => {
-                panic!("expected mock response, found nothing");
-            },
+            _ => panic!("expected resolve response, found {:?}", &mock_resp),
         }
     }
 
@@ -697,16 +732,11 @@ impl ClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::Search(resp)) => Ok(resp),
-            Some(Response::Resolve(_)) => {
-                panic!("found resolve response, expected search response");
-            },
             Some(Response::Error(err)) => Err(SearchError::Search(
                 err.try_into()
                     .expect("couldn't convert mock error response"),
             )),
-            None => {
-                panic!("expected mock response, found nothing");
-            },
+            _ => panic!("expected resolve response, found {:?}", &mock_resp),
         }
     }
 
@@ -721,16 +751,11 @@ impl ClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::Search(resp)) => Ok(resp),
-            Some(Response::Resolve(_)) => {
-                panic!("found resolve response, expected search response");
-            },
             Some(Response::Error(err)) => Err(VersionsError::Versions(
                 err.try_into()
                     .expect("couldn't convert mock error response"),
             )),
-            None => {
-                panic!("expected mock response, found nothing");
-            },
+            _ => panic!("expected resolve response, found {:?}", &mock_resp),
         }
     }
 
@@ -757,6 +782,21 @@ impl ClientTrait for MockClient {
         _build_info: &UserBuildInfo,
     ) -> Result<(), CatalogClientError> {
         Ok(())
+    }
+
+    async fn get_store_info(
+        &self,
+        _derivations: Vec<String>,
+    ) -> Result<HashMap<String, Vec<StoreInfo>>, CatalogClientError> {
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::GetStoreInfo(resp)) => Ok(resp.items),
+            _ => panic!("expected get_store_info response, found {:?}", &mock_resp),
+        }
     }
 }
 
