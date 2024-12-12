@@ -110,8 +110,88 @@ pub fn create_registry_and_filter_reload_handle() -> (
     // registering `Interest` for the event and that somehow bypasses the filter?!
     let registry = tracing_subscriber::registry()
         .with(log_layer)
+        .with(indicatif::progress_layer())
         .with(metrics_layer)
         .with(sentry_layer);
 
     (registry, filter_reload_handle)
 }
+
+// region: indicatif
+mod indicatif {
+    use std::fmt::{self, Display};
+
+    use indicatif::ProgressStyle;
+    use tracing::field::{Field, Visit};
+    use tracing::Subscriber;
+    use tracing_subscriber::field::RecordFields;
+    use tracing_subscriber::fmt::format::Writer;
+    use tracing_subscriber::fmt::FormatFields;
+    use tracing_subscriber::layer::Layer;
+    use tracing_subscriber::registry;
+
+    pub fn progress_layer<S>() -> impl tracing_subscriber::Layer<S>
+    where
+        S: Subscriber + for<'span> registry::LookupSpan<'span> + 'static,
+    {
+        #[derive(Debug, Default)]
+        struct Visitor {
+            message: Option<String>,
+        }
+        impl Display for Visitor {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                if let Some(message) = &self.message {
+                    write!(f, "{message}")
+                } else {
+                    write!(f, "👻 How can you see me?")
+                }
+            }
+        }
+        impl Visit for Visitor {
+            fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+                self.record_str(field, &format!("{:?}", value));
+            }
+
+            fn record_str(&mut self, field: &Field, value: &str) {
+                if field.name() == "progress" {
+                    self.message = Some(value.to_string());
+                }
+            }
+        }
+
+        struct Formatter;
+        impl<'writer> FormatFields<'writer> for Formatter {
+            /// Format the provided `fields` to the provided [`Writer`], returning a result.
+            fn format_fields<R: RecordFields>(
+                &self,
+                mut writer: Writer<'writer>,
+                fields: R,
+            ) -> fmt::Result {
+                let mut visitor = Visitor::default();
+                fields.record(&mut visitor);
+
+                write!(&mut writer, "{visitor}")?;
+
+                Ok(())
+            }
+        }
+
+        // The progress bar style, a spinner the progress message
+        // and the elapsed time if it's running longer than 1 second.
+        let style = ProgressStyle::with_template(
+            "{span_child_prefix}{spinner} {span_fields} {wide_msg}",
+        )
+        .unwrap();
+
+        let layer = tracing_indicatif::IndicatifLayer::new()
+            .with_progress_style(style)
+            .with_span_field_formatter(Formatter);
+
+        let filtered = layer.with_filter(tracing_subscriber::filter::FilterFn::new(|meta| {
+            meta.fields().iter().any(|field| field.name() == "progress")
+        }));
+
+       filtered
+    }
+}
+// endregion: indicatif
