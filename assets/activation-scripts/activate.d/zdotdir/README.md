@@ -14,6 +14,17 @@ activations involving `zsh`, and our goal in creating this collection is for
 each of these scripts to first perform all of the expected "normal" processing,
 followed by the flox-specific initialization.
 
+## macOS
+
+macOS creates every new shell as a login shell,
+so the startup order below is especially important on macOS.
+Furthermore, the `path_helper` utility is run in `/etc/zprofile`,
+and this utility is responsible for adding `/usr/local/bin` to `PATH`.
+This means that you can't put in-place activation logic in `.zshenv`,
+since `/usr/local/bin/flox` won't be in `PATH` yet,
+and any directories that `flox` adds to `PATH` will be reordered by
+`path_helper` anyway.
+
 ## Implementation
 
 The `flox` script is responsible for setting `ZDOTDIR` to point to this
