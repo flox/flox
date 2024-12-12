@@ -3,14 +3,12 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use fslock::LockFile;
 use log::debug;
-use nix::errno::Errno;
-use nix::sys::signal::kill;
-use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
 
 use crate::path_hash;
+use crate::proc_status::pid_is_running;
 
 type Error = anyhow::Error;
 
@@ -241,7 +239,7 @@ impl Activation {
     pub fn startup_process_running(&self) -> bool {
         self.attached_pids
             .first()
-            .map(|attached_pid| attached_pid.is_running())
+            .map(|attached_pid| pid_is_running(attached_pid.pid))
             .unwrap_or_default()
     }
 
@@ -284,19 +282,6 @@ pub struct AttachedPid {
     /// In that case, `flox activate` sets an expiration so that the shell has
     /// some time before the activation is cleaned up.
     pub expiration: Option<OffsetDateTime>,
-}
-
-impl AttachedPid {
-    fn is_running(&self) -> bool {
-        let pid = Pid::from_raw(self.pid);
-        match kill(pid, None) {
-            // These semantics come from kill(2).
-            Ok(_) => true,              // Process received the signal and is running.
-            Err(Errno::EPERM) => true,  // No permission to send a signal but we know it's running.
-            Err(Errno::ESRCH) => false, // No process running to receive the signal.
-            Err(_) => false,            // Unknown error, assume no running process.
-        }
-    }
 }
 
 /// Acquires the filesystem-based lock on activations.json
