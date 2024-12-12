@@ -7,7 +7,7 @@ use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use crate::models::manifest::{ManifestPackageDescriptorFlake, DEFAULT_PRIORITY};
 use crate::models::pkgdb::{
@@ -133,6 +133,13 @@ impl Default for InstallableLockerImpl {
 pub struct Pkgdb;
 
 impl InstallableLocker for Pkgdb {
+    #[instrument(skip_all, fields(
+        system = system.as_ref(),
+        descriptor = descriptor.flake,
+        progress = format!(
+            "Locking flake installable '{}' for '{}'",
+            descriptor.flake, system.as_ref())
+    ))]
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,

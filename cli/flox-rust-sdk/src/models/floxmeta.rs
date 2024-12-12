@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use log::debug;
 use thiserror::Error;
+use tracing::instrument;
 use url::Url;
 
 use super::environment::managed_environment::remote_branch_name;
@@ -88,6 +89,7 @@ impl FloxMeta {
     /// The caller is responsible for ensuring that the token is present and valid.
     ///
     /// Like [`FloxmetaV2::clone_to`], but uses the system path for floxmeta repositories in XDG_DATA_HOME
+    #[instrument(skip(flox), fields(progress = format!("Retrieving environment metadata for {}/{}", pointer.owner, pointer.name)))]
     pub fn clone(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxMetaError> {
         Self::clone_to(floxmeta_dir(flox, &pointer.owner), flox, pointer)
     }
@@ -143,6 +145,7 @@ impl FloxMeta {
     /// Open a floxmeta repository for a given user
     ///
     /// Like [`FloxmetaV2::open_at`], but uses the system path for floxmeta repositories in XDG_DATA_HOME.
+    #[instrument(skip(flox), fields(progress = format!("Updating environment metadata for {}/{}", pointer.owner, pointer.name)))]
     pub fn open(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxMetaError> {
         let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
         Self::open_at(user_floxmeta_dir, flox, pointer)

@@ -5,6 +5,7 @@ use flox_core::Version;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::instrument;
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::generations::{Generations, GenerationsError};
@@ -694,6 +695,13 @@ impl ManagedEnvironment {
             },
             // We have rev but not local_rev
             Some(lock) => {
+                let span = tracing::info_span!(
+                    "ensure_generation_locked::restore_locked",
+                    rev = %lock.rev,
+                    progress = "Fetching locked generation"
+                );
+                let _guard = span.enter();
+
                 let remote_branch = remote_branch_name(pointer);
                 // Check that the commit not only exists but is on the
                 // correct branch - we don't want to allow grabbing commits
@@ -755,6 +763,11 @@ impl ManagedEnvironment {
             // There's no lockfile, so write a new one with whatever remote
             // branch is after fetching.
             None => {
+                let span = tracing::info_span!(
+                    "ensure_generation_locked::lock_latest",
+                    progress = "Fetching latest generation"
+                );
+                let _guard = span.enter();
                 let remote_branch = remote_branch_name(pointer);
 
                 floxmeta
@@ -1210,6 +1223,7 @@ impl ManagedEnvironment {
     /// If access to a remote repository requires authentication,
     /// the FloxHub token must be set in the flox instance.
     /// The caller is responsible for ensuring that the token is present and valid.
+    #[instrument(skip(flox), fields(progress = "Pushing new environment to FloxHub"))]
     pub fn push_new(
         flox: &Flox,
         path_environment: PathEnvironment,
@@ -1328,6 +1342,7 @@ impl ManagedEnvironment {
         Ok(env)
     }
 
+    #[instrument(skip(self, flox), fields(progress = "Pushing updates to FloxHub"))]
     pub fn push(&mut self, flox: &Flox, force: bool) -> Result<(), ManagedEnvironmentError> {
         let project_branch = branch_name(&self.pointer, &self.path);
         let sync_branch = remote_branch_name(&self.pointer);
@@ -1407,6 +1422,7 @@ impl ManagedEnvironment {
     /// If the environment has diverged, the pull will fail.
     ///
     /// If `force == true`, the pull will proceed even if the environment has diverged.
+    #[instrument(skip(self, flox), fields(progress = "Pulling updates from FloxHub"))]
     pub fn pull(
         &mut self,
         flox: &Flox,

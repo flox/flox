@@ -5,8 +5,8 @@ use std::str::FromStr;
 
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
-use log::debug;
 use thiserror::Error;
+use tracing::{debug, instrument};
 use url::Url;
 
 use super::build::{build_symlink_path, ManifestBuilder};
@@ -16,6 +16,7 @@ use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
 use crate::providers::buildenv::NIX_BIN;
 use crate::providers::git::GitProvider;
+use crate::utils::CommandExt;
 
 #[derive(Debug, Error)]
 pub enum PublishError {
@@ -100,6 +101,7 @@ pub struct NixCopyCache {
 }
 
 impl BinaryCache for NixCopyCache {
+    #[instrument(skip(self), fields(progress = format!("Uploading '{path}' to '{}'", self.url)))]
     fn upload(&self, path: &str) -> Result<(), PublishError> {
         let mut url = self.url.clone();
         let url_with_key = url
@@ -109,11 +111,6 @@ impl BinaryCache for NixCopyCache {
             .append_pair("compression", "zstd")
             .append_pair("write-nar-listing", "true")
             .finish();
-        debug!(
-            "Uploading {path} to cache {cache}...",
-            path = path,
-            cache = url_with_key
-        );
 
         let mut copy_command = Command::new(&*NIX_BIN);
         copy_command
@@ -121,6 +118,14 @@ impl BinaryCache for NixCopyCache {
             .arg("--to")
             .arg(url_with_key.to_string())
             .arg(path);
+
+        debug!(
+            %path,
+            %url_with_key,
+            cmd = %copy_command.display(),
+            "Uploading store path to cache"
+        );
+
         let output = copy_command
             .output()
             .map_err(|e| PublishError::CacheUploadError(e.to_string()))?;
