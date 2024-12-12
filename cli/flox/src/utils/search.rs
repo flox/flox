@@ -115,7 +115,7 @@ impl Display for DisplaySearchResults {
         let column_width = self
             .display_items
             .iter()
-            .map(|d| format_name(&d.to_string()).len())
+            .map(|d| d.to_string().len())
             .max()
             .unwrap_or_default();
 
@@ -129,9 +129,10 @@ impl Display for DisplaySearchResults {
                 d.description.as_deref().unwrap()
             };
             let name = format_name(&d.to_string());
+            let width = column_width + (name.len() - d.to_string().len());
 
             // The two spaces here provide visual breathing room.
-            write!(f, "{name:<column_width$}  {desc}")?;
+            write!(f, "{name:<width$}  {desc}")?;
             // Only print a newline if there are more items to print
             if items.peek().is_some() {
                 writeln!(f)?;
