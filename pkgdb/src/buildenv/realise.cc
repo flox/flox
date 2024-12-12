@@ -794,7 +794,8 @@ makeActivationScripts( nix::EvalState &         state,
   auto            references = nix::StorePathSet();
   references.insert( activationStorePath );
   references.insert(
-    state.store->parseStorePath( ACTIVATION_SCRIPTS_PACKAGE_DIR ) );
+    state.store->addToStore( "activation-scripts",
+                             ACTIVATION_SCRIPTS_PACKAGE_DIR ) );
   references.insert( state.store->parseStorePath( FLOX_BASH_PKG ) );
   references.insert( state.store->parseStorePath( FLOX_CACERT_PKG ) );
 
@@ -868,8 +869,8 @@ makeActivationScriptsPackageDir( nix::EvalState & state )
   debugLog( nix::fmt( "adding activation scripts to store, path=%s",
                       ACTIVATION_SCRIPTS_PACKAGE_DIR ) );
   auto profileScriptsPath
-    = state.store->parseStorePath( ACTIVATION_SCRIPTS_PACKAGE_DIR );
-  state.store->ensurePath( profileScriptsPath );
+    = state.store->addToStore( "activation-scripts",
+                               ACTIVATION_SCRIPTS_PACKAGE_DIR );
   RealisedPackage realised( state.store->printStorePath( profileScriptsPath ),
                             true,
                             buildenv::Priority() );
