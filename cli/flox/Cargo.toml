@@ -28,6 +28,7 @@ nix.workspace = true
 oauth2.workspace = true
 once_cell.workspace = true
 path-dedot.workspace = true
+pollster.workspace = true
 reqwest.workspace = true
 semver.workspace = true
 regex.workspace = true

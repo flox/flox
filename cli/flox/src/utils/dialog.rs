@@ -1,8 +1,6 @@
 use std::fmt::Display;
-use std::time::{Duration, Instant};
+use std::io::IsTerminal;
 
-use crossterm::tty::IsTty;
-use indicatif::{ProgressBar, ProgressStyle};
 use inquire::ui::{Attributes, RenderConfig, StyleSheet, Styled};
 
 use super::{colors, TERMINAL_STDERR};
@@ -15,13 +13,6 @@ pub struct Confirm {
 #[derive(Clone)]
 pub struct Select<T> {
     pub options: Vec<T>,
-}
-
-pub struct Spinner<F>(F);
-impl<F: FnOnce() -> T + Send, T: Send> Spinner<F> {
-    pub fn new(f: F) -> Self {
-        Self(f)
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -157,60 +148,12 @@ impl<'a, T: Display> Dialog<'a, Select<T>> {
     }
 }
 
-impl<'a, F: FnOnce() -> T + Send, T: Send> Dialog<'a, Spinner<F>> {
-    pub fn spin_with_delay(self, start_spinning_after: Duration) -> T {
-        let handle = tokio::runtime::Handle::current();
-        std::thread::scope(|s| {
-            let y = s.spawn(move || {
-                // self.typed.0 may be a function that requires tokio
-                let _guard = handle.enter();
-                (self.typed.0)()
-            });
-            let mut dialog: Option<ProgressBar> = None;
-            let started = Instant::now();
-            loop {
-                if y.is_finished() {
-                    break;
-                }
-
-                if Instant::now() - started < start_spinning_after {
-                    std::thread::sleep(Duration::from_millis(100));
-                    continue;
-                }
-
-                let spinner = indicatif::ProgressBar::new_spinner();
-                spinner.set_style(
-                    ProgressStyle::with_template("{spinner} {wide_msg} {prefix:>}").unwrap(),
-                );
-                spinner.set_message(self.message.to_string());
-                if let Some(help_message) = self.help_message {
-                    spinner.set_prefix(help_message.to_string())
-                }
-                spinner.enable_steady_tick(Duration::from_millis(100));
-                dialog = Some(spinner);
-
-                break;
-            }
-            let res = y.join().unwrap();
-
-            if let Some(dialog) = dialog {
-                dialog.finish_and_clear();
-            }
-
-            res
-        })
-    }
-
-    #[allow(unused)]
-    pub fn spin(self) -> T {
-        self.spin_with_delay(Duration::from_millis(0))
-    }
-}
-
 impl Dialog<'_, ()> {
     /// True if stderr and stdin are ttys
     pub fn can_prompt() -> bool {
-        std::io::stderr().is_tty() && std::io::stdin().is_tty() && std::io::stdout().is_tty()
+        std::io::stderr().is_terminal()
+            && std::io::stdin().is_terminal()
+            && std::io::stdout().is_terminal()
     }
 }
 

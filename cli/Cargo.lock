@@ -1018,6 +1018,7 @@ dependencies = [
  "oauth2",
  "once_cell",
  "path-dedot",
+ "pollster",
  "pretty_assertions",
  "regex",
  "reqwest 0.11.27",

@@ -1,6 +1,5 @@
 use std::fmt::Write;
 use std::num::NonZeroU8;
-use std::time::Duration;
 
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
@@ -13,7 +12,6 @@ use tracing::instrument;
 
 use crate::config::Config;
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
 use crate::utils::message;
 use crate::utils::search::DisplaySearchResults;
@@ -76,18 +74,10 @@ impl Search {
                     term
                 },
             };
-            Dialog {
-                message: "Searching for packages...",
-                help_message: None,
-                typed: Spinner::new(|| {
-                    tokio::runtime::Handle::current().block_on(flox.catalog_client.search(
-                        parsed_search,
-                        flox.system.clone(),
-                        limit,
-                    ))
-                }),
-            }
-            .spin_with_delay(Duration::from_secs(1))?
+
+            flox.catalog_client
+                .search(parsed_search, flox.system.clone(), limit)
+                .await?
         };
 
         // Render what we have no matter what, then indicate whether we encountered an error.

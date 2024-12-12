@@ -5,13 +5,12 @@ use flox_rust_sdk::models::environment::EnvironmentError;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
-use tracing::instrument;
+use tracing::{info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{ensure_floxhub_token, environment_description, EnvironmentSelectError};
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
 
@@ -71,12 +70,12 @@ impl Uninstall {
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
 
-        let _ = Dialog {
-            message: &format!("Uninstalling packages from environment {description}..."),
-            help_message: None,
-            typed: Spinner::new(|| environment.uninstall(self.packages.clone(), &flox)),
-        }
-        .spin()?;
+        let span = info_span!(
+            "uninstall",
+            environment = %description,
+            progress = format!("Uninstalling {} packages", self.packages.len()));
+
+        span.in_scope(|| environment.uninstall(self.packages.clone(), &flox))?;
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.

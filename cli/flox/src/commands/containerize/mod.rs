@@ -17,7 +17,6 @@ use tracing::{debug, instrument};
 
 use super::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
 use crate::utils::openers::first_in_path;
 
@@ -57,26 +56,19 @@ impl Containerize {
             None => "latest",
         };
 
-        let built_environment = Dialog {
-            message: &format!("Building environment {}...", env.name()),
-            help_message: None,
-            typed: Spinner::new(|| env.build(&flox)),
-        }
-        .spin()?;
+        let _span = tracing::info_span!(
+            "building and writing container",
+            progress = format!("Creating container image and writing to {output}")
+        );
+
+        let built_environment = env.build(&flox)?;
 
         let source = if std::env::consts::OS == "linux" {
             // this method is only executed on linux
             #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
             let builder = MkContainerNix::new(built_environment.develop);
 
-            Dialog {
-                message: &format!("Creating container builder for {}...", env.name()),
-                help_message: None,
-                typed: Spinner::new(|| {
-                    builder.create_container_source(env.name().as_ref(), output_tag)
-                }),
-            }
-            .spin()?
+            builder.create_container_source(env.name().as_ref(), output_tag)?
         } else {
             let env_path = env.parent_path()?;
             let Some(container_runtime) = Runtime::detect_from_path() else {
@@ -90,17 +82,9 @@ impl Containerize {
             builder.create_container_source(env.name().as_ref(), output_tag)?
         };
 
-        Dialog {
-            message: &format!("Writing container to {output}...",),
-            help_message: None,
-            typed: Spinner::new(|| {
-                let mut writer = output.to_writer()?;
-                source.stream_container(&mut writer)?;
-                writer.wait()?;
-                anyhow::Ok(())
-            }),
-        }
-        .spin()?;
+        let mut writer = output.to_writer()?;
+        source.stream_container(&mut writer)?;
+        writer.wait()?;
 
         message::created(format!("Container written to {output}"));
         Ok(())

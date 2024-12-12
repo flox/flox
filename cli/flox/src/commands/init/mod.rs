@@ -20,11 +20,11 @@ use indoc::formatdoc;
 use log::debug;
 use path_dedot::ParseDot;
 use toml_edit::{DocumentMut, Formatted, Item, Table, Value};
-use tracing::instrument;
+use tracing::{info_span, instrument};
 
 use crate::commands::environment_description;
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Spinner};
+use crate::utils::dialog::Dialog;
 use crate::utils::message;
 
 mod go;
@@ -122,14 +122,13 @@ impl Init {
         };
 
         let env = if customization.packages.is_some() {
-            Dialog {
-                message: "Installing Flox suggested packages...",
-                help_message: None,
-                typed: Spinner::new(|| {
-                    PathEnvironment::init(PathPointer::new(env_name), &dir, &customization, &flox)
-                }),
-            }
-            .spin()?
+            info_span!(
+                "init_with_suggested_packages",
+                progress = "Installing Flox suggested packages"
+            )
+            .in_scope(|| {
+                PathEnvironment::init(PathPointer::new(env_name), &dir, &customization, &flox)
+            })?
         } else {
             PathEnvironment::init(PathPointer::new(env_name), &dir, &customization, &flox)?
         };

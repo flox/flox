@@ -23,7 +23,6 @@ use tracing::instrument;
 
 use crate::commands::ensure_floxhub_token;
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::errors::format_core_error;
 use crate::utils::message;
 
@@ -65,14 +64,7 @@ impl Push {
             EnvironmentPointer::Managed(managed_pointer) => {
                 let message = Self::push_existing_message(&managed_pointer, self.force);
 
-                Dialog {
-                    message: "Pushing updates to FloxHub...",
-                    help_message: None,
-                    typed: Spinner::new(|| {
-                        Self::push_managed_env(&flox, managed_pointer, &dot_flox.path, self.force)
-                    }),
-                }
-                .spin()?;
+                Self::push_managed_env(&flox, managed_pointer, &dot_flox.path, self.force)?;
 
                 message::updated(message);
             },
@@ -89,20 +81,13 @@ impl Push {
                     )?
                 };
 
-                let env = Dialog {
-                    message: "Pushing environment to FloxHub...",
-                    help_message: None,
-                    typed: Spinner::new(|| {
-                        Self::push_make_managed(
-                            &flox,
-                            path_pointer,
-                            canonical_dot_flox_path,
-                            owner,
-                            self.force,
-                        )
-                    }),
-                }
-                .spin()?;
+                let env = Self::push_make_managed(
+                    &flox,
+                    path_pointer,
+                    canonical_dot_flox_path,
+                    owner,
+                    self.force,
+                )?;
 
                 message::updated(Self::push_new_message(env.pointer(), self.force));
             },

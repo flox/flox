@@ -39,7 +39,7 @@ use flox_rust_sdk::providers::catalog::{
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
-use tracing::{instrument, warn};
+use tracing::{info_span, instrument, span, warn};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{environment_select, EnvironmentSelect};
@@ -50,7 +50,7 @@ use crate::commands::{
     ConcreteEnvironment,
     EnvironmentSelectError,
 };
-use crate::utils::dialog::{Dialog, Select, Spinner};
+use crate::utils::dialog::{Dialog, Select};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_error};
 use crate::utils::message;
@@ -203,12 +203,14 @@ impl Install {
             Install::format_packages_for_tracing(&packages_to_install),
         );
 
-        let installation = Dialog {
-            message: &format!("Installing packages to environment {description}..."),
-            help_message: None,
-            typed: Spinner::new(|| environment.install(&packages_to_install, &flox)),
-        }
-        .spin();
+        let span = info_span!(
+            "install",
+            progress = format!(
+                "Installing {} package(s) to environment {description}...",
+                packages_to_install.len()
+            )
+        );
+        let installation = span.in_scope(|| environment.install(&packages_to_install, &flox));
 
         let installation = match installation {
             Ok(installation) => installation,
@@ -326,12 +328,12 @@ impl Install {
 
                 let packages = packages.into_values().collect::<Vec<_>>();
 
-                let install_result = Dialog {
-                    message: "Installing packages for available systems...",
-                    help_message: None,
-                    typed: Spinner::new(|| environment.install(&packages, flox)),
-                }
-                .spin();
+                let span = span!(
+                    tracing::Level::INFO,
+                    "install",
+                    progress = "Installing packages for available systems"
+                );
+                let install_result = span.in_scope(|| environment.install(&packages, flox));
 
                 match install_result {
                     Ok(install_attempt) => Ok(install_attempt),
