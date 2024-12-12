@@ -130,7 +130,7 @@ pub struct CatalogClientConfig {
 #[derive(Debug)]
 pub struct CatalogClient {
     client: APIClient,
-    pub config: CatalogClientConfig,
+    config: CatalogClientConfig,
 }
 
 impl CatalogClient {
@@ -142,8 +142,20 @@ impl CatalogClient {
             let _ = std::fs::remove_file(path);
         }
 
+        Self {
+            client: Self::create_client(&config),
+            config,
+        }
+    }
+
+    pub fn update_config(&mut self, update: impl FnOnce(&mut CatalogClientConfig)) {
+        update(&mut self.config);
+        self.client = Self::create_client(&self.config);
+    }
+
+    fn create_client(config: &CatalogClientConfig) -> APIClient {
         // Build the map of headers based on the config
-        let headers = Self::build_header_map(&config);
+        let headers = Self::build_header_map(config);
 
         let client = {
             let conn_timeout = std::time::Duration::from_secs(15);
@@ -154,15 +166,13 @@ impl CatalogClient {
                 .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
                 .default_headers(headers)
         };
-        Self {
-            client: APIClient::new_with_client(&config.catalog_url, client.build().unwrap()),
-            config,
-        }
+        APIClient::new_with_client(config.catalog_url.as_str(), client.build().unwrap())
     }
 
-    pub fn build_header_map(config: &CatalogClientConfig) -> HeaderMap {
+    fn build_header_map(config: &CatalogClientConfig) -> HeaderMap {
         // let mut headers: BTreeMap<String, String> = BTreeMap::new();
         let mut header_map = HeaderMap::new();
+
         // Pass in a bool if we are running in CI, so requests can reflect this in the headers
         if std::env::var("CI").is_ok() {
             header_map.insert(
@@ -172,10 +182,10 @@ impl CatalogClient {
         };
 
         // Authenticated requests (for custom catalogs) require a token.
-        if let Some(token) = config.floxhub_token.as_ref() {
+        if let Some(token) = &config.floxhub_token {
             header_map.insert(
-                header::HeaderName::from_static("Authorization"),
-                header::HeaderValue::from_str(&format!("Bearer {}", token)).unwrap(),
+                header::HeaderName::from_static("authorization"),
+                header::HeaderValue::from_str(&format!("bearer {}", token.clone())).unwrap(),
             );
         };
 

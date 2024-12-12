@@ -36,31 +36,35 @@ pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
         );
         Ok(MockClient::new(Some(path))?.into())
     } else {
-        let mut client_config = CatalogClientConfig {
+        let extra_headers = {
+            // If metrics are not disabled, pass along the metrics UUID so it can be
+            // sent in catalog request headers, as well as the Sentry span info
+            if !config.flox.disable_metrics {
+                let mut metrics_headers = BTreeMap::new();
+                metrics_headers.insert(
+                    "flox-device-uuid".to_string(),
+                    read_metrics_uuid(config).unwrap().to_string(),
+                );
+
+                if let Some(span) = sentry::configure_scope(|scope| scope.get_span()) {
+                    for (k, v) in span.iter_headers() {
+                        metrics_headers.insert(k.to_string(), v);
+                    }
+                }
+                Some(metrics_headers)
+            } else {
+                None
+            }
+        };
+
+        let client_config = CatalogClientConfig {
             catalog_url: config
                 .flox
                 .catalog_url
                 .clone()
                 .unwrap_or_else(|| DEFAULT_CATALOG_URL.to_string()),
             floxhub_token: config.flox.floxhub_token.clone(),
-            extra_headers: None,
-        };
-
-        // If metrics are not disabled, pass along the metrics UUID so it can be
-        // sent in catalog request headers, as well as the Sentry span info
-        if !config.flox.disable_metrics {
-            let mut metrics_headers = BTreeMap::new();
-            metrics_headers.insert(
-                "flox-device-uuid".to_string(),
-                read_metrics_uuid(config).unwrap().to_string(),
-            );
-
-            if let Some(span) = sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    metrics_headers.insert(k.to_string(), v);
-                }
-            }
-            client_config.extra_headers = Some(metrics_headers);
+            extra_headers,
         };
 
         debug!(

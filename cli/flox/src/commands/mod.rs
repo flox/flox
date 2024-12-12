@@ -1611,10 +1611,11 @@ pub(super) async fn ensure_environment_trust(
 ///
 /// If the token is not present and we can prompt the user,
 /// run the login flow ([auth::login_flox]).
-pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<Option<FloxhubToken>> {
+pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<&FloxhubToken> {
     match flox.floxhub_token {
         Some(ref token) => {
             log::debug!("floxhub token is present; logged in as {}", token.handle());
+            Ok(token)
         },
         None if !Dialog::can_prompt() => {
             log::debug!("floxhub token is not present; can not prompt user");
@@ -1634,11 +1635,10 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<Option<Floxh
             log::debug!("floxhub token is not present; prompting user");
 
             message::plain("You are not logged in to FloxHub. Logging in...");
-            auth::login_flox(flox).await?;
+            let token = auth::login_flox(flox).await?;
+            Ok(token)
         },
-    };
-
-    Ok(flox.floxhub_token.clone())
+    }
 }
 
 pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
