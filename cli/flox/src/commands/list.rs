@@ -1,5 +1,4 @@
 use std::io::{stdout, Write};
-use std::time::Duration;
 
 use anyhow::Result;
 use bpaf::Bpaf;
@@ -19,7 +18,6 @@ use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
 
@@ -273,13 +271,9 @@ impl List {
     /// Check the implementation docs of [Environment::lockfile] for more
     /// information.
     fn get_lockfile(flox: &Flox, env: &mut dyn Environment) -> Result<Lockfile> {
-        let lockfile = Dialog {
-                message: "No lockfile found for environment, building...",
-                help_message: None,
-                typed: Spinner::new(|| env.lockfile(flox)),
-            }
-            // TODO: it would be better if we knew when a lock was actually happening
-            .spin_with_delay(Duration::from_secs_f32(0.25))?;
+        // TODO: it would be better if we knew when a lock was actually happening
+        let lockfile = env.lockfile(flox)?;
+
         Ok(lockfile)
     }
 }

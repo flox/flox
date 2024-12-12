@@ -23,12 +23,12 @@ use flox_rust_sdk::models::manifest;
 use indoc::{formatdoc, indoc};
 use log::debug;
 use toml_edit::DocumentMut;
-use tracing::instrument;
+use tracing::{info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{open_path, ConcreteEnvironment};
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Select, Spinner};
+use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::{display_chain, format_core_error};
 use crate::utils::message;
 
@@ -93,7 +93,7 @@ impl Pull {
         match self.pull_select {
             PullSelect::New { remote } | PullSelect::NewAbbreviated { remote } => {
                 let start_message = format!(
-                    "⬇️  Remote: pulling and building {env_ref} from {host} into {into_dir}",
+                    "Pulling {env_ref} from {host} into {into_dir}",
                     env_ref = &remote,
                     host = flox.floxhub.base_url(),
                     into_dir = if let Some(dir) = self.dir.as_deref() {
@@ -108,15 +108,14 @@ impl Pull {
                 let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
+                let span = tracing::info_span!(
+                        "pull new",
+                        remote = %remote,
+                        dir = %dir.display(),
+                        progress = start_message.as_str());
+                let _guard = span.entered();
 
-                Self::pull_new_environment(
-                    &flox,
-                    dir,
-                    remote,
-                    self.copy,
-                    self.force,
-                    &start_message,
-                )?;
+                Self::pull_new_environment(&flox, dir, remote, self.copy, self.force)?;
             },
             PullSelect::Existing {} => {
                 let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
@@ -166,19 +165,7 @@ impl Pull {
     ) -> Result<(), EnvironmentError> {
         let mut env = ManagedEnvironment::open(flox, pointer.clone(), dot_flox_path)?;
 
-        let pull_message = format!(
-            "⬇️  Remote: pulling {owner}/{name} from {floxhub_host}",
-            owner = pointer.owner,
-            name = pointer.name,
-            floxhub_host = flox.floxhub.base_url()
-        );
-
-        let state = Dialog {
-            message: &pull_message,
-            help_message: None,
-            typed: Spinner::new(|| env.pull(flox, force)),
-        }
-        .spin()?;
+        let state = env.pull(flox, force)?;
 
         match state {
             PullResult::Updated => {
@@ -186,17 +173,11 @@ impl Pull {
                 //
                 // Build errors are _not_ handled here
                 // as it is assumed that environments were validated during push.
-                Dialog {
-                    message: "🛠️  Building the environment",
-                    help_message: None,
-                    typed: Spinner::new(|| {
-                        // The pulled generation already has a lock,
-                        // so we can skip locking.
-                        let store_paths = env.build(flox)?;
-                        env.link(&store_paths)
-                    }),
-                }
-                .spin()?;
+
+                // The pulled generation already has a lock,
+                // so we can skip locking.
+                let store_paths = env.build(flox)?;
+                env.link(&store_paths)?;
 
                 message::updated(formatdoc! {"
                     Pulled {owner}/{name} from {floxhub_host}{suffix}
@@ -233,7 +214,6 @@ impl Pull {
         env_ref: EnvironmentRef,
         copy: bool,
         force: bool,
-        message: &str,
     ) -> Result<()> {
         let dot_flox_path = env_path.join(DOT_FLOX);
         if dot_flox_path.exists() {
@@ -278,14 +258,8 @@ impl Pull {
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
         let mut env = {
-            let result = Dialog {
-                message,
-                help_message: None,
-                typed: Spinner::new(|| ManagedEnvironment::open(flox, pointer, &dot_flox_path)),
-            }
-            .spin()
-            .map_err(Self::handle_error);
-
+            let result =
+                ManagedEnvironment::open(flox, pointer, &dot_flox_path).map_err(Self::handle_error);
             match result {
                 Err(err) => {
                     fs::remove_dir_all(&dot_flox_path)
@@ -297,17 +271,11 @@ impl Pull {
         };
         // endregion
 
-        let result = Dialog {
-            message,
-            help_message: None,
-            typed: Spinner::new(|| {
-                // The pulled generation already has a lock,
-                // so we can skip locking.
-                let store_paths = env.build(flox)?;
-                env.link(&store_paths)
-            }),
-        }
-        .spin();
+        // The pulled generation already has a lock,
+        // so we can skip locking.
+        let result = env
+            .build(flox)
+            .and_then(|store_paths| env.link(&store_paths));
 
         let resolution = Self::handle_pull_result(
             flox,
@@ -416,14 +384,11 @@ impl Pull {
                 }
 
                 let manifest_with_current_system = Self::amend_current_system(env, flox)?;
-                let rebuild_with_current_system = Dialog {
-                    message: "Adding your system to the manifest and validating the environment.",
-                    help_message: None,
-                    typed: Spinner::new(|| {
-                        env.edit_unsafe(flox, manifest_with_current_system.to_string())
-                    }),
-                }
-                .spin()?;
+                let rebuild_with_current_system = info_span!(
+                    "rebuild_with_current_system",
+                    progress = "Adding your system to the manifest and validating the environment"
+                )
+                .in_scope(|| env.edit_unsafe(flox, manifest_with_current_system.to_string()))?;
 
                 match rebuild_with_current_system {
                     Err(broken_error) => {

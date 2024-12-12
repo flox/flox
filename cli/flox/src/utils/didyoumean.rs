@@ -1,15 +1,15 @@
 use std::fmt::Display;
 use std::num::NonZeroU8;
-use std::time::Duration;
 
 use anyhow::Result;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::search::SearchResults;
 use flox_rust_sdk::providers::catalog::{Client, ClientTrait};
 use log::debug;
+use pollster::FutureExt;
+use tracing::instrument;
 
 use super::search::{DisplayItems, DisplaySearchResults};
-use crate::utils::dialog::{Dialog, Spinner};
 
 pub const SUGGESTION_SEARCH_LIMIT: u8 = 3;
 
@@ -61,23 +61,19 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
     }
 
     /// Collects installation suggestions for a given query using the catalog
+    #[instrument(skip(client), fields(progress = "Looking for alternative suggestions"))]
     fn suggest_searched_packages_catalog(
         client: &Client,
         term: &str,
         system: String,
     ) -> Result<SearchResults> {
-        let results = Dialog {
-            message: "Looking for alternative suggestions...",
-            help_message: None,
-            typed: Spinner::new(|| {
-                tokio::runtime::Handle::current().block_on(client.search(
-                    term,
-                    system.to_string(),
-                    NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
-                ))
-            }),
-        }
-        .spin_with_delay(Duration::from_secs(1))?;
+        let results = client
+            .search(
+                term,
+                system.to_string(),
+                NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
+            )
+            .block_on()?;
         Ok(results)
     }
 
@@ -161,23 +157,19 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         Some(suggestion)
     }
 
+    #[instrument(skip(client), fields(progress = "Looking for alternative suggestions"))]
     fn suggest_searched_packages_catalog(
         client: &Client,
         term: &str,
         system: String,
     ) -> Result<SearchResults> {
-        let results = Dialog {
-            message: "Looking for alternative suggestions...",
-            help_message: None,
-            typed: Spinner::new(|| {
-                tokio::runtime::Handle::current().block_on(client.search(
-                    term,
-                    system.to_string(),
-                    NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
-                ))
-            }),
-        }
-        .spin_with_delay(Duration::from_secs(1))?;
+        let results = client
+            .search(
+                term,
+                system.to_string(),
+                NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
+            )
+            .block_on()?;
         Ok(results)
     }
 

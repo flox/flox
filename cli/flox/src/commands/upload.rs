@@ -9,7 +9,6 @@ use url::Url;
 
 use crate::config::Config;
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
 
 #[derive(Bpaf, Clone)]
@@ -47,13 +46,9 @@ impl Upload {
             key_file: self.cache.key_file,
         };
 
-        Dialog {
-            message: &format!("Uploading store path {}...", store_path.display()),
-            help_message: None,
-            typed: Spinner::new(|| cache.upload(&store_path.to_string_lossy())),
-        }
-        .spin()
-        .context("Failed to upload artifact")?;
+        cache
+            .upload(&store_path.to_string_lossy())
+            .context("Failed to upload artifact")?;
 
         message::updated(format!(
             "Store path {} uploaded successfully.",

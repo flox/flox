@@ -48,7 +48,6 @@ use super::{
 use crate::commands::services::ServicesCommandsError;
 use crate::commands::{ensure_environment_trust, EnvironmentSelectError};
 use crate::config::{Config, EnvironmentPromptConfig};
-use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::openers::Shell;
 use crate::utils::{default_nix_env_vars, message};
 use crate::{subcommand_metric, utils};
@@ -183,19 +182,7 @@ impl Activate {
         let mode = self.mode.clone().unwrap_or_default();
 
         // Don't spin in bashrcs and similar contexts
-        let rendered_env_path_result = if in_place {
-            environment.rendered_env_links(&flox)
-        } else {
-            Dialog {
-                message: &format!(
-                    "Preparing environment {}...",
-                    now_active.message_description()?
-                ),
-                help_message: None,
-                typed: Spinner::new(|| environment.rendered_env_links(&flox)),
-            }
-            .spin()
-        };
+        let rendered_env_path_result = environment.rendered_env_links(&flox);
 
         let rendered_env_path = match rendered_env_path_result {
             Err(EnvironmentError::Core(err)) if err.is_incompatible_system_error() => {

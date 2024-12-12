@@ -1,13 +1,12 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use tracing::instrument;
+use tracing::{info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{ensure_floxhub_token, environment_description};
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
 
 // Upgrade packages in an environment
@@ -42,21 +41,28 @@ impl Upgrade {
 
         let mut environment = concrete_environment.into_dyn_environment();
 
-        let result = Dialog {
-            message: "Upgrading packages...",
-            help_message: None,
-            typed: Spinner::new(|| {
-                environment.upgrade(
-                    &flox,
-                    &self
-                        .groups_or_iids
-                        .iter()
-                        .map(String::as_str)
-                        .collect::<Vec<_>>(),
-                )
-            }),
-        }
-        .spin()?;
+        let span = info_span!(
+            "upgrade",
+            environment = %description,
+            progress = format!(
+                "Upgrading {} package(s) or group(s)",
+                if self.groups_or_iids.is_empty() {
+                    "all".to_string()
+                } else {
+                    format!("{}", self.groups_or_iids.len())
+                }
+            )
+        );
+        let result = span.in_scope(|| {
+            environment.upgrade(
+                &flox,
+                &self
+                    .groups_or_iids
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+            )
+        })?;
 
         let upgraded = result.packages;
 
