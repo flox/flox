@@ -189,13 +189,13 @@ impl BuildEnvNix {
         Ok(())
     }
 
-    /// Try to substitute a custom package by copying it from an associated store.
+    /// Try to substitute a published package by copying it from an associated store.
     ///
     /// Query the associated store(s) that contain the package from the catalog.
     /// Then attempt to download the package closure from each store in order,
     /// until successful.
     /// Returns `true` if all outputs were found and downloaded, `false` otherwise.
-    fn try_substitute_custom_pkg(
+    fn try_substitute_published_pkg(
         &self,
         client: &impl ClientTrait,
         locked: &LockedPackageCatalog,
@@ -212,7 +212,7 @@ impl BuildEnvNix {
         // Try downloading each output from the store location provided.  If we
         // are missing store info for any, we should return false.
         // TODO - It is possible not _all_ are missing. For now, we'll just
-        // assume they are all missing, noting custom packages only have one
+        // assume they are all missing, noting published packages only have one
         // output currently.  Also to note: if all the outputs were valid
         // locally, we would not get here as that check happens before this is
         // called within `realise_nixpkgs`.
@@ -290,14 +290,14 @@ impl BuildEnvNix {
             if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
                 locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
             } else {
-                debug!(?locked.attr_path, "Trying to substitute custom package");
-                let all_found = self.try_substitute_custom_pkg(client, locked)?;
+                debug!(?locked.attr_path, "Trying to substitute published package");
+                let all_found = self.try_substitute_published_pkg(client, locked)?;
                 // We asked for all the outputs for the package, got store info for
                 // each, and were able to substitute them all.  If so, then we're done here.
                 if all_found {
                     return Ok(());
                 };
-                panic!("Building custom packages is not yet supported");
+                todo!("Building published packages is not yet supported");
             }
 
             // build all out paths
@@ -628,10 +628,10 @@ mod realise_nixpkgs_tests {
         locked_package.expect("no locked package found")
     }
 
-    fn locked_custom_package(store_path: Option<&str>) -> LockedPackageCatalog {
+    fn locked_published_package(store_path: Option<&str>) -> LockedPackageCatalog {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
-        // Set the attr_path to something that looks like a custom package.
+        // Set the attr_path to something that looks like a published package.
         locked_package.attr_path = "custom_catalog/hello".to_string();
         locked_package.locked_url =
             "github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string();
@@ -783,8 +783,8 @@ mod realise_nixpkgs_tests {
     }
 
     #[test]
-    fn nixpkgs_custom_pkg_no_matching_response() {
-        let locked_package = locked_custom_package(None);
+    fn nixpkgs_published_pkg_no_matching_response() {
+        let locked_package = locked_published_package(None);
         let mut client = MockClient::new(None::<String>).unwrap();
         let mut resp = StoreInfoResponse {
             items: std::collections::HashMap::new(),
@@ -798,14 +798,14 @@ mod realise_nixpkgs_tests {
 
         let buildenv = BuildEnvNix;
         let subst_resp = buildenv
-            .try_substitute_custom_pkg(&client, &locked_package)
+            .try_substitute_published_pkg(&client, &locked_package)
             .unwrap();
         assert!(!subst_resp);
     }
 
     #[test]
-    fn nixpkgs_custom_pkg_no_cache_info() {
-        let locked_package = locked_custom_package(None);
+    fn nixpkgs_published_pkg_no_cache_info() {
+        let locked_package = locked_published_package(None);
         let mut client = MockClient::new(None::<String>).unwrap();
         let mut resp = StoreInfoResponse {
             items: std::collections::HashMap::new(),
@@ -816,15 +816,15 @@ mod realise_nixpkgs_tests {
 
         let buildenv = BuildEnvNix;
         let subst_resp = buildenv
-            .try_substitute_custom_pkg(&client, &locked_package)
+            .try_substitute_published_pkg(&client, &locked_package)
             .unwrap();
         assert!(!subst_resp);
     }
 
     #[test]
-    fn nixpkgs_custom_pkg_cache_download_success() {
+    fn nixpkgs_published_pkg_cache_download_success() {
         let real_storepath = env!("NIX_BIN").to_string();
-        let locked_package = locked_custom_package(Some(&real_storepath));
+        let locked_package = locked_published_package(Some(&real_storepath));
         let mut client = MockClient::new(None::<String>).unwrap();
         let mut resp = StoreInfoResponse {
             items: std::collections::HashMap::new(),
@@ -844,15 +844,15 @@ mod realise_nixpkgs_tests {
 
         let buildenv = BuildEnvNix;
         let subst_resp = buildenv
-            .try_substitute_custom_pkg(&client, &locked_package)
+            .try_substitute_published_pkg(&client, &locked_package)
             .unwrap();
         assert!(subst_resp);
     }
 
     #[test]
-    #[should_panic = "Building custom packages is not yet supported"]
-    fn nixpkgs_custom_pkg_cache_download_failure() {
-        let locked_package = locked_custom_package(None);
+    #[should_panic = "Building published packages is not yet supported"]
+    fn nixpkgs_published_pkg_cache_download_failure() {
+        let locked_package = locked_published_package(None);
         let mut client = MockClient::new(None::<String>).unwrap();
         let mut resp = StoreInfoResponse {
             items: std::collections::HashMap::new(),
