@@ -89,7 +89,7 @@ impl Publish {
             check_environment_metadata(&flox, &mut env).or_else(|e| bail!(e.to_string()))?;
 
         let build_metadata =
-            check_build_metadata(&env, &package, &flox.system).or_else(|e| bail!(e.to_string()))?;
+            check_build_metadata(&env, &package).or_else(|e| bail!(e.to_string()))?;
 
         let cache = cache_args.map(|args| NixCopyCache {
             url: args.url,
