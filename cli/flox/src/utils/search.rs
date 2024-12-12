@@ -15,6 +15,8 @@ pub const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
 pub struct DisplayItem {
     /// The input that the package came from
     input: String,
+    /// The package path of the package, including catalog name
+    pkg_path: String,
     /// The attribute path of the package, excluding subtree and system
     rel_path: Vec<String>,
     /// The package description
@@ -38,7 +40,7 @@ impl Display for DisplayItem {
         if self.render_with_input {
             write!(f, "{}{SEARCH_INPUT_SEPARATOR}", self.input)?;
         }
-        write!(f, "{}", self.rel_path.join("."))
+        write!(f, "{}", self.pkg_path)
     }
 }
 
@@ -90,6 +92,7 @@ impl From<Vec<SearchResult>> for DisplayItems {
             .into_iter()
             .map(|r| DisplayItem {
                 input: r.input,
+                pkg_path: r.pkg_path,
                 rel_path: r.rel_path,
                 description: r.description.map(|s| s.replace('\n', " ")),
                 render_with_input: false,
