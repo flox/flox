@@ -18,7 +18,7 @@ pub enum ProcStatusError {
 
 /// The state that a process is in.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum ProcStatus {
+pub enum ProcStatus {
     /// The process is running (or runnable, which includes "idle").
     Running,
     /// The process has exited, but has not been cleaned up by the parent.
@@ -104,7 +104,7 @@ fn read_pid_status_linux(pid: i32) -> ProcStatus {
 }
 
 /// Returns the status of the provided PID.
-fn read_pid_status(pid: i32) -> ProcStatus {
+pub fn read_pid_status(pid: i32) -> ProcStatus {
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     panic!("unsupported operating system");
 
