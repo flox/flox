@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use super::core_environment::UpgradeResult;
 use super::managed_environment::{remote_branch_name, ManagedEnvironment, ManagedEnvironmentError};
@@ -75,6 +75,7 @@ impl RemoteEnvironment {
     /// Pull a remote environment into a provided (temporary) managed environment.
     /// Constructiing a [RemoteEnvironment] _does not_ create a gc-root
     /// or guarantee that the environment is valid.
+    #[instrument(skip_all, fields(progress = "Pulling remote environment"))]
     pub fn new_in(
         flox: &Flox,
         path: impl AsRef<Path>,

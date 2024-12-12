@@ -9,7 +9,7 @@ use flox_core::canonical_path::CanonicalPath;
 use pollster::FutureExt as _;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, info_span, instrument};
 
 use super::catalog::ClientTrait;
 use crate::data::System;
@@ -271,6 +271,7 @@ impl BuildEnvNix {
     /// this function is currently assumes that the package is from the nixpkgs base-catalog.
     /// Currently the type is distinguished by the [LockedPackageCatalog::locked_url].
     /// If this does not indicate a nixpkgs package, the function will currently panic!
+    #[instrument(skip(self, client), fields(progress = format!("Producing package '{}'", locked.install_id)))]
     fn realise_nixpkgs(
         &self,
         client: &impl ClientTrait,
@@ -283,6 +284,12 @@ impl BuildEnvNix {
         if all_valid {
             return Ok(());
         }
+
+        let _span = info_span!(
+            "build from catalog",
+            progress = format!("Building '{}' from source", locked.attr_path)
+        )
+        .entered();
 
         let installable = {
             let mut locked_url = locked.locked_url.to_string();
@@ -336,7 +343,7 @@ impl BuildEnvNix {
         nix_build_command.arg("--no-link");
         nix_build_command.arg(&installable);
 
-        debug!(%installable, cmd=%nix_build_command.display(), "building catalog package:");
+        debug!(%installable, cmd=%nix_build_command.display(), "building catalog package");
 
         let output = nix_build_command
             .output()
@@ -361,6 +368,7 @@ impl BuildEnvNix {
     /// and building the package with essentially `nix build <flake-url>#<attr-path>^*`.
     /// We set `--option pure-eval true` to avoid improve reproducibility,
     /// and allow the use of the eval-cache to avoid costly re-evaluations.
+    #[instrument(skip(self), fields(progress = format!("Realising flake package '{}'", locked.install_id)))]
     fn realise_flakes(&self, locked: &LockedPackageFlake) -> Result<(), BuildEnvError> {
         // check if all store paths are valid, if so, return without eval
         let all_valid = self.check_store_path(locked.locked_installable.outputs.values())?;
@@ -377,6 +385,12 @@ impl BuildEnvNix {
 
             format!("{}#{}^*", locked_url, attr_path)
         };
+
+        let _span = info_span!(
+            "build flake package",
+            progress = format!("Building '{installable}'")
+        )
+        .entered();
 
         nix_build_command.arg("build");
         nix_build_command.arg("--no-write-lock-file");
@@ -406,6 +420,7 @@ impl BuildEnvNix {
     /// The package is realised by checking if the store paths are valid,
     /// if the store path is not valid (and the store lacks the ability to reproduce it),
     /// This function will return an error.
+    #[instrument(skip(self), fields(progress = format!("Realising store path for '{}'", locked.install_id)))]
     fn realise_store_path(&self, locked: &LockedPackageStorePath) -> Result<(), BuildEnvError> {
         let valid = self.check_store_path_with_substituters([&locked.store_path])?;
         if !valid {
@@ -420,6 +435,10 @@ impl BuildEnvNix {
     /// Check if the given store paths are valid,
     /// i.e. if the store paths exist in the store,
     /// substitute store paths if necessary and possible.
+    #[instrument(
+        skip_all,
+        fields(progress = "Ensuring packages are present or downloaded")
+    )]
     fn check_store_path_with_substituters(
         &self,
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
@@ -442,6 +461,7 @@ impl BuildEnvNix {
 
     /// Check if the given store paths are valid,
     /// i.e. if the store paths exist in the store.
+    #[instrument(skip_all, fields(progress = "Checking if store paths exist locally"))]
     fn check_store_path(
         &self,
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
@@ -516,6 +536,7 @@ impl BuildEnvNix {
 }
 
 impl BuildEnv for BuildEnvNix {
+    #[instrument(skip_all, fields(progress = "Building environment"))]
     fn build(
         &self,
         client: &impl ClientTrait,

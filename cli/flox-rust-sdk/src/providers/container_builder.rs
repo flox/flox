@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 
 use serde::Deserialize;
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use super::buildenv::BuiltStorePath;
 use crate::providers::build::BUILDTIME_NIXPKGS_URL;
@@ -82,6 +82,10 @@ impl ContainerBuilder for MkContainerNix {
     /// The container image will be built from the provided [BuiltStorePath],
     /// which is generally the output of a [crate::providers::buildenv::BuildEnv::build].
     /// The streaming script will be built via `nix build`.
+    #[instrument(skip_all, fields(
+        name = name.as_ref(),
+        tag = tag.as_ref(),
+        progress = "Building container layers"))]
     fn create_container_source(
         &self,
         name: impl AsRef<str>,
@@ -148,6 +152,7 @@ impl ContainerSource {
 
     /// Run the container builder script
     /// and write the container tarball to the given sink
+    #[instrument(skip_all, fields(command = ?self.source_command, progress = "Writing container"))]
     pub fn stream_container(self, sink: &mut impl Write) -> Result<(), ContainerSourceError> {
         let mut container_source_command = self.source_command;
 

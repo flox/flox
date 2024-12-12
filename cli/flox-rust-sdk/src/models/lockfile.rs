@@ -7,6 +7,7 @@ use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::skip_serializing_none;
+use tracing::instrument;
 
 pub type FlakeRef = Value;
 
@@ -527,6 +528,7 @@ impl Lockfile {
     /// Catalog and flake installables are locked separately, using largely symmetric logic.
     /// Keeping the locking of each kind separate keeps the existing methods simpler
     /// and allows for potential parallelization in the future.
+    #[instrument(skip_all, fields(progress = "Locking environment"))]
     pub async fn lock_manifest(
         manifest: &Manifest,
         seed_lockfile: Option<&Lockfile>,
