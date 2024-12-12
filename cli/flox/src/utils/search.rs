@@ -173,7 +173,11 @@ impl Display for DisplaySearchResults {
         let mut items = self.display_items.iter().peekable();
 
         while let Some(d) = items.next() {
-            let desc = d.description.as_deref().unwrap_or(DEFAULT_DESCRIPTION);
+            let desc = if d.description.as_deref().is_none_or(|s| s.is_empty()) {
+                DEFAULT_DESCRIPTION
+            } else {
+                d.description.as_deref().unwrap()
+            };
             let name = format_name(&d.to_string());
 
             // The two spaces here provide visual breathing room.
