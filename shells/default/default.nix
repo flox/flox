@@ -7,6 +7,7 @@
   yq,
   lib,
   mkShell,
+  writeShellScript,
   procps,
   pre-commit-check,
   pstree,
@@ -48,6 +49,25 @@ let
       # ... so only install it on Linux. It's only an optional dev dependency.
       mitmproxy
     ];
+
+  envWrapper = writeShellScript "wrapper" ''
+    BUILD_DIR="$( cd "$( dirname "''${BASH_SOURCE[0]}" )" &> /dev/null && pwd )";
+    ENV_CMD="/usr/bin/env -";
+
+    # Load the envs from the .env file
+    for env in "$(cat $BUILD_DIR/.env)"; do
+      ENV_CMD="$ENV_CMD $env";
+    done
+
+    # Prepend the PATH from the .PATH file
+    ENV_CMD="$ENV_CMD PATH=$(cat $BUILD_DIR/.PATH):$PATH";
+
+    # Run the command with the environment
+    ENV_CMD="$ENV_CMD";
+
+    exec $ENV_CMD "$@";
+  '';
+
 in
 mkShell (
   {
@@ -69,6 +89,17 @@ mkShell (
     shellHook =
       pre-commit-check.shellHook
       + ''
+        # Find the project root.
+        REPO_ROOT="$( git rev-parse --show-toplevel; )";
+
+        mkdir -p "$REPO_ROOT/build";
+        rm -f "$REPO_ROOT/build/.env"; # clear the .env file
+        rm -f "$REPO_ROOT/build/.PATH"; # clear the .PATH file
+        cp -f ${envWrapper} "$REPO_ROOT/build/wrapper";
+
+
+        # Define a function to set an environment variable
+        # and add it to the .env file.
         function define_dev_env_var() {
           local USAGE="Usage: define_dev_env_var <name> <value>";
 
@@ -76,11 +107,11 @@ mkShell (
           local value=''${2?$USAGE};
 
           export $name="$value";
-          echo "$name => $(printenv "$name")";
-        }
+          echo "$name=$value" >> "$REPO_ROOT/build/.env";
 
-        # Find the project root.
-        REPO_ROOT="$( git rev-parse --show-toplevel; )";
+          echo "$name => $(printenv "$name")";
+
+        }
 
         # Setup mutable paths to all internal subsystems,
         # so that they can be changed and built without restarting the shell.
@@ -108,13 +139,15 @@ mkShell (
         define_dev_env_var GENERATED_DATA "''${REPO_ROOT}/test_data/generated";
         define_dev_env_var MANUALLY_GENERATED "''${REPO_ROOT}/test_data/manually_generated";
 
-        # Add all internal rust crates to the path.
+        # Add all internal rust crates to the PATH.
         # That's `flox` itself as well as the `flox-watchdog`
         # and `flox-activations` subsystems.
         export PATH="''${REPO_ROOT}/cli/target/debug":$PATH;
+        echo -n "''${REPO_ROOT}/cli/target/debug:" >> "$REPO_ROOT/build/.PATH";
 
         # Add the pkgdb binary to the path
         export PATH="''${REPO_ROOT}/pkgdb/bin":$PATH;
+        echo -n "''${REPO_ROOT}/pkgdb/bin:" >> "$REPO_ROOT/build/.PATH";
 
         # Add the flox-manpages to the manpath
         export MANPATH="''${FLOX_MANPAGES}/share/man:$MANPATH"
