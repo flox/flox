@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
 
-use catalog_api_v1::types::{Output, Outputs, SystemEnum};
+use catalog_api_v1::types::{Output, SystemEnum};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 use tracing::{debug, instrument};
@@ -27,6 +27,9 @@ pub enum PublishError {
 
     #[error("The outputs from the build do not exist: {0}")]
     NonexistentOutputs(String),
+
+    #[error("Unable to find derivation info: {0}")]
+    MissingDerviationInfo(String),
 
     #[error("The environment is in an unsupported state for publishing: {0}")]
     UnsupportedEnvironmentState(String),
@@ -81,9 +84,14 @@ pub struct CheckedEnvironmentMetadata {
 pub struct CheckedBuildMetadata {
     // Define metadata coming from the build, e.g. outpaths
     pub package: String,
-    pub outputs: Vec<catalog_api_v1::types::Output>,
+    pub name: String,
+    pub outputs: catalog_api_v1::types::Outputs,
+    pub outputs_to_install: Vec<String>,
     pub drv_path: String,
     pub system: SystemEnum,
+
+    pub description: Option<String>,
+    pub version: Option<String>,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
@@ -197,39 +205,19 @@ where
             .await
             .map_err(|e| PublishError::CatalogError(Box::new(e)))?;
 
-        let outputs = Outputs(
-            self.build_metadata
-                .outputs
-                .clone()
-                .into_iter()
-                .map(|o| Output {
-                    name: o.name,
-                    store_path: o.store_path,
-                })
-                .collect(),
-        );
-        let outputs_to_install = Some(
-            self.build_metadata
-                .outputs
-                .clone()
-                .into_iter()
-                .map(|o| o.name.clone())
-                .collect(),
-        );
-
         let build_info = UserBuildInfo {
             derivation: UserDerivationInfo {
                 broken: Some(false),
                 description: "".to_string(),
                 drv_path: self.build_metadata.drv_path.clone(),
                 license: None,
-                name: self.build_metadata.package.to_string().to_owned(),
-                outputs,
-                outputs_to_install,
+                name: self.build_metadata.name.clone(),
+                outputs: self.build_metadata.outputs.clone(),
+                outputs_to_install: Some(self.build_metadata.outputs_to_install.clone()),
                 pname: Some(self.build_metadata.package.to_string()),
                 system: self.build_metadata.system,
                 unfree: None,
-                version: Some("unknown".to_string()),
+                version: self.build_metadata.version.clone(),
             },
             locked_base_catalog_url: Some(self.env_metadata.base_catalog_ref.url.clone()),
             url: self.env_metadata.build_repo_ref.url.clone(),
@@ -253,11 +241,82 @@ where
     }
 }
 
+pub fn get_derivation_info(
+    path: &str,
+) -> Result<serde_json::Map<String, serde_json::Value>, PublishError> {
+    let mut info_cmd = Command::new(&*NIX_BIN);
+    info_cmd.arg("derivation").arg("show").arg(path);
+    let output = info_cmd
+        .output()
+        .map_err(|e| PublishError::MissingDerviationInfo(e.to_string()))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .map_err(|e| PublishError::MissingDerviationInfo(e.to_string()))?;
+    Ok(json.as_object().unwrap().clone())
+}
+
+pub fn check_build_metadata_from_storepath(
+    pkg: &str,
+    storepath: &str,
+) -> Result<CheckedBuildMetadata, PublishError> {
+    let drv_json = get_derivation_info(storepath)?;
+
+    // Error out if there was no derivation info found
+    if drv_json.is_empty() || drv_json.keys().next().is_none() {
+        return Err(PublishError::MissingDerviationInfo(
+            "No derivation info found".to_string(),
+        ));
+    }
+    let drv_path = drv_json.keys().next().unwrap().to_string();
+    let name = drv_json[&drv_path]["name"].as_str().unwrap().to_string();
+    let system_str = drv_json[&drv_path]["system"].as_str().unwrap();
+    // TODO - There is a drv_json[drv_path]["env"]["version"] in some derivations
+    // that looks like the source of the version that is then later included in
+    // the 'name' Once we include 'version' in the builders, we should look into
+    // grabbing it from there.  Perhaps there won't ever be a 'version' where we
+    // are currently looking for it?  Same for 'description'?
+    let version = drv_json[&drv_path]["version"]
+        .as_str()
+        .map(|s| s.to_string());
+    let description = drv_json[&drv_path]["description"]
+        .as_str()
+        .map(|s| s.to_string());
+
+    let system = SystemEnum::from_str(system_str).map_err(|e| {
+        PublishError::UnsupportedEnvironmentState(format!("Unable to identify system: {e}"))
+    })?;
+
+    let outputs = catalog_api_v1::types::Outputs(
+        drv_json[&drv_path]["outputs"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(name, value)| Output {
+                name: name.to_string(),
+                store_path: value["path"].as_str().unwrap().to_string(),
+            })
+            .collect(),
+    );
+    let outputs_to_install: Vec<String> = outputs.iter().map(|o| o.name.clone()).collect();
+
+    Ok(CheckedBuildMetadata {
+        drv_path,
+        package: pkg.to_string(),
+        name,
+        outputs,
+        outputs_to_install,
+        system,
+        description,
+        version,
+        _private: (),
+    })
+}
+
 /// Collect metadata needed for publishing that is obtained from the build output
 pub fn check_build_metadata(
     env: &impl Environment,
     pkg: &str,
-    system: &str,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     // For now assume the build is successful, and present.
     // Look for the output from the build at `results-<pkgname>`
@@ -265,26 +324,12 @@ pub fn check_build_metadata(
     // pre-defined path.  Later work will get structured results from the build
     // process to feed this.
 
-    let system = SystemEnum::from_str(system).map_err(|e| {
-        PublishError::UnsupportedEnvironmentState(format!("Unable to identify system: {e}"))
-    })?;
-
     let result_dir = build_symlink_path(env, pkg)?;
-    let store_dir = result_dir
+    let storepath = result_dir
         .read_link()
         .map_err(|e| PublishError::NonexistentOutputs(e.to_string()))?;
 
-    Ok(CheckedBuildMetadata {
-        // TODO - This is technically incorrect.  Need to eval `ATTRIBUTE.drv_path`?
-        drv_path: store_dir.to_string_lossy().to_string(),
-        outputs: vec![catalog_api_v1::types::Output {
-            name: "bin".to_string(),
-            store_path: store_dir.to_string_lossy().into_owned(),
-        }],
-        system,
-        package: pkg.to_string(),
-        _private: (),
-    })
+    check_build_metadata_from_storepath(pkg, &storepath.to_string_lossy())
 }
 
 fn gather_build_repo_meta(environment: &impl Environment) -> Result<LockedUrlInfo, PublishError> {
@@ -509,9 +554,37 @@ pub mod tests {
         // Do the build to ensure it's been run.  We just want to find the outputs
         assert_build_status(&flox, &mut env, EXAMPLE_PACKAGE_NAME, true);
 
-        let meta = check_build_metadata(&env, EXAMPLE_PACKAGE_NAME, &flox.system).unwrap();
+        let meta = check_build_metadata(&env, EXAMPLE_PACKAGE_NAME).unwrap();
         assert_eq!(meta.outputs.len(), 1);
+        assert_eq!(meta.outputs_to_install.len(), 1);
         assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
+        assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
+        assert_eq!(meta.version.is_none(), true);
+        assert_eq!(meta.description.is_none(), true);
+        assert_eq!(meta.system.to_string(), flox.system);
+    }
+
+    #[test]
+    fn test_check_build_meta_storepath_missing() {
+        let meta = check_build_metadata_from_storepath("mypkg", "/nix/store/abc123.drv");
+        assert!(meta.is_err());
+    }
+
+    #[test]
+    fn test_check_build_meta_storepath_nominal() {
+        let real_storepath = env!("NIX_BIN").to_string();
+        let meta = check_build_metadata_from_storepath("mypkg", &real_storepath).unwrap();
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        // Some of this found heuristically, and _probably_ won't change
+        assert_eq!(meta.name.starts_with("nix-"), true);
+        assert_eq!(meta.outputs.len(), 5);
+        assert_eq!(meta.outputs_to_install.len(), 5);
+        assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
+        assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
+        assert_eq!(meta.version.is_none(), true);
+        assert_eq!(meta.description.is_none(), true);
+        assert_eq!(meta.system.to_string(), flox.system);
     }
 
     #[tokio::test]
@@ -529,7 +602,7 @@ pub mod tests {
 
         let (env_metadata, build_metadata) = (
             check_environment_metadata(&flox, &mut env).unwrap(),
-            check_build_metadata(&env, EXAMPLE_PACKAGE_NAME, &flox.system).unwrap(),
+            check_build_metadata(&env, EXAMPLE_PACKAGE_NAME).unwrap(),
         );
 
         let publish_provider = PublishProvider::<&FloxBuildMk, &MockCache> {
@@ -559,7 +632,7 @@ pub mod tests {
 
         let (env_metadata, build_metadata) = (
             check_environment_metadata(&flox, &mut env).unwrap(),
-            check_build_metadata(&env, EXAMPLE_PACKAGE_NAME, &flox.system).unwrap(),
+            check_build_metadata(&env, EXAMPLE_PACKAGE_NAME).unwrap(),
         );
 
         // Test an expected failure from the Mock
@@ -598,7 +671,7 @@ pub mod tests {
 
         let (env_metadata, build_metadata) = (
             check_environment_metadata(&flox, &mut env).unwrap(),
-            check_build_metadata(&env, EXAMPLE_PACKAGE_NAME, &flox.system).unwrap(),
+            check_build_metadata(&env, EXAMPLE_PACKAGE_NAME).unwrap(),
         );
 
         let (_key_file, cache) = local_nix_cache();
