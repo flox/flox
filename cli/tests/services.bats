@@ -1401,7 +1401,7 @@ EOF
     version = 1
 
     [services]
-    one.command = "echo $FOO"
+    one.command = "echo $FOO > out"
 
     [hook]
     on-activate = "export FOO=foo_one"
@@ -1411,26 +1411,19 @@ EOF
   "$FLOX_BIN" init
   echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
 
-  # Edit the manifest adding a second service and changing the value of FOO.
-  # Then start services again.
+  # Start a background activation with an initial value of FOO.
   TEARDOWN_FIFO="$PROJECT_DIR/finished"
   mkfifo "$TEARDOWN_FIFO"
   "$FLOX_BIN" activate -s -- echo \> "$TEARDOWN_FIFO" &
 
-  # Since `one` is just an `echo` it will complete almost immediately once it has
-  # started, we just need to make we wait until after it has started.
-  echo "waiting for initial service to complete" >&3
-  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
-
-  run "$FLOX_BIN" services logs one
-  assert_success
-  assert_output "foo_one"
+  # The initial value of FOO should be written.
+  wait_for_file_content out foo_one
 
   MANIFEST_CONTENTS_2="$(cat << "EOF"
     version = 1
 
     [services]
-    one.command = "echo $FOO"
+    one.command = "echo $FOO > out"
     two.command = "sleep infinity"
 
     [hook]
@@ -1440,18 +1433,15 @@ EOF
 
   echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -f -
 
+  # Start a new and concurrent activation and services with a modified value of FOO.
   "$FLOX_BIN" activate -s -- true
 
-  # Make sure we avoid a race of service one failing to complete
-  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
+  # The modified value of FOO should be written.
+  wait_for_file_content out foo_two
 
   # The added service should be running.
   "${TESTS_DIR}"/services/wait_for_service_status.sh two:Running
 
-  # The modified value of FOO should be printed.
-  run "$FLOX_BIN" services logs one
-  assert_success
-  assert_output "foo_two"
 }
 
 @test "services stop after multiple activations of an environment exit" {
