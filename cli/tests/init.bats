@@ -37,7 +37,7 @@ setup() {
 }
 
 teardown() {
-  wait_for_watchdogs "$PROJECT_DIR"
+  wait_for_watchdogs "$PROJECT_DIR" || return 1
   project_teardown
   common_test_teardown
 }
