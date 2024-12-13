@@ -73,7 +73,7 @@ impl Containerize {
                 message: &format!("Creating container builder for {}...", env.name()),
                 help_message: None,
                 typed: Spinner::new(|| {
-                    builder.create_container_source(env.name().as_ref(), output_tag)
+                    builder.create_container_source(&flox, env.name().as_ref(), output_tag)
                 }),
             }
             .spin()?
@@ -87,7 +87,7 @@ impl Containerize {
                 "#});
             };
             let builder = ContainerizeProxy::new(env_path, container_runtime);
-            builder.create_container_source(env.name().as_ref(), output_tag)?
+            builder.create_container_source(&flox, env.name().as_ref(), output_tag)?
         };
 
         Dialog {

@@ -8,6 +8,7 @@ use thiserror::Error;
 use tracing::debug;
 
 use super::buildenv::BuiltStorePath;
+use crate::flox::Flox;
 use crate::providers::build::BUILDTIME_NIXPKGS_URL;
 use crate::providers::buildenv::NIX_BIN;
 use crate::utils::CommandExt;
@@ -22,6 +23,7 @@ pub trait ContainerBuilder {
     type Error: std::error::Error;
     fn create_container_source(
         &self,
+        flox: &Flox,
         name: impl AsRef<str>,
         tag: impl AsRef<str>,
     ) -> Result<ContainerSource, Self::Error>;
@@ -84,6 +86,7 @@ impl ContainerBuilder for MkContainerNix {
     /// The streaming script will be built via `nix build`.
     fn create_container_source(
         &self,
+        _flox: &Flox,
         name: impl AsRef<str>,
         tag: impl AsRef<str>,
     ) -> Result<ContainerSource, Self::Error> {
