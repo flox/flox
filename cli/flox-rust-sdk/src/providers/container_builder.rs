@@ -111,6 +111,8 @@ impl ContainerBuilder for MkContainerNix {
         command.args(["--argstr", "containerName", name.as_ref()]);
         command.args(["--argstr", "containerTag", tag.as_ref()]);
 
+        debug!(cmd=%command.display(), "building container");
+
         let output = command
             .output()
             .map_err(MkContainerNixError::CallNixError)?;
