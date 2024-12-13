@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::path::PathBuf;
 
 use dirs::home_dir;
-use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
 
 use super::Runtime;
@@ -40,6 +40,7 @@ impl ContainerBuilder for ContainerizeProxy {
     /// 3. `flox containerize`
     fn create_container_source(
         &self,
+        flox: &Flox,
         // Inferred from `self.environment_path` by flox _inside_ the container.
         _name: impl AsRef<str>,
         tag: impl AsRef<str>,
@@ -107,6 +108,20 @@ impl ContainerBuilder for ContainerizeProxy {
         command.args(["run", &flox_flake, "--"]);
 
         // Inception L3: Flox args.
+
+        // TODO: this should probably be a method on Verbosity
+        match flox.verbosity {
+            -1 => {
+                command.arg("--quiet");
+            },
+            _ if flox.verbosity > 0 => {
+                command.arg(format!(
+                    "-{}",
+                    "v".repeat(flox.verbosity.try_into().unwrap())
+                ));
+            },
+            _ => {},
+        }
         command.arg("containerize");
         command.args(["--dir", MOUNT_ENV]);
         command.args(["--tag", tag.as_ref()]);

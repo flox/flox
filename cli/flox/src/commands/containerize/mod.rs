@@ -68,7 +68,7 @@ impl Containerize {
             #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
             let builder = MkContainerNix::new(built_environment.develop);
 
-            builder.create_container_source(env.name().as_ref(), output_tag)?
+            builder.create_container_source(&flox, env.name().as_ref(), output_tag)?
         } else {
             let env_path = env.parent_path()?;
             let Some(container_runtime) = Runtime::detect_from_path() else {
@@ -79,7 +79,7 @@ impl Containerize {
                 "#});
             };
             let builder = ContainerizeProxy::new(env_path, container_runtime);
-            builder.create_container_source(env.name().as_ref(), output_tag)?
+            builder.create_container_source(&flox, env.name().as_ref(), output_tag)?
         };
 
         let mut writer = output.to_writer()?;
