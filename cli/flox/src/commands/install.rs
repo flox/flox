@@ -510,7 +510,7 @@ fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
 
     let read_more_msg = formatdoc! {"
         -> Read more about the 'default' environment at:
-           https://flox.dev/docs/tutorials/layering-multiple-environments/#create-your-default-home-environment"};
+           https://flox.dev/docs/tutorials/default-environment/"};
     let restart_msg = formatdoc! {"
         The 'default' environment will be activated for every new shell.
         -> Restart your shell to continue using the default environment."};
