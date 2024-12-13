@@ -902,7 +902,7 @@ EOF
   TEARDOWN_FIFO="$PROJECT_DIR/finished"
   mkfifo "$TEARDOWN_FIFO"
   "$FLOX_BIN" activate -s -- echo \> "$TEARDOWN_FIFO" &
-  activate_pid="$!"
+
   # Make sure the first `process-compose` gets up and running
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
 
@@ -1416,7 +1416,6 @@ EOF
   TEARDOWN_FIFO="$PROJECT_DIR/finished"
   mkfifo "$TEARDOWN_FIFO"
   "$FLOX_BIN" activate -s -- echo \> "$TEARDOWN_FIFO" &
-  activate_pid="$!"
 
   # Since `one` is just an `echo` it will complete almost immediately once it has
   # started, we just need to make we wait until after it has started.
