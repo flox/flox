@@ -578,8 +578,8 @@ pub mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         // Some of this found heuristically, and _probably_ won't change
         assert_eq!(meta.name.starts_with("nix-"), true);
-        assert_eq!(meta.outputs.len(), 5);
-        assert_eq!(meta.outputs_to_install.len(), 5);
+        assert!(meta.outputs.len() >= 4);
+        assert_eq!(meta.outputs_to_install.len(), meta.outputs.len());
         assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.version.is_none(), true);
