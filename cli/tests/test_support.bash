@@ -174,13 +174,25 @@ common_file_teardown() {
 
 teardown_file() { common_file_teardown; }
 
-# Wait for all watchdogs called with project_dir as part of one of their
-# arguments
+# Wait for all watchdogs called with `project_dir` as part of one of their
+# arguments.
+#
+# This is primarily used in `teardown()` to prevent us leaving stray
+# activations, services, and other processes running after a test has finished.
+# These are problematic because they're both a waste of resources (in CI and for
+# real users) and the suite will block without feedback if a processes inherits
+# FD3 from BATS.
+#
+# NB1: It must be appended with `|| return 1` to fail the offending test and
+# preserve other output, at the expense of aborting any other cleanup.
+#
+# NB2: It cannot be reliably used inlined of tests to wait for activations or
+# services to be cleaned up because it can exit before a watchdog has started.
 wait_for_watchdogs() {
   project_dir="${1?}"
   if [ -z "$project_dir" ]; then
     echo "ERROR: cannot wait for watchdogs with empty project_dir" >&3
-    exit 1
+    return 1
   fi
   # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
   # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
@@ -219,7 +231,7 @@ wait_for_watchdogs() {
           pstree -ws "$BATS_RUN_TMPDIR" >&3
           # This will fail the test giving us a better idea of which watchdog
           # didn't get cleaned up
-          exit 1
+          return 1
         fi
         sleep 0.01;
       fi

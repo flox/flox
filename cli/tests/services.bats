@@ -88,7 +88,7 @@ teardown() {
   # Within the `services` tests, we call `setup_isolated_flox` during `setup()`,
   # which sets the data dir to a unique value for every test,
   # thus avoiding waiting for unrelated watchdog processes.
-  wait_for_watchdogs "$PROJECT_DIR"
+  wait_for_watchdogs "$PROJECT_DIR" || return 1
   project_teardown
   common_test_teardown
 }

@@ -119,7 +119,7 @@ teardown() {
   # by the watchdog as the activation terminates.
   if [ -n "${PROJECT_DIR:-}" ]; then
     # Not all tests call project_setup
-    wait_for_watchdogs "$PROJECT_DIR"
+    wait_for_watchdogs "$PROJECT_DIR" || return 1
     project_teardown
   fi
   common_test_teardown
