@@ -185,7 +185,7 @@ impl CatalogClient {
         if let Some(token) = &config.floxhub_token {
             header_map.insert(
                 header::HeaderName::from_static("authorization"),
-                header::HeaderValue::from_str(&format!("bearer {}", token.clone())).unwrap(),
+                header::HeaderValue::from_str(&format!("bearer {token}")).unwrap(),
             );
         };
 
