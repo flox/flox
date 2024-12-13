@@ -898,8 +898,10 @@ EOF
 
 @test "activate services: shows warning when services already running" {
   setup_sleeping_services
-  mkfifo fifo
-  "$FLOX_BIN" activate -s -- echo \> fifo &
+
+  TEARDOWN_FIFO="$PROJECT_DIR/finished"
+  mkfifo "$TEARDOWN_FIFO"
+  "$FLOX_BIN" activate -s -- echo \> "$TEARDOWN_FIFO" &
   activate_pid="$!"
   # Make sure the first `process-compose` gets up and running
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
@@ -907,10 +909,6 @@ EOF
   run "$FLOX_BIN" activate -s -- true
   assert_success
   assert_output --partial "⚠️  Skipped starting services, services are already running"
-
-  # Technically this should be a teardown step
-  # The test will hang forever if it fails and doesn't get here
-  timeout 2 cat fifo
 }
 
 # ---------------------------------------------------------------------------- #
@@ -1415,8 +1413,9 @@ EOF
 
   # Edit the manifest adding a second service and changing the value of FOO.
   # Then start services again.
-  mkfifo fifo
-  "$FLOX_BIN" activate -s -- echo \> fifo &
+  TEARDOWN_FIFO="$PROJECT_DIR/finished"
+  mkfifo "$TEARDOWN_FIFO"
+  "$FLOX_BIN" activate -s -- echo \> "$TEARDOWN_FIFO" &
   activate_pid="$!"
 
   # Since `one` is just an `echo` it will complete almost immediately once it has
@@ -1454,10 +1453,6 @@ EOF
   run "$FLOX_BIN" services logs one
   assert_success
   assert_output "foo_two"
-
-  # Technically this should be a teardown step
-  # The test will hang forever if it fails and doesn't get here
-  timeout 2 cat fifo
 }
 
 @test "services stop after multiple activations of an environment exit" {
