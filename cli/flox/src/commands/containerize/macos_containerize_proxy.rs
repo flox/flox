@@ -1,5 +1,7 @@
 use std::convert::Infallible;
+use std::env;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use dirs::home_dir;
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
@@ -10,6 +12,8 @@ use crate::config::FLOX_DISABLE_METRICS_VAR;
 
 const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE: &str = "ghcr.io/flox/flox";
+pub static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
+    LazyLock::new(|| env::var("FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
 
 const MOUNT_ENV: &str = "/flox_env";
 const MOUNT_HOME: &str = "/flox_home";
@@ -103,7 +107,9 @@ impl ContainerBuilder for ContainerizeProxy {
             FLOX_FLAKE,
             // Use a more specific commit if available, e.g. pushed to GitHub.
             // TODO: Doesn't always work: https://github.com/flox/flox/issues/2502
-            flox_version.commit_sha().unwrap_or(flox_version_tag)
+            (*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV)
+                .clone()
+                .unwrap_or(flox_version.commit_sha().unwrap_or(flox_version_tag))
         );
         command.args(["run", &flox_flake, "--"]);
 
