@@ -53,9 +53,9 @@ setup() {
   mkdir -p $HOME/.config/containers
   echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$HOME/.config/containers/policy.json"
 
-  if ! is_linux; then
-    return
-  fi
+  # if ! is_linux; then
+  #   return
+  # fi
   # flox does not allow to set a $HOME
   # that does not correspond to the effective user's,
   # but podman requires the policy.json set in the **test user's** $HOME,
@@ -81,6 +81,11 @@ EOF
 
   chmod +x "$BATS_TEST_TMPDIR/bin/podman"
   export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  machine="$(podman machine list -n)"
+  if [ -z "$machine" ]; then
+    podman machine init
+  fi
+  podman machine start || true
 }
 
 setup_file() {
@@ -146,7 +151,6 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
 # bats test_tags=containerize:default-to-file
 @test "container is written to a runtime by default" {
-  skip_if_not_linux
   env_setup_catalog
 
   # Check that podman is installed
@@ -159,7 +163,6 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
 # bats test_tags=containerize:default-to-file
 @test "container is written to a file if no runtime is found on PATH" {
-  skip_if_not_linux
   env_setup_catalog
 
   PATH= run "$FLOX_BIN" containerize
@@ -169,8 +172,6 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
 # bats test_tags=containerize:container-tag
 @test "container is tagged with specified tag" {
-  skip_if_not_linux
-
   env_setup_catalog
 
   # Check that podman is installed
@@ -183,7 +184,6 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
 # bats test_tags=containerize:piped-to-runtime
 @test "container is written to runtime when '--runtime <runtime>' is passed" {
-  skip_if_not_linux
   env_setup_catalog
 
   run bash -c '"$FLOX_BIN" containerize --tag "runtime" --runtime podman' 3>&-
@@ -196,12 +196,11 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
 # bats test_tags=containerize:runtime-not-in-path
 @test "error if runtime not in PATH" {
-  skip_if_not_linux
   env_setup_catalog
 
   run bash -c 'PATH= "$FLOX_BIN" containerize --runtime podman' 3>&-
   assert_failure
-  assert_line --partial "Failed to call runtime"
+  assert_output --partial "Failed to call runtime"
 }
 
 function assert_container_output() {
@@ -231,8 +230,6 @@ function assert_container_output() {
 
 # bats test_tags=containerize:run-container-i
 @test "container can be run with 'podman/docker run' with/without -i'" {
-  skip_if_not_linux
-
   env_setup_catalog
 
   # Also tests writing to STDOUT with `-f -`
