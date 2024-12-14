@@ -90,6 +90,7 @@ let
       yq
       process-compose
       procps
+      podman
     ]
     # TODO: this hack is not going to be needed once we test against stuff on system
     ++ lib.optional stdenv.isDarwin (
@@ -108,11 +109,7 @@ let
           mkdir -p "$out/bin"
           echo "$source" | gcc -Wall -o "$out/bin/$name" -xc -
         ''
-    )
-    # Containerize tests need a container runtime.
-    # Since we're building and building only works on linux,
-    # we only include podman on linux.
-    ++ lib.optionals stdenv.isLinux [ podman ];
+    );
 in
 # TODO: we should run tests against different shells
 writeShellScriptBin PROJECT_NAME ''
