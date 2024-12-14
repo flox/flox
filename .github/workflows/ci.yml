@@ -105,6 +105,10 @@ jobs:
           - "containerize"
           - "catalog"
           - "!activate,!containerize,!catalog"
+        exclude:
+          # Skip containerize tests on the macOS runner because we can't double nest virtualization
+          - os: "macos-14-xlarge"
+            test-tags: "containerize"
 
     steps:
       - name: "Checkout"
@@ -158,6 +162,7 @@ jobs:
         env:
           RUST_BACKTRACE: 1
           AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.MANAGED_AUTH0_FLOX_DEV_CLIENT_SECRET }}"
+          FLOX_CI_RUNNER: "github-${{ matrix.os }}"
         run: |
           nix develop -L --no-update-lock-file --command just integ-tests --\
             --filter-tags '"${{ matrix.test-tags }}"'
@@ -365,6 +370,10 @@ jobs:
         test-tags:
           - "containerize"
           - "!containerize"
+        exclude:
+          # Skip containerize tests on this runner because it's actually Rosetta on aarch64-darwin
+          - system: "x86_64-darwin"
+            test-tags: "containerize"
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
@@ -393,6 +402,8 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30
+        env:
+          FLOX_CI_RUNNER: "flox-${{ matrix.system }}"
         run: |
           git clean -xfd
           ssh github@$REMOTE_SERVER_ADDRESS \
