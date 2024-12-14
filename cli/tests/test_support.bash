@@ -109,7 +109,7 @@ floxhub_setup() {
 
 # Isolate flox config, data, and cache from the potentially shared
 # xdg directories.
-# This is necessary as other wisemultiple tests contest for the same
+# This is necessary as otherwise multiple tests contest for the same
 # resources, e.g.:
 # * the global manifest and lockfile
 #   + created by multiple processes

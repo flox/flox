@@ -54,6 +54,14 @@ impl ContainerBuilder for ContainerizeProxy {
         let mut command = self.container_runtime.to_command();
         command.arg("run");
         command.arg("--rm");
+        // The `--userns` flag creates a mapping of users in the container,
+        // which we need. However, in order to work we also need the user
+        // in the container to be `root` otherwise you run into multi-user
+        // issues. The empty string `""` argument to `--userns` maps the
+        // current user to `root` inside the container.
+        if self.container_runtime == Runtime::Podman {
+            command.args(["--userns", ""]);
+        }
         command.args([
             "--mount",
             &format!(
@@ -124,7 +132,11 @@ impl ContainerBuilder for ContainerizeProxy {
 
         // Inception L2: Nix args.
         command.arg("nix");
-        command.args(["--extra-experimental-features", "nix-command flakes"]);
+        command.args([
+            "--extra-experimental-features",
+            "nix-command flakes",
+            "--accept-flake-config",
+        ]);
         let flox_flake = format!(
             "{}/{}",
             FLOX_FLAKE,
