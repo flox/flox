@@ -14,7 +14,6 @@ flox-rust-sdk.workspace = true
 fslock.workspace = true
 glob = "0.3.1"
 nix.workspace = true
-once_cell.workspace = true
 sentry.workspace = true
 serde.workspace = true
 signal-hook.workspace = true

@@ -732,9 +732,9 @@ fn services_socket_path(id: &str, flox: &Flox) -> Result<PathBuf, EnvironmentErr
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
+    use std::sync::LazyLock;
     use std::time::Duration;
 
-    use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -754,7 +754,7 @@ mod test {
         "version": 1
     }"#;
 
-    static MANAGED_ENV_POINTER: Lazy<EnvironmentPointer> = Lazy::new(|| {
+    static MANAGED_ENV_POINTER: LazyLock<EnvironmentPointer> = LazyLock::new(|| {
         EnvironmentPointer::Managed(ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),

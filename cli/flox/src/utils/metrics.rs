@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration as TimeoutDuration;
 
 use anyhow::{bail, Context, Result};
@@ -12,7 +12,6 @@ use flox_rust_sdk::flox::FLOX_VERSION;
 use fslock::LockFile;
 use indoc::indoc;
 use log::debug;
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::format_description::well_known::Iso8601;
@@ -27,7 +26,7 @@ pub const METRICS_UUID_FILE_NAME: &str = "metrics-uuid";
 pub const METRICS_LOCK_FILE_NAME: &str = "metrics-lock";
 const DEFAULT_BUFFER_EXPIRY: Duration = Duration::minutes(2);
 
-pub static METRICS_EVENTS_URL: Lazy<String> = Lazy::new(|| {
+pub static METRICS_EVENTS_URL: LazyLock<String> = LazyLock::new(|| {
     std::env::var("_FLOX_METRICS_URL_OVERRIDE").unwrap_or(env!("METRICS_EVENTS_URL").to_string())
 });
 pub const METRICS_EVENTS_API_KEY: &str = env!("METRICS_EVENTS_API_KEY");
@@ -280,7 +279,7 @@ pub fn read_metrics_uuid(config: &Config) -> Result<Uuid> {
         })
 }
 
-static METRICS_HUB: Lazy<Hub> = Lazy::new(|| Hub {
+static METRICS_HUB: LazyLock<Hub> = LazyLock::new(|| Hub {
     client: Arc::new(Mutex::new(None)),
 });
 

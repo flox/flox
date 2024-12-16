@@ -6,6 +6,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
+use std::sync::LazyLock;
 use std::{env, fs};
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -36,7 +37,6 @@ use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, warn};
-use once_cell::sync::Lazy;
 
 use super::services::ServicesEnvironment;
 use super::{
@@ -53,17 +53,17 @@ use crate::utils::openers::Shell;
 use crate::utils::{default_nix_env_vars, message};
 use crate::{subcommand_metric, utils};
 
-pub static INTERACTIVE_BASH_BIN: Lazy<PathBuf> = Lazy::new(|| {
+pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(
         env::var("INTERACTIVE_BASH_BIN").unwrap_or(env!("INTERACTIVE_BASH_BIN").to_string()),
     )
 });
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
-pub static WATCHDOG_BIN: Lazy<PathBuf> = Lazy::new(|| {
+pub static WATCHDOG_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("WATCHDOG_BIN").unwrap_or(env!("WATCHDOG_BIN").to_string()))
 });
-pub static FLOX_INTERPRETER: Lazy<PathBuf> = Lazy::new(|| {
+pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
 });
 
@@ -712,20 +712,21 @@ impl Activate {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::LazyLock;
+
     use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, PathPointer};
-    use once_cell::sync::Lazy;
 
     use super::*;
     use crate::commands::ActiveEnvironments;
 
-    static DEFAULT_ENV: Lazy<UninitializedEnvironment> = Lazy::new(|| {
+    static DEFAULT_ENV: LazyLock<UninitializedEnvironment> = LazyLock::new(|| {
         UninitializedEnvironment::DotFlox(DotFlox {
             path: PathBuf::from(""),
             pointer: EnvironmentPointer::Path(PathPointer::new("default".parse().unwrap())),
         })
     });
 
-    static NON_DEFAULT_ENV: Lazy<UninitializedEnvironment> = Lazy::new(|| {
+    static NON_DEFAULT_ENV: LazyLock<UninitializedEnvironment> = LazyLock::new(|| {
         UninitializedEnvironment::DotFlox(DotFlox {
             path: PathBuf::from(""),
             pointer: EnvironmentPointer::Path(PathPointer::new("wichtig".parse().unwrap())),

@@ -21,7 +21,6 @@ itertools.workspace = true
 jsonwebtoken.workspace = true
 log.workspace = true
 nix = {workspace = true, features = ["signal"]}
-once_cell.workspace = true
 pollster.workspace = true
 regex.workspace = true
 reqwest.workspace = true

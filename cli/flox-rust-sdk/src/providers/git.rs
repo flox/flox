@@ -4,10 +4,10 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::LazyLock;
 
 use chrono::{DateTime, Utc};
 use log::{debug, error, warn};
-use once_cell::sync::Lazy;
 use thiserror::Error;
 
 use crate::utils::CommandExt;
@@ -15,8 +15,8 @@ use crate::utils::CommandExt;
 // This is the full /path/to/bin/git that we actually use.
 // This is set once and prefers to use the `GIT_PKG` env variable if set,
 // and falls back to the value observed at build time if it is unset.
-pub static GIT_BIN: Lazy<String> =
-    Lazy::new(|| env::var("GIT_PKG").unwrap_or(env!("GIT_PKG").to_string()) + "/bin/git");
+pub static GIT_BIN: LazyLock<String> =
+    LazyLock::new(|| env::var("GIT_PKG").unwrap_or(env!("GIT_PKG").to_string()) + "/bin/git");
 
 #[derive(Error, Debug)]
 pub enum EmptyError {}
