@@ -54,6 +54,7 @@ impl ContainerBuilder for ContainerizeProxy {
         let mut command = self.container_runtime.to_command();
         command.arg("run");
         command.arg("--rm");
+        command.args(["--userns", "keep-id"]);
         command.args([
             "--mount",
             &format!(
