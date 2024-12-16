@@ -1,19 +1,19 @@
 use std::convert::Infallible;
 use std::env;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use dirs::home_dir;
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
-use once_cell::sync::Lazy;
 
 use super::Runtime;
 use crate::config::FLOX_DISABLE_METRICS_VAR;
 
 const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE: &str = "ghcr.io/flox/flox";
-pub static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: Lazy<Option<String>> =
-    Lazy::new(|| env::var("FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
+pub static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
+    LazyLock::new(|| env::var("FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
 
 const MOUNT_ENV: &str = "/flox_env";
 const MOUNT_HOME: &str = "/flox_home";
