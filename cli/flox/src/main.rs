@@ -77,6 +77,8 @@ fn main() -> ExitCode {
             .unwrap_or_default()
     };
 
+    init_logger(Some(verbosity));
+
     if let Err(err) = set_user() {
         message::error(err.to_string());
         return ExitCode::from(1);
@@ -87,7 +89,6 @@ fn main() -> ExitCode {
         .flox
         .disable_metrics;
 
-    init_logger(Some(verbosity));
     // Sentry client must be initialized before starting an async runtime or spawning threads
     // https://docs.sentry.io/platforms/rust/#async-main-function
     let _sentry_guard = (!disable_metrics).then(init_sentry);
