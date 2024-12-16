@@ -49,10 +49,6 @@ fn main() -> ExitCode {
     // Avoid SIGPIPE from killing the process
     reset_sigpipe();
 
-    // initialize logger with "best guess" defaults
-    // updating the logger conf is cheap, so we reinitialize whenever we get more information
-    init_logger(None);
-
     // Quit early if `--prefix` is present
     if Prefix::check() {
         println!(env!("out"));
