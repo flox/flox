@@ -410,6 +410,11 @@ home_setup() {
       suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home" ;;
       file) export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home" ;;
       test) export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home" ;;
+      short)
+        tmpdir="$(mktemp -d "/tmp/home.XXXXXX")"
+        mkdir -p "$tmpdir"
+        export FLOX_TEST_HOME="$tmpdir"
+        ;;
       *)
         echo "home_setup: Invalid homedir category '${1?}'" >&2
         return 1
