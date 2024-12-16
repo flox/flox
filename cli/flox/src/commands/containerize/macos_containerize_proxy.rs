@@ -114,12 +114,19 @@ impl ContainerBuilder for ContainerizeProxy {
         command.args(["run", &flox_flake, "--"]);
 
         // Inception L3: Flox args.
-        if flox.verbosity > 0 {
-            // TODO: this should probably be a method on Verbosity
-            command.arg(format!(
-                "-{}",
-                "v".repeat(flox.verbosity.try_into().unwrap())
-            ));
+
+        // TODO: this should probably be a method on Verbosity
+        match flox.verbosity {
+            -1 => {
+                command.arg("--quiet");
+            },
+            _ if flox.verbosity > 0 => {
+                command.arg(format!(
+                    "-{}",
+                    "v".repeat(flox.verbosity.try_into().unwrap())
+                ));
+            },
+            _ => {},
         }
         command.arg("containerize");
         command.args(["--dir", MOUNT_ENV]);
