@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::LazyLock;
 
 use jsonwebtoken::{DecodingKey, Validation};
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_with::DeserializeFromStr;
 use thiserror::Error;
@@ -13,16 +13,16 @@ pub use crate::models::environment_ref::{self, *};
 use crate::models::search::SearchStrategy;
 use crate::providers::{catalog, flox_cpp_utils};
 
-pub static FLOX_VERSION_STRING: Lazy<String> =
-    Lazy::new(|| std::env::var("FLOX_VERSION").unwrap_or(env!("FLOX_VERSION").to_string()));
-pub static FLOX_VERSION: Lazy<FloxVersion> = Lazy::new(|| {
+pub static FLOX_VERSION_STRING: LazyLock<String> =
+    LazyLock::new(|| std::env::var("FLOX_VERSION").unwrap_or(env!("FLOX_VERSION").to_string()));
+pub static FLOX_VERSION: LazyLock<FloxVersion> = LazyLock::new(|| {
     (*FLOX_VERSION_STRING)
         .parse()
         // Won't panic since we run flox --version in pkgs/flox/default.nix
         .expect("Version '{version}' can not be parsed.")
 });
-pub static FLOX_SENTRY_ENV: Lazy<Option<String>> =
-    Lazy::new(|| std::env::var("FLOX_SENTRY_ENV").ok());
+pub static FLOX_SENTRY_ENV: LazyLock<Option<String>> =
+    LazyLock::new(|| std::env::var("FLOX_SENTRY_ENV").ok());
 
 /// The main API struct for our flox implementation
 ///
@@ -90,8 +90,8 @@ impl Default for UseCatalog {
     }
 }
 
-pub static DEFAULT_FLOXHUB_URL: Lazy<Url> =
-    Lazy::new(|| Url::parse("https://hub.flox.dev").unwrap());
+pub static DEFAULT_FLOXHUB_URL: LazyLock<Url> =
+    LazyLock::new(|| Url::parse("https://hub.flox.dev").unwrap());
 
 #[derive(Debug, Clone, Deserialize)]
 struct FloxTokenClaims {

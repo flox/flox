@@ -1,5 +1,6 @@
+use std::sync::OnceLock;
+
 use log::{debug, error};
-use once_cell::sync::OnceCell;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::reload::Handle;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -35,7 +36,7 @@ impl std::io::Write for LockingTerminalStderr {
     }
 }
 
-static LOGGER_HANDLE: OnceCell<Handle<EnvFilter, Registry>> = OnceCell::new();
+static LOGGER_HANDLE: OnceLock<Handle<EnvFilter, Registry>> = OnceLock::new();
 
 pub(crate) fn init_logger(verbosity: Option<Verbosity>) {
     let verbosity = verbosity.unwrap_or_default();

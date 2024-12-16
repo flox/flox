@@ -1,8 +1,9 @@
+use std::sync::LazyLock;
+
 use catalog_api_v1::types::{MessageLevel, SystemEnum};
 use indent::{indent_all_by, indent_by};
 use indoc::formatdoc;
 use itertools::{Either, Itertools};
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::skip_serializing_none;
@@ -48,7 +49,7 @@ use crate::providers::flox_cpp_utils::{
     LockedInstallable,
 };
 
-pub(crate) static DEFAULT_SYSTEMS_STR: Lazy<[String; 4]> = Lazy::new(|| {
+pub(crate) static DEFAULT_SYSTEMS_STR: LazyLock<[String; 4]> = LazyLock::new(|| {
     [
         "aarch64-darwin".to_string(),
         "aarch64-linux".to_string(),
@@ -1569,7 +1570,7 @@ pub mod test_helpers {
     }
 
     /// This JSON was copied from a manifest.lock after installing github:nix-community/nix-eval-jobs
-    pub static LOCKED_NIX_EVAL_JOBS: Lazy<LockedPackageFlake> = Lazy::new(|| {
+    pub static LOCKED_NIX_EVAL_JOBS: LazyLock<LockedPackageFlake> = LazyLock::new(|| {
         serde_json::from_str(r#"
             {
               "install_id": "nix-eval-jobs",
@@ -1605,6 +1606,7 @@ pub mod test_helpers {
 #[cfg(test)]
 pub(crate) mod tests {
     use std::collections::HashMap;
+    use std::sync::LazyLock;
     use std::vec;
 
     use catalog::test_helpers::resolved_pkg_group_with_dummy_package;
@@ -1621,7 +1623,6 @@ pub(crate) mod tests {
     };
     use catalog_api_v1::types::{Output, ResolvedPackageDescriptor};
     use indoc::indoc;
-    use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
     use test_helpers::{
         fake_catalog_package_lock,
@@ -1793,7 +1794,7 @@ pub(crate) mod tests {
         );
     }
 
-    static TEST_RAW_MANIFEST: Lazy<RawManifest> = Lazy::new(|| {
+    static TEST_RAW_MANIFEST: LazyLock<RawManifest> = LazyLock::new(|| {
         indoc! {r#"
           version = 1
 
@@ -1808,11 +1809,11 @@ pub(crate) mod tests {
         .unwrap()
     });
 
-    static TEST_TYPED_MANIFEST: Lazy<Manifest> =
-        Lazy::new(|| TEST_RAW_MANIFEST.to_typed().unwrap());
+    static TEST_TYPED_MANIFEST: LazyLock<Manifest> =
+        LazyLock::new(|| TEST_RAW_MANIFEST.to_typed().unwrap());
 
-    static TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG: Lazy<Vec<ResolvedPackageGroup>> =
-        Lazy::new(|| {
+    static TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG: LazyLock<Vec<ResolvedPackageGroup>> =
+        LazyLock::new(|| {
             vec![ResolvedPackageGroup {
                 page: None,
                 name: "group".to_string(),
@@ -1825,19 +1826,20 @@ pub(crate) mod tests {
             }]
         });
 
-    static TEST_RESOLUTION_RESPONSE_GENERAL: Lazy<Vec<ResolvedPackageGroup>> = Lazy::new(|| {
-        vec![ResolvedPackageGroup {
-            page: None,
-            name: "group".to_string(),
-            msgs: vec![ResolutionMessage::General(MsgGeneral {
-                level: MessageLevel::Error,
-                msg: "User consumable message".to_string(),
-            })],
-        }]
-    });
+    static TEST_RESOLUTION_RESPONSE_GENERAL: LazyLock<Vec<ResolvedPackageGroup>> =
+        LazyLock::new(|| {
+            vec![ResolvedPackageGroup {
+                page: None,
+                name: "group".to_string(),
+                msgs: vec![ResolutionMessage::General(MsgGeneral {
+                    level: MessageLevel::Error,
+                    msg: "User consumable message".to_string(),
+                })],
+            }]
+        });
 
-    static TEST_RESOLUTION_RESPONSE_SYSTEMS_NOT_ON_SAME_PAGE: Lazy<Vec<ResolvedPackageGroup>> =
-        Lazy::new(|| {
+    static TEST_RESOLUTION_RESPONSE_SYSTEMS_NOT_ON_SAME_PAGE: LazyLock<Vec<ResolvedPackageGroup>> =
+        LazyLock::new(|| {
             vec![ResolvedPackageGroup {
                 page: None,
                 name: "group".to_string(),
@@ -1853,7 +1855,7 @@ pub(crate) mod tests {
             }]
         });
 
-    static TEST_RESOLUTION_PARAMS: Lazy<Vec<PackageGroup>> = Lazy::new(|| {
+    static TEST_RESOLUTION_PARAMS: LazyLock<Vec<PackageGroup>> = LazyLock::new(|| {
         vec![PackageGroup {
             name: "group".to_string(),
             descriptors: vec![PackageDescriptor {
@@ -1871,7 +1873,7 @@ pub(crate) mod tests {
         }]
     });
 
-    static TEST_RESOLUTION_RESPONSE: Lazy<Vec<ResolvedPackageGroup>> = Lazy::new(|| {
+    static TEST_RESOLUTION_RESPONSE: LazyLock<Vec<ResolvedPackageGroup>> = LazyLock::new(|| {
         vec![ResolvedPackageGroup {
             page: Some(CatalogPage {
                 complete: true,
@@ -1915,7 +1917,7 @@ pub(crate) mod tests {
         }]
     });
 
-    static TEST_LOCKED_MANIFEST: Lazy<Lockfile> = Lazy::new(|| Lockfile {
+    static TEST_LOCKED_MANIFEST: LazyLock<Lockfile> = LazyLock::new(|| Lockfile {
         version: Version::<1>,
         manifest: TEST_TYPED_MANIFEST.clone(),
         packages: vec![LockedPackageCatalog {

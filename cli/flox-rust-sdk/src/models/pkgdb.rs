@@ -3,9 +3,9 @@ use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::{BufRead, BufReader, Read};
 use std::process::{Command, Stdio};
+use std::sync::LazyLock;
 
 use log::debug;
-use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
@@ -15,10 +15,10 @@ use crate::utils::CommandExt;
 // This is the `PKGDB` path that we actually use.
 // This is set once and prefers the `PKGDB` env variable, but will use
 // the fallback to the binary available at build time if it is unset.
-pub static PKGDB_BIN: Lazy<String> =
-    Lazy::new(|| env::var("PKGDB_BIN").unwrap_or(env!("PKGDB_BIN").to_string()));
-pub static GIT_PKG_BIN: Lazy<String> =
-    Lazy::new(|| env::var("GIT_PKG").unwrap_or(env!("GIT_PKG").to_string()) + "/bin");
+pub static PKGDB_BIN: LazyLock<String> =
+    LazyLock::new(|| env::var("PKGDB_BIN").unwrap_or(env!("PKGDB_BIN").to_string()));
+pub static GIT_PKG_BIN: LazyLock<String> =
+    LazyLock::new(|| env::var("GIT_PKG").unwrap_or(env!("GIT_PKG").to_string()) + "/bin");
 
 /// Error codes emitted by pkgdb
 /// matching the definitions in `pkgdb/include/flox/core/exceptions.hh`

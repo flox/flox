@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 use std::env;
 use std::io::Stderr;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
-
-use once_cell::sync::Lazy;
 
 pub mod colors;
 pub mod dialog;
@@ -17,7 +15,8 @@ pub mod openers;
 pub mod search;
 pub mod tracing;
 
-pub static TERMINAL_STDERR: Lazy<Mutex<Stderr>> = Lazy::new(|| Mutex::new(std::io::stderr()));
+pub static TERMINAL_STDERR: LazyLock<Mutex<Stderr>> =
+    LazyLock::new(|| Mutex::new(std::io::stderr()));
 /// Timeout used for network operations that run after the main flox command has
 /// completed.
 ///

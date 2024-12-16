@@ -11,8 +11,8 @@ use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::LazyLock;
 
-use once_cell::sync::Lazy;
 #[cfg(test)]
 use proptest::prelude::*;
 use regex::Regex;
@@ -33,11 +33,11 @@ const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
 /// by running a dummy service that sleeps indefinitely.
 /// Not all systems have a `sleep` command that supports `sleep infinity`,
 /// so we use a nix provided `sleep` binary instead.
-static SLEEP_BIN: Lazy<String> =
-    Lazy::new(|| env::var("SLEEP_BIN").unwrap_or(env!("SLEEP_BIN").to_string()));
+static SLEEP_BIN: LazyLock<String> =
+    LazyLock::new(|| env::var("SLEEP_BIN").unwrap_or(env!("SLEEP_BIN").to_string()));
 
 pub const SERVICE_CONFIG_FILENAME: &str = "service-config.yaml";
-pub static PROCESS_COMPOSE_BIN: Lazy<String> = Lazy::new(|| {
+pub static PROCESS_COMPOSE_BIN: LazyLock<String> = LazyLock::new(|| {
     env::var("PROCESS_COMPOSE_BIN").unwrap_or(env!("PROCESS_COMPOSE_BIN").to_string())
 });
 pub const DEFAULT_TAIL: usize = 15;

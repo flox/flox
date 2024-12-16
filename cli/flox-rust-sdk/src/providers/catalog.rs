@@ -8,7 +8,7 @@ use std::num::NonZeroU32;
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use async_stream::try_stream;
 use catalog_api_v1::types::{
@@ -25,7 +25,6 @@ use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
 use log::debug;
-use once_cell::sync::Lazy;
 use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -41,10 +40,10 @@ const NIXPKGS_CATALOG: &str = "nixpkgs";
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
 
-pub static GENERATED_DATA: Lazy<PathBuf> =
-    Lazy::new(|| PathBuf::from(std::env::var("GENERATED_DATA").unwrap()));
-pub static MANUALLY_GENERATED: Lazy<PathBuf> =
-    Lazy::new(|| PathBuf::from(std::env::var("MANUALLY_GENERATED").unwrap()));
+pub static GENERATED_DATA: LazyLock<PathBuf> =
+    LazyLock::new(|| PathBuf::from(std::env::var("GENERATED_DATA").unwrap()));
+pub static MANUALLY_GENERATED: LazyLock<PathBuf> =
+    LazyLock::new(|| PathBuf::from(std::env::var("MANUALLY_GENERATED").unwrap()));
 
 const RESPONSE_PAGE_SIZE: NonZeroU32 = unsafe { NonZeroU32::new_unchecked(1000) };
 
