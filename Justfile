@@ -105,7 +105,7 @@ clean-builds:
     pushd cli; cargo build -p mk_data; popd
 
 # Generate test data
-@gen-data +mk_data_args="": build-data-gen
+@gen-data +mk_data_args="": build-data-gen build-cli
     mkdata="$PWD/cli/target/debug/mk_data"; pushd test_data; "$mkdata" {{mk_data_args}} config.toml; popd
 
 # ---------------------------------------------------------------------------- #
