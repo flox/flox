@@ -56,8 +56,11 @@ build-cdb:
     nix {{nix_options}} build .#flox-manpages -o build/flox-manpages
 
 # Build the activation scripts
+# `pure-eval` is disabled because `FLOX_ACTIVATIONS_BIN`
+# is read from the environment.
 @build-activation-scripts: build-activations
     nix {{nix_options}} build \
+        --option pure-eval false \
         '.#floxDevelopmentPackages.flox-activation-scripts^*' \
         -o $FLOX_INTERPRETER
 
@@ -68,8 +71,11 @@ build-cdb:
         -o "$FLOX_PACKAGE_BUILDER"
 
 # Build the flox buildenv
+# `pure-eval` is disabled because `FLOX_INTERPRETER`
+# is read from the environment.
 @build-buildenv:
     nix {{nix_options}} build \
+        --option pure-eval false \
         ".#floxDevelopmentPackages.flox-buildenv" \
         -o "$FLOX_BUILDENV"
 

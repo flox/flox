@@ -13,14 +13,28 @@
   writers,
   writeText,
 }:
+# We need to ensure that the flox-activation-scripts package is available.
+# If it's not, we'll use the binary from the environment.
+# Build or evaluate this package with `--option pure-eval false`.
+assert (flox-activation-scripts == null) -> builtins.getEnv "FLOX_INTERPRETER" != null;
 let
   pname = "flox-buildenv";
   version = "0.0.1";
   buildenv = (writers.writeBash "buildenv" (builtins.readFile ../../buildenv/buildenv.bash));
   buildenv_nix = ../../buildenv/buildenv.nix;
   builder_pl = ../../buildenv/builder.pl;
-  activationScripts_out = flox-activation-scripts.out;
-  activationScripts_build_wrapper = flox-activation-scripts.build_wrapper;
+  activationScripts_fallback = builtins.getEnv "FLOX_INTERPRETER";
+  activationScripts_out =
+    if flox-activation-scripts != null then
+      flox-activation-scripts.out
+    else
+      "${activationScripts_fallback}";
+  activationScripts_build_wrapper =
+    if flox-activation-scripts != null then
+      flox-activation-scripts.build_wrapper
+    else
+      "${activationScripts_fallback}-build_wrapper";
+
   defaultEnvrc = writeText "default.envrc" (
     ''
       # Default environment variables

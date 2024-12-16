@@ -137,6 +137,7 @@
           };
           flox-package-builder = prev.flox-package-builder.override { };
           flox-buildenv = prev.flox-buildenv.override {
+            flox-activation-scripts = null;
             flox-pkgdb = null;
           };
           checksFor = checks.${prev.system};
