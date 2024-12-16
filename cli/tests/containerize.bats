@@ -47,10 +47,11 @@ podman_cache_reset() {
 
 setup() {
   common_test_setup
+  home_setup short
   setup_isolated_flox
   project_setup
 
-  mkdir -p $HOME/.config/containers
+  mkdir -p "$HOME/.config/containers"
   echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$HOME/.config/containers/policy.json"
 
   # if ! is_linux; then
@@ -83,8 +84,10 @@ EOF
   export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
   machine="$(podman machine list -n)"
   if [ -z "$machine" ]; then
+    echo "Creating podman machine" >&2
     podman machine init
   fi
+  echo "Starting podman machine" >&2
   podman machine start || true
 }
 
@@ -150,6 +153,7 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 }
 
 # bats test_tags=containerize:default-to-file
+# bats test_tags=bats:focus
 @test "container is written to a runtime by default" {
   env_setup_catalog
 
