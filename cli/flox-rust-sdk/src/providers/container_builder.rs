@@ -54,7 +54,7 @@ pub enum MkContainerNixError {
     #[error("failed to call nix")]
     CallNixError(#[source] std::io::Error),
 
-    #[error("failed to build container")]
+    #[error("failed to build container: {0}")]
     BuildContainerError(String),
 
     #[error("failed to parse nix build output")]
