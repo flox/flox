@@ -85,11 +85,9 @@ impl Publish {
             bail!("Unsupported environment type");
         }
 
-        let env_metadata =
-            check_environment_metadata(&flox, &mut env).or_else(|e| bail!(e.to_string()))?;
+        let env_metadata = check_environment_metadata(&flox, &mut env)?;
 
-        let build_metadata =
-            check_build_metadata(&env, &package).or_else(|e| bail!(e.to_string()))?;
+        let build_metadata = check_build_metadata(&env, &package)?;
 
         let cache = cache_args.map(|args| NixCopyCache {
             url: args.url,

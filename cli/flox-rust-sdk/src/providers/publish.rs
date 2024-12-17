@@ -1,12 +1,15 @@
+use std::collections::HashMap;
 use std::error;
 use std::path::PathBuf;
 use std::process::Command;
-use std::str::FromStr;
 
-use catalog_api_v1::types::{Output, SystemEnum};
+use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
+use serde::de::Error;
+use serde::Deserialize;
+use serde_json::Value;
 use thiserror::Error;
-use tracing::{debug, instrument};
+use tracing::instrument;
 use url::Url;
 
 use super::build::{build_symlink_path, ManifestBuilder};
@@ -28,8 +31,11 @@ pub enum PublishError {
     #[error("The outputs from the build do not exist: {0}")]
     NonexistentOutputs(String),
 
-    #[error("Unable to find derivation info: {0}")]
-    MissingDerviationInfo(String),
+    #[error("Unable to get derivation info: {0}")]
+    MissingDerivationInfo(String),
+
+    #[error("Unable to interpret derivation info: {0}")]
+    DeserializeDerivationInfo(#[source] serde_json::Error),
 
     #[error("The environment is in an unsupported state for publishing: {0}")]
     UnsupportedEnvironmentState(String),
@@ -127,7 +133,7 @@ impl BinaryCache for NixCopyCache {
             .arg(url_with_key.to_string())
             .arg(path);
 
-        debug!(
+        tracing::debug!(
             %path,
             %url_with_key,
             cmd = %copy_command.display(),
@@ -195,7 +201,7 @@ where
         // The create package service call will create the user's own catalog
         // if not already created, and then create (or return) the package noted
         // returning either a 200 or 201.  Either is ok here, as long as it's not an error.
-        debug!("Creating package in catalog...");
+        tracing::debug!("Creating package in catalog...");
         client
             .create_package(
                 &catalog_name,
@@ -228,10 +234,17 @@ where
         };
 
         if let Some(cache) = self.cache {
-            cache.upload(&self.build_metadata.drv_path)?
+            for output in self.build_metadata.outputs.iter() {
+                tracing::debug!(
+                    "Uploading {}:{} to cache...",
+                    output.name,
+                    output.store_path
+                );
+                cache.upload(&output.store_path)?
+            }
         }
 
-        debug!("Publishing build in catalog...");
+        tracing::debug!("Publishing build in catalog...");
         client
             .publish_build(&catalog_name, &self.build_metadata.package, &build_info)
             .await
@@ -241,74 +254,79 @@ where
     }
 }
 
-pub fn get_derivation_info(
-    path: &str,
-) -> Result<serde_json::Map<String, serde_json::Value>, PublishError> {
+pub fn get_derivation_info(path: &str) -> Result<(String, DerivationInfo), PublishError> {
     let mut info_cmd = Command::new(&*NIX_BIN);
     info_cmd.arg("derivation").arg("show").arg(path);
     let output = info_cmd
         .output()
-        .map_err(|e| PublishError::MissingDerviationInfo(e.to_string()))?;
+        .map_err(|e| PublishError::MissingDerivationInfo(e.to_string()))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let json: serde_json::Value = serde_json::from_str(&stdout)
-        .map_err(|e| PublishError::MissingDerviationInfo(e.to_string()))?;
-    Ok(json.as_object().unwrap().clone())
+    let json: Value =
+        serde_json::from_str(&stdout).map_err(PublishError::DeserializeDerivationInfo)?;
+    match json {
+        Value::Object(map) if map.len() == 1 => {
+            let (drv_path, drv_info_value) = map
+                .into_iter()
+                .next()
+                .expect("Proven to have a single key.");
+            let drv_info = serde_json::from_value(drv_info_value)
+                .map_err(PublishError::DeserializeDerivationInfo)?;
+            Ok((drv_path, drv_info))
+        },
+        Value::Object(map) if map.len() > 1 => Err(PublishError::DeserializeDerivationInfo(
+            serde_json::Error::custom("Multiple derivations found"),
+        )),
+        _ => Err(PublishError::DeserializeDerivationInfo(
+            serde_json::Error::custom("Invalid JSON"),
+        )),
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct DerivationOutput {
+    path: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct DerivationInfo {
+    name: String,
+    system: SystemEnum,
+    outputs: HashMap<String, DerivationOutput>,
 }
 
 pub fn check_build_metadata_from_storepath(
     pkg: &str,
     storepath: &str,
 ) -> Result<CheckedBuildMetadata, PublishError> {
-    let drv_json = get_derivation_info(storepath)?;
+    let (drv_path, drv_info) = get_derivation_info(storepath)?;
 
-    // Error out if there was no derivation info found
-    if drv_json.is_empty() || drv_json.keys().next().is_none() {
-        return Err(PublishError::MissingDerviationInfo(
-            "No derivation info found".to_string(),
-        ));
-    }
-    let drv_path = drv_json.keys().next().unwrap().to_string();
-    let name = drv_json[&drv_path]["name"].as_str().unwrap().to_string();
-    let system_str = drv_json[&drv_path]["system"].as_str().unwrap();
-    // TODO - There is a drv_json[drv_path]["env"]["version"] in some derivations
-    // that looks like the source of the version that is then later included in
-    // the 'name' Once we include 'version' in the builders, we should look into
-    // grabbing it from there.  Perhaps there won't ever be a 'version' where we
-    // are currently looking for it?  Same for 'description'?
-    let version = drv_json[&drv_path]["version"]
-        .as_str()
-        .map(|s| s.to_string());
-    let description = drv_json[&drv_path]["description"]
-        .as_str()
-        .map(|s| s.to_string());
+    let name = drv_info.name;
+    let system = drv_info.system;
 
-    let system = SystemEnum::from_str(system_str).map_err(|e| {
-        PublishError::UnsupportedEnvironmentState(format!("Unable to identify system: {e}"))
-    })?;
-
-    let outputs = catalog_api_v1::types::Outputs(
-        drv_json[&drv_path]["outputs"]
-            .as_object()
-            .unwrap()
-            .iter()
-            .map(|(name, value)| Output {
-                name: name.to_string(),
-                store_path: value["path"].as_str().unwrap().to_string(),
+    let outputs = Outputs(
+        drv_info
+            .outputs
+            .clone()
+            .into_iter()
+            .map(|(output_name, output_info)| Output {
+                name: output_name,
+                store_path: output_info.path,
             })
             .collect(),
     );
-    let outputs_to_install: Vec<String> = outputs.iter().map(|o| o.name.clone()).collect();
+
+    let outputs_to_install: Vec<String> = drv_info.outputs.into_keys().collect();
 
     Ok(CheckedBuildMetadata {
-        drv_path,
+        drv_path: drv_path.to_string(),
         package: pkg.to_string(),
         name,
         outputs,
         outputs_to_install,
         system,
-        description,
-        version,
+        description: None,
+        version: None,
         _private: (),
     })
 }
@@ -329,7 +347,16 @@ pub fn check_build_metadata(
         .read_link()
         .map_err(|e| PublishError::NonexistentOutputs(e.to_string()))?;
 
-    check_build_metadata_from_storepath(pkg, &storepath.to_string_lossy())
+    let metadata = check_build_metadata_from_storepath(pkg, &storepath.to_string_lossy())?;
+
+    // TODO - Once these fields are added to the manifest, we can add them here.
+    // if let Some(version) = env.manifest(flox)?.build[pkg].version {
+    //     metadata.version = Some(version);
+    // }
+    // if let Some(description) = env.manifest(flox)?.build[pkg].description {
+    //     metadata.description = Some(description);
+    // }
+    Ok(metadata)
 }
 
 fn gather_build_repo_meta(environment: &impl Environment) -> Result<LockedUrlInfo, PublishError> {
@@ -575,7 +602,6 @@ pub mod tests {
         let real_storepath = env!("NIX_BIN").to_string();
         let meta = check_build_metadata_from_storepath("mypkg", &real_storepath).unwrap();
 
-        let (flox, _temp_dir_handle) = flox_instance();
         // Some of this found heuristically, and _probably_ won't change
         assert_eq!(meta.name.starts_with("nix-"), true);
         assert!(meta.outputs.len() >= 4);
@@ -584,7 +610,10 @@ pub mod tests {
         assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.version.is_none(), true);
         assert_eq!(meta.description.is_none(), true);
-        assert_eq!(meta.system.to_string(), flox.system);
+        assert_eq!(
+            meta.system.to_string(),
+            env!("NIX_TARGET_SYSTEM").to_string()
+        );
     }
 
     #[tokio::test]
