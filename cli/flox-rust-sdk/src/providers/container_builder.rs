@@ -95,6 +95,7 @@ impl ContainerBuilder for MkContainerNix {
         tag: impl AsRef<str>,
     ) -> Result<ContainerSource, Self::Error> {
         let mut command = Command::new(&*NIX_BIN);
+        command.args(["--extra-experimental-features", "nix-command flakes"]);
         command.args(["--option", "pure-eval", "true"]);
         command.arg("build");
         command.arg("--json");
