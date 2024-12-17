@@ -205,7 +205,7 @@ fn set_user() -> Result<()> {
                     env::set_var("HOME", effective_user.dir);
                 }
             }
-        } else {
+        } else if env::var("__FLOX_NO_EUID_WARNING") == Err(std::env::VarError::NotPresent) {
             // Corporate LDAP environments rely on finding nss_ldap in
             // ld.so.cache *or* by configuring nscd to perform the LDAP
             // lookups instead. The Nix version of glibc has been modified

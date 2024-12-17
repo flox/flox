@@ -112,6 +112,9 @@
 
           # Wrapper scripts for running test suites.
           flox-cli-tests = callPackage ./pkgs/flox-cli-tests { };
+
+          # Wrapper scripts for running test suites in the sandbox.
+          flox-cli-tests-sandbox = callPackage ./pkgs/flox-cli-tests-sandbox { };
         };
 
       overlays.development = final: prev: {
@@ -184,6 +187,7 @@
           flox-activations
           flox-cli
           flox-cli-tests
+          flox-cli-tests-sandbox
           flox-manpages
           flox
           ld-floxlib
