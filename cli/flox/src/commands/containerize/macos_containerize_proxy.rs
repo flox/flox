@@ -14,6 +14,7 @@ const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE: &str = "ghcr.io/flox/flox";
 pub static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
     LazyLock::new(|| env::var("FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
+const CONTAINER_VOLUME_NAME: &str = "flox-nix";
 
 const MOUNT_ENV: &str = "/flox_env";
 const MOUNT_HOME: &str = "/flox_home";
@@ -60,6 +61,28 @@ impl ContainerBuilder for ContainerizeProxy {
                 self.environment_path.to_string_lossy(),
                 MOUNT_ENV
             ),
+            // From https://docs.docker.com/engine/storage/volumes
+            // If you mount an empty volume into a directory in the container in
+            // which files or directories exist, these files or directories are
+            // propagated (copied) into the volume by default. Similarly, if you
+            // start a container and specify a volume which does not already
+            // exist, an empty volume is created for you.
+            //
+            // From https://docs.podman.io/en/v5.1.1/markdown/podman-run.1.html
+            // If no such named volume exists, Podman creates one.
+            //
+            // I confirmed manually that Podman has the same propagation
+            // behavior as Docker for an auto created volume.
+            //
+            // This gives us precisely the behavior we want;
+            // /nix is bootstrapped from FLOX_PROXY_IMAGE,
+            // and then subsequently CONTAINER_VOLUME_NAME acts as a cache of
+            // /nix.
+            //
+            // There are no tests for this behavior since that would just be
+            // testing podman and Docker work as expected.
+            "--mount",
+            &format!("type=volume,src={},dst=/nix", CONTAINER_VOLUME_NAME),
         ]);
 
         // Honour config from the user's home directory on their host machine if
