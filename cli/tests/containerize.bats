@@ -85,7 +85,7 @@ EOF
   machine="$(podman machine list -n)"
   if [ -z "$machine" ]; then
     echo "Creating podman machine" >&2
-    podman machine init
+    podman machine init -v /tmp:/tmp -v /Users:/Users
   fi
   echo "Starting podman machine" >&2
   podman machine start || true
