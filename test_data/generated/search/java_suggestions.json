@@ -1,11 +1,12 @@
 [
   {
-    "count": 818,
+    "count": 819,
     "results": [
       {
         "description": "Parser generator for building parsers from grammars",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "javacc",
         "pname": "javacc",
         "relPath": [
           "javacc"
@@ -17,6 +18,7 @@
         "description": "LALR parser generator for Java",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "javaCup",
         "pname": "javaCup",
         "relPath": [
           "javaCup"
@@ -28,6 +30,7 @@
         "description": "A Java package that implements HDF4 and HDF5 data objects in an object-oriented form",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "hdf_java",
         "pname": "hdf_java",
         "relPath": [
           "hdf_java"
@@ -39,6 +42,7 @@
         "description": null,
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "dbus_java",
         "pname": "dbus_java",
         "relPath": [
           "dbus_java"
@@ -50,6 +54,7 @@
         "description": "GeoIP Java API",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "geoipjava",
         "pname": "geoipjava",
         "relPath": [
           "geoipjava"
@@ -61,6 +66,7 @@
         "description": "Library for extracting tables from PDF files",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "tabula-java",
         "pname": "tabula-java",
         "relPath": [
           "tabula-java"
@@ -72,6 +78,7 @@
         "description": "Programming language used for massively scalable soft real-time systems",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "erlang_javac",
         "pname": "erlang_javac",
         "relPath": [
           "erlang_javac"
@@ -83,6 +90,7 @@
         "description": "Interface compiler that connects C/C++ code to higher-level languages",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "swigWithJava",
         "pname": "swigWithJava",
         "relPath": [
           "swigWithJava"
@@ -94,6 +102,7 @@
         "description": "Award winning, fully featured low overhead profiler for Java EE and Java SE platforms",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "yourkit-java",
         "pname": "yourkit-java",
         "relPath": [
           "yourkit-java"
@@ -102,12 +111,13 @@
         "version": null
       },
       {
-        "description": "Cap'n Proto codegen plugin for Java",
+        "description": "Java library containing matchers that can be combined to create flexible expressions of intent",
         "input": "nixpkgs",
         "license": null,
-        "pname": "capnproto-java",
+        "pkgPath": "java-hamcrest",
+        "pname": "java-hamcrest",
         "relPath": [
-          "capnproto-java"
+          "java-hamcrest"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -118,9 +128,10 @@
     "count": 142,
     "results": [
       {
-        "description": "Open-source Java Development Kit",
+        "description": "Certified builds of OpenJDK",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "jdk",
         "pname": "jdk",
         "relPath": [
           "jdk"
@@ -129,9 +140,10 @@
         "version": null
       },
       {
-        "description": "Open-source Java Development Kit",
+        "description": "Certified builds of OpenJDK",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "jdk8",
         "pname": "jdk8",
         "relPath": [
           "jdk8"
@@ -143,6 +155,7 @@
         "description": "Open-source Java Development Kit",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "jdk11",
         "pname": "jdk11",
         "relPath": [
           "jdk11"
