@@ -119,9 +119,9 @@ pub fn create_registry_and_filter_reload_handle() -> (
 
 // region: indicatif
 mod indicatif {
-    use std::fmt::{self, Display};
+    use std::fmt::{self, Display, Write};
 
-    use indicatif::ProgressStyle;
+    use indicatif::{ProgressState, ProgressStyle};
     use tracing::field::{Field, Visit};
     use tracing::Subscriber;
     use tracing_subscriber::field::RecordFields;
@@ -178,10 +178,19 @@ mod indicatif {
 
         // The progress bar style, a spinner the progress message
         // and the elapsed time if it's running longer than 1 second.
-        let style = ProgressStyle::with_template(
-            "{span_child_prefix}{spinner} {span_fields} {wide_msg}",
-        )
-        .unwrap();
+        let style =
+            ProgressStyle::with_template("{span_child_prefix}{spinner} {span_fields} {wide_msg}")
+                .unwrap()
+                .with_key(
+                    "elapsed",
+                    |state: &ProgressState, writer: &mut dyn Write| {
+                        if state.elapsed() > std::time::Duration::from_secs(1) {
+                            let seconds = state.elapsed().as_secs();
+                            let sub_seconds = (state.elapsed().as_millis() % 1000) / 100;
+                            let _ = writer.write_str(&format!("{}.{}s", seconds, sub_seconds));
+                        }
+                    },
+                );
 
         let layer = tracing_indicatif::IndicatifLayer::new()
             .with_progress_style(style)
