@@ -54,7 +54,13 @@ impl ContainerBuilder for ContainerizeProxy {
         let mut command = self.container_runtime.to_command();
         command.arg("run");
         command.arg("--rm");
-        command.args(["--userns", "keep-id"]);
+        // The `--userns` flag creates a mapping of users in the container,
+        // which we need. However, in order to work we also need the user
+        // in the container to be `root` otherwise you run into multi-user
+        // issues. The empty string `""` argument to `--userns` maps the
+        // current user to `root` inside the container.
+        command.args(["--userns", ""]);
+        command.args(["--log-level", "debug"]);
         command.args([
             "--mount",
             &format!(
@@ -114,14 +120,16 @@ impl ContainerBuilder for ContainerizeProxy {
         let flox_version = &*FLOX_VERSION;
         let flox_version_tag = format!("v{}", flox_version.base_semver());
 
-        // Use a released Flox container of the same semantic version as a base
-        // because it already has:
-        //
-        // - most of the dependency store paths
-        // - substitutors configured
-        // - correct version of nix
-        let flox_container = format!("{}:{}", FLOX_PROXY_IMAGE, flox_version_tag);
-        command.arg(flox_container);
+        // FIXME: The released version of flox doesn't build the container
+        // // Use a released Flox container of the same semantic version as a base
+        // // because it already has:
+        // //
+        // // - most of the dependency store paths
+        // // - substitutors configured
+        // // - correct version of nix
+        // let flox_container = format!("{}:{}", FLOX_PROXY_IMAGE, flox_version_tag);
+        // command.arg(flox_container);
+        command.arg(FLOX_PROXY_IMAGE);
 
         // Inception L2: Nix args.
         command.arg("nix");
