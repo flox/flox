@@ -28,13 +28,17 @@ and expects the selected runtime to be found in PATH.
 
 When neither option is provided,
 the container is loaded into a supported runtime,
-`docker` or `podman`, whichever is found first on the PATH.
+`docker` or `podman`, whichever is found first in PATH.
 If no supported runtime is found,
 the container is written to `./<env name>-container.tar` instead.
 
 **Note**: Exporting a container from macOS requires a supported runtime to be
 found because a proxy container is used to build the environment and image. You
 may be prompted for permissions to share files into the proxy container.
+Files used in the proxy container are cached using a `docker` or `podman`
+volume named `flox-nix`.
+It can safely be removed any time a `flox containerize` command is not running
+using either `docker volume rm flox-nix` or `podman volume rm flox-nix`.
 
 Running the container will behave like running `flox activate`.
 Running the container interactively with `docker run -it <container id>`,
