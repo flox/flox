@@ -1,4 +1,12 @@
-{pkgs, flox-src, flox, flox-pkgdb, flox-buildenv, flox-activation-scripts, closureInfo }:
+{
+  pkgs,
+  flox-src,
+  flox,
+  flox-pkgdb,
+  flox-buildenv,
+  flox-activation-scripts,
+  closureInfo,
+}:
 let
   flox-src = ../..;
   bats = pkgs.bats.withLibraries (p: [
@@ -9,66 +17,63 @@ let
   ]);
   batsLibraryPaths = "${flox-src}/cli/tests/setup_suite.bash:${flox-src}/cli/tests/test_support.bash";
 in
-pkgs.testers.runCommand
-  {
-    name = "flox-test-install-hello";
-    # __impure = true;
-    # requiredSystemFeatures = [ "recursive-nix" ];
-    buildInputs = [
-      flox
-      flox-buildenv
-      flox-activation-scripts.build_wrapper
-      flox-activation-scripts
-      bats
-      pkgs.nix
-      pkgs.jq
-      pkgs.expect
-      pkgs.which
-      pkgs.openssh
-      pkgs.zsh
-      pkgs.tcsh
-      pkgs.fish
-      pkgs.dash
-      pkgs.bashInteractive
-      pkgs.coreutils
-      pkgs.curl
-      pkgs.diffutils
-      pkgs.entr
-      pkgs.findutils
-      pkgs.gawk
-      pkgs.git
-      pkgs.gnugrep
-      pkgs.gnupg
-      pkgs.gnused
-      pkgs.gnutar
-      pkgs.man
-      pkgs.parallel
-      pkgs.pstree
-      pkgs.unixtools.util-linux
-      pkgs.which
-      pkgs.yq
-      pkgs.process-compose
-      pkgs.procps
-      pkgs.time
-    ];
-    FLOX_DISABLE_METRICS = "true";
-    SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-    NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-    BATS_LIB_PATH = "${batsLibraryPaths}";
-    FLOX_BIN = "${flox}/bin/flox";
-    PKGDB_BIN = "${flox-pkgdb}/bin/pkgdb";
-    NIX_BIN = "${pkgs.nix}/bin/nix";
-    TESTS_DIR = "${flox-src}/cli/tests";
-    GENERATED_DATA = "${flox-src}/test_data/generated";
-    INPUT_DATA = "${flox-src}/test_data/input_data";
-    __FT_RAN_XDG_REALS_SETUP = "1";
+pkgs.testers.runCommand {
+  name = "flox-test-install-hello";
+  # __impure = true;
+  # requiredSystemFeatures = [ "recursive-nix" ];
+  buildInputs = [
+    flox
+    flox-buildenv
+    flox-activation-scripts.build_wrapper
+    flox-activation-scripts
+    bats
+    pkgs.nix
+    pkgs.jq
+    pkgs.expect
+    pkgs.which
+    pkgs.openssh
+    pkgs.zsh
+    pkgs.tcsh
+    pkgs.fish
+    pkgs.dash
+    pkgs.bashInteractive
+    pkgs.coreutils
+    pkgs.curl
+    pkgs.diffutils
+    pkgs.entr
+    pkgs.findutils
+    pkgs.gawk
+    pkgs.git
+    pkgs.gnugrep
+    pkgs.gnupg
+    pkgs.gnused
+    pkgs.gnutar
+    pkgs.man
+    pkgs.parallel
+    pkgs.pstree
+    pkgs.unixtools.util-linux
+    pkgs.which
+    pkgs.yq
+    pkgs.process-compose
+    pkgs.procps
+    pkgs.time
+  ];
+  FLOX_DISABLE_METRICS = "true";
+  SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+  NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+  BATS_LIB_PATH = "${batsLibraryPaths}";
+  FLOX_BIN = "${flox}/bin/flox";
+  PKGDB_BIN = "${flox-pkgdb}/bin/pkgdb";
+  NIX_BIN = "${pkgs.nix}/bin/nix";
+  TESTS_DIR = "${flox-src}/cli/tests";
+  GENERATED_DATA = "${flox-src}/test_data/generated";
+  INPUT_DATA = "${flox-src}/test_data/input_data";
+  __FT_RAN_XDG_REALS_SETUP = "1";
 
-    __FLOX_NO_EUID_WARNING = "1";
-  script =
-  ''
+  __FLOX_NO_EUID_WARNING = "1";
+  script = ''
     mkdir t
     cd t
-    export LD_PRELOAD="${pkgs.sssd}/lib/libnss_sss.so.2"
     export HOME="$PWD"
     export USER="floxfan"
     export FLOX_CONFIG_DIR="$PWD/flox-config"
@@ -112,39 +117,35 @@ pkgs.testers.runCommand
     export HOME=$(mktemp -d)
     export NIX_CONFIG="experimental-features = flakes nix-command"
 
-    closureInfo=${closureInfo {
-      rootPaths = [
-        #inputs.nixpkgs.sourceInfo.outPath
-        #inputs.nixpkgs.legacyPackages.${system}.hello
-        flox-activation-scripts.build_wrapper
-        flox-activation-scripts
-	flox-pkgdb
-	flox-buildenv
-      ];
-    }}
-    mkdir -p $TEST_ROOT/nix/store/
-    # command time xargs -I % cp -a -t $TEST_ROOT/nix/store/ % < $closureInfo/store-paths
-    command time xargs -I % ln -s -t $TEST_ROOT/nix/store/ % < $closureInfo/store-paths
-    ls -alh $TEST_ROOT/nix/store/*/bin/mkdir -alh
+    closureInfo=${
+      closureInfo {
+        rootPaths = [
+          #inputs.nixpkgs.sourceInfo.outPath
+          #inputs.nixpkgs.legacyPackages.${system}.hello
+          flox-buildenv.defaultEnvrc
+          flox-activation-scripts.build_wrapper
+          flox-activation-scripts
+          flox-buildenv
+        ];
+      }
+    }
+    export TEST_ROOT=/nix/store/subdir
+    mkdir -p $TEST_ROOT/nix/store
+    echo loading...
+    cat $closureInfo/store-paths | cut -d ' ' --output-delimiter=$'\n' -f 1- | command time xargs -I % ln -s -t $TEST_ROOT/nix/store/ /something/%
 
     export NIX_CONFIG="experimental-features = flakes nix-command
+    extra-sandbox-paths = /something
     store = $TEST_ROOT"
-    nix-store --load-db < $closureInfo/registration
 
-    flox init --debug
-    echo created
-    flox install hello --debug -vvv
-    if ! grep "installed to environment" output ; then
-        echo "did not install"
-        exit 1
-    fi
+    cat $closureInfo/registration | nix-store --load-db
+    chmod g+w $TEST_ROOT/nix/store
+
+    # setup complete
+
+    flox init
+    flox install hello gawk dasel
+    ls -alh $TEST_ROOT/$(readlink .flox/run/${pkgs.system}.t.dev)/bin
     touch $out
   '';
-  }
-
-# 1. Long time to setup store
-# 2. impure - testers.runCommand
-
-
-
-
+}
