@@ -10,7 +10,7 @@
         "relPath": [
           "hello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -21,7 +21,7 @@
         "relPath": [
           "hello-go"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -32,7 +32,7 @@
         "relPath": [
           "hello-cpp"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -43,7 +43,7 @@
         "relPath": [
           "nwg-hello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -54,7 +54,7 @@
         "relPath": [
           "hello-unfree"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -65,7 +65,7 @@
         "relPath": [
           "hello-wayland"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -77,7 +77,7 @@
           "sbclPackages",
           "hello-clog"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -89,7 +89,7 @@
           "texlivePackages",
           "othello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -101,7 +101,7 @@
           "sbclPackages",
           "hello-builder"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -113,7 +113,7 @@
           "javaPackages",
           "mavenHello_1_0"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       }
     ]

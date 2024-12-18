@@ -11,41 +11,40 @@
             "attr_path": "nodejs",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/v0v7dny82f4hmfp9s8zj31iykjrdblkn-nodejs-20.18.0.drv",
+            "derivation": "/nix/store/2znhzcp5ran8q5mzyqgz6lxi3a56rgva-nodejs-20.18.1.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "default",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "name": "nodejs-20.18.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=3566ab7246670a43abd2ffa913cc62dad9cdf7d5",
+            "name": "nodejs-20.18.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/9grahx8677nlgbx3yfiggibw335lkgfr-nodejs-20.18.0"
+                "store_path": "/nix/store/wfxq6w9bkp5dcfr8yb6789b0w7128gnb-nodejs-20.18.1"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/hfchgw1as9fm02wcyr3iqya05ylll5f3-nodejs-20.18.0-libv8"
+                "store_path": "/nix/store/6cpw80r57lyippnjl5knrvymcwalv1m2-nodejs-20.18.1-libv8"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "nodejs",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "3566ab7246670a43abd2ffa913cc62dad9cdf7d5",
+            "rev_count": 721821,
+            "rev_date": "2024-12-13T19:53:07Z",
+            "scrape_date": "2024-12-16T03:51:20Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
-            "system": "aarch64-darwin",
+            "system": "x86_64-linux",
             "unfree": false,
-            "version": "20.18.0"
+            "version": "20.18.1"
           }
         ],
-        "page": 710087,
+        "page": 721821,
         "url": ""
       }
     }
@@ -62,37 +61,36 @@
             "attr_path": "yarn",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/29jq3h1xvi33nid9na3bimxaff8bf67z-yarn-1.22.22.drv",
+            "derivation": "/nix/store/idlrzijjmmgwpcrs4qhrmrsqk0wfa9wz-yarn-1.22.22.drv",
             "description": "Fast, reliable, and secure dependency management for javascript",
             "insecure": false,
             "install_id": "yarn",
             "license": "BSD-2-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=3566ab7246670a43abd2ffa913cc62dad9cdf7d5",
             "name": "yarn-1.22.22",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/0hmmpszg5wfrr43kvlk2cxjqpll0dh2z-yarn-1.22.22"
+                "store_path": "/nix/store/jcgdksj946l5l42c2y9ks2l4g6n74h3f-yarn-1.22.22"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "yarn",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "3566ab7246670a43abd2ffa913cc62dad9cdf7d5",
+            "rev_count": 721821,
+            "rev_date": "2024-12-13T19:53:07Z",
+            "scrape_date": "2024-12-16T03:51:20Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
-            "system": "aarch64-darwin",
+            "system": "x86_64-linux",
             "unfree": false,
             "version": "1.22.22"
           }
         ],
-        "page": 710087,
+        "page": 721821,
         "url": ""
       }
     }
@@ -109,29 +107,28 @@
             "attr_path": "yarn",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/29jq3h1xvi33nid9na3bimxaff8bf67z-yarn-1.22.22.drv",
+            "derivation": "/nix/store/qbgvrh36lqaf1mfr9nkcxyn5v0c2plzm-yarn-1.22.22.drv",
             "description": "Fast, reliable, and secure dependency management for javascript",
             "insecure": false,
             "install_id": "yarn",
             "license": "BSD-2-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=3566ab7246670a43abd2ffa913cc62dad9cdf7d5",
             "name": "yarn-1.22.22",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/0hmmpszg5wfrr43kvlk2cxjqpll0dh2z-yarn-1.22.22"
+                "store_path": "/nix/store/pdbkig0qcx9ln371vnmihrvjj70xqnmv-yarn-1.22.22"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "yarn",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "3566ab7246670a43abd2ffa913cc62dad9cdf7d5",
+            "rev_count": 721821,
+            "rev_date": "2024-12-13T19:53:07Z",
+            "scrape_date": "2024-12-16T03:51:20Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -142,29 +139,28 @@
             "attr_path": "yarn",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/vkm27crcfnsh8jvrvpi4bs2k67mb9b2z-yarn-1.22.22.drv",
+            "derivation": "/nix/store/8xnd2zkb4qq3hbzp9plq8rjck2a363wf-yarn-1.22.22.drv",
             "description": "Fast, reliable, and secure dependency management for javascript",
             "insecure": false,
             "install_id": "yarn",
             "license": "BSD-2-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=3566ab7246670a43abd2ffa913cc62dad9cdf7d5",
             "name": "yarn-1.22.22",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/vmx0di4y3m8amqwsfgyccf8zs8kml06q-yarn-1.22.22"
+                "store_path": "/nix/store/9ja1kwgz2qjf86654j8hq8dx7jfmx4y8-yarn-1.22.22"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "yarn",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "3566ab7246670a43abd2ffa913cc62dad9cdf7d5",
+            "rev_count": 721821,
+            "rev_date": "2024-12-13T19:53:07Z",
+            "scrape_date": "2024-12-16T03:51:20Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -175,29 +171,28 @@
             "attr_path": "yarn",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/rxkhv6b9iarrklhib18vnr8sj5428bxr-yarn-1.22.22.drv",
+            "derivation": "/nix/store/5dvs5s466iginbbxg8v5i3vzzamc7983-yarn-1.22.22.drv",
             "description": "Fast, reliable, and secure dependency management for javascript",
             "insecure": false,
             "install_id": "yarn",
             "license": "BSD-2-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=3566ab7246670a43abd2ffa913cc62dad9cdf7d5",
             "name": "yarn-1.22.22",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/nbaa0rip3xw6l3bmnc2k2fm071pzvzwv-yarn-1.22.22"
+                "store_path": "/nix/store/xirjnml845m1l4cvfddf3avripb62hvg-yarn-1.22.22"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "yarn",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "3566ab7246670a43abd2ffa913cc62dad9cdf7d5",
+            "rev_count": 721821,
+            "rev_date": "2024-12-13T19:53:07Z",
+            "scrape_date": "2024-12-16T03:51:20Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -208,29 +203,28 @@
             "attr_path": "yarn",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/7bxc3x8jz6jbrg5gi2qlz1cffzgrba3a-yarn-1.22.22.drv",
+            "derivation": "/nix/store/idlrzijjmmgwpcrs4qhrmrsqk0wfa9wz-yarn-1.22.22.drv",
             "description": "Fast, reliable, and secure dependency management for javascript",
             "insecure": false,
             "install_id": "yarn",
             "license": "BSD-2-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=3566ab7246670a43abd2ffa913cc62dad9cdf7d5",
             "name": "yarn-1.22.22",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/hlf55dc9jjm9xhhjx29ll65ya1rzlmal-yarn-1.22.22"
+                "store_path": "/nix/store/jcgdksj946l5l42c2y9ks2l4g6n74h3f-yarn-1.22.22"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "yarn",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "3566ab7246670a43abd2ffa913cc62dad9cdf7d5",
+            "rev_count": 721821,
+            "rev_date": "2024-12-13T19:53:07Z",
+            "scrape_date": "2024-12-16T03:51:20Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
@@ -238,7 +232,7 @@
             "version": "1.22.22"
           }
         ],
-        "page": 710087,
+        "page": 721821,
         "url": ""
       }
     }

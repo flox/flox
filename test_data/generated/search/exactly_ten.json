@@ -10,7 +10,7 @@
         "relPath": [
           "python"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -21,7 +21,7 @@
         "relPath": [
           "gpython"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -32,7 +32,7 @@
         "relPath": [
           "python2"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -43,7 +43,7 @@
         "relPath": [
           "python3"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -54,7 +54,7 @@
         "relPath": [
           "python27"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -65,7 +65,7 @@
         "relPath": [
           "python36"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -76,7 +76,7 @@
         "relPath": [
           "python37"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -87,7 +87,7 @@
         "relPath": [
           "python38"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -98,7 +98,7 @@
         "relPath": [
           "python39"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -109,7 +109,7 @@
         "relPath": [
           "python310"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       }
     ]

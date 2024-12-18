@@ -1,6 +1,6 @@
 [
   {
-    "count": 818,
+    "count": 819,
     "results": [
       {
         "description": "Parser generator for building parsers from grammars",
@@ -10,7 +10,7 @@
         "relPath": [
           "javacc"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -21,7 +21,7 @@
         "relPath": [
           "javaCup"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -32,7 +32,7 @@
         "relPath": [
           "hdf_java"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -43,7 +43,7 @@
         "relPath": [
           "dbus_java"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -54,7 +54,7 @@
         "relPath": [
           "geoipjava"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -65,7 +65,7 @@
         "relPath": [
           "tabula-java"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -76,7 +76,7 @@
         "relPath": [
           "erlang_javac"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -87,7 +87,7 @@
         "relPath": [
           "swigWithJava"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -98,18 +98,18 @@
         "relPath": [
           "yourkit-java"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
-        "description": "Cap'n Proto codegen plugin for Java",
+        "description": "Java library containing matchers that can be combined to create flexible expressions of intent",
         "input": "nixpkgs",
         "license": null,
-        "pname": "capnproto-java",
+        "pname": "java-hamcrest",
         "relPath": [
-          "capnproto-java"
+          "java-hamcrest"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       }
     ]
@@ -118,25 +118,25 @@
     "count": 142,
     "results": [
       {
-        "description": "Open-source Java Development Kit",
+        "description": "Certified builds of OpenJDK",
         "input": "nixpkgs",
         "license": null,
         "pname": "jdk",
         "relPath": [
           "jdk"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
-        "description": "Open-source Java Development Kit",
+        "description": "Certified builds of OpenJDK",
         "input": "nixpkgs",
         "license": null,
         "pname": "jdk8",
         "relPath": [
           "jdk8"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -147,7 +147,7 @@
         "relPath": [
           "jdk11"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       }
     ]

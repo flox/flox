@@ -1,6 +1,6 @@
 [
   {
-    "count": 63,
+    "count": 64,
     "results": [
       {
         "description": "Program that produces a familiar, friendly greeting",
@@ -10,7 +10,7 @@
         "relPath": [
           "hello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -21,7 +21,7 @@
         "relPath": [
           "jello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -32,7 +32,7 @@
         "relPath": [
           "hello-go"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -43,7 +43,7 @@
         "relPath": [
           "libcello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -54,7 +54,7 @@
         "relPath": [
           "hello-cpp"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -65,7 +65,7 @@
         "relPath": [
           "nwg-hello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -76,7 +76,7 @@
         "relPath": [
           "cannelloni"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -87,7 +87,7 @@
         "relPath": [
           "hello-unfree"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -98,7 +98,7 @@
         "relPath": [
           "mellowplayer"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -109,7 +109,7 @@
         "relPath": [
           "hello-wayland"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -120,7 +120,7 @@
         "relPath": [
           "marwaita-yellow"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -132,7 +132,18 @@
           "libsForQt5",
           "umbrello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
+        "version": null
+      },
+      {
+        "description": "Aesthetic, modern fcitx5 theme featuring rounded rectangle design",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "fcitx5-mellow-themes",
+        "relPath": [
+          "fcitx5-mellow-themes"
+        ],
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -144,7 +155,7 @@
           "kdePackages",
           "umbrello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -156,7 +167,7 @@
           "libsForQt512",
           "umbrello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -168,7 +179,7 @@
           "libsForQt514",
           "umbrello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -180,7 +191,7 @@
           "libsForQt515",
           "umbrello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -192,7 +203,7 @@
           "emacsPackages",
           "ellocate"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -204,7 +215,7 @@
           "python310Packages",
           "jello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -216,7 +227,7 @@
           "python311Packages",
           "jello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -228,7 +239,7 @@
           "python312Packages",
           "jello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -240,7 +251,7 @@
           "sbclPackages",
           "hello-clog"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -252,7 +263,7 @@
           "texlivePackages",
           "othello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -264,7 +275,7 @@
           "emacsPackages",
           "org-trello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -276,7 +287,7 @@
           "plasma5Packages",
           "umbrello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -288,7 +299,7 @@
           "python37Packages",
           "bellows"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -300,7 +311,7 @@
           "python38Packages",
           "bellows"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -312,7 +323,7 @@
           "python38Packages",
           "pynello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -324,7 +335,7 @@
           "python39Packages",
           "bellows"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -336,7 +347,7 @@
           "python39Packages",
           "pynello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -348,7 +359,7 @@
           "python310Packages",
           "bellows"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -360,7 +371,7 @@
           "python310Packages",
           "pynello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -372,7 +383,7 @@
           "python311Packages",
           "bellows"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -384,7 +395,7 @@
           "python311Packages",
           "pynello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -396,7 +407,7 @@
           "python312Packages",
           "bellows"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -408,7 +419,7 @@
           "python312Packages",
           "pynello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -420,7 +431,7 @@
           "emacsPackages",
           "mellow-theme"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -432,7 +443,7 @@
           "perlPackages",
           "ParallelLoops"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -444,7 +455,7 @@
           "sbclPackages",
           "hello-builder"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -456,7 +467,7 @@
           "javaPackages",
           "mavenHello_1_0"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -468,7 +479,7 @@
           "javaPackages",
           "mavenHello_1_1"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -480,7 +491,7 @@
           "texlivePackages",
           "othelloboard"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -492,7 +503,7 @@
           "emacsPackages",
           "sly-hello-world"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -504,7 +515,7 @@
           "perl536Packages",
           "ParallelLoops"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -516,7 +527,7 @@
           "perl538Packages",
           "ParallelLoops"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -528,7 +539,7 @@
           "perl540Packages",
           "ParallelLoops"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -540,7 +551,7 @@
           "sbclPackages",
           "qtools-helloworld"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -552,7 +563,7 @@
           "libsForQt5_openssl_1_1",
           "umbrello"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -564,7 +575,7 @@
           "apacheHttpdPackages",
           "mod_auth_mellon"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -576,7 +587,7 @@
           "apacheHttpdPackages_2_4",
           "mod_auth_mellon"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -589,7 +600,7 @@
           "sbclPackages",
           "hello-clog"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -602,7 +613,7 @@
           "sbclPackages",
           "hello-builder"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -615,7 +626,7 @@
           "sbclPackages",
           "qtools-helloworld"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -627,7 +638,7 @@
           "sbclPackages",
           "cl-mw_dot_examples_dot_hello-world"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -639,7 +650,7 @@
           "home-assistant-component-tests",
           "homeassistant_yellow"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -652,7 +663,7 @@
           "sbclPackages",
           "cl-mw_dot_examples_dot_hello-world"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -663,7 +674,7 @@
         "relPath": [
           "_3llo"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -674,7 +685,7 @@
         "relPath": [
           "iagno"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -685,7 +696,7 @@
         "relPath": [
           "gerbolyze"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -697,7 +708,7 @@
           "gnome",
           "iagno"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -709,7 +720,7 @@
           "gnome3",
           "iagno"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -721,7 +732,7 @@
           "texlivePackages",
           "songs"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -733,7 +744,7 @@
           "python311Packages",
           "gerbonara"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       },
       {
@@ -745,7 +756,7 @@
           "python312Packages",
           "gerbonara"
         ],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": null
       }
     ]
