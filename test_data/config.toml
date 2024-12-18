@@ -381,6 +381,19 @@ post_cmd = '''
     mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
 '''
 
+[envs.hello]
+skip_if_output_exists = "envs/hello"
+pre_cmd = "flox init"
+cmd = "flox install hello"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/hello"
+    mkdir -p "$env_dir"
+    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
+'''
+
 # Used in list tests for packages whose install IDs != pkg-path
 [envs.hello_as_greeting]
 skip_if_output_exists = "envs/hello_as_greeting"
