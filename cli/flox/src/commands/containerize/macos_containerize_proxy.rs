@@ -133,7 +133,11 @@ impl ContainerBuilder for ContainerizeProxy {
 
         // Inception L2: Nix args.
         command.arg("nix");
-        command.args(["--extra-experimental-features", "nix-command flakes"]);
+        command.args([
+            "--extra-experimental-features",
+            "nix-command flakes",
+            "--accept-flake-config",
+        ]);
         let flox_flake = format!(
             "{}/{}",
             FLOX_FLAKE,
