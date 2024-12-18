@@ -110,13 +110,7 @@ impl ContainerBuilder for ContainerizeProxy {
             "nix-command flakes",
             "--accept-flake-config",
         ]);
-        let flox_flake = format!(
-            "{}/{}",
-            FLOX_FLAKE,
-            // Use a more specific commit if available, e.g. pushed to GitHub.
-            // TODO: Doesn't always work: https://github.com/flox/flox/issues/2502
-            flox_version.commit_sha().unwrap_or(flox_version_tag)
-        );
+        let flox_flake = FLOX_FLAKE;
         command.args(["run", &flox_flake, "--"]);
 
         // Inception L3: Flox args.
