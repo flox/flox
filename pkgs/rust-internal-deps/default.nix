@@ -2,7 +2,7 @@
   coreutils,
   flox-buildenv,
   flox-package-builder,
-  flox-mk-container ? ../../mkContainer/mkContainer.nix,
+  flox-mk-container ? ../../mkContainer,
   flox-pkgdb,
   flox-src,
   gitMinimal,
@@ -59,7 +59,7 @@ let
       PKGDB_BIN = "${flox-pkgdb}/bin/flox-pkgdb";
     }
     // lib.optionalAttrs (flox-mk-container != null) {
-      FLOX_MK_CONTAINER_NIX = "${flox-mk-container}";
+      FLOX_MK_CONTAINER_NIX = "${flox-mk-container}/mkContainer.nix";
     };
 
 in
@@ -98,7 +98,8 @@ in
         process-compose
         coreutils # for `sleep infinity`
       ]
-      ++ lib.optional (flox-pkgdb != null) [ flox-pkgdb ];
+      ++ lib.optional (flox-pkgdb != null) [ flox-pkgdb ]
+      ++ lib.optional (flox-mk-container != null) [ flox-mk-container ];
 
     # Tests are disabled inside of the build because the sandbox prevents
     # internet access and there are tests that require internet access to
