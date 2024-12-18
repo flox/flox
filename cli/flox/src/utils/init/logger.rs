@@ -8,33 +8,6 @@ use tracing_subscriber::{EnvFilter, Registry};
 
 use crate::commands::Verbosity;
 use crate::utils::metrics::MetricsLayer;
-use crate::utils::TERMINAL_STDERR;
-
-struct LockingTerminalStderr;
-impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LockingTerminalStderr {
-    type Writer = LockingTerminalStderr;
-
-    fn make_writer(&'a self) -> Self::Writer {
-        LockingTerminalStderr
-    }
-}
-
-impl std::io::Write for LockingTerminalStderr {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let buf_vec = buf.to_vec();
-        if let Ok(mut guard) = TERMINAL_STDERR.lock() {
-            guard.write_all(buf_vec.as_slice())?;
-        }
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        if let Ok(mut guard) = TERMINAL_STDERR.lock() {
-            guard.flush()?
-        }
-        Ok(())
-    }
-}
 
 static LOGGER_HANDLE: OnceLock<Handle<EnvFilter, Registry>> = OnceLock::new();
 
@@ -85,6 +58,8 @@ pub fn create_registry_and_filter_reload_handle() -> (
     Handle<EnvFilter, Registry>,
 ) {
     debug!("Initializing logger (how are you seeing this?)");
+
+    let (progress_layer, writer) = indicatif::progress_layer();
     // The first time this layer is set it establishes an upper boundary for `log` verbosity.
     // If you try to `modify` this layer later, `log` will not accept any higher verbosity events.
     //
@@ -97,7 +72,7 @@ pub fn create_registry_and_filter_reload_handle() -> (
     let (filter, filter_reload_handle) = tracing_subscriber::reload::Layer::new(filter);
     let use_colors = supports_color::on(supports_color::Stream::Stderr).is_some();
     let log_layer = tracing_subscriber::fmt::layer()
-        .with_writer(LockingTerminalStderr)
+        .with_writer(writer.clone())
         .with_ansi(use_colors)
         .event_format(tracing_subscriber::fmt::format())
         .with_filter(filter);
@@ -110,7 +85,7 @@ pub fn create_registry_and_filter_reload_handle() -> (
     // registering `Interest` for the event and that somehow bypasses the filter?!
     let registry = tracing_subscriber::registry()
         .with(log_layer)
-        .with(indicatif::progress_layer())
+        .with(progress_layer)
         .with(metrics_layer)
         .with(sentry_layer);
 
@@ -124,13 +99,14 @@ mod indicatif {
     use indicatif::{ProgressState, ProgressStyle};
     use tracing::field::{Field, Visit};
     use tracing::Subscriber;
+    use tracing_indicatif::IndicatifWriter;
     use tracing_subscriber::field::RecordFields;
     use tracing_subscriber::fmt::format::Writer;
     use tracing_subscriber::fmt::FormatFields;
     use tracing_subscriber::layer::Layer;
     use tracing_subscriber::registry;
 
-    pub fn progress_layer<S>() -> impl tracing_subscriber::Layer<S>
+    pub fn progress_layer<S>() -> (impl tracing_subscriber::Layer<S>, IndicatifWriter)
     where
         S: Subscriber + for<'span> registry::LookupSpan<'span> + 'static,
     {
@@ -196,11 +172,13 @@ mod indicatif {
             .with_progress_style(style)
             .with_span_field_formatter(Formatter);
 
+        let writer = layer.get_stderr_writer();
+
         let filtered = layer.with_filter(tracing_subscriber::filter::FilterFn::new(|meta| {
             meta.fields().iter().any(|field| field.name() == "progress")
         }));
 
-       filtered
+        (filtered, writer)
     }
 }
 // endregion: indicatif
