@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::io::Write;
 
 use flox_rust_sdk::models::manifest::PackageToInstall;
+use tracing::info;
 /// Write a message to stderr.
 ///
 /// This is a wrapper around `eprintln!` that can be further extended
@@ -13,7 +14,7 @@ fn print_message(v: impl Display) {
         history.push_message(format!("{v}"));
     }
 
-    eprintln!("{v}");
+    info!("{v}");
 }
 
 fn print_message_to_buffer(out: &mut impl Write, v: impl Display) {
