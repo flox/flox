@@ -1,12 +1,9 @@
-use std::io::BufRead;
 use std::num::NonZeroU8;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::skip_serializing_none;
-
-use super::pkgdb::PkgDbError;
 
 pub type SearchLimit = Option<NonZeroU8>;
 
@@ -20,8 +17,6 @@ pub enum SearchError {
     ParseStdout(std::io::Error),
     #[error("invalid search term '{0}', try quoting the search term if this isn't what you searched for")]
     SearchTerm(String),
-    #[error("search encountered an error")]
-    PkgDb(#[from] PkgDbError),
     #[error("search encountered an error: {0}")]
     PkgDbCall(std::io::Error),
     #[error("failed to canonicalize manifest path: {0}")]
@@ -233,53 +228,6 @@ pub struct SearchResults {
 }
 pub type ResultCount = Option<u64>;
 
-/// The types of JSON records that `pkgdb` can emit on stdout during a search
-#[derive(Debug, PartialEq, Deserialize)]
-#[serde(untagged)]
-pub enum Record {
-    /// A record containing the total number of search results regardless
-    /// of how many are displayed to the user
-    #[serde(rename_all = "kebab-case")]
-    ResultCount { result_count: u64 },
-    /// A single search result
-    SearchResult(SearchResult),
-    /// An error
-    Error(PkgDbError),
-}
-
-/// The different kinds of output that can be collected from pkgdb during a search
-#[derive(Debug)]
-pub enum PkgDbOutput {
-    Stdout(Record),
-    Stderr(String),
-}
-
-impl TryFrom<&[u8]> for SearchResults {
-    type Error = SearchError;
-
-    // Note, this impl isn't actually used in the CLI, it's leftover from a previous iteration on the design.
-    // It still works, so we should keep it around. It may prove useful for testing or something.
-    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        let mut results = Vec::new();
-        for maybe_line in bytes.lines() {
-            let text = maybe_line.map_err(SearchError::ParseStdout)?;
-            match serde_json::from_str(&text) {
-                Ok(search_result) => results.push(search_result),
-                Err(_) => {
-                    let mut deserializer = serde_json::Deserializer::from_str(&text);
-                    let err = PkgDbError::deserialize(&mut deserializer)
-                        .map_err(SearchError::Deserialize)?;
-                    return Err(SearchError::PkgDb(err));
-                },
-            };
-        }
-        Ok(SearchResults {
-            results,
-            count: None,
-        })
-    }
-}
-
 /// A package search result
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -308,50 +256,4 @@ pub struct SearchResult {
     pub description: Option<String>,
     /// Which license the package is licensed under
     pub license: Option<String>,
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    const EXAMPLE_RESULT_COUNT: &str = r#"{"result-count": 15}"#;
-
-    // This is illegible when put on a single line, but the deserializer will fail due to
-    // the newlines. You'll need to `EXAMPLE_SEARCH_RESULTS.replace('\n', "").as_bytes()`
-    // to deserialize it.
-    const EXAMPLE_SEARCH_RESULTS: &str = r#"{
-        "broken": false,
-        "description": "A program that produces a familiar, friendly greeting",
-        "input": "nixpkgs",
-        "license": "GPL-3.0-or-later",
-        "absPath": [
-            "legacyPackages",
-            "aarch64-darwin",
-            "hello"
-        ],
-        "relPath": [
-            "hello"
-        ],
-        "pkgPath": "hello",
-        "subtree": "legacyPackages",
-        "system": "aarch64-darwin",
-        "stability": null,
-        "pname": "hello",
-        "unfree": false,
-        "version": "2.12.1",
-        "id": 420
-    }"#;
-
-    #[test]
-    fn deserializes_search_results() {
-        let search_results =
-            SearchResults::try_from(EXAMPLE_SEARCH_RESULTS.replace('\n', "").as_bytes()).unwrap();
-        assert!(search_results.results.len() == 1);
-    }
-
-    #[test]
-    fn deserializes_result_count() {
-        let count: Record = serde_json::from_str(EXAMPLE_RESULT_COUNT).unwrap();
-        assert_eq!(Record::ResultCount { result_count: 15 }, count);
-    }
 }
