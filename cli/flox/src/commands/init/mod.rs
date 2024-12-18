@@ -2,14 +2,13 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{anyhow, Context, Error, Result};
+use anyhow::{anyhow, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
 use flox_rust_sdk::models::manifest::{insert_packages, CatalogPackage, PackageToInstall};
-use flox_rust_sdk::models::search::SearchResult;
 use flox_rust_sdk::providers::catalog::{
     ClientTrait,
     PackageDescriptor,
@@ -435,26 +434,6 @@ pub(crate) struct ProvidedPackage {
     pub display_version: String,
     /// The actual version of the package
     pub version: Option<String>,
-}
-
-impl TryFrom<SearchResult> for ProvidedPackage {
-    type Error = Error;
-
-    fn try_from(value: SearchResult) -> Result<Self, Self::Error> {
-        let path_name = value
-            .rel_path
-            .last()
-            .ok_or_else(|| anyhow!("invalid search result: 'rel_path' empty in {value:?}"))?;
-
-        let name = value.pname.unwrap_or_else(|| path_name.to_string());
-
-        Ok(ProvidedPackage {
-            name,
-            rel_path: value.rel_path.into(),
-            display_version: value.version.clone().unwrap_or("N/A".to_string()),
-            version: value.version,
-        })
-    }
 }
 
 impl From<ProvidedPackage> for CatalogPackage {
