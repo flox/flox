@@ -2316,7 +2316,7 @@ pub mod types {
     ///    {
     ///      "cache_uri": "https://example-s3-bucket.com",
     ///      "derivation": {
-    ///        "description": "A very nice derivation",
+    ///        "description": "An exceptional derivation",
     ///        "drv_path": "foo.bar.curl",
     ///        "license": "GnuFoo",
     ///        "name": "mydrv",
@@ -2476,7 +2476,7 @@ pub mod types {
     ///    {
     ///      "cache_uri": "https://example-s3-bucket.com",
     ///      "derivation": {
-    ///        "description": "A very nice derivation",
+    ///        "description": "An exceptional derivation",
     ///        "drv_path": "foo.bar.curl",
     ///        "license": "GnuFoo",
     ///        "name": "mydrv",
@@ -2621,7 +2621,7 @@ pub mod types {
     ///  "title": "UserDerivation",
     ///  "examples": [
     ///    {
-    ///      "description": "A very nice derivation",
+    ///      "description": "An exceptional derivation",
     ///      "drv_path": "foo.bar.curl",
     ///      "license": "GnuFoo",
     ///      "name": "mydrv",
@@ -2746,7 +2746,7 @@ pub mod types {
     ///  "title": "UserDerivation",
     ///  "examples": [
     ///    {
-    ///      "description": "A very nice derivation",
+    ///      "description": "An exceptional derivation",
     ///      "drv_path": "foo.bar.curl",
     ///      "license": "GnuFoo",
     ///      "name": "mydrv",

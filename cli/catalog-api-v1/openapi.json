@@ -2391,7 +2391,7 @@
         "example": {
           "cache_uri": "https://example-s3-bucket.com",
           "derivation": {
-            "description": "A very nice derivation",
+            "description": "An exceptional derivation",
             "drv_path": "foo.bar.curl",
             "license": "GnuFoo",
             "name": "mydrv",
@@ -2457,7 +2457,7 @@
         "example": {
           "cache_uri": "https://example-s3-bucket.com",
           "derivation": {
-            "description": "A very nice derivation",
+            "description": "An exceptional derivation",
             "drv_path": "foo.bar.curl",
             "license": "GnuFoo",
             "name": "mydrv",
@@ -2613,7 +2613,7 @@
         ],
         "title": "UserDerivation",
         "example": {
-          "description": "A very nice derivation",
+          "description": "An exceptional derivation",
           "drv_path": "foo.bar.curl",
           "license": "GnuFoo",
           "name": "mydrv",
@@ -2692,7 +2692,7 @@
         ],
         "title": "UserDerivation",
         "example": {
-          "description": "A very nice derivation",
+          "description": "An exceptional derivation",
           "drv_path": "foo.bar.curl",
           "license": "GnuFoo",
           "name": "mydrv",
