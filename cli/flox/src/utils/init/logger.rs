@@ -4,7 +4,7 @@ use log::{debug, error};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::reload::Handle;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Registry};
+use tracing_subscriber::{filter, EnvFilter, Registry};
 
 use crate::commands::Verbosity;
 use crate::utils::metrics::MetricsLayer;
@@ -17,16 +17,15 @@ pub(crate) fn init_logger(verbosity: Option<Verbosity>) {
     let log_filter = match verbosity {
         // Show only errors
         Verbosity::Quiet => "off,flox=error",
-        // Only show warnings
-        Verbosity::Verbose(0) => "off,flox=warn",
-        // Show our own info logs
-        Verbosity::Verbose(1) => "off,flox=info",
-        // Also show debug from our libraries
-        Verbosity::Verbose(2) => "off,flox=debug,flox-rust-sdk=debug",
-        // Also show trace from our libraries and POSIX
-        Verbosity::Verbose(3) => "off,flox=trace,flox-rust-sdk=trace",
-        // Also show trace from our libraries and POSIX
-        Verbosity::Verbose(4) => "debug,flox=trace,flox-rust-sdk=trace",
+        // Only show warnings, and user facing messages
+        Verbosity::Verbose(0) => "warn,flox::utils::message=info",
+        // Show internal info logs
+        Verbosity::Verbose(1) => "warn,flox=info,flox-rust-sdk=info,flox-core=info",
+        // Show debug logs from our libraries
+        Verbosity::Verbose(2) => "warn,flox=debug,flox-rust-sdk=debug,flox-core=debug",
+        // Show trace logs from our libraries
+        Verbosity::Verbose(3) => "warn,flox=trace,flox-rust-sdk=trace,flox-core=trace",
+        // Show trace for all libraries
         Verbosity::Verbose(_) => "trace",
     };
 
@@ -69,13 +68,39 @@ pub fn create_registry_and_filter_reload_handle() -> (
     // and then modify it later to the actual level below.
     // Logs are being passed through by the `log` crate and correctly filtered by `tracing`.
     let filter = tracing_subscriber::filter::EnvFilter::try_new("trace").unwrap();
+
     let (filter, filter_reload_handle) = tracing_subscriber::reload::Layer::new(filter);
     let use_colors = supports_color::on(supports_color::Stream::Stderr).is_some();
+
+    // Tracing layer that handles user facing messages.
+    // That is messages that are produced by the `crate::utils::message` module,
+    // and target the flox _user_, rather than revealing internals.
+    let message_fmt = tracing_subscriber::fmt::format()
+        .compact()
+        .without_time()
+        .with_level(false)
+        .with_target(false);
+    let message_layer = tracing_subscriber::fmt::layer()
+        .with_writer(writer.clone())
+        .with_ansi(use_colors)
+        .event_format(message_fmt)
+        .with_filter(filter::filter_fn(|meta| {
+            meta.target().starts_with("flox::utils::message")
+        }));
+
+    // Tracing layer that handles all other logs.
     let log_layer = tracing_subscriber::fmt::layer()
         .with_writer(writer.clone())
         .with_ansi(use_colors)
-        .event_format(tracing_subscriber::fmt::format())
-        .with_filter(filter);
+        .with_filter(filter::filter_fn(|meta| {
+            !meta.target().starts_with("flox::utils::message")
+        }));
+
+    // The combined layer that handles tracing events and formats them,
+    // either for user facing messages or for internal logs.
+    // The verbosity of these logs is controlled by the `filter` env filter.
+    let combined_log_layer = log_layer.and_then(message_layer).with_filter(filter);
+
     let metrics_layer = MetricsLayer::new();
     let sentry_layer = sentry::integrations::tracing::layer().enable_span_attributes();
     // Filtered layer must come first.
@@ -84,7 +109,7 @@ pub fn create_registry_and_filter_reload_handle() -> (
     // My current understanding is, that it because the `metrics_layer` (at least) is
     // registering `Interest` for the event and that somehow bypasses the filter?!
     let registry = tracing_subscriber::registry()
-        .with(log_layer)
+        .with(combined_log_layer)
         .with(progress_layer)
         .with(metrics_layer)
         .with(sentry_layer);
