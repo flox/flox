@@ -16,12 +16,13 @@
     }
   ],
   {
-    "count": 3180,
+    "count": 3203,
     "results": [
       {
         "description": "System to facilitate installing and updating packages",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "packagekit",
         "pname": "packagekit",
         "relPath": [
           "packagekit"
@@ -33,6 +34,7 @@
         "description": "Package manager for PureScript based on package sets",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "psc-package",
         "pname": "psc-package",
         "relPath": [
           "psc-package"
@@ -44,6 +46,7 @@
         "description": "Fix broken node modules instantly",
         "input": "nixpkgs",
         "license": null,
+        "pkgPath": "patch-package",
         "pname": "patch-package",
         "relPath": [
           "patch-package"

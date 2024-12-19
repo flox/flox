@@ -1,4 +1,3 @@
-use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::io::stdout;
 
@@ -7,20 +6,15 @@ use crossterm::style::Stylize;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::models::search::{SearchResult, SearchResults};
 
-pub const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 pub const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
 
 /// An intermediate representation of a search result used for rendering
 #[derive(Debug, PartialEq, Clone)]
 pub struct DisplayItem {
-    /// The input that the package came from
-    input: String,
-    /// The attribute path of the package, excluding subtree and system
-    rel_path: Vec<String>,
+    /// The package path of the package, including catalog name
+    pkg_path: String,
     /// The package description
     description: Option<String>,
-    /// Whether to join the `input` and `package` fields with a separator when rendering
-    render_with_input: bool,
 }
 
 impl Display for DisplayItem {
@@ -29,16 +23,8 @@ impl Display for DisplayItem {
     ///
     /// It should be possible to copy and paste this as an argument to
     /// `flox install`.
-    ///
-    /// If we change this function, we will likely need to update what the
-    /// deduplicate field controls in pkgdb.
-    /// Technically, pkgdb shouldn't have knowledge of this format,
-    /// but it's nicer to perform deduplication in SQL.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.render_with_input {
-            write!(f, "{}{SEARCH_INPUT_SEPARATOR}", self.input)?;
-        }
-        write!(f, "{}", self.rel_path.join("."))
+        write!(f, "{}", self.pkg_path)
     }
 }
 
@@ -49,34 +35,6 @@ impl Display for DisplayItem {
 pub struct DisplayItems(Vec<DisplayItem>);
 
 impl DisplayItems {
-    /// Disambiguate display items.
-    ///
-    /// This gets complicated because we have to satisfy a few constraints:
-    /// - The order of results from `pkgdb` is important (best matches come first),
-    ///   so that order must be preserved.
-    /// - Packages that appear in more than one input need to be disambiguated by prepending
-    ///   the name of the input and a separator.
-    fn disambiguate_display_items(display_items: &mut [DisplayItem]) {
-        let mut package_to_inputs: HashMap<Vec<String>, HashSet<String>> = HashMap::new();
-        for d in display_items.iter() {
-            // Build a collection of packages and which inputs they are seen in so we can tell
-            // which packages need to be disambiguated when rendering search results.
-            package_to_inputs
-                .entry(d.rel_path.clone())
-                .and_modify(|inputs| {
-                    inputs.insert(d.input.clone());
-                })
-                .or_insert_with(|| HashSet::from_iter([d.input.clone()]));
-        }
-
-        // For any package that comes from more than one input, mark it as needing to be joined
-        for d in display_items.iter_mut() {
-            if let Some(inputs) = package_to_inputs.get(&d.rel_path) {
-                d.render_with_input = inputs.len() > 1;
-            }
-        }
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = &DisplayItem> {
         self.0.iter()
     }
@@ -84,20 +42,15 @@ impl DisplayItems {
 
 impl From<Vec<SearchResult>> for DisplayItems {
     fn from(search_results: Vec<SearchResult>) -> Self {
-        // Search results contain a lot of information, but all we need for rendering are
-        // the input, the package subpath (e.g. "python310Packages.flask"), and the description.
-        let mut display_items = search_results
+        // Search results contain a lot of information, but all we need for rendering is the
+        // pkg-path and the description.
+        let display_items = search_results
             .into_iter()
             .map(|r| DisplayItem {
-                input: r.input,
-                rel_path: r.rel_path,
+                pkg_path: r.pkg_path,
                 description: r.description.map(|s| s.replace('\n', " ")),
-                render_with_input: false,
             })
             .collect::<Vec<_>>();
-
-        // TODO: we could disambiguate as we're collecting above
-        Self::disambiguate_display_items(&mut display_items);
 
         Self(display_items)
     }
@@ -162,7 +115,7 @@ impl Display for DisplaySearchResults {
         let column_width = self
             .display_items
             .iter()
-            .map(|d| format_name(&d.to_string()).len())
+            .map(|d| d.to_string().len())
             .max()
             .unwrap_or_default();
 
@@ -170,11 +123,16 @@ impl Display for DisplaySearchResults {
         let mut items = self.display_items.iter().peekable();
 
         while let Some(d) = items.next() {
-            let desc = d.description.as_deref().unwrap_or(DEFAULT_DESCRIPTION);
+            let desc = if d.description.as_deref().is_none_or(|s| s.is_empty()) {
+                DEFAULT_DESCRIPTION
+            } else {
+                d.description.as_deref().unwrap()
+            };
             let name = format_name(&d.to_string());
+            let width = column_width + (name.len() - d.to_string().len());
 
             // The two spaces here provide visual breathing room.
-            write!(f, "{name:<column_width$}  {desc}")?;
+            write!(f, "{name:<width$}  {desc}")?;
             // Only print a newline if there are more items to print
             if items.peek().is_some() {
                 writeln!(f)?;
@@ -189,14 +147,6 @@ impl DisplaySearchResults {
     pub fn search_results_truncated_hint(&self) -> Option<String> {
         let count = self.count?;
 
-        // Don't show the message if we have exactly the number of results as the limit,
-        // otherwise we would get messages like `Showing 10 of 10...`
-        // In addition after deduplication we may have fewer results than the limit,
-        // but we dont want to show a message like `Showing 5 of 9...`,
-        // when the requested number of results is 10.
-        // There is still an issue with duplicate results where even when called with `--all`
-        // the number of elements in `deduped_display_items` may be less than `count`.
-        // That bug will be fixed separately.
         if count == self.n_results {
             return None;
         }
@@ -206,5 +156,75 @@ impl DisplaySearchResults {
                 n_results = self.n_results,
                 search_term = self.search_term
             ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use flox_rust_sdk::models::search::SearchResult;
+    use indoc::indoc;
+
+    use super::*;
+
+    #[test]
+    fn test_display_search_result() {
+        let search_results = vec![
+            SearchResult {
+                input: "nixpkgs".to_string(),
+                pkg_path: "pkg1".to_string(),
+                description: Some("description of pkg1".to_string()),
+                ..Default::default()
+            },
+            SearchResult {
+                input: "mycatalog".to_string(),
+                pkg_path: "mycatalog/pkg1".to_string(),
+                description: Some("description of mycatalog/pkg1".to_string()),
+                ..Default::default()
+            },
+        ];
+
+        let display = DisplaySearchResults {
+            search_term: "pkg1".to_string(),
+            count: Some(search_results.len() as u64),
+            display_items: search_results.into(),
+            n_results: 2,
+            use_bold: false,
+        };
+
+        let expected = indoc! {"
+            pkg1            description of pkg1
+            mycatalog/pkg1  description of mycatalog/pkg1
+            "};
+        assert_eq!(expected, format!("{}\n", display));
+    }
+
+    #[test]
+    fn test_display_empty_description() {
+        let search_results = vec![
+            SearchResult {
+                pkg_path: "pkg1".to_string(),
+                description: None,
+                ..Default::default()
+            },
+            SearchResult {
+                pkg_path: "pkg2".to_string(),
+                description: Some("".to_string()),
+                ..Default::default()
+            },
+        ];
+
+        let display = DisplaySearchResults {
+            search_term: "pkg".to_string(),
+            count: Some(search_results.len() as u64),
+            display_items: search_results.into(),
+            n_results: 2,
+            use_bold: false,
+        };
+
+        let expected = indoc! {"
+            pkg1  <no description provided>
+            pkg2  <no description provided>
+            "};
+        assert_eq!(expected, format!("{}\n", display));
     }
 }
