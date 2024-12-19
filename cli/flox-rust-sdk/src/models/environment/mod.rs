@@ -119,6 +119,13 @@ pub trait Environment: Send {
     /// Atomically edit this environment, ensuring that it still builds
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError>;
 
+    /// Upgrade packages in this environment without modifying the environment on disk.
+    fn dry_upgrade(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: &[&str],
+    ) -> Result<UpgradeResult, EnvironmentError>;
+
     /// Atomically upgrade packages in this environment
     fn upgrade(
         &mut self,
