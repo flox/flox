@@ -286,6 +286,7 @@ impl InstallableLocker for Nix {
         descriptor: &ManifestPackageDescriptorFlake,
     ) -> Result<LockedInstallable, FlakeInstallableError> {
         let mut command = Command::new(&*NIX_BIN);
+        command.args(["--experimental-features", "nix-command flakes"]);
 
         {
             let pkgdb_lib_dir = Path::new(&*PKGDB_BIN)
