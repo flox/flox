@@ -313,6 +313,18 @@ impl Environment for ManagedEnvironment {
         Ok(result)
     }
 
+    /// Try to upgrade packages in the current local checkout
+    /// without committing a new generation
+    fn dry_upgrade(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: &[&str],
+    ) -> Result<UpgradeResult, EnvironmentError> {
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
+        let result = local_checkout.upgrade(flox, groups_or_iids, false)?;
+        Ok(result)
+    }
+
     /// Atomically upgrade packages in this environment
     fn upgrade(
         &mut self,
