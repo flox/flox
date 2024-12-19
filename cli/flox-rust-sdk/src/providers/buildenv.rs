@@ -271,14 +271,19 @@ impl BuildEnvNix {
     /// this function is currently assumes that the package is from the nixpkgs base-catalog.
     /// Currently the type is distinguished by the [LockedPackageCatalog::locked_url].
     /// If this does not indicate a nixpkgs package, the function will currently panic!
-    #[instrument(skip(self, client), fields(progress = format!("Producing package '{}'", locked.install_id)))]
     fn realise_nixpkgs(
         &self,
         client: &impl ClientTrait,
         locked: &LockedPackageCatalog,
     ) -> Result<(), BuildEnvError> {
         // Check if all store paths are valid, or can be substituted.
-        let all_valid = self.check_store_path_with_substituters(locked.outputs.values())?;
+        let all_valid = {
+            let span = info_span!(
+                "subsitute catalog package",
+                progress = format!("Downloading '{}'", locked.attr_path)
+            );
+            span.in_scope(|| self.check_store_path_with_substituters(locked.outputs.values()))?
+        };
 
         // If so, return without eval.
         if all_valid {
@@ -435,10 +440,6 @@ impl BuildEnvNix {
     /// Check if the given store paths are valid,
     /// i.e. if the store paths exist in the store,
     /// substitute store paths if necessary and possible.
-    #[instrument(
-        skip_all,
-        fields(progress = "Ensuring packages are present or downloaded")
-    )]
     fn check_store_path_with_substituters(
         &self,
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
@@ -461,7 +462,6 @@ impl BuildEnvNix {
 
     /// Check if the given store paths are valid,
     /// i.e. if the store paths exist in the store.
-    #[instrument(skip_all, fields(progress = "Checking if store paths exist locally"))]
     fn check_store_path(
         &self,
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
