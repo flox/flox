@@ -325,6 +325,8 @@ impl InstallableLocker for Nix {
         let mut lock = serde_json::from_slice(&output.stdout)
             .map_err(FlakeInstallableError::DeserializeLockedInstallable)?;
 
+        set_priority(&mut lock, descriptor);
+
         Ok(lock)
     }
 }
