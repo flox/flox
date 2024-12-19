@@ -239,7 +239,7 @@ impl Environment for PathEnvironment {
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
-        let result = env_view.upgrade(flox, groups_or_iids)?;
+        let result = env_view.upgrade(flox, groups_or_iids, true)?;
         if let Some(ref store_paths) = result.store_path {
             self.link(flox, store_paths)?;
         }

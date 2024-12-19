@@ -336,7 +336,7 @@ impl Environment for ManagedEnvironment {
             ))?
         }
 
-        let result = local_checkout.upgrade(flox, groups_or_iids)?;
+        let result = local_checkout.upgrade(flox, groups_or_iids, true)?;
 
         let metadata = format!("upgraded packages: {}", result.packages().join(", "));
 
