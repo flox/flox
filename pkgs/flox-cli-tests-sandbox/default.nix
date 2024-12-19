@@ -19,8 +19,6 @@ let
 in
 pkgs.testers.runCommand {
   name = "flox-test-install-hello";
-  # __impure = true;
-  # requiredSystemFeatures = [ "recursive-nix" ];
   buildInputs = [
     flox
     flox-buildenv
@@ -88,13 +86,16 @@ pkgs.testers.runCommand {
     export XDG_DATA_HOME="$HOME/.local/share"
     export XDG_STATE_HOME="$HOME/.local/state"
 
-    export REAL_HOME="$HOME"
-    export REAL_XDG_CONFIG_HOME="$XDG_CONFIG_HOME"
-    export REAL_XDG_CACHE_HOME="$XDG_CACHE_HOME"
-    export REAL_XDG_DATA_HOME="$XDG_DATA_HOME"
-    export REAL_XDG_STATE_HOME="$XDG_STATE_HOME"
-    unset HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_DATA_DIRS
-    export __FT_RAN_XDG_REALS_SETUP=:
+    export FLOX_CACHE_DIR="$PWD/.flox-cache"
+    export FLOX_CONFIG_DIR="$XDG_CONFIG_HOME/flox"
+    export FLOX_DATA_HOME="$XDG_DATA_HOME/flox"
+    export FLOX_STATE_HOME="$XDG_STATE_HOME/flox"
+    export FLOX_META="$FLOX_CACHE_DIR/meta"
+    export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments"
+
+    export NIX_CACHE_HOME="$XDG_CACHE_HOME/nix"
+    export NIX_STATE_HOME="$XDG_STATE_HOME/nix"
+    export NIX_CONFIG_HOME="$XDG_CONFIG_HOME/nix"
 
     cat <<EOF > fake-ssh-key
     -----BEGIN OPENSSH PRIVATE KEY-----
@@ -130,22 +131,30 @@ pkgs.testers.runCommand {
       }
     }
     export TEST_ROOT=/nix/store/subdir
-    mkdir -p $TEST_ROOT/nix/store
+    
     echo loading...
-    cat $closureInfo/store-paths | cut -d ' ' --output-delimiter=$'\n' -f 1- | command time xargs -I % ln -s -t $TEST_ROOT/nix/store/ /something/%
+
+    ${pkgs.lib.strings.optionalString (pkgs.stdenv.isLinux) ''
+    mkdir -p $TEST_ROOT/nix/store
+    cat $closureInfo/store-paths | cut -d ' ' --output-delimiter=$'\n' -f 1- | command time xargs -I % ln -sf -t $TEST_ROOT/nix/store/ /something/%
+    cat $closureInfo/registration | nix-store --load-db
+    chmod g+w $TEST_ROOT/nix/store
 
     export NIX_CONFIG="experimental-features = flakes nix-command
     extra-sandbox-paths = /something
     store = $TEST_ROOT"
-
-    cat $closureInfo/registration | nix-store --load-db
-    chmod g+w $TEST_ROOT/nix/store
+    ''}
 
     # setup complete
 
     flox init
     flox install hello gawk dasel
+    ${pkgs.lib.strings.optionalString (pkgs.stdenv.isLinux) ''
     ls -alh $TEST_ROOT/$(readlink .flox/run/${pkgs.system}.t.dev)/bin
+    ''}
+    ${pkgs.lib.strings.optionalString (pkgs.stdenv.isDarwin) ''
+    ls -alh $(readlink .flox/run/${pkgs.system}.t.dev)/bin
+    ''}
     touch $out
   '';
 }
