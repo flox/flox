@@ -64,7 +64,7 @@ impl Upgrade {
             )
         })?;
 
-        let upgraded = result.packages;
+        let upgraded = result.packages().collect::<Vec<_>>();
 
         if upgraded.is_empty() {
             if self.groups_or_iids.is_empty() {
