@@ -280,6 +280,13 @@ impl InstallableLocker for InstallableLockerMock {
 #[derive(Debug)]
 pub struct Nix;
 impl InstallableLocker for Nix {
+    #[instrument(skip_all, fields(
+        system = system.as_ref(),
+        descriptor = descriptor.flake,
+        progress = format!(
+            "Locking flake installable '{}' for '{}'",
+            descriptor.flake, system.as_ref())
+    ))]
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,
