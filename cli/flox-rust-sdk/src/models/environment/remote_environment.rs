@@ -287,6 +287,14 @@ impl Environment for RemoteEnvironment {
         Ok(result)
     }
 
+    fn dry_upgrade(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: &[&str],
+    ) -> Result<UpgradeResult, EnvironmentError> {
+        self.inner.dry_upgrade(flox, groups_or_iids)
+    }
+
     /// Atomically upgrade packages in this environment
     fn upgrade(
         &mut self,
