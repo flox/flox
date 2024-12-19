@@ -208,7 +208,11 @@ impl InstallableLocker for Nix {
         descriptor: &ManifestPackageDescriptorFlake,
     ) -> Result<LockedInstallable, FlakeInstallableError> {
         let mut command = Command::new(&*NIX_BIN);
-        command.args(["--option", "extra-experimental-features", "nix-command flakes"]);
+        command.args([
+            "--option",
+            "extra-experimental-features",
+            "nix-command flakes",
+        ]);
 
         // for now assume the plugins are located relative to the pkgdb binary
         // <pkgdb>
