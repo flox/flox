@@ -488,11 +488,15 @@ impl CoreEnvironment<ReadOnly> {
     /// First resolve a new lockfile with upgraded packages using the catalog client.
     /// Then verify the new lockfile by building the environment.
     ///
-    /// Finally replace the existing environment with the new, upgraded one.
+    /// Finally if `write_lockfile` is true,
+    /// replace the existing environment with the new, upgraded one.
+    /// Otherwise, validate the upgrade by writing the new lockfile to a temporary file
+    /// and building it.
     pub fn upgrade(
         &mut self,
         flox: &Flox,
         groups_or_iids: &[&str],
+        write_lockfile: bool,
     ) -> Result<UpgradeResult, CoreEnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let manifest = self.manifest()?;
@@ -511,8 +515,24 @@ impl CoreEnvironment<ReadOnly> {
         // the "Serialize decides to fail, or if T contains a map with non-string keys",
         // neither of which should happen here.
         let lockfile_contents = serde_json::to_string_pretty(&result.new_lockfile).unwrap();
-        let store_path = self.transact_with_lockfile_contents(lockfile_contents, flox)?;
-        result.store_path = Some(store_path);
+
+        if write_lockfile {
+            if result.diff().is_empty() {
+                return Ok(result);
+            }
+
+            let store_path = self.transact_with_lockfile_contents(lockfile_contents, flox)?;
+            result.store_path = Some(store_path);
+        } else {
+            let tmp_lockfile = tempfile::NamedTempFile::new_in(&flox.temp_dir)
+                .map_err(CoreEnvironmentError::WriteLockfile)?;
+            fs::write(&tmp_lockfile, lockfile_contents)
+                .map_err(CoreEnvironmentError::WriteLockfile)?;
+
+            // We are not interested in the store path here, so we ignore the result
+            // Neither do we depend on services, so we pass `None`
+            let _ = BuildEnvNix.build(&flox.catalog_client, tmp_lockfile.path(), None)?;
+        }
 
         Ok(result)
     }
