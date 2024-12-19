@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use flox_core::Version;
+use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -337,7 +338,7 @@ impl Environment for ManagedEnvironment {
 
         let result = local_checkout.upgrade(flox, groups_or_iids)?;
 
-        let metadata = format!("upgraded packages: {}", result.packages.join(", "));
+        let metadata = format!("upgraded packages: {}", result.packages().join(", "));
 
         generations
             .add_generation(&mut local_checkout, metadata)
