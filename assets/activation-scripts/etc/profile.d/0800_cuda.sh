@@ -8,7 +8,6 @@ _ldconfig="@iconv@/bin/ldconfig"
 # ---------------------------------------------------------------------------- #
 
 activate_cuda() {
-  local _fd="@fd@/bin/fd"
   local _find="@findutils@/bin/find"
   local _ln="@coreutils@/bin/ln"
   local _mkdir="@coreutils@/bin/mkdir"
@@ -20,7 +19,7 @@ activate_cuda() {
   # Path to ldconfig that can be substituted for testing.
   local ldconfig_bin="$2"
   # Pattern of libraries that we support.
-  local lib_pattern="^lib(cuda|nvidia|dxcore).*\.so.*"
+  local lib_pattern="lib(cuda|nvidia|dxcore).*\.so.*"
 
   # Only run if _FLOX_ENV_CUDA_DETECTION is set
   if [[ "${_FLOX_ENV_CUDA_DETECTION:-}" != 1 ]]; then
@@ -40,13 +39,15 @@ activate_cuda() {
   # Use system library cache.
   SYSTEM_LIBS=$(
     { "$ldconfig_bin" --print-cache -C /etc/ld.so.cache 2> /dev/null || echo; } \
-      | "$_nawk" "\$1 ~ /${lib_pattern}/ { print \$4 }"
+      | "$_nawk" "\$1 ~ /^${lib_pattern}/ { print \$4 }"
   )
 
   # Fallback for NixOS.
   if [ -z "$SYSTEM_LIBS" ]; then
-    # LD_AUDIT workaround for Linux: https://github.com/flox/flox/issues/1341
-    SYSTEM_LIBS=$(LD_AUDIT="" "$_fd" "$lib_pattern" "${fhs_root_prefix}/run/opengl-driver" 2> /dev/null)
+    SYSTEM_LIBS=$(
+      "$_find" "${fhs_root_prefix}/run/opengl-driver" -type f -print 2> /dev/null \
+        | "$_nawk" "/\/${lib_pattern}/ { print }"
+    )
   fi
 
   # No matching libs from either results.
