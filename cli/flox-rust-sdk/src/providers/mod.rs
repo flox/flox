@@ -6,3 +6,4 @@ pub mod flake_installable_locker;
 pub mod git;
 pub mod publish;
 pub mod services;
+pub mod upgrade_checks;

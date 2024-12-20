@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-use core_environment::UpgradeResult;
 use enum_dispatch::enum_dispatch;
 pub use flox_core::{path_hash, Version};
 use log::debug;
@@ -32,7 +31,13 @@ use crate::providers::git::{
 use crate::utils::copy_file_without_permissions;
 
 mod core_environment;
-pub use core_environment::{test_helpers, CoreEnvironment, CoreEnvironmentError, EditResult};
+pub use core_environment::{
+    test_helpers,
+    CoreEnvironment,
+    CoreEnvironmentError,
+    EditResult,
+    UpgradeResult,
+};
 
 pub mod generations;
 pub mod managed_environment;
@@ -228,6 +233,7 @@ pub trait Environment: Send {
 
 /// The various ways in which an environment can be referred to
 #[enum_dispatch(Environment)]
+#[derive(Debug)]
 pub enum ConcreteEnvironment {
     /// Container for [PathEnvironment]
     Path(PathEnvironment),
