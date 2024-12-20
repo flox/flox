@@ -275,7 +275,7 @@ EOF
       assert_line_flags="--partial"
       FLOX_SHELL="$shell" PATH="${SYSTEM_BIN}:${PATH}" NO_COLOR=1 \
         run expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" \
-        "${shell} -c '${echo_install_echo}'"
+        "${echo_install_echo}"
       ;;
     command)
       FLOX_SHELL="$shell" PATH="${SYSTEM_BIN}:${PATH}" \
