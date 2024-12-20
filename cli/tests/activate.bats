@@ -242,6 +242,97 @@ EOF
   refute_output "not found"
 }
 
+install_shadows_system_path() {
+  shell="${1?}"
+  mode="${2?}"
+
+  project_setup
+
+  # TODO: https://github.com/flox/flox/issues/2164
+  run find "${HOME}" -type f -exec grep -qs 'Setting PATH' {} \; -delete
+  assert_success
+
+  # Prevent first run helper.
+  touch "${HOME}/.zshrc"
+
+  # Mimic a different `hello` coming from the system PATH.
+  SYSTEM_BIN="$PROJECT_DIR/system_bin"
+  mkdir "${SYSTEM_BIN}"
+  cat > "${SYSTEM_BIN}/hello" <<'EOF'
+#!/usr/bin/env bash
+echo "Hello, from system path"
+EOF
+  chmod +x "${SYSTEM_BIN}/hello"
+
+  # Call `hello` from the system, then install and call `hello` from the environment.
+  echo_install_echo='hello && "$FLOX_BIN" install hello && hello'
+  assert_line_flags=""
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+
+  case "$mode" in
+    interactive)
+      # Can't get clean ordered output from expect.
+      assert_line_flags="--partial"
+      FLOX_SHELL="$shell" PATH="${SYSTEM_BIN}:${PATH}" NO_COLOR=1 \
+        run expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" \
+        "${shell} -c '${echo_install_echo}'"
+      ;;
+    command)
+      FLOX_SHELL="$shell" PATH="${SYSTEM_BIN}:${PATH}" \
+        run "$FLOX_BIN" activate -d "$PROJECT_DIR" -- \
+        "$shell" -c "$echo_install_echo"
+      ;;
+    in-place)
+      activation_command='eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR")"'
+      FLOX_SHELL="$shell" PATH="${SYSTEM_BIN}:${PATH}" \
+        run "$shell" -c "${activation_command} && ${echo_install_echo}"
+      ;;
+  esac
+
+  assert_success
+  assert_line $assert_line_flags "Hello, from system path"
+  assert_line $assert_line_flags "✅ 'hello' installed to environment '${PROJECT_NAME}'"
+  assert_line $assert_line_flags "Hello, world!"
+}
+
+@test "wip: zsh: interactive install shadows system path" {
+  install_shadows_system_path zsh interactive
+}
+@test "wip: zsh: command install shadows system path" {
+  install_shadows_system_path zsh command
+}
+@test "wip: zsh: in-place install shadows system path" {
+  install_shadows_system_path zsh in-place
+}
+@test "wip: bash: interactive install shadows system path" {
+  install_shadows_system_path bash interactive
+}
+@test "wip: bash: command install shadows system path" {
+  install_shadows_system_path bash command
+}
+@test "wip: bash: in-place install shadows system path" {
+  install_shadows_system_path bash in-place
+}
+@test "wip: fish: interactive install shadows system path" {
+  install_shadows_system_path fish interactive
+}
+@test "wip: fish: command install shadows system path" {
+  install_shadows_system_path fish command
+}
+@test "wip: fish: in-place install shadows system path" {
+  install_shadows_system_path fish in-place
+}
+# TODO: tcsh needs different command syntax
+# @test "wip: tcsh: interactive install shadows system path" {
+#   new_packages_bypass_path_hashing tcsh interactive
+# }
+# @test "wip: tcsh: command install shadows system path" {
+#   new_packages_bypass_path_hashing tcsh command
+# }
+# @test "wip: tcsh: in-place install shadows system path" {
+#   new_packages_bypass_path_hashing tcsh in-place
+# }
+
 # ---------------------------------------------------------------------------- #
 
 # The following battery of tests ensure that the activation script invokes
