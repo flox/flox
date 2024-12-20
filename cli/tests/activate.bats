@@ -265,7 +265,7 @@ EOF
   chmod +x "${SYSTEM_BIN}/hello"
 
   # Call `hello` from the system, then install and call `hello` from the environment.
-  echo_install_echo='hello && "$FLOX_BIN" install hello && hello'
+  echo_install_echo="hello && ${FLOX_BIN} install hello && hello"
   assert_line_flags=""
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
 
@@ -279,8 +279,8 @@ EOF
       ;;
     command)
       FLOX_SHELL="$shell" PATH="${SYSTEM_BIN}:${PATH}" \
-        run "$FLOX_BIN" activate -d "$PROJECT_DIR" -- \
-        "$shell" -c "$echo_install_echo"
+        run "$FLOX_BIN" activate -d "$PROJECT_DIR" -vv -- \
+        ${echo_install_echo}
       ;;
     in-place)
       activation_command='eval "$("$FLOX_BIN" activate -d "$PROJECT_DIR")"'
