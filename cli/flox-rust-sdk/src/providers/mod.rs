@@ -6,3 +6,4 @@ pub mod flox_cpp_utils;
 pub mod git;
 pub mod publish;
 pub mod services;
+pub mod upgrade_checks;
