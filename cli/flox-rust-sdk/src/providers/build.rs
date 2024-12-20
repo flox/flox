@@ -517,8 +517,13 @@ mod tests {
         );
     }
 
-    #[test]
-    fn build_no_bin_in_out_bin_sandbox_off() {
+    /// Test for:
+    /// - non-files in {bin,sbin} (note we do not warn for libexec)
+    /// - non-executables in {bin,sbin} (note we do not warn for libexec)
+    /// - no executable files found in bin
+    /// - executable files in directories other than {bin,sbin,libexec},
+    ///   including subdirectories of {bin,sbin,libexec}
+    fn build_verify_sane_out(mode: &str) {
         let package_name = String::from("foo");
 
         let manifest = formatdoc! {r#"
@@ -526,15 +531,25 @@ mod tests {
 
             [build.{package_name}]
             command = '''
-                mkdir -p $out/not-bin
-                touch $out/not-bin/hello
-                chmod +x $out/not-bin/hello
+                mkdir -p $out/bin/subdir $out/not-bin
+                touch \
+                  $out/bin/not-executable \
+                  $out/bin/subdir/executable-in-subdir \
+                  $out/not-bin/hello
+                chmod +x \
+                  $out/bin/subdir/executable-in-subdir \
+                  $out/not-bin/hello
             '''
-            sandbox = "off"
+            sandbox = "{mode}"
         "#};
 
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
+
+        // Create git clone for pure mode only
+        if mode == "pure" {
+            let _git = GitCommandProvider::init(env.parent_path().unwrap(), false).unwrap();
+        }
 
         // expect the build to succeed
         let output = assert_build_status(&flox, &mut env, &package_name, true);
@@ -542,6 +557,8 @@ mod tests {
         // [sic] newline before 'HINT: ...' ignored in 'nix build -L' output:
         // <https://github.com/NixOS/nix/issues/11991>
         let expected_output = formatdoc! {r#"
+            {package_name}> ⚠️  WARNING: $out/bin/not-executable is not executable.
+            {package_name}> ⚠️  WARNING: $out/bin/subdir is not a file.
             {package_name}> ⚠️  WARNING: No executables found in '$out/bin'.
             {package_name}> Only executables in '$out/bin' will be available on the PATH.
             {package_name}> If your build produces executables, make sure they are copied to '$out/bin'.
@@ -551,6 +568,7 @@ mod tests {
             {package_name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
             {package_name}> HINT: The following executables were found outside of '$out/bin':
             {package_name}>   - not-bin/hello
+            {package_name}>   - bin/subdir/executable-in-subdir
         "#};
         assert!(
             output.stderr.contains(&expected_output),
@@ -559,45 +577,13 @@ mod tests {
     }
 
     #[test]
-    fn build_no_bin_in_out_bin_sandbox_pure() {
-        let package_name = String::from("foo");
+    fn build_verify_sane_out_sandbox_off() {
+        build_verify_sane_out("off");
+    }
 
-        let manifest = formatdoc! {r#"
-            version = 1
-
-            [build.{package_name}]
-            command = '''
-                mkdir -p $out/not-bin
-                touch $out/not-bin/hello
-                chmod +x $out/not-bin/hello
-            '''
-            sandbox = "pure"
-        "#};
-
-        let (flox, _temp_dir_handle) = flox_instance();
-        let mut env = new_path_environment(&flox, &manifest);
-
-        let _git = GitCommandProvider::init(env.parent_path().unwrap(), false).unwrap();
-        // expect the build to succeed
-        let output = assert_build_status(&flox, &mut env, &package_name, true);
-
-        // [sic] newline before 'HINT: ...' ignored in 'nix build -L' output:
-        // <https://github.com/NixOS/nix/issues/11991>
-        let expected_output = formatdoc! {r#"
-            {package_name}> ⚠️  WARNING: No executables found in '$out/bin'.
-            {package_name}> Only executables in '$out/bin' will be available on the PATH.
-            {package_name}> If your build produces executables, make sure they are copied to '$out/bin'.
-            {package_name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
-            {package_name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
-            {package_name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
-            {package_name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
-            {package_name}> HINT: The following executables were found outside of '$out/bin':
-            {package_name}>   - not-bin/hello
-        "#};
-        assert!(
-            output.stderr.contains(&expected_output),
-            "{expected_output}"
-        );
+    #[test]
+    fn build_verify_sane_out_sandbox_pure() {
+        build_verify_sane_out("pure");
     }
 
     #[test]

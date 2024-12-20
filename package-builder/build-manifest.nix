@@ -53,7 +53,7 @@ pkgs.runCommandNoCC name
     nativeBuildInputs =
       with pkgs;
       [
-        fd
+        findutils
         gnutar
         gnused
         makeWrapper
@@ -186,40 +186,74 @@ pkgs.runCommandNoCC name
         exit 1
       fi
 
-      # Check if there are binaries in $out/bin
-      mapfile -t binaries_in_bin < <(
-        fd --base-directory "$out" './bin/*' --type executable \
-        fd --base-directory "$out" './sbin/*' --type executable
-      )
-      if [ "''${#binaries_in_bin[@]}" -eq 0 ]; then
-        ${dollar_out_no_bin_warning}
+      # Take inventory of executables found in bin, sbin, and libexec.
+      declare -a bin sbin libexec;
+      shopt -s nullglob
+      for i in bin sbin libexec; do
+        for j in $out/$i/*; do
+          relpath="''${j#"$out/"}"
+          if [ ! -f "$j" ]; then
+            # Don't warn about non-files in libexec.
+            if [ "$i" != "libexec" ]; then
+              echo "⚠️  WARNING: \$out/$relpath is not a file." 1>&2
+            fi
+          elif [ ! -x "$j" ]; then
+            # Don't warn about non-executable files in libexec.
+            if [ "$i" != "libexec" ]; then
+              echo "⚠️  WARNING: \$out/$relpath is not executable." 1>&2
+            fi
+          else
+            eval "$i+=($j)"
+          fi
+        done
+      done
 
-        # Check if there are executables in $out that are not in $out/bin
-        mapfile -t binaries_not_in_bin < <(
-          fd --base-directory "$out" -u --type executable \
-            --exclude ./bin/ \
-            --exclude ./sbin/ \
-            | sort )
-        if [ "''${#binaries_not_in_bin[@]}" -gt 0 ]; then
-          # [sic] ignored in 'nix build -L' output:
-          # <https://github.com/NixOS/nix/issues/11991>
-          echo "" 1>&2
-          echo "HINT: The following executables were found outside of '\$out/bin':" 1>&2
-          for binary in "''${binaries_not_in_bin[@]}"; do
-            echo "  - $binary" 1>&2
-          done
-        fi
+      # Check if there are binaries in $out/bin
+      if [ ''${#bin[@]} -eq 0 ]; then
+        ${dollar_out_no_bin_warning}
       fi
 
-      # Start by patching shebangs in bin and sbin directories, making sure to
-      # prefer the build wrapper environment over the "develop" environment.
-      for dir in $out/bin $out/sbin; do
-        if [ -d "$dir" ]; then
-          patchShebangs $dir
-        fi
-      done
-      # Wrap contents of files in bin with ${build-wrapper-env-package}/activate
-      for prog in $out/bin/* $out/sbin/*; do
+      # Warn about executables in $out not found in $out/{bin,sbin,libexec}.
+      # Also don't warn about shared libraries that compilers mark executable
+      # by default, however unwise that may be. See:
+      # https://www.technovelty.org/linux/shared-libraries-and-execute-permissions.html
+      declare -a stray_binaries
+      stray_binaries=($(
+        find "$out" -type f -executable \
+          -not -name "*.so" \
+          -not -name "*.dylib" \
+          -not -path "$out/bin/*" \
+          -not -path "$out/sbin/*" \
+          -not -path "$out/libexec/*" \
+          -printf "%P\n"
+        for i in bin sbin libexec; do
+          for j in $out/$i/*; do
+            if [ -d "$j" ]; then
+              find "$out" -type f -executable \
+                -path "$j/*" \
+                -not -name "*.so" \
+                -not -name "*.dylib" \
+                -printf "%P\n"
+            fi
+          done
+        done
+      ))
+      if [ ''${#stray_binaries[@]} -gt 0 ]; then
+        # [sic] ignored in 'nix build -L' output:
+        # <https://github.com/NixOS/nix/issues/11991>
+        echo "" 1>&2
+        echo "HINT: The following executables were found outside of '\$out/bin':" 1>&2
+        for binary in ''${stray_binaries[@]}; do
+          echo "  - $binary" 1>&2
+        done
+      fi
+
+      for prog in ''${bin[@]} ''${sbin[@]} ''${libexec[@]}; do
+        # Start by patching shebangs in executables, making sure to prefer the
+        # build wrapper environment over the "develop" environment.
+        patchShebangs "$prog"
+
+        # Wrap contents of executables with ${build-wrapper-env-package}/activate
         if [ -L "$prog" ]; then
           : # You cannot wrap a symlink, so just leave it be?
         else
@@ -247,6 +281,6 @@ pkgs.runCommandNoCC name
       # compression is stable on both Mac and Linux, but that can be slow,
       # and we probably don't actually need to compress the build cache
       # because we actively delete the old copy as we create a new one.
-      fd -u --type file | sort | tar -c --no-recursion -f $buildCache -T -
+      find . -type f | sort | tar -c --no-recursion -f $buildCache -T -
     ''
   )
