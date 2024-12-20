@@ -120,16 +120,14 @@ impl ContainerBuilder for ContainerizeProxy {
         let flox_version = &*FLOX_VERSION;
         let flox_version_tag = format!("v{}", flox_version.base_semver());
 
-        // FIXME: The released version of flox doesn't build the container
-        // // Use a released Flox container of the same semantic version as a base
-        // // because it already has:
-        // //
-        // // - most of the dependency store paths
-        // // - substitutors configured
-        // // - correct version of nix
-        // let flox_container = format!("{}:{}", FLOX_PROXY_IMAGE, flox_version_tag);
-        // command.arg(flox_container);
-        command.arg(FLOX_PROXY_IMAGE);
+        // Use a released Flox container of the same semantic version as a base
+        // because it already has:
+        //
+        // - most of the dependency store paths
+        // - substitutors configured
+        // - correct version of nix
+        let flox_container = format!("{}:{}", FLOX_PROXY_IMAGE, flox_version_tag);
+        command.arg(flox_container);
 
         // Inception L2: Nix args.
         command.arg("nix");
@@ -138,7 +136,15 @@ impl ContainerBuilder for ContainerizeProxy {
             "nix-command flakes",
             "--accept-flake-config",
         ]);
-        let flox_flake = FLOX_FLAKE;
+        let flox_flake = format!(
+            "{}/{}",
+            FLOX_FLAKE,
+            // Use a more specific commit if available, e.g. pushed to GitHub.
+            // TODO: Doesn't always work: https://github.com/flox/flox/issues/2502
+            (*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV)
+                .clone()
+                .unwrap_or(flox_version.commit_sha().unwrap_or(flox_version_tag))
+        );
         command.args(["run", &flox_flake, "--"]);
 
         // Inception L3: Flox args.

@@ -43,16 +43,105 @@ podman_cache_reset() {
   true
 }
 
+podman_restore_xdg_dirs() {
+  export XDG_CONFIG_HOME="$SHORT_TMP/.config"
+  export XDG_DATA_HOME="$SHORT_TMP/.local/share"
+  export XDG_RUNTIME_DIR="$SHORT_TMP/run"
+}
+
+# These dirs are where podman puts sockets and config files on the host machine
+# when creating and starting the VM. You need to set these before setting up the
+# temporary home directory since these will linked into that temporary home
+# directory.
+podman_global_dirs_setup() {
+  # Podman creates deeply nested directories and stores sockets in some of them,
+  # so we need to create locations to store those with shorter paths than what
+  # we'd get nesting them under `/tmp/nix-shell.XXXXXX/bats-run-XXXXXX`.
+  export SHORT_TMP="$(mktemp -d "/tmp/XXXXXX")"
+  export TMPDIR="$SHORT_TMP"
+  export XDG_CONFIG_HOME="$SHORT_TMP/.config"
+  export XDG_DATA_HOME="$SHORT_TMP/.local/share"
+  export XDG_RUNTIME_DIR="$SHORT_TMP/run"
+  echo "Podman XDG root: $SHORT_TMP" >&3
+  mkdir -p "$XDG_CONFIG_HOME/containers"
+  mkdir -p "$XDG_DATA_HOME"
+  mkdir -p "$XDG_RUNTIME_DIR"
+  echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$XDG_CONFIG_HOME/containers/policy.json"
+}
+
+podman_xdg_vars_setup() {
+  home_dir="$1"; shift;
+
+  xdg_reals_setup
+  # These get unset by the preceding function call and must be restored in order
+  # to use a single podman machine across the test run
+  podman_restore_xdg_dirs
+
+  test_cache_dir="${home_dir:?}/.cache"
+  test_state_dir="${home_dir:?}/.local/state"
+
+  # Create all of the directories
+  mkdir -p "$home_dir"
+  mkdir -p "$test_cache_dir"
+  mkdir -p "$test_state_dir"
+  chmod u+w "$home_dir"
+  chmod u+w "$test_cache_dir"
+  chmod u+w "$test_state_dir"
+
+  # Export the vars
+  export XDG_CACHE_HOME="$test_cache_dir"
+  export XDG_STATE_HOME="$test_state_dir"
+}
+
+# This is the same as the global `flox_vars_setup` except it doesn't run
+# `xdg_vars_setup` again.
+podman_flox_vars_setup() {
+  # We store sockets in FLOX_CACHE_DIR,
+  # so create cache in /tmp since TMPDIR may result in too long of a path.
+  FLOX_CACHE_DIR="$(mktemp -d /tmp/flox.tests.XXXXXX)"
+  export FLOX_CACHE_DIR
+  export FLOX_CONFIG_DIR="$XDG_CONFIG_HOME/flox"
+  export FLOX_DATA_HOME="$XDG_DATA_HOME/flox"
+  export FLOX_STATE_HOME="$XDG_STATE_HOME/flox"
+  export FLOX_META="$FLOX_CACHE_DIR/meta"
+  export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments"
+  export HOME="${FLOX_TEST_HOME:-$HOME}"
+}
+
+# We need to handle some directories globally for this file, so we need a
+# different setup routine than the typical `home_setup` function.
+podman_home_setup() {
+  if [[ "${__FT_RAN_HOME_SETUP:-}" = "real" ]]; then
+    export FLOX_TEST_HOME="$REAL_HOME"
+    export HOME="$REAL_HOME"
+  else
+    tmpdir="$(mktemp -d "/tmp/home.XXXXXX")"
+    mkdir -p "$tmpdir"
+    export FLOX_TEST_HOME="$tmpdir"
+    # Force recreation on `home' on every invocation.
+    unset __FT_RAN_HOME_SETUP
+  fi
+  echo "Podman home dir: $FLOX_TEST_HOME" >&3
+  podman_xdg_vars_setup "$FLOX_TEST_HOME"
+  podman_flox_vars_setup
+  export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME"
+}
+
+start_podman_machine() {
+  machine="$(podman machine list -n)"
+  if [ -z "$machine" ]; then
+    echo "Creating podman machine" >&3
+    podman machine init -v /tmp:/tmp -v /Users:/Users -v /private:/private
+  fi
+  echo "Starting podman machine" >&3
+  podman machine start
+}
+
 # ---------------------------------------------------------------------------- #
 
 setup() {
-  common_test_setup
-  home_setup short
   setup_isolated_flox
   project_setup
-
-  mkdir -p "$HOME/.config/containers"
-  echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$HOME/.config/containers/policy.json"
 
   # if ! is_linux; then
   #   return
@@ -82,13 +171,6 @@ EOF
 
   chmod +x "$BATS_TEST_TMPDIR/bin/podman"
   export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
-  machine="$(podman machine list -n)"
-  if [ -z "$machine" ]; then
-    echo "Creating podman machine" >&2
-    podman machine init -v /tmp:/tmp -v /Users:/Users
-  fi
-  echo "Starting podman machine" >&2
-  podman machine start || true
 }
 
 setup_file() {
@@ -104,6 +186,10 @@ setup_file() {
   # As a side effect the individual tests will run faster
   # because podman does not need to serialize writes to the cache.
   export BATS_NO_PARALLELIZE_WITHIN_FILE=true
+  podman_global_dirs_setup
+  common_test_setup
+  podman_home_setup
+  start_podman_machine
 }
 
 teardown() {
@@ -114,6 +200,9 @@ teardown() {
 teardown_file() {
   podman_cache_reset
   common_file_teardown
+  podman machine stop
+  rm -rf "$SHORT_TMP"
+  rm -rf "$FLOX_TEST_HOME"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -153,7 +242,6 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 }
 
 # bats test_tags=containerize:default-to-file
-# bats test_tags=bats:focus
 @test "container is written to a runtime by default" {
   env_setup_catalog
 
@@ -204,7 +292,7 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
   run bash -c 'PATH= "$FLOX_BIN" containerize --runtime podman' 3>&-
   assert_failure
-  assert_output --partial "Failed to call runtime"
+  assert_output --partial "macOS requires Docker or Podman"
 }
 
 function assert_container_output() {

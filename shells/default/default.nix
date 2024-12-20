@@ -14,6 +14,7 @@
   shfmt,
   mitmproxy,
   cargo-nextest,
+  tre-command,
   flox-cli,
   flox-cli-tests,
   flox-activations,
@@ -41,6 +42,7 @@ let
       procps
       pstree
       flox-cli-tests
+      tre-command
     ]
     ++ lib.optionals stdenv.isLinux [
       # The python3Packages.mitmproxy-macos package is broken on mac:
