@@ -2,7 +2,6 @@
   bash,
   coreutils,
   daemonize,
-  fd,
   findutils,
   flox-activations,
   getopt,
@@ -32,7 +31,6 @@ let
       bash
       coreutils
       daemonize
-      fd
       findutils
       getopt
       gnused
