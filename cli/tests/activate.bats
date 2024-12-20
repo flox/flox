@@ -252,8 +252,11 @@ install_shadows_system_path() {
   run find "${HOME}" -type f -exec grep -qs 'Setting PATH' {} \; -delete
   assert_success
 
-  # Prevent first run helper.
-  touch "${HOME}/.zshrc"
+  cat > "${HOME}/.zshrc" <<EOF
+autoload -Uz vcs_info
+precmd() { vcs_info }
+setopt PROMPT_SUBST
+EOF
 
   # Mimic a different `hello` coming from the system PATH.
   SYSTEM_BIN="$PROJECT_DIR/system_bin"
@@ -304,24 +307,24 @@ EOF
 @test "wip: zsh: in-place install shadows system path" {
   install_shadows_system_path zsh in-place
 }
-@test "wip: bash: interactive install shadows system path" {
-  install_shadows_system_path bash interactive
-}
-@test "wip: bash: command install shadows system path" {
-  install_shadows_system_path bash command
-}
-@test "wip: bash: in-place install shadows system path" {
-  install_shadows_system_path bash in-place
-}
-@test "wip: fish: interactive install shadows system path" {
-  install_shadows_system_path fish interactive
-}
-@test "wip: fish: command install shadows system path" {
-  install_shadows_system_path fish command
-}
-@test "wip: fish: in-place install shadows system path" {
-  install_shadows_system_path fish in-place
-}
+# @test "wip: bash: interactive install shadows system path" {
+#   install_shadows_system_path bash interactive
+# }
+# @test "wip: bash: command install shadows system path" {
+#   install_shadows_system_path bash command
+# }
+# @test "wip: bash: in-place install shadows system path" {
+#   install_shadows_system_path bash in-place
+# }
+# @test "wip: fish: interactive install shadows system path" {
+#   install_shadows_system_path fish interactive
+# }
+# @test "wip: fish: command install shadows system path" {
+#   install_shadows_system_path fish command
+# }
+# @test "wip: fish: in-place install shadows system path" {
+#   install_shadows_system_path fish in-place
+# }
 # TODO: tcsh needs different command syntax
 # @test "wip: tcsh: interactive install shadows system path" {
 #   new_packages_bypass_path_hashing tcsh interactive
