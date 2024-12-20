@@ -1,6 +1,7 @@
 mod activate;
 mod auth;
 mod build;
+mod check_for_upgrades;
 mod containerize;
 mod delete;
 mod edit;
@@ -927,6 +928,12 @@ enum InternalCommands {
     /// Lock a manifest file
     #[bpaf(command, hide)]
     LockManifest(#[bpaf(external(lock_manifest::lock_manifest))] lock_manifest::LockManifest),
+    /// Check for environmet upgrades
+    #[bpaf(command, hide)]
+    CheckForUpgrades(
+        #[bpaf(external(check_for_upgrades::check_for_upgrades))]
+        check_for_upgrades::CheckForUpgrades,
+    ),
 }
 
 impl InternalCommands {
@@ -938,6 +945,7 @@ impl InternalCommands {
             InternalCommands::Publish(args) => args.handle(config, flox).await?,
             InternalCommands::Upload(args) => args.handle(config, flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
+            InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
         }
         Ok(())
     }
