@@ -30,7 +30,7 @@ runs:
   using: "composite"
   steps:
     - name: "Setup Tailscale"
-      uses: "tailscale/github-action@v2"
+      uses: "tailscale/github-action@v3"
       if: ${{ inputs.TAILSCALE_URL && inputs.TAILSCALE_AUTH_KEY }}
       with:
         args: "--timeout 30s --login-server ${{ inputs.TAILSCALE_URL }}"
