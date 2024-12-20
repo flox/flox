@@ -1,0 +1,897 @@
+~/src/flox/macos-containerize-ci/cli ~/src/flox/macos-containerize-ci
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.07s
+warning: Git tree '/Users/zmitchell/src/flox/macos-containerize-ci' is dirty
+Using saved setting for 'extra-substituters = https://cache.flox.dev' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs=' from ~/.local/share/nix/trusted-settings.json.
+warning: Nix search path entry '/nix/var/nix/profiles/per-user/root/channels' does not exist, ignoring
+make: Entering directory '/Users/zmitchell/src/flox/macos-containerize-ci/pkgdb'
+mkdir -p tests;
+Generating tests/.gitignore
+make: Leaving directory '/Users/zmitchell/src/flox/macos-containerize-ci/pkgdb'
+warning: Git tree '/Users/zmitchell/src/flox/macos-containerize-ci' is dirty
+Using saved setting for 'extra-substituters = https://cache.flox.dev' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs=' from ~/.local/share/nix/trusted-settings.json.
+~/src/flox/macos-containerize-ci/cli ~/src/flox/macos-containerize-ci
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s
+warning: Git tree '/Users/zmitchell/src/flox/macos-containerize-ci' is dirty
+Using saved setting for 'extra-substituters = https://cache.flox.dev' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs=' from ~/.local/share/nix/trusted-settings.json.
+warning: Nix search path entry '/nix/var/nix/profiles/per-user/root/channels' does not exist, ignoring
+~/src/flox/macos-containerize-ci/cli ~/src/flox/macos-containerize-ci
+warning: unused variable: `flox_version_tag`
+  --> flox/src/commands/containerize/macos_containerize_proxy.rs:93:13
+   |
+93 |         let flox_version_tag = format!("v{}", flox_version.base_semver());
+   |             ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_flox_version_tag`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: `flox` (bin "flox") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s
+flox-cli-tests: Running test suite with:
+  FLOX_BIN:                 /Users/zmitchell/src/flox/macos-containerize-ci/cli/target/debug/flox
+  WATCHDOG_BIN:             /Users/zmitchell/src/flox/macos-containerize-ci/cli/target/debug/flox-watchdog
+  BUILDENV_BIN:             /Users/zmitchell/src/flox/macos-containerize-ci/build/flox-buildenv/bin/buildenv
+  FLOX_ACTIVATIONS_BIN:     /Users/zmitchell/src/flox/macos-containerize-ci/cli/target/debug/flox-activations
+  PKGDB_BIN:                /Users/zmitchell/src/flox/macos-containerize-ci/pkgdb/bin/pkgdb
+  NIX_BIN:                  /nix/store/7wr913d7zdn899ggl9p48gas243znipa-nix-2.18.8/bin/nix
+  FLOX_INTERPRETER:         /Users/zmitchell/src/flox/macos-containerize-ci/build/flox-activation-scripts
+  PROJECT_TESTS_DIR:        /Users/zmitchell/src/flox/macos-containerize-ci/cli/tests
+  INPUT_DATA:               /Users/zmitchell/src/flox/macos-containerize-ci/test_data/input_data
+  GENERATED_DATA:           /Users/zmitchell/src/flox/macos-containerize-ci/test_data/generated
+  bats                      /nix/store/h7inz07x6739s38i02532g5pj6dlnx8k-bats-with-libraries-1.11.0/bin/bats
+  bats options              --print-output-on-failure --verbose-run --timing --jobs 4 --no-parallelize-across-files 
+  bats tests                containerize.bats
+WARNING: This test run only contains tests tagged `bats:focus`!
+1..1
+FLOX_BIN: /Users/zmitchell/src/flox/macos-containerize-ci/cli/target/debug/flox
+NIX_BIN: /nix/store/7wr913d7zdn899ggl9p48gas243znipa-nix-2.18.8/bin/nix
+NIX_STORE: /nix/store
+REAL_GIT_CONFIG_GLOBAL: /Users/zmitchell/.gitconfig
+REAL_GIT_CONFIG_SYSTEM: /etc/gitconfig
+REAL_HOME: /Users/zmitchell
+REAL_XDG_CACHE_HOME: /Users/zmitchell/.cache
+REAL_XDG_CONFIG_HOME: /Users/zmitchell/.config
+REAL_XDG_DATA_HOME: /Users/zmitchell/.local/share
+REAL_XDG_STATE_HOME: /Users/zmitchell/.local/state
+TESTS_DIR: /tmp/nix-shell.tvmXfz/flox-cli-tests-UExzoJ
+GENERATED_DATA: /Users/zmitchell/src/flox/macos-containerize-ci/test_data/generated
+FLOX_TEST_HOME: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/home
+HOME: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/home
+PATH: /nix/store/zk4mlqhnhz7jj8yjm8fd2fzlgkrsslfz-bats-1.11.0/libexec/bats-core:/Users/zmitchell/src/flox/macos-containerize-ci/cli/target/debug:/Users/zmitchell/src/flox/macos-containerize-ci/pkgdb/bin:/nix/store/jin4ifpw4bvi554g02phy668gvaylqn1-bash-interactive-5.2p32/bin:/nix/store/lh19r6hngpjap0qaflmx0iz0bqhggps6-fish-3.7.1/bin:/nix/store/hmzci951nivw8w3sza8x7wr8g2x5k5d7-tcsh-6.24.13/bin:/nix/store/3ibdmy0gnaaqv7jq9572dk6af8y4f9xh-zsh-5.9/bin:/nix/store/fzjwn4wgcn86dvk02vkfdkzr24zwh1fq-dash-0.5.12/bin:/nix/store/h7inz07x6739s38i02532g5pj6dlnx8k-bats-with-libraries-1.11.0/bin:/nix/store/b7j95xd7yccclshfln10k843q2qf20yg-coreutils-9.5/bin:/nix/store/jwyikhivayg1cnhq8dy396gafw2p7nzc-curl-8.9.1-bin/bin:/nix/store/xb5jrhn226vpndfixnqhbkff3sqwhiw7-diffutils-3.10/bin:/nix/store/63lsb303zwiqhc38x9b9mskw9gq01vv4-entr-5.6/bin:/nix/store/7id3dw78arbcbxnnzrz9kafk7xlxzhcn-expect-5.45.4/bin:/nix/store/q8pjl22r3x66x6dlk8w36a7axjlyl3rn-findutils-4.10.0/bin:/nix/store/x8lyh3242pz9f999dlkig668j3pfb6zm-gawk-5.2.2/bin:/nix/store/fzsjyd9wxiymv5j38f1igk99660hi4vl-git-2.46.1/bin:/nix/store/dxqp89x3g9z721ic4ddis07hwxqafn86-gnugrep-3.11/bin:/nix/store/wvj27apjfw97h27m05qxkqx6188nh41f-gnupg-2.4.5/bin:/nix/store/8yjj9w5ay33pb741sr2mcfszmsvzbqaz-gnused-4.9/bin:/nix/store/d24cyixkbbz680shw069dqn5fdhvpzxi-gnutar-1.35/bin:/nix/store/kkfa84h1sd7496mydwhnnqf0kdbgc0fa-jq-1.7.1-bin/bin:/nix/store/83nfagk65h70zmwkkabq4mxqhrv0mcn8-man-db-2.12.1/bin:/nix/store/7wr913d7zdn899ggl9p48gas243znipa-nix-2.18.8/bin:/nix/store/9c7gy9i74k71l3df083anca84di29n1m-openssh-9.8p1/bin:/nix/store/w4s5lbp56vmm1mkfp5prp6iaa2wp3r2q-parallel-20240922/bin:/nix/store/wxffczyzdg726fp74fk3nwq51yvhhy27-pstree-2.39/bin:/nix/store/c8r5z0x59bsyx53zrlcha69srfjw2x84-util-linux-1003.1-2008/bin:/nix/store/nlnz9881mv4cg9d1mhadxnnvfcr0wny0-which-2.21/bin:/nix/store/x2hwfhcs7mcd3sslvkvraw32l3wjksw2-python3.12-yq-3.4.3/bin:/nix/store/csan4hrkyjcbq5bq1ml4nhzbimhmhixq-process-compose-1.34.0/bin:/nix/store/5lpc8593zr7id1vzhha9jllszzqnfl7m-procps-1003.1-2008/bin:/nix/store/p3lz44rirshy6z1f3mzdgk2py9mqssjx-podman-5.2.3/bin:/nix/store/pb1ay1rh30mx1qxwqmcwmwy4wm98hira-locale/bin
+XDG_CACHE_HOME: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/home/.cache
+XDG_CONFIG_HOME: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/home/.config
+XDG_DATA_HOME: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/home/.local/share
+XDG_STATE_HOME: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/home/.local/state
+FLOX_CACHE_DIR: /tmp/flox.tests.uj1d91
+FLOX_CONFIG_DIR: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/home/.config/flox
+FLOX_DATA_HOME: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/home/.local/share/flox
+FLOX_STATE_HOME: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/home/.local/state/flox
+FLOX_META: /tmp/flox.tests.uj1d91/meta
+FLOX_ENVIRONMENTS: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/home/.local/share/flox/environments
+NIX_SYSTEM: aarch64-darwin
+FLOX_TEST_SSH_KEY: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/ssh/id_ed25519
+SSH_AUTH_SOCK: /tmp/nix-shell.tvmXfz/ssh-nu3Nh81t9KK2/agent.90975
+GIT_CONFIG_SYSTEM: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/git/gitconfig.system
+GIT_CONFIG_GLOBAL: /tmp/nix-shell.tvmXfz/bats-run-0WWH64/suite/git/gitconfig.global
+PKGDB_NIXPKGS_REV_NEW: ab5fd150146dcfe41fda501134e6503932cc8dfd
+PKGDB_NIXPKGS_REV_OLD: e8039594435c68eb4f780f3e9bf3972a7399c4b1
+PKGDB_NIXPKGS_REF_NEW: github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd
+PKGDB_NIXPKGS_REF_OLD: github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1
+_PKGDB_GA_REGISTRY_REF_OR_REV: ab5fd150146dcfe41fda501134e6503932cc8dfd
+Creating podman machine
+Looking up Podman Machine image at quay.io/podman/machine-os:5.2 to create VM
+12113a44435343a5cb2f6fc1c8cb4589b359bafd6123aab0c293e9cf884184ae
+Machine init complete
+To start your machine run:
+
+	podman machine start
+
+Starting podman machine
+not ok 1 container is written to a runtime by default in 109671ms
+# tags: bats:focus containerize
+# (in test file containerize.bats, line 264)
+#   `exit 1' failed
+# time="2024-12-19T17:24:57-07:00" level=info msg="/nix/store/p3lz44rirshy6z1f3mzdgk2py9mqssjx-podman-5.2.3/bin/podman filtering at log level debug"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="Using Podman machine with `applehv` virtualization provider"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.config/containers/podman/machine/applehv is 58"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv is 63"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/cache is 69"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="socket length for /tmp/nix-shell.tvmXfz/podman is 28"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.config/containers/podman/machine/applehv is 58"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv is 63"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/cache is 69"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="socket length for /tmp/nix-shell.tvmXfz/podman is 28"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.config/containers/podman/machine/applehv/podman-machine-default.json is 86"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/podman-machine-default-arm64.raw is 96"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="Using registries.d directory /etc/containers/registries.d"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="Loading registries configuration \"/etc/containers/registries.conf\""
+# time="2024-12-19T17:24:57-07:00" level=debug msg="Trying to access \"quay.io/podman/machine-os:5.2\""
+# time="2024-12-19T17:24:57-07:00" level=debug msg="No credentials matching quay.io/podman/machine-os found in /tmp/home.PA2Vyj/.config/containers/auth.json"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="No credentials matching quay.io/podman/machine-os found in /tmp/home.PA2Vyj/.config/containers/auth.json"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="No credentials matching quay.io/podman/machine-os found in /tmp/home.PA2Vyj/.docker/config.json"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="No credentials matching quay.io/podman/machine-os found in /tmp/home.PA2Vyj/.dockercfg"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="No credentials for quay.io/podman/machine-os found"
+# time="2024-12-19T17:24:57-07:00" level=debug msg=" No signature storage configuration found for quay.io/podman/machine-os:5.2, using built-in default file:///tmp/home.PA2Vyj/.local/share/containers/sigstore"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="Looking for TLS certificates and private keys in /etc/docker/certs.d/quay.io"
+# time="2024-12-19T17:24:57-07:00" level=debug msg="GET https://quay.io/v2/"
+# time="2024-12-19T17:24:58-07:00" level=debug msg="Ping https://quay.io/v2/ status 401"
+# time="2024-12-19T17:24:58-07:00" level=debug msg="GET https://quay.io/v2/auth?scope=repository%3Apodman%2Fmachine-os%3Apull&service=quay.io"
+# time="2024-12-19T17:24:59-07:00" level=debug msg="Increasing token expiration to: 60 seconds"
+# time="2024-12-19T17:24:59-07:00" level=debug msg="GET https://quay.io/v2/podman/machine-os/manifests/5.2"
+# time="2024-12-19T17:24:59-07:00" level=debug msg="Content-Type from manifest GET is \"application/vnd.oci.image.index.v1+json\""
+# time="2024-12-19T17:24:59-07:00" level=debug msg="found image in digest: \"sha256:d43a54ba14e57e8c10ee5dbde4b7981d9e2d685cff1161aa6673302b69a5e2cd\""
+# time="2024-12-19T17:24:59-07:00" level=debug msg="GET https://quay.io/v2/podman/machine-os/manifests/sha256:d43a54ba14e57e8c10ee5dbde4b7981d9e2d685cff1161aa6673302b69a5e2cd"
+# time="2024-12-19T17:24:59-07:00" level=debug msg="Content-Type from manifest GET is \"application/vnd.oci.image.manifest.v1+json\""
+# time="2024-12-19T17:24:59-07:00" level=debug msg="original artifact file name: podman-machine.aarch64.applehv.raw.zst"
+# time="2024-12-19T17:24:59-07:00" level=debug msg="GET https://quay.io/v2/podman/machine-os/manifests/sha256:d43a54ba14e57e8c10ee5dbde4b7981d9e2d685cff1161aa6673302b69a5e2cd"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Content-Type from manifest GET is \"application/vnd.oci.image.manifest.v1+json\""
+# time="2024-12-19T17:25:00-07:00" level=debug msg="original artifact file name: podman-machine.aarch64.applehv.raw.zst"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/cache/d43a54ba14e57e8c10ee5dbde4b7981d9e2d685cff1161aa6673302b69a5e2cd.raw.zst is 142"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/cache/d43a54ba14e57e8c10ee5dbde4b7981d9e2d685cff1161aa6673302b69a5e2cd is 134"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="no signature policy file found: using default allow everything signature policy"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Using registries.d directory /etc/containers/registries.d"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Trying to access \"quay.io/podman/machine-os@sha256:d43a54ba14e57e8c10ee5dbde4b7981d9e2d685cff1161aa6673302b69a5e2cd\""
+# time="2024-12-19T17:25:00-07:00" level=debug msg="No credentials matching quay.io/podman/machine-os found in /tmp/home.PA2Vyj/.config/containers/auth.json"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="No credentials matching quay.io/podman/machine-os found in /tmp/home.PA2Vyj/.config/containers/auth.json"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="No credentials matching quay.io/podman/machine-os found in /tmp/home.PA2Vyj/.docker/config.json"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="No credentials matching quay.io/podman/machine-os found in /tmp/home.PA2Vyj/.dockercfg"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="No credentials for quay.io/podman/machine-os found"
+# time="2024-12-19T17:25:00-07:00" level=debug msg=" No signature storage configuration found for quay.io/podman/machine-os@sha256:d43a54ba14e57e8c10ee5dbde4b7981d9e2d685cff1161aa6673302b69a5e2cd, using built-in default file:///tmp/home.PA2Vyj/.local/share/containers/sigstore"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Looking for TLS certificates and private keys in /etc/docker/certs.d/quay.io"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="GET https://quay.io/v2/"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Ping https://quay.io/v2/ status 401"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="GET https://quay.io/v2/auth?scope=repository%3Apodman%2Fmachine-os%3Apull&service=quay.io"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Increasing token expiration to: 60 seconds"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="GET https://quay.io/v2/podman/machine-os/manifests/sha256:d43a54ba14e57e8c10ee5dbde4b7981d9e2d685cff1161aa6673302b69a5e2cd"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Content-Type from manifest GET is \"application/vnd.oci.image.manifest.v1+json\""
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Error creating a SQLite blob info cache at /tmp/home.PA2Vyj/.local/share/containers/cache/blob-info-cache-v1.sqlite, using a memory-only cache: beginning transaction: Binary was compiled with 'CGO_ENABLED=0', go-sqlite3 requires cgo to work. This is a stub"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="IsRunningImageAllowed for image docker:quay.io/podman/machine-os@sha256:d43a54ba14e57e8c10ee5dbde4b7981d9e2d685cff1161aa6673302b69a5e2cd"
+# time="2024-12-19T17:25:00-07:00" level=debug msg=" Using default policy section"
+# time="2024-12-19T17:25:00-07:00" level=debug msg=" Requirement 0: allowed"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Overall: allowed"
+# Getting image source signatures
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Reading /tmp/home.PA2Vyj/.local/share/containers/sigstore/podman/machine-os@sha256=d43a54ba14e57e8c10ee5dbde4b7981d9e2d685cff1161aa6673302b69a5e2cd/signature-1"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Not looking for sigstore attachments: disabled by configuration"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Manifest has MIME type application/vnd.oci.image.manifest.v1+json, ordered candidate list [application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json]"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="... will first try using the original manifest unmodified"
+# Copying blob sha256:12113a44435343a5cb2f6fc1c8cb4589b359bafd6123aab0c293e9cf884184ae
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Checking if we can reuse blob sha256:12113a44435343a5cb2f6fc1c8cb4589b359bafd6123aab0c293e9cf884184ae: general substitution = true, compression for MIME type \"application/zstd\" = false"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="Downloading /v2/podman/machine-os/blobs/sha256:12113a44435343a5cb2f6fc1c8cb4589b359bafd6123aab0c293e9cf884184ae"
+# time="2024-12-19T17:25:00-07:00" level=debug msg="GET https://quay.io/v2/podman/machine-os/blobs/sha256:12113a44435343a5cb2f6fc1c8cb4589b359bafd6123aab0c293e9cf884184ae"
+# time="2024-12-19T17:25:01-07:00" level=debug msg="Detected compression format zstd"
+# time="2024-12-19T17:25:01-07:00" level=debug msg="Compression change for blob sha256:12113a44435343a5cb2f6fc1c8cb4589b359bafd6123aab0c293e9cf884184ae (\"application/zstd\") not supported"
+# time="2024-12-19T17:25:01-07:00" level=debug msg="Using original blob without modification"
+# Copying config sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a
+# time="2024-12-19T17:25:11-07:00" level=debug msg="Downloading /v2/podman/machine-os/blobs/sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+# time="2024-12-19T17:25:11-07:00" level=debug msg="GET https://quay.io/v2/podman/machine-os/blobs/sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+# time="2024-12-19T17:25:11-07:00" level=debug msg="No compression detected"
+# time="2024-12-19T17:25:11-07:00" level=debug msg="Compression change for blob sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a (\"application/vnd.oci.empty.v1+json\") not supported"
+# time="2024-12-19T17:25:11-07:00" level=debug msg="Using original blob without modification"
+# Writing manifest to image destination
+# time="2024-12-19T17:25:11-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/cache/d43a54ba14e57e8c10ee5dbde4b7981d9e2d685cff1161aa6673302b69a5e2cd is 134"
+# time="2024-12-19T17:25:11-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/cache/d43a54ba14e57e8c10ee5dbde4b7981d9e2d685cff1161aa6673302b69a5e2cd.raw.zst is 142"
+# time="2024-12-19T17:25:11-07:00" level=debug msg="Detected compression format zstd"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="--> imagePath is \"/tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/podman-machine-default-arm64.raw\""
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.config/containers/podman/machine/applehv/podman-machine-default.ign is 85"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="resizing /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/podman-machine-default-arm64.raw to 107374182400 bytes"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="writing ignition file to \"/tmp/home.PA2Vyj/.config/containers/podman/machine/applehv/podman-machine-default.ign\""
+# time="2024-12-19T17:25:20-07:00" level=debug msg="writing configuration file \"/tmp/home.PA2Vyj/.config/containers/podman/machine/applehv/podman-machine-default.json\""
+# time="2024-12-19T17:25:20-07:00" level=debug msg="Called machine init.PersistentPostRunE(/nix/store/p3lz44rirshy6z1f3mzdgk2py9mqssjx-podman-5.2.3/bin/podman machine init --log-level debug -v /tmp:/tmp -v /Users:/Users -v /private:/private)"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="Shutting down engines"
+# time="2024-12-19T17:25:20-07:00" level=info msg="/nix/store/p3lz44rirshy6z1f3mzdgk2py9mqssjx-podman-5.2.3/bin/podman filtering at log level debug"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="Using Podman machine with `applehv` virtualization provider"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.config/containers/podman/machine/applehv is 58"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv is 63"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/cache is 69"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/nix-shell.tvmXfz/podman is 28"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.config/containers/podman/machine/applehv/podman-machine-default.json is 86"
+# Starting machine "podman-machine-default"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.config/containers/podman/machine/applehv is 58"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv is 63"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/cache is 69"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/nix-shell.tvmXfz/podman is 28"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.config/containers/podman/machine/applehv/podman-machine-default.json is 86"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="connection refused: http://localhost:64829/vm/state"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="writing configuration file \"/tmp/home.PA2Vyj/.config/containers/podman/machine/applehv/podman-machine-default.json\""
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/nix-shell.tvmXfz/podman/gvproxy.pid is 40"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.config/containers/podman/machine/applehv is 58"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv is 63"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/cache is 69"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/nix-shell.tvmXfz/podman is 28"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/nix-shell.tvmXfz/podman/podman-machine-default-api.sock is 60"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="{true 1500 map[forward-dest:[/run/user/501/podman/podman.sock] forward-identity:[/tmp/home.PA2Vyj/.local/share/containers/podman/machine/machine] forward-sock:[/tmp/nix-shell.tvmXfz/podman/podman-machine-default-api.sock] forward-user:[core]] [] map[] /tmp/nix-shell.tvmXfz/podman/gvproxy.log /tmp/nix-shell.tvmXfz/podman/gvproxy.pid 64821}"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/nix-shell.tvmXfz/podman/podman-machine-default-gvproxy.sock is 64"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="gvproxy command-line: /nix/store/p3lz44rirshy6z1f3mzdgk2py9mqssjx-podman-5.2.3/libexec/podman/gvproxy -debug -mtu 1500 -ssh-port 64821 -listen-vfkit unixgram:///tmp/nix-shell.tvmXfz/podman/podman-machine-default-gvproxy.sock -forward-identity /tmp/home.PA2Vyj/.local/share/containers/podman/machine/machine -forward-sock /tmp/nix-shell.tvmXfz/podman/podman-machine-default-api.sock -forward-dest /run/user/501/podman/podman.sock -forward-user core -pid-file /tmp/nix-shell.tvmXfz/podman/gvproxy.pid -log-file /tmp/nix-shell.tvmXfz/podman/gvproxy.log"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/nix-shell.tvmXfz/podman/podman-machine-default-gvproxy.sock is 64"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="checking that \"gvproxy\" socket is ready"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/nix-shell.tvmXfz/podman/podman-machine-default.log is 55"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/nix-shell.tvmXfz/podman/podman-machine-default.sock is 56"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="helper binary path is: /nix/store/s5fsjyi41hh85xa2s2kr4rdbb95c6awc-vfkit-0.5.1/bin/vfkit"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/podman-machine-default-ignition.sock is 100"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="first boot detected"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="serving ignition file over /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/podman-machine-default-ignition.sock"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="listening for ready on: /tmp/nix-shell.tvmXfz/podman/podman-machine-default.sock"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="socket length for /tmp/home.PA2Vyj/.config/containers/podman/machine/applehv/podman-machine-default.ign is 85"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="reading ignition file: /tmp/home.PA2Vyj/.config/containers/podman/machine/applehv/podman-machine-default.ign"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="waiting for ready notification"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="helper command-line: [/nix/store/s5fsjyi41hh85xa2s2kr4rdbb95c6awc-vfkit-0.5.1/bin/vfkit --cpus 5 --memory 2048 --bootloader efi,variable-store=/tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/efi-bl-podman-machine-default,create --device virtio-blk,path=/tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/podman-machine-default-arm64.raw --device virtio-rng --device virtio-vsock,port=1025,socketURL=/tmp/nix-shell.tvmXfz/podman/podman-machine-default.sock,listen --device virtio-serial,logFilePath=/tmp/nix-shell.tvmXfz/podman/podman-machine-default.log --device rosetta,mountTag=rosetta,install --device virtio-net,unixSocketPath=/tmp/nix-shell.tvmXfz/podman/podman-machine-default-gvproxy.sock,mac=5a:94:ef:e4:0c:ee --device virtio-fs,sharedDir=/tmp,mountTag=e9671acd244849c57167c658fa2f96975204 --device virtio-fs,sharedDir=/Users,mountTag=a2a0ee2c717462feb1de2f5afd59de5fd2d8 --device virtio-fs,sharedDir=/private,mountTag=71708eb255bc230cd7c91dd26f7667a7b938 --restful-uri tcp://localhost:64829 --device virtio-gpu,width=800,height=600 --device virtio-input,pointing --device virtio-input,keyboard --gui --device virtio-vsock,port=1024,socketURL=/tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/podman-machine-default-ignition.sock,listen]"
+# time="2024-12-19T17:25:20-07:00" level=debug msg="ignition socket device: /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/podman-machine-default-ignition.sock"
+# time="2024-12-19T17:25:20-07:00" level=info msg="&{5 2048    {[efi variable-store=/tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/efi-bl-podman-machine-default create] true}  [virtio-blk,path=/tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/podman-machine-default-arm64.raw virtio-rng virtio-vsock,port=1025,socketURL=/tmp/nix-shell.tvmXfz/podman/podman-machine-default.sock,listen virtio-serial,logFilePath=/tmp/nix-shell.tvmXfz/podman/podman-machine-default.log rosetta,mountTag=rosetta,install virtio-net,unixSocketPath=/tmp/nix-shell.tvmXfz/podman/podman-machine-default-gvproxy.sock,mac=5a:94:ef:e4:0c:ee virtio-fs,sharedDir=/tmp,mountTag=e9671acd244849c57167c658fa2f96975204 virtio-fs,sharedDir=/Users,mountTag=a2a0ee2c717462feb1de2f5afd59de5fd2d8 virtio-fs,sharedDir=/private,mountTag=71708eb255bc230cd7c91dd26f7667a7b938 virtio-gpu,width=800,height=600 virtio-input,pointing virtio-input,keyboard virtio-vsock,port=1024,socketURL=/tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/podman-machine-default-ignition.sock,listen] tcp://localhost:64829  true}"
+# time="2024-12-19T17:25:20-07:00" level=info msg="boot parameters: &{EFIVariableStorePath:/tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/efi-bl-podman-machine-default CreateVariableStore:true}"
+# time="2024-12-19T17:25:20-07:00" level=info
+# time="2024-12-19T17:25:20-07:00" level=info msg="virtual machine parameters:"
+# time="2024-12-19T17:25:20-07:00" level=info msg="\tvCPUs: 5"
+# time="2024-12-19T17:25:20-07:00" level=info msg="\tmemory: 2048 MiB"
+# time="2024-12-19T17:25:20-07:00" level=info
+# time="2024-12-19T17:25:20-07:00" level=info msg="Adding virtio-blk device (imagePath: /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/podman-machine-default-arm64.raw)"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Adding virtio-rng device"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Adding virtio-vsock device"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Adding virtio-serial device (logFile: /tmp/nix-shell.tvmXfz/podman/podman-machine-default.log)"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Adding virtio-fs device"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Adding virtio-net device (nat: false macAddress: [5a:94:ef:e4:0c:ee])"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Using unix socket /tmp/nix-shell.tvmXfz/podman/podman-machine-default-gvproxy.sock"
+# time="2024-12-19T17:25:20-07:00" level=info msg="local: /tmp/home.PA2Vyj/Library/Application Support/vfkit/net-91319-318368835.sock remote: /tmp/nix-shell.tvmXfz/podman/podman-machine-default-gvproxy.sock"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Adding virtio-fs device"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Adding virtio-fs device"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Adding virtio-fs device"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Adding virtio-gpu device"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Adding virtio-input pointing device"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Adding virtio-input keyboard device"
+# [GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+#
+# [GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+#  - using env:	export GIN_MODE=release
+#  - using code:	gin.SetMode(gin.ReleaseMode)
+#
+# [GIN-debug] GET    /vm/state                 --> github.com/crc-org/vfkit/pkg/rest.VirtualMachineStateHandler.GetVMState-fm (3 handlers)
+# [GIN-debug] POST   /vm/state                 --> github.com/crc-org/vfkit/pkg/rest.VirtualMachineStateHandler.SetVMState-fm (3 handlers)
+# [GIN-debug] GET    /vm/inspect               --> github.com/crc-org/vfkit/pkg/rest.VirtualMachineInspector.Inspect-fm (3 handlers)
+# [GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+# Please check https://pkg.go.dev/github.com/gin-gonic/gin#readme-don-t-trust-all-proxies for details.
+# [GIN-debug] Listening and serving HTTP on localhost:64829
+# time="2024-12-19T17:25:20-07:00" level=info msg="virtual machine is running"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Exposing vsock port 1025 on /tmp/nix-shell.tvmXfz/podman/podman-machine-default.sock (listening)"
+# time="2024-12-19T17:25:20-07:00" level=info msg="Exposing vsock port 1024 on /tmp/home.PA2Vyj/.local/share/containers/podman/machine/applehv/podman-machine-default-ignition.sock (listening)"
+# time="2024-12-19T17:25:20-07:00" level=info msg="waiting for VM to stop"
+# time="2024-12-19T17:25:30-07:00" level=debug msg="ready ack received"
+# time="2024-12-19T17:25:30-07:00" level=debug msg="ready notification received"
+#
+# This machine is currently configured in rootless mode. If your containers
+# require root permissions (e.g. ports < 1024), or if you run into compatibility
+# issues with non-podman clients, you can switch using the following command:
+#
+# 	podman machine set --rootful
+#
+# [GIN] 2024/12/19 - 17:25:30 | 200 |     551.917µs |       127.0.0.1 | GET      "/vm/state"
+# time="2024-12-19T17:25:30-07:00" level=debug msg="Running ssh command on machine \"podman-machine-default\": true"
+# time="2024-12-19T17:25:30-07:00" level=debug msg="Running ssh command on machine \"podman-machine-default\": /usr/bin/bash"
+# API forwarding listening on: /tmp/nix-shell.tvmXfz/podman/podman-machine-default-api.sock
+# You can still connect Docker API clients by setting DOCKER_HOST using the
+# following command in your terminal session:
+#
+#         export DOCKER_HOST='unix:///tmp/nix-shell.tvmXfz/podman/podman-machine-default-api.sock'
+#
+# time="2024-12-19T17:25:31-07:00" level=debug msg="writing configuration file \"/tmp/home.PA2Vyj/.config/containers/podman/machine/applehv/podman-machine-default.json\""
+# Machine "podman-machine-default" started successfully
+# time="2024-12-19T17:25:31-07:00" level=debug msg="Called machine start.PersistentPostRunE(/nix/store/p3lz44rirshy6z1f3mzdgk2py9mqssjx-podman-5.2.3/bin/podman machine start --log-level debug)"
+# time="2024-12-19T17:25:31-07:00" level=debug msg="Shutting down engines"
+# ✨ Created environment 'test' (aarch64-darwin)
+#
+# Next:
+#   $ flox search <package>    <- Search for a package
+#   $ flox install <package>   <- Install a package into an environment
+#   $ flox activate            <- Enter the environment
+#   $ flox edit                <- Add environment variables and shell hooks
+#
+# ✅ Environment successfully updated.
+# /tmp/nix-shell.tvmXfz/bats-run-0WWH64/test/1/bin/podman
+# time="2024-12-19T17:25:31-07:00" level=info msg="/nix/store/p3lz44rirshy6z1f3mzdgk2py9mqssjx-podman-5.2.3/bin/podman filtering at log level debug"
+# time="2024-12-19T17:25:31-07:00" level=debug msg="Called run.PersistentPreRunE(/nix/store/p3lz44rirshy6z1f3mzdgk2py9mqssjx-podman-5.2.3/bin/podman run --rm --userns  --log-level debug --mount type=bind,source=/private/tmp/nix-shell.tvmXfz/bats-run-0WWH64/test/1/test,target=/flox_env --env HOME=/flox_home --mount type=bind,source=/tmp/home.PA2Vyj,target=/flox_home --env FLOX_DISABLE_METRICS=true ghcr.io/flox/flox nix --extra-experimental-features nix-command flakes --accept-flake-config run github:flox/flox -- containerize --dir /flox_env --tag latest --file -)"
+# time="2024-12-19T17:25:31-07:00" level=debug msg="SSH Ident Key \"/tmp/home.PA2Vyj/.local/share/containers/podman/machine/machine\" SHA256:RubZN9pYVrjLMIOB0CuMwVXCv9uEUs0TKMyiyzM13qQ ssh-ed25519"
+# time="2024-12-19T17:25:31-07:00" level=debug msg="DoRequest Method: GET URI: http://d/v5.2.3/libpod/_ping"
+# time="2024-12-19T17:25:31-07:00" level=debug msg="Loading registries configuration \"/etc/containers/registries.conf\""
+# time="2024-12-19T17:25:31-07:00" level=debug msg="DoRequest Method: POST URI: http://d/v5.2.3/libpod/images/pull"
+# Trying to pull ghcr.io/flox/flox:latest...
+# Getting image source signatures
+# Copying blob sha256:cc4dac0a07463fd5c448b2bfdb3b0d1bd9d2f4a209e602ed668bb652497988b3
+# Copying blob sha256:a27f694102d985bb9d78b01c622be099d8e33f3efbca8854ede4fa29c91be36e
+# Copying blob sha256:78eb46c3d18fc32f95f0c8c1b27daf0b676d78734460cdfe360f205f02053bf3
+# Copying blob sha256:bb536f766f1b5355cd1398a20802cd01d5b1c76e08df1e5c9808d635b54b9bfc
+# Copying blob sha256:df6854cf35e13aa11a3eacf23531a31ab04af47a3068a800dc3bc73c614a94b6
+# Copying blob sha256:9e70610fc2d57ca58bc38f0500b4d700656dce10105a84f7633bcf3bd2e1d663
+# Copying blob sha256:d751c171e83fc266362fdeed9a036aeaf1773d455ee1ba0f4739d747b77c1a1b
+# Copying blob sha256:c10fea46a2f96ce423e2271ff55a26e5b600816e9e2724b4519a741df641b851
+# Copying blob sha256:6abfda7c4176fe3f2200fd2607d3e800e383b1ed9933392b5dde6db61dcb90ad
+# Copying blob sha256:be2996c4f268b5a4e4fac1f6c839561d2c2dd1992f96fa4e6a24f9cb1b2ea44d
+# Copying blob sha256:24dfb501ace6a99cad0ebd60a252ba50a5d0e1714aacf8b1c154a73871ae7fdf
+# Copying blob sha256:01346989dc7827167f510cfaf20b8c9ce8dc08508056c5349e4820edf9c91a46
+# Copying blob sha256:f5a52ece03f37cac787e51423755dfd0b1fabcd1fcc1f2f07c934d0b086db96f
+# Copying blob sha256:d7132d809fcd280ce67d755dbc2cdf42169f27ec114fab1c76f9348f3dcee5b4
+# Copying blob sha256:6ad89c10d4b7241b6ac9e4b326812de0365b756e55e5e5556b395c1556e5f01d
+# Copying blob sha256:2345d4a43fd467d695308297cbf6d99d989c078054a79cbb8bdfa79ee2ab04af
+# Copying blob sha256:3b389caf1c13eac38f8df6d816f2224d617b6e0d086a4fe213527583f9ee1bf6
+# Copying blob sha256:f79108d35e2ad4c97c65af235a4f48892f9b9eedb1930842db8e36b2ec5fec07
+# Copying blob sha256:5359fe515e8448d6d6ca13a20a10e3eb89e51ce3a01ac4cc8fd89bc51b86d8ca
+# Copying blob sha256:fa230e3f1462915dcd47e8da0bfd7f5e73d31d5d41e31af53e55608f2e756864
+# Copying blob sha256:5afd662f640b6aca9c7cf4f0c7cbfd60fe9d18fa6802f7a91363d7c29a806c56
+# Copying blob sha256:dba23de481c20224c04dffab16ef074e85853925a549969ec05e464151217850
+# Copying blob sha256:cd17820a898bf004bccbce4778f7b60a53f910536c4af185e2c6b95758c25b79
+# Copying blob sha256:456a0f553265eb7c05608aa58e2bdda591dc18a0e224b89e90c9118d0a91f5b4
+# Copying blob sha256:bf98b83b9ceb78ba54d6b428d088b6e726f165fa8d090706464c4a2911bedc40
+# Copying blob sha256:ae6e9ef42f77048c0bdc2ec0557dd3e2d3179c5a88e306e7ee38e06afc038eca
+# Copying blob sha256:f444f0fd8bd7c7b10d6d800f0cc16d4200c33e38ebfc044b99bb332f62ac1143
+# Copying blob sha256:b22b03a71d63a7c0f5e8df855f973c77a93c25be7169afa6d63461bbd808be3b
+# Copying blob sha256:7b0f2efc495484baadeceafa961496f97c2bc2947b4c3c987b6c217a78ded14c
+# Copying blob sha256:7ff8e034cf9d3786f422030b3d6f2b4735f1e63a8117c1e7e5422e7aacde9f9c
+# Copying blob sha256:c5966f759574bc0a6d676c5f454df2278d2d4d1b721bf770ad0c54d4b19dc415
+# Copying blob sha256:a827e662b2791f7e9b990af4d770c058455de236d9861eb07d941040ba5197c4
+# Copying blob sha256:5fb6071ba4f6429ccd0e0f8488eef2ddf0f55dfbad5b20400e3952c3a48ba657
+# Copying blob sha256:95f5d102d598a5ec5c93717845ed60d514400da1b8b653d6c71e99c5d108c1c0
+# Copying blob sha256:462c1bd1de3dfcc753eff169a71a9766f6087b277d647bed4c388b6cc9645013
+# Copying blob sha256:74d09976a1e68d17bc99189b8377f75e6856dc122fb290a3cd364f43d2078b38
+# Copying blob sha256:39ce209dec895f5c23746fecc6c44ee9bcb4c99eb6047c4c08e10fca4779249b
+# Copying blob sha256:4bdd19ca96e3260d8efbadf9b0471389e0bd11fe68bab5df2cbef54f271547ea
+# Copying blob sha256:77045ed0787f749785e2f55cf82ccecd77d7a575d69f7800504577186fb54b49
+# Copying blob sha256:013085ede17b94cdae6c65869cff37da3f12086e2580aaf680e8eac9a127fec5
+# Copying blob sha256:afa63bb5a022740876c964c436c1475e7222ff154fb2614e2bece1c6d777667d
+# Copying blob sha256:d8c17ea4e6018daca371717e2249b9a56978ed56810735268c5fbaea18ed1175
+# Copying blob sha256:9b51f531451c81f136ce32f7108d1d11ef949b28143d3e07c2304fa6ced7017e
+# Copying blob sha256:6900aa6bd6e51bfdfff4c1577d61f0e7ef56a413fb8c3cf4d21d0c672d1dba54
+# Copying blob sha256:09e8742c8423f4912adff723c7530558aba81781d19a93aea54d4ab2915103de
+# Copying blob sha256:75471cd60187fa03da297fdfb8f09f8a776d932cfbb80f673091c6ce2faf538a
+# Copying blob sha256:c752503bc526afdd82276e65ee24147e8321dcb5e8b69c77366be299c8696ca8
+# Copying blob sha256:e8d80721ad04f1d1479906b94ccd090fc95ff9cb62e93d0c0e1eb6d98c80aacd
+# Copying blob sha256:49187a83cf4b4a67b48fd3d32a4bcf4f2f47eaeae7b5cd40e8387e3c8accbb81
+# Copying blob sha256:46fa11bf7d4f2dda3426a79d4b171ec2b8df3fee14122601d1cc9a21c50b7aaf
+# Copying blob sha256:d9b5a0bb095199ea301b8d05c0fef9a008ec653f3287e4958cf20a2e6d0b4cf4
+# Copying blob sha256:3ac55317e861f76e50450a801de891e686a81d91b6d60e445a13a2e1c6857578
+# Copying blob sha256:24d910e34b5d56302851c3c759c9ef10c5d067aba6d7faaa3ae5bfed3c66a02b
+# Copying blob sha256:179e466e816ce7048e36589b05f9c13e80e7a6d1ac31415328c83c09862ea2e6
+# Copying blob sha256:d0cb815c947c19b88b48519c450248a63845cf901e774e944abf84721b279695
+# Copying blob sha256:65b40a8c8af9b34106a1e8e65c257ccf725a0701073b07e7801db6117a0b27d5
+# Copying blob sha256:96a5937dda92670c5772dc07ec9dc08b406dcb75853bf525e7caef6d81be439b
+# Copying blob sha256:8407f869dd9ee74b0c2297ccd30fdd16aef699c6257895328d2e2d65d1551319
+# Copying blob sha256:9e53fdcc5a5e5f77ba403a81eaa343d4a4a00da4362822cdf687dfb71516e109
+# Copying blob sha256:ef7246cc3b48aa95e0cdc524981870b31a485045185378bf2dd03c690b71e625
+# Copying blob sha256:cc3e99c85e8faf834b7928eb8d74b967878a5f1c41656be513d87b3ad0686b32
+# Copying blob sha256:dbbd03e4acd5ead85a4f60d8d41ad02671623f088fb6d568cf4298b075044190
+# Copying blob sha256:6d02fbe29ee57a2bce3396b862904eed53b35b99614420f73413d39177366fa2
+# Copying blob sha256:c9243c4ac8c0db6d76eabf467c120e1bb34725a5046e8f300dfb7fd22f13e390
+# Copying blob sha256:cb966a08287337d329bee69ca106a459ea33f5cf6cf0849485a6c5008a3d71f6
+# Copying blob sha256:26345e6345fca1943de15ea7be7354ae40fffe618590b16a46492f825d0c839d
+# Copying blob sha256:a69c8403a01f387665117ab44cf0e2af212f5381038ff1738b6a2dd63e644821
+# Copying blob sha256:1af38e1572ba2daa057c3363fedb6dfbd841a0d0154322ceb298bdb77c66d180
+# Copying blob sha256:e1ffdc2d30e031ba4bbdee5ee8400155cff8a9da0a5dad4f1f6b992833230001
+# Copying blob sha256:3b5a5cf1f4de5c52f9502e96a03786aa2820c1c76c1e4819b2d5a134eb6a84da
+# Copying blob sha256:a02dbaebb6e7f6bccfa9a2f874bdafcc443e454e646fc16035f17b350b6bf523
+# Copying blob sha256:d3933dc4eef28452924060a571205b42bc913612c91d545fd4ae77257bd303c0
+# Copying blob sha256:e96090c604e4cd331f9ba5142f4694980005dd3c5e45ff4b0baae24d18245c28
+# Copying blob sha256:0447d765c9d89d564c93a27111f64a14fb5434fb798ae653c15490447615f39c
+# Copying blob sha256:5b592a016d86308d62f80d1eed3a3e3965f0bdcae5952f6e10ae40f3a0db0207
+# Copying blob sha256:4b65f9922687fce6953f0ba1ed9bdabeafab16a7bce84e89d0cd71cc7776e339
+# Copying blob sha256:edee935561150ca58dcd922cd2fa7187848d95ff9dc4f1cc34af553846a13c44
+# Copying blob sha256:66a45dfee5d4daa328685bb2e2a185fec9074eb1e420182dd54b197c8d1c93e6
+# Copying blob sha256:abc3e6454a8698d9e8338584e11a3f4c5c6a637ded34b3410bef36c4e18288b6
+# Copying blob sha256:cb883835b680dfe1f489c74b134830909e6363b5029baa54c7cf41e31d51c7f9
+# Copying blob sha256:da60d02107bb8d19f09a02fab26aaa17a4bd6f366df5bbb320dd7f40108cc207
+# Copying blob sha256:52c2360e67f47eb1e58bf4650f6fe5cd883b731ed5dd197a0a063471d26a9e02
+# Copying blob sha256:c82b59cf21b3551dbcf6de21d8a3b7d6032d7e06899567970b197e048aedf5d9
+# Copying blob sha256:c5092dc41f8563207b0f8c7c5fdad976746cc63a82a0b2717944064004a97e41
+# Copying blob sha256:84be2e43535982fa66c617f5c002f1ad739ba94f6e522d2e59db97456d82ad03
+# Copying blob sha256:7dd883153f558a4412e6bcf6a9235bc919e847dea8af4b36c13931ece88713fd
+# Copying blob sha256:737ba8c82f2a7c0697fe21e52f3de8ec552efae0d3c551ab3c4a8a10aa0e6620
+# Copying blob sha256:8834b1655a3219a0f67433e707c53168cea69122fc7cfddcb66462b72e94674c
+# Copying blob sha256:a9d38951db9246ec5246544249e64eba35a8a05df869009f1fb6d923e1330369
+# Copying blob sha256:b689bb53275e78915bb754e09cac7c3f2510775da60d66afe6478eb5ab751453
+# Copying blob sha256:1ae5929adf407f8f49673090c90503974779f1fc0058cd8b4423a20a8597b8bb
+# Copying blob sha256:f37fb4a8697c5f8d1c82ac050dec94f30a25b50a3baa2a6bf95c8e36c19c5ec1
+# Copying blob sha256:c52d6fbf9e8b7ce00331a43c431447d88e2887e326174b89fbfaef57c89a474b
+# Copying blob sha256:7976cd422492d0908ab846521789c4480643866dc9990ad930bda4589b6ba6d3
+# Copying blob sha256:638876e3141acb597a707125ebeddf40dec21d897ad9b64a7b834115743edaf5
+# Copying blob sha256:dce6dd78b555c6a66f0403b96d0f711fe33826351ac99fde8261a0a3f86e42d8
+# Copying blob sha256:416324d9d2699aaa7faff9a2a3cd2876fe82ae53cd713184080d7825be00f27c
+# Copying blob sha256:19423140783f107f7f32a9a52861b6e8f53f12669856eacfbfda6abfdef0d6ec
+# Copying blob sha256:9fd58902794e5caf87fdeb118bf1cb34e2c7d2d98dd8f2dccb644e325a0e34fc
+# Copying blob sha256:7c3700724d8848c40b6b55e20619abe2f6c77fd6e1a45e2b92d1e64a2b57e7e7
+# Copying config sha256:e9fa665da13e2696c3b3899990a0a4d0f18aae385bf5dba59a89a1ce3766c736
+# Writing manifest to image destination
+# time="2024-12-19T17:25:57-07:00" level=debug msg="User or group ID mappings not available: open /proc/self/uid_map: no such file or directory"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="User or group ID mappings not available: open /proc/self/uid_map: no such file or directory"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="DoRequest Method: GET URI: http://d/v5.2.3/libpod/images/ghcr.io%2Fflox%2Fflox/json"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="DoRequest Method: POST URI: http://d/v5.2.3/libpod/containers/create"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="Enabling signal proxying"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="Enabling signal proxying"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="DoRequest Method: GET URI: http://d/v5.2.3/libpod/containers/655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960/json"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="DoRequest Method: POST URI: http://d/v5.2.3/libpod/containers/655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960/attach"
+# time="2024-12-19T17:25:58-07:00" level=debug msg="Copying standard streams of container \"655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960\" in non-terminal mode"
+# time="2024-12-19T17:25:58-07:00" level=debug msg="DoRequest Method: POST URI: http://d/v5.2.3/libpod/containers/655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960/start"
+# this derivation will be built:
+#   /nix/store/pm9yibyghnx6zx3k2cjq7kqf00086w48-flox-1.3.8-g4f8fd41.drv
+# these 34 paths will be fetched (92.78 MiB download, 305.59 MiB unpacked):
+#   /nix/store/wj7hxrvf8jqipkdry7x6ii1ds1ry2hd5-binutils-2.43.1
+#   /nix/store/gssgc7m6mdxm896grgb4hrhmf6rkp0v9-binutils-2.43.1-lib
+#   /nix/store/q7f04cg09lhbcynblifncs2jj7piiqbr-binutils-wrapper-2.43.1
+#   /nix/store/997fxzdflaans1z4zxi496km3dkvh44l-die-hook
+#   /nix/store/icn9rk40wni93jc96dymq8qfbm240jsq-diffutils-3.10
+#   /nix/store/82grjzqq27fc7fgw1bslzvh3vg2g513i-ed-1.20.2
+#   /nix/store/wf6z93b8awzggxgmmqx8mbxydjrwpaz4-expand-response-params
+#   /nix/store/2s2av8fvjw3k3jc1vm4m0g6v027gh8hq-file-5.45
+#   /nix/store/5vkyrs9hj5hc83rg91w7x1l0dbp4awkk-flox-1.3.8
+#   /nix/store/f06nqkh8zc4awxg7d4hq50xqsnap8m18-flox-activation-scripts
+#   /nix/store/v67csb6zbvd7pvbrm7pv8lvacwhpaprn-flox-activation-scripts-build_wrapper
+#   /nix/store/mv8hljnpgm4qc1lkj6r3azhfsyhi6kgc-flox-activations-1.3.8
+#   /nix/store/xjyhks0j2d7picrkagkpd6g9v3s87c6f-flox-buildenv-0.0.1
+#   /nix/store/fdnbkglslcyvyg6kyk0s8hqcmv35qqw9-flox-manpages
+#   /nix/store/qrirc5x0jz2jr8ib8k412y091h99nrm6-flox-pkgdb-1.3.8
+#   /nix/store/zxiwiszrv6hiy29b2vwwks6fl4n7jvh5-flox-watchdog-1.3.8
+#   /nix/store/3y6ami71csargy3hbrdc15lbkdi3icyy-gcc-13.3.0
+#   /nix/store/z37lqx549cl99dzz12ghsww0zjrifa1y-gcc-wrapper-13.3.0
+#   /nix/store/a79372lvalazma0jzpkajm4q6s8m84ks-glibc-2.40-36-dev
+#   /nix/store/2wapfvhpgpigqn4c3554i3msab2m5226-gmp-6.3.0
+#   /nix/store/a6wwfilczbax7g7ifj02c21h9fs954si-gnu-config-2024-01-01
+#   /nix/store/77mvb93h7g9479lq4myxz9zvvhcj2ckh-gnumake-4.4.1
+#   /nix/store/z2bz2zp3664qpx1c24ksafmci2l4q8dc-isl-0.20
+#   /nix/store/a97xiwnbss1zmdifgs0rmlsn2ci3hy34-libmpc-1.3.1
+#   /nix/store/wh3mm34k6ayg5y2i9nqf6gzscysva888-linux-headers-6.10
+#   /nix/store/j8gacxj1zjh0vvlc4cy4f51wjjg8wh43-lndir-1.0.5
+#   /nix/store/fhnwkrpbfkpzaqqinjq707zjwbivx8im-make-binary-wrapper-hook
+#   /nix/store/9f75mhj5xvm2dpy8l77gk6h9h2gfwvw9-mpfr-4.2.1
+#   /nix/store/gg0c2md3c7lzzhhsmjhpm0xc4x5qzmhl-package-builder-1.0.0
+#   /nix/store/h7lg7p2hpxr7y3fz529v5j54wxlpfy85-patch-2.7.6
+#   /nix/store/s8ygwyad5fmhrjws94g4k3f4809knxzk-patchelf-0.15.0
+#   /nix/store/qx5an9g1a8v0g87cjgr56w7sjjjayc9x-stdenv-linux
+#   /nix/store/vhq7k5sbj4k7vsihaqqfxndi3i37dbkr-t3-1.0.3
+#   /nix/store/f60ckbsa2b7gv8i1zwrig9l4mnmgk6id-update-autotools-gnu-config-scripts-hook
+# copying path '/nix/store/fdnbkglslcyvyg6kyk0s8hqcmv35qqw9-flox-manpages' from 'https://cache.flox.dev'...
+# copying path '/nix/store/997fxzdflaans1z4zxi496km3dkvh44l-die-hook' from 'https://cache.flox.dev'...
+# copying path '/nix/store/a6wwfilczbax7g7ifj02c21h9fs954si-gnu-config-2024-01-01' from 'https://cache.flox.dev'...
+# copying path '/nix/store/j8gacxj1zjh0vvlc4cy4f51wjjg8wh43-lndir-1.0.5' from 'https://cache.flox.dev'...
+# copying path '/nix/store/icn9rk40wni93jc96dymq8qfbm240jsq-diffutils-3.10' from 'https://cache.flox.dev'...
+# copying path '/nix/store/82grjzqq27fc7fgw1bslzvh3vg2g513i-ed-1.20.2' from 'https://cache.flox.dev'...
+# copying path '/nix/store/wf6z93b8awzggxgmmqx8mbxydjrwpaz4-expand-response-params' from 'https://cache.flox.dev'...
+# copying path '/nix/store/2s2av8fvjw3k3jc1vm4m0g6v027gh8hq-file-5.45' from 'https://cache.flox.dev'...
+# copying path '/nix/store/mv8hljnpgm4qc1lkj6r3azhfsyhi6kgc-flox-activations-1.3.8' from 'https://cache.flox.dev'...
+# copying path '/nix/store/77mvb93h7g9479lq4myxz9zvvhcj2ckh-gnumake-4.4.1' from 'https://cache.flox.dev'...
+# copying path '/nix/store/wh3mm34k6ayg5y2i9nqf6gzscysva888-linux-headers-6.10' from 'https://cache.flox.dev'...
+# copying path '/nix/store/vhq7k5sbj4k7vsihaqqfxndi3i37dbkr-t3-1.0.3' from 'https://cache.flox.dev'...
+# copying path '/nix/store/2wapfvhpgpigqn4c3554i3msab2m5226-gmp-6.3.0' from 'https://cache.flox.dev'...
+# copying path '/nix/store/s8ygwyad5fmhrjws94g4k3f4809knxzk-patchelf-0.15.0' from 'https://cache.flox.dev'...
+# copying path '/nix/store/gssgc7m6mdxm896grgb4hrhmf6rkp0v9-binutils-2.43.1-lib' from 'https://cache.flox.dev'...
+# copying path '/nix/store/f60ckbsa2b7gv8i1zwrig9l4mnmgk6id-update-autotools-gnu-config-scripts-hook' from 'https://cache.flox.dev'...
+# copying path '/nix/store/v67csb6zbvd7pvbrm7pv8lvacwhpaprn-flox-activation-scripts-build_wrapper' from 'https://cache.flox.dev'...
+# copying path '/nix/store/f06nqkh8zc4awxg7d4hq50xqsnap8m18-flox-activation-scripts' from 'https://cache.flox.dev'...
+# copying path '/nix/store/gg0c2md3c7lzzhhsmjhpm0xc4x5qzmhl-package-builder-1.0.0' from 'https://cache.flox.dev'...
+# copying path '/nix/store/qrirc5x0jz2jr8ib8k412y091h99nrm6-flox-pkgdb-1.3.8' from 'https://cache.flox.dev'...
+# copying path '/nix/store/xjyhks0j2d7picrkagkpd6g9v3s87c6f-flox-buildenv-0.0.1' from 'https://cache.flox.dev'...
+# copying path '/nix/store/zxiwiszrv6hiy29b2vwwks6fl4n7jvh5-flox-watchdog-1.3.8' from 'https://cache.flox.dev'...
+# copying path '/nix/store/5vkyrs9hj5hc83rg91w7x1l0dbp4awkk-flox-1.3.8' from 'https://cache.flox.dev'...
+# copying path '/nix/store/h7lg7p2hpxr7y3fz529v5j54wxlpfy85-patch-2.7.6' from 'https://cache.flox.dev'...
+# copying path '/nix/store/z2bz2zp3664qpx1c24ksafmci2l4q8dc-isl-0.20' from 'https://cache.flox.dev'...
+# copying path '/nix/store/9f75mhj5xvm2dpy8l77gk6h9h2gfwvw9-mpfr-4.2.1' from 'https://cache.flox.dev'...
+# copying path '/nix/store/wj7hxrvf8jqipkdry7x6ii1ds1ry2hd5-binutils-2.43.1' from 'https://cache.flox.dev'...
+# copying path '/nix/store/a79372lvalazma0jzpkajm4q6s8m84ks-glibc-2.40-36-dev' from 'https://cache.flox.dev'...
+# copying path '/nix/store/qx5an9g1a8v0g87cjgr56w7sjjjayc9x-stdenv-linux' from 'https://cache.flox.dev'...
+# copying path '/nix/store/a97xiwnbss1zmdifgs0rmlsn2ci3hy34-libmpc-1.3.1' from 'https://cache.flox.dev'...
+# copying path '/nix/store/3y6ami71csargy3hbrdc15lbkdi3icyy-gcc-13.3.0' from 'https://cache.flox.dev'...
+# copying path '/nix/store/q7f04cg09lhbcynblifncs2jj7piiqbr-binutils-wrapper-2.43.1' from 'https://cache.flox.dev'...
+# copying path '/nix/store/z37lqx549cl99dzz12ghsww0zjrifa1y-gcc-wrapper-13.3.0' from 'https://cache.flox.dev'...
+# copying path '/nix/store/fhnwkrpbfkpzaqqinjq707zjwbivx8im-make-binary-wrapper-hook' from 'https://cache.flox.dev'...
+# building '/nix/store/pm9yibyghnx6zx3k2cjq7kqf00086w48-flox-1.3.8-g4f8fd41.drv'...
+# No 'fromImage' provided
+# Creating layer 1 from paths: ['/nix/store/a0mbpky7hll3ljg1cnp5apc4y1bgb9hl-libunistring-1.2']
+# Creating layer 2 from paths: ['/nix/store/y9n3vjmh0iarg25ngv6bzbhbqam5rxch-libidn2-2.3.7']
+# Creating layer 3 from paths: ['/nix/store/v2fdaykfy6ldp5wzn8hm2hb74nd35anw-xgcc-13.3.0-libgcc']
+# Creating layer 4 from paths: ['/nix/store/qii6jadf3xrhg4y0f5m09k11lh5ymwnv-glibc-2.40-36']
+# Creating layer 5 from paths: ['/nix/store/dajy07dbzdag6vbmcdbhqhnn2hiaiwhd-gcc-13.3.0-libgcc']
+# Creating layer 6 from paths: ['/nix/store/9ki1b72wzh9b5g9pl9sdqg691clrriq7-gcc-13.3.0-lib']
+# Creating layer 7 from paths: ['/nix/store/k2wspf0nq81hxjwxsnb8r9cg08qngdk2-bash-5.2p32']
+# Creating layer 8 from paths: ['/nix/store/rgsl4wpi5m4kql5gbqm3qrqbkm4kxr6q-zlib-1.3.1']
+# Creating layer 9 from paths: ['/nix/store/lcmchmg9k0dmhzrlzr5q2jba9b5dm3hd-openssl-3.3.2']
+# Creating layer 10 from paths: ['/nix/store/73cmakk5y5jy8dg8525vh1ihivz5akmy-libxcrypt-4.4.36']
+# Creating layer 11 from paths: ['/nix/store/dczwbhzranlyagibd5bri0hh3f2fpdhr-zstd-1.5.6']
+# Creating layer 12 from paths: ['/nix/store/27g9izyxv4n1q89k0igs833mjrvpaihx-attr-2.5.2']
+# Creating layer 13 from paths: ['/nix/store/r8d4jrlyp2fhn34f4r2239mdqscys8b5-keyutils-1.6.3-lib']
+# Creating layer 14 from paths: ['/nix/store/ara1ipkqpc9cl1d1l541kgp2mq28dxjn-publicsuffix-list-0-unstable-2024-09-10']
+# Creating layer 15 from paths: ['/nix/store/kvyb0lw3zh8x1vpc6hicz8y0qb9p6dkr-xz-5.6.2']
+# Creating layer 16 from paths: ['/nix/store/xhyb4qdh528if2qrdxmm86qbrcqyxazx-gmp-with-cxx-6.3.0']
+# Creating layer 17 from paths: ['/nix/store/261i1cr9kinsh5rvkpgz9pjxm46wbc6l-acl-2.3.2']
+# Creating layer 18 from paths: ['/nix/store/m09lvkkdsbnw7ys1pp7ypb8rf2m80ssz-audit-4.0']
+# Creating layer 19 from paths: ['/nix/store/7cyssy2hvfbi24ibarlb6gvfryic86r3-brotli-1.1.0-lib']
+# Creating layer 20 from paths: ['/nix/store/jlwwlwnq7w1sxq5c73b442arb96nwr07-krb5-1.21.3-lib']
+# Creating layer 21 from paths: ['/nix/store/xqgzsb8cfqpq176xp97f0r39vdjxz7dc-libpsl-0.21.5']
+# Creating layer 22 from paths: ['/nix/store/lm51wdx4qi7gvvipssjx35gh52wrbm0j-libssh2-1.11.0']
+# Creating layer 23 from paths: ['/nix/store/kixyi38p74cfvksjk3hg06g21q7bzmq5-nghttp2-1.63.0-lib']
+# Creating layer 24 from paths: ['/nix/store/9rd3pgw8wh3m2r372qpbv8j6frpfs1jc-bzip2-1.0.8']
+# Creating layer 25 from paths: ['/nix/store/344hm8gld550hq7whwj3qdr86qpw31b5-db-4.8.30']
+# Creating layer 26 from paths: ['/nix/store/9bjvb2vbak1bmpq03yg8na477778mfy3-libgpg-error-1.50']
+# Creating layer 27 from paths: ['/nix/store/wxnri4hmjcmmip031bm27zx80j1c3lp5-libcap-2.70-lib']
+# Creating layer 28 from paths: ['/nix/store/9wgim2ysrichvwi1hmhwpmv3ggdg25py-util-linux-minimal-2.39.4-login']
+# Creating layer 29 from paths: ['/nix/store/h887yq6z05ynslzqbqd125flw251j4hr-util-linux-minimal-2.39.4-lib']
+# Creating layer 30 from paths: ['/nix/store/jj296s3llq5h537zj8mjbmyw4fcri84m-libtasn1-4.19.0']
+# Creating layer 31 from paths: ['/nix/store/h2x0xrfq3iqfn6anb3hld7h3k0dgsj3x-curl-8.9.1']
+# Creating layer 32 from paths: ['/nix/store/yvpsla8c5sf7vcfxxs9ainsviqmnyyf1-gmp-with-cxx-6.3.0']
+# Creating layer 33 from paths: ['/nix/store/vhy8lcs8js2qs785vgssj0qq6asx7kqi-libmnl-1.0.5']
+# Creating layer 34 from paths: ['/nix/store/raxk9vwg1raq7v90x27y4a0b0djfsi2v-libffi-3.4.6']
+# Creating layer 35 from paths: ['/nix/store/qyj38vb6i7alz0w86g8vk1y68r8v3s2d-linux-pam-1.6.1']
+# Creating layer 36 from paths: ['/nix/store/gcm8z4y9614h9wwlssc9mdqdm774bims-nettle-3.10']
+# Creating layer 37 from paths: ['/nix/store/mcln7vd9r6p72s6m1lm1jbjnmfbwxj3l-ncurses-6.4.20221231']
+# Creating layer 38 from paths: ['/nix/store/z16jwhhg1pavcrjk5sfihjn6lnz93sfw-pcre2-10.44']
+# Creating layer 39 from paths: ['/nix/store/h1xfncxv0c1nxj4vsmy94c91v02g5qkz-systemd-minimal-libs-256.6']
+# Creating layer 40 from paths: ['/nix/store/gay60sgl1brq3vsfnk7bfdlmxpsvrma8-libevent-2.1.12']
+# Creating layer 41 from paths: ['/nix/store/namch7m64x4mpz94vfb042bq226d2kdn-libnfnetlink-1.0.2']
+# Creating layer 42 from paths: ['/nix/store/iilsqz9ws7rwgkvgci1990hn0rz9b4fg-p11-kit-0.25.5']
+# Creating layer 43 from paths: ['/nix/store/gfjbnw92vcya9c1wg1i29sjfclqs101q-util-linux-2.39.4-lib']
+# Creating layer 44 from paths: ['/nix/store/cqnb5spmpzvc32h16568s028frzvz8hs-coreutils-9.5']
+# Creating layer 45 from paths: ['/nix/store/lagsw626j70k65xwc6rnnv288xzcl57c-json-c-0.17']
+# Creating layer 46 from paths: ['/nix/store/gq5gx8bhgdc814ka4x7h9i7cmpic4qmr-dns-root-data-2024-06-20']
+# Creating layer 47 from paths: ['/nix/store/hz0n7bgpmnkvd83kz7ahgd899yiwrvsa-gnugrep-3.11']
+# Creating layer 48 from paths: ['/nix/store/0psv0msmldg02055y2mj0kh9m4nvf8d4-libnl-3.10.0']
+# Creating layer 49 from paths: ['/nix/store/bs7kl3j5scgmkvwqcca1gf6p8sn4x6xg-unbound-1.21.0-lib']
+# Creating layer 50 from paths: ['/nix/store/z2lpgv1s8fql3qvyg6d9mmni9r2z6z73-elfutils-0.191']
+# Creating layer 51 from paths: ['/nix/store/flba8s6amih014k26byw1bf7aqwdppvg-libgcrypt-1.10.3-lib']
+# Creating layer 52 from paths: ['/nix/store/mih5vx30zp8g7i9zhxzzkj6avmf248cg-readline-8.2p13']
+# Creating layer 53 from paths: ['/nix/store/8anqigswx4hwakzmb2f3y8g4ydm143am-bzip2-1.0.8-bin']
+# Creating layer 54 from paths: ['/nix/store/fzd5bxwcw9w7f42skk2kc546c034ph81-cracklib-2.10.0']
+# Creating layer 55 from paths: ['/nix/store/8ha5gmibmlzyvi2dy7rlgd4fj7s21ndc-glibc-2.40-36-getent']
+# Creating layer 56 from paths: ['/nix/store/s7x02wdik5az8w8mpl6763k6m51lkp7z-gnutls-3.8.6']
+# Creating layer 57 from paths: ['/nix/store/zf7spazb812ddrhkw07b7d245rhpsc1d-gzip-1.13']
+# Creating layer 58 from paths: ['/nix/store/39p40kzrjjxxjwqppq8bm2zh0qkcn69n-libassuan-2.5.7']
+# Creating layer 59 from paths: ['/nix/store/55h07bacdrma3q03g5gis0ppf538mwps-libcbor-0.11.0']
+# Creating layer 60 from paths: ['/nix/store/cfxysnmjlyr7hffkznk6szxpbm9l1mpz-libmd-1.1.0']
+# Creating layer 61 from paths: ['/nix/store/a88jn1mfib4zqg4iwbkaix9b1xnmfs0z-libnetfilter_conntrack-1.0.9']
+# Creating layer 62 from paths: ['/nix/store/2f6273j4wpyysaydbffz0aqgqjh8payw-libnftnl-1.2.7']
+# Creating layer 63 from paths: ['/nix/store/d059pkgd991kvgjxk9klgdgy2qbm7iz5-libpcap-1.10.5']
+# Creating layer 64 from paths: ['/nix/store/fgc3im92h8h07da2i997kkbk9slz1sr4-libxml2-2.13.4']
+# Creating layer 65 from paths: ['/nix/store/720p41z6zlx7004ihb5bv57xxkvcjhkk-lvm2-2.03.26-lib']
+# Creating layer 66 from paths: ['/nix/store/8n89hjz2h3riasqi3ix3s9id9ghwbw7g-npth-1.7']
+# Creating layer 67 from paths: ['/nix/store/6l0xbbc74r074r0by2cyi3k04gh1xjag-pcsclite-2.2.3-lib']
+# Creating layer 68 from paths: ['/nix/store/3pwr0akyz1x3xxbjbd7rq4s6f7vvxbi1-xz-5.6.2-bin']
+# Creating layer 69 from paths: ['/nix/store/6pgkj5wzar8a2b8rjw1y9i3d5vdl9ibj-zstd-1.5.6-bin']
+# Creating layer 70 from paths: ['/nix/store/4x6vqi0xda060rdyldq4s0lpalvk90wf-oniguruma-6.9.9-lib']
+# Creating layer 71 from paths: ['/nix/store/7031c1bwpqvmsfnzd0v50vd6v2lb1kni-bash-interactive-5.2p32']
+# Creating layer 72 from paths: ['/nix/store/2idfdm25lr2dgdh1p9mz7r6cl7gc3fdz-glibc-2.40-36-bin']
+# Creating layer 73 from paths: ['/nix/store/105dgqpc2b7s6m8ydhfg2la54i9z2524-cryptsetup-2.7.4']
+# Creating layer 74 from paths: ['/nix/store/wnwi7f015q8k2zn5k5i52hswms3mq3r6-getent-glibc-2.40-36']
+# Creating layer 75 from paths: ['/nix/store/dc6p55wvjicpzi3khl34ls7x9lakrjmm-gnupg-2.4.5']
+# Creating layer 76 from paths: ['/nix/store/r9sqz7j69q8b0i8z602rvp5jqxrvzj3f-gnutar-1.35']
+# Creating layer 77 from paths: ['/nix/store/60vh2s6qg66401pka7vjygxwpjszyfv4-iptables-1.8.10']
+# Creating layer 78 from paths: ['/nix/store/abvi82d77r0y8zp1pd6jzflgjm0gwx0p-kbd-2.6.4']
+# Creating layer 79 from paths: ['/nix/store/yhrph09r91by0d96p7mc4jdnyv1190p3-kexec-tools-2.0.29']
+# Creating layer 80 from paths: ['/nix/store/m1lkn9x0vyjrp8f67vvg5fi8ahnzyzwb-kmod-31']
+# Creating layer 81 from paths: ['/nix/store/2l3gs155pb3z1k1chw1v2sjsb1w2wlx5-kmod-31-lib']
+# Creating layer 82 from paths: ['/nix/store/l8p7wzjyznfr3fdgb4ydffyd2mzc2wn8-libapparmor-4.0.3']
+# Creating layer 83 from paths: ['/nix/store/immk9p6sqywry61vnqiaar4pf868pb5n-libarchive-3.7.4-lib']
+# Creating layer 84 from paths: ['/nix/store/d8wzk90rkh8ic34g3xdy45xfwqz0q0p6-libbpf-1.4.6']
+# Creating layer 85 from paths: ['/nix/store/jbmm3gdlhymk4b6aalmvqqqi27w3jwp3-libbsd-0.12.2']
+# Creating layer 86 from paths: ['/nix/store/l127ha80km2k30aakxmgsxxb20bxm6rm-libfido2-1.15.0']
+# Creating layer 87 from paths: ['/nix/store/6v5wsv132s2bf5921i5ha7brdrab4zsf-libmicrohttpd-1.0.1']
+# Creating layer 88 from paths: ['/nix/store/6cnwp8h3g4lm8hk4qfbqg7dxnvvk9g7x-libpwquality-1.4.5-lib']
+# Creating layer 89 from paths: ['/nix/store/1hyz4amsh3wx2amg642hq24kscg92v33-libseccomp-2.5.5-lib']
+# Creating layer 90 from paths: ['/nix/store/8rywcj8s7gx9iy4hwipfz7nb87s9rib9-libunistring-1.2']
+# Creating layer 91 from paths: ['/nix/store/zv7hg49vxci1cb8x7iap31a0h01h6vqc-lz4-1.10.0-lib']
+# Creating layer 92 from paths: ['/nix/store/1wj15absz3jqv0wx6c2m4x9b4bb548kp-qrencode-4.1.1']
+# Creating layer 93 from paths: ['/nix/store/ra30rnc7v9m004igfb24j4fnkwy03dr0-tcb-1.2']
+# Creating layer 94 from paths: ['/nix/store/ppd6zs4kd8jcnbq85pw5g352vlb6r6qk-tpm2-tss-4.1.3']
+# Creating layer 95 from paths: ['/nix/store/ar6pnn3ypff7bk6sh68zxzdd76rr04nz-util-linux-minimal-2.39.4-mount']
+# Creating layer 96 from paths: ['/nix/store/q86xpa7b1jvvfp8xvy7zyismgp2bjk2q-util-linux-minimal-2.39.4-swap']
+# Creating layer 97 from paths: ['/nix/store/j9dys760pk0lbp5i8l5h71grivd2ld9x-iana-etc-20240318']
+# Creating layer 98 from paths: ['/nix/store/gr5zibf0nhvk3fiffnrrzwpbcpdnha6h-jemalloc-5.3.0']
+# Creating layer 99 from paths: ['/nix/store/ykwd69vhal2nlqrz9fjp2llcc86qqn03-jq-1.7.1', '/nix/store/cmq38fl372l8lwxafqzl6cz4m3syvksw-jq-1.7.1-doc', '/nix/store/8xhqcza8rphrzmam4s8iwcpcxw0wplz9-jq-1.7.1-lib', '/nix/store/q4p9qaif44i4saks3vinfz2rmb0v9y7l-jq-1.7.1-man', '/nix/store/0ddx6k9v5k45031j09mn6jfvcwq61rl6-libcap-ng-0.8.5', '/nix/store/04aq2w58qlqjvwamcljh1hahz744hlzd-libidn2-2.3.7', '/nix/store/2yf9cl31hfk1fv7a9s48signc294yjj8-mailcap-2.1.54', '/nix/store/9w8cpk44fm9l1kmhaldc0r1yn4lbjacm-shadow-4.16.0', '/nix/store/pnabxmab15j0jrh19rrins6fx3ip8j38-systemd-256.6', '/nix/store/bkjfb1j7v2yax4501fyws8ha13mfancm-tzdata-2024b', '/nix/store/rfnih2sgjgzg9ja60nga6spc52lx2i4f-util-linux-2.39.4-login', '/nix/store/0z9nimr9wrrbzbyrjm6v8626l3ypjai2-util-linux-2.39.4-mount', '/nix/store/1slv943cd8v56r2rk9kqrp8zdcwsysyj-util-linux-2.39.4-swap', '/nix/store/9zk5kpadlnzhz4aq319hykb6anf71g7x-xgcc-13.3.0-libgcc', '/nix/store/pi8ni9x1852baf0l9baqr93dy2fb3gxm-daemonize-1.7.8', '/nix/store/xzlg56rwscm5bhxwfhivvb6wb79xm8az-fd-10.2.0', '/nix/store/mx757zkaiyr6d4qcl902i6qd6wgmksk2-findutils-4.10.0', '/nix/store/mv8hljnpgm4qc1lkj6r3azhfsyhi6kgc-flox-activations-1.3.8', '/nix/store/qswh3390mf0shsrbq54md3l8w3jxxcfd-getopt-1.1.6', '/nix/store/w0gi2q79avgm6fr2mikgjl6z781rq0h7-glibc-2.40-36', '/nix/store/z914nm4kzmjgfs6ydf59wrpiwybr2xwc-glibc-locales-2.40-36', '/nix/store/i3f50210jpp4wmzkpds6l7zbp81ds4xf-gnused-4.9', '/nix/store/ahpilzy1f17m9c7kbjvv7576zzbyy6qi-jq-1.7.1-bin', '/nix/store/pc794acs7wv5sss5sy1v5j926fpxms8y-ld-floxlib-1.0.0', '/nix/store/sbhv2xspr1mjbmlczas6fn3afvxar0mq-nawk-20240728', '/nix/store/x3hd7m7g12xbkmyc3lissbr27bb36wsc-nss-cacert-3.104', '/nix/store/95nxlvj6rrdkgrbp308fqrhxqlq4ragw-process-compose-1.34.0', '/nix/store/ap6v9j8iv2w8xy0d6xpl8n0ca91gv079-util-linux-2.39.4-bin', '/nix/store/f06nqkh8zc4awxg7d4hq50xqsnap8m18-flox-activation-scripts', '/nix/store/7m8hnxx2k849ambsfl0vq0ahxz77rmly-hello-2.12.1', '/nix/store/yzi1ika41ssq4ksi4ysn867nicnnpq23-manifest', '/nix/store/7w8wn15ddarmyp0q14ja69c4qibp1yay-environment-develop', '/nix/store/vkdp5328nmrp0aaxfcxywy9xrqx4g4mw-bash-interactive-5.2p32-man']
+# Creating layer 100 with customisation...
+# Adding manifests...
+# Done.
+# ✨ Container written to stdout
+# time="2024-12-19T17:26:30-07:00" level=debug msg="DoRequest Method: POST URI: http://d/v5.2.3/libpod/containers/655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960/wait"
+# time="2024-12-19T17:26:31-07:00" level=debug msg="DoRequest Method: POST URI: http://d/v5.2.3/libpod/containers/655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960/shouldrestart"
+# time="2024-12-19T17:26:31-07:00" level=debug msg="DoRequest Method: DELETE URI: http://d/v5.2.3/libpod/containers/655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960"
+# time="2024-12-19T17:26:31-07:00" level=debug msg="Container 655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960 does not exist: no container with ID or name \"655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960\" found: no such container"
+# time="2024-12-19T17:26:31-07:00" level=debug msg="Called run.PersistentPostRunE(/nix/store/p3lz44rirshy6z1f3mzdgk2py9mqssjx-podman-5.2.3/bin/podman run --rm --userns  --log-level debug --mount type=bind,source=/private/tmp/nix-shell.tvmXfz/bats-run-0WWH64/test/1/test,target=/flox_env --env HOME=/flox_home --mount type=bind,source=/tmp/home.PA2Vyj,target=/flox_home --env FLOX_DISABLE_METRICS=true ghcr.io/flox/flox nix --extra-experimental-features nix-command flakes --accept-flake-config run github:flox/flox -- containerize --dir /flox_env --tag latest --file -)"
+# time="2024-12-19T17:26:31-07:00" level=debug msg="Shutting down engines"
+# Loaded image: localhost/test:latest
+# ✨ Container written to Podman runtime
+# Last output:
+# time="2024-12-19T17:25:31-07:00" level=info msg="/nix/store/p3lz44rirshy6z1f3mzdgk2py9mqssjx-podman-5.2.3/bin/podman filtering at log level debug"
+# time="2024-12-19T17:25:31-07:00" level=debug msg="Called run.PersistentPreRunE(/nix/store/p3lz44rirshy6z1f3mzdgk2py9mqssjx-podman-5.2.3/bin/podman run --rm --userns  --log-level debug --mount type=bind,source=/private/tmp/nix-shell.tvmXfz/bats-run-0WWH64/test/1/test,target=/flox_env --env HOME=/flox_home --mount type=bind,source=/tmp/home.PA2Vyj,target=/flox_home --env FLOX_DISABLE_METRICS=true ghcr.io/flox/flox nix --extra-experimental-features nix-command flakes --accept-flake-config run github:flox/flox -- containerize --dir /flox_env --tag latest --file -)"
+# time="2024-12-19T17:25:31-07:00" level=debug msg="SSH Ident Key \"/tmp/home.PA2Vyj/.local/share/containers/podman/machine/machine\" SHA256:RubZN9pYVrjLMIOB0CuMwVXCv9uEUs0TKMyiyzM13qQ ssh-ed25519"
+# time="2024-12-19T17:25:31-07:00" level=debug msg="DoRequest Method: GET URI: http://d/v5.2.3/libpod/_ping"
+# time="2024-12-19T17:25:31-07:00" level=debug msg="Loading registries configuration \"/etc/containers/registries.conf\""
+# time="2024-12-19T17:25:31-07:00" level=debug msg="DoRequest Method: POST URI: http://d/v5.2.3/libpod/images/pull"
+# Trying to pull ghcr.io/flox/flox:latest...
+# Getting image source signatures
+# Copying blob sha256:cc4dac0a07463fd5c448b2bfdb3b0d1bd9d2f4a209e602ed668bb652497988b3
+# Copying blob sha256:a27f694102d985bb9d78b01c622be099d8e33f3efbca8854ede4fa29c91be36e
+# Copying blob sha256:78eb46c3d18fc32f95f0c8c1b27daf0b676d78734460cdfe360f205f02053bf3
+# Copying blob sha256:bb536f766f1b5355cd1398a20802cd01d5b1c76e08df1e5c9808d635b54b9bfc
+# Copying blob sha256:df6854cf35e13aa11a3eacf23531a31ab04af47a3068a800dc3bc73c614a94b6
+# Copying blob sha256:9e70610fc2d57ca58bc38f0500b4d700656dce10105a84f7633bcf3bd2e1d663
+# Copying blob sha256:d751c171e83fc266362fdeed9a036aeaf1773d455ee1ba0f4739d747b77c1a1b
+# Copying blob sha256:c10fea46a2f96ce423e2271ff55a26e5b600816e9e2724b4519a741df641b851
+# Copying blob sha256:6abfda7c4176fe3f2200fd2607d3e800e383b1ed9933392b5dde6db61dcb90ad
+# Copying blob sha256:be2996c4f268b5a4e4fac1f6c839561d2c2dd1992f96fa4e6a24f9cb1b2ea44d
+# Copying blob sha256:24dfb501ace6a99cad0ebd60a252ba50a5d0e1714aacf8b1c154a73871ae7fdf
+# Copying blob sha256:01346989dc7827167f510cfaf20b8c9ce8dc08508056c5349e4820edf9c91a46
+# Copying blob sha256:f5a52ece03f37cac787e51423755dfd0b1fabcd1fcc1f2f07c934d0b086db96f
+# Copying blob sha256:d7132d809fcd280ce67d755dbc2cdf42169f27ec114fab1c76f9348f3dcee5b4
+# Copying blob sha256:6ad89c10d4b7241b6ac9e4b326812de0365b756e55e5e5556b395c1556e5f01d
+# Copying blob sha256:2345d4a43fd467d695308297cbf6d99d989c078054a79cbb8bdfa79ee2ab04af
+# Copying blob sha256:3b389caf1c13eac38f8df6d816f2224d617b6e0d086a4fe213527583f9ee1bf6
+# Copying blob sha256:f79108d35e2ad4c97c65af235a4f48892f9b9eedb1930842db8e36b2ec5fec07
+# Copying blob sha256:5359fe515e8448d6d6ca13a20a10e3eb89e51ce3a01ac4cc8fd89bc51b86d8ca
+# Copying blob sha256:fa230e3f1462915dcd47e8da0bfd7f5e73d31d5d41e31af53e55608f2e756864
+# Copying blob sha256:5afd662f640b6aca9c7cf4f0c7cbfd60fe9d18fa6802f7a91363d7c29a806c56
+# Copying blob sha256:dba23de481c20224c04dffab16ef074e85853925a549969ec05e464151217850
+# Copying blob sha256:cd17820a898bf004bccbce4778f7b60a53f910536c4af185e2c6b95758c25b79
+# Copying blob sha256:456a0f553265eb7c05608aa58e2bdda591dc18a0e224b89e90c9118d0a91f5b4
+# Copying blob sha256:bf98b83b9ceb78ba54d6b428d088b6e726f165fa8d090706464c4a2911bedc40
+# Copying blob sha256:ae6e9ef42f77048c0bdc2ec0557dd3e2d3179c5a88e306e7ee38e06afc038eca
+# Copying blob sha256:f444f0fd8bd7c7b10d6d800f0cc16d4200c33e38ebfc044b99bb332f62ac1143
+# Copying blob sha256:b22b03a71d63a7c0f5e8df855f973c77a93c25be7169afa6d63461bbd808be3b
+# Copying blob sha256:7b0f2efc495484baadeceafa961496f97c2bc2947b4c3c987b6c217a78ded14c
+# Copying blob sha256:7ff8e034cf9d3786f422030b3d6f2b4735f1e63a8117c1e7e5422e7aacde9f9c
+# Copying blob sha256:c5966f759574bc0a6d676c5f454df2278d2d4d1b721bf770ad0c54d4b19dc415
+# Copying blob sha256:a827e662b2791f7e9b990af4d770c058455de236d9861eb07d941040ba5197c4
+# Copying blob sha256:5fb6071ba4f6429ccd0e0f8488eef2ddf0f55dfbad5b20400e3952c3a48ba657
+# Copying blob sha256:95f5d102d598a5ec5c93717845ed60d514400da1b8b653d6c71e99c5d108c1c0
+# Copying blob sha256:462c1bd1de3dfcc753eff169a71a9766f6087b277d647bed4c388b6cc9645013
+# Copying blob sha256:74d09976a1e68d17bc99189b8377f75e6856dc122fb290a3cd364f43d2078b38
+# Copying blob sha256:39ce209dec895f5c23746fecc6c44ee9bcb4c99eb6047c4c08e10fca4779249b
+# Copying blob sha256:4bdd19ca96e3260d8efbadf9b0471389e0bd11fe68bab5df2cbef54f271547ea
+# Copying blob sha256:77045ed0787f749785e2f55cf82ccecd77d7a575d69f7800504577186fb54b49
+# Copying blob sha256:013085ede17b94cdae6c65869cff37da3f12086e2580aaf680e8eac9a127fec5
+# Copying blob sha256:afa63bb5a022740876c964c436c1475e7222ff154fb2614e2bece1c6d777667d
+# Copying blob sha256:d8c17ea4e6018daca371717e2249b9a56978ed56810735268c5fbaea18ed1175
+# Copying blob sha256:9b51f531451c81f136ce32f7108d1d11ef949b28143d3e07c2304fa6ced7017e
+# Copying blob sha256:6900aa6bd6e51bfdfff4c1577d61f0e7ef56a413fb8c3cf4d21d0c672d1dba54
+# Copying blob sha256:09e8742c8423f4912adff723c7530558aba81781d19a93aea54d4ab2915103de
+# Copying blob sha256:75471cd60187fa03da297fdfb8f09f8a776d932cfbb80f673091c6ce2faf538a
+# Copying blob sha256:c752503bc526afdd82276e65ee24147e8321dcb5e8b69c77366be299c8696ca8
+# Copying blob sha256:e8d80721ad04f1d1479906b94ccd090fc95ff9cb62e93d0c0e1eb6d98c80aacd
+# Copying blob sha256:49187a83cf4b4a67b48fd3d32a4bcf4f2f47eaeae7b5cd40e8387e3c8accbb81
+# Copying blob sha256:46fa11bf7d4f2dda3426a79d4b171ec2b8df3fee14122601d1cc9a21c50b7aaf
+# Copying blob sha256:d9b5a0bb095199ea301b8d05c0fef9a008ec653f3287e4958cf20a2e6d0b4cf4
+# Copying blob sha256:3ac55317e861f76e50450a801de891e686a81d91b6d60e445a13a2e1c6857578
+# Copying blob sha256:24d910e34b5d56302851c3c759c9ef10c5d067aba6d7faaa3ae5bfed3c66a02b
+# Copying blob sha256:179e466e816ce7048e36589b05f9c13e80e7a6d1ac31415328c83c09862ea2e6
+# Copying blob sha256:d0cb815c947c19b88b48519c450248a63845cf901e774e944abf84721b279695
+# Copying blob sha256:65b40a8c8af9b34106a1e8e65c257ccf725a0701073b07e7801db6117a0b27d5
+# Copying blob sha256:96a5937dda92670c5772dc07ec9dc08b406dcb75853bf525e7caef6d81be439b
+# Copying blob sha256:8407f869dd9ee74b0c2297ccd30fdd16aef699c6257895328d2e2d65d1551319
+# Copying blob sha256:9e53fdcc5a5e5f77ba403a81eaa343d4a4a00da4362822cdf687dfb71516e109
+# Copying blob sha256:ef7246cc3b48aa95e0cdc524981870b31a485045185378bf2dd03c690b71e625
+# Copying blob sha256:cc3e99c85e8faf834b7928eb8d74b967878a5f1c41656be513d87b3ad0686b32
+# Copying blob sha256:dbbd03e4acd5ead85a4f60d8d41ad02671623f088fb6d568cf4298b075044190
+# Copying blob sha256:6d02fbe29ee57a2bce3396b862904eed53b35b99614420f73413d39177366fa2
+# Copying blob sha256:c9243c4ac8c0db6d76eabf467c120e1bb34725a5046e8f300dfb7fd22f13e390
+# Copying blob sha256:cb966a08287337d329bee69ca106a459ea33f5cf6cf0849485a6c5008a3d71f6
+# Copying blob sha256:26345e6345fca1943de15ea7be7354ae40fffe618590b16a46492f825d0c839d
+# Copying blob sha256:a69c8403a01f387665117ab44cf0e2af212f5381038ff1738b6a2dd63e644821
+# Copying blob sha256:1af38e1572ba2daa057c3363fedb6dfbd841a0d0154322ceb298bdb77c66d180
+# Copying blob sha256:e1ffdc2d30e031ba4bbdee5ee8400155cff8a9da0a5dad4f1f6b992833230001
+# Copying blob sha256:3b5a5cf1f4de5c52f9502e96a03786aa2820c1c76c1e4819b2d5a134eb6a84da
+# Copying blob sha256:a02dbaebb6e7f6bccfa9a2f874bdafcc443e454e646fc16035f17b350b6bf523
+# Copying blob sha256:d3933dc4eef28452924060a571205b42bc913612c91d545fd4ae77257bd303c0
+# Copying blob sha256:e96090c604e4cd331f9ba5142f4694980005dd3c5e45ff4b0baae24d18245c28
+# Copying blob sha256:0447d765c9d89d564c93a27111f64a14fb5434fb798ae653c15490447615f39c
+# Copying blob sha256:5b592a016d86308d62f80d1eed3a3e3965f0bdcae5952f6e10ae40f3a0db0207
+# Copying blob sha256:4b65f9922687fce6953f0ba1ed9bdabeafab16a7bce84e89d0cd71cc7776e339
+# Copying blob sha256:edee935561150ca58dcd922cd2fa7187848d95ff9dc4f1cc34af553846a13c44
+# Copying blob sha256:66a45dfee5d4daa328685bb2e2a185fec9074eb1e420182dd54b197c8d1c93e6
+# Copying blob sha256:abc3e6454a8698d9e8338584e11a3f4c5c6a637ded34b3410bef36c4e18288b6
+# Copying blob sha256:cb883835b680dfe1f489c74b134830909e6363b5029baa54c7cf41e31d51c7f9
+# Copying blob sha256:da60d02107bb8d19f09a02fab26aaa17a4bd6f366df5bbb320dd7f40108cc207
+# Copying blob sha256:52c2360e67f47eb1e58bf4650f6fe5cd883b731ed5dd197a0a063471d26a9e02
+# Copying blob sha256:c82b59cf21b3551dbcf6de21d8a3b7d6032d7e06899567970b197e048aedf5d9
+# Copying blob sha256:c5092dc41f8563207b0f8c7c5fdad976746cc63a82a0b2717944064004a97e41
+# Copying blob sha256:84be2e43535982fa66c617f5c002f1ad739ba94f6e522d2e59db97456d82ad03
+# Copying blob sha256:7dd883153f558a4412e6bcf6a9235bc919e847dea8af4b36c13931ece88713fd
+# Copying blob sha256:737ba8c82f2a7c0697fe21e52f3de8ec552efae0d3c551ab3c4a8a10aa0e6620
+# Copying blob sha256:8834b1655a3219a0f67433e707c53168cea69122fc7cfddcb66462b72e94674c
+# Copying blob sha256:a9d38951db9246ec5246544249e64eba35a8a05df869009f1fb6d923e1330369
+# Copying blob sha256:b689bb53275e78915bb754e09cac7c3f2510775da60d66afe6478eb5ab751453
+# Copying blob sha256:1ae5929adf407f8f49673090c90503974779f1fc0058cd8b4423a20a8597b8bb
+# Copying blob sha256:f37fb4a8697c5f8d1c82ac050dec94f30a25b50a3baa2a6bf95c8e36c19c5ec1
+# Copying blob sha256:c52d6fbf9e8b7ce00331a43c431447d88e2887e326174b89fbfaef57c89a474b
+# Copying blob sha256:7976cd422492d0908ab846521789c4480643866dc9990ad930bda4589b6ba6d3
+# Copying blob sha256:638876e3141acb597a707125ebeddf40dec21d897ad9b64a7b834115743edaf5
+# Copying blob sha256:dce6dd78b555c6a66f0403b96d0f711fe33826351ac99fde8261a0a3f86e42d8
+# Copying blob sha256:416324d9d2699aaa7faff9a2a3cd2876fe82ae53cd713184080d7825be00f27c
+# Copying blob sha256:19423140783f107f7f32a9a52861b6e8f53f12669856eacfbfda6abfdef0d6ec
+# Copying blob sha256:9fd58902794e5caf87fdeb118bf1cb34e2c7d2d98dd8f2dccb644e325a0e34fc
+# Copying blob sha256:7c3700724d8848c40b6b55e20619abe2f6c77fd6e1a45e2b92d1e64a2b57e7e7
+# Copying config sha256:e9fa665da13e2696c3b3899990a0a4d0f18aae385bf5dba59a89a1ce3766c736
+# Writing manifest to image destination
+# time="2024-12-19T17:25:57-07:00" level=debug msg="User or group ID mappings not available: open /proc/self/uid_map: no such file or directory"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="User or group ID mappings not available: open /proc/self/uid_map: no such file or directory"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="DoRequest Method: GET URI: http://d/v5.2.3/libpod/images/ghcr.io%2Fflox%2Fflox/json"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="DoRequest Method: POST URI: http://d/v5.2.3/libpod/containers/create"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="Enabling signal proxying"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="Enabling signal proxying"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="DoRequest Method: GET URI: http://d/v5.2.3/libpod/containers/655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960/json"
+# time="2024-12-19T17:25:57-07:00" level=debug msg="DoRequest Method: POST URI: http://d/v5.2.3/libpod/containers/655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960/attach"
+# time="2024-12-19T17:25:58-07:00" level=debug msg="Copying standard streams of container \"655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960\" in non-terminal mode"
+# time="2024-12-19T17:25:58-07:00" level=debug msg="DoRequest Method: POST URI: http://d/v5.2.3/libpod/containers/655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960/start"
+# this derivation will be built:
+#   /nix/store/pm9yibyghnx6zx3k2cjq7kqf00086w48-flox-1.3.8-g4f8fd41.drv
+# these 34 paths will be fetched (92.78 MiB download, 305.59 MiB unpacked):
+#   /nix/store/wj7hxrvf8jqipkdry7x6ii1ds1ry2hd5-binutils-2.43.1
+#   /nix/store/gssgc7m6mdxm896grgb4hrhmf6rkp0v9-binutils-2.43.1-lib
+#   /nix/store/q7f04cg09lhbcynblifncs2jj7piiqbr-binutils-wrapper-2.43.1
+#   /nix/store/997fxzdflaans1z4zxi496km3dkvh44l-die-hook
+#   /nix/store/icn9rk40wni93jc96dymq8qfbm240jsq-diffutils-3.10
+#   /nix/store/82grjzqq27fc7fgw1bslzvh3vg2g513i-ed-1.20.2
+#   /nix/store/wf6z93b8awzggxgmmqx8mbxydjrwpaz4-expand-response-params
+#   /nix/store/2s2av8fvjw3k3jc1vm4m0g6v027gh8hq-file-5.45
+#   /nix/store/5vkyrs9hj5hc83rg91w7x1l0dbp4awkk-flox-1.3.8
+#   /nix/store/f06nqkh8zc4awxg7d4hq50xqsnap8m18-flox-activation-scripts
+#   /nix/store/v67csb6zbvd7pvbrm7pv8lvacwhpaprn-flox-activation-scripts-build_wrapper
+#   /nix/store/mv8hljnpgm4qc1lkj6r3azhfsyhi6kgc-flox-activations-1.3.8
+#   /nix/store/xjyhks0j2d7picrkagkpd6g9v3s87c6f-flox-buildenv-0.0.1
+#   /nix/store/fdnbkglslcyvyg6kyk0s8hqcmv35qqw9-flox-manpages
+#   /nix/store/qrirc5x0jz2jr8ib8k412y091h99nrm6-flox-pkgdb-1.3.8
+#   /nix/store/zxiwiszrv6hiy29b2vwwks6fl4n7jvh5-flox-watchdog-1.3.8
+#   /nix/store/3y6ami71csargy3hbrdc15lbkdi3icyy-gcc-13.3.0
+#   /nix/store/z37lqx549cl99dzz12ghsww0zjrifa1y-gcc-wrapper-13.3.0
+#   /nix/store/a79372lvalazma0jzpkajm4q6s8m84ks-glibc-2.40-36-dev
+#   /nix/store/2wapfvhpgpigqn4c3554i3msab2m5226-gmp-6.3.0
+#   /nix/store/a6wwfilczbax7g7ifj02c21h9fs954si-gnu-config-2024-01-01
+#   /nix/store/77mvb93h7g9479lq4myxz9zvvhcj2ckh-gnumake-4.4.1
+#   /nix/store/z2bz2zp3664qpx1c24ksafmci2l4q8dc-isl-0.20
+#   /nix/store/a97xiwnbss1zmdifgs0rmlsn2ci3hy34-libmpc-1.3.1
+#   /nix/store/wh3mm34k6ayg5y2i9nqf6gzscysva888-linux-headers-6.10
+#   /nix/store/j8gacxj1zjh0vvlc4cy4f51wjjg8wh43-lndir-1.0.5
+#   /nix/store/fhnwkrpbfkpzaqqinjq707zjwbivx8im-make-binary-wrapper-hook
+#   /nix/store/9f75mhj5xvm2dpy8l77gk6h9h2gfwvw9-mpfr-4.2.1
+#   /nix/store/gg0c2md3c7lzzhhsmjhpm0xc4x5qzmhl-package-builder-1.0.0
+#   /nix/store/h7lg7p2hpxr7y3fz529v5j54wxlpfy85-patch-2.7.6
+#   /nix/store/s8ygwyad5fmhrjws94g4k3f4809knxzk-patchelf-0.15.0
+#   /nix/store/qx5an9g1a8v0g87cjgr56w7sjjjayc9x-stdenv-linux
+#   /nix/store/vhq7k5sbj4k7vsihaqqfxndi3i37dbkr-t3-1.0.3
+#   /nix/store/f60ckbsa2b7gv8i1zwrig9l4mnmgk6id-update-autotools-gnu-config-scripts-hook
+# copying path '/nix/store/fdnbkglslcyvyg6kyk0s8hqcmv35qqw9-flox-manpages' from 'https://cache.flox.dev'...
+# copying path '/nix/store/997fxzdflaans1z4zxi496km3dkvh44l-die-hook' from 'https://cache.flox.dev'...
+# copying path '/nix/store/a6wwfilczbax7g7ifj02c21h9fs954si-gnu-config-2024-01-01' from 'https://cache.flox.dev'...
+# copying path '/nix/store/j8gacxj1zjh0vvlc4cy4f51wjjg8wh43-lndir-1.0.5' from 'https://cache.flox.dev'...
+# copying path '/nix/store/icn9rk40wni93jc96dymq8qfbm240jsq-diffutils-3.10' from 'https://cache.flox.dev'...
+# copying path '/nix/store/82grjzqq27fc7fgw1bslzvh3vg2g513i-ed-1.20.2' from 'https://cache.flox.dev'...
+# copying path '/nix/store/wf6z93b8awzggxgmmqx8mbxydjrwpaz4-expand-response-params' from 'https://cache.flox.dev'...
+# copying path '/nix/store/2s2av8fvjw3k3jc1vm4m0g6v027gh8hq-file-5.45' from 'https://cache.flox.dev'...
+# copying path '/nix/store/mv8hljnpgm4qc1lkj6r3azhfsyhi6kgc-flox-activations-1.3.8' from 'https://cache.flox.dev'...
+# copying path '/nix/store/77mvb93h7g9479lq4myxz9zvvhcj2ckh-gnumake-4.4.1' from 'https://cache.flox.dev'...
+# copying path '/nix/store/wh3mm34k6ayg5y2i9nqf6gzscysva888-linux-headers-6.10' from 'https://cache.flox.dev'...
+# copying path '/nix/store/vhq7k5sbj4k7vsihaqqfxndi3i37dbkr-t3-1.0.3' from 'https://cache.flox.dev'...
+# copying path '/nix/store/2wapfvhpgpigqn4c3554i3msab2m5226-gmp-6.3.0' from 'https://cache.flox.dev'...
+# copying path '/nix/store/s8ygwyad5fmhrjws94g4k3f4809knxzk-patchelf-0.15.0' from 'https://cache.flox.dev'...
+# copying path '/nix/store/gssgc7m6mdxm896grgb4hrhmf6rkp0v9-binutils-2.43.1-lib' from 'https://cache.flox.dev'...
+# copying path '/nix/store/f60ckbsa2b7gv8i1zwrig9l4mnmgk6id-update-autotools-gnu-config-scripts-hook' from 'https://cache.flox.dev'...
+# copying path '/nix/store/v67csb6zbvd7pvbrm7pv8lvacwhpaprn-flox-activation-scripts-build_wrapper' from 'https://cache.flox.dev'...
+# copying path '/nix/store/f06nqkh8zc4awxg7d4hq50xqsnap8m18-flox-activation-scripts' from 'https://cache.flox.dev'...
+# copying path '/nix/store/gg0c2md3c7lzzhhsmjhpm0xc4x5qzmhl-package-builder-1.0.0' from 'https://cache.flox.dev'...
+# copying path '/nix/store/qrirc5x0jz2jr8ib8k412y091h99nrm6-flox-pkgdb-1.3.8' from 'https://cache.flox.dev'...
+# copying path '/nix/store/xjyhks0j2d7picrkagkpd6g9v3s87c6f-flox-buildenv-0.0.1' from 'https://cache.flox.dev'...
+# copying path '/nix/store/zxiwiszrv6hiy29b2vwwks6fl4n7jvh5-flox-watchdog-1.3.8' from 'https://cache.flox.dev'...
+# copying path '/nix/store/5vkyrs9hj5hc83rg91w7x1l0dbp4awkk-flox-1.3.8' from 'https://cache.flox.dev'...
+# copying path '/nix/store/h7lg7p2hpxr7y3fz529v5j54wxlpfy85-patch-2.7.6' from 'https://cache.flox.dev'...
+# copying path '/nix/store/z2bz2zp3664qpx1c24ksafmci2l4q8dc-isl-0.20' from 'https://cache.flox.dev'...
+# copying path '/nix/store/9f75mhj5xvm2dpy8l77gk6h9h2gfwvw9-mpfr-4.2.1' from 'https://cache.flox.dev'...
+# copying path '/nix/store/wj7hxrvf8jqipkdry7x6ii1ds1ry2hd5-binutils-2.43.1' from 'https://cache.flox.dev'...
+# copying path '/nix/store/a79372lvalazma0jzpkajm4q6s8m84ks-glibc-2.40-36-dev' from 'https://cache.flox.dev'...
+# copying path '/nix/store/qx5an9g1a8v0g87cjgr56w7sjjjayc9x-stdenv-linux' from 'https://cache.flox.dev'...
+# copying path '/nix/store/a97xiwnbss1zmdifgs0rmlsn2ci3hy34-libmpc-1.3.1' from 'https://cache.flox.dev'...
+# copying path '/nix/store/3y6ami71csargy3hbrdc15lbkdi3icyy-gcc-13.3.0' from 'https://cache.flox.dev'...
+# copying path '/nix/store/q7f04cg09lhbcynblifncs2jj7piiqbr-binutils-wrapper-2.43.1' from 'https://cache.flox.dev'...
+# copying path '/nix/store/z37lqx549cl99dzz12ghsww0zjrifa1y-gcc-wrapper-13.3.0' from 'https://cache.flox.dev'...
+# copying path '/nix/store/fhnwkrpbfkpzaqqinjq707zjwbivx8im-make-binary-wrapper-hook' from 'https://cache.flox.dev'...
+# building '/nix/store/pm9yibyghnx6zx3k2cjq7kqf00086w48-flox-1.3.8-g4f8fd41.drv'...
+# No 'fromImage' provided
+# Creating layer 1 from paths: ['/nix/store/a0mbpky7hll3ljg1cnp5apc4y1bgb9hl-libunistring-1.2']
+# Creating layer 2 from paths: ['/nix/store/y9n3vjmh0iarg25ngv6bzbhbqam5rxch-libidn2-2.3.7']
+# Creating layer 3 from paths: ['/nix/store/v2fdaykfy6ldp5wzn8hm2hb74nd35anw-xgcc-13.3.0-libgcc']
+# Creating layer 4 from paths: ['/nix/store/qii6jadf3xrhg4y0f5m09k11lh5ymwnv-glibc-2.40-36']
+# Creating layer 5 from paths: ['/nix/store/dajy07dbzdag6vbmcdbhqhnn2hiaiwhd-gcc-13.3.0-libgcc']
+# Creating layer 6 from paths: ['/nix/store/9ki1b72wzh9b5g9pl9sdqg691clrriq7-gcc-13.3.0-lib']
+# Creating layer 7 from paths: ['/nix/store/k2wspf0nq81hxjwxsnb8r9cg08qngdk2-bash-5.2p32']
+# Creating layer 8 from paths: ['/nix/store/rgsl4wpi5m4kql5gbqm3qrqbkm4kxr6q-zlib-1.3.1']
+# Creating layer 9 from paths: ['/nix/store/lcmchmg9k0dmhzrlzr5q2jba9b5dm3hd-openssl-3.3.2']
+# Creating layer 10 from paths: ['/nix/store/73cmakk5y5jy8dg8525vh1ihivz5akmy-libxcrypt-4.4.36']
+# Creating layer 11 from paths: ['/nix/store/dczwbhzranlyagibd5bri0hh3f2fpdhr-zstd-1.5.6']
+# Creating layer 12 from paths: ['/nix/store/27g9izyxv4n1q89k0igs833mjrvpaihx-attr-2.5.2']
+# Creating layer 13 from paths: ['/nix/store/r8d4jrlyp2fhn34f4r2239mdqscys8b5-keyutils-1.6.3-lib']
+# Creating layer 14 from paths: ['/nix/store/ara1ipkqpc9cl1d1l541kgp2mq28dxjn-publicsuffix-list-0-unstable-2024-09-10']
+# Creating layer 15 from paths: ['/nix/store/kvyb0lw3zh8x1vpc6hicz8y0qb9p6dkr-xz-5.6.2']
+# Creating layer 16 from paths: ['/nix/store/xhyb4qdh528if2qrdxmm86qbrcqyxazx-gmp-with-cxx-6.3.0']
+# Creating layer 17 from paths: ['/nix/store/261i1cr9kinsh5rvkpgz9pjxm46wbc6l-acl-2.3.2']
+# Creating layer 18 from paths: ['/nix/store/m09lvkkdsbnw7ys1pp7ypb8rf2m80ssz-audit-4.0']
+# Creating layer 19 from paths: ['/nix/store/7cyssy2hvfbi24ibarlb6gvfryic86r3-brotli-1.1.0-lib']
+# Creating layer 20 from paths: ['/nix/store/jlwwlwnq7w1sxq5c73b442arb96nwr07-krb5-1.21.3-lib']
+# Creating layer 21 from paths: ['/nix/store/xqgzsb8cfqpq176xp97f0r39vdjxz7dc-libpsl-0.21.5']
+# Creating layer 22 from paths: ['/nix/store/lm51wdx4qi7gvvipssjx35gh52wrbm0j-libssh2-1.11.0']
+# Creating layer 23 from paths: ['/nix/store/kixyi38p74cfvksjk3hg06g21q7bzmq5-nghttp2-1.63.0-lib']
+# Creating layer 24 from paths: ['/nix/store/9rd3pgw8wh3m2r372qpbv8j6frpfs1jc-bzip2-1.0.8']
+# Creating layer 25 from paths: ['/nix/store/344hm8gld550hq7whwj3qdr86qpw31b5-db-4.8.30']
+# Creating layer 26 from paths: ['/nix/store/9bjvb2vbak1bmpq03yg8na477778mfy3-libgpg-error-1.50']
+# Creating layer 27 from paths: ['/nix/store/wxnri4hmjcmmip031bm27zx80j1c3lp5-libcap-2.70-lib']
+# Creating layer 28 from paths: ['/nix/store/9wgim2ysrichvwi1hmhwpmv3ggdg25py-util-linux-minimal-2.39.4-login']
+# Creating layer 29 from paths: ['/nix/store/h887yq6z05ynslzqbqd125flw251j4hr-util-linux-minimal-2.39.4-lib']
+# Creating layer 30 from paths: ['/nix/store/jj296s3llq5h537zj8mjbmyw4fcri84m-libtasn1-4.19.0']
+# Creating layer 31 from paths: ['/nix/store/h2x0xrfq3iqfn6anb3hld7h3k0dgsj3x-curl-8.9.1']
+# Creating layer 32 from paths: ['/nix/store/yvpsla8c5sf7vcfxxs9ainsviqmnyyf1-gmp-with-cxx-6.3.0']
+# Creating layer 33 from paths: ['/nix/store/vhy8lcs8js2qs785vgssj0qq6asx7kqi-libmnl-1.0.5']
+# Creating layer 34 from paths: ['/nix/store/raxk9vwg1raq7v90x27y4a0b0djfsi2v-libffi-3.4.6']
+# Creating layer 35 from paths: ['/nix/store/qyj38vb6i7alz0w86g8vk1y68r8v3s2d-linux-pam-1.6.1']
+# Creating layer 36 from paths: ['/nix/store/gcm8z4y9614h9wwlssc9mdqdm774bims-nettle-3.10']
+# Creating layer 37 from paths: ['/nix/store/mcln7vd9r6p72s6m1lm1jbjnmfbwxj3l-ncurses-6.4.20221231']
+# Creating layer 38 from paths: ['/nix/store/z16jwhhg1pavcrjk5sfihjn6lnz93sfw-pcre2-10.44']
+# Creating layer 39 from paths: ['/nix/store/h1xfncxv0c1nxj4vsmy94c91v02g5qkz-systemd-minimal-libs-256.6']
+# Creating layer 40 from paths: ['/nix/store/gay60sgl1brq3vsfnk7bfdlmxpsvrma8-libevent-2.1.12']
+# Creating layer 41 from paths: ['/nix/store/namch7m64x4mpz94vfb042bq226d2kdn-libnfnetlink-1.0.2']
+# Creating layer 42 from paths: ['/nix/store/iilsqz9ws7rwgkvgci1990hn0rz9b4fg-p11-kit-0.25.5']
+# Creating layer 43 from paths: ['/nix/store/gfjbnw92vcya9c1wg1i29sjfclqs101q-util-linux-2.39.4-lib']
+# Creating layer 44 from paths: ['/nix/store/cqnb5spmpzvc32h16568s028frzvz8hs-coreutils-9.5']
+# Creating layer 45 from paths: ['/nix/store/lagsw626j70k65xwc6rnnv288xzcl57c-json-c-0.17']
+# Creating layer 46 from paths: ['/nix/store/gq5gx8bhgdc814ka4x7h9i7cmpic4qmr-dns-root-data-2024-06-20']
+# Creating layer 47 from paths: ['/nix/store/hz0n7bgpmnkvd83kz7ahgd899yiwrvsa-gnugrep-3.11']
+# Creating layer 48 from paths: ['/nix/store/0psv0msmldg02055y2mj0kh9m4nvf8d4-libnl-3.10.0']
+# Creating layer 49 from paths: ['/nix/store/bs7kl3j5scgmkvwqcca1gf6p8sn4x6xg-unbound-1.21.0-lib']
+# Creating layer 50 from paths: ['/nix/store/z2lpgv1s8fql3qvyg6d9mmni9r2z6z73-elfutils-0.191']
+# Creating layer 51 from paths: ['/nix/store/flba8s6amih014k26byw1bf7aqwdppvg-libgcrypt-1.10.3-lib']
+# Creating layer 52 from paths: ['/nix/store/mih5vx30zp8g7i9zhxzzkj6avmf248cg-readline-8.2p13']
+# Creating layer 53 from paths: ['/nix/store/8anqigswx4hwakzmb2f3y8g4ydm143am-bzip2-1.0.8-bin']
+# Creating layer 54 from paths: ['/nix/store/fzd5bxwcw9w7f42skk2kc546c034ph81-cracklib-2.10.0']
+# Creating layer 55 from paths: ['/nix/store/8ha5gmibmlzyvi2dy7rlgd4fj7s21ndc-glibc-2.40-36-getent']
+# Creating layer 56 from paths: ['/nix/store/s7x02wdik5az8w8mpl6763k6m51lkp7z-gnutls-3.8.6']
+# Creating layer 57 from paths: ['/nix/store/zf7spazb812ddrhkw07b7d245rhpsc1d-gzip-1.13']
+# Creating layer 58 from paths: ['/nix/store/39p40kzrjjxxjwqppq8bm2zh0qkcn69n-libassuan-2.5.7']
+# Creating layer 59 from paths: ['/nix/store/55h07bacdrma3q03g5gis0ppf538mwps-libcbor-0.11.0']
+# Creating layer 60 from paths: ['/nix/store/cfxysnmjlyr7hffkznk6szxpbm9l1mpz-libmd-1.1.0']
+# Creating layer 61 from paths: ['/nix/store/a88jn1mfib4zqg4iwbkaix9b1xnmfs0z-libnetfilter_conntrack-1.0.9']
+# Creating layer 62 from paths: ['/nix/store/2f6273j4wpyysaydbffz0aqgqjh8payw-libnftnl-1.2.7']
+# Creating layer 63 from paths: ['/nix/store/d059pkgd991kvgjxk9klgdgy2qbm7iz5-libpcap-1.10.5']
+# Creating layer 64 from paths: ['/nix/store/fgc3im92h8h07da2i997kkbk9slz1sr4-libxml2-2.13.4']
+# Creating layer 65 from paths: ['/nix/store/720p41z6zlx7004ihb5bv57xxkvcjhkk-lvm2-2.03.26-lib']
+# Creating layer 66 from paths: ['/nix/store/8n89hjz2h3riasqi3ix3s9id9ghwbw7g-npth-1.7']
+# Creating layer 67 from paths: ['/nix/store/6l0xbbc74r074r0by2cyi3k04gh1xjag-pcsclite-2.2.3-lib']
+# Creating layer 68 from paths: ['/nix/store/3pwr0akyz1x3xxbjbd7rq4s6f7vvxbi1-xz-5.6.2-bin']
+# Creating layer 69 from paths: ['/nix/store/6pgkj5wzar8a2b8rjw1y9i3d5vdl9ibj-zstd-1.5.6-bin']
+# Creating layer 70 from paths: ['/nix/store/4x6vqi0xda060rdyldq4s0lpalvk90wf-oniguruma-6.9.9-lib']
+# Creating layer 71 from paths: ['/nix/store/7031c1bwpqvmsfnzd0v50vd6v2lb1kni-bash-interactive-5.2p32']
+# Creating layer 72 from paths: ['/nix/store/2idfdm25lr2dgdh1p9mz7r6cl7gc3fdz-glibc-2.40-36-bin']
+# Creating layer 73 from paths: ['/nix/store/105dgqpc2b7s6m8ydhfg2la54i9z2524-cryptsetup-2.7.4']
+# Creating layer 74 from paths: ['/nix/store/wnwi7f015q8k2zn5k5i52hswms3mq3r6-getent-glibc-2.40-36']
+# Creating layer 75 from paths: ['/nix/store/dc6p55wvjicpzi3khl34ls7x9lakrjmm-gnupg-2.4.5']
+# Creating layer 76 from paths: ['/nix/store/r9sqz7j69q8b0i8z602rvp5jqxrvzj3f-gnutar-1.35']
+# Creating layer 77 from paths: ['/nix/store/60vh2s6qg66401pka7vjygxwpjszyfv4-iptables-1.8.10']
+# Creating layer 78 from paths: ['/nix/store/abvi82d77r0y8zp1pd6jzflgjm0gwx0p-kbd-2.6.4']
+# Creating layer 79 from paths: ['/nix/store/yhrph09r91by0d96p7mc4jdnyv1190p3-kexec-tools-2.0.29']
+# Creating layer 80 from paths: ['/nix/store/m1lkn9x0vyjrp8f67vvg5fi8ahnzyzwb-kmod-31']
+# Creating layer 81 from paths: ['/nix/store/2l3gs155pb3z1k1chw1v2sjsb1w2wlx5-kmod-31-lib']
+# Creating layer 82 from paths: ['/nix/store/l8p7wzjyznfr3fdgb4ydffyd2mzc2wn8-libapparmor-4.0.3']
+# Creating layer 83 from paths: ['/nix/store/immk9p6sqywry61vnqiaar4pf868pb5n-libarchive-3.7.4-lib']
+# Creating layer 84 from paths: ['/nix/store/d8wzk90rkh8ic34g3xdy45xfwqz0q0p6-libbpf-1.4.6']
+# Creating layer 85 from paths: ['/nix/store/jbmm3gdlhymk4b6aalmvqqqi27w3jwp3-libbsd-0.12.2']
+# Creating layer 86 from paths: ['/nix/store/l127ha80km2k30aakxmgsxxb20bxm6rm-libfido2-1.15.0']
+# Creating layer 87 from paths: ['/nix/store/6v5wsv132s2bf5921i5ha7brdrab4zsf-libmicrohttpd-1.0.1']
+# Creating layer 88 from paths: ['/nix/store/6cnwp8h3g4lm8hk4qfbqg7dxnvvk9g7x-libpwquality-1.4.5-lib']
+# Creating layer 89 from paths: ['/nix/store/1hyz4amsh3wx2amg642hq24kscg92v33-libseccomp-2.5.5-lib']
+# Creating layer 90 from paths: ['/nix/store/8rywcj8s7gx9iy4hwipfz7nb87s9rib9-libunistring-1.2']
+# Creating layer 91 from paths: ['/nix/store/zv7hg49vxci1cb8x7iap31a0h01h6vqc-lz4-1.10.0-lib']
+# Creating layer 92 from paths: ['/nix/store/1wj15absz3jqv0wx6c2m4x9b4bb548kp-qrencode-4.1.1']
+# Creating layer 93 from paths: ['/nix/store/ra30rnc7v9m004igfb24j4fnkwy03dr0-tcb-1.2']
+# Creating layer 94 from paths: ['/nix/store/ppd6zs4kd8jcnbq85pw5g352vlb6r6qk-tpm2-tss-4.1.3']
+# Creating layer 95 from paths: ['/nix/store/ar6pnn3ypff7bk6sh68zxzdd76rr04nz-util-linux-minimal-2.39.4-mount']
+# Creating layer 96 from paths: ['/nix/store/q86xpa7b1jvvfp8xvy7zyismgp2bjk2q-util-linux-minimal-2.39.4-swap']
+# Creating layer 97 from paths: ['/nix/store/j9dys760pk0lbp5i8l5h71grivd2ld9x-iana-etc-20240318']
+# Creating layer 98 from paths: ['/nix/store/gr5zibf0nhvk3fiffnrrzwpbcpdnha6h-jemalloc-5.3.0']
+# Creating layer 99 from paths: ['/nix/store/ykwd69vhal2nlqrz9fjp2llcc86qqn03-jq-1.7.1', '/nix/store/cmq38fl372l8lwxafqzl6cz4m3syvksw-jq-1.7.1-doc', '/nix/store/8xhqcza8rphrzmam4s8iwcpcxw0wplz9-jq-1.7.1-lib', '/nix/store/q4p9qaif44i4saks3vinfz2rmb0v9y7l-jq-1.7.1-man', '/nix/store/0ddx6k9v5k45031j09mn6jfvcwq61rl6-libcap-ng-0.8.5', '/nix/store/04aq2w58qlqjvwamcljh1hahz744hlzd-libidn2-2.3.7', '/nix/store/2yf9cl31hfk1fv7a9s48signc294yjj8-mailcap-2.1.54', '/nix/store/9w8cpk44fm9l1kmhaldc0r1yn4lbjacm-shadow-4.16.0', '/nix/store/pnabxmab15j0jrh19rrins6fx3ip8j38-systemd-256.6', '/nix/store/bkjfb1j7v2yax4501fyws8ha13mfancm-tzdata-2024b', '/nix/store/rfnih2sgjgzg9ja60nga6spc52lx2i4f-util-linux-2.39.4-login', '/nix/store/0z9nimr9wrrbzbyrjm6v8626l3ypjai2-util-linux-2.39.4-mount', '/nix/store/1slv943cd8v56r2rk9kqrp8zdcwsysyj-util-linux-2.39.4-swap', '/nix/store/9zk5kpadlnzhz4aq319hykb6anf71g7x-xgcc-13.3.0-libgcc', '/nix/store/pi8ni9x1852baf0l9baqr93dy2fb3gxm-daemonize-1.7.8', '/nix/store/xzlg56rwscm5bhxwfhivvb6wb79xm8az-fd-10.2.0', '/nix/store/mx757zkaiyr6d4qcl902i6qd6wgmksk2-findutils-4.10.0', '/nix/store/mv8hljnpgm4qc1lkj6r3azhfsyhi6kgc-flox-activations-1.3.8', '/nix/store/qswh3390mf0shsrbq54md3l8w3jxxcfd-getopt-1.1.6', '/nix/store/w0gi2q79avgm6fr2mikgjl6z781rq0h7-glibc-2.40-36', '/nix/store/z914nm4kzmjgfs6ydf59wrpiwybr2xwc-glibc-locales-2.40-36', '/nix/store/i3f50210jpp4wmzkpds6l7zbp81ds4xf-gnused-4.9', '/nix/store/ahpilzy1f17m9c7kbjvv7576zzbyy6qi-jq-1.7.1-bin', '/nix/store/pc794acs7wv5sss5sy1v5j926fpxms8y-ld-floxlib-1.0.0', '/nix/store/sbhv2xspr1mjbmlczas6fn3afvxar0mq-nawk-20240728', '/nix/store/x3hd7m7g12xbkmyc3lissbr27bb36wsc-nss-cacert-3.104', '/nix/store/95nxlvj6rrdkgrbp308fqrhxqlq4ragw-process-compose-1.34.0', '/nix/store/ap6v9j8iv2w8xy0d6xpl8n0ca91gv079-util-linux-2.39.4-bin', '/nix/store/f06nqkh8zc4awxg7d4hq50xqsnap8m18-flox-activation-scripts', '/nix/store/7m8hnxx2k849ambsfl0vq0ahxz77rmly-hello-2.12.1', '/nix/store/yzi1ika41ssq4ksi4ysn867nicnnpq23-manifest', '/nix/store/7w8wn15ddarmyp0q14ja69c4qibp1yay-environment-develop', '/nix/store/vkdp5328nmrp0aaxfcxywy9xrqx4g4mw-bash-interactive-5.2p32-man']
+# Creating layer 100 with customisation...
+# Adding manifests...
+# Done.
+# ✨ Container written to stdout
+# time="2024-12-19T17:26:30-07:00" level=debug msg="DoRequest Method: POST URI: http://d/v5.2.3/libpod/containers/655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960/wait"
+# time="2024-12-19T17:26:31-07:00" level=debug msg="DoRequest Method: POST URI: http://d/v5.2.3/libpod/containers/655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960/shouldrestart"
+# time="2024-12-19T17:26:31-07:00" level=debug msg="DoRequest Method: DELETE URI: http://d/v5.2.3/libpod/containers/655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960"
+# time="2024-12-19T17:26:31-07:00" level=debug msg="Container 655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960 does not exist: no container with ID or name \"655ea71e2cff2a2adc7fd0c9b43c056f9ae9e373deaef86c26f35d89747a9960\" found: no such container"
+# time="2024-12-19T17:26:31-07:00" level=debug msg="Called run.PersistentPostRunE(/nix/store/p3lz44rirshy6z1f3mzdgk2py9mqssjx-podman-5.2.3/bin/podman run --rm --userns  --log-level debug --mount type=bind,source=/private/tmp/nix-shell.tvmXfz/bats-run-0WWH64/test/1/test,target=/flox_env --env HOME=/flox_home --mount type=bind,source=/tmp/home.PA2Vyj,target=/flox_home --env FLOX_DISABLE_METRICS=true ghcr.io/flox/flox nix --extra-experimental-features nix-command flakes --accept-flake-config run github:flox/flox -- containerize --dir /flox_env --tag latest --file -)"
+# time="2024-12-19T17:26:31-07:00" level=debug msg="Shutting down engines"
+# Loaded image: localhost/test:latest
+# ✨ Container written to Podman runtime

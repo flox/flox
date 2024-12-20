@@ -48,9 +48,22 @@ podman_cache_reset() {
 # temporary home directory since these will linked into that temporary home
 # directory.
 podman_global_dirs_setup() {
-  export PODMAN_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/containers"
-  export PODMAN_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/containers"
-  export PODMAN_RUNTIME_DIR="${XDA_RUNTIME_DIR:-$HOME/run}/podman"
+  # Podman creates deeply nested directories and stores sockets in some of them,
+  # so we need to create locations to store those with shorter paths than what
+  # we'd get nesting them under `/tmp/nix-shell.XXXXXX/bats-run-XXXXXX`.
+  export SHORT_TMP="$(mktemp -d "/tmp/XXXXXX")"
+  export XDG_CONFIG_HOME="$SHORT_TMP/.config"
+  export XDG_DATA_HOME="$SHORT_TMP/.local/share"
+  export XDG_RUNTIME_DIR="$SHORT_TMP/run"
+  mkdir -p "$XDG_CONFIG_HOME"
+  mkdir -p "$XDG_DATA_HOME"
+  mkdir -p "$XDG_RUNTIME_DIR"
+  export PODMAN_CONFIG_DIR="${XDG_CONFIG_HOME}/containers"
+  export PODMAN_DATA_DIR="${XDG_DATA_HOME}/containers"
+  export PODMAN_RUNTIME_DIR="${XDG_RUNTIME_DIR}/podman"
+  echo "global podman config dir: $PODMAN_CONFIG_DIR" >&3
+  echo "global podman data dir: $PODMAN_DATA_DIR" >&3
+  echo "global podman runtime dir: $PODMAN_RUNTIME_DIR" >&3
   mkdir -p "$PODMAN_CONFIG_DIR"
   mkdir -p "$PODMAN_DATA_DIR"
   mkdir -p "$PODMAN_RUNTIME_DIR"
@@ -74,7 +87,14 @@ podman_xdg_vars_setup() {
   # This one likely doesn't exist yet, so we'll have to create it.
   # It also isn't the standard location for the runtime directory, it just
   # makes things a little simpler to keep it with the other directories.
-  test_runtime_dir="${home_dir:?}/.local/run"
+  test_runtime_dir="${home_dir:?}/run"
+
+  echo "test home dir: $home_dir" >&3
+  echo "test podman config dir: $test_config_dir" >&3
+  echo "test podman cache dir: $test_cache_dir" >&3
+  echo "test podman data dir: $test_data_dir" >&3
+  echo "test podman state dir: $test_state_dir" >&3
+  echo "test podman runtime dir: $test_runtime_dir" >&3
 
   # Create all of the directories
   mkdir -p "$home_dir"
@@ -177,15 +197,6 @@ EOF
 
   chmod +x "$BATS_TEST_TMPDIR/bin/podman"
   export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
-  machine="$(podman machine list -n)"
-  if [ -z "$machine" ]; then
-    echo "Creating podman machine" >&3
-    podman machine init --log-level debug -v /tmp:/tmp -v /Users:/Users -v /private:/private 2>&1 >&3-
-  fi
-  echo "Starting podman machine" >&3
-  podman machine start --log-level debug || true 2>&1 >&3-
-
-  rm -rf "$HOME/.cache/nix"
 }
 
 setup_file() {
@@ -202,16 +213,25 @@ setup_file() {
   # because podman does not need to serialize writes to the cache.
   export BATS_NO_PARALLELIZE_WITHIN_FILE=true
   podman_global_dirs_setup
+  machine="$(podman machine list -n)"
+  if [ -z "$machine" ]; then
+    echo "Creating podman machine" >&3
+    podman machine init --log-level debug -v /tmp:/tmp -v /Users:/Users -v /private:/private 2>&1 >&3-
+  fi
+  echo "Starting podman machine" >&3
+  podman machine start --log-level debug || true 2>&1 >&3-
 }
 
 teardown() {
   project_teardown
   common_test_teardown
+  # rm -rf "$FLOX_TEST_HOME"
 }
 
 teardown_file() {
   podman_cache_reset
   common_file_teardown
+  # rm -rf "$SHORT_TMP"
 }
 
 # ---------------------------------------------------------------------------- #
