@@ -3,14 +3,16 @@
   writeShellScript,
   runCommand,
   pandoc,
-  fd,
+  findutils,
   installShellFiles,
 }:
 let
   compileManPageBin = writeShellScript "compile" ''
     source="$1"
     shift
-    dest="$1"
+    destdir="$1"
+    shift
+    section="$1"
     shift
 
     # tools
@@ -30,7 +32,7 @@ let
       --from markdown                          \
       --to man                                 \
        $source                                 \
-    > "$dest"
+    > "$destdir/$(basename $source .md).$section"
   '';
 in
 runCommand "flox-manpages"
@@ -40,7 +42,7 @@ runCommand "flox-manpages"
       path = "${./../../cli/flox/doc}";
     };
     buildInputs = [
-      fd
+      findutils
       installShellFiles
     ];
   }
@@ -51,8 +53,7 @@ runCommand "flox-manpages"
     mkdir "$buildDir"
     pushd "$src"
 
-
-    fd ".*\.md" -d 1 ./ -x ${compileManPageBin} {} $buildDir/{/.}.1
+    find . -name "*.md" -exec ${compileManPageBin} {} $buildDir 1 \;
     mv $buildDir/manifest.toml.1 $buildDir/manifest.toml.5
 
     ls $buildDir
