@@ -279,7 +279,7 @@ EOF
       ;;
     command)
       FLOX_SHELL="$shell" PATH="${SYSTEM_BIN}:${PATH}" \
-        run "$FLOX_BIN" activate -d "$PROJECT_DIR" -vv -- \
+        run "$FLOX_BIN" activate -d "$PROJECT_DIR" -- \
         ${echo_install_echo}
       ;;
     in-place)
