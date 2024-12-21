@@ -22,8 +22,6 @@ use flox_rust_sdk::models::environment::{
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
     FLOX_ENV_CACHE_VAR,
     FLOX_ENV_DESCRIPTION_VAR,
-    FLOX_ENV_DIRS_VAR,
-    FLOX_ENV_LIB_DIRS_VAR,
     FLOX_ENV_LOG_DIR_VAR,
     FLOX_ENV_PROJECT_VAR,
     FLOX_ENV_VAR,
@@ -33,7 +31,6 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::utils::traceable_path;
-use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, warn};
@@ -242,27 +239,6 @@ impl Activate {
         // read the currently active environments from the environment
         let mut flox_active_environments = activated_environments();
 
-        // install prefixes of all active environments
-        let flox_env_install_prefixes: IndexSet<PathBuf> = {
-            let mut set = IndexSet::new();
-            if !flox_active_environments.is_active(&now_active) {
-                set.insert(mode_link_path.to_path_buf());
-            }
-            let active_set: IndexSet<PathBuf> = {
-                if let Ok(var) = env::var(FLOX_ENV_DIRS_VAR) {
-                    if !var.is_empty() {
-                        IndexSet::from_iter(env::split_paths(&var))
-                    } else {
-                        IndexSet::new()
-                    }
-                } else {
-                    IndexSet::new()
-                }
-            };
-            set.extend(active_set);
-            set
-        };
-
         // Detect if the current environment is already active
         // For in-place and command (but not ephemeral) activations, if the
         // environment is already active, we only want to re-run profile scripts
@@ -282,22 +258,6 @@ impl Activate {
             // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
             flox_active_environments.set_last_active(now_active.clone());
             false
-        };
-
-        // Set FLOX_ENV_DIRS and FLOX_ENV_LIB_DIRS
-
-        let (flox_env_dirs_joined, flox_env_lib_dirs_joined) = {
-            let flox_env_lib_dirs = flox_env_install_prefixes.iter().map(|p| p.join("lib"));
-
-            let flox_env_dirs = env::join_paths(&flox_env_install_prefixes).context(
-                "Cannot activate environment because its path contains an invalid character",
-            )?;
-
-            let flox_env_lib_dirs = env::join_paths(flox_env_lib_dirs).context(
-                "Cannot activate environment because its path contains an invalid character",
-            )?;
-
-            (flox_env_dirs, flox_env_lib_dirs)
         };
 
         // Determine values for `set_prompt` and `hide_default_prompt`, taking
@@ -338,14 +298,6 @@ impl Activate {
             (
                 FLOX_ACTIVE_ENVIRONMENTS_VAR,
                 flox_active_environments.to_string(),
-            ),
-            (
-                FLOX_ENV_DIRS_VAR,
-                flox_env_dirs_joined.to_string_lossy().to_string(),
-            ),
-            (
-                FLOX_ENV_LIB_DIRS_VAR,
-                flox_env_lib_dirs_joined.to_string_lossy().to_string(),
             ),
             (
                 FLOX_ENV_LOG_DIR_VAR,

@@ -8,13 +8,11 @@ _sed="@gnused@/bin/sed"
 # newlines from the output, so we must ensure that the output is a valid shell
 # script fragment when represented on a single line.
 generate_bash_startup_commands() {
+  "$_flox_activate_tracer" "generate_bash_startup_commands()" START
+
   _flox_activate_tracelevel="${1?}"
   shift
   _FLOX_ACTIVATION_STATE_DIR="${1?}"
-  shift
-  _FLOX_RESTORE_PATH="${1?}"
-  shift
-  _FLOX_RESTORE_MANPATH="${1?}"
   shift
   _activate_d="${1?}"
   shift
@@ -42,22 +40,20 @@ generate_bash_startup_commands() {
     $_sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
     $_sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
 
-    # Restore PATH and MANPATH if set in one of the attach scripts.
-    if [ -n "$_FLOX_RESTORE_PATH" ]; then
-      echo "export PATH='$_FLOX_RESTORE_PATH';"
-    fi
-    if [ -n "$_FLOX_RESTORE_MANPATH" ]; then
-      echo "export MANPATH='$_FLOX_RESTORE_MANPATH';"
-    fi
-
     # Propagate $_activate_d to the environment.
     echo "export _activate_d='$_activate_d';"
     # Propagate $_flox_activate_tracer to the environment.
     echo "export _flox_activate_tracer='$_flox_activate_tracer';"
+    # Propagate $_flox_env_helper to the environment.
+    echo "export _flox_env_helper='$_flox_env_helper';"
   fi
 
   # Set the prompt if we're in an interactive shell.
   echo "if [ -t 1 ]; then source '$_activate_d/set-prompt.bash'; fi;"
+
+  # We already customized the PATH and MANPATH, but the user and system
+  # dotfiles may have changed them, so finish by doing this again.
+  echo "eval \"\$($_flox_env_helper bash)\";"
 
   # Source user-specified profile scripts if they exist.
   for i in profile-common profile-bash hook-script; do
@@ -79,4 +75,6 @@ generate_bash_startup_commands() {
   if [ "$_flox_activate_tracelevel" -ge 2 ]; then
     echo "set +x;"
   fi
+
+  "$_flox_activate_tracer" "generate_bash_startup_commands()" END
 }
