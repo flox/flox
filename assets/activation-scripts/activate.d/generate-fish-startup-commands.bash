@@ -1,3 +1,5 @@
+# shellcheck disable=SC2154
+
 _sed="@gnused@/bin/sed"
 
 # N.B. the output of
@@ -41,6 +43,11 @@ generate_fish_startup_commands() {
     if [ -n "$_FLOX_RESTORE_MANPATH" ]; then
       echo "set -gx MANPATH $_FLOX_RESTORE_MANPATH;"
     fi
+
+    # Propagate $_activate_d to the environment.
+    echo "set -gx _activate_d $_activate_d;"
+    # Propagate $_flox_activate_tracer to the environment.
+    echo "set -gx _flox_activate_tracer $_flox_activate_tracer;"
   fi
 
   # Set the prompt if we're in an interactive shell.
@@ -49,7 +56,11 @@ generate_fish_startup_commands() {
   # Source user-specified profile scripts if they exist.
   for i in profile-common profile-fish hook-script; do
     if [ -e "$FLOX_ENV/activate.d/$i" ]; then
+      "$_flox_activate_tracer" "$FLOX_ENV/activate.d/$i" START
       echo "source '$FLOX_ENV/activate.d/$i';"
+      "$_flox_activate_tracer" "$FLOX_ENV/activate.d/$i" END
+    else
+      "$_flox_activate_tracer" "$FLOX_ENV/activate.d/$i" NOT FOUND
     fi
   done
 

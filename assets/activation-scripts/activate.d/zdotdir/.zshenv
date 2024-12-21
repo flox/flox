@@ -1,3 +1,5 @@
+"$_flox_activate_tracer" "$_activate_d/zdotdir/.zshenv" START
+
 # Source /etc/zshenv and "${FLOX_ORIG_ZDOTDIR:-$HOME}/.zshenv" if they exist
 # prior to performing Flox-specific initialization.
 #
@@ -60,3 +62,5 @@ fi
 # after we've set it up.
 [[ -o interactive ]] || [[ -o login ]] || \
   [ -z "$FLOX_ZSH_INIT_SCRIPT" ] || source "$FLOX_ZSH_INIT_SCRIPT"
+
+"$_flox_activate_tracer" "$_activate_d/zdotdir/.zshenv" END

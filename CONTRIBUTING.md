@@ -214,6 +214,51 @@ section refers to settings from that plugin.
    "shellformat.useEditorConfig": true,
   ```
 
+### Activation scripts
+
+Flox activations invoke a series of scripts
+which begins with the `activate` script
+as maintained in the `assets/activation-scripts` subdirectory.
+The process of developing these scripts is highly iterative,
+and it can be challenging to follow the sequence of scripts
+as invoked in different contexts.
+
+To make debugging easier
+we have added invocations of a "tracer" script
+to the top and bottom of each file to be sourced.
+This script then prints to STDERR
+the full path of the file and one of "START" or "END"
+depending on its position in the file.
+We invoke the "tracer" script in this way
+so as to remain compatible with all shells.
+
+The default "tracer" script is "true",
+which under normal circumstances will do nothing,
+but it can be set to a Flox or user-provided script
+by way of the following:
+
+1. set `FLOX_ACTIVATE_TRACE` to a non-empty value
+
+    If `FLOX_ACTIVATE_TRACE` is defined
+    but does _not_ refer to the path of an executable file
+    then tracing will be performed using the standard
+    `activate.d/trace` script included in the Flox environment.
+
+1. set `FLOX_ACTIVATE_TRACE` to the path of a program of your choosing
+
+    Otherwise, if `FLOX_ACTIVATE_TRACE` contains the path of an executable file
+    then that will be the program invoked
+    at the start and end of each activation script.
+    This is useful when studying the effects of activation scripts
+    on certain environment variables and shell settings.
+
+To use the tracing facility when testing changes to the activation scripts,
+the canonical/authoritative method is to build and activate the full `flox` package:
+```
+nix build
+FLOX_ACTIVATE_TRACE=1 result/bin/flox activate [args]
+```
+
 ## Testing
 
 ### Unit tests

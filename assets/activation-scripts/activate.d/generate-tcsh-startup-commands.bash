@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+# shellcheck disable=SC2154
 
 _sed="@gnused@/bin/sed"
 
@@ -44,6 +45,11 @@ generate_tcsh_startup_commands() {
     if [ -n "$_FLOX_RESTORE_MANPATH" ]; then
       echo "setenv MANPATH '$_FLOX_RESTORE_MANPATH';"
     fi
+
+    # Propagate $_activate_d to the environment.
+    echo "setenv _activate_d '$_activate_d';"
+    # Propagate $_flox_activate_tracer to the environment.
+    echo "setenv _flox_activate_tracer '$_flox_activate_tracer';"
   fi
 
   # Set the prompt if we're in an interactive shell.

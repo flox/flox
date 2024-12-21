@@ -1,3 +1,5 @@
+"$_flox_activate_tracer" "$_activate_d/start.bash" START
+
 _comm="@coreutils@/bin/comm"
 _daemonize="@daemonize@/bin/daemonize"
 _flox_activations="@flox_activations@"
@@ -79,9 +81,13 @@ if [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
   # as configuration statements by the "in-place" activation
   # mode. So, we'll redirect stdout to stderr.
   set +euo pipefail
+  "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" START
   # shellcheck disable=SC1091 # from rendered environment
   source "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
+  "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" END
   set -euo pipefail
+else
+  "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" NOT FOUND
 fi
 
 # Capture ending environment.
@@ -113,3 +119,5 @@ LC_ALL=C $_comm -23 "$_start_env" "$_end_env" \
   --runtime-dir "$FLOX_RUNTIME_DIR" \
   set-ready \
   --flox-env "$FLOX_ENV" --id "$_FLOX_ACTIVATION_ID"
+
+"$_flox_activate_tracer" "$_activate_d/start.bash" END
