@@ -9,6 +9,7 @@ use tracing::{debug, instrument};
 
 use super::buildenv::BuiltStorePath;
 use crate::flox::Flox;
+use crate::models::manifest::ManifestContainerizeConfig;
 use crate::providers::build::BUILDTIME_NIXPKGS_URL;
 use crate::providers::buildenv::NIX_BIN;
 use crate::utils::CommandExt;
@@ -47,6 +48,7 @@ pub trait ContainerBuilder {
 #[derive(Debug)]
 pub struct MkContainerNix {
     store_path: BuiltStorePath,
+    container_config: Option<ManifestContainerizeConfig>,
 }
 
 #[derive(Debug, Error)]
@@ -59,6 +61,9 @@ pub enum MkContainerNixError {
 
     #[error("failed to parse nix build output")]
     ParseBuildOutout(#[source] serde_json::Error),
+
+    #[error("couldn't serialize container config")]
+    SerializeContainerConfig(#[source] serde_json::Error),
 }
 
 impl MkContainerNix {
@@ -72,8 +77,14 @@ impl MkContainerNix {
         not(target_os = "linux"),
         deprecated(note = "MkContainerNix is not supported on this platform")
     )]
-    pub fn new(store_path: BuiltStorePath) -> Self {
-        Self { store_path }
+    pub fn new(
+        store_path: BuiltStorePath,
+        container_config: Option<ManifestContainerizeConfig>,
+    ) -> Self {
+        Self {
+            store_path,
+            container_config,
+        }
     }
 }
 
@@ -111,6 +122,12 @@ impl ContainerBuilder for MkContainerNix {
         ]);
         command.args(["--argstr", "containerName", name.as_ref()]);
         command.args(["--argstr", "containerTag", tag.as_ref()]);
+        command.args([
+            "--argstr",
+            "containerConfig",
+            &serde_json::to_string(&self.container_config)
+                .map_err(MkContainerNixError::SerializeContainerConfig)?,
+        ]);
 
         debug!(cmd=%command.display(), "building container");
 
