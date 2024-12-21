@@ -19,7 +19,7 @@ use super::environment::path_environment::InitCustomization;
 use crate::data::System;
 use crate::providers::services::ServiceError;
 #[cfg(test)]
-use crate::utils::proptest_btree_map_alphanum_keys;
+use crate::utils::{proptest_btree_map_alphanum_keys, proptest_btree_map_alphanum_keys_empty_map};
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub const DEFAULT_PRIORITY: u64 = 5;
@@ -388,6 +388,9 @@ pub struct Manifest {
     #[serde(default)]
     #[serde(skip_serializing_if = "ManifestBuild::skip_serializing")]
     pub build: ManifestBuild,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub containerize: Option<ManifestContainerize>,
 }
 
 impl Manifest {
@@ -1030,6 +1033,73 @@ pub struct ManifestBuildDescriptor {
 pub enum ManifestBuildSandbox {
     Off,
     Pure,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ManifestContainerize {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config: Option<ManifestContainerizeConfig>,
+}
+
+/// Container config derived from
+/// https://github.com/opencontainers/image-spec/blob/main/config.md
+///
+/// Env and Entrypoint are left out since they interfere with our activation implementation
+/// Deprecated and reserved keys are also left out
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "PascalCase")]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ManifestContainerizeConfig {
+    /// The username or UID which is a platform-specific structure that allows specific control over which user the process run as.
+    /// This acts as a default value to use when the value is not specified when creating a container.
+    /// For Linux based systems, all of the following are valid: `user`, `uid`, `user:group`, `uid:gid`, `uid:group`, `user:gid`.
+    /// If `group`/`gid` is not specified, the default group and supplementary groups of the given `user`/`uid` in `/etc/passwd` and `/etc/group` from the container are applied.
+    /// If `group`/`gid` is specified, supplementary groups from the container are ignored.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user: Option<String>,
+    /// A set of ports to expose from a container running this image.
+    /// Its keys can be in the format of:
+    /// `port/tcp`, `port/udp`, `port` with the default protocol being `tcp` if not specified.
+    /// These values act as defaults and are merged with any specified when creating a container.
+    /// **NOTE:** This JSON structure value is unusual because it is a direct JSON serialization of the Go type `map[string]struct{}` and is represented in JSON as an object mapping its keys to an empty object.
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest::option::of(proptest_btree_map_alphanum_keys_empty_map(10, 3))"
+        )
+    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    exposed_ports: Option<BTreeMap<String, BTreeMap<(), ()>>>,
+    /// Default arguments to the entrypoint of the container.
+    /// These values act as defaults and may be replaced by any specified when creating a container.
+    /// If an `Entrypoint` value is not specified, then the first entry of the `Cmd` array SHOULD be interpreted as the executable to run.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cmd: Option<Vec<String>>,
+    /// A set of directories describing where the process is
+    /// likely to write data specific to a container instance.
+    /// This JSON structure value is unusual because it is a direct JSON serialization of the Go type map[string]struct{} and is represented in JSON as an object mapping its keys to an empty object.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest::option::of(proptest_btree_map_alphanum_keys_empty_map(10, 3))"
+        )
+    )]
+    volumes: Option<BTreeMap<String, BTreeMap<(), ()>>>,
+    /// Sets the current working directory of the entrypoint process in the container.
+    /// This value acts as a default and may be replaced by a working directory specified when creating a container.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    working_dir: Option<String>,
+    /// The field contains arbitrary metadata for the container.
+    /// This property MUST use the [annotation rules](https://github.com/opencontainers/image-spec/blob/main/annotations.md#rules).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    labels: Option<BTreeMap<String, String>>,
+    /// The field contains the system call signal that will be sent to the container to exit. The signal can be a signal name in the format `SIGNAME`, for instance `SIGKILL` or `SIGRTMIN+3`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop_signal: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]

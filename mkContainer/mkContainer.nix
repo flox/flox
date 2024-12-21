@@ -11,6 +11,7 @@
   containerName ? "flox-env-container",
   containerTag ? null,
   containerCreated ? "now",
+  containerConfig ? null,
 }:
 let
   environment = builtins.storePath environmentOutPath;
@@ -48,7 +49,7 @@ let
       mkdir -m 1777 tmp
       mkdir -p -m 1777 tmp/flox/run
     '';
-    config = {
+    config = (if containerConfig == null then { } else (builtins.fromJSON containerConfig)) // {
       # Use activate script as the [one] entrypoint capable of
       # detecting interactive vs. command activation modes.
       # Usage:
