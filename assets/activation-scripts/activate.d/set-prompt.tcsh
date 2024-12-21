@@ -1,3 +1,5 @@
+$_flox_activate_tracer $_activate_d/set-prompt.tcsh START
+
 # Tweak the (already customized) prompt: add a flox indicator.
 if ( ! $?FLOX_PROMPT ) then
     set FLOX_PROMPT = "flox"
@@ -27,3 +29,5 @@ if ( $?prompt && "$FLOX_PROMPT_ENVIRONMENTS" != "" && "$_FLOX_SET_PROMPT" != "fa
 endif
 
 unset _flox
+
+$_flox_activate_tracer $_activate_d/set-prompt.tcsh END

@@ -1,3 +1,5 @@
+"$_flox_activate_tracer" "$_activate_d/zsh" START
+
 _sed="@gnused@/bin/sed"
 
 # Confirm _flox_activate_tracelevel is defined before proceeding.
@@ -82,7 +84,11 @@ fi
 # Source user-specified profile scripts if they exist.
 for i in profile-common profile-zsh hook-script; do
   if [ -e "$FLOX_ENV/activate.d/$i" ]; then
+    "$_flox_activate_tracer" "$FLOX_ENV/activate.d/$i" START
     source "$FLOX_ENV/activate.d/$i"
+    "$_flox_activate_tracer" "$FLOX_ENV/activate.d/$i" END
+  else
+    "$_flox_activate_tracer" "$FLOX_ENV/activate.d/$i" NOT FOUND
   fi
 done
 
@@ -98,3 +104,5 @@ if [ "$_flox_activate_tracelevel" -ge 2 ]; then
   set +x
 fi
 unset _flox_activate_tracelevel
+
+"$_flox_activate_tracer" "$_activate_d/zsh" END
