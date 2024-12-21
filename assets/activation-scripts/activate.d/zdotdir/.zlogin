@@ -1,3 +1,7 @@
+# shellcheck shell=zsh
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$activate_d/zdotdir/.zlogin" START
+
 # Source /etc/zlogin and "${FLOX_ORIG_ZDOTDIR:-$HOME}/.zlogin" if they exist
 # prior to performing Flox-specific initialization.
 #
@@ -54,3 +58,5 @@ fi
 
 # Bring in the Nix and Flox environment customizations.
 [ -z "$FLOX_ZSH_INIT_SCRIPT" ] || source "$FLOX_ZSH_INIT_SCRIPT"
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$activate_d/zdotdir/.zlogin" END

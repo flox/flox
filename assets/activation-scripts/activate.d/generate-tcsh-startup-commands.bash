@@ -1,5 +1,7 @@
 # shellcheck shell=bash
 
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/generate-tcsh-startup-commands.bash" START
+
 _sed="@gnused@/bin/sed"
 
 # N.B. the output of
@@ -66,3 +68,5 @@ generate_tcsh_startup_commands() {
     echo "unset verbose;"
   fi
 }
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/generate-tcsh-startup-commands.bash" END

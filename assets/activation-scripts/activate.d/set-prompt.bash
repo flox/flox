@@ -1,4 +1,9 @@
 # shellcheck shell=bash
+
+# shellcheck disable=SC2154
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/set-prompt.bash" START
+
+# shellcheck shell=bash
 # Tweak the (already customized) prompt: add a flox indicator.
 
 _esc="\x1b["
@@ -40,3 +45,5 @@ if [ -n "$_flox" ] && [ -n "${PS1:-}" ] && [ "${FLOX_PROMPT_ENVIRONMENTS:-}" != 
 fi
 
 unset _flox
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/set-prompt.bash" END

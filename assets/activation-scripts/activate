@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
+
+# Ensure that $FLOX_TRACE is either empty or defined as an executable.
+if [ -z "${FLOX_TRACE+x}" ]; then
+  # If FLOX_TRACE is not set, set it to the empty string.
+  export FLOX_TRACE=""
+else
+  # If FLOX_TRACE is set but does not refer to an executable, then
+  # set it to the default trace script.
+  if [ ! -x "${FLOX_TRACE:-}" ]; then
+    export FLOX_TRACE="__OUT__/activate.d/trace"
+  fi
+fi
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "__OUT__/activate" START
+
 _dirname="@coreutils@/bin/dirname"
 _getopt="@getopt@/bin/getopt"
 _nawk="@nawk@/bin/nawk"
@@ -208,3 +222,5 @@ else
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/attach-inplace.bash"
 fi
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "__OUT__/activate" END

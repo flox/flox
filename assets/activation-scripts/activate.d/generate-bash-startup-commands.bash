@@ -1,5 +1,7 @@
 # shellcheck shell=bash
 
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/generate-bash-startup-commands.bash" START
+
 _sed="@gnused@/bin/sed"
 
 # N.B. the output of
@@ -70,3 +72,5 @@ generate_bash_startup_commands() {
     echo "set +x;"
   fi
 }
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/generate-bash-startup-commands.bash" END

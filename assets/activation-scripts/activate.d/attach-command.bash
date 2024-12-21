@@ -1,3 +1,7 @@
+# shellcheck shell=bash
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/attach-command.bash" START
+
 # "command" mode(s): invoke the user's shell with args that:
 #   a. defeat the shell's normal startup scripts
 #   b. source the relevant activation script
@@ -87,3 +91,5 @@ case "$_flox_shell" in
     exit 1
     ;;
 esac
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/attach-command.bash" END

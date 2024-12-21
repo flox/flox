@@ -1,3 +1,7 @@
+# shellcheck shell=bash
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/generate-fish-startup-commands.bash" START
+
 _sed="@gnused@/bin/sed"
 
 # N.B. the output of
@@ -61,3 +65,5 @@ generate_fish_startup_commands() {
     echo "set -gx fish_trace 0;"
   fi
 }
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/generate-fish-startup-commands.bash" END

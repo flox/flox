@@ -1,3 +1,7 @@
+# shellcheck shell=zsh
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/set-prompt.zsh" START
+
 # Tweak the (already customized) prompt: add a flox indicator.
 
 _floxPrompt1="${FLOX_PROMPT-flox}"
@@ -30,3 +34,5 @@ if [ -n "$_flox" -a -n "${PS1:-}" -a "${FLOX_PROMPT_ENVIRONMENTS:-}" != "" -a "$
 fi
 
 unset _flox _floxPrompt1 _floxPrompt2
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/set-prompt.zsh" END

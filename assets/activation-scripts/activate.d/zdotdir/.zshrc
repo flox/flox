@@ -1,3 +1,7 @@
+# shellcheck shell=zsh
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/zdotdir/.zshrc" START
+
 # Source /etc/zshrc and "${FLOX_ORIG_ZDOTDIR:-$HOME}/.zshrc" if they exist
 # prior to performing Flox-specific initialization.
 #
@@ -59,3 +63,5 @@ fi
 # opportunity to perturb the environment after we've set it up.
 [[ -o login ]] || \
   [ -z "$FLOX_ZSH_INIT_SCRIPT" ] || source "$FLOX_ZSH_INIT_SCRIPT"
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/zdotdir/.zshrc" END

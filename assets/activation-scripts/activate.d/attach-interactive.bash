@@ -1,3 +1,7 @@
+# shellcheck shell=bash
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/attach-interactive.bash" START
+
 # Export PATH and MANPATH to restore in shell-specific activate scripts.
 export _FLOX_RESTORE_PATH="$PATH"
 export _FLOX_RESTORE_MANPATH="$MANPATH"
@@ -77,3 +81,5 @@ case "$_flox_shell" in
     exit 1
     ;;
 esac
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/attach-interactive.bash" END

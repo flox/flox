@@ -1,3 +1,7 @@
+# shellcheck shell=bash
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/attach-inplace.bash" START
+
 expiring_pid="$$"
 # Put a 5 second timeout on the activation
 "$_flox_activations" \
@@ -47,3 +51,5 @@ case "$_flox_shell" in
     exit 1
     ;;
 esac
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/attach-inplace.bash" END
