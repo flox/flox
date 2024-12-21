@@ -1,3 +1,5 @@
+"$_flox_activate_tracer" "$_activate_d/attach-interactive.bash" START
+
 # Export PATH and MANPATH to restore in shell-specific activate scripts.
 export _FLOX_RESTORE_PATH="$PATH"
 export _FLOX_RESTORE_MANPATH="$MANPATH"
@@ -77,3 +79,5 @@ case "$_flox_shell" in
     exit 1
     ;;
 esac
+
+"$_flox_activate_tracer" "$_activate_d/attach-interactive.bash" END

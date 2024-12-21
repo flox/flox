@@ -1,3 +1,6 @@
+# shellcheck disable=SC2154
+"$_flox_activate_tracer" "$_activate_d/generate-fish-startup-commands.bash" START
+
 _sed="@gnused@/bin/sed"
 
 # N.B. the output of
@@ -41,6 +44,9 @@ generate_fish_startup_commands() {
     if [ -n "$_FLOX_RESTORE_MANPATH" ]; then
       echo "set -gx MANPATH $_FLOX_RESTORE_MANPATH;"
     fi
+
+    # Propagate $_flox_activate_tracer to the environment.
+    echo "set -gx _flox_activate_tracer $_flox_activate_tracer;"
   fi
 
   # Set the prompt if we're in an interactive shell.
@@ -61,3 +67,5 @@ generate_fish_startup_commands() {
     echo "set -gx fish_trace 0;"
   fi
 }
+
+"$_flox_activate_tracer" "$_activate_d/generate-fish-startup-commands.bash" END

@@ -1,3 +1,5 @@
+"$_flox_activate_tracer" "$_activate_d/attach.bash" START
+
 _sed="@gnused@/bin/sed"
 
 # If interactive and a command has not been passed, this is an interactive
@@ -14,3 +16,5 @@ fi
 # Replay the environment for the benefit of this shell.
 eval "$($_sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env")"
 eval "$($_sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env")"
+
+"$_flox_activate_tracer" "$_activate_d/attach.bash" END

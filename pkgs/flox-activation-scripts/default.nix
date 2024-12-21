@@ -75,16 +75,18 @@ runCommandNoCC "flox-activation-scripts"
   ''
     # Create the "out" output.
     cp -R ${activation-scripts} $out
-    chmod +x $out/activate
     chmod -R +w $out
+    chmod +x $out/activate
     patchShebangs $out/activate
-    substituteInPlace $out/activate --replace-fail "__OUT__" "$out"
+    mv $out/activate.d/trace.bash $out/activate.d/trace
+    chmod +x $out/activate.d/trace
+    patchShebangs $out/activate.d/trace
 
     # Next create the (lesser) "build_wrapper" output.
-    cp -R ${activation-scripts} $build_wrapper
-    chmod +x $build_wrapper/activate
-    chmod -R +w $build_wrapper
-    patchShebangs $build_wrapper/activate
+    cp -R $out $build_wrapper
+
+    # Replace __OUT__ with the output path for both outputs.
+    substituteInPlace $out/activate --replace-fail "__OUT__" "$out"
     substituteInPlace $build_wrapper/activate --replace-fail "__OUT__" "$build_wrapper"
 
     # TODO: come up with neater way to master activate script for build_wrapper case.

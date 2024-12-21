@@ -1,3 +1,5 @@
+"$_flox_activate_tracer" "$_activate_d/set-run-variables.bash" START
+
 # Now that we support attaching to an environment we can no longer rely on
 # the environment variable replay for setting the PATH and MANPATH variables,
 # and must instead infer them from the FLOX_ENV_DIRS variable maintained for
@@ -68,3 +70,5 @@ _nodup_PATH="$(echo "$PATH" | "$_nawk" "$_awkScript")"
 _nodup_MANPATH="$(echo "$MANPATH" | "$_nawk" "$_awkScript")"
 export PATH="${_nodup_PATH}"
 export MANPATH="${_nodup_MANPATH}"
+
+"$_flox_activate_tracer" "$_activate_d/set-run-variables.bash" END

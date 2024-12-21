@@ -1,3 +1,5 @@
+"$_flox_activate_tracer" "$_activate_d/start-services.bash" START
+
 NOT_READY="SOCKET_NOT_READY"
 
 poll_services_status() {
@@ -89,3 +91,5 @@ start_services_blocking() {
 
 config_file="$FLOX_ENV/service-config.yaml"
 start_services_blocking "$config_file" "$_FLOX_SERVICES_SOCKET" "$_FLOX_ENV_LOG_DIR"
+
+"$_flox_activate_tracer" "$_activate_d/start-services.bash" START

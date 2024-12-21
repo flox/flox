@@ -1,4 +1,6 @@
 # shellcheck shell=bash
+# shellcheck disable=SC2154
+"$_flox_activate_tracer" "$_activate_d/generate-bash-startup-commands.bash" START
 
 _sed="@gnused@/bin/sed"
 
@@ -48,6 +50,9 @@ generate_bash_startup_commands() {
     if [ -n "$_FLOX_RESTORE_MANPATH" ]; then
       echo "export MANPATH='$_FLOX_RESTORE_MANPATH';"
     fi
+
+    # Propagate $_flox_activate_tracer to the environment.
+    echo "export _flox_activate_tracer='$_flox_activate_tracer';"
   fi
 
   # Set the prompt if we're in an interactive shell.
@@ -70,3 +75,5 @@ generate_bash_startup_commands() {
     echo "set +x;"
   fi
 }
+
+"$_flox_activate_tracer" "$_activate_d/generate-bash-startup-commands.bash" END
