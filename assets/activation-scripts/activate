@@ -22,11 +22,10 @@ else
     export _flox_activate_tracer="__OUT__/activate.d/trace"
   fi
 fi
-"$_flox_activate_tracer" "__OUT__/activate" START
+"$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" START
 
 _dirname="@coreutils@/bin/dirname"
 _getopt="@getopt@/bin/getopt"
-_nawk="@nawk@/bin/nawk"
 _readlink="@coreutils@/bin/readlink"
 _flox_activations="@flox_activations@"
 
@@ -40,6 +39,7 @@ export _activate_d="__OUT__/activate.d"
 export _profile_d="__OUT__/etc/profile.d"
 export _tcsh_home="__OUT__/activate.d/tcsh_home"
 export _zdotdir="__OUT__/activate.d/zdotdir"
+export _flox_env_helper="__OUT__/activate.d/flox-env-helper"
 
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/generate-bash-startup-commands.bash"
@@ -156,6 +156,10 @@ fi
 _FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
 export FLOX_ENV="${FLOX_ENV:-$_FLOX_ENV}"
 
+# Now that FLOX_ENV has been updated by way of getopt, fix the env accordingly.
+# shellcheck disable=SC1090
+source <("$_flox_env_helper" "bash")
+
 # Set a default for _FLOX_ACTIVATE_STORE_PATH for container and build
 # invocations
 if [ -z "${_FLOX_ACTIVATE_STORE_PATH:-}" ]; then
@@ -196,9 +200,6 @@ eval "$to_eval"
 export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
 
 if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" != true ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/set-run-variables.bash"
-
   if [ "$_FLOX_ATTACH" == true ]; then
     # shellcheck source-path=SCRIPTDIR/activate.d
     source "${_activate_d}/attach.bash"
@@ -226,4 +227,4 @@ else
   source "${_activate_d}/attach-inplace.bash"
 fi
 
-"$_flox_activate_tracer" "__OUT__/activate" END
+"$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END

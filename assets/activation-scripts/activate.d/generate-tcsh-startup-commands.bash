@@ -8,13 +8,11 @@ _sed="@gnused@/bin/sed"
 # newlines from the output, so we must ensure that the output is a valid shell
 # script fragment when represented on a single line.
 generate_tcsh_startup_commands() {
+  "$_flox_activate_tracer" "generate_tcsh_startup_commands()" START
+
   _flox_activate_tracelevel="${1?}"
   shift
   _FLOX_ACTIVATION_STATE_DIR="${1?}"
-  shift
-  _FLOX_RESTORE_PATH="${1?}"
-  shift
-  _FLOX_RESTORE_MANPATH="${1?}"
   shift
   _activate_d="${1?}"
   shift
@@ -38,14 +36,6 @@ generate_tcsh_startup_commands() {
     $_sed -e 's/^/unsetenv /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
     $_sed -e 's/^/setenv /' -e 's/=/ /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
 
-    # Restore PATH and MANPATH if set in one of the attach scripts.
-    if [ -n "$_FLOX_RESTORE_PATH" ]; then
-      echo "setenv PATH '$_FLOX_RESTORE_PATH';"
-    fi
-    if [ -n "$_FLOX_RESTORE_MANPATH" ]; then
-      echo "setenv MANPATH '$_FLOX_RESTORE_MANPATH';"
-    fi
-
     # Propagate $_activate_d to the environment.
     echo "setenv _activate_d '$_activate_d';"
     # Propagate $_flox_activate_tracer to the environment.
@@ -55,10 +45,18 @@ generate_tcsh_startup_commands() {
   # Set the prompt if we're in an interactive shell.
   echo "if ( \$?tty ) then; source '$_activate_d/set-prompt.tcsh'; endif;"
 
+  # We already customized the PATH and MANPATH, but the user and system
+  # dotfiles may have changed them, so finish by doing this again.
+  echo "eval \"\`$_flox_env_helper tcsh\`\";"
+
   # Source user-specified profile scripts if they exist.
   for i in profile-common profile-tcsh; do
     if [ -e "$FLOX_ENV/activate.d/$i" ]; then
+      "$_flox_activate_tracer" "$FLOX_ENV/activate.d/$i" START
       echo "source '$FLOX_ENV/activate.d/$i';"
+      "$_flox_activate_tracer" "$FLOX_ENV/activate.d/$i" END
+    else
+      "$_flox_activate_tracer" "$FLOX_ENV/activate.d/$i" NOT FOUND
     fi
   done
 
@@ -71,4 +69,6 @@ generate_tcsh_startup_commands() {
   if [ "$_flox_activate_tracelevel" -ge 2 ]; then
     echo "unset verbose;"
   fi
+
+  "$_flox_activate_tracer" "generate_tcsh_startup_commands()" END
 }
