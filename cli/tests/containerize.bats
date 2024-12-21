@@ -347,6 +347,76 @@ function assert_container_output() {
   assert_container_output
 }
 
+@test "config set on image" {
+  skip_if_not_linux # config is implemented in the Linux build of flox entirely
+
+  "$FLOX_BIN" init
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+    [containerize.config]
+    User = "user"
+    ExposedPorts = { "80/tcp" = {} }
+    Cmd = [ "some", "command" ]
+    Volumes = { "/some/volume" = {} }
+    WorkingDir = "/working/dir"
+    Labels = { "dev.flox.key" = "value" }
+    StopSignal = "SIGKILL"
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  TAG="config-set"
+
+  bash -c "$FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
+
+  run bash -c "podman inspect test:$TAG | jq '.[0].Config | .User, .ExposedPorts, .Cmd, .Volumes, .WorkingDir, .Labels, .StopSignal'"
+  assert_success
+  assert_output  --partial - <<EOF
+"user"
+{
+  "80/tcp": {}
+}
+[
+  "some",
+  "command"
+]
+{
+  "/some/volume": {}
+}
+"/working/dir"
+{
+  "dev.flox.key": "value"
+}
+"SIGKILL"
+EOF
+}
+
+@test "Cmd can run binary from activated environment" {
+  "$FLOX_BIN" init
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+    [install]
+    hello.pkg-path = "hello"
+
+    [containerize.config]
+    Cmd = [ "hello" ]
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" "$FLOX_BIN" edit -f -
+
+  TAG="Cmd-runs-in-activation"
+
+  bash -c "FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=containerize-config $FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
+
+  run podman run --rm "test:$TAG"
+  assert_success
+  assert_output --partial "Hello, world!"
+}
+
 # ---------------------------------------------------------------------------- #
 #
 #
