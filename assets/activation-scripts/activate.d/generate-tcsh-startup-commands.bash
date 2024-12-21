@@ -13,10 +13,6 @@ generate_tcsh_startup_commands() {
   shift
   _FLOX_ACTIVATION_STATE_DIR="${1?}"
   shift
-  _FLOX_RESTORE_PATH="${1?}"
-  shift
-  _FLOX_RESTORE_MANPATH="${1?}"
-  shift
   _activate_d="${1?}"
   shift
   FLOX_ENV="${1?}"
@@ -38,14 +34,6 @@ generate_tcsh_startup_commands() {
     # Restore environment variables set in the previous bash initialization.
     $_sed -e 's/^/unsetenv /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
     $_sed -e 's/^/setenv /' -e 's/=/ /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
-
-    # Restore PATH and MANPATH if set in one of the attach scripts.
-    if [ -n "$_FLOX_RESTORE_PATH" ]; then
-      echo "setenv PATH '$_FLOX_RESTORE_PATH';"
-    fi
-    if [ -n "$_FLOX_RESTORE_MANPATH" ]; then
-      echo "setenv MANPATH '$_FLOX_RESTORE_MANPATH';"
-    fi
   fi
 
   # Set the prompt if we're in an interactive shell.

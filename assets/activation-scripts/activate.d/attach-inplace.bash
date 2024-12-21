@@ -32,8 +32,6 @@ case "$_flox_shell" in
     ;;
   # Any additions should probably be restored in zdotdir/* scripts
   *zsh)
-    echo "export _FLOX_RESTORE_PATH=\"$PATH\";"
-    echo "export _FLOX_RESTORE_MANPATH=\"$MANPATH\";"
     echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
     echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
     echo "export FLOX_ENV=\"$FLOX_ENV\";"

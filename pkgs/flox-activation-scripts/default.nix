@@ -76,8 +76,14 @@ runCommandNoCC "flox-activation-scripts"
     # Create the "out" output.
     cp -R ${activation-scripts} $out
     chmod -R +w $out
+
     chmod +x $out/activate
     patchShebangs $out/activate
+
+    mv $out/activate.d/flox-path-helper.awk $out/activate.d/flox-path-helper
+    chmod +x $out/activate.d/flox-path-helper
+    patchShebangs $out/activate.d/flox-path-helper
+
     mv $out/activate.d/trace.bash $out/activate.d/trace
     chmod +x $out/activate.d/trace
     patchShebangs $out/activate.d/trace
