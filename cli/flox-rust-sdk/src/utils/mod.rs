@@ -230,3 +230,19 @@ pub fn proptest_btree_map_alphanum_keys<T: proptest::arbitrary::Arbitrary>(
         0..max_keys,
     )
 }
+
+/// Produces maps whose keys are strings that only contain alphanumeric
+/// characters and whose values are empty BTreeMaps
+#[cfg(any(test, feature = "tests"))]
+pub fn proptest_btree_map_alphanum_keys_empty_map(
+    key_max_size: usize,
+    max_keys: usize,
+) -> impl Strategy<Value = BTreeMap<String, BTreeMap<(), ()>>> {
+    use prop::collection::btree_map;
+
+    prop::collection::btree_map(
+        proptest_alphanum_string(key_max_size),
+        btree_map(any::<()>(), any::<()>(), 0),
+        0..max_keys,
+    )
+}
