@@ -159,6 +159,14 @@ impl LockedPackage {
             LockedPackage::StorePath(_) => None,
         }
     }
+
+    pub fn version(&self) -> Option<&str> {
+        match self {
+            LockedPackage::Catalog(pkg) => Some(&pkg.version),
+            LockedPackage::Flake(pkg) => pkg.locked_installable.version.as_deref(),
+            LockedPackage::StorePath(_) => None,
+        }
+    }
 }
 
 #[skip_serializing_none]

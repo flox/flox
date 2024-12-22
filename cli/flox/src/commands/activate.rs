@@ -26,8 +26,11 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
     FLOX_SERVICES_SOCKET_VAR,
 };
+use flox_rust_sdk::models::lockfile::{LockedPackage, LockedPackageCatalog, LockedPackageFlake};
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
+use flox_rust_sdk::providers::flox_cpp_utils::LockedInstallable;
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
+use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::traceable_path;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
@@ -40,6 +43,7 @@ use super::{
     EnvironmentSelect,
     UninitializedEnvironment,
 };
+use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
 use crate::commands::services::ServicesCommandsError;
 use crate::commands::{ensure_environment_trust, EnvironmentSelectError};
 use crate::config::{Config, EnvironmentPromptConfig};
@@ -123,10 +127,10 @@ pub struct Activate {
 }
 
 impl Activate {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
 
-        let concrete_environment = match self.environment.to_concrete_environment(&flox) {
+        let mut concrete_environment = match self.environment.to_concrete_environment(&flox) {
             Ok(concrete_environment) => concrete_environment,
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
                 bail!(formatdoc! {"
@@ -138,6 +142,30 @@ impl Activate {
             Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
             Err(e) => Err(e)?,
         };
+
+        if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
+            if !self.trust {
+                ensure_environment_trust(&mut config, &flox, env).await?;
+            }
+        }
+
+        if config.flox.upgrade_notifications.unwrap_or(true) {
+            // Read the results of a previous upgrade check
+            // and print a message if an upgrade is available.
+            notify_upgrade_if_available(&flox, &mut concrete_environment)?;
+        } else {
+            debug!("Upgrade notification disabled");
+        }
+
+        // Spawn a detached process to check for upgrades in the background.
+        let environment =
+            UninitializedEnvironment::from_concrete_environment(&concrete_environment)?;
+        spawn_detached_check_for_upgrades_process(
+            &environment,
+            None,
+            &concrete_environment.log_path()?,
+            None,
+        )?;
 
         self.activate(config, flox, concrete_environment, false, &[])
             .await
@@ -155,18 +183,12 @@ impl Activate {
     // but for now just hack through the is_ephemeral bool.
     pub async fn activate(
         self,
-        mut config: Config,
+        config: Config,
         flox: Flox,
         mut concrete_environment: ConcreteEnvironment,
         is_ephemeral: bool,
         services_to_start: &[String],
     ) -> Result<()> {
-        if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
-            if !self.trust {
-                ensure_environment_trust(&mut config, &flox, env).await?;
-            }
-        }
-
         let now_active =
             UninitializedEnvironment::from_concrete_environment(&concrete_environment)?;
 
@@ -669,6 +691,67 @@ impl Activate {
 
         prompt_envs.join(" ")
     }
+}
+
+/// Notify the user of available upgrades
+///
+/// Upon activation flox will start a detached process to check for upgrades.
+/// Future activations will be able to read the upgrade information from a file
+/// and notify the user if there are any upgrades available using this function.
+fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironment) -> Result<()> {
+    let upgrade_guard =
+        UpgradeInformationGuard::for_environment(&flox.cache_dir, environment.dot_flox_path())?;
+
+    let Some(info) = upgrade_guard.info() else {
+        debug!("Not notifying user of upgrade, no upgrade information available");
+        return Ok(());
+    };
+
+    let current_lockfile = environment.lockfile(flox)?;
+
+    if Some(current_lockfile) != info.result.old_lockfile {
+        // todo: delete the info file?
+        debug!("Not notifying user of upgrade, lockfile has changed since last check");
+        return Ok(());
+    }
+
+    let diff = info.result.diff();
+    if diff.is_empty() {
+        debug!("Not notifying user of upgrade, no changes in lockfile");
+        return Ok(());
+    }
+
+    let mut changes = diff
+        .iter()
+        .filter(|(before, _)| {
+            matches!(before,
+            LockedPackage::Catalog(LockedPackageCatalog{system, ..})
+            | LockedPackage::Flake(LockedPackageFlake{locked_installable: LockedInstallable{system, ..}, ..})
+            if system == &flox.system)
+        } )
+        .map(|(before, after)| {
+            let install_id = before.install_id();
+            let old_version = before.version().unwrap_or("unknown");
+            let new_version = after.version().unwrap_or("unknown");
+
+            if new_version == old_version {
+                format!("- {install_id}: {old_version} (build changes)")
+            } else {
+                format!("{install_id}: {old_version} -> {new_version}")
+            }
+        });
+
+    let message = formatdoc! {"
+            The following packages can be upgraded:
+
+            {changes}
+
+            Run 'flox upgrade' to apply these changes.
+        ", changes = changes.join("\n")};
+
+    message::plain(message);
+
+    Ok(())
 }
 
 #[cfg(test)]
