@@ -1,10 +1,14 @@
+use std::fs::File;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::time::SystemTime;
 
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use bpaf::{Bpaf, Parser};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::providers::upgrade_checks::{UpgradeInformation, UpgradeInformationGuard};
+use flox_rust_sdk::utils::CommandExt;
 use serde::de::DeserializeOwned;
 use tracing::{debug, info_span, instrument};
 
@@ -88,4 +92,67 @@ impl CheckForUpgrades {
 
         Ok(())
     }
+}
+
+/// Spawn a new `flox check-for-upgrades` process in the background,
+/// and redirect its logs to a log file.
+///
+/// The process will live on after the parent process exits.
+/// When multiple processes are spawned, e.g. due to multiple successive activations,
+/// one (usually the first) process will grab a lock on the upgrade information file,
+/// and the others will exit early.
+pub fn spawn_detached_check_for_upgrades_process(
+    environment: &UninitializedEnvironment,
+    self_executable: Option<PathBuf>,
+    log_dir: &Path,
+    check_timeout: Option<u64>,
+) -> Result<()> {
+    // Get the path to the current executable
+    let self_executable = match self_executable {
+        Some(path) => path,
+        None if cfg!(test) => {
+            bail!("self_executable must be provided in tests")
+        },
+        // SECURITY:
+        // This is safe because the flox executable path
+        // is at an immutable nix store path.
+        None => std::env::current_exe()?,
+    };
+
+    let environment_json = serde_json::to_string(&environment)?;
+
+    let mut command = Command::new(self_executable);
+    command.arg("check-for-upgrades");
+    command.arg(environment_json);
+
+    if let Some(timeout) = check_timeout {
+        command.arg("--check-timeout").arg(timeout.to_string());
+    };
+
+    command.arg("-vv"); // enable debug logging
+
+    // Redirect logs to a file
+    let log_dir = environment.log_path()?;
+    let timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let upgrade_check_log = log_dir.join(format!("upgrade-check.{}.log", timestamp));
+
+    debug!(log_file=?upgrade_check_log, "Logging upgrade check output to file, and redirecting std{{in,out}} to /dev/null");
+
+    let file = File::create(upgrade_check_log)?;
+    command.stderr(file);
+    command.stdout(Stdio::null());
+    command.stdin(Stdio::null());
+
+    command.display();
+    debug!(cmd=%command.display(), "Spawning check-for-upgrades process in background");
+
+    // continue in the background
+    let _child = command
+        .spawn()
+        .context("Failed to spawn 'check-for-upgrades' process")?;
+
+    Ok(())
 }
