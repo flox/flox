@@ -1,3 +1,7 @@
+# shellcheck shell=bash
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/start.bash" START
+
 _comm="@coreutils@/bin/comm"
 _daemonize="@daemonize@/bin/daemonize"
 _flox_activations="@flox_activations@"
@@ -113,3 +117,5 @@ LC_ALL=C $_comm -23 "$_start_env" "$_end_env" \
   --runtime-dir "$FLOX_RUNTIME_DIR" \
   set-ready \
   --flox-env "$FLOX_ENV" --id "$_FLOX_ACTIVATION_ID"
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/start.bash" END

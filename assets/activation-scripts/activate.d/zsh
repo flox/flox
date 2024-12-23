@@ -1,4 +1,9 @@
+# shellcheck shell=zsh
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/zsh" START
+
 _sed="@gnused@/bin/sed"
+_flox_path_helper="__OUT__/activate.d/flox-path-helper"
 
 # Confirm _flox_activate_tracelevel is defined before proceeding.
 if [ -z "${_flox_activate_tracelevel:=}" ]; then
@@ -58,20 +63,14 @@ if [ ${#fpath_prepend[@]} -gt 0 ]; then
 fi
 unset fpath_prepend
 
+# We already customized the PATH and MANPATH, but the user and system
+# dotfiles may have changed them, so finish by doing this again.
+source =("$_flox_path_helper" "zsh")
+
 if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" != true ]; then
   # Restore environment variables set in the previous bash initialization.
   eval "$($_sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env")"
   eval "$($_sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env")"
-
-  # Restore PATH and MANPATH if set in one of the attach scripts.
-  if [ -n "$_FLOX_RESTORE_PATH" ]; then
-    export PATH="$_FLOX_RESTORE_PATH"
-    unset _FLOX_RESTORE_PATH
-  fi
-  if [ -n "$_FLOX_RESTORE_MANPATH" ]; then
-    export MANPATH="$_FLOX_RESTORE_MANPATH"
-    unset _FLOX_RESTORE_MANPATH
-  fi
 fi
 
 # Set the prompt if we're in an interactive shell.
@@ -98,3 +97,5 @@ if [ "$_flox_activate_tracelevel" -ge 2 ]; then
   set +x
 fi
 unset _flox_activate_tracelevel
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/zsh" END

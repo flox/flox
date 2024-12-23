@@ -1,3 +1,7 @@
+# shellcheck shell=bash
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/attach-command.bash" START
+
 # "command" mode(s): invoke the user's shell with args that:
 #   a. defeat the shell's normal startup scripts
 #   b. source the relevant activation script
@@ -14,10 +18,6 @@ if [ -n "$FLOX_TURBO" ]; then
     exit $?
   fi
 fi
-
-# Export PATH and MANPATH to restore in shell-specific activate scripts.
-export _FLOX_RESTORE_PATH="$PATH"
-export _FLOX_RESTORE_MANPATH="$MANPATH"
 
 # "-c" command mode: pass both [2] arguments unaltered to shell invocation
 case "$_flox_shell" in
@@ -87,3 +87,5 @@ case "$_flox_shell" in
     exit 1
     ;;
 esac
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/attach-command.bash" END

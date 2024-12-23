@@ -1,3 +1,7 @@
+# shellcheck shell=fish
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/set-prompt.fish" START
+
 if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS" && [ "$_FLOX_SET_PROMPT" != false ]
     if not set -q FLOX_PROMPT
         set FLOX_PROMPT "flox"
@@ -22,3 +26,5 @@ if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS" && [ "
         flox_saved_fish_prompt
     end
 end
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/set-prompt.fish" END

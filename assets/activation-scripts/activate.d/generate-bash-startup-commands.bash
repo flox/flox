@@ -1,5 +1,7 @@
 # shellcheck shell=bash
 
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/generate-bash-startup-commands.bash" START
+
 _sed="@gnused@/bin/sed"
 
 # N.B. the output of
@@ -10,10 +12,6 @@ generate_bash_startup_commands() {
   _flox_activate_tracelevel="${1?}"
   shift
   _FLOX_ACTIVATION_STATE_DIR="${1?}"
-  shift
-  _FLOX_RESTORE_PATH="${1?}"
-  shift
-  _FLOX_RESTORE_MANPATH="${1?}"
   shift
   _activate_d="${1?}"
   shift
@@ -40,14 +38,6 @@ generate_bash_startup_commands() {
     # Restore environment variables set in the previous bash initialization.
     $_sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
     $_sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
-
-    # Restore PATH and MANPATH if set in one of the attach scripts.
-    if [ -n "$_FLOX_RESTORE_PATH" ]; then
-      echo "export PATH='$_FLOX_RESTORE_PATH';"
-    fi
-    if [ -n "$_FLOX_RESTORE_MANPATH" ]; then
-      echo "export MANPATH='$_FLOX_RESTORE_MANPATH';"
-    fi
   fi
 
   # Set the prompt if we're in an interactive shell.
@@ -70,3 +60,5 @@ generate_bash_startup_commands() {
     echo "set +x;"
   fi
 }
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/generate-bash-startup-commands.bash" END

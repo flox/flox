@@ -1,3 +1,7 @@
+# shellcheck shell=zsh
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/zdotdir/.zprofile" START
+
 # Source /etc/zprofile and "${FLOX_ORIG_ZDOTDIR:-$HOME}/.zprofile" if they exist.
 #
 # See README.md for more information on the initialization process.
@@ -10,9 +14,8 @@ _save_FLOX_ENV="$FLOX_ENV"
 _save_FLOX_ORIG_ZDOTDIR="$FLOX_ORIG_ZDOTDIR"
 _save_ZDOTDIR="$ZDOTDIR"
 _save_activate_d="$_activate_d"
+_save_flox_path_helper="$_flox_path_helper"
 _save_FLOX_ZSH_INIT_SCRIPT="$FLOX_ZSH_INIT_SCRIPT"
-_save_FLOX_RESTORE_PATH="$_FLOX_RESTORE_PATH"
-_save_FLOX_RESTORE_MANPATH="$_FLOX_RESTORE_MANPATH"
 _save_FLOX_ACTIVATION_PROFILE_ONLY="$_FLOX_ACTIVATION_PROFILE_ONLY"
 
 restore_saved_vars() {
@@ -21,11 +24,11 @@ restore_saved_vars() {
     export FLOX_ORIG_ZDOTDIR="$_save_FLOX_ORIG_ZDOTDIR"
     export ZDOTDIR="$_save_ZDOTDIR"
     export _activate_d="$_save_activate_d"
+    export _flox_path_helper="$_save_flox_path_helper"
     export FLOX_ZSH_INIT_SCRIPT="$_save_FLOX_ZSH_INIT_SCRIPT"
     export _FLOX_ACTIVATION_STATE_DIR="$_save_FLOX_ACTIVATION_STATE_DIR"
-    export _FLOX_RESTORE_PATH="$_save_FLOX_RESTORE_PATH"
-    export _FLOX_RESTORE_MANPATH="$_save_FLOX_RESTORE_MANPATH"
     export _FLOX_ACTIVATION_PROFILE_ONLY="$_save_FLOX_ACTIVATION_PROFILE_ONLY"
+    source =("$_flox_path_helper" "zsh")
 }
 
 if [ -f /etc/zprofile ]
@@ -54,3 +57,5 @@ fi
 # Do not bring in the Nix and Flox environment customizations from this file
 # because one of the neighbouring .zshrc or .zlogin files will always be
 # sourced after this one.
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/zdotdir/.zprofile" END

@@ -1,8 +1,21 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
+
+# Ensure that $FLOX_TRACE is either empty or defined as an executable.
+if [ -z "${FLOX_TRACE+x}" ]; then
+  # If FLOX_TRACE is not set, set it to the empty string.
+  export FLOX_TRACE=""
+else
+  # If FLOX_TRACE is set but does not refer to an executable, then
+  # set it to the default trace script.
+  if [ ! -x "${FLOX_TRACE:-}" ]; then
+    export FLOX_TRACE="__OUT__/activate.d/trace"
+  fi
+fi
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "__OUT__/activate" START
+
 _dirname="@coreutils@/bin/dirname"
 _getopt="@getopt@/bin/getopt"
-_nawk="@nawk@/bin/nawk"
 _readlink="@coreutils@/bin/readlink"
 _flox_activations="@flox_activations@"
 
@@ -23,6 +36,10 @@ export _activate_d="__OUT__/activate.d"
 export _profile_d="__OUT__/etc/profile.d"
 export _tcsh_home="__OUT__/activate.d/tcsh_home"
 export _zdotdir="__OUT__/activate.d/zdotdir"
+export _flox_path_helper="__OUT__/activate.d/flox-path-helper"
+
+# shellcheck disable=SC1090
+source <("$_flox_path_helper" "bash")
 
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/generate-bash-startup-commands.bash"
@@ -179,9 +196,6 @@ eval "$to_eval"
 export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
 
 if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" != true ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/set-run-variables.bash"
-
   if [ "$_FLOX_ATTACH" == true ]; then
     # shellcheck source-path=SCRIPTDIR/activate.d
     source "${_activate_d}/attach.bash"
@@ -208,3 +222,5 @@ else
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/attach-inplace.bash"
 fi
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "__OUT__/activate" END

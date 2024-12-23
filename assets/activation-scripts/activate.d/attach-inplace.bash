@@ -1,3 +1,7 @@
+# shellcheck shell=bash
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/attach-inplace.bash" START
+
 expiring_pid="$$"
 # Put a 5 second timeout on the activation
 "$_flox_activations" \
@@ -28,8 +32,6 @@ case "$_flox_shell" in
     ;;
   # Any additions should probably be restored in zdotdir/* scripts
   *zsh)
-    echo "export _FLOX_RESTORE_PATH=\"$PATH\";"
-    echo "export _FLOX_RESTORE_MANPATH=\"$MANPATH\";"
     echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
     echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
     echo "export FLOX_ENV=\"$FLOX_ENV\";"
@@ -47,3 +49,5 @@ case "$_flox_shell" in
     exit 1
     ;;
 esac
+
+@coreutils@/bin/test -z "$FLOX_TRACE" || "$FLOX_TRACE" "$_activate_d/attach-inplace.bash" END
