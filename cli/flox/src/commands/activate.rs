@@ -163,6 +163,8 @@ impl Activate {
 
             // Spawn a detached process to check for upgrades in the background.
             spawn_detached_check_for_upgrades_process(&concrete_environment, None, None)?;
+        } else {
+            debug!("Upgrade checks disabled");
         }
 
         self.activate(config, flox, concrete_environment, false, &[])
