@@ -131,7 +131,7 @@ pub fn mtime_of(path: impl AsRef<Path>) -> SystemTime {
 }
 
 /// An extension trait for [std::process::Command]
-pub(crate) trait CommandExt {
+pub trait CommandExt {
     /// Provide a [DisplayCommand] that can be used to display
     /// POSIX like formatting of the command.
     fn display(&self) -> DisplayCommand;
@@ -143,7 +143,7 @@ impl CommandExt for std::process::Command {
     }
 }
 
-pub(crate) struct DisplayCommand<'a>(&'a std::process::Command);
+pub struct DisplayCommand<'a>(&'a std::process::Command);
 
 impl Display for DisplayCommand<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

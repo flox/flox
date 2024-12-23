@@ -6,6 +6,7 @@ use std::process::Command;
 
 use itertools::Itertools;
 use pollster::FutureExt;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
 
@@ -857,10 +858,10 @@ impl EditResult {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct UpgradeResult {
-    old_lockfile: Option<Lockfile>,
-    new_lockfile: Lockfile,
+    pub old_lockfile: Option<Lockfile>,
+    pub new_lockfile: Lockfile,
     pub store_path: Option<BuildEnvOutputs>,
 }
 
