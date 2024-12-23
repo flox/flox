@@ -155,6 +155,8 @@ impl Activate {
         }
 
         if config.flox.check_for_upgrades.unwrap_or(true) {
+            debug!("Checking for available upgrades");
+
             // Read the results of a previous upgrade check
             // and print a message if an upgrade is available.
             notify_upgrade_if_available(&flox, &mut concrete_environment)?;
