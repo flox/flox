@@ -298,6 +298,8 @@ pub struct SearchResult {
     ///
     /// TODO: rename this attr_path or pkg_path
     pub rel_path: Vec<String>,
+    /// The package path including catalog name
+    pub pkg_path: String,
     /// The package name
     pub pname: Option<String>,
     /// The package version
@@ -330,6 +332,7 @@ mod test {
         "relPath": [
             "hello"
         ],
+        "pkgPath": "hello",
         "subtree": "legacyPackages",
         "system": "aarch64-darwin",
         "stability": null,

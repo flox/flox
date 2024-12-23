@@ -1261,7 +1261,7 @@ impl TryFrom<PackageInfoSearch> for SearchResult {
 
     fn try_from(package_info: PackageInfoSearch) -> Result<Self, SearchError> {
         Ok(Self {
-            input: NIXPKGS_CATALOG.to_string(),
+            input: package_info.catalog.unwrap_or(NIXPKGS_CATALOG.to_string()),
             system: package_info.system.to_string(),
             // The server does not include legacyPackages.<system> in attr_path
             rel_path: package_info
@@ -1273,6 +1273,7 @@ impl TryFrom<PackageInfoSearch> for SearchResult {
             version: None,
             description: package_info.description,
             license: None,
+            pkg_path: package_info.pkg_path,
         })
     }
 }
@@ -1281,8 +1282,13 @@ impl TryFrom<api_types::PackageResolutionInfo> for SearchResult {
     type Error = VersionsError;
 
     fn try_from(package_info: api_types::PackageResolutionInfo) -> Result<Self, VersionsError> {
+        let pkg_path = match &package_info.catalog {
+            Some(catalog) => format!("{}/{}", catalog, package_info.attr_path),
+            None => package_info.attr_path.clone(),
+        };
+
         Ok(Self {
-            input: NIXPKGS_CATALOG.to_string(),
+            input: package_info.catalog.unwrap_or(NIXPKGS_CATALOG.to_string()),
             system: package_info.system.to_string(),
             // The server does not include legacyPackages.<system> in attr_path
             rel_path: package_info
@@ -1294,6 +1300,7 @@ impl TryFrom<api_types::PackageResolutionInfo> for SearchResult {
             version: Some(package_info.version),
             description: package_info.description,
             license: package_info.license,
+            pkg_path,
         })
     }
 }
