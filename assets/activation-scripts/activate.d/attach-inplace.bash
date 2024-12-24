@@ -1,3 +1,5 @@
+"$_flox_activate_tracer" "$_activate_d/attach-inplace.bash" START
+
 expiring_pid="$$"
 # Put a 5 second timeout on the activation
 "$_flox_activations" \
@@ -40,6 +42,7 @@ case "$_flox_shell" in
     echo "export _FLOX_ACTIVATION_STATE_DIR=\"$_FLOX_ACTIVATION_STATE_DIR\";"
     echo "export FLOX_ZSH_INIT_SCRIPT=\"$_activate_d/zsh\";"
     echo "export _activate_d=\"$_activate_d\";"
+    echo "export _flox_activate_tracer=\"$_flox_activate_tracer\";"
     echo "source '$_activate_d/zsh';"
     ;;
   *)
@@ -47,3 +50,5 @@ case "$_flox_shell" in
     exit 1
     ;;
 esac
+
+"$_flox_activate_tracer" "$_activate_d/attach-inplace.bash" END

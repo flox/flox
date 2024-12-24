@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
-_dirname="@coreutils@/bin/dirname"
-_getopt="@getopt@/bin/getopt"
-_nawk="@nawk@/bin/nawk"
-_readlink="@coreutils@/bin/readlink"
-_flox_activations="@flox_activations@"
-
-set -euo pipefail
 
 # Trace levels supported by activation scripts:
 #   1. (-v) top-level activate script
@@ -14,6 +7,30 @@ set -euo pipefail
 #   3. (-vvv) zsh `autoload -U compinit` (very verbose)
 export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
 [ "$_flox_activate_tracelevel" -eq 0 ] || set -x
+
+# Ensure that $_flox_activate_tracer is defined as an executable.
+if [ -z "${FLOX_ACTIVATE_TRACE-}" ]; then
+  # If FLOX_ACTIVATE_TRACE is empty or not set, set _flox_activate_tracer to
+  # `true` which can always be invoked with any arguments without error.
+  export _flox_activate_tracer=true
+else
+  # If FLOX_ACTIVATE_TRACE is set but does not refer to an executable, then
+  # set _flox_activate_tracer to the default trace script.
+  if [ -x "${FLOX_ACTIVATE_TRACE:-}" ]; then
+    export _flox_activate_tracer="$FLOX_ACTIVATE_TRACE"
+  else
+    export _flox_activate_tracer="__OUT__/activate.d/trace"
+  fi
+fi
+"$_flox_activate_tracer" "__OUT__/activate" START
+
+_dirname="@coreutils@/bin/dirname"
+_getopt="@getopt@/bin/getopt"
+_nawk="@nawk@/bin/nawk"
+_readlink="@coreutils@/bin/readlink"
+_flox_activations="@flox_activations@"
+
+set -euo pipefail
 
 # These all derive from the `flox-interpreter` package.
 # FIXME This is wrong; the profile.d scripts in particular should be
@@ -208,3 +225,5 @@ else
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/attach-inplace.bash"
 fi
+
+"$_flox_activate_tracer" "__OUT__/activate" END

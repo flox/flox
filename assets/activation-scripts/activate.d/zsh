@@ -1,3 +1,5 @@
+"$_flox_activate_tracer" "$_activate_d/zsh" START
+
 _sed="@gnused@/bin/sed"
 
 # Confirm _flox_activate_tracelevel is defined before proceeding.
@@ -98,3 +100,5 @@ if [ "$_flox_activate_tracelevel" -ge 2 ]; then
   set +x
 fi
 unset _flox_activate_tracelevel
+
+"$_flox_activate_tracer" "$_activate_d/zsh" END

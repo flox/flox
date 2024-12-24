@@ -1,3 +1,5 @@
+"$_flox_activate_tracer" "$_activate_d/zdotdir/.zprofile" START
+
 # Source /etc/zprofile and "${FLOX_ORIG_ZDOTDIR:-$HOME}/.zprofile" if they exist.
 #
 # See README.md for more information on the initialization process.
@@ -54,3 +56,5 @@ fi
 # Do not bring in the Nix and Flox environment customizations from this file
 # because one of the neighbouring .zshrc or .zlogin files will always be
 # sourced after this one.
+
+"$_flox_activate_tracer" "$_activate_d/zdotdir/.zprofile" END
