@@ -71,6 +71,49 @@ With `flox` you can:<br/>
 - .. more (point to the website)
 -->
 
+# Flox vs Docker:
+Before demonstrating the difference, let's clarify what Docker is. Historically, the fundamental operation of Docker is based on `chroot`, a system call introduced in Version 7 Unix. This system call changes the root directory for the current process, making the specified directory appear as the root (`/`) for any process running within it. Later, Linux adopted this feature, which became known as Linux Containers. In 2008, Docker was built based on this concept. Simply put, a container is a running process that uses virtualization-based mechanisms, but each of these containers perceives its own environment as if it were the host system. Given this, you can see Flox is different than Docker.
+
+# Flox vs Homebrew:
+
+This document compares **Homebrew** and **Flox**, two popular package managers used in modern development environments. Each has its own strengths and is suited to different use cases. Here's a side-by-side comparison of their key features:
+
+## Installation and Package Management
+
+- **Homebrew** is a package manager primarily for macOS. It allows users to easily install, update, and manage software packages with a simple command-line interface. Packages are installed in standard directories, making it user-friendly for macOS users.
+  
+- **Flox** is a cross-platform, purely functional package manager available for multiple operating systems. It isolates packages in their own environments, ensuring reproducibility and conflict-free installations. Flox’s approach is more controlled, allowing precise environment management.
+
+## Package Availability
+
+- **Homebrew** provides a large number of packages through its main repository, **Homebrew Core**. Users can also tap into additional repositories, known as **taps**, for even more software.
+  
+- **Flox** comes with **Nixpkgs**, a curated repository of packages. However, Flox also allows users to define and share custom package sets. This flexibility makes it highly adaptable for specialized workflows and environments.
+
+## Version Management
+
+- **Homebrew** offers easy version management, allowing users to switch between package versions using the `brew switch` command. This is useful when certain packages depend on specific versions.
+  
+- **Flox** handles version management differently. It allows multiple versions of a package to be installed and used concurrently, each in its own isolated environment. This eliminates version conflicts and makes it simple to switch between different package versions.
+
+## Reproducibility
+
+- **Homebrew** focuses on convenience and ease of use. However, it does not guarantee full reproducibility of package installations across systems. This can lead to inconsistencies when trying to replicate environments.
+  
+- **Flox** is designed with **reproducibility** at its core. It ensures that package installations are fully declarative and can be reproduced exactly across different systems, making it ideal for environments where consistency is critical (e.g., scientific computing, large-scale deployments).
+
+## Rollbacks and Atomic Upgrades
+
+- **Homebrew** does not natively support rollbacks or atomic upgrades. If an installation or update fails, it can leave the system in an inconsistent state.
+  
+- **Flox** supports **atomic upgrades** and **rollbacks**. It uses a transactional approach to package installations, ensuring that changes are applied in a consistent and reliable manner. If something goes wrong, the system can easily be rolled back to its previous state.
+
+## Customizability and Extensibility
+
+- **Homebrew** is simple and easy to use, making it ideal for casual users and those who need a straightforward package management experience. Its primary focus is on usability and quick installations.
+  
+- **Flox** is highly **customizable** and **extensible**, offering users the ability to define custom package sets, build configurations, and even entire environments. Flox is based on Nix, a functional package manager, which gives advanced users full control over their package management workflow.
+
 ## ⚡️ Quick start
 
 ``` text
