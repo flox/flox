@@ -2624,9 +2624,10 @@ EOF
 @test "nested interactive activate fails" {
   project_setup
   run bash <(cat <<'EOF'
+    _expect="$(command -v expect)"
     eval "$("$FLOX_BIN" activate)"
 
-    expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
+    $_expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
 EOF
 )
   assert_failure
@@ -3247,6 +3248,10 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   # This has to be updated with [flox_core::activations::LATEST_VERSION].
   LATEST_VERSION=1
 
+  # Pass the path to jq for the benefit of the jq_edit() function.
+  _jq="$(command -v jq)"
+  export _jq
+
   export -f jq_edit
   run "$FLOX_BIN" activate -- bash <(
     cat << 'EOF'
@@ -3383,28 +3388,32 @@ EOF
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
 
+  # TODO: install `man` package to test environment, but in meantime
+  # just capture the full path to man before activating.
+  _man="$(command -v man)"
+
   case "$NIX_SYSTEM" in
     *-linux)
       VIM_MAN="$(realpath "$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man/man1/vim.1.gz")"
-      run man --path vim
+      run $_man --path vim
       assert_failure
       refute_output "$VIM_MAN"
 
       EMACS_MAN="$(realpath "$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man/man1/emacs.1.gz")"
-      run man --path emacs
+      run $_man --path emacs
       assert_failure
       refute_output "$EMACS_MAN"
 
       # vim gets added to MANPATH
-      "$FLOX_BIN" activate -d vim -- bash -c "man --path vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
+      _man=$_man "$FLOX_BIN" activate -d vim -- bash -c "$_man --path vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
       cat activate_finished
       run cat output
       assert_success
       assert_output "$VIM_MAN"
 
       # emacs gets added to MANPATH, and then a nested attach also adds vim
-      "$FLOX_BIN" activate -d emacs -- \
-        bash -c 'man --path emacs > output_emacs_1 && "$FLOX_BIN" activate -d vim -- bash -c "man --path vim > output_vim && man --path emacs > output_emacs_2"'
+      _man=$_man "$FLOX_BIN" activate -d emacs -- \
+        bash -c '$_man --path emacs > output_emacs_1 && "$FLOX_BIN" activate -d vim -- bash -c "$_man --path vim > output_vim && $_man --path emacs > output_emacs_2"'
       run cat output_emacs_1
       assert_output "$EMACS_MAN"
       run cat output_vim
@@ -3614,11 +3623,12 @@ EOF
   # .bashrc
   run bash <(cat <<'EOF'
     set -euo pipefail
+    _expect="$(command -v expect)"
     eval "$("$FLOX_BIN" activate -d default)"
     echo "$_FLOX_ACTIVE_ENVIRONMENTS"
     # We can't double check the alias has been loaded because bash isn't
     # interactive and discards it
-    FLOX_SHELL="bash" NO_COLOR=1 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
+    FLOX_SHELL="bash" NO_COLOR=1 $_expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
 EOF
 )
   assert_success
@@ -3653,12 +3663,13 @@ EOF
   # .bashrc
   run bash <(cat <<'EOF'
     set -euo pipefail
+    _expect="$(command -v expect)"
     eval "$("$FLOX_BIN" activate -d default)"
     if ! [[ "$PATH" =~ $PROJECT_DIR/default/.flox/run/.*.default.dev/bin ]]; then # to double check we activated the default environment
       echo "default not in PATH: $PATH"
       exit 1
     fi
-    FLOX_SHELL="bash" NO_COLOR=1 expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "$PATH"'
+    FLOX_SHELL="bash" NO_COLOR=1 $_expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "$PATH"'
 EOF
 )
   assert_success
