@@ -272,7 +272,11 @@ jq_edit() {
   local _command="${2?You must provide a jq command}"
   local _tmp
   _tmp="${_file}~"
-  jq "$_command" "$_file" > "$_tmp"
+  # This function requires jq in the PATH, and for those tests where that
+  # is not the case, the full path can instead be passed in by way of the
+  # $_jq environment variable.
+  _jq="${_jq:-$(command -v jq)}"
+  $_jq "$_command" "$_file" > "$_tmp"
   mv "$_tmp" "$_file"
 }
 
