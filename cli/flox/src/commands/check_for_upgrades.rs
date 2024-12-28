@@ -174,3 +174,129 @@ pub fn spawn_detached_check_for_upgrades_process(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
+    use flox_rust_sdk::models::environment::{ConcreteEnvironment, UpgradeResult};
+    use flox_rust_sdk::providers::catalog::{Client, MockClient, GENERATED_DATA};
+
+    use super::*;
+
+    #[test]
+    fn skips_if_recently_checked() {
+        let (flox, _tempdir) = flox_instance();
+
+        let mut environment =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+
+        let upgrade_information =
+            UpgradeInformationGuard::for_environment(&flox.cache_dir, environment.dot_flox_path())
+                .unwrap();
+
+        // Create a fake upgrade information based on the current lockfile
+        // and mark it as checked recently (now)
+        let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
+        let _ = locked.info_mut().insert(UpgradeInformation {
+            last_checked: SystemTime::now(),
+            result: UpgradeResult {
+                old_lockfile: Some(environment.lockfile(&flox).unwrap()),
+                new_lockfile: environment.lockfile(&flox).unwrap(),
+                store_path: None,
+            },
+        });
+        locked.commit().unwrap();
+
+        let serialized = UninitializedEnvironment::from_concrete_environment(
+            &ConcreteEnvironment::Path(environment),
+        )
+        .unwrap();
+
+        // Check for upgrades with a timeout of u64::MAX
+        // to ensure that the fake upgrade information is always considered recent
+        let command = CheckForUpgrades {
+            check_timeout: u64::MAX,
+            environment: serialized,
+        };
+
+        let exit_branch = command.check_for_upgrades(&flox).unwrap();
+
+        assert_eq!(exit_branch, ExitBranch::AlreadyChecked);
+    }
+
+    #[test]
+    fn skips_if_lock_taken() {
+        let (flox, _tempdir) = flox_instance();
+
+        let environment =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+
+        let upgrade_information =
+            UpgradeInformationGuard::for_environment(&flox.cache_dir, environment.dot_flox_path())
+                .unwrap();
+
+        // Simulate a lock being taken by another process (i.e. `_locked` is not dropped)
+        // A separate test in the SDK checks that `lock_if_unlocked` does not block.
+        let _locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
+
+        let serialized = UninitializedEnvironment::from_concrete_environment(
+            &ConcreteEnvironment::Path(environment),
+        )
+        .unwrap();
+
+        let command = CheckForUpgrades {
+            check_timeout: 0,
+            environment: serialized,
+        };
+
+        let exit_branch = command.check_for_upgrades(&flox).unwrap();
+
+        assert_eq!(exit_branch, ExitBranch::LockTaken);
+    }
+
+    #[test]
+    fn checks_if_not_recently_checked() {
+        let (mut flox, _tempdir) = flox_instance();
+
+        let environment =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+
+        // required to read the upgrade information after being moved in the following line.
+        let dot_flox_path = environment.dot_flox_path();
+
+        let serialized = UninitializedEnvironment::from_concrete_environment(
+            &ConcreteEnvironment::Path(environment),
+        )
+        .unwrap();
+
+        let command = CheckForUpgrades {
+            check_timeout: 0,
+            environment: serialized,
+        };
+
+        // provide a mock response from the catalog client
+        // in this case an older [sic] version of the hello package,
+        // which should trigger an upgrade.
+        flox.catalog_client = Client::Mock(
+            MockClient::new(Some(GENERATED_DATA.join("resolve/old_hello.json"))).unwrap(),
+        );
+
+        let exit_branch = command.check_for_upgrades(&flox).unwrap();
+
+        assert_eq!(exit_branch, ExitBranch::Checked);
+
+        // assert that the upgrade information was stored
+        let upgrade_information =
+            UpgradeInformationGuard::for_environment(&flox.cache_dir, dot_flox_path).unwrap();
+
+        assert!(upgrade_information.info().is_some());
+        let info = upgrade_information.info().as_ref().unwrap();
+        assert!(info.result.old_lockfile.is_some());
+        assert_ne!(
+            &info.result.new_lockfile,
+            info.result.old_lockfile.as_ref().unwrap()
+        );
+    }
+}
