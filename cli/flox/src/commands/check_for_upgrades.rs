@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::SystemTime;
@@ -34,12 +34,23 @@ fn parse_uninitialized_environment_json<T: DeserializeOwned>() -> impl Parser<T>
         .parse(|string: String| serde_json::from_str::<T>(&string))
 }
 
+#[derive(Debug, PartialEq)]
+enum ExitBranch {
+    LockTaken,
+    AlreadyChecked,
+    Checked,
+}
+
 impl CheckForUpgrades {
     #[instrument(name = "check-upgrade", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("check-upgrade");
+        self.check_for_upgrades(&flox)?;
+        Ok(())
+    }
 
-        let mut environment = self.environment.into_concrete_environment(&flox)?;
+    fn check_for_upgrades(self, flox: &Flox) -> Result<ExitBranch> {
+        let mut environment = self.environment.into_concrete_environment(flox)?;
 
         let upgrade_information =
             UpgradeInformationGuard::for_environment(&flox.cache_dir, environment.dot_flox_path())?;
@@ -48,25 +59,29 @@ impl CheckForUpgrades {
         // - exists &&
         // - targets the current lockfile &&
         // - has recently been fetched
-        // Otherwise, dry-upgrade the environment and store the new information
+        // Otherwise, run a dry-upgrade tof he environment and store the new information
         if let Some(info) = upgrade_information.info() {
-            let environment_lockfile = environment.lockfile(&flox)?;
-            if Some(environment_lockfile) == info.result.old_lockfile
-                && info.last_checked.elapsed().unwrap().as_secs() < self.check_timeout
-            {
+            let environment_lockfile = environment.lockfile(flox)?;
+
+            let is_information_for_current_lockfile =
+                info.result.old_lockfile == Some(environment_lockfile);
+            let is_checked_recently =
+                info.last_checked.elapsed().unwrap().as_secs() <= self.check_timeout;
+
+            if is_information_for_current_lockfile && is_checked_recently {
                 debug!("Recently checked for upgrades. Skipping.");
-                return Ok(());
+                return Ok(ExitBranch::AlreadyChecked);
             }
         }
 
         let Ok(mut locked) = upgrade_information.lock_if_unlocked()? else {
             debug!("Lock already taken. Skipping.");
-            return Ok(());
+            return Ok(ExitBranch::LockTaken);
         };
 
         let result = info_span!("check-upgrade", progress = "Performing dry upgrade")
             .entered()
-            .in_scope(|| environment.dry_upgrade(&flox, &[]))?;
+            .in_scope(|| environment.dry_upgrade(flox, &[]))?;
 
         let info = locked.info_mut();
 
@@ -90,7 +105,7 @@ impl CheckForUpgrades {
 
         locked.commit()?;
 
-        Ok(())
+        Ok(ExitBranch::Checked)
     }
 }
 
@@ -132,15 +147,18 @@ pub fn spawn_detached_check_for_upgrades_process(
     command.arg("-vv"); // enable debug logging
 
     // Redirect logs to a file
-    let log_dir = environment.log_path()?;
     let timestamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
+        .expect("now is after UNIX EPOCH")
         .as_secs();
     let upgrade_check_log = log_dir.join(format!("upgrade-check.{}.log", timestamp));
 
-    debug!(log_file=?upgrade_check_log, "Logging upgrade check output to file, and redirecting std{{in,out}} to /dev/null");
+    debug!(
+        log_file=?upgrade_check_log,
+        "Logging upgrade check output to file, and redirecting std{{in,out}} to /dev/null"
+    );
 
+    fs::create_dir_all(log_dir)?;
     let file = File::create(upgrade_check_log)?;
     command.stderr(file);
     command.stdout(Stdio::null());
