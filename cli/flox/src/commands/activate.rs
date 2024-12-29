@@ -884,3 +884,226 @@ mod tests {
         assert_eq!(prompt, "wichtig".to_string());
     }
 }
+
+#[cfg(test)]
+mod upgrade_notification_tests {
+    use std::io::Write;
+    use std::sync::{Arc, Mutex};
+    use std::time::SystemTime;
+
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
+    use flox_rust_sdk::models::environment::UpgradeResult;
+    use flox_rust_sdk::providers::catalog::GENERATED_DATA;
+    use flox_rust_sdk::providers::upgrade_checks::UpgradeInformation;
+    use tracing::Subscriber;
+    use tracing_subscriber::filter::FilterFn;
+    use tracing_subscriber::layer::SubscriberExt;
+
+    use super::*;
+
+    #[derive(Debug, Default)]
+    struct CollectingWriter {
+        buffer: Mutex<Vec<u8>>,
+    }
+
+    impl Display for CollectingWriter {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let buffer = self.buffer.lock().unwrap();
+            let str_content = String::from_utf8_lossy(&buffer);
+            write!(f, "{str_content}")
+        }
+    }
+    impl Write for &CollectingWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.buffer.lock().unwrap().write(buf)
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.buffer.lock().unwrap().flush()
+        }
+    }
+
+    // For now this is a POC of using tracing for output tests,
+    // evenatually we should probably move that to the tracing utils or `message` module.
+    fn test_subscriber() -> (impl Subscriber, Arc<CollectingWriter>) {
+        let writer = Arc::new(CollectingWriter::default());
+
+        // TODO: also tee to test output?
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(writer.clone())
+            .compact()
+            .without_time()
+            .with_level(false)
+            .with_target(false)
+            .finish()
+            .with(FilterFn::new(|metadata| {
+                metadata.target() == "flox::utils::message"
+            }));
+
+        (subscriber, writer)
+    }
+
+    #[test]
+    fn no_notification_printed_if_absent() {
+        let (flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber();
+
+        let environment =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let mut environment = ConcreteEnvironment::Path(environment);
+
+        tracing::subscriber::with_default(subscriber, || {
+            notify_upgrade_if_available(&flox, &mut environment).unwrap();
+        });
+
+        let printed = writer.to_string();
+
+        assert!(printed.is_empty(), "printed: {printed}");
+    }
+
+    #[test]
+    fn notification_printed_if_present() {
+        let (flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber();
+
+        let environment =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let mut environment = ConcreteEnvironment::Path(environment);
+
+        {
+            let upgrade_information = UpgradeInformationGuard::for_environment(
+                &flox.cache_dir,
+                environment.dot_flox_path(),
+            )
+            .unwrap();
+            let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
+
+            let mut new_lockfile = environment.lockfile(&flox).unwrap();
+            for locked_package in new_lockfile.packages.iter_mut() {
+                match locked_package {
+                    LockedPackage::Catalog(locked_package_catalog) => {
+                        locked_package_catalog.derivation = "upgraded".to_string()
+                    },
+                    LockedPackage::Flake(locked_package_flake) => {
+                        locked_package_flake.locked_installable.derivation = "upgraded".to_string()
+                    },
+                    LockedPackage::StorePath(_) => {},
+                }
+            }
+
+            let _ = locked.info_mut().insert(UpgradeInformation {
+                last_checked: SystemTime::now(),
+                result: UpgradeResult {
+                    old_lockfile: Some(environment.lockfile(&flox).unwrap()),
+                    new_lockfile,
+
+                    store_path: None,
+                },
+            });
+
+            locked.commit().unwrap();
+        }
+
+        tracing::subscriber::with_default(subscriber, || {
+            notify_upgrade_if_available(&flox, &mut environment).unwrap();
+        });
+
+        let printed = writer.to_string();
+
+        assert!(
+            printed.contains("The following packages can be upgraded"),
+            "printed: {printed}"
+        );
+        assert!(printed.contains("- hello: "), "printed: {printed}");
+        assert!(
+            printed.contains("Run 'flox upgrade' to apply these changes."),
+            "printed: {printed}"
+        );
+    }
+
+    #[test]
+    fn no_notification_printed_if_outdated() {
+        let (flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber();
+
+        let environment =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let mut environment = ConcreteEnvironment::Path(environment);
+
+        {
+            let upgrade_information = UpgradeInformationGuard::for_environment(
+                &flox.cache_dir,
+                environment.dot_flox_path(),
+            )
+            .unwrap();
+            let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
+
+            // cause old_lockfile to evaluate as non-equal to the current lockfile
+            let mut old_lockfile = environment.lockfile(&flox).unwrap();
+            old_lockfile.packages.clear();
+
+            let _ = locked.info_mut().insert(UpgradeInformation {
+                last_checked: SystemTime::now(),
+                result: UpgradeResult {
+                    old_lockfile: Some(old_lockfile),
+                    new_lockfile: environment.lockfile(&flox).unwrap(),
+
+                    store_path: None,
+                },
+            });
+
+            locked.commit().unwrap();
+        }
+
+        tracing::subscriber::with_default(subscriber, || {
+            notify_upgrade_if_available(&flox, &mut environment).unwrap();
+        });
+
+        let printed = writer.to_string();
+        assert!(printed.is_empty(), "printed: {printed}");
+    }
+
+    #[test]
+    fn no_notification_printed_if_no_diff() {
+        let (flox, _tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber();
+
+        let environment =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let mut environment = ConcreteEnvironment::Path(environment);
+
+        {
+            let upgrade_information = UpgradeInformationGuard::for_environment(
+                &flox.cache_dir,
+                environment.dot_flox_path(),
+            )
+            .unwrap();
+
+            let result = UpgradeResult {
+                old_lockfile: Some(environment.lockfile(&flox).unwrap()),
+                new_lockfile: environment.lockfile(&flox).unwrap(),
+
+                store_path: None,
+            };
+
+            assert_eq!(result.diff(), vec![]);
+
+            let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
+
+            let _ = locked.info_mut().insert(UpgradeInformation {
+                last_checked: SystemTime::now(),
+                result,
+            });
+
+            locked.commit().unwrap();
+        }
+
+        tracing::subscriber::with_default(subscriber, || {
+            notify_upgrade_if_available(&flox, &mut environment).unwrap();
+        });
+
+        let printed = writer.to_string();
+        assert!(printed.is_empty(), "printed: {printed}");
+    }
+}
