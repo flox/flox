@@ -334,6 +334,9 @@ if ($manifest) {
 # <flox>
 } else {
 
+    # For each reference being walked, make sure we don't trip over cyclic links.
+    my %seen;
+
     sub parseJSONFile($) {
         my $json_file = shift;
         # Read the JSON file.
@@ -681,11 +684,12 @@ if ($manifest) {
         my $references = shift @_;
         my $pkg = shift @_;
         my @retarray = ( $pkg );
-        if (defined $references->{$pkg}) {
+        if (defined $references->{$pkg} and not defined $seen{$pkg}) {
             foreach my $reference (@{$references->{$pkg}}) {
                 next if $reference eq $pkg;
                 push @retarray, walkReferences($references, $reference);
             }
+            $seen{$pkg} = 1;
         } else {
             warn "references for package $pkg not found\n";
         }
@@ -709,6 +713,7 @@ if ($manifest) {
         %done = ();
         %postponed = ();
         %symlinks = ();
+        %seen = ();
         my $envName = $output->{"name"};
 
         my $path = $nix_attrs->{"outputs"}{$envName};
