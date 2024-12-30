@@ -711,18 +711,21 @@ struct Help {
     cmd: Option<String>,
 }
 
+/// Force `--help` output for `flox` with a given command
+pub fn display_help(cmd: Option<String>) {
+    let mut args = Vec::from_iter(cmd.as_deref());
+    args.push("--help");
+
+    match flox_cli().run_inner(&*args) {
+        Ok(_) => unreachable!(),
+        Err(ParseFailure::Completion(comp)) => print!("{comp:80}"),
+        Err(ParseFailure::Stdout(doc, _)) => message::plain(format!("{doc:80}")),
+        Err(ParseFailure::Stderr(err)) => message::error(err),
+    }
+}
 impl Help {
     fn handle(self) {
-        let mut args = Vec::from_iter(self.cmd.as_deref());
-        args.push("--help");
-
-        // todo: just `run()` this -- we might not need the expl;icit error handling anymore
-        match flox_cli().run_inner(&*args) {
-            Ok(_) => unreachable!(),
-            Err(ParseFailure::Completion(comp)) => print!("{comp:80}"),
-            Err(ParseFailure::Stdout(doc, _)) => message::plain(format!("{doc:80}")),
-            Err(ParseFailure::Stderr(err)) => message::error(err),
-        }
+        display_help(self.cmd);
     }
 }
 
@@ -790,7 +793,13 @@ enum LocalDevelopmentCommands {
     Delete(#[bpaf(external(delete::delete))] delete::Delete),
     /// Interact with services
     #[bpaf(command)]
-    Services(#[bpaf(external(services::services_commands))] services::ServicesCommands),
+    Services(
+        #[bpaf(
+            external(services::services_commands),
+            fallback(services::ServicesCommands::Help)
+        )]
+        services::ServicesCommands,
+    ),
 }
 
 impl LocalDevelopmentCommands {

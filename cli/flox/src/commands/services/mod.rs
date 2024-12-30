@@ -17,6 +17,7 @@ use super::{
     UninitializedEnvironment,
 };
 use crate::commands::activate::Activate;
+use crate::commands::display_help;
 use crate::config::Config;
 use crate::utils::message;
 
@@ -53,6 +54,9 @@ pub enum ServicesCommandsError {
 /// Services Commands.
 #[derive(Debug, Clone, Bpaf)]
 pub enum ServicesCommands {
+    /// Prints help information
+    #[bpaf(command, hide)]
+    Help,
     /// Restart a service or services
     #[bpaf(command)]
     Restart(#[bpaf(external(restart::restart))] restart::Restart),
@@ -78,6 +82,9 @@ impl ServicesCommands {
     #[instrument(name = "services", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
+            ServicesCommands::Help => {
+                display_help(Some("services".to_string()));
+            },
             ServicesCommands::Restart(args) => args.handle(config, flox).await?,
             ServicesCommands::Start(args) => args.handle(config, flox).await?,
             ServicesCommands::Status(args) => args.handle(flox).await?,

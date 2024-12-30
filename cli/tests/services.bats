@@ -168,6 +168,13 @@ EOF
   assert_output --partial "setting service variables should_have_services=false start_new_process_compose=false"
 }
 
+@test "help for the command is displayed with no args" {
+
+    RUST_LOG=debug run "$FLOX_BIN" services
+    assert_success
+    assert_output --partial "Interact with services"
+}
+
 @test "all imperative commands error when no services are defined" {
   run "$FLOX_BIN" init
 
