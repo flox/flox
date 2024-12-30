@@ -157,8 +157,8 @@ pkgs.runCommandNoCC name
                 # N.B. not using t3 --forcecolor option because Nix sandbox
                 # strips color codes from output anyway.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
-                  ${flox-env-package}/activate --mode run --turbo -- \
-                    ${build-wrapper-env-package}/activate --env ${build-wrapper-env-package} --turbo -- \
+                  ${flox-env-package}/activate --env ${flox-env-package} --mode run --turbo -- \
+                    ${build-wrapper-env-package}/activate --env ${build-wrapper-env-package} --mode dev --turbo -- \
                       ${t3-package}/bin/t3 --relative $log -- bash -e ${buildScript-contents}
               ''
             else
@@ -171,8 +171,8 @@ pkgs.runCommandNoCC name
                 # TMP will be set to something like
                 # /private/tmp/nix-build-file-0.0.0.drv-0
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
-                  ${flox-env-package}/activate --mode run --turbo -- \
-                    ${build-wrapper-env-package}/activate --env ${build-wrapper-env-package} --turbo -- \
+                  ${flox-env-package}/activate --env ${flox-env-package} --mode run --turbo -- \
+                    ${build-wrapper-env-package}/activate --env ${build-wrapper-env-package} --mode dev --turbo -- \
                       ${t3-package}/bin/t3 --relative $log -- bash -e ${buildScript-contents} || \
                 ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
