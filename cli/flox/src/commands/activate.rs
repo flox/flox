@@ -470,7 +470,7 @@ impl Activate {
         //    eval "$(flox activate)"
         if in_place {
             let shell = Self::detect_shell_for_in_place()?;
-            Self::activate_in_place(&mode, &shell, &exports, &activate_path);
+            Self::activate_in_place(&mode, mode_link_path, &shell, &exports, &activate_path);
 
             return Ok(());
         }
@@ -478,10 +478,11 @@ impl Activate {
         let shell = Self::detect_shell_for_subshell();
         // These functions will only return if exec fails
         if interactive {
-            Self::activate_interactive(&mode, shell, exports, &activate_path)
+            Self::activate_interactive(&mode, mode_link_path, shell, exports, &activate_path)
         } else {
             Self::activate_command(
                 &mode,
+                mode_link_path,
                 self.run_args,
                 shell,
                 exports,
@@ -494,6 +495,7 @@ impl Activate {
     /// Used for `flox activate -- run_args`
     fn activate_command(
         mode: &Mode,
+        mode_link_path: &Path,
         run_args: Vec<String>,
         shell: Shell,
         exports: HashMap<&str, String>,
@@ -509,6 +511,13 @@ impl Activate {
         // userShell invocation. Take this opportunity to combine these args
         // safely, and *exactly* as the user provided them in argv.
         command.arg("-c").arg(Self::quote_run_args(&run_args));
+
+        // Don't rely on FLOX_ENV in the environment when we explicitly know
+        // what it should be. This is necessary for nested activations where an
+        // outer export of FLOX_ENV would be inherited by the inner activation.
+        command
+            .arg("--env")
+            .arg(mode_link_path.to_string_lossy().to_string());
 
         // Pass down the activation mode
         command.arg("--mode").arg(mode.to_string());
@@ -539,6 +548,7 @@ impl Activate {
     /// This function should never return as it replaces the current process
     fn activate_interactive(
         mode: &Mode,
+        mode_link_path: &Path,
         shell: Shell,
         exports: HashMap<&str, String>,
         activate_path: &Path,
@@ -546,6 +556,13 @@ impl Activate {
         let mut command = Command::new(activate_path);
         command.env("FLOX_SHELL", shell.exe_path());
         command.envs(exports);
+
+        // Don't rely on FLOX_ENV in the environment when we explicitly know
+        // what it should be. This is necessary for nested activations where an
+        // outer export of FLOX_ENV would be inherited by the inner activation.
+        command
+            .arg("--env")
+            .arg(mode_link_path.to_string_lossy().to_string());
 
         // Pass down the activation mode
         command.arg("--mode").arg(mode.to_string());
@@ -559,6 +576,7 @@ impl Activate {
     /// Used for `eval "$(flox activate)"`
     fn activate_in_place(
         mode: &Mode,
+        mode_link_path: &Path,
         shell: &Shell,
         exports: &HashMap<&str, String>,
         activate_path: &Path,
@@ -566,6 +584,13 @@ impl Activate {
         let mut command = Command::new(activate_path);
         command.env("FLOX_SHELL", shell.exe_path());
         command.envs(exports);
+
+        // Don't rely on FLOX_ENV in the environment when we explicitly know
+        // what it should be. This is necessary for nested activations where an
+        // outer export of FLOX_ENV would be inherited by the inner activation.
+        command
+            .arg("--env")
+            .arg(mode_link_path.to_string_lossy().to_string());
 
         // Pass down the activation mode
         command.arg("--mode").arg(mode.to_string());
