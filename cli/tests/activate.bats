@@ -1505,6 +1505,62 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# The following tests check that repeat in-place activations, such as from RC
+# files, modify PATH to:
+#
+# 1. put FLOX_ENV/bin first
+# 2. not put it there more than once
+#
+# This guards against:
+#
+# 1. RC files unconditionally modifying PATH (e.g. nix-darwin)
+# 2. `path_helper` on macOS putting our environment last
+
+# bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:bash
+@test "bash: 'flox activate' patches PATH correctly when already activated" {
+  project_setup
+  _bash="$(command -v bash)"
+  FLOX_SHELL="bash" run -- \
+    "$FLOX_BIN" activate -- \
+    $_bash -c "source <($FLOX_BIN activate); $_bash $TESTS_DIR/activate/verify_PATH.bash"
+  assert_success
+}
+
+# bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:fish
+@test "fish: 'flox activate' patches PATH correctly when already activated" {
+  project_setup
+  _bash="$(command -v bash)"
+  _fish="$(command -v fish)"
+  FLOX_SHELL="fish" run -- \
+    "$FLOX_BIN" activate -- \
+    $_fish -c "$FLOX_BIN activate | source; $_bash $TESTS_DIR/activate/verify_PATH.bash"
+  assert_success
+}
+
+# bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:tcsh
+@test "tcsh: 'flox activate' patches PATH correctly when already activated" {
+  project_setup
+  _bash="$(command -v bash)"
+  _tcsh="$(command -v tcsh)"
+  FLOX_SHELL="tcsh" run -- \
+    "$FLOX_BIN" activate -- \
+    $_tcsh -c "$FLOX_BIN activate | source /dev/stdin; $_bash $TESTS_DIR/activate/verify_PATH.bash"
+  assert_success
+}
+
+# bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:zsh
+@test "zsh: 'flox activate' patches PATH correctly when already activated" {
+  project_setup
+  _bash="$(command -v bash)"
+  _zsh="$(command -v zsh)"
+  FLOX_SHELL="zsh" run -- \
+    "$FLOX_BIN" activate -- \
+    $_zsh -c "source =($FLOX_BIN activate); $_bash $TESTS_DIR/activate/verify_PATH.bash"
+  assert_success
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=activate,activate:python-detects-installed-python
 @test "'flox activate' sets python vars if python is installed" {
   project_setup
