@@ -860,7 +860,7 @@ EOF
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
   cat <<'EOF' | tcsh
-    eval "`$FLOX_BIN activate`" >& "$PROJECT_DIR/stderr_1"
+    eval "`$FLOX_BIN activate`" |& tee "$PROJECT_DIR/stderr_1"
     grep -q "sourcing hook.on-activate" "$PROJECT_DIR/stderr_1"
     "$FLOX_BIN" activate | grep -q "sourcing hook.on-activate"
     if ($? == 0) then
@@ -3746,7 +3746,7 @@ EOF
   # Instead `eval "$(flox activate -d default)"` manually to simulate sourcing
   # .bashrc
 
-  echo "eval \`$FLOX_BIN activate -d '$PROJECT_DIR/default'\`" > "$HOME/.tcshrc.extra"
+  echo "eval \"\`$FLOX_BIN activate -d '$PROJECT_DIR/default'\`\"" > "$HOME/.tcshrc.extra"
 
 
   export TCSH="$(which tcsh)"
