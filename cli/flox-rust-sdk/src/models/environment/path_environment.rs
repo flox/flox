@@ -231,6 +231,17 @@ impl Environment for PathEnvironment {
         Ok(result)
     }
 
+    /// Upgrade packages in this environment and return the result, but do not
+    fn dry_upgrade(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: &[&str],
+    ) -> Result<UpgradeResult, EnvironmentError> {
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let result = env_view.upgrade(flox, groups_or_iids, false)?;
+        Ok(result)
+    }
+
     /// Atomically upgrade packages in this environment
     fn upgrade(
         &mut self,
@@ -239,7 +250,7 @@ impl Environment for PathEnvironment {
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
-        let result = env_view.upgrade(flox, groups_or_iids)?;
+        let result = env_view.upgrade(flox, groups_or_iids, true)?;
         if let Some(ref store_paths) = result.store_path {
             self.link(flox, store_paths)?;
         }
