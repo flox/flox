@@ -37,7 +37,7 @@ use crate::providers::buildenv::{
     BuiltStorePath,
 };
 use crate::providers::catalog::{self, ClientTrait};
-use crate::providers::flox_cpp_utils::InstallableLocker;
+use crate::providers::flake_installable_locker::InstallableLocker;
 use crate::providers::services::{maybe_make_service_config_file, ServiceError};
 
 pub struct ReadOnly {}
@@ -1100,7 +1100,7 @@ mod tests {
     use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::manifest::{ManifestPackageDescriptorCatalog, DEFAULT_GROUP_NAME};
-    use crate::providers::flox_cpp_utils::InstallableLockerMock;
+    use crate::providers::flake_installable_locker::InstallableLockerMock;
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
     /// Create a CoreEnvironment with an empty manifest (with version = 1)

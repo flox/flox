@@ -43,7 +43,7 @@ use crate::providers::catalog::{
     PackageGroup,
     ResolvedPackageGroup,
 };
-use crate::providers::flox_cpp_utils::{
+use crate::providers::flake_installable_locker::{
     FlakeInstallableError,
     InstallableLocker,
     LockedInstallable,
@@ -1537,7 +1537,10 @@ pub(crate) mod tests {
     use super::*;
     use crate::models::manifest::{Manifest, RawManifest};
     use crate::models::search::{SearchLimit, SearchResults};
-    use crate::providers::flox_cpp_utils::{FlakeInstallableError, InstallableLockerMock};
+    use crate::providers::flake_installable_locker::{
+        FlakeInstallableError,
+        InstallableLockerMock,
+    };
 
     /// A mock client that panics if any of its methods are called
     struct PanickingClient;

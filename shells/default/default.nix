@@ -18,13 +18,16 @@
   flox-cli-tests,
   flox-activations,
   flox-watchdog,
+  flox-nix-plugins,
   stdenv,
   ci ? false,
 }:
 let
   # For use in GitHub Actions and local development.
+  ciPackages = [ ] ++ flox-nix-plugins.ciPackages;
 
   devPackages =
+    flox-nix-plugins.devPackages
     ++ flox-cli.devPackages
     ++ [
       just
@@ -75,7 +78,7 @@ mkShell (
     # but in case we add specific ones,
     # it's good to have them here already.
     inputsFrom = [
-      flox-pkgdb
+      flox-nix-plugins
       flox-cli
       flox-watchdog
       flox-activations
@@ -119,6 +122,7 @@ mkShell (
         define_dev_env_var FLOX_ACTIVATIONS_BIN "''${REPO_ROOT}/cli/target/debug/flox-activations";
 
         # make built binaries
+        define_dev_env_var NIX_PLUGINS "''${REPO_ROOT}/build/nix-plugins/lib/nix-plugins";
 
         # static nix files
         define_dev_env_var FLOX_MK_CONTAINER_NIX "''${REPO_ROOT}/mkContainer/mkContainer.nix";

@@ -20,6 +20,7 @@ use crate::models::lockfile::{
     LockedPackageStorePath,
     Lockfile,
 };
+use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::catalog::CatalogClientError;
 use crate::utils::CommandExt;
 
@@ -313,26 +314,7 @@ impl BuildEnvNix {
 
         let mut nix_build_command = self.base_command();
 
-        // for now assume the plugin is located relative to the pkgdb binary
-        // <pkgdb>
-        // ├── bin
-        // │   └── pkgdb
-        // └── lib
-        //     └── nix-plugins
-        //          └── wrapped-nixpkgs-input.(so|dylib)
-        {
-            let pkgdb_lib_dir = Path::new(&*PKGDB_BIN)
-                .ancestors()
-                .nth(2)
-                .expect("pkgdb is in '<store-path>/bin'")
-                .join("lib/nix-plugins");
-
-            nix_build_command.args([
-                "--option",
-                "extra-plugin-files",
-                &pkgdb_lib_dir.to_string_lossy(),
-            ]);
-        }
+        nix_build_command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
 
         nix_build_command.arg("build");
         nix_build_command.arg("--no-write-lock-file");
@@ -914,7 +896,7 @@ mod realise_flakes_tests {
 
     use super::*;
     use crate::models::manifest::ManifestPackageDescriptorFlake;
-    use crate::providers::flox_cpp_utils::{InstallableLocker, InstallableLockerImpl};
+    use crate::providers::flake_installable_locker::{InstallableLocker, InstallableLockerImpl};
 
     // region: tools to configure mock flakes for testing
     struct MockedLockedPackageFlakeBuilder {
