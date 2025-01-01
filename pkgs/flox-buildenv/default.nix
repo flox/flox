@@ -3,7 +3,6 @@
   darwin,
   coreutils,
   flox-activation-scripts,
-  flox-pkgdb,
   glibcLocalesUtf8,
   lib,
   nix,

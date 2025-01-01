@@ -52,11 +52,6 @@ setup_file() {
   export SHOW_HINT="Use 'flox show <package>' to see available versions"
   # Separator character for ambiguous package sources
   export SEP=":"
-
-  if [[ -z "${PKGDB_BIN}" ]]; then
-    echo "You must set \$PKGDB_BIN to run these tests" >&2
-    exit 1
-  fi
 }
 
 # ---------------------------------------------------------------------------- #
