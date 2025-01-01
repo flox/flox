@@ -11,7 +11,7 @@ use flox_rust_sdk::models::lockfile::{
     PackageInfo,
     PackageToList,
 };
-use flox_rust_sdk::providers::flox_cpp_utils::LockedInstallable;
+use flox_rust_sdk::providers::flake_installable_locker::LockedInstallable;
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::instrument;

@@ -896,7 +896,7 @@ mod realise_flakes_tests {
 
     use super::*;
     use crate::models::manifest::ManifestPackageDescriptorFlake;
-    use crate::providers::flox_cpp_utils::{InstallableLocker, InstallableLockerImpl};
+    use crate::providers::flake_installable_locker::{InstallableLocker, InstallableLockerImpl};
 
     // region: tools to configure mock flakes for testing
     struct MockedLockedPackageFlakeBuilder {
