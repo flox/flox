@@ -1036,9 +1036,6 @@ pub enum ManifestBuildSandbox {
 pub enum ManifestError {
     #[error("couldn't parse descriptor '{}': {}", desc, msg)]
     MalformedStringDescriptor { msg: String, desc: String },
-    /// FIXME: This is a temporary error variant until `flox` parses descriptors on its own
-    #[error("failed while calling pkgdb")]
-    PkgDbCall(#[source] std::io::Error),
     #[error("no package or group named '{0}' in the manifest")]
     PkgOrGroupNotFound(String),
     #[error("invalid flake ref: {0}")]

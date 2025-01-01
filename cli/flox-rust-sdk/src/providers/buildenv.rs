@@ -20,7 +20,6 @@ use crate::models::lockfile::{
     LockedPackageStorePath,
     Lockfile,
 };
-use crate::models::pkgdb::{PkgDbError, PKGDB_BIN};
 use crate::providers::catalog::CatalogClientError;
 use crate::utils::CommandExt;
 
@@ -50,12 +49,6 @@ const FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE: &str = "flox-nixpkgs:v0/flox";
 
 #[derive(Debug, Error)]
 pub enum BuildEnvError {
-    /// An error that occurred while realising the packages in the lockfile.
-    /// Those are Nix errors pkgdb forwards to us as well as detection of
-    /// disallowed packages.
-    #[error("Failed to realise packages in lockfile")]
-    Realise(#[source] PkgDbError),
-
     #[error("Failed to realise '{install_id}':\n{message}")]
     Realise2 { install_id: String, message: String },
 

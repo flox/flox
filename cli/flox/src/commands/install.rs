@@ -52,7 +52,7 @@ use crate::commands::{
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
-use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_error};
+use crate::utils::errors::format_error;
 use crate::utils::message;
 use crate::utils::openers::Shell;
 use crate::utils::tracing::sentry_set_tag;
@@ -397,7 +397,7 @@ impl Install {
                 ))
                 .into())
             },
-            err => Err(apply_doc_link_for_unsupported_packages(err).into()),
+            err => Err(err.into()),
         }
     }
 

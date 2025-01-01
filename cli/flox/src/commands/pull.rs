@@ -414,15 +414,15 @@ impl Pull {
                     err = display_chain(core_err)
                 );
 
-                let pkgdb_error = format_core_error(core_err);
+                let build_error = format_core_error(core_err);
 
                 if !force && query_functions.is_none() {
                     fs::remove_dir_all(dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
-                    bail!("{pkgdb_error}");
+                    bail!("{build_error}");
                 }
 
-                message::error(pkgdb_error);
+                message::error(build_error);
 
                 // The unwrap() is only reached if !force,
                 // and we return above if !force and query_functions.is_none()
@@ -572,8 +572,6 @@ mod tests {
         unusable_mock_managed_environment,
     };
     use flox_rust_sdk::models::environment::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
-    use flox_rust_sdk::models::pkgdb::error_codes::PACKAGE_BUILD_FAILURE;
-    use flox_rust_sdk::models::pkgdb::PkgDbError;
     use flox_rust_sdk::providers::buildenv::BuildEnvError;
     use tempfile::tempdir_in;
 
@@ -587,11 +585,10 @@ mod tests {
 
     fn incompatible_package_result() -> Result<(), EnvironmentError> {
         Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
-            BuildEnvError::Realise(PkgDbError {
-                exit_code: PACKAGE_BUILD_FAILURE,
-                category_message: "category_message".to_string(),
-                context_message: None,
-            }),
+            BuildEnvError::Realise2 {
+                install_id: "install_id".to_string(),
+                message: "message".to_string(),
+            },
         )))
     }
 
