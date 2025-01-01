@@ -13,7 +13,6 @@
 nix_options := "--extra-experimental-features nix-command \
                 --extra-experimental-features flakes"
 INPUT_DATA := "${PWD}/test_data/input_data"
-cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo nextest run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
 
 
 # ---------------------------------------------------------------------------- #
@@ -26,27 +25,12 @@ cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo nextest run --manifest-pa
 
 # Print the paths of all of the binaries
 @bins:
-    echo "$PKGDB_BIN"
     echo "$FLOX_BIN"
 
 # ---------------------------------------------------------------------------- #
 
-# Build the compilation database
-build-cdb:
-    @make -C pkgdb -j 8 -s cdb
 
-# Build only pkgdb
-@build-pkgdb: build-activation-scripts
-    make -C pkgdb -j 8;
 
-# Build pkgdb with debug symbols
-@build-pkgdb-debug:
-    # Note that you need to clean pkgdb first
-    make -C pkgdb -j 8 -s DEBUG=1
-
-# Clean the pkgdb build cache
-@clean-pkgdb:
-    make -C pkgdb -j 8 -s clean
 
 # ---------------------------------------------------------------------------- #
 # Nix built subsystems
@@ -116,15 +100,10 @@ clean-builds:
 
 # ---------------------------------------------------------------------------- #
 
-# Run the pkgdb tests
-@test-pkgdb: build-pkgdb
-    make -C pkgdb -j 8 tests;
-    make -C pkgdb check;
 
 # Run the CLI integration test suite
 @integ-tests +bats_args="": build
     flox-cli-tests \
-        --pkgdb "$PKGDB_BIN" \
         --flox "$FLOX_BIN" \
         --watchdog "$WATCHDOG_BIN" \
         --input-data "{{INPUT_DATA}}" \
@@ -199,25 +178,18 @@ test-all: test-pkgdb impure-tests integ-tests nix-integ-tests
     echo "just: DEPRECATED TARGET: Use 'flox' instead" >&2;
     cli/target/debug/flox {{args}}
 
-# Run a `pkgdb` command
-@pkgdb +args="": build-pkgdb
-    pkgdb/bin/pkgdb {{args}}
-
 
 # ---------------------------------------------------------------------------- #
 
 # Clean ( remove ) built artifacts
 @clean:
     pushd cli; cargo clean;
-    make -C pkgdb clean;
 
 # ---------------------------------------------------------------------------- #
 
 @format-cli:
     pushd cli; cargo fmt; popd
 
-@format-pkgdb:
-    pushd pkgdb; make fmt; popd
 
 @format-nix:
     treefmt
