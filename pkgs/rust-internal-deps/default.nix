@@ -3,7 +3,7 @@
   flox-buildenv,
   flox-package-builder,
   flox-mk-container ? ../../mkContainer,
-  flox-pkgdb,
+  flox-nix-plugins,
   flox-src,
   gitMinimal,
   gnumake,
@@ -55,8 +55,8 @@ let
     // lib.optionalAttrs (flox-package-builder != null) {
       FLOX_BUILD_MK = "${flox-package-builder}/libexec/flox-build.mk";
     }
-    // lib.optionalAttrs (flox-pkgdb != null) {
-      PKGDB_BIN = "${flox-pkgdb}/bin/flox-pkgdb";
+    // lib.optionalAttrs (flox-nix-plugins != null) {
+      NIX_PLUGINS = "${flox-nix-plugins}/bin/flox-nix-plugins";
     }
     // lib.optionalAttrs (flox-mk-container != null) {
       FLOX_MK_CONTAINER_NIX = "${flox-mk-container}/mkContainer.nix";
@@ -98,7 +98,7 @@ in
         process-compose
         coreutils # for `sleep infinity`
       ]
-      ++ lib.optional (flox-pkgdb != null) [ flox-pkgdb ]
+      ++ lib.optional (flox-nix-plugins != null) [ flox-nix-plugins ]
       ++ lib.optional (flox-mk-container != null) [ flox-mk-container ];
 
     # Tests are disabled inside of the build because the sandbox prevents

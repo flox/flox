@@ -1,2 +1,0 @@
-options.systems = ["x86_64-linux"]
-install.nodejs = {}

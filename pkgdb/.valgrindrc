@@ -1,8 +1,0 @@
---memcheck:suppressions=./build-aux/valgrind.supp
---memcheck:trace-children=yes
---memcheck:track-origins=yes
---memcheck:leak-check=yes
-
---massif:pages-as-heap=yes
---massif:trace-children=yes
---massif:time-unit=ms
