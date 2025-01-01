@@ -12,13 +12,10 @@ use tracing::{debug, instrument};
 
 use super::buildenv::NIX_BIN;
 use crate::models::manifest::{ManifestPackageDescriptorFlake, DEFAULT_PRIORITY};
-use crate::models::pkgdb::{CallPkgDbError, PKGDB_BIN};
 use crate::utils::CommandExt;
 
 #[derive(Debug, Error)]
 pub enum FlakeInstallableError {
-    #[error(transparent)]
-    Pkgdb(#[from] CallPkgDbError),
     // todo: do we need to break this into more specific errors?
     #[error("Failed to lock flake installable: {0}")]
     LockInstallable(String),
