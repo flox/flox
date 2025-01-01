@@ -52,8 +52,7 @@ impl CheckForUpgrades {
     fn check_for_upgrades(self, flox: &Flox) -> Result<ExitBranch> {
         let mut environment = self.environment.into_concrete_environment(flox)?;
 
-        let upgrade_information =
-            UpgradeInformationGuard::for_environment(&flox.cache_dir, environment.dot_flox_path())?;
+        let upgrade_information = UpgradeInformationGuard::read_in(environment.cache_path()?)?;
 
         // Return if previous information
         // - exists &&
@@ -193,8 +192,7 @@ mod tests {
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
 
         let upgrade_information =
-            UpgradeInformationGuard::for_environment(&flox.cache_dir, environment.dot_flox_path())
-                .unwrap();
+            UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
 
         // Create a fake upgrade information based on the current lockfile
         // and mark it as checked recently (now)
@@ -234,8 +232,7 @@ mod tests {
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
 
         let upgrade_information =
-            UpgradeInformationGuard::for_environment(&flox.cache_dir, environment.dot_flox_path())
-                .unwrap();
+            UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
 
         // Simulate a lock being taken by another process (i.e. `_locked` is not dropped)
         // A separate test in the SDK checks that `lock_if_unlocked` does not block.
@@ -264,7 +261,7 @@ mod tests {
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
 
         // required to read the upgrade information after being moved in the following line.
-        let dot_flox_path = environment.dot_flox_path();
+        let cache_path = environment.cache_path().unwrap();
 
         let serialized = UninitializedEnvironment::from_concrete_environment(
             &ConcreteEnvironment::Path(environment),
@@ -288,8 +285,7 @@ mod tests {
         assert_eq!(exit_branch, ExitBranch::Checked);
 
         // assert that the upgrade information was stored
-        let upgrade_information =
-            UpgradeInformationGuard::for_environment(&flox.cache_dir, dot_flox_path).unwrap();
+        let upgrade_information = UpgradeInformationGuard::read_in(cache_path).unwrap();
 
         assert!(upgrade_information.info().is_some());
         let info = upgrade_information.info().as_ref().unwrap();

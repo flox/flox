@@ -170,7 +170,9 @@ pub trait Environment: Send {
     /// This does not link the environment, but may lock the environment, if necessary.
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError>;
 
-    /// Return a path that environment hooks should use to store transient data.
+    /// Return a path to store transient data,
+    /// such as temporary files created by the environment hooks or the environment itself,
+    /// including reproducible data about the environment.
     ///
     /// The returned path will exist.
     fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError>;
