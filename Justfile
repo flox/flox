@@ -13,6 +13,7 @@
 nix_options := "--extra-experimental-features nix-command \
                 --extra-experimental-features flakes"
 INPUT_DATA := "${PWD}/test_data/input_data"
+cargo_test_invocation := "cargo nextest run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
 
 
 # ---------------------------------------------------------------------------- #
@@ -30,7 +31,14 @@ INPUT_DATA := "${PWD}/test_data/input_data"
 # ---------------------------------------------------------------------------- #
 
 
+# Build only nix-plugins
+@build-nix-plugins:
+    meson compile -C nix-plugins/builddir; \
+    meson install -C nix-plugins/builddir
 
+# Clean th e nix-plugins build cache
+@clean-nix-plugins:
+   meson compile -C nix-plugins/builddir --clean
 
 # ---------------------------------------------------------------------------- #
 # Nix built subsystems
@@ -78,7 +86,7 @@ INPUT_DATA := "${PWD}/test_data/input_data"
 # ---------------------------------------------------------------------------- #
 # Build the flox binary
 
-@build-cli: build-pkgdb build-package-builder build-activation-scripts build-watchdog build-buildenv
+@build-cli: build-nix-plugins build-package-builder build-activation-scripts build-watchdog build-buildenv
     pushd cli; cargo build -p flox
 
 
@@ -100,10 +108,14 @@ clean-builds:
 
 # ---------------------------------------------------------------------------- #
 
+# Run the nix-plugins tests
+@test-nix-plugins: build-nix-plugins
+    meson test -C nix-plugins/builddir
 
 # Run the CLI integration test suite
 @integ-tests +bats_args="": build
     flox-cli-tests \
+        --nix-plugins "$NIX_PLUGINS" \
         --flox "$FLOX_BIN" \
         --watchdog "$WATCHDOG_BIN" \
         --input-data "{{INPUT_DATA}}" \
@@ -128,11 +140,11 @@ clean-builds:
 # Run the entire CLI test suite
 test-cli: impure-tests integ-tests
 
-# Run the test suite except for pkgdb
+# Run the test suite except for nix-plugins
 @test-rust: impure-tests integ-tests nix-integ-tests
 
 # Run the entire test suite, including impure unit tests
-test-all: test-pkgdb impure-tests integ-tests nix-integ-tests
+test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
 
 
 # ---------------------------------------------------------------------------- #
@@ -182,20 +194,24 @@ test-all: test-pkgdb impure-tests integ-tests nix-integ-tests
 # ---------------------------------------------------------------------------- #
 
 # Clean ( remove ) built artifacts
-@clean:
-    pushd cli; cargo clean;
+@clean: clean-nix-plugins
+    pushd cli; cargo clean; popd
 
 # ---------------------------------------------------------------------------- #
 
 @format-cli:
     pushd cli; cargo fmt; popd
 
+@format-nix-plugins:
+    clang-format -i nix-plugins/src/**/*.cc; \
+    clang-format -i nix-plugins/include/**/*.hh
+
 
 @format-nix:
     treefmt
 
 # Format all the code
-format: format-cli format-pkgdb format-nix
+format: format-cli format-nix-plugins format-nix
 
 # ---------------------------------------------------------------------------- #
 #

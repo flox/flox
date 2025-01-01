@@ -7,7 +7,8 @@
   lcov,
   nix,
   pkg-config,
-  bash,
+  meson,
+  ninja,
   # For testing
   gdb ? throw "`gdb' is required for debugging with `g++'",
   lldb ? throw "`lldb' is required for debugging with `clang++'",
@@ -24,6 +25,8 @@ stdenv.mkDerivation (
     };
 
     nativeBuildInputs = [
+      meson
+      ninja
       pkg-config
     ];
 
