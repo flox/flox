@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use tempfile::TempDir;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
@@ -335,13 +334,8 @@ impl Environment for RemoteEnvironment {
         self.inner.build(flox)
     }
 
-    /// Return a path that environment hooks should use to store transient data.
-    ///
-    /// Remote environments shouldn't have state of any kind, so this just
-    /// returns a temporary directory.
     fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError> {
-        let tempdir = TempDir::new().map_err(EnvironmentError::CreateTempDir)?;
-        CanonicalPath::new(tempdir.into_path()).map_err(EnvironmentError::Canonicalize)
+        self.inner.cache_path()
     }
 
     fn log_path(&self) -> Result<CanonicalPath, EnvironmentError> {

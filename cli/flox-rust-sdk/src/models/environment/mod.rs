@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-use core_environment::UpgradeResult;
 use enum_dispatch::enum_dispatch;
 pub use flox_core::{path_hash, Version};
 use log::debug;
@@ -32,7 +31,13 @@ use crate::providers::git::{
 use crate::utils::copy_file_without_permissions;
 
 mod core_environment;
-pub use core_environment::{test_helpers, CoreEnvironment, CoreEnvironmentError, EditResult};
+pub use core_environment::{
+    test_helpers,
+    CoreEnvironment,
+    CoreEnvironmentError,
+    EditResult,
+    UpgradeResult,
+};
 
 pub mod generations;
 pub mod managed_environment;
@@ -167,7 +172,9 @@ pub trait Environment: Send {
     /// This does not link the environment, but may lock the environment, if necessary.
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError>;
 
-    /// Return a path that environment hooks should use to store transient data.
+    /// Return a path to store transient data,
+    /// such as temporary files created by the environment hooks or the environment itself,
+    /// including reproducible data about the environment.
     ///
     /// The returned path will exist.
     fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError>;
@@ -230,6 +237,7 @@ pub trait Environment: Send {
 
 /// The various ways in which an environment can be referred to
 #[enum_dispatch(Environment)]
+#[derive(Debug)]
 pub enum ConcreteEnvironment {
     /// Container for [PathEnvironment]
     Path(PathEnvironment),

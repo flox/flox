@@ -93,6 +93,9 @@ pub struct FloxConfig {
 
     /// Hide environments named 'default' from the shell prompt
     pub hide_default_prompt: Option<bool>,
+
+    /// Check for upgrades on `flox activate` (default: true)
+    pub check_for_upgrades: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
