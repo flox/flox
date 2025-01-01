@@ -235,6 +235,7 @@ impl InstallableLocker for Nix {
             ]);
         }
 
+        command.args(["--option", "pure-eval", "false"]);
         command.arg("eval");
         command.arg("--no-update-lock-file");
         command.arg("--no-write-lock-file");
