@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Debug;
-use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
@@ -12,6 +11,7 @@ use tracing::{debug, instrument};
 
 use super::buildenv::NIX_BIN;
 use crate::models::manifest::{ManifestPackageDescriptorFlake, DEFAULT_PRIORITY};
+use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::utils::CommandExt;
 
 #[derive(Debug, Error)]
@@ -25,9 +25,9 @@ pub enum FlakeInstallableError {
     NixError(String),
 }
 
-/// Rust representation of the output of `pkgdb lock-flake-installable`
+/// Rust representation of the output of `buitins.lockFlakeInstallable`
 /// This is a direct translation of the definition in
-/// `<flox>/pkgdb/include/flox/lock-flake-installable.hh`
+/// `<flox>/nix-plugins/include/flox/lock-flake-installable.hh`
 #[skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 // [sic] this is inconsistent with the naming of all other structs in the lockfile
@@ -62,7 +62,7 @@ pub struct LockedInstallable {
     pub broken: Option<bool>,
     pub unfree: Option<bool>,
     // In the lockfile, the priority should always be known.
-    // Usage of the output type of pkgdb lock-flake-installable,
+    // Usage of the output type of `buitins.lockFlakeInstallable`,
     // however requires guarding against a missing priority.
     // Since the default priority is not known statically,
     // we assign it as a default value during deserialization.
@@ -74,8 +74,9 @@ pub struct LockedInstallable {
 }
 
 /// Deserialize the priority field of a locked installable.
-/// Pkgdb will yield a `null` priority if the priority is not set,
-/// which requires a custom deserializer to set the default priority.
+/// `buitins.lockFlakeInstallable` will yield a `null` priority
+/// if the priority is not set, which requires a custom deserializer
+/// to set the default priority.
 fn locked_installable_default_priority_on_null<'de, D>(d: D) -> Result<u64, D::Error>
 where
     D: Deserializer<'de>,
@@ -95,7 +96,7 @@ fn locked_installable_default_priority_on_undefined() -> u64 {
 /// time-consuming unless cached.
 ///
 /// The trait is implemented by the [`Pkgdb`] struct which is the canonical implementation
-/// using the `pkgdb lock-flake-installable` command.
+/// using the `buitins.lockFlakeInstallable` primop.
 ///
 /// The trait is also implemented by the [`InstallableLockerMock`] struct which is used for testing.
 #[enum_dispatch]
@@ -211,26 +212,7 @@ impl InstallableLocker for Nix {
             "extra-experimental-features",
             "nix-command flakes",
         ]);
-
-        // for now assume the plugins are located relative to the pkgdb binary
-        // <pkgdb>
-        // ├── bin
-        // │   └── pkgdb
-        // └── lib
-        //     └── nix-plugins
-        {
-            let pkgdb_lib_dir = Path::new(&*PKGDB_BIN)
-                .ancestors()
-                .nth(2)
-                .expect("pkgdb is in '<store-path>/bin'")
-                .join("lib/nix-plugins");
-
-            command.args([
-                "--option",
-                "extra-plugin-files",
-                &pkgdb_lib_dir.to_string_lossy(),
-            ]);
-        }
+        command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
 
         command.args(["--option", "pure-eval", "false"]);
         command.arg("eval");
@@ -282,13 +264,13 @@ mod tests {
     fn local_test_flake() -> String {
         let manifest_root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let local_test_flake_path = manifest_root
-            .join("../../pkgdb/tests/data/lock-flake-installable")
+            .join("../../nix-plugins/tests/data/lock-flake-installable")
             .canonicalize()
             .unwrap();
         local_test_flake_path.to_str().unwrap().to_string()
     }
 
-    /// Test that the output of `pkgdb lock-flake-installable` can be deserialized
+    /// Test that the output of `buitins.lockFlakeInstallable` can be deserialized
     /// into a [LockedFlakeInstallble] struct.
     #[test]
     fn test_output_format() {
