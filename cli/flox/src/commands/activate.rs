@@ -699,8 +699,7 @@ impl Activate {
 /// Future activations will be able to read the upgrade information from a file
 /// and notify the user if there are any upgrades available using this function.
 fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironment) -> Result<()> {
-    let upgrade_guard =
-        UpgradeInformationGuard::for_environment(&flox.cache_dir, environment.dot_flox_path())?;
+    let upgrade_guard = UpgradeInformationGuard::read_in(environment.cache_path()?)?;
 
     let Some(info) = upgrade_guard.info() else {
         debug!("Not notifying user of upgrade, no upgrade information available");
@@ -972,11 +971,8 @@ mod upgrade_notification_tests {
         let mut environment = ConcreteEnvironment::Path(environment);
 
         {
-            let upgrade_information = UpgradeInformationGuard::for_environment(
-                &flox.cache_dir,
-                environment.dot_flox_path(),
-            )
-            .unwrap();
+            let upgrade_information =
+                UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
             let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
 
             let mut new_lockfile = environment.lockfile(&flox).unwrap();
@@ -1032,11 +1028,8 @@ mod upgrade_notification_tests {
         let mut environment = ConcreteEnvironment::Path(environment);
 
         {
-            let upgrade_information = UpgradeInformationGuard::for_environment(
-                &flox.cache_dir,
-                environment.dot_flox_path(),
-            )
-            .unwrap();
+            let upgrade_information =
+                UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
             let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
 
             // cause old_lockfile to evaluate as non-equal to the current lockfile
@@ -1074,11 +1067,8 @@ mod upgrade_notification_tests {
         let mut environment = ConcreteEnvironment::Path(environment);
 
         {
-            let upgrade_information = UpgradeInformationGuard::for_environment(
-                &flox.cache_dir,
-                environment.dot_flox_path(),
-            )
-            .unwrap();
+            let upgrade_information =
+                UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
 
             let result = UpgradeResult {
                 old_lockfile: Some(environment.lockfile(&flox).unwrap()),
