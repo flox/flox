@@ -14,7 +14,7 @@ on:
         type: choice
         options:
           - "changes"
-          - "pkgdb-dev"
+          - "nix-plugins-dev"
           - "cli-dev"
           - "nix-build"
           - "trigger-flox-installers-workflow"
@@ -51,7 +51,7 @@ jobs:
       pull-requests: read
     # Set job outputs to values from filter step
     outputs:
-      pkgdb: ${{ steps.filter.outputs.pkgdb }}
+      nix-plugins: ${{ steps.filter.outputs.nix-plugins }}
     steps:
     # For pull requests it's not necessary to checkout the code
     - uses: "actions/checkout@v4"
@@ -70,21 +70,21 @@ jobs:
         base: ${{ github.event.merge_group.base_ref || 'main' }}
         ref: ${{ github.event.merge_group.head_ref || github.ref }}
         filters: |
-          pkgdb:
+          nix-plugins:
             - ".github/workflows/ci.yml"
-            - "pkgdb/**"
+            - "nix-plugins/**"
             - "pkgs/**"
             - "Justfile"
             - "flake.nix"
             - "flake.lock"
             - "shells/**"
 
-  pkgdb-dev:
-    name: "Pkgdb"
+  nix-plugins-dev:
+    name: "Nix Plugins"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
 
-    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.pkgdb == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.nix-plugins == 'true' }}
     needs:
       - "changes"
 
@@ -124,30 +124,10 @@ jobs:
           SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: "Build"
-        run: nix develop -L --no-update-lock-file --command just build-pkgdb
+        run: nix develop -L --no-update-lock-file --command just build-nix-plugins
 
       - name: "Test"
-        run: nix develop -L --no-update-lock-file --command just test-pkgdb
-
-      - name: "Build Docs"
-        run: |
-          nix develop -L                   \
-            --no-update-lock-file          \
-            --command make -C pkgdb docs;
-          chmod -c -R +rX "pkgdb/docs/"|while read line; do
-            echo "::warning title=Invalid file permissions fixed::$line";
-          done
-
-      - name: "Upload artifact"
-        uses: "actions/upload-pages-artifact@v3"
-        if: ${{ matrix.os == 'ubuntu-22.04-8core' }}
-        with:
-          path: "pkgdb/docs"
-
-      - name: "Deploy to GitHub Pages"
-        if: ${{ matrix.os == 'ubuntu-22.04-8core' }}
-        id: "deployment"
-        uses: "actions/deploy-pages@v4"
+        run: nix develop -L --no-update-lock-file --command just test-nix-plugins
 
   cli-dev:
     name: "dev"
@@ -279,7 +259,7 @@ jobs:
       - name: "Build"
         id: "build"
         run: |
-          for package in '.#packages.${{ matrix.system }}.flox-pkgdb' '.#packages.${{ matrix.system }}.flox-cli' '.#packages.${{ matrix.system }}.flox' '.#packages.${{ matrix.system }}.flox-cli-tests'; do
+          for package in '.#packages.${{ matrix.system }}.flox-nix-plugins' '.#packages.${{ matrix.system }}.flox-cli' '.#packages.${{ matrix.system }}.flox' '.#packages.${{ matrix.system }}.flox-cli-tests'; do
             echo "Building $package ..."
             git clean -xfd .
             if nix path-info                 \
@@ -382,7 +362,7 @@ jobs:
 
     needs:
       - "nix-build"
-      - "pkgdb-dev"
+      - "nix-plugins-dev"
       - "cli-dev"
       # TODO: enable these when deemed reliable - "nix-build-bats-tests"
 
