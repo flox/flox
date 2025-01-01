@@ -9,7 +9,6 @@
   perl,
   runCommandNoCC,
   stdenv,
-  writers,
   writeText,
 }:
 # We need to ensure that the flox-activation-scripts package is available.
@@ -19,7 +18,6 @@ assert (flox-activation-scripts == null) -> builtins.getEnv "FLOX_INTERPRETER" !
 let
   pname = "flox-buildenv";
   version = "0.0.1";
-  buildenv = (writers.writeBash "buildenv" (builtins.readFile ../../buildenv/buildenv.bash));
   buildenv_nix = ../../buildenv/buildenv.nix;
   builder_pl = ../../buildenv/builder.pl;
   activationScripts_fallback = builtins.getEnv "FLOX_INTERPRETER";
@@ -66,12 +64,9 @@ runCommandNoCC "${pname}-${version}"
     # Substitutions for builder.pl.
     inherit (builtins) storeDir;
     perl = perl + "/bin/perl";
-    pkgdb = if flox-pkgdb != null then "${flox-pkgdb}/bin/pkgdb" else "$PKGDB_BIN";
   }
   ''
-    mkdir -p "$out/bin" "$out/lib"
-    cp ${buildenv} "$out/bin/buildenv"
-    substituteAllInPlace "$out/bin/buildenv"
+    mkdir -p "$out/lib"
 
     cp ${builder_pl} "$out/lib/builder.pl"
     chmod +x "$out/lib/builder.pl"
