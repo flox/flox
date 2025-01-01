@@ -11,7 +11,7 @@ use url::Url;
 use crate::data::FloxVersion;
 pub use crate::models::environment_ref::{self, *};
 use crate::models::search::SearchStrategy;
-use crate::providers::{catalog, flox_cpp_utils};
+use crate::providers::{catalog, flake_installable_locker};
 
 pub static FLOX_VERSION_STRING: LazyLock<String> =
     LazyLock::new(|| std::env::var("FLOX_VERSION").unwrap_or(env!("FLOX_VERSION").to_string()));
@@ -58,7 +58,7 @@ pub struct Flox {
     pub floxhub_token: Option<FloxhubToken>,
 
     pub catalog_client: catalog::Client,
-    pub installable_locker: flox_cpp_utils::InstallableLockerImpl,
+    pub installable_locker: flake_installable_locker::InstallableLockerImpl,
 
     /// Feature flags
     pub features: Features,
