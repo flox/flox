@@ -246,6 +246,8 @@ impl InstallableLocker for Nix {
             &format!(r#"builtins.lockFlakeInstallable "{}""#, descriptor.flake),
         ]);
 
+        debug!(cmd=%command.display(), "running nix evaluation");
+
         let output = command
             .output()
             .map_err(|e| FlakeInstallableError::NixError(e.to_string()))?;
