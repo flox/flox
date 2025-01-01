@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use itertools::Itertools;
 use pollster::FutureExt;
@@ -30,7 +29,6 @@ use crate::models::manifest::{
     PackageToInstall,
     TomlEditError,
 };
-use crate::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError, PKGDB_BIN};
 use crate::providers::buildenv::{
     BuildEnv,
     BuildEnvError,
@@ -271,12 +269,6 @@ impl CoreEnvironment<()> {
         out_link_path: impl AsRef<Path>,
         store_path: &BuiltStorePath,
     ) -> Result<(), CoreEnvironmentError> {
-        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_cmd
-            .arg("linkenv")
-            .args(["--out-link", &out_link_path.as_ref().to_string_lossy()])
-            .args(["--store-path", &store_path.as_ref().to_string_lossy()]);
-
         BuildEnvNix.link(out_link_path, store_path)?;
 
         Ok(())
@@ -985,9 +977,6 @@ pub enum CoreEnvironmentError {
     #[error("failed to upgrade environment")]
     UpgradeFailedCatalog(#[source] UpgradeError),
     // endregion
-    #[error("package is unsupported for this system")]
-    UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
-
     #[error("could not automatically migrate manifest to version 1")]
     MigrateManifest(#[source] toml_edit::de::Error),
 
@@ -1022,25 +1011,9 @@ impl CoreEnvironmentError {
 
     pub fn is_incompatible_package_error(&self) -> bool {
         matches!(
-            self.pkgdb_exit_code().copied(),
-            Some(
-                error_codes::PACKAGE_BUILD_FAILURE
-                    | error_codes::PACKAGE_EVAL_FAILURE
-                    | error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-            )
+            self,
+            CoreEnvironmentError::BuildEnv(BuildEnvError::Realise2 { .. })
         )
-    }
-
-    /// If the error contains a PkgDbError with an exit_code, return it.
-    /// Otherwise return None.
-    pub fn pkgdb_exit_code(&self) -> Option<&u64> {
-        match self {
-            CoreEnvironmentError::BuildEnv(BuildEnvError::Realise(PkgDbError {
-                exit_code,
-                ..
-            })) => Some(exit_code),
-            _ => None,
-        }
     }
 }
 

@@ -12,39 +12,12 @@ use flox_rust_sdk::models::environment::{
 };
 use flox_rust_sdk::models::floxmeta::FloxMetaError;
 use flox_rust_sdk::models::lockfile::LockedManifestError;
-use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, ContextMsgError, PkgDbError};
-use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use flox_rust_sdk::providers::services::{LoggedError, ServiceError};
 use indoc::{formatdoc, indoc};
-use log::{debug, trace};
+use log::trace;
 
 use crate::commands::EnvironmentSelectError;
-
-/// Convert to an error variant that directs the user to the docs if the provided error is
-/// due to a package not being supported on the current system.
-pub fn apply_doc_link_for_unsupported_packages(err: EnvironmentError) -> EnvironmentError {
-    if let EnvironmentError::Core(CoreEnvironmentError::BuildEnv(BuildEnvError::Realise(
-        PkgDbError {
-            exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-            category_message,
-            context_message,
-        },
-    ))) = err
-    {
-        debug!("incompatible package, directing user to docs");
-        EnvironmentError::Core(CoreEnvironmentError::UnsupportedPackageWithDocLink(
-            CallPkgDbError::PkgDbError(PkgDbError {
-                exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-                category_message,
-                context_message,
-            }),
-        ))
-    } else {
-        // Not the type of error we're concerned with, just pass it through
-        err
-    }
-}
 
 pub fn format_error(err: &EnvironmentError) -> String {
     trace!("formatting environment_error: {err:?}");
@@ -310,63 +283,6 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         // internal error, a bug if this happens to users!
         CoreEnvironmentError::BadLockfilePath(_) => display_chain(err),
 
-        // catch package eval and build errors
-        CoreEnvironmentError::BuildEnv(BuildEnvError::Realise(PkgDbError {
-            exit_code,
-            context_message:
-                Some(ContextMsgError {
-                    message,
-                    caught: Some(caught),
-                }),
-            ..
-        })) if [
-            error_codes::PACKAGE_EVAL_FAILURE,
-            error_codes::PACKAGE_BUILD_FAILURE,
-        ]
-        .contains(exit_code) =>
-        {
-            format!("{message}: {caught}")
-        },
-
-        CoreEnvironmentError::BuildEnv(BuildEnvError::Realise(PkgDbError {
-            exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-            context_message: Some(ContextMsgError { message, .. }),
-            ..
-        })) => message.into(),
-        // We manually construct this error variant in cases where we want to add a link to the docs,
-        // otherwise it's the same as the basic PACKAGE_EVAL_INCOMPATIBLE_SYSTEM error.
-        CoreEnvironmentError::UnsupportedPackageWithDocLink(CallPkgDbError::PkgDbError(
-            PkgDbError {
-                exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-                context_message,
-                ..
-            },
-        )) => {
-            if let Some(ctx_msg) = context_message {
-                formatdoc! {"
-                {}
-
-                For more on managing system-specific packages, visit the documentation:
-                https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
-            ", ctx_msg}
-            } else {
-                // In this context it's an error to encounter an error (heh) where the context message is missing,
-                // but a vague error message is preferable to panicking.
-                formatdoc! {"
-                    This package is not available for this system
-
-                    For more on managing system-specific packages, visit the documentation:
-                    https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
-                "}
-            }
-        },
-        // Since we manually construct the UnsupportedPackageWithDocLink variant we should *never* encounter
-        // a situation in which it contains the wrong kind of error. That said, we need some kind of error
-        // in case we've screwed up.
-        CoreEnvironmentError::UnsupportedPackageWithDocLink(_) => {
-            // Could probably do with a better error message
-            "encountered an internal error".into()
-        },
         CoreEnvironmentError::BuildEnv(err) => formatdoc! {"
             Failed to build environment:
 
@@ -704,16 +620,6 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         "},
         // endregion
 
-        // region: errors returned by pkgdb
-        // we do minimal formatting here as the error message is supposed to be
-        // already user friendly.
-        // some commands catch these errors and process them separately
-        // e.g. `flox pull`, `flox push`
-        LockedManifestError::CheckLockfile(pkgdb_error) => {
-            format_pkgdb_error(pkgdb_error, err, "Failed to check environment.")
-        },
-        // endregion
-
         // this is a bug, but likely needs some formatting
         LockedManifestError::ReadLockfile(_) => display_chain(err),
         LockedManifestError::ParseLockfile(serde_error) => formatdoc! {"
@@ -769,23 +675,6 @@ pub fn format_service_error(err: &ServiceError) -> String {
             or activate the environment with 'flox activate --start-services'.
         "},
         _ => display_chain(err),
-    }
-}
-
-fn format_pkgdb_error(
-    err: &CallPkgDbError,
-    parent: &dyn std::error::Error,
-    context: &str,
-) -> String {
-    trace!("formatting pkgdb_error: {err:?}");
-
-    match err {
-        CallPkgDbError::PkgDbError(err) => formatdoc! {"
-            {context}
-
-            {err}
-        ", err = display_chain(err)},
-        _ => display_chain(parent),
     }
 }
 
