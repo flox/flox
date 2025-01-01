@@ -17,7 +17,6 @@
   findutils,
   flox-activations,
   flox-buildenv,
-  flox-pkgdb,
   flox-watchdog,
   flox-cli,
   flox-activation-scripts,
@@ -47,7 +46,6 @@
   PROJECT_TESTS_DIR ? ./../../cli/tests,
   NIX_BIN ? "${nix}/bin/nix",
   BUILDENV_BIN ? "${flox-buildenv}/bin/buildenv",
-  PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   FLOX_BIN ? "${flox-cli}/bin/flox",
   WATCHDOG_BIN ? "${flox-watchdog}/libexec/flox-watchdog",
   FLOX_ACTIVATIONS_BIN ? "${flox-activations}/bin/flox-activations",
@@ -140,7 +138,6 @@ writeShellScriptBin PROJECT_NAME ''
       fi
       PROJECT_TESTS_DIR="$PROJECT_ROOT_DIR$PROJECT_TESTS_DIR";
       PROJECT_PATH="$PROJECT_ROOT_DIR/cli/target/debug";
-      PROJECT_PATH="$PROJECT_PATH:$PROJECT_ROOT_DIR/pkgdb/bin";
     ;;
   esac
   export PROJECT_TESTS_DIR;
@@ -163,10 +160,7 @@ writeShellScriptBin PROJECT_NAME ''
       "export BUILDENV_BIN='${BUILDENV_BIN}';"
   }
   ${
-    if PKGDB_BIN == null then
-      ''export PKGDB_BIN="$(command -v pkgdb)";''
     else
-      "export PKGDB_BIN='${PKGDB_BIN}';"
   }
   ${
     if WATCHDOG_BIN == null then
@@ -197,7 +191,6 @@ writeShellScriptBin PROJECT_NAME ''
   Usage: $0 [--flox <FLOX BINARY>| -F <FLOX BINARY>] \
             [--watchdog <WATCHDOG BINARY | -K <WATCHDOG BINARY>] \
             [--flox-activations <FLOX ACTIVATIONS BINARY>] \
-            [--pkgdb <PKGDB BINARY>| -P <PKGDB BINARY>] \
             [--nix <NIX BINARY>| -N <NIX BINARY>] \
             [--input-data <INPUT DATA> | -I <INPUT DATA>] \
             [--generated-data <GENERATED DATA> | -G <GENERATED DATA>] \
@@ -209,7 +202,6 @@ writeShellScriptBin PROJECT_NAME ''
       -F, --flox           Path to flox binary (Default: $FLOX_BIN)
       -K, --watchdog       Path to the watchdog binary (Default: $WATCHDOG_BIN)
       -B, --buildenv       Path to buildenv binary (Default: $BUILDENV_BIN)
-      -P, --pkgdb          Path to pkgdb binary (Default: $PKGDB_BIN)
       -N, --nix            Path to nix binary (Default: $NIX_BIN)
       -I, --input-data     Path to the input data directory (Default: $INPUT_DATA)
       -G, --generated-data Path to the generated data directory (Default: $GENERATED_DATA)
@@ -229,7 +221,6 @@ writeShellScriptBin PROJECT_NAME ''
       -[kK]|--watchdog)       export WATCHDOG_BIN="''${2?}"; shift; ;;
       -[bB]|--buildenv)       export BUILDENV_BIN="''${2?}"; shift; ;;
       --flox-activations)     export FLOX_ACTIVATIONS_BIN="''${2?}"; shift; ;;
-      -[pP]|--pkgdb)          export PKGDB_BIN="''${2?}"; shift; ;;
       -[nN]|--nix)            export NIX_BIN="''${2?}"; shift; ;;
       -[iI]|--input-data)     export INPUT_DATA="''${2?}"; shift; ;;
       -[gG]|--generated-data) export GENERATED_DATA="''${2?}"; shift; ;;
@@ -285,7 +276,6 @@ writeShellScriptBin PROJECT_NAME ''
     echo "  WATCHDOG_BIN:             $WATCHDOG_BIN";
     echo "  BUILDENV_BIN:             $BUILDENV_BIN";
     echo "  FLOX_ACTIVATIONS_BIN:     $FLOX_ACTIVATIONS_BIN";
-    echo "  PKGDB_BIN:                $PKGDB_BIN";
     echo "  NIX_BIN:                  $NIX_BIN";
     echo "  FLOX_INTERPRETER:         $FLOX_INTERPRETER";
     echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
@@ -298,7 +288,6 @@ writeShellScriptBin PROJECT_NAME ''
 
   # Run basts either via entr or just a single run
   if [[ -n "''${WATCH:-}" ]]; then
-    find "$TESTS_DIR" "$NIX_BIN" "$BUILDENV_BIN" "$PKGDB_BIN" "$WATCHDOG_BIN" "$FLOX_BIN"    \
       |${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
   else
     ${batsWith}/bin/bats "''${_BATS_ARGS[@]}"    \

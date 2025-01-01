@@ -6,7 +6,6 @@
   symlinkJoin,
   makeBinaryWrapper,
   flox-buildenv,
-  flox-pkgdb,
   flox-watchdog,
   flox-cli,
   flox-manpages,
@@ -46,7 +45,6 @@ symlinkJoin {
       ${lib.optionalString (SENTRY_ENV != null) "--set FLOX_SENTRY_ENV \"${SENTRY_ENV}\" "} \
       --set NIX_BIN             "${nix}/bin/nix" \
       --set BUILDENV_NIX        "${flox-buildenv}/lib/buildenv.nix" \
-      --set PKGDB_BIN           "${flox-pkgdb}/bin/pkgdb" \
       --set FLOX_BIN            "${flox-cli}/bin/flox" \
       --set WATCHDOG_BIN        "${flox-watchdog}/libexec/flox-watchdog" \
       --set PROCESS_COMPOSE_BIN "${process-compose}/bin/process-compose" \
