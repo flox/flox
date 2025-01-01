@@ -2,7 +2,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use flox_core::path_hash;
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -82,11 +81,10 @@ impl UpgradeInformationGuard<Unlocked> {
     /// If no information is found, this methods succeeds
     /// and returns a guard with [None] as the upgrade information.
     /// This guard can then be locked and mutated to store new information.
-    pub fn for_environment(
+    pub fn read_in(
         cache_dir: impl AsRef<Path>,
-        dot_flox_path: impl AsRef<Path>,
     ) -> Result<UpgradeInformationGuard<Unlocked>, UpgradeChecksError> {
-        let upgrade_information_path = upgrade_information_path(cache_dir, dot_flox_path);
+        let upgrade_information_path = upgrade_information_path(cache_dir);
         let info = read_upgrade_information(&upgrade_information_path)?;
 
         debug!(
@@ -167,14 +165,8 @@ impl UpgradeInformationGuard<Locked> {
 /// ```text
 /// cache_dir/upgrade-checks-{path_hash(dot_flox_path)}.json
 /// ```
-fn upgrade_information_path(
-    cache_dir: impl AsRef<Path>,
-    dot_flox_path: impl AsRef<Path>,
-) -> PathBuf {
-    let path_hash = path_hash(&dot_flox_path);
-    cache_dir
-        .as_ref()
-        .join(format!("upgrade-checks-{}.json", path_hash))
+fn upgrade_information_path(cache_dir: impl AsRef<Path>) -> PathBuf {
+    cache_dir.as_ref().join("upgrade-checks.json")
 }
 
 /// Tries to acquire a lock on the upgrade information file.
@@ -257,20 +249,16 @@ mod tests {
     #[test]
     fn upgrade_information_is_none_if_absent() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let dot_flox_path = temp_dir.path().join("flox.toml");
 
-        let guard =
-            UpgradeInformationGuard::for_environment(temp_dir.path(), dot_flox_path).unwrap();
+        let guard = UpgradeInformationGuard::read_in(temp_dir.path()).unwrap();
         assert_eq!(guard.info(), &None);
     }
 
     #[test]
     fn upgrade_information_is_discarded_if_not_committed() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let dot_flox_path = temp_dir.path().join("flox.toml");
 
-        let guard =
-            UpgradeInformationGuard::for_environment(temp_dir.path(), &dot_flox_path).unwrap();
+        let guard = UpgradeInformationGuard::read_in(temp_dir.path()).unwrap();
         let mut locked = guard.lock_if_unlocked().unwrap().unwrap();
 
         *locked.info_mut() = Some(UpgradeInformation {
@@ -284,18 +272,15 @@ mod tests {
 
         drop(locked);
 
-        let guard =
-            UpgradeInformationGuard::for_environment(temp_dir.path(), dot_flox_path).unwrap();
+        let guard = UpgradeInformationGuard::read_in(temp_dir.path()).unwrap();
         assert_eq!(guard.info(), &None);
     }
 
     #[test]
     fn upgrade_information_is_written_if_committed() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let dot_flox_path = temp_dir.path().join("flox.toml");
 
-        let guard =
-            UpgradeInformationGuard::for_environment(temp_dir.path(), &dot_flox_path).unwrap();
+        let guard = UpgradeInformationGuard::read_in(temp_dir.path()).unwrap();
         let mut locked = guard.lock_if_unlocked().unwrap().unwrap();
         let info = UpgradeInformation {
             last_checked: SystemTime::now(),
@@ -310,8 +295,7 @@ mod tests {
 
         drop(locked);
 
-        let guard =
-            UpgradeInformationGuard::for_environment(temp_dir.path(), dot_flox_path).unwrap();
+        let guard = UpgradeInformationGuard::read_in(temp_dir.path()).unwrap();
         assert_eq!(guard.info(), &Some(info));
     }
 }
