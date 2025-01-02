@@ -199,7 +199,18 @@ to_eval="$($_flox_activations \
 eval "$to_eval"
 export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
 
-if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" != true ]; then
+# If the current shell is re-activating the same environment then we should only
+# re-run profile scripts, without start or attach, because the shell will
+# already be attached to an activation.
+if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" == true ]; then
+  # Except for when the environment has been modified and generated a new store
+  # path since the last activation, in which case we need to mark that new
+  # activation as ready.
+  if [ "$_FLOX_ATTACH" == false ]; then
+    # shellcheck source-path=SCRIPTDIR/activate.d
+    source "${_activate_d}/start.bash"
+  fi
+else # This is the standard path when the current shell is NOT re-activating.
   if [ "$_FLOX_ATTACH" == true ]; then
     # shellcheck source-path=SCRIPTDIR/activate.d
     source "${_activate_d}/attach.bash"
