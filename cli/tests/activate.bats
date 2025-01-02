@@ -3262,6 +3262,35 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+@test "in-place: repeat activations work after modifying environment" {
+  project_setup
+
+  # TODO: https://github.com/flox/flox/issues/2164
+  # Clutters the `assert_output`.
+  run find "${HOME}" -type f -exec grep -qs 'Setting PATH' {} \; -delete
+  assert_success
+
+  # Modify the environment from an in-place activation and then perform another
+  # in-place activation, which will generate a new store path and activation ID,
+  # to simulate RC file nesting for sub-shells or a terminal multiplexer.
+  run bash -c '
+    eval "$(${FLOX_BIN} activate -d ${PROJECT_DIR})"
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+      "$FLOX_BIN" install hello
+    eval "$(${FLOX_BIN} activate -d ${PROJECT_DIR})"
+  '
+  # There should be no errors from the in-place activations.
+  assert_output "✅ 'hello' installed to environment '${PROJECT_NAME}'"
+  assert_success
+
+  # Additional activations of the modified environment should still work.
+  run "$FLOX_BIN" activate -d "${PROJECT_DIR}" -- hello
+  assert_success
+  assert_output "Hello, world!"
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=activate,activate:attach
 # NB: There is a corresponding test in `services.bats`.
 @test "version: refuses to attach to an older activations.json version" {
