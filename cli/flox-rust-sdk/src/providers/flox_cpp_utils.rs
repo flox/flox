@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Debug;
+use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
@@ -9,15 +10,10 @@ use serde_with::skip_serializing_none;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
+use super::buildenv::NIX_BIN;
 use crate::models::manifest::{ManifestPackageDescriptorFlake, DEFAULT_PRIORITY};
-use crate::models::pkgdb::{
-    call_pkgdb,
-    error_codes,
-    CallPkgDbError,
-    ContextMsgError,
-    PkgDbError,
-    PKGDB_BIN,
-};
+use crate::models::pkgdb::{CallPkgDbError, PKGDB_BIN};
+use crate::utils::CommandExt;
 
 #[derive(Debug, Error)]
 pub enum FlakeInstallableError {
@@ -117,90 +113,13 @@ pub trait InstallableLocker {
 #[derive(Debug)]
 #[enum_dispatch(InstallableLocker)]
 pub enum InstallableLockerImpl {
-    Pkgdb(Pkgdb),
     Mock(InstallableLockerMock),
+    Nix(Nix),
 }
 
 impl Default for InstallableLockerImpl {
     fn default() -> Self {
-        InstallableLockerImpl::Pkgdb(Pkgdb)
-    }
-}
-/// A wrapper for (eventually) various `pkgdb` commands
-/// Currently only implements [InstallableLocker] through
-/// `pkgdb lock-flake-installable`.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Pkgdb;
-
-impl InstallableLocker for Pkgdb {
-    #[instrument(skip_all, fields(
-        system = system.as_ref(),
-        descriptor = descriptor.flake,
-        progress = format!(
-            "Locking flake installable '{}' for '{}'",
-            descriptor.flake, system.as_ref())
-    ))]
-    fn lock_flake_installable(
-        &self,
-        system: impl AsRef<str>,
-        descriptor: &ManifestPackageDescriptorFlake,
-    ) -> Result<LockedInstallable, FlakeInstallableError> {
-        let installable = descriptor.flake.clone();
-        let mut pkgdb_cmd = Command::new(&*PKGDB_BIN);
-
-        pkgdb_cmd
-            .arg("lock-flake-installable")
-            .args(["--system", system.as_ref()])
-            .arg(installable);
-
-        debug!("locking installable: {pkgdb_cmd:?}");
-
-        // Locking flakes may require using `ssh` for private flakes,
-        // so don't clear PATH.
-        // We don't have tests for private flakes,
-        // so make sure private flakes work after touching this.
-        let lock = call_pkgdb(pkgdb_cmd, false).map_err(|err| match err {
-            CallPkgDbError::PkgDbError(PkgDbError {
-                exit_code: error_codes::NIX_GENERIC,
-                context_message:
-                    Some(ContextMsgError {
-                        caught: Some(nix_error),
-                        ..
-                    }),
-                ..
-            }) => FlakeInstallableError::NixError(nix_error.message),
-            CallPkgDbError::PkgDbError(PkgDbError {
-                exit_code: error_codes::NIX_EVAL,
-                context_message:
-                    Some(ContextMsgError {
-                        caught: Some(nix_error),
-                        ..
-                    }),
-                ..
-            }) => FlakeInstallableError::NixError(nix_error.message),
-            CallPkgDbError::PkgDbError(PkgDbError {
-                exit_code: error_codes::NIX_LOCK_FLAKE,
-                context_message:
-                    Some(ContextMsgError {
-                        caught: Some(nix_error),
-                        ..
-                    }),
-                ..
-            }) => FlakeInstallableError::LockInstallable(nix_error.message),
-            CallPkgDbError::PkgDbError(PkgDbError {
-                exit_code: error_codes::LOCK_LOCAL_FLAKE,
-                category_message: message,
-                ..
-            }) => FlakeInstallableError::LockInstallable(message),
-            _ => FlakeInstallableError::Pkgdb(err),
-        })?;
-
-        let mut lock: LockedInstallable = serde_json::from_value(lock)
-            .map_err(FlakeInstallableError::DeserializeLockedInstallable)?;
-
-        set_priority(&mut lock, descriptor);
-
-        Ok(lock)
+        InstallableLockerImpl::Nix(Nix)
     }
 }
 
@@ -274,6 +193,80 @@ impl InstallableLocker for InstallableLockerMock {
     }
 }
 
+#[derive(Debug)]
+pub struct Nix;
+impl InstallableLocker for Nix {
+    #[instrument(skip_all, fields(
+        system = system.as_ref(),
+        descriptor = descriptor.flake,
+        progress = format!(
+            "Locking flake installable '{}' for '{}'",
+            descriptor.flake, system.as_ref())
+    ))]
+    fn lock_flake_installable(
+        &self,
+        system: impl AsRef<str>,
+        descriptor: &ManifestPackageDescriptorFlake,
+    ) -> Result<LockedInstallable, FlakeInstallableError> {
+        let mut command = Command::new(&*NIX_BIN);
+        command.args([
+            "--option",
+            "extra-experimental-features",
+            "nix-command flakes",
+        ]);
+
+        // for now assume the plugins are located relative to the pkgdb binary
+        // <pkgdb>
+        // ├── bin
+        // │   └── pkgdb
+        // └── lib
+        //     └── nix-plugins
+        {
+            let pkgdb_lib_dir = Path::new(&*PKGDB_BIN)
+                .ancestors()
+                .nth(2)
+                .expect("pkgdb is in '<store-path>/bin'")
+                .join("lib/nix-plugins");
+
+            command.args([
+                "--option",
+                "extra-plugin-files",
+                &pkgdb_lib_dir.to_string_lossy(),
+            ]);
+        }
+
+        command.args(["--option", "pure-eval", "false"]);
+        command.arg("eval");
+        command.arg("--no-update-lock-file");
+        command.arg("--no-write-lock-file");
+        command.arg("--json");
+        command.args(["--system", system.as_ref()]);
+        command.args([
+            "--expr",
+            &format!(r#"builtins.lockFlakeInstallable "{}""#, descriptor.flake),
+        ]);
+
+        debug!(cmd=%command.display(), "running nix evaluation");
+
+        let output = command
+            .output()
+            .map_err(|e| FlakeInstallableError::NixError(e.to_string()))?;
+
+        if !output.status.success() {
+            return Err(FlakeInstallableError::LockInstallable(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+
+        let mut lock = serde_json::from_slice(&output.stdout)
+            .map_err(FlakeInstallableError::DeserializeLockedInstallable)?;
+
+        set_priority(&mut lock, descriptor);
+
+        Ok(lock)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -307,34 +300,20 @@ mod tests {
         let installable = format!("{flake}#hello", flake = local_test_flake());
 
         // make sure the deserialization is not accidentally optimized away
-        Pkgdb
-            .lock_flake_installable(system, &ManifestPackageDescriptorFlake {
-                flake: installable,
-                priority: None,
-                systems: None,
-            })
-            .expect("locking local test flake should succeed");
+        Nix.lock_flake_installable(system, &ManifestPackageDescriptorFlake {
+            flake: installable,
+            priority: None,
+            systems: None,
+        })
+        .expect("locking local test flake should succeed");
     }
-
-    // Tests against locking errors thrown by pkgdb.
-    //
-    // There is currently no coverage of error cases in the pkgdb unit tests,
-    // because it's not yet clear how detailed we want tests to be.
-    // Currently, flake lock errors are caught and thrown as `LockFlakeInstallableException`,
-    // while most evaluation errors are thrown as plain nix errors.
-    // While we should have coverage of error cases in pkgdb as well,
-    // we need tests on the rust side that ensure
-    // that the errors are mapped to the right [FlakeInstallableError] variant.
-    // These also tests the error handling in the pkgdb implementation, indirectly.
-    //
-    // region: pkgdb errors
 
     #[test]
     fn test_catches_absent_flake() {
         let system = env!("system");
         let installable = "github:flox/trust-this-wont-be-added#hello";
 
-        let result = Pkgdb.lock_flake_installable(system, &ManifestPackageDescriptorFlake {
+        let result = Nix.lock_flake_installable(system, &ManifestPackageDescriptorFlake {
             flake: installable.to_string(),
             priority: None,
             systems: None,
@@ -350,7 +329,7 @@ mod tests {
         let system = env!("system");
         let installable = format!("{flake}#nonexistent", flake = local_test_flake());
 
-        let result = Pkgdb.lock_flake_installable(system, &ManifestPackageDescriptorFlake {
+        let result = Nix.lock_flake_installable(system, &ManifestPackageDescriptorFlake {
             flake: installable,
             priority: None,
             systems: None,
