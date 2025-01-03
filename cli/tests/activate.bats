@@ -244,6 +244,62 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+@test "zsh: interactive activate works with VCS plugins" {
+  project_setup
+
+  # TODO: https://github.com/flox/flox/issues/2164
+  run find "${HOME}" -type f -exec grep -qs 'Setting PATH' {} \; -delete
+  assert_success
+
+  # `vcs_info` and similar plugins check `$commands` which will re-populate
+  # the `hash` table if any of the `nohash*` options are not set but setting
+  # `nohashlistall` will prevent them from finding VCS commands altogether.
+  cat > "${HOME}/.zshrc" <<EOF
+autoload -Uz add-zsh-hook vcs_info
+add-zsh-hook precmd vcs_info
+EOF
+
+  # Mimic a different `hello` coming from an outside PATH.
+  EXTERNAL_PATH="${PROJECT_DIR}/system_bin"
+  mkdir "${EXTERNAL_PATH}"
+  cat > "${EXTERNAL_PATH}/hello" <<'EOF'
+#!/usr/bin/env bash
+echo "Hello, from EXTERNAL_PATH"
+EOF
+  chmod +x "${EXTERNAL_PATH}/hello"
+
+  # Set PATH here, rather than on the command, because `/etc/zshenv` can
+  # reintroduce the system path at the front which might already have `hello`.
+  cat > "${HOME}/.zshenv" <<EOF
+export PATH="${EXTERNAL_PATH}:${PATH}"
+EOF
+
+  # Verify that `hello` shadows an existing PATH after being installed to the
+  # environment from the same shell session.
+  FLOX_SHELL="zsh" NO_COLOR=1 \
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" \
+    'hello && ${FLOX_BIN} --quiet install hello && hello'
+
+  assert_success
+  # Before install.
+  assert_line --partial "Hello, from EXTERNAL_PATH"
+  # After install.
+  assert_line --partial "Hello, world!"
+
+  # Verify that `vcs_info` can still find `git`.
+  git init --initial-branch=main "${PROJECT_DIR}"
+  # Use `git` from `flox-cli-tests` rather than creating a package mock.
+  GIT_PATH="$(dirname $(which git))"
+  FLOX_SHELL="zsh" PATH="${GIT_PATH}:${PATH}" \
+    run expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" \
+    'echo "vcs_info: ${vcs_info_msg_0_}"'
+
+  assert_success
+  assert_line --partial "vcs_info:  (git)-[main]-"
+}
+# ---------------------------------------------------------------------------- #
+
 # The following battery of tests ensure that the activation script invokes
 # the expected hook and profile scripts for the bash and zsh shells, and
 # in each of the following four scenarios:
