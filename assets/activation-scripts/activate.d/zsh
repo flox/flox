@@ -94,6 +94,19 @@ done
 setopt nohashcmds
 setopt nohashdirs
 
+# Undo the hashing that plugins like `vcs_info` perform as a side-effect of
+# checking `$commands` from `precmd` hooks in interactive shells. We should have
+# loaded all user config by now so our hook will come near-to-last. Setting
+# `nohashlistall` will prevent them from finding VCS commands altogether.
+if [[ -o interactive ]]; then
+  # Underscore prefix to prevent it polluting auto-complete.
+  function _flox_rehash() {
+    hash -r
+  }
+  autoload -Uz add-zsh-hook
+  add-zsh-hook precmd _flox_rehash
+fi
+
 # Disable tracing before potentially launching into user shell.
 if [ "$_flox_activate_tracelevel" -ge 2 ]; then
   set +x
