@@ -72,17 +72,19 @@ With `flox` you can:<br/>
 -->
 
 # Flox vs Docker:
-Before demonstrating the difference, let's clarify what Docker is. Historically, the fundamental operation of Docker is based on `chroot`, a system call introduced in Version 7 Unix. This system call changes the root directory for the current process, making the specified directory appear as the root (`/`) for any process running within it. Later, Linux adopted this feature, which became known as Linux Containers. In 2008, Docker was built based on this concept. Simply put, a container is a running process that uses virtualization-based mechanisms, but each of these containers perceives its own environment as if it were the host system. Given this, you can see Flox is different than Docker.
+Before demonstrating the difference, let's clarify what Docker is. Historically, the fundamental operation of Docker is based on `chroot`, a system call introduced in Version 7 Unix. This system call changes the root directory for the current process, making the specified directory appear as the root (`/`) for any process running within it. Later, Linux adopted this feature, which became known as Linux Containers. In 2008, Docker was built based on this concept. 
+
+Simply put, a container is a running process that uses virtualization-based mechanisms, but each container perceives its own environment as if it were the host system. In contrast, Flox combines a virtual environment and package manager into a single tool.
 
 # Flox vs Homebrew:
 
-This document compares **Homebrew** and **Flox**, two popular package managers used in modern development environments. Each has its own strengths and is suited to different use cases. Here's a side-by-side comparison of their key features:
+A comparison of **Homebrew** and **Flox**, two popular package managers used in modern development environments. Each has its own strengths and is suited to different use cases. Here's a side-by-side comparison of their key features:
 
 ## Installation and Package Management
 
-- **Homebrew** is a package manager primarily for macOS. It allows users to easily install, update, and manage software packages with a simple command-line interface. Packages are installed in standard directories, making it user-friendly for macOS users.
+- **Homebrew** is a package manager primarily for macOS. It allows users to easily install, update, and manage software packages with a simple command-line interface.
   
-- **Flox** is a cross-platform, purely functional package manager available for multiple operating systems. It isolates packages in their own environments, ensuring reproducibility and conflict-free installations. Flox’s approach is more controlled, allowing precise environment management.
+- **Flox** is a cross-platform, purely functional package manager available for multiple operating systems. It isolates packages in their own environments, ensuring reproducibility and conflict-free installations. Flox’s approach is more controlled, allowing precise environment management. Being purely functional, Flox treats packages as values built by functions without side effects, and they never change after being built.
 
 ## Package Availability
 
@@ -92,7 +94,7 @@ This document compares **Homebrew** and **Flox**, two popular package managers u
 
 ## Version Management
 
-- **Homebrew** offers easy version management, allowing users to switch between package versions using the `brew switch` command. This is useful when certain packages depend on specific versions.
+- **Homebrew** offers version management, allowing users to install and switch between specific versions of packages. This is useful when certain packages depend on particular versions.
   
 - **Flox** handles version management differently. It allows multiple versions of a package to be installed and used concurrently, each in its own isolated environment. This eliminates version conflicts and makes it simple to switch between different package versions.
 
@@ -110,9 +112,9 @@ This document compares **Homebrew** and **Flox**, two popular package managers u
 
 ## Customizability and Extensibility
 
-- **Homebrew** is simple and easy to use, making it ideal for casual users and those who need a straightforward package management experience. Its primary focus is on usability and quick installations.
+- **Homebrew** is simple and easy to use, making it ideal for individual users on single machines who typically need just one version of software.
   
-- **Flox** is highly **customizable** and **extensible**, offering users the ability to define custom package sets, build configurations, and even entire environments. Flox is based on Nix, a functional package manager, which gives advanced users full control over their package management workflow.
+- **Flox** is highly **customizable** and **extensible**, offering users the ability to define custom package sets, build configurations, and even entire environments. Flox is built-upon Nix, a functional package manager, which gives advanced users full control over their package management workflow.
 
 ## ⚡️ Quick start
 
