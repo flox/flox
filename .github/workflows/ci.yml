@@ -451,6 +451,15 @@ jobs:
           REMOTE_BUILDERS:        "${{    vars.MANAGED_REMOTE_BUILDERS }}"
           SYSTEM:                 "${{ matrix.system }}"
 
+      - name: Verify remote builder system
+        run: |
+          REMOTE_SYSTEM=$(ssh github@$REMOTE_SERVER_ADDRESS \
+            -oLogLevel=ERROR \
+            -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
+            nix eval --experimental-features "nix-command" \
+            --impure --raw --expr builtins.currentSystem)
+          [[ "${REMOTE_SYSTEM}" == "${{ matrix.system }}" ]]
+
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30
         run: |
