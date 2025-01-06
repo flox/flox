@@ -211,8 +211,10 @@ fn check_for_activation_ready_and_attach_pid(
     }
 
     if !activation.startup_process_running() {
-        // TODO: clean out old activation of store_path
-        // Or we may need to do that in activation_for_store_path()
+        // Remove the deadlock so that a retry can proceed with a new start.
+        let id = activation.id();
+        activations.remove_activation(id);
+        activations::write_activations_json(&activations, activations_json_path, lock)?;
         return Err(RestartableFailure(anyhow::anyhow!(indoc! {"
             Prior activation of the environment failed to start, or completed.
         "}))
@@ -438,6 +440,20 @@ mod tests {
             result.is_err(),
             "check_for_activation_ready_and_attach_pid should fail"
         );
+        assert!(
+            result
+                .unwrap_err()
+                .downcast_ref::<RestartableFailure>()
+                .is_some(),
+            "should return RestartableFailure"
+        );
+        read_activations(&runtime_dir, &flox_env, |activations| {
+            assert!(
+                activations.is_empty(),
+                "activations should be empty, got: {:?}",
+                activations
+            );
+        });
     }
 
     #[test]
@@ -473,5 +489,15 @@ mod tests {
             result.is_err(),
             "check_for_activation_ready_and_attach_pid should fail"
         );
+        assert!(
+            result
+                .unwrap_err()
+                .downcast_ref::<RestartableFailure>()
+                .is_none(),
+            "should return terminal (not Restartable) error"
+        );
+        read_activations(&runtime_dir, &flox_env, |activations| {
+            assert!(!activations.is_empty(), "activations should not be empty",);
+        });
     }
 }

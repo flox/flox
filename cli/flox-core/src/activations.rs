@@ -175,7 +175,7 @@ impl<V> Activations<V> {
             .find(|activation| activation.id == activation_id.as_ref())
     }
 
-    /// Remove an activation. Should only be called by `flox-watchdog`.
+    /// Remove an activation.
     pub fn remove_activation(&mut self, id: impl AsRef<str>) {
         self.activations
             .retain(|activation| activation.id != id.as_ref());
