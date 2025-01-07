@@ -1,0 +1,54 @@
+# Activate a project environment using --dir
+
+set outer_dir [lindex $argv 0]
+set expect_eof [lindex $argv 1]
+set inner_activate_command [lindex $argv 2]
+set flox $env(FLOX_BIN)
+set timeout 10
+
+spawn $flox activate --dir $outer_dir
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
+  "*\r" { exp_continue }
+}
+expect "You are now using the environment"
+
+send "$inner_activate_command\r"
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
+  "*\r" { exp_continue }
+}
+expect "common hook running"
+
+send "inner\r"
+expect "the inner alias is defined"
+
+send "outer\r"
+expect "the outer alias is defined"
+
+send "current\r"
+expect "the current alias is inner"
+
+puts "INFO: exiting inner env"
+send "exit 0\r"
+
+puts "INFO: exiting outer env"
+send "exit 0\r"
+
+if { $expect_eof eq "yes" } {
+  puts "INFO: waiting for eof";
+  expect eof;
+  puts "TEST COMPLETE: received eof";
+} else {
+  # Fish does not reliably deliver eof to expect in CI for some Linux hosts
+  # but not others, and we haven't been able to reproduce the problem outside
+  # of CI. For now just draw the test to a close without expecting eof as
+  # happens above.
+  puts "TEST COMPLETE";
+}
+
+exit 0
