@@ -13,9 +13,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
-use flox_rust_sdk::models::env_registry::env_registry_path;
 use flox_rust_sdk::models::environment::{
-    path_hash,
     ConcreteEnvironment,
     Environment,
     EnvironmentError,
@@ -329,15 +327,6 @@ impl Activate {
             (
                 "_FLOX_ACTIVATE_STORE_PATH",
                 store_path.to_string_lossy().to_string(),
-            ),
-            // TODO: The following are no longer needed after https://github.com/flox/flox/issues/2206
-            (
-                "_FLOX_REGISTRY_PATH",
-                env_registry_path(&flox).to_string_lossy().to_string(),
-            ),
-            (
-                "_FLOX_DOTFLOX_HASH",
-                path_hash(environment.dot_flox_path()).to_string(),
             ),
             (
                 // TODO: we should probably figure out a more consistent way to
