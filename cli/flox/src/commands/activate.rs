@@ -330,10 +330,6 @@ impl Activate {
                 "_FLOX_ACTIVATE_STORE_PATH",
                 store_path.to_string_lossy().to_string(),
             ),
-            (
-                "_FLOX_WATCHDOG_BIN",
-                WATCHDOG_BIN.to_string_lossy().to_string(),
-            ),
             // TODO: The following are no longer needed after https://github.com/flox/flox/issues/2206
             (
                 "_FLOX_REGISTRY_PATH",
@@ -474,6 +470,10 @@ impl Activate {
         // Pass down the activation mode
         command.arg("--mode").arg(mode.to_string());
 
+        command
+            .arg("--watchdog")
+            .arg(WATCHDOG_BIN.to_string_lossy().to_string());
+
         debug!("running activation command: {:?}", command);
 
         if is_ephemeral {
@@ -519,6 +519,10 @@ impl Activate {
         // Pass down the activation mode
         command.arg("--mode").arg(mode.to_string());
 
+        command
+            .arg("--watchdog")
+            .arg(WATCHDOG_BIN.to_string_lossy().to_string());
+
         debug!("running activation command: {:?}", command);
 
         // exec should never return
@@ -546,6 +550,10 @@ impl Activate {
 
         // Pass down the activation mode
         command.arg("--mode").arg(mode.to_string());
+
+        command
+            .arg("--watchdog")
+            .arg(WATCHDOG_BIN.to_string_lossy().to_string());
 
         debug!("running activation command: {:?}", command);
 
