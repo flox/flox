@@ -24,7 +24,7 @@ case "$_flox_shell" in
       exec "$_flox_shell" --noprofile --norc -c "$*"
     else
       RCFILE="$(@coreutils@/bin/mktemp -p "$_FLOX_ACTIVATION_STATE_DIR")"
-      generate_bash_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$_activate_d" "$FLOX_ENV" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" > "$RCFILE"
+      generate_bash_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$_activate_d" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" > "$RCFILE"
       # self destruct
       echo "@coreutils@/bin/rm '$RCFILE'" >> "$RCFILE"
       if [ -t 1 ]; then
@@ -42,7 +42,7 @@ case "$_flox_shell" in
       exec "$_flox_shell" -c "$*"
     else
       RCFILE="$(@coreutils@/bin/mktemp -p "$_FLOX_ACTIVATION_STATE_DIR")"
-      generate_fish_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$_activate_d" "$FLOX_ENV" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" > "$RCFILE"
+      generate_fish_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$_activate_d" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" > "$RCFILE"
       # self destruct
       echo "@coreutils@/bin/rm '$RCFILE'" >> "$RCFILE"
       exec "$_flox_shell" --init-command "source '$RCFILE'" -c "$*"
@@ -58,7 +58,7 @@ case "$_flox_shell" in
       # The tcsh implementation will source our custom `~/.tcshrc`,
       # which eventually sources $FLOX_TCSH_INIT_SCRIPT after the normal initialization.
       FLOX_TCSH_INIT_SCRIPT="$(@coreutils@/bin/mktemp -p "$_FLOX_ACTIVATION_STATE_DIR")"
-      generate_tcsh_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$_activate_d" "$FLOX_ENV" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" > "$FLOX_TCSH_INIT_SCRIPT"
+      generate_tcsh_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$_activate_d" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" > "$FLOX_TCSH_INIT_SCRIPT"
       # self destruct
       echo "@coreutils@/bin/rm '$FLOX_TCSH_INIT_SCRIPT'" >> "$FLOX_TCSH_INIT_SCRIPT"
       export FLOX_TCSH_INIT_SCRIPT

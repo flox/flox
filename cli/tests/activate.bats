@@ -4337,3 +4337,256 @@ EOF
   project_setup
   attach_previous_release zsh in-place
 }
+
+# ---------------------------------------------------------------------------- #
+
+# Set up nested environments used for testing nested activations below.
+nested_environment_setup() {
+  project_setup
+  OUTER_MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+    [profile]
+    common = """
+      echo "$_FLOX_SHELL_FORCE"": common hook running from outer"
+    """
+    bash = """
+      echo "bash: sourcing outer profile"
+      alias outer="echo bash: the outer alias is defined"
+      alias current="echo bash: the current alias is outer"
+    """
+    fish = """
+      echo "fish: sourcing outer profile"
+      alias outer="echo fish: the outer alias is defined"
+      alias current="echo fish: the current alias is outer"
+    """
+    tcsh = """
+      echo "tcsh: sourcing outer profile"
+      alias outer 'echo tcsh: the outer alias is defined'
+      alias current 'echo tcsh: the current alias is outer'
+    """
+    zsh = """
+      echo "zsh: sourcing outer profile"
+      alias outer="echo zsh: the outer alias is defined"
+      alias current="echo zsh: the current alias is outer"
+    """
+EOF
+  )"
+  "$FLOX_BIN" init -d outer
+  echo "$OUTER_MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d outer -f -
+
+  INNER_MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+    [profile]
+    common = """
+      echo "$_FLOX_SHELL_FORCE"": common hook running from inner"
+    """
+    bash = """
+      echo "bash: sourcing inner profile"
+      alias inner="echo bash: the inner alias is defined"
+      alias current="echo bash: the current alias is inner"
+    """
+    fish = """
+      echo "fish: sourcing inner profile"
+      alias inner="echo fish: the inner alias is defined"
+      alias current="echo fish: the current alias is inner"
+    """
+    tcsh = """
+      echo "tcsh: sourcing inner profile"
+      alias inner 'echo tcsh: the inner alias is defined'
+      alias current 'echo tcsh: the current alias is inner'
+    """
+    zsh = """
+      echo "zsh: sourcing inner profile"
+      alias inner="echo zsh: the inner alias is defined"
+      alias current="echo zsh: the current alias is inner"
+    """
+EOF
+  )"
+  "$FLOX_BIN" init -d inner
+  echo "$INNER_MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d inner -f -
+}
+
+# bats test_tags=activate,activate:profile,activate:profile:interactive,activate:profile:interactive:bash
+@test "profile scripts run for all environments in nested bash interactive activation" {
+  nested_environment_setup
+  # Use _FLOX_SHELL_FORCE in preference to FLOX_SHELL because the activate
+  # script explicitly undefines FLOX_SHELL in the activated environment.
+  _FLOX_SHELL_FORCE="$(command -v bash)" NO_COLOR=1 run -0 \
+    expect "$TESTS_DIR/activate/nested-activate.exp" \
+    "$PROJECT_DIR/outer" "yes" "$FLOX_BIN activate --dir $PROJECT_DIR/inner"
+  assert_success
+  assert_output --partial "bash: common hook running from outer"
+  assert_output --partial "bash: sourcing outer profile"
+  assert_output --partial "bash: common hook running from inner"
+  assert_output --partial "bash: sourcing inner profile"
+  assert_output --partial "bash: the inner alias is defined"
+  assert_output --partial "bash: the outer alias is defined"
+  assert_output --partial "bash: the current alias is inner"
+}
+
+# bats test_tags=activate,activate:profile,activate:profile:interactive,activate:profile:interactive:fish
+@test "profile scripts run for all environments in nested fish interactive activation" {
+  nested_environment_setup
+  _FLOX_SHELL_FORCE="$(command -v fish)" NO_COLOR=1 run -0 \
+    expect "$TESTS_DIR/activate/nested-activate.exp" \
+    "$PROJECT_DIR/outer" "no" "$FLOX_BIN activate --dir $PROJECT_DIR/inner"
+  assert_success
+  assert_output --partial "fish: common hook running from outer"
+  assert_output --partial "fish: sourcing outer profile"
+  assert_output --partial "fish: common hook running from inner"
+  assert_output --partial "fish: sourcing inner profile"
+  assert_output --partial "fish: the inner alias is defined"
+  assert_output --partial "fish: the outer alias is defined"
+  assert_output --partial "fish: the current alias is inner"
+}
+
+# bats test_tags=activate,activate:profile,activate:profile:interactive,activate:profile:interactive:tcsh
+@test "profile scripts run for all environments in nested tcsh interactive activation" {
+  nested_environment_setup
+  _FLOX_SHELL_FORCE="$(command -v tcsh)" NO_COLOR=1 run -0 \
+    expect "$TESTS_DIR/activate/nested-activate.exp" \
+    "$PROJECT_DIR/outer" "yes" "$FLOX_BIN activate --dir $PROJECT_DIR/inner"
+  assert_success
+  assert_output --partial "tcsh: common hook running from outer"
+  assert_output --partial "tcsh: sourcing outer profile"
+  assert_output --partial "tcsh: common hook running from inner"
+  assert_output --partial "tcsh: sourcing inner profile"
+  assert_output --partial "tcsh: the inner alias is defined"
+  assert_output --partial "tcsh: the outer alias is defined"
+  assert_output --partial "tcsh: the current alias is inner"
+}
+
+# bats test_tags=activate,activate:profile,activate:profile:interactive,activate:profile:interactive:zsh
+@test "profile scripts run for all environments in nested zsh interactive activation" {
+  nested_environment_setup
+  _FLOX_SHELL_FORCE="$(command -v zsh)" NO_COLOR=1 run -0 \
+    expect "$TESTS_DIR/activate/nested-activate.exp" \
+    "$PROJECT_DIR/outer" "yes" "$FLOX_BIN activate --dir $PROJECT_DIR/inner"
+  assert_success
+  assert_output --partial "zsh: common hook running from outer"
+  assert_output --partial "zsh: sourcing outer profile"
+  assert_output --partial "zsh: common hook running from inner"
+  assert_output --partial "zsh: sourcing inner profile"
+  assert_output --partial "zsh: the inner alias is defined"
+  assert_output --partial "zsh: the outer alias is defined"
+  assert_output --partial "zsh: the current alias is inner"
+}
+
+# Command mode: aliases only supported in interactive shells so we instead
+# only look for echo statements made within the profile hooks.
+
+# bats test_tags=activate,activate:profile,activate:profile:command,activate:profile:command:bash
+@test "profile scripts run for all environments in nested bash command activation" {
+  nested_environment_setup
+  _FLOX_SHELL_FORCE="$(command -v bash)" NO_COLOR=1 run -0 \
+     "$FLOX_BIN" activate --dir "$PROJECT_DIR/outer" -- \
+     "$FLOX_BIN" activate --dir "$PROJECT_DIR/inner" -- :
+  assert_success
+  assert_output --partial "bash: common hook running from outer"
+  assert_output --partial "bash: sourcing outer profile"
+  assert_output --partial "bash: common hook running from inner"
+  assert_output --partial "bash: sourcing inner profile"
+}
+
+# bats test_tags=activate,activate:profile,activate:profile:command,activate:profile:command:fish
+@test "profile scripts run for all environments in nested fish command activation" {
+  nested_environment_setup
+  _FLOX_SHELL_FORCE="$(command -v fish)" NO_COLOR=1 run -0 \
+     "$FLOX_BIN" activate --dir "$PROJECT_DIR/outer" -- \
+     "$FLOX_BIN" activate --dir "$PROJECT_DIR/inner" -- :
+  assert_success
+  assert_output --partial "fish: common hook running from outer"
+  assert_output --partial "fish: sourcing outer profile"
+  assert_output --partial "fish: common hook running from inner"
+  assert_output --partial "fish: sourcing inner profile"
+}
+
+# bats test_tags=activate,activate:profile,activate:profile:command,activate:profile:command:tcsh
+@test "profile scripts run for all environments in nested tcsh command activation" {
+  nested_environment_setup
+  _FLOX_SHELL_FORCE="$(command -v tcsh)" NO_COLOR=1 run -0 \
+     "$FLOX_BIN" activate --dir "$PROJECT_DIR/outer" -- \
+     "$FLOX_BIN" activate --dir "$PROJECT_DIR/inner" -- :
+  assert_success
+  assert_output --partial "tcsh: common hook running from outer"
+  assert_output --partial "tcsh: sourcing outer profile"
+  assert_output --partial "tcsh: common hook running from inner"
+  assert_output --partial "tcsh: sourcing inner profile"
+}
+
+# bats test_tags=activate,activate:profile,activate:profile:command,activate:profile:command:zsh
+@test "profile scripts run for all environments in nested zsh command activation" {
+  nested_environment_setup
+  _FLOX_SHELL_FORCE="$(command -v zsh)" NO_COLOR=1 run -0 \
+     "$FLOX_BIN" activate --dir "$PROJECT_DIR/outer" -- \
+     "$FLOX_BIN" activate --dir "$PROJECT_DIR/inner" -- :
+  assert_success
+  assert_output --partial "zsh: common hook running from outer"
+  assert_output --partial "zsh: sourcing outer profile"
+  assert_output --partial "zsh: common hook running from inner"
+  assert_output --partial "zsh: sourcing inner profile"
+}
+
+# bats test_tags=activate,activate:profile,activate:profile:inplace,activate:profile:inplace:bash
+@test "profile scripts run for all environments in nested bash in-place activation" {
+  nested_environment_setup
+  _FLOX_SHELL_FORCE="$(command -v bash)" NO_COLOR=1 run -0 \
+    expect "$TESTS_DIR/activate/nested-activate.exp" \
+    "$PROJECT_DIR/outer" "yes" "eval \"\$($FLOX_BIN activate --dir $PROJECT_DIR/inner)\""
+  assert_success
+  assert_output --partial "bash: common hook running from outer"
+  assert_output --partial "bash: sourcing outer profile"
+  assert_output --partial "bash: common hook running from inner"
+  assert_output --partial "bash: sourcing inner profile"
+  assert_output --partial "bash: the inner alias is defined"
+  assert_output --partial "bash: the outer alias is defined"
+  assert_output --partial "bash: the current alias is inner"
+}
+
+# bats test_tags=activate,activate:profile,activate:profile:inplace,activate:profile:inplace:fish
+@test "profile scripts run for all environments in nested fish in-place activation" {
+  nested_environment_setup
+  _FLOX_SHELL_FORCE="$(command -v fish)" NO_COLOR=1 run -0 \
+    expect "$TESTS_DIR/activate/nested-activate.exp" \
+    "$PROJECT_DIR/outer" "no" "eval \"\$($FLOX_BIN activate --dir $PROJECT_DIR/inner)\""
+  assert_success
+  assert_output --partial "fish: common hook running from outer"
+  assert_output --partial "fish: sourcing outer profile"
+  assert_output --partial "fish: common hook running from inner"
+  assert_output --partial "fish: sourcing inner profile"
+  assert_output --partial "fish: the inner alias is defined"
+  assert_output --partial "fish: the outer alias is defined"
+  assert_output --partial "fish: the current alias is inner"
+}
+
+# bats test_tags=activate,activate:profile,activate:profile:inplace,activate:profile:inplace:tcsh
+@test "profile scripts run for all environments in nested tcsh in-place activation" {
+  nested_environment_setup
+  _FLOX_SHELL_FORCE="$(command -v tcsh)" NO_COLOR=1 run -0 \
+    expect "$TESTS_DIR/activate/nested-activate.exp" \
+    "$PROJECT_DIR/outer" "yes" "eval \"\`$FLOX_BIN activate --dir $PROJECT_DIR/inner\`\""
+  assert_success
+  assert_output --partial "tcsh: common hook running from outer"
+  assert_output --partial "tcsh: sourcing outer profile"
+  assert_output --partial "tcsh: common hook running from inner"
+  assert_output --partial "tcsh: sourcing inner profile"
+  assert_output --partial "tcsh: the inner alias is defined"
+  assert_output --partial "tcsh: the outer alias is defined"
+  assert_output --partial "tcsh: the current alias is inner"
+}
+
+# bats test_tags=activate,activate:profile,activate:profile:inplace,activate:profile:inplace:zsh
+@test "profile scripts run for all environments in nested zsh in-place activation" {
+  nested_environment_setup
+  _FLOX_SHELL_FORCE="$(command -v zsh)" NO_COLOR=1 run -0 \
+    expect "$TESTS_DIR/activate/nested-activate.exp" \
+    "$PROJECT_DIR/outer" "yes" "eval \"\$($FLOX_BIN activate --dir $PROJECT_DIR/inner)\""
+  assert_success
+  assert_output --partial "zsh: common hook running from outer"
+  assert_output --partial "zsh: sourcing outer profile"
+  assert_output --partial "zsh: common hook running from inner"
+  assert_output --partial "zsh: sourcing inner profile"
+  assert_output --partial "zsh: the inner alias is defined"
+  assert_output --partial "zsh: the outer alias is defined"
+  assert_output --partial "zsh: the current alias is inner"
+}
