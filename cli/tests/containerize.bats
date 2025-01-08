@@ -254,7 +254,8 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 }
 
 # bats test_tags=containerize:default-to-file
-@test "container is written to a file if no runtime is found on PATH" {
+@test "container is written to a file if no runtime is found on PATH on Linux" {
+  skip_if_not_linux
   env_setup_catalog
 
   PATH= run "$FLOX_BIN" containerize
