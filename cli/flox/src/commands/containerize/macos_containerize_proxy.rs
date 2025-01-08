@@ -59,8 +59,9 @@ impl ContainerBuilder for ContainerizeProxy {
         // in the container to be `root` otherwise you run into multi-user
         // issues. The empty string `""` argument to `--userns` maps the
         // current user to `root` inside the container.
-        command.args(["--userns", ""]);
-        command.args(["--log-level", "debug"]);
+        if self.container_runtime == Runtime::Podman {
+            command.args(["--userns", ""]);
+        }
         command.args([
             "--mount",
             &format!(

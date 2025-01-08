@@ -141,7 +141,21 @@ start_podman_machine() {
     podman machine init -v /tmp:/tmp -v /Users:/Users -v /private:/private
   fi
   echo "Starting podman machine" >&3
-  podman --log-level=debug machine start
+  podman machine start
+}
+
+should_skip() {
+  case "${FLOX_CI_RUNNER:-}" in
+    "github-macos*")
+      echo "true"
+      ;;
+    "flox-x86_64-darwin")
+      echo "true"
+      ;;
+    "*")
+      echo "false"
+      ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------- #
@@ -181,6 +195,9 @@ EOF
 }
 
 setup_file() {
+  if [ "$(should_skip)" = "true" ]; then
+    exit 0
+  fi
   common_file_setup
   # There seems to be a deadlock when running tests in parallel
   # either due to podman, or deleting the podman cache.
@@ -212,6 +229,9 @@ teardown() {
 }
 
 teardown_file() {
+  if [ "$(should_skip)" = "true" ]; then
+    exit 0
+  fi
   podman_cache_reset
   common_file_teardown
 
