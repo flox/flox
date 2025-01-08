@@ -67,6 +67,14 @@ podman_global_dirs_setup() {
   mkdir -p "$XDG_DATA_HOME"
   mkdir -p "$XDG_RUNTIME_DIR"
   echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$XDG_CONFIG_HOME/containers/policy.json"
+
+  # Don't require Rosetta unless cross-compiling on builders.
+  if [[ "${NIX_SYSTEM}" != "x86_64-darwin" ]]; then
+    cat > "$XDG_CONFIG_HOME/containers/containers.conf" <<'EOF'
+[machine]
+rosetta = false
+EOF
+  fi
 }
 
 podman_xdg_vars_setup() {
