@@ -219,6 +219,8 @@ jobs:
           RUST_BACKTRACE: 1
           AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.MANAGED_AUTH0_FLOX_DEV_CLIENT_SECRET }}"
           FLOX_CI_RUNNER: "github-${{ matrix.os }}"
+        # Skip containerize tests on the macOS runner because we can't double nest virtualization
+        if: ${{ !((matrix.os == 'macos-14-xlarge') && (matrix.test-tags == 'containerize'))}}
         run: |
           nix develop -L --no-update-lock-file --command just integ-tests --\
             --filter-tags '"${{ matrix.test-tags }}"'
@@ -454,6 +456,8 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30
+        # Skip containerize tests on the macOS runner because we can't double nest virtualization
+        if: ${{ !((matrix.system == 'x86_64-darwin') && (matrix.test-tags == 'containerize'))}}
         env:
           FLOX_CI_RUNNER: "flox-${{ matrix.system }}"
         run: |

@@ -43,46 +43,33 @@ podman_cache_reset() {
   true
 }
 
-podman_restore_xdg_dirs() {
-  export XDG_CONFIG_HOME="$SHORT_TMP/.config"
-  export XDG_DATA_HOME="$SHORT_TMP/.local/share"
-  export XDG_RUNTIME_DIR="$SHORT_TMP/run"
-}
-
-# These dirs are where podman puts sockets and config files on the host machine
-# when creating and starting the VM. You need to set these before setting up the
-# temporary home directory since these will linked into that temporary home
-# directory.
-podman_global_dirs_setup() {
-  # Podman creates deeply nested directories and stores sockets in some of them,
-  # so we need to create locations to store those with shorter paths than what
-  # we'd get nesting them under `/tmp/nix-shell.XXXXXX/bats-run-XXXXXX`.
-  export SHORT_TMP="$(mktemp -d "/tmp/XXXXXX")"
-  export TMPDIR="$SHORT_TMP"
-  export XDG_CONFIG_HOME="$SHORT_TMP/.config"
-  export XDG_DATA_HOME="$SHORT_TMP/.local/share"
-  export XDG_RUNTIME_DIR="$SHORT_TMP/run"
-  echo "Podman XDG root: $SHORT_TMP" >&3
-  mkdir -p "$XDG_CONFIG_HOME/containers"
-  mkdir -p "$XDG_DATA_HOME"
-  mkdir -p "$XDG_RUNTIME_DIR"
-
-  # Don't require Rosetta unless cross-compiling on builders.
-  if [[ "${NIX_SYSTEM}" != "x86_64-darwin" ]]; then
-    cat > "$XDG_CONFIG_HOME/containers/containers.conf" <<'EOF'
-[machine]
-rosetta = false
-EOF
+# We need to handle some directories globally for this file, so we need a
+# different setup routine than the typical `home_setup` function.
+podman_home_setup() {
+  if [[ "${__FT_RAN_HOME_SETUP:-}" = "real" ]]; then
+    export FLOX_TEST_HOME="$REAL_HOME"
+    export HOME="$REAL_HOME"
+  else
+    tmpdir="$(mktemp -d "/tmp/home.XXXXXX")"
+    mkdir -p "$tmpdir"
+    export FLOX_TEST_HOME="$tmpdir"
+    # Force recreation on `home' on every invocation.
+    unset __FT_RAN_HOME_SETUP
   fi
+  echo "Podman home dir: $FLOX_TEST_HOME" >&3
+  export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME"
 }
 
 podman_xdg_vars_setup() {
   home_dir="$1"; shift;
+  short_tmp_dir="$1"; shift;
 
   xdg_reals_setup
   # These get unset by the preceding function call and must be restored in order
   # to use a single podman machine across the test run
-  podman_restore_xdg_dirs
+  export XDG_CONFIG_HOME="$short_tmp_dir/.config"
+  export XDG_DATA_HOME="$short_tmp_dir/.local/share"
+  export XDG_RUNTIME_DIR="$short_tmp_dir/run"
 
   test_cache_dir="${home_dir:?}/.cache"
   test_state_dir="${home_dir:?}/.local/state"
@@ -115,23 +102,32 @@ podman_flox_vars_setup() {
   export HOME="${FLOX_TEST_HOME:-$HOME}"
 }
 
-# We need to handle some directories globally for this file, so we need a
-# different setup routine than the typical `home_setup` function.
-podman_home_setup() {
-  if [[ "${__FT_RAN_HOME_SETUP:-}" = "real" ]]; then
-    export FLOX_TEST_HOME="$REAL_HOME"
-    export HOME="$REAL_HOME"
-  else
-    tmpdir="$(mktemp -d "/tmp/home.XXXXXX")"
-    mkdir -p "$tmpdir"
-    export FLOX_TEST_HOME="$tmpdir"
-    # Force recreation on `home' on every invocation.
-    unset __FT_RAN_HOME_SETUP
+
+podman_dirs_setup() {
+  # Podman creates deeply nested directories and stores sockets in some of them,
+  # so we need to create locations to store those with shorter paths than what
+  # we'd get nesting them under `/tmp/nix-shell.XXXXXX/bats-run-XXXXXX`.
+  export SHORT_TMP="$(mktemp -d "/tmp/XXXXXX")"
+  export TMPDIR="$SHORT_TMP"
+  export XDG_CONFIG_HOME="$SHORT_TMP/.config"
+  export XDG_DATA_HOME="$SHORT_TMP/.local/share"
+  export XDG_RUNTIME_DIR="$SHORT_TMP/run"
+  echo "Podman XDG root: $SHORT_TMP" >&3
+  mkdir -p "$XDG_CONFIG_HOME/containers"
+  mkdir -p "$XDG_DATA_HOME"
+  mkdir -p "$XDG_RUNTIME_DIR"
+
+  # Don't require Rosetta unless cross-compiling on builders.
+  if [[ "${NIX_SYSTEM}" != "x86_64-darwin" ]]; then
+    cat > "$XDG_CONFIG_HOME/containers/containers.conf" <<'EOF'
+[machine]
+rosetta = false
+EOF
   fi
-  echo "Podman home dir: $FLOX_TEST_HOME" >&3
-  podman_xdg_vars_setup "$FLOX_TEST_HOME"
+  
+  podman_home_setup
+  podman_xdg_vars_setup "$FLOX_TEST_HOME" "$SHORT_TMP"
   podman_flox_vars_setup
-  export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME"
 }
 
 start_podman_machine() {
@@ -142,20 +138,6 @@ start_podman_machine() {
   fi
   echo "Starting podman machine" >&3
   podman machine start
-}
-
-should_skip() {
-  case "${FLOX_CI_RUNNER:-}" in
-    "github-macos*")
-      echo "true"
-      ;;
-    "flox-x86_64-darwin")
-      echo "true"
-      ;;
-    "*")
-      echo "false"
-      ;;
-  esac
 }
 
 # ---------------------------------------------------------------------------- #
@@ -195,9 +177,6 @@ EOF
 }
 
 setup_file() {
-  if [ "$(should_skip)" = "true" ]; then
-    exit 0
-  fi
   common_file_setup
   # There seems to be a deadlock when running tests in parallel
   # either due to podman, or deleting the podman cache.
@@ -213,9 +192,7 @@ setup_file() {
 
   # Only for macOS, don't force rootless on Linux.
   if ! is_linux; then
-    podman_global_dirs_setup
-    common_test_setup
-    podman_home_setup
+    podman_dirs_setup
     start_podman_machine
   fi
 
@@ -229,9 +206,6 @@ teardown() {
 }
 
 teardown_file() {
-  if [ "$(should_skip)" = "true" ]; then
-    exit 0
-  fi
   podman_cache_reset
   common_file_teardown
 
