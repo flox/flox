@@ -141,7 +141,7 @@ start_podman_machine() {
     podman machine init -v /tmp:/tmp -v /Users:/Users -v /private:/private
   fi
   echo "Starting podman machine" >&3
-  podman machine start
+  podman --log-level=debug machine start
 }
 
 # ---------------------------------------------------------------------------- #
