@@ -146,9 +146,6 @@ setup() {
   setup_isolated_flox
   project_setup
 
-  # if ! is_linux; then
-  #   return
-  # fi
   # flox does not allow to set a $HOME
   # that does not correspond to the effective user's,
   # but podman requires the policy.json set in the **test user's** $HOME,

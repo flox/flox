@@ -456,7 +456,7 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30
-        # Skip containerize tests on the macOS runner because we can't double nest virtualization
+        # Skip containerize tests on this runner because it's actually Rosetta on aarch64-darwin
         if: ${{ !((matrix.system == 'x86_64-darwin') && (matrix.test-tags == 'containerize'))}}
         env:
           FLOX_CI_RUNNER: "flox-${{ matrix.system }}"
