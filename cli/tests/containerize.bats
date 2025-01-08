@@ -186,10 +186,14 @@ setup_file() {
   # As a side effect the individual tests will run faster
   # because podman does not need to serialize writes to the cache.
   export BATS_NO_PARALLELIZE_WITHIN_FILE=true
-  podman_global_dirs_setup
-  common_test_setup
-  podman_home_setup
-  start_podman_machine
+
+  # Only for macOS, don't force rootless on Linux.
+  if ! is_linux; then
+    podman_global_dirs_setup
+    common_test_setup
+    podman_home_setup
+    start_podman_machine
+  fi
 }
 
 teardown() {
@@ -200,9 +204,12 @@ teardown() {
 teardown_file() {
   podman_cache_reset
   common_file_teardown
-  podman machine stop
-  rm -rf "$SHORT_TMP"
-  rm -rf "$FLOX_TEST_HOME"
+
+  if ! is_linux; then
+    podman machine stop
+    rm -rf "$SHORT_TMP"
+    rm -rf "$FLOX_TEST_HOME"
+  fi
 }
 
 # ---------------------------------------------------------------------------- #
