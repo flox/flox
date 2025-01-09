@@ -117,7 +117,9 @@ impl Display for DidYouMean<'_, InstallSuggestion> {
         writeln!(f)?;
         writeln!(f, "Here are a few other similar options:")?;
 
-        // apparently its possible for pkgdb to _not_ return a count?
+        // apparently its permitted that the count is absent,
+        // if the catalog service does not send it
+        // see: `providers::catalog::collect_search_results`.
         let count_message = match self.search_results.count {
             Some(n) => format!("up to {n}"),
             None => "more".to_string(),

@@ -106,7 +106,11 @@ setup() {
   common_test_setup
   home_setup test # Isolate $HOME for each test.
   user_dotfiles_setup
-  setup_isolated_flox # concurrent pkgdb database creation
+
+  # concurrent pkgdb database creation
+  # todo: still needed now that there is no pkgdb?
+  setup_isolated_flox
+
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 teardown() {

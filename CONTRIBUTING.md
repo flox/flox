@@ -6,7 +6,7 @@ $ cd git clone git@github.com/flox/flox.git;
 $ cd flox;
 # Enter Dev Shell
 $ nix develop;
-# Build `pkgdb' and `flox'
+# Build `flox' and its subsystems
 $ just build;
 # Run the build
 $ ./cli/target/debug/flox --help;

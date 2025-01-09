@@ -95,7 +95,7 @@ fn locked_installable_default_priority_on_undefined() -> u64 {
 /// Implemented as a trait to allow mocking as evaluation is
 /// time-consuming unless cached.
 ///
-/// The trait is implemented by the [`Pkgdb`] struct which is the canonical implementation
+/// The trait is implemented by the [Nix] struct which is the canonical implementation
 /// using the `buitins.lockFlakeInstallable` primop.
 ///
 /// The trait is also implemented by the [`InstallableLockerMock`] struct which is used for testing.

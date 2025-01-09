@@ -38,14 +38,6 @@ pub struct Search {
     pub search_term: String,
 }
 
-// Your first run will be slow, it's creating databases, but after that -
-//   it's fast!
-//
-// `NIX_CONFIG='allow-import-from-derivation = true'` may be required because
-// `pkgdb` disables this by default, but some flakes require it.
-// Ideally this setting should be controlled by Registry preferences,
-// which is TODO.
-// Luckily most flakes don't.
 impl Search {
     #[instrument(name = "search", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
@@ -81,9 +73,6 @@ impl Search {
         };
 
         // Render what we have no matter what, then indicate whether we encountered an error.
-        // FIXME: We may have warnings on `stderr` even with a successful call to `pkgdb`.
-        //        We aren't checking that at all at the moment because better overall error handling
-        //        is coming in a later PR.
         if self.json {
             debug!("printing search results as JSON");
             render_search_results_json(results)?;
