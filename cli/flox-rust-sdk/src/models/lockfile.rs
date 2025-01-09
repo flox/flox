@@ -14,7 +14,6 @@ pub type FlakeRef = Value;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 use std::fs;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use flox_core::Version;
@@ -280,7 +279,7 @@ impl LockedPackageCatalog {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedPackageFlake {
     pub install_id: String,
-    /// Unaltered lock information as returned by `pkgdb lock-flake-installable`.
+    /// Unaltered lock information as returned by `lock-flake-installable`.
     /// In this case we completely own the data format in this repo
     /// and so far have to do no conversion.
     /// If this changes in the future, we can add a conversion layer here
@@ -467,9 +466,6 @@ fn format_multiple_resolution_failures(failures: &[ResolutionFailure]) -> String
 
 impl Lockfile {
     /// Convert a locked manifest to a list of installed packages for a given system.
-    ///
-    /// Catalog packages share a format with pkgdb.
-    /// Flake packages have their own format.
     pub fn list_packages(
         &self,
         system: &System,
@@ -479,21 +475,19 @@ impl Lockfile {
             .filter(|package| package.system() == system)
             .cloned()
             .map(|package| match package {
-                LockedPackage::Catalog(pkg) => {
-                    Ok(PackageToList::Catalog(InstalledPackage {
-                        install_id: pkg.install_id,
-                        rel_path: pkg.attr_path,
-                        info: PackageInfo {
-                            description: pkg.description,
-                            broken: pkg.broken,
-                            license: pkg.license,
-                            pname: pkg.pname,
-                            unfree: pkg.unfree,
-                            version: Some(pkg.version),
-                        },
-                        priority: pkg.priority,
-                    }))
-                },
+                LockedPackage::Catalog(pkg) => Ok(PackageToList::Catalog(InstalledPackage {
+                    install_id: pkg.install_id,
+                    rel_path: pkg.attr_path,
+                    info: PackageInfo {
+                        description: pkg.description,
+                        broken: pkg.broken,
+                        license: pkg.license,
+                        pname: pkg.pname,
+                        unfree: pkg.unfree,
+                        version: Some(pkg.version),
+                    },
+                    priority: pkg.priority,
+                })),
                 LockedPackage::Flake(locked_package) => {
                     let descriptor = self
                         .manifest
@@ -1146,7 +1140,7 @@ impl Lockfile {
     /// At this point flake installables are resolved sequentially.
     /// In further iterations we may want to resolve them in parallel,
     /// either here, through a method of [InstallableLocker],
-    /// or the underlying `pkgdb lock-flake-installable` command itself.
+    /// or the underlying `lock-flake-installable` primop itself.
     ///
     /// Todo: [ResolutionFailures] may be caught downstream and used to provide suggestions.
     ///       Those suggestions are invalid for the flake installables case.
@@ -1232,16 +1226,6 @@ impl Lockfile {
     }
 }
 
-#[derive(Debug, Clone, derive_more::Deref, Serialize, Deserialize, PartialEq)]
-pub struct LockedManifestPkgdb(Value);
-
-#[derive(Debug)]
-pub struct UpdateResult {
-    pub new_lockfile: LockedManifestPkgdb,
-    pub old_lockfile: Option<LockedManifestPkgdb>,
-    pub store_path: Option<PathBuf>,
-}
-
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct PackageInfo {
     pub description: Option<String>,
@@ -1252,12 +1236,8 @@ pub struct PackageInfo {
     pub version: Option<String>,
 }
 
-/// `list` uses a common format for catalog and pkgdb packages,
-/// but then another format is used for flake packages.
-/// The info needed from catalog and pkgdb packages is so similar it makes sense
-/// to convert them to a common format,
-/// but flake packages need enough special handling that it makes sense to
-/// bubble LockedPackageFlake all the way up to `list`.
+/// Distinct types of packages that can be listed
+/// TODO: drop in favor of mapping to `(ManifestPackageDescriptor*, LockedPackage*)`
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackageToList {
     Catalog(InstalledPackage),
@@ -1272,7 +1252,6 @@ impl From<InstalledPackage> for PackageToList {
 }
 
 // TODO: consider dropping this in favor of mapping to [LockedPackageCatalog]?
-/// A common format for catalog and pkgdb packages use by list
 #[derive(Debug, Clone, PartialEq)]
 pub struct InstalledPackage {
     pub install_id: String,
@@ -1343,13 +1322,6 @@ pub enum LockedManifestError {
     LockFlakeNixError(FlakeInstallableError),
     #[error("catalog returned install id not in manifest: {0}")]
     InstallIdNotInManifest(String),
-}
-
-/// A warning produced by `pkgdb manifest check`
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct LockfileCheckWarning {
-    pub package: String,
-    pub message: String,
 }
 
 pub mod test_helpers {

@@ -13,12 +13,9 @@ pub enum SearchStrategy {
     MatchNameOrRelPath,
 }
 
-/// The deserialized search results.
-///
-/// Note that the JSON results are returned by `pkgdb` one result per line
-/// without an enclosing `[]`, so the results returned by `pkgdb` can't be
-/// directly deserialized to a JSON object. To parse the results you should
-/// use the provided `TryFrom` impl.
+/// Representation of search results.
+/// Created via [crate::providers::catalog::ClientTrait::search],
+/// which translates raw api responses to this struct.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResults {
     pub results: Vec<SearchResult>,
