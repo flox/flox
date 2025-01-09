@@ -253,7 +253,7 @@ EOF
 # bats test_tags=edit:install-store-path
 @test "'flox edit' install-store-path" {
   "$FLOX_BIN" init
-  hello_store_path="$(nix build "github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#hello^out" --no-link --print-out-paths)"
+  hello_store_path="$(nix build "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#hello^out" --no-link --print-out-paths)"
 
   run "$FLOX_BIN" edit -f <(echo "
     version = 1

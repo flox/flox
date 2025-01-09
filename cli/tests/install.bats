@@ -464,7 +464,7 @@ EOF
 
 @test "flake: github ref added to manifest" {
   "$FLOX_BIN" init
-  input_flake="github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#hello"
+  input_flake="github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#hello"
   run "$FLOX_BIN" install "$input_flake"
   assert_success
   installed_flake=$(tomlq -r -c -t ".install.hello" "$MANIFEST_PATH")
@@ -473,7 +473,7 @@ EOF
 
 @test "flake: https ref added to manifest" {
   "$FLOX_BIN" init
-  input_flake="https://github.com/nixos/nixpkgs/archive/$PKGDB_NIXPKGS_REV_NEW.tar.gz#hello"
+  input_flake="https://github.com/nixos/nixpkgs/archive/$TEST_NIXPKGS_REV_NEW.tar.gz#hello"
   run "$FLOX_BIN" install "$input_flake"
   assert_success
   installed_flake=$(tomlq -r -c -t ".install.hello" "$MANIFEST_PATH")
@@ -485,7 +485,7 @@ EOF
 # bats test_tags=install:install-store-path
 @test "'flox install' install-store-path" {
   "$FLOX_BIN" init
-  hello_store_path="$(nix build "github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#hello^out" --no-link --print-out-paths)"
+  hello_store_path="$(nix build "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#hello^out" --no-link --print-out-paths)"
 
   PROJECT_DIR="$(realpath "$PROJECT_DIR")"
   run "$FLOX_BIN" install "$hello_store_path"
@@ -503,7 +503,7 @@ EOF
 # bats test_tags=install:install-store-path
 @test "'flox install' install-store-path from link" {
  "$FLOX_BIN" init
-  vim_store_path="$(nix build "github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#vim^out" --out-link ./result-vim --print-out-paths)"
+  vim_store_path="$(nix build "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#vim^out" --out-link ./result-vim --print-out-paths)"
 
   PROJECT_DIR="$(realpath "$PROJECT_DIR")"
   run "$FLOX_BIN" install "./result-vim"

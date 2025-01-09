@@ -36,13 +36,13 @@ project_teardown() {
 assert_old_hello() {
   run jq -r ".packages.\"$NIX_SYSTEM\".hello.input.attrs.narHash" "$LOCK_PATH"
   assert_success
-  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
+  assert_output "$TEST_NIXPKGS_NAR_HASH_OLD"
 }
 
 assert_new_hello() {
   run jq -r ".packages.\"$NIX_SYSTEM\".hello.input.attrs.narHash" "$LOCK_PATH"
   assert_success
-  assert_output "$PKGDB_NIXPKGS_NAR_HASH_NEW"
+  assert_output "$TEST_NIXPKGS_NAR_HASH_NEW"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -215,7 +215,7 @@ setup_pkgdb_env() {
 @test "upgrade for flake installable" {
   "$FLOX_BIN" init
 
-  run "$FLOX_BIN" install "github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#hello"
+  run "$FLOX_BIN" install "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#hello"
 
   run "$FLOX_BIN" upgrade
   assert_success
@@ -232,7 +232,7 @@ setup_pkgdb_env() {
 @test "upgrade for flake installable by iid" {
   "$FLOX_BIN" init
 
-  run "$FLOX_BIN" install "github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#hello"
+  run "$FLOX_BIN" install "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#hello"
 
   run "$FLOX_BIN" upgrade hello
   assert_success
