@@ -35,12 +35,14 @@ generate_tcsh_startup_commands() {
     # Restore environment variables set in the previous bash initialization.
     $_sed -e 's/^/unsetenv /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
     $_sed -e 's/^/setenv /' -e 's/=/ /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
-
-    # Propagate $_activate_d to the environment.
-    echo "setenv _activate_d '$_activate_d';"
-    # Propagate $_flox_activate_tracer to the environment.
-    echo "setenv _flox_activate_tracer '$_flox_activate_tracer';"
   fi
+
+  # Propagate $_activate_d to the environment.
+  echo "setenv _activate_d '$_activate_d';"
+  # Propagate $_flox_activate_tracer to the environment.
+  echo "setenv _flox_activate_tracer '$_flox_activate_tracer';"
+  # Propagate $_flox_env_helper to the environment.
+  echo "setenv _flox_env_helper '$_flox_env_helper';"
 
   # Set the prompt if we're in an interactive shell.
   echo "if ( \$?tty ) then; source '$_activate_d/set-prompt.tcsh'; endif;"
