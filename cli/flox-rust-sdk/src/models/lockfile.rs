@@ -480,7 +480,7 @@ impl Lockfile {
             .cloned()
             .map(|package| match package {
                 LockedPackage::Catalog(pkg) => {
-                    Ok(PackageToList::CatalogOrPkgdb(InstalledPackage {
+                    Ok(PackageToList::Catalog(InstalledPackage {
                         install_id: pkg.install_id,
                         rel_path: pkg.attr_path,
                         info: PackageInfo {
@@ -1260,14 +1260,14 @@ pub struct PackageInfo {
 /// bubble LockedPackageFlake all the way up to `list`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackageToList {
-    CatalogOrPkgdb(InstalledPackage),
+    Catalog(InstalledPackage),
     Flake(ManifestPackageDescriptorFlake, LockedPackageFlake),
     StorePath(LockedPackageStorePath),
 }
 
 impl From<InstalledPackage> for PackageToList {
     fn from(installed: InstalledPackage) -> Self {
-        PackageToList::CatalogOrPkgdb(installed)
+        PackageToList::Catalog(installed)
     }
 }
 
