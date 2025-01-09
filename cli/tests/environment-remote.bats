@@ -243,8 +243,7 @@ EOF
 @test "sanity check upgrade works for remote environments" {
   skip "will be fixed by https://github.com/flox/flox/issues/1485"
 
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    make_empty_remote_env
+  make_empty_remote_env
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" \
     "$FLOX_BIN" install hello --remote "$OWNER/test"
