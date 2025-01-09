@@ -26,9 +26,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
     FLOX_SERVICES_SOCKET_VAR,
 };
-use flox_rust_sdk::models::lockfile::{LockedPackage, LockedPackageCatalog, LockedPackageFlake};
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
-use flox_rust_sdk::providers::flox_cpp_utils::LockedInstallable;
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::traceable_path;
@@ -720,33 +718,13 @@ fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironmen
         return Ok(());
     }
 
-    let mut changes = diff
-        .iter()
-        .filter(|(before, _)| {
-            matches!(before,
-            LockedPackage::Catalog(LockedPackageCatalog{system, ..})
-            | LockedPackage::Flake(LockedPackageFlake{locked_installable: LockedInstallable{system, ..}, ..})
-            if system == &flox.system)
-        } )
-        .map(|(before, after)| {
-            let install_id = before.install_id();
-            let old_version = before.version().unwrap_or("unknown");
-            let new_version = after.version().unwrap_or("unknown");
-
-            if new_version == old_version {
-                format!("- {install_id}: {old_version} (build changes)")
-            } else {
-                format!("{install_id}: {old_version} -> {new_version}")
-            }
-        });
+    let description =
+        UninitializedEnvironment::from_concrete_environment(environment)?.message_description()?;
 
     let message = formatdoc! {"
-            The following packages can be upgraded:
-
-            {changes}
-
-            Run 'flox upgrade' to apply these changes.
-        ", changes = changes.join("\n")};
+        ℹ️  Upgrades are available for packages in {description}.
+        Use 'flox upgrade' to get the latest.
+    "};
 
     message::plain(message);
 
@@ -893,6 +871,7 @@ mod upgrade_notification_tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
     use flox_rust_sdk::models::environment::UpgradeResult;
+    use flox_rust_sdk::models::lockfile::LockedPackage;
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
     use flox_rust_sdk::providers::upgrade_checks::UpgradeInformation;
     use tracing::Subscriber;
@@ -1007,15 +986,11 @@ mod upgrade_notification_tests {
 
         let printed = writer.to_string();
 
-        assert!(
-            printed.contains("The following packages can be upgraded"),
-            "printed: {printed}"
-        );
-        assert!(printed.contains("- hello: "), "printed: {printed}");
-        assert!(
-            printed.contains("Run 'flox upgrade' to apply these changes."),
-            "printed: {printed}"
-        );
+        assert_eq!(printed, formatdoc! {"
+            ℹ️  Upgrades are available for packages in 'name'.
+            Use 'flox upgrade' to get the latest.
+
+        "});
     }
 
     #[test]
