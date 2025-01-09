@@ -124,7 +124,7 @@ podman_dirs_setup() {
 rosetta = false
 EOF
   fi
-  
+
   podman_home_setup
   podman_xdg_vars_setup "$FLOX_TEST_HOME" "$SHORT_TMP"
   podman_flox_vars_setup
@@ -331,7 +331,7 @@ function assert_container_output() {
 }
 
 # bats test_tags=containerize:run-container-i
-@test "container can be run with 'podman/docker run' with/without -i'" {
+@test "container can be run with 'podman run' with/without -i'" {
   env_setup_catalog
 
   # Also tests writing to STDOUT with `-f -`
