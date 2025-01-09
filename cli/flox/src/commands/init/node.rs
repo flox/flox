@@ -194,14 +194,15 @@ impl Node {
             _ => Self::get_nvmrc_version(flox, path).await?,
         };
 
+        let node_install = Self::get_node_install(
+            &package_json_node_version,
+            &nvmrc_version,
+            valid_package_json,
+        );
+
         let action = match yarn_install {
             Some(yarn_install) => {
-                Self::get_node_install(
-                    &package_json_node_version,
-                    &nvmrc_version,
-                    valid_package_json,
-                )
-                .map_or(
+                node_install.map_or(
                     Some(NodeInstallAction::Yarn(yarn_install.clone())),
                     |node_install| {
                         // We know at this point that package-lock.json exists,
@@ -211,12 +212,7 @@ impl Node {
                 )
             },
             None => {
-                Self::get_node_install(
-                    &package_json_node_version,
-                    &nvmrc_version,
-                    valid_package_json,
-                )
-                .map(|mut node_install| {
+                node_install.map(|mut node_install| {
                     // If yarn.lock exists but we couldn't find a compatible
                     // yarn, don't offer an npm hook
                     if yarn_lock_exists {
