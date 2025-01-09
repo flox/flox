@@ -101,7 +101,7 @@ impl List {
     fn print_name_only(mut out: impl Write, packages: &[PackageToList]) -> Result<()> {
         for p in packages {
             let install_id = match p {
-                PackageToList::CatalogOrPkgdb(p) => &p.install_id,
+                PackageToList::Catalog(p) => &p.install_id,
                 PackageToList::Flake(_, p) => &p.install_id,
                 PackageToList::StorePath(p) => &p.install_id,
             };
@@ -118,7 +118,7 @@ impl List {
     fn print_extended(mut out: impl Write, packages: &[PackageToList]) -> Result<()> {
         for p in packages {
             match p {
-                PackageToList::CatalogOrPkgdb(p) => {
+                PackageToList::Catalog(p) => {
                     writeln!(
                         &mut out,
                         "{id}: {path} ({version})",
@@ -153,14 +153,14 @@ impl List {
         for (idx, package) in packages
             .iter()
             .sorted_by_key(|p| match p {
-                PackageToList::CatalogOrPkgdb(p) => p.priority,
+                PackageToList::Catalog(p) => p.priority,
                 PackageToList::Flake(_, locked) => locked.locked_installable.priority,
                 PackageToList::StorePath(locked) => locked.priority,
             })
             .enumerate()
         {
             let message = match package {
-                PackageToList::CatalogOrPkgdb(package) => {
+                PackageToList::Catalog(package) => {
                     let InstalledPackage {
                         install_id: name,
                         rel_path,
@@ -497,7 +497,7 @@ mod tests {
     #[test]
     fn test_print_detail_output_orders_by_priority_unknown_first() {
         let mut packages = test_packages();
-        let PackageToList::CatalogOrPkgdb(ref mut package_2) = packages[1] else {
+        let PackageToList::Catalog(ref mut package_2) = packages[1] else {
             panic!();
         };
         package_2.priority = 5;
@@ -529,7 +529,7 @@ mod tests {
     #[test]
     fn test_print_detail_output_orders_by_priority() {
         let mut packages = test_packages();
-        let PackageToList::CatalogOrPkgdb(ref mut package_2) = packages[1] else {
+        let PackageToList::Catalog(ref mut package_2) = packages[1] else {
             panic!();
         };
         package_2.priority = 10;
