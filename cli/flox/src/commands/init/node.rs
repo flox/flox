@@ -172,15 +172,8 @@ impl Node {
         // Get value for self.package_json_node_version.
         // We only do this if we didn't return early with action [NodeAction::YarnInstall]
         let package_json_node_version = match versions {
-            Some(PackageJSONVersions {
-                node: Some(ref node_version),
-                ..
-            }) => match try_find_compatible_package(flox, "nodejs", Some(node_version)).await? {
-                None => Some(PackageJSONVersion::Unavailable),
-                Some(result) => Some(PackageJSONVersion::Found(result)),
-            },
-            Some(_) => Some(PackageJSONVersion::Unspecified),
-            _ => None,
+            None => None,
+            Some(ref versions) => Self::try_find_compatible_nodejs(flox, versions).await?,
         };
 
         // Get value for self.nvmrc_version
@@ -287,6 +280,26 @@ impl Node {
             yarn: found_yarn,
             node: found_node,
         }))
+    }
+
+    /// Try to find nodejs (alone) that satisfies constraints in package.json
+    async fn try_find_compatible_nodejs(
+        flox: &Flox,
+        versions: &PackageJSONVersions,
+    ) -> Result<Option<PackageJSONVersion>> {
+        let PackageJSONVersions { node, .. } = versions;
+
+        let found_node = match node {
+            Some(node_version) => {
+                match try_find_compatible_package(flox, "nodejs", Some(node_version)).await? {
+                    None => Some(PackageJSONVersion::Unavailable),
+                    Some(result) => Some(PackageJSONVersion::Found(result)),
+                }
+            },
+            _ => Some(PackageJSONVersion::Unspecified),
+        };
+
+        Ok(found_node)
     }
 
     /// Determine appropriate [NVMRCVersion] variant for a (possibly
