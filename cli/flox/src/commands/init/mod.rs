@@ -469,54 +469,19 @@ impl From<&PackageResolutionInfo> for ProvidedPackage {
     }
 }
 
-/// Get a package as if installed with `flox install {package}`
-async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<ProvidedPackage> {
-    let pkg = {
-        tracing::debug!(
-            package = package.to_string(),
-            "using catalog client to find default package"
-        );
-
-        let resolved_groups = flox
-            .catalog_client
-            .resolve(vec![PackageGroup {
-                descriptors: vec![PackageDescriptor {
-                    attr_path: package.to_string(),
-                    install_id: package.to_string(),
-                    version: None,
-                    allow_pre_releases: None,
-                    derivation: None,
-                    allow_broken: None,
-                    allow_insecure: None,
-                    allow_unfree: None,
-                    allowed_licenses: None,
-                    systems: vec![flox.system.parse()?],
-                }],
-                name: package.to_string(),
-            }])
-            .await?;
-        let pkg: Option<ProvidedPackage> = resolved_groups
-            .first()
-            .and_then(|pkg_group| pkg_group.page.as_ref())
-            .and_then(|page| page.packages.as_ref())
-            .and_then(|pkgs| pkgs.first().cloned())
-            .map(|pkg| {
-                // Type-inference fails without the fully-qualified method call
-                <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
-            });
-        let Some(pkg) = pkg else {
-            tracing::debug!("no default package found");
-            return Err(anyhow!("Flox couldn't find any versions of {package}"))?;
-        };
-        pkg
-    };
-
-    tracing::debug!(
-        version = pkg.version.as_ref().unwrap_or(&"null".to_string()),
-        package = package.to_string(),
-        "found default package"
-    );
-    Ok(pkg)
+/// Searches for a given pname and optional version, returning an error if there
+/// are no matches.
+async fn find_compatible_package(
+    flox: &Flox,
+    pname: &str,
+    version: Option<&str>,
+) -> Result<ProvidedPackage> {
+    match try_find_compatible_package(flox, pname, version).await? {
+        Some(pkg) => Ok(pkg),
+        None => Err(anyhow!(
+            "Flox couldn't find any compatible versions of {pname}"
+        )),
+    }
 }
 
 /// Searches for a given pname and optional version
