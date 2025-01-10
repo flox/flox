@@ -28,17 +28,19 @@ cargo_test_invocation := "cargo nextest run --manifest-path ${PWD}/cli/Cargo.tom
 @bins:
     echo "$FLOX_BIN"
 
-# ---------------------------------------------------------------------------- #
 
+# ---------------------------------------------------------------------------- #
+# Build Nix plugins
 
 # Build only nix-plugins
 @build-nix-plugins:
     meson compile -C nix-plugins/builddir; \
     meson install -C nix-plugins/builddir
 
-# Clean th e nix-plugins build cache
+# Clean the nix-plugins build cache
 @clean-nix-plugins:
    meson compile -C nix-plugins/builddir --clean
+
 
 # ---------------------------------------------------------------------------- #
 # Nix built subsystems
@@ -82,6 +84,14 @@ cargo_test_invocation := "cargo nextest run --manifest-path ${PWD}/cli/Cargo.tom
 @build-watchdog:
     pushd cli; cargo build -p flox-watchdog
 
+# Build the flox activations binary
+@build-activations-release:
+    pushd cli; cargo build -p flox-activations -r
+
+# Build the flox watchdog binary
+@build-watchdog-release:
+    pushd cli; cargo build -p flox-watchdog -r
+
 
 # ---------------------------------------------------------------------------- #
 # Build the flox binary
@@ -89,22 +99,27 @@ cargo_test_invocation := "cargo nextest run --manifest-path ${PWD}/cli/Cargo.tom
 @build-cli: build-nix-plugins build-package-builder build-activation-scripts build-watchdog build-buildenv
     pushd cli; cargo build -p flox
 
-
-
 # Build the binaries
-build: build-cli
+@build: build-cli
 
-clean-builds:
+# Build flox with release profile
+@build-release: build-nix-plugins build-package-builder build-activation-scripts build-watchdog-release build-buildenv
+    pushd cli; cargo build -p flox -r
+
+# Remove build artifacts
+@clean-builds:
     git checkout -- build/
 
 # ---------------------------------------------------------------------------- #
 # Build just the data generator
+
 @build-data-gen:
     pushd cli; cargo build -p mk_data; popd
 
 # Generate test data
 @gen-data +mk_data_args="": build-data-gen build-cli
     mkdata="$PWD/cli/target/debug/mk_data"; pushd test_data; "$mkdata" {{mk_data_args}} config.toml; popd
+
 
 # ---------------------------------------------------------------------------- #
 

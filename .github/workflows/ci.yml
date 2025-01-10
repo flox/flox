@@ -402,8 +402,6 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30
-        env:
-          FLOX_CI_RUNNER: "flox-${{ matrix.system }}"
         run: |
           git clean -xfd
           ssh github@$REMOTE_SERVER_ADDRESS \
@@ -412,5 +410,6 @@ jobs:
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests' -- -- \
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests' -- \
+                  --ci-runner '"flox-${{ matrix.system }}"' -- \
                   --filter-tags '"${{ matrix.test-tags }}"'
