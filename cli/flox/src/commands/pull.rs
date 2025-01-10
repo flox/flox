@@ -20,6 +20,7 @@ use flox_rust_sdk::models::environment::{
     ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::manifest;
+use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use indoc::{formatdoc, indoc};
 use log::debug;
 use toml_edit::DocumentMut;
@@ -406,11 +407,11 @@ impl Pull {
             },
 
             // Failed to _build_ the environment due to an incompatible package
-            EnvironmentError::Core(ref core_err @ CoreEnvironmentError::BuildEnv(_))
-                if core_err.is_incompatible_package_error() =>
-            {
+            EnvironmentError::Core(
+                ref core_err @ CoreEnvironmentError::BuildEnv(BuildEnvError::Realise2 { .. }),
+            ) => {
                 debug!(
-                    "environment contains package incompatible with the current system: {err}",
+                    "Failed to build environment: {err}",
                     err = display_chain(core_err)
                 );
 
@@ -596,14 +597,6 @@ mod tests {
     fn ensure_valid_mock_incompatible_system_result() {
         match incompatible_system_result() {
             Err(EnvironmentError::Core(core_err)) if core_err.is_incompatible_system_error() => {},
-            _ => panic!(),
-        }
-    }
-
-    #[test]
-    fn ensure_valid_mock_incompatible_package_result() {
-        match incompatible_package_result() {
-            Err(EnvironmentError::Core(core_err)) if core_err.is_incompatible_package_error() => {},
             _ => panic!(),
         }
     }
