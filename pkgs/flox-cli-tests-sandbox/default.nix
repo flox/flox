@@ -131,24 +131,27 @@ pkgs.testers.runCommand {
       }
     }
     export TEST_ROOT=/nix/store/subdir
-    
+
     echo loading...
 
     ${pkgs.lib.strings.optionalString (pkgs.stdenv.isLinux) ''
     mkdir -p $TEST_ROOT/nix/store
     cat $closureInfo/store-paths | cut -d ' ' --output-delimiter=$'\n' -f 1- | command time xargs -I % ln -sf -t $TEST_ROOT/nix/store/ /something/%
-    cat $closureInfo/registration | nix-store --load-db
-    chmod g+w $TEST_ROOT/nix/store
 
     export NIX_CONFIG="experimental-features = flakes nix-command
     extra-sandbox-paths = /something
     store = $TEST_ROOT"
+
+
+    cat $closureInfo/registration | nix-store --load-db
+    chmod g+w $TEST_ROOT/nix/store
     ''}
 
     # setup complete
 
     flox init
     flox install hello gawk dasel
+
     ${pkgs.lib.strings.optionalString (pkgs.stdenv.isLinux) ''
     ls -alh $TEST_ROOT/$(readlink .flox/run/${pkgs.system}.t.dev)/bin
     ''}
