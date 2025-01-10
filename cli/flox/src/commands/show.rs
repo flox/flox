@@ -67,7 +67,7 @@ fn render_show_catalog(
         // set of results is non-empty.
         bail!("no packages found");
     }
-    let pkg_name = search_results[0].rel_path.join(".");
+    let pkg_name = search_results[0].attr_path.join(".");
     let description = search_results[0]
         .description
         .as_ref()

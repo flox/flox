@@ -1,124 +1,124 @@
 [
   {
-    "count": 819,
+    "count": 859,
     "results": [
       {
+        "attrPath": [
+          "javacc"
+        ],
         "description": "Parser generator for building parsers from grammars",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "javacc",
         "pname": "javacc",
-        "relPath": [
-          "javacc"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "javaCup"
+        ],
         "description": "LALR parser generator for Java",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "javaCup",
         "pname": "javaCup",
-        "relPath": [
-          "javaCup"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "hdf_java"
+        ],
         "description": "A Java package that implements HDF4 and HDF5 data objects in an object-oriented form",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "hdf_java",
         "pname": "hdf_java",
-        "relPath": [
-          "hdf_java"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "dbus_java"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "dbus_java",
         "pname": "dbus_java",
-        "relPath": [
-          "dbus_java"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "geoipjava"
+        ],
         "description": "GeoIP Java API",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "geoipjava",
         "pname": "geoipjava",
-        "relPath": [
-          "geoipjava"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "tabula-java"
+        ],
         "description": "Library for extracting tables from PDF files",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "tabula-java",
         "pname": "tabula-java",
-        "relPath": [
-          "tabula-java"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "erlang_javac"
+        ],
         "description": "Programming language used for massively scalable soft real-time systems",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "erlang_javac",
         "pname": "erlang_javac",
-        "relPath": [
-          "erlang_javac"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "swigWithJava"
+        ],
         "description": "Interface compiler that connects C/C++ code to higher-level languages",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "swigWithJava",
         "pname": "swigWithJava",
-        "relPath": [
-          "swigWithJava"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "yourkit-java"
+        ],
         "description": "Award winning, fully featured low overhead profiler for Java EE and Java SE platforms",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "yourkit-java",
         "pname": "yourkit-java",
-        "relPath": [
-          "yourkit-java"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "java-hamcrest"
+        ],
         "description": "Java library containing matchers that can be combined to create flexible expressions of intent",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "java-hamcrest",
         "pname": "java-hamcrest",
-        "relPath": [
-          "java-hamcrest"
-        ],
         "system": "aarch64-darwin",
         "version": null
       }
@@ -128,38 +128,38 @@
     "count": 142,
     "results": [
       {
-        "description": "Certified builds of OpenJDK",
+        "attrPath": [
+          "jdk"
+        ],
+        "description": "Open-source Java Development Kit",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "jdk",
         "pname": "jdk",
-        "relPath": [
-          "jdk"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "jdk8"
+        ],
         "description": "Certified builds of OpenJDK",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "jdk8",
         "pname": "jdk8",
-        "relPath": [
-          "jdk8"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "jdk11"
+        ],
         "description": "Open-source Java Development Kit",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "jdk11",
         "pname": "jdk11",
-        "relPath": [
-          "jdk11"
-        ],
         "system": "aarch64-darwin",
         "version": null
       }

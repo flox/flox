@@ -16,41 +16,41 @@
     }
   ],
   {
-    "count": 68,
+    "count": 70,
     "results": [
       {
+        "attrPath": [
+          "nodejs"
+        ],
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "nodejs",
         "pname": "nodejs",
-        "relPath": [
-          "nodejs"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "nodejs_14"
+        ],
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "nodejs_14",
         "pname": "nodejs_14",
-        "relPath": [
-          "nodejs_14"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "nodejs_16"
+        ],
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "nodejs_16",
         "pname": "nodejs_16",
-        "relPath": [
-          "nodejs_16"
-        ],
         "system": "aarch64-darwin",
         "version": null
       }

@@ -3,126 +3,126 @@
     "count": 22,
     "results": [
       {
+        "attrPath": [
+          "hello"
+        ],
         "description": "Program that produces a familiar, friendly greeting",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "hello",
         "pname": "hello",
-        "relPath": [
-          "hello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "hello-go"
+        ],
         "description": "Simple program printing hello world in Go",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "hello-go",
         "pname": "hello-go",
-        "relPath": [
-          "hello-go"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "hello-cpp"
+        ],
         "description": "Basic sanity check that C++ and cmake infrastructure are working",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "hello-cpp",
         "pname": "hello-cpp",
-        "relPath": [
-          "hello-cpp"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "nwg-hello"
+        ],
         "description": "GTK3-based greeter for the greetd daemon, written in python",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "nwg-hello",
         "pname": "nwg-hello",
-        "relPath": [
-          "nwg-hello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "hello-unfree"
+        ],
         "description": "Example package with unfree license (for testing)",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "hello-unfree",
         "pname": "hello-unfree",
-        "relPath": [
-          "hello-unfree"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "hello-wayland"
+        ],
         "description": "Hello world Wayland client",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "hello-wayland",
         "pname": "hello-wayland",
-        "relPath": [
-          "hello-wayland"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "sbclPackages",
+          "hello-clog"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "sbclPackages.hello-clog",
         "pname": "hello-clog",
-        "relPath": [
-          "sbclPackages",
-          "hello-clog"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "texlivePackages",
+          "othello"
+        ],
         "description": "Modification of a Go package to create othello boards",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "texlivePackages.othello",
         "pname": "othello",
-        "relPath": [
-          "texlivePackages",
-          "othello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "sbclPackages",
+          "hello-builder"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "sbclPackages.hello-builder",
         "pname": "hello-builder",
-        "relPath": [
-          "sbclPackages",
-          "hello-builder"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "javaPackages",
+          "mavenHello_1_0"
+        ],
         "description": "Maven Hello World",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "javaPackages.mavenHello_1_0",
         "pname": "mavenHello_1_0",
-        "relPath": [
-          "javaPackages",
-          "mavenHello_1_0"
-        ],
         "system": "aarch64-darwin",
         "version": null
       }
