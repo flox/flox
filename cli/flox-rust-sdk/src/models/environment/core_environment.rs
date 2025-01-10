@@ -1004,13 +1004,6 @@ impl CoreEnvironmentError {
 
         is_lock_incompatible_system_error || is_build_incompatible_system_error
     }
-
-    pub fn is_incompatible_package_error(&self) -> bool {
-        matches!(
-            self,
-            CoreEnvironmentError::BuildEnv(BuildEnvError::Realise2 { .. })
-        )
-    }
 }
 
 pub mod test_helpers {
