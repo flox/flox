@@ -857,17 +857,19 @@ enum AdditionalCommands {
     Update(#[bpaf(external(update::update))] update::Update),
     /// Upgrade packages in an environment
     #[bpaf(command, hide, footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
-        When no arguments are specified, all packages in the environment are upgraded.\n\n
+        When no arguments are specified,
+        all packages in the environment are upgraded if possible.
+        A package is upgraded if its version, build configuration,
+        or dependency graph changes.\n\n
 
-        Packages to upgrade can be specified by either group name, or, if a package is
-        not in a group with any other packages, it may be specified by ID.
-        If the specified argument is both a group name and a package ID, the group is
-        upgraded.\n\n
+        Packages to upgrade can be specified by group name.
+        Packages without a specified pkg-group in the manifest
+        are placed in a group named 'toplevel'.
+        The packages in that group can be upgraded without updating any other groups
+        by passing 'toplevel' as the group name.\n\n
 
-        Packages without a specified group in the manifest are placed in a group
-        named 'toplevel'.
-        The packages in that group can be upgraded without updating any other
-        groups by passing 'toplevel' as the group name.
+        A single package can only be specified to upgrade by ID
+        if it is not in a group with any other packages.
     "}))]
     Upgrade(#[bpaf(external(upgrade::upgrade))] upgrade::Upgrade),
     /// View and set configuration options
