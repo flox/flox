@@ -923,13 +923,15 @@ impl UpgradeResult {
         packages_with_upgrades
     }
 
+    /// Return a map of packages that have upgrades in the format
+    /// packages[install_id] = (old_package, new_package)
     pub fn diff_for_system(&self, system: &str) -> SingleSystemUpgradeDiff {
         self.diff()
             .into_iter()
             .filter_map(|(install_id, mut by_system)| {
-                by_system.remove(system).map(|(old_package, new_package)| {
-                    (install_id, (old_package.clone(), new_package.clone()))
-                })
+                by_system
+                    .remove(system)
+                    .map(|(old_package, new_package)| (install_id, (old_package, new_package)))
             })
             .collect()
     }

@@ -154,7 +154,36 @@ ignore_cmd_errors = true
 pre_cmd = "flox init"
 cmd = "flox install hello"
 post_cmd = '''
-    cat "$RESPONSE_FILE" | jq | sed 's/"derivation": .*$/"derivation": "\/nix\/store\/AAA-hello-2.12.1.drv",/g' > tmp.json
+    cat "$RESPONSE_FILE" | jq \
+    | sed 's/"derivation": .*$/"derivation": "\/nix\/store\/AAA-hello-2.10.1.drv",/g' \
+    | sed 's/"version": .*$/"version": "2.10.1"/g' \
+    > tmp.json
+    mv tmp.json "$RESPONSE_FILE"
+'''
+
+[resolve.old_linux_hello]
+pre_cmd = "flox init"
+cmd = "flox install hello"
+post_cmd = '''
+    cat "$RESPONSE_FILE" | jq \
+    '.[].[].page.packages |= map(if .system | contains("linux")
+      then .version = "2.10.1" | .derivation = "/nix/store/AAA-hello-2.10.1.drv"
+      else .
+      end)' \
+    > tmp.json
+    mv tmp.json "$RESPONSE_FILE"
+'''
+
+[resolve.old_darwin_hello]
+pre_cmd = "flox init"
+cmd = "flox install hello"
+post_cmd = '''
+    cat "$RESPONSE_FILE" | jq \
+    '.[].[].page.packages |= map(if .system | contains("darwin")
+      then .version = "2.10.1" | .derivation = "/nix/store/AAA-hello-2.10.1.drv"
+      else .
+      end)' \
+    > tmp.json
     mv tmp.json "$RESPONSE_FILE"
 '''
 
