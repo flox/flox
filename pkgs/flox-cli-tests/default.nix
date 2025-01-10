@@ -210,6 +210,7 @@ writeShellScriptBin PROJECT_NAME ''
       -I, --input-data     Path to the input data directory (Default: $INPUT_DATA)
       -G, --generated-data Path to the generated data directory (Default: $GENERATED_DATA)
       -T, --tests          Path to folder of tests (Default: $PROJECT_TESTS_DIR)
+      -c, --ci-runner      Which runner this job is on, if any
       -W, --watch          Run tests in a continuous watch mode
       -h, --help           Prints help information
   EOF
@@ -230,6 +231,7 @@ writeShellScriptBin PROJECT_NAME ''
       -[iI]|--input-data)     export INPUT_DATA="''${2?}"; shift; ;;
       -[gG]|--generated-data) export GENERATED_DATA="''${2?}"; shift; ;;
       -[tT]|--tests)          export TESTS_DIR="''${2?}"; shift; ;;
+      -[cC]|--ci-runner)      export FLOX_CI_RUNNER="''${2?}"; shift; ;;
       -[wW]|--watch)          WATCH=:; ;;
       -h|--help|-u|--usage)   usage; exit 0; ;;
       --)                     shift; break; ;;

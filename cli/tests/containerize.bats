@@ -37,6 +37,7 @@ env_setup_catalog() {
 # using an overlayfs.
 # However, that directory is not writable
 # and thus fails to be deleted by bats as part of the test teardown.
+# TODO: do we also need to do this on macOS?
 podman_cache_reset() {
   # echo "Resetting podman cache" >&3
   is_linux && podman system reset --force
@@ -56,95 +57,106 @@ podman_home_setup() {
     # Force recreation on `home' on every invocation.
     unset __FT_RAN_HOME_SETUP
   fi
-  echo "Podman home dir: $FLOX_TEST_HOME" >&3
   export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME"
 }
 
-podman_xdg_vars_setup() {
-  home_dir="$1"; shift;
-  short_tmp_dir="$1"; shift;
-
+podman_setup() {
+  # Populate REAL_XDG_* vars so we can point at the host machine's data/config
+  # directories. This is necessary for caching the podman VM across test runs.
   xdg_reals_setup
-  # These get unset by the preceding function call and must be restored in order
-  # to use a single podman machine across the test run
-  export XDG_CONFIG_HOME="$short_tmp_dir/.config"
-  export XDG_DATA_HOME="$short_tmp_dir/.local/share"
-  export XDG_RUNTIME_DIR="$short_tmp_dir/run"
 
-  test_cache_dir="${home_dir:?}/.cache"
-  test_state_dir="${home_dir:?}/.local/state"
+  # Create a tempdir with a short path to use as a home directory. The path
+  # needs to be short because podman and friends create a deeply nested
+  # directory structure that can make socket paths that are longer than 108
+  # characters.
+  podman_home_setup # populates FLOX_TEST_HOME
 
-  # Create all of the directories
-  mkdir -p "$home_dir"
-  mkdir -p "$test_cache_dir"
-  mkdir -p "$test_state_dir"
-  chmod u+w "$home_dir"
-  chmod u+w "$test_cache_dir"
-  chmod u+w "$test_state_dir"
+  # Set TMPDIR to a directory under this home-tempdir otherwise it will be set
+  # to a tempdir created for the development shell, and again you might end up
+  # with socket paths that are too long.
+  export TMPDIR="$FLOX_TEST_HOME/tmp"
+  mkdir -p "$TMPDIR"
 
-  # Export the vars
-  export XDG_CACHE_HOME="$test_cache_dir"
-  export XDG_STATE_HOME="$test_state_dir"
-}
+  # Set the XDG variables to point to the home-tempdir
+  export XDG_DATA_HOME="$FLOX_TEST_HOME/.local/share"
+  export XDG_STATE_HOME="$FLOX_TEST_HOME/.local/state"
+  export XDG_CACHE_HOME="$FLOX_TEST_HOME/.cache"
+  export XDG_RUNTIME_DIR="$FLOX_TEST_HOME/run"
+  export XDG_CONFIG_HOME="$FLOX_TEST_HOME/.config"
 
-# This is the same as the global `flox_vars_setup` except it doesn't run
-# `xdg_vars_setup` again.
-podman_flox_vars_setup() {
-  # We store sockets in FLOX_CACHE_DIR,
-  # so create cache in /tmp since TMPDIR may result in too long of a path.
-  FLOX_CACHE_DIR="$(mktemp -d /tmp/flox.tests.XXXXXX)"
-  export FLOX_CACHE_DIR
+  mkdir -p "$XDG_DATA_HOME"
+  mkdir -p "$XDG_STATE_HOME"
+  mkdir -p "$XDG_CACHE_HOME"
+  mkdir -p "$XDG_RUNTIME_DIR"
+  mkdir -p "$XDG_CONFIG_HOME"
+
+  # Set the flox-specific directories to point to this home-tempdir
+  export FLOX_CACHE_DIR="$XDG_CACHE_HOME/flox"
   export FLOX_CONFIG_DIR="$XDG_CONFIG_HOME/flox"
   export FLOX_DATA_HOME="$XDG_DATA_HOME/flox"
   export FLOX_STATE_HOME="$XDG_STATE_HOME/flox"
   export FLOX_META="$FLOX_CACHE_DIR/meta"
   export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments"
-  export HOME="${FLOX_TEST_HOME:-$HOME}"
+
+  # Set HOME
+  export HOME="${FLOX_TEST_HOME:?FLOX_TEST_HOME was unset or null}"
 }
 
-
-podman_dirs_setup() {
-  # Podman creates deeply nested directories and stores sockets in some of them,
-  # so we need to create locations to store those with shorter paths than what
-  # we'd get nesting them under `/tmp/nix-shell.XXXXXX/bats-run-XXXXXX`.
-  export SHORT_TMP="$(mktemp -d "/tmp/XXXXXX")"
-  export TMPDIR="$SHORT_TMP"
-  export XDG_CONFIG_HOME="$SHORT_TMP/.config"
-  export XDG_DATA_HOME="$SHORT_TMP/.local/share"
-  export XDG_RUNTIME_DIR="$SHORT_TMP/run"
-  echo "Podman XDG root: $SHORT_TMP" >&3
-  mkdir -p "$XDG_CONFIG_HOME/containers"
-  mkdir -p "$XDG_DATA_HOME"
-  mkdir -p "$XDG_RUNTIME_DIR"
-
-  # Don't require Rosetta unless cross-compiling on builders.
-  if [[ "${NIX_SYSTEM}" != "x86_64-darwin" ]]; then
-    cat > "$XDG_CONFIG_HOME/containers/containers.conf" <<'EOF'
-[machine]
-rosetta = false
-EOF
-  fi
-
-  podman_home_setup
-  podman_xdg_vars_setup "$FLOX_TEST_HOME" "$SHORT_TMP"
-  podman_flox_vars_setup
-}
-
-start_podman_machine() {
-  machine="$(podman machine list -n)"
-  if [ -z "$machine" ]; then
-    echo "Creating podman machine" >&3
-    podman machine init -v /tmp:/tmp -v /Users:/Users -v /private:/private
-  fi
+create_and_start_podman_machine() {
+  # For some of these calls you need to not only close FD 3, but also FD 4.
+  # I have no idea why.
+  echo "Creating podman machine" >&3
+  podman machine init -v /tmp:/tmp -v /Users:/Users -v /private:/private flox-containerize-vm 3>&- 4>&-
   echo "Starting podman machine" >&3
-  podman machine start
+  podman machine start flox-containerize-vm 3>&- 4>&-
+}
+
+is_local_dev() {
+  [ ! -v "FLOX_CI_RUNNER" ]
 }
 
 # ---------------------------------------------------------------------------- #
 
+# Identical to `setup_isolated_flox` but doesn't handle FLOX_CACHE_DIR because
+# we already handle the socket length issue for Flox by virtue of handling it
+# for podman.
+podman_setup_isolated_flox() {
+  export FLOX_CONFIG_DIR="${BATS_TEST_TMPDIR?}/flox-config"
+  export FLOX_DATA_DIR="${BATS_TEST_TMPDIR?}/flox-data"
+  export FLOX_STATE_DIR="${BATS_TEST_TMPDIR?}/flox-state"
+}
+
 setup() {
-  setup_isolated_flox
+  podman_setup_isolated_flox
   project_setup
+}
+
+setup_file() {
+  echo "FLOX_CI_RUNNER: '${FLOX_CI_RUNNER}'" >&3
+  common_file_setup
+  # The individual tests run faster this way because podman doesn't need to
+  # serialize writes to the cache, and subsequent runs can reuse the already
+  # built flox container.
+  export BATS_NO_PARALLELIZE_WITHIN_FILE=true
+
+  # Only for macOS, don't force rootless on Linux.
+  if ! is_linux; then
+    podman_setup
+    if is_local_dev; then
+      machine_state="$(XDG_DATA_HOME="$REAL_XDG_DATA_HOME" XDG_CONFIG_HOME="$REAL_XDG_CONFIG_HOME" podman machine inspect flox-containerize-vm | jq -r '.[0].State')"
+      if [ "$machine_state" != "running" ]; then
+        echo "ERROR: podman VM is not running" >&3
+        echo "Start the VM with 'podman machine start flox-containerize-vm'" >&3
+        echo "See create_and_start_podman_machine() in containerize.bats to create the VM" >&3
+        exit 1
+      fi
+    else
+      create_and_start_podman_machine
+    fi
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/containers"
+  echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$XDG_CONFIG_HOME/containers/policy.json"
 
   # flox does not allow to set a $HOME
   # that does not correspond to the effective user's,
@@ -162,39 +174,24 @@ setup() {
   #
   # To work around this wrap podman in a script that sets the HOME to the test user's.
   # 一点傻傻地，但是有效。
-  mkdir -p "$BATS_TEST_TMPDIR/bin"
   ORIGINAL_PODMAN="$(command -v podman)"
-  cat > "$BATS_TEST_TMPDIR/bin/podman" << EOF
+  mkdir -p "$FLOX_TEST_HOME/bin"
+  if is_local_dev; then
+    # Use the host machine's VM for local development.
+    # The develop is responsible for starting the VM.
+    cat > "$FLOX_TEST_HOME/bin/podman" << EOF
+#!/usr/bin/env bash
+HOME=$HOME USER=podman-user XDG_DATA_HOME="$REAL_XDG_DATA_HOME" XDG_CONFIG_HOME="$REAL_XDG_CONFIG_HOME" exec $ORIGINAL_PODMAN "\$@"
+EOF
+  else
+    cat > "$FLOX_TEST_HOME/bin/podman" << EOF
 #!/usr/bin/env bash
 HOME=$HOME USER=podman-user exec $ORIGINAL_PODMAN "\$@"
 EOF
-
-  chmod +x "$BATS_TEST_TMPDIR/bin/podman"
-  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
-}
-
-setup_file() {
-  common_file_setup
-  # There seems to be a deadlock when running tests in parallel
-  # either due to podman, or deleting the podman cache.
-  # Since this started with the addition of tests
-  # for loading containers into podman from flox,
-  # fd3 issues are possible as well.
-  # For the sake of getting the tests to pass, we'll disable parallelism.
-  # this slows down the tests, but since they already run in parallel
-  # with other groups this won't slow down the overall test suite.
-  # As a side effect the individual tests will run faster
-  # because podman does not need to serialize writes to the cache.
-  export BATS_NO_PARALLELIZE_WITHIN_FILE=true
-
-  # Only for macOS, don't force rootless on Linux.
-  if ! is_linux; then
-    podman_dirs_setup
-    start_podman_machine
   fi
 
-  mkdir -p "$XDG_CONFIG_HOME/containers"
-  echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$XDG_CONFIG_HOME/containers/policy.json"
+  chmod +x "$FLOX_TEST_HOME/bin/podman"
+  export PATH="$FLOX_TEST_HOME/bin:$PATH"
 }
 
 teardown() {
@@ -204,13 +201,14 @@ teardown() {
 
 teardown_file() {
   podman_cache_reset
-  common_file_teardown
-
   if ! is_linux; then
-    podman machine stop
+    if ! is_local_dev; then
+      podman machine stop flox-containerize-vm
+    fi
     rm -rf "$SHORT_TMP"
     rm -rf "$FLOX_TEST_HOME"
   fi
+  common_file_teardown
 }
 
 # ---------------------------------------------------------------------------- #

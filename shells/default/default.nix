@@ -12,6 +12,7 @@
   pre-commit-check,
   pstree,
   shfmt,
+  podman,
   mitmproxy,
   cargo-nextest,
   flox-cli,
@@ -40,6 +41,7 @@ let
       cargo-nextest
       procps
       pstree
+      podman
       flox-cli-tests
     ]
     ++ lib.optionals stdenv.isLinux [
