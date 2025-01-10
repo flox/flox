@@ -14,8 +14,7 @@ use regex::Regex;
 
 use super::{
     format_customization,
-    get_default_package_if_compatible,
-    try_find_compatible_version,
+    try_find_compatible_package,
     InitHook,
     ProvidedVersion,
     AUTO_SETUP_HINT,
@@ -328,7 +327,7 @@ impl PoetryPyProject {
 
         let provided_python_version = 'version: {
             let compatible =
-                try_find_compatible_version(flox, "python3", required_python_version.as_ref())
+                try_find_compatible_package(flox, "python3", Some(&required_python_version))
                     .await?;
 
             if let Some(found_version) = compatible {
@@ -340,10 +339,9 @@ impl PoetryPyProject {
 
             log::debug!("poetry config requires python version {required_python_version}, but no compatible version found in the catalogs");
 
-            let substitute =
-                get_default_package_if_compatible(flox, vec!["python3".to_string()], None)
-                    .await?
-                    .context("No python3 in the catalogs")?;
+            let substitute = try_find_compatible_package(flox, "python3", None)
+                .await?
+                .context("No python3 in the catalogs")?;
 
             ProvidedVersion::Incompatible {
                 substitute,
@@ -351,12 +349,11 @@ impl PoetryPyProject {
             }
         };
 
-        let poetry_version =
-            get_default_package_if_compatible(flox, vec!["poetry".to_string()], None)
-                .await?
-                .context("Did not find poetry in the catalogs")?
-                .version
-                .unwrap_or_else(|| "N/A".to_string());
+        let poetry_version = try_find_compatible_package(flox, "poetry", None)
+            .await?
+            .context("Did not find poetry in the catalogs")?
+            .version
+            .unwrap_or_else(|| "N/A".to_string());
 
         Ok(Some(PoetryPyProject {
             provided_python_version,
@@ -523,10 +520,9 @@ impl PyProject {
 
         let provided_python_version = 'version: {
             let search_default = || async {
-                let default =
-                    get_default_package_if_compatible(flox, vec!["python3".to_string()], None)
-                        .await?
-                        .context("No python3 in the catalogs")?;
+                let default = try_find_compatible_package(flox, "python3", None)
+                    .await?
+                    .context("No python3 in the catalogs")?;
                 Ok::<_, Error>(default)
             };
 
@@ -538,7 +534,7 @@ impl PyProject {
             };
 
             let compatible =
-                try_find_compatible_version(flox, "python3", required_python_version.as_ref())
+                try_find_compatible_package(flox, "python3", Some(&required_python_version))
                     .await?;
 
             if let Some(found_version) = compatible {
@@ -704,7 +700,7 @@ impl Requirements {
         let matches = Self::get_matches(path)?;
 
         if !matches.is_empty() {
-            let result = get_default_package_if_compatible(flox, vec!["python3".to_string()], None)
+            let result = try_find_compatible_package(flox, "python3", None)
                 .await?
                 .context("Did not find python3 in the catalogs")?;
             // given our catalog is based on nixpkgs,

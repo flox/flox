@@ -12,8 +12,7 @@ use semver::VersionReq;
 use super::{
     format_customization,
     get_default_package,
-    get_default_package_if_compatible,
-    try_find_compatible_version,
+    try_find_compatible_package,
     InitHook,
     ProvidedPackage,
     AUTO_SETUP_HINT,
@@ -176,7 +175,7 @@ impl Node {
             Some(PackageJSONVersions {
                 node: Some(ref node_version),
                 ..
-            }) => match try_find_compatible_version(flox, "nodejs", node_version).await? {
+            }) => match try_find_compatible_package(flox, "nodejs", Some(node_version)).await? {
                 None => Some(PackageJSONVersion::Unavailable),
                 Some(result) => Some(PackageJSONVersion::Found(result)),
             },
@@ -268,29 +267,21 @@ impl Node {
 
         let found_node = match node {
             Some(node_version) => {
-                match get_default_package_if_compatible(
-                    flox,
-                    vec!["nodejs".to_string()],
-                    Some(node_version.clone()),
-                )
-                .await?
-                {
+                match try_find_compatible_package(flox, "nodejs", Some(node_version)).await? {
                     // If the corresponding node isn't compatible, don't install yarn
                     None => return Ok(None),
                     Some(found_node) => found_node,
                 }
             },
-            None => get_default_package_if_compatible(flox, vec!["nodejs".to_string()], None)
+            None => try_find_compatible_package(flox, "nodejs", None)
                 .await?
                 .ok_or(anyhow!("Flox couldn't find nodejs in nixpkgs"))?,
         };
 
         // We assume that yarn is built with found_node, which is currently true
         // in nixpkgs
-        let found_yarn: Option<ProvidedPackage> = match yarn {
-            Some(yarn_version) => try_find_compatible_version(flox, "yarn", yarn_version).await?,
-            _ => Some(get_default_package(flox, &"yarn".into()).await?),
-        };
+        let found_yarn: Option<ProvidedPackage> =
+            try_find_compatible_package(flox, "yarn", yarn.as_deref()).await?;
 
         Ok(found_yarn.map(|found_yarn| YarnInstall {
             yarn: found_yarn,
@@ -313,8 +304,8 @@ impl Node {
         let nvmrc_version = match Self::parse_nvmrc_version(&nvmrc_contents) {
             RequestedNVMRCVersion::None => None,
             RequestedNVMRCVersion::Unsure => Some(NVMRCVersion::Unsure),
-            RequestedNVMRCVersion::Found(version) => {
-                match try_find_compatible_version(flox, "nodejs", &version).await? {
+            RequestedNVMRCVersion::Found(ref version) => {
+                match try_find_compatible_package(flox, "nodejs", Some(version)).await? {
                     None => Some(NVMRCVersion::Unavailable),
                     Some(result) => Some(NVMRCVersion::Found(result)),
                 }
