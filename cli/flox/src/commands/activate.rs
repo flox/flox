@@ -696,6 +696,21 @@ impl Activate {
 /// Upon activation flox will start a detached process to check for upgrades.
 /// Future activations will be able to read the upgrade information from a file
 /// and notify the user if there are any upgrades available using this function.
+/// See [spawn_detached_check_for_upgrades_process] for more information
+/// on the upgrade check process.
+///
+/// This function reads the upgrade information for a given environment,
+/// and prints a message to the user if the upgrade information is still applicable
+/// to the current environment -- based on the same lockfile
+/// and indicating that upgrades are available.
+/// There is no refractory period for upgrade notifications,
+/// i.e. we message _every_ time this function is called by `flox activate`.
+/// The motivation for this is to provide deterministic behavior,
+/// compared to comparatively random display of upgrade messages every hour or so.
+/// For example, when a user activates an environment and sees a message,
+/// but doesn't act on it, they should see the message again next time they activate,
+/// so they are not wondering whether upgrades may have been applied automatically.
+/// To make this less annoying, we tried to make the message as unobtrusive as possible.
 fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironment) -> Result<()> {
     let upgrade_guard = UpgradeInformationGuard::read_in(environment.cache_path()?)?;
 
