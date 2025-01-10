@@ -67,13 +67,14 @@ fn render_show_catalog(
         // set of results is non-empty.
         bail!("no packages found");
     }
-    let pkg_name = search_results[0].attr_path.join(".");
+    let pkg_path = search_results[0].pkg_path.clone();
     let description = search_results[0]
         .description
         .as_ref()
         .map(|d| d.replace('\n', " "))
+        .filter(|d| !d.trim().is_empty())
         .unwrap_or(DEFAULT_DESCRIPTION.into());
-    println!("{pkg_name} - {description}");
+    println!("{pkg_path} - {description}");
 
     // Organize the versions to be queried and printed
     let version_to_systems = {
@@ -117,11 +118,11 @@ fn render_show_catalog(
             };
             if available_systems.len() != expected_systems.len() {
                 println!(
-                    "    {pkg_name}@{version} ({} only)",
+                    "    {pkg_path}@{version} ({} only)",
                     available_systems.join(", ")
                 );
             } else {
-                println!("    {pkg_name}@{version}");
+                println!("    {pkg_path}@{version}");
             }
             seen_versions.insert(version);
         }
