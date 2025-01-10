@@ -16,9 +16,6 @@
   # reach stable.
   inputs.nixpkgs.url = "github:flox/nixpkgs/stable";
 
-  inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
-  inputs.sqlite3pp.inputs.nixpkgs.follows = "nixpkgs";
-
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   inputs.pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -62,7 +59,6 @@
           cpp-semver = final.callPackage ./pkgs/cpp-semver { };
           t3 = final.callPackage ./pkgs/t3 { inherit (inputs) t3-src; };
         })
-        inputs.sqlite3pp.overlays.default
         inputs.fenix.overlays.default
       ];
 
