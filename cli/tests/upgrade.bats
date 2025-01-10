@@ -2,7 +2,9 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
-# Test `flox update`
+# Test `flox upgrade`
+#
+# bats file_tags=upgrade
 #
 # ---------------------------------------------------------------------------- #
 
@@ -20,12 +22,12 @@ project_setup() {
   export TMP_MANIFEST_PATH="${BATS_TEST_TMPDIR}/manifest.toml"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" > /dev/null || return
+  pushd "$PROJECT_DIR" >/dev/null || return
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 project_teardown() {
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
   rm -f "${TMP_MANIFEST_PATH?}"
   unset PROJECT_DIR
@@ -75,18 +77,24 @@ setup_pkgdb_env() {
 # ---------------------------------------------------------------------------- #
 # catalog tests
 
+# bats test_tags=upgrade:hello
 @test "upgrade hello" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
 
-  old_hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/old_hello.json")
+  old_hello_response_drv="$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/old_hello.json")"
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
+
   assert_equal "$old_hello_locked_drv" "$old_hello_response_drv"
+
+  old_hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/old_hello.json")"
+  hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/hello.json")"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade
   assert_success
-  assert_output "⬆️  Upgraded 'hello' in environment 'test'."
+  assert_line "✅  Upgrade sucessfully applied build changes to 1 package(s) in 'test':"
+  assert_line --regexp "- hello: $old_hello_response_version -> $hello_response_version"
 
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -108,10 +116,14 @@ setup_pkgdb_env() {
 
   # add the package group
 
+  old_hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/old_hello.json")"
+  hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/hello.json")"
+
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade blue
   assert_success
-  assert_output "⬆️  Upgraded 'hello' in environment 'test'."
+  assert_line "✅  Upgrade sucessfully applied build changes to 1 package(s) in 'test':"
+  assert_line --regexp "- hello: $old_hello_response_version -> $hello_response_version"
 
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -128,10 +140,14 @@ setup_pkgdb_env() {
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$old_hello_locked_drv" "$old_hello_response_drv"
 
+  old_hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/old_hello.json")"
+  hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/hello.json")"
+
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade toplevel
   assert_success
-  assert_output "⬆️  Upgraded 'hello' in environment 'test'."
+  assert_line "✅  Upgrade sucessfully applied build changes to 1 package(s) in 'test':"
+  assert_line --regexp "- hello: $old_hello_response_version -> $hello_response_version"
 
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -148,10 +164,14 @@ setup_pkgdb_env() {
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$old_hello_locked_drv" "$old_hello_response_drv"
 
+  old_hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/old_hello.json")"
+  hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/hello.json")"
+
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade hello
   assert_success
-  assert_output "⬆️  Upgraded 'hello' in environment 'test'."
+  assert_line "✅  Upgrade sucessfully applied build changes to 1 package(s) in 'test':"
+  assert_line --regexp "- hello: $old_hello_response_version -> $hello_response_version"
 
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -177,7 +197,7 @@ setup_pkgdb_env() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" \
     run "$FLOX_BIN" upgrade
   assert_success
-  assert_output "ℹ️  No packages need to be upgraded in environment 'test'."
+  assert_output "No package(s) need to be upgraded in 'test'."
 }
 
 # bats test_tags=upgrade:page-not-upgraded
@@ -200,16 +220,40 @@ setup_pkgdb_env() {
       .locked_url |= sub("rev=.*"; "rev=" + $newrev)
     ))' \
     "$GENERATED_DATA/resolve/curl_hello.json" \
-    > "$BUMPED_REVS_RESPONE"
+    >"$BUMPED_REVS_RESPONE"
   _FLOX_USE_CATALOG_MOCK="$BUMPED_REVS_RESPONE" \
     run "$FLOX_BIN" upgrade
   assert_success
-  assert_output "ℹ️  No packages need to be upgraded in environment 'test'."
+  assert_output "No package(s) need to be upgraded in 'test'."
 
   curr_lock=$(jq --sort-keys . "$LOCK_PATH")
 
   run diff -u <(echo "$prev_lock") <(echo "$curr_lock")
   assert_success
+}
+
+# bats test_tags=upgrade:dry-run
+@test "'upgrade --dry-run' does not update the lockfil" {
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
+
+  old_hello_response_drv="$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/old_hello.json")"
+  old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
+
+  assert_equal "$old_hello_locked_drv" "$old_hello_response_drv"
+
+  old_hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/old_hello.json")"
+  hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/hello.json")"
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" upgrade --dry-run
+  assert_success
+  assert_line "Dry run: Upgrade will apply build changes to 1 package(s) in 'test':"
+  assert_line --regexp "- hello: $old_hello_response_version -> $hello_response_version"
+  assert_line "To apply these changes, run the command without the '--dry-run' flag."
+
+  hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
+  assert_equal "$hello_locked_drv" "$old_hello_locked_drv"
 }
 
 @test "upgrade for flake installable" {
@@ -219,13 +263,19 @@ setup_pkgdb_env() {
 
   run "$FLOX_BIN" upgrade
   assert_success
-  assert_output --partial "No packages need to be upgraded"
+  assert_output "No package(s) need to be upgraded in 'test'."
+
+  new_version="$(jq -r '.packages[0]."version"' "$LOCK_PATH")"
+  old_version="2.10.0"
 
   jq_edit "$LOCK_PATH" '.packages[]."derivation" = "/nix/store/blahblahblah"'
+  jq_edit "$LOCK_PATH" '.packages[]."version" = "'"$old_version"'"'
 
   run "$FLOX_BIN" upgrade
   assert_success
-  assert_output "⬆️  Upgraded 'hello' in environment 'test'."
+
+  assert_line "✅  Upgrade sucessfully applied build changes to 1 package(s) in 'test':"
+  assert_line --regexp "- hello: $old_version -> $new_version"
 }
 
 # bats test_tags=upgrade:flake:iid
@@ -236,5 +286,5 @@ setup_pkgdb_env() {
 
   run "$FLOX_BIN" upgrade hello
   assert_success
-  assert_output "ℹ️  The specified packages do not need to be upgraded in environment 'test'."
+  assert_output "The specified package(s) do not need to be upgraded in 'test'."
 }
