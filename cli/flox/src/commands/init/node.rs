@@ -624,7 +624,7 @@ impl InitHook for Node {
             NodeInstallAction::Yarn(yarn_install) => {
                 packages.push(CatalogPackage {
                     id: "yarn".to_string(),
-                    pkg_path: yarn_install.yarn.rel_path.clone().into(),
+                    pkg_path: yarn_install.yarn.attr_path.clone().into(),
                     // TODO: we probably shouldn't pin this when we're just
                     // providing the default
                     version: yarn_install.yarn.version.clone(),
@@ -639,7 +639,7 @@ impl InitHook for Node {
                 let nodejs_to_install = match &node_install.node {
                     Some(result) => CatalogPackage {
                         id: "nodejs".to_string(),
-                        pkg_path: result.rel_path.clone().into(),
+                        pkg_path: result.attr_path.clone().into(),
                         version: result.version.clone(),
                         systems: None,
                     },
@@ -711,7 +711,7 @@ mod tests {
             fn from(pkg: &Package) -> Self {
                 ProvidedPackage {
                     name: pkg.name.clone(),
-                    rel_path: pkg.name.clone().into(),
+                    attr_path: pkg.name.clone().into(),
                     display_version: pkg.version.clone(),
                     version: Some(pkg.version.clone()),
                 }
@@ -993,14 +993,14 @@ mod tests {
                 nvmrc_version: None,
                 action: NodeInstallAction::Yarn(YarnInstall {
                     yarn: ProvidedPackage {
-                        rel_path: "yarn.path".into(),
+                        attr_path: "yarn.path".into(),
                         version: Some("1".to_string()),
                         name: "yarn".to_string(),
                         display_version: "1".to_string(),
                     },
                     node: ProvidedPackage {
                         name: "nodejs".to_string(),
-                        rel_path: "nodejs".into(),
+                        attr_path: "nodejs".into(),
                         display_version: "N/A".to_string(),
                         version: None
                     },
@@ -1036,20 +1036,20 @@ mod tests {
                     YarnInstall {
                         yarn: ProvidedPackage {
                             name: "yarn".to_string(),
-                            rel_path: "yarn".into(),
+                            attr_path: "yarn".into(),
                             display_version: "N/A".to_string(),
                             version: None
                         },
                         node: ProvidedPackage {
                             name: "nodejs".to_string(),
-                            rel_path: "nodejs".into(),
+                            attr_path: "nodejs".into(),
                             display_version: "N/A".to_string(),
                             version: None
                         },
                     },
                     NodeInstall {
                         node: Some(ProvidedPackage {
-                            rel_path: "nodejs.path".into(),
+                            attr_path: "nodejs.path".into(),
                             version: Some("1".to_string()),
                             name: "nodejs".to_string(),
                             display_version: "1".to_string()
@@ -1084,7 +1084,7 @@ mod tests {
                 nvmrc_version: None,
                 action: NodeInstallAction::Node(NodeInstall {
                     node: Some(ProvidedPackage {
-                        rel_path: "nodejs.path".into(),
+                        attr_path: "nodejs.path".into(),
                         version: Some("1".to_string()),
                         name: "nodejs".to_string(),
                         display_version: "1".to_string()
@@ -1145,8 +1145,8 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
+        assert_eq!(yarn_install.node.attr_path, "nodejs".into());
+        assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
     }
 
     /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
@@ -1180,9 +1180,9 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
+        assert_eq!(yarn_install.node.attr_path, "nodejs".into());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
+        assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
     }
 
     /// Test finding yarn with a version of node other than that of
@@ -1237,8 +1237,8 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
+        assert_eq!(yarn_install.node.attr_path, "nodejs".into());
+        assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
 
@@ -1302,9 +1302,9 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
+        assert_eq!(yarn_install.node.attr_path, "nodejs".into());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
+        assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
 }

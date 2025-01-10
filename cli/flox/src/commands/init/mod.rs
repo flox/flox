@@ -421,11 +421,11 @@ impl ProvidedVersion {
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct ProvidedPackage {
     /// Name of the provided package
-    /// pname or the last component of [Self::rel_path]
+    /// pname or the last component of [Self::attr_path]
     pub name: String,
     /// Path to the package in the catalog
     /// Checked to be non-empty
-    pub rel_path: AttrPath,
+    pub attr_path: AttrPath,
     /// Version of the package in the catalog
     /// "N/A" if not found
     ///
@@ -440,7 +440,7 @@ impl From<ProvidedPackage> for CatalogPackage {
     fn from(value: ProvidedPackage) -> Self {
         CatalogPackage {
             id: value.name,
-            pkg_path: value.rel_path.into(),
+            pkg_path: value.attr_path.into(),
             version: value.version,
             systems: None,
         }
@@ -451,7 +451,7 @@ impl From<PackageResolutionInfo> for ProvidedPackage {
     fn from(value: PackageResolutionInfo) -> Self {
         Self {
             name: value.install_id,
-            rel_path: value.attr_path.into(),
+            attr_path: value.attr_path.into(),
             display_version: value.version.clone(),
             version: Some(value.version),
         }
@@ -462,7 +462,7 @@ impl From<&PackageResolutionInfo> for ProvidedPackage {
     fn from(value: &PackageResolutionInfo) -> Self {
         Self {
             name: value.install_id.clone(),
-            rel_path: value.attr_path.clone().into(),
+            attr_path: value.attr_path.clone().into(),
             display_version: value.version.clone(),
             version: Some(value.version.clone()),
         }
@@ -639,12 +639,12 @@ mod tests {
     impl ProvidedPackage {
         pub(crate) fn new(
             name: impl ToString,
-            rel_path: impl IntoIterator<Item = impl ToString>,
+            attr_path: impl IntoIterator<Item = impl ToString>,
             version: &str,
         ) -> Self {
             Self {
                 name: name.to_string(),
-                rel_path: rel_path
+                attr_path: attr_path
                     .into_iter()
                     .map(|s| s.to_string())
                     .collect::<Vec<_>>()

@@ -3,418 +3,418 @@
     "count": 32,
     "results": [
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-linux",
         "version": "python3.10-flask-2.3.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-darwin",
         "version": "python3.10-flask-2.3.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-darwin",
         "version": "python3.10-flask-2.3.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-linux",
         "version": "python3.10-flask-2.3.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-darwin",
         "version": "python3.10-flask-2.2.5"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-linux",
         "version": "python3.10-flask-2.2.5"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-linux",
         "version": "python3.10-flask-2.2.5"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-darwin",
         "version": "python3.10-flask-2.2.5"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-linux",
         "version": "python3.10-flask-2.2.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-linux",
         "version": "python3.10-flask-2.2.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-darwin",
         "version": "python3.10-flask-2.2.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-darwin",
         "version": "python3.10-flask-2.2.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-linux",
         "version": "python3.10-flask-2.2.2"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-linux",
         "version": "python3.10-flask-2.2.2"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-darwin",
         "version": "python3.10-flask-2.2.2"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-darwin",
         "version": "python3.10-flask-2.2.2"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-linux",
         "version": "python3.10-flask-2.1.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-darwin",
         "version": "python3.10-flask-2.1.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-darwin",
         "version": "python3.10-flask-2.1.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-linux",
         "version": "python3.10-flask-2.1.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-linux",
         "version": "python3.10-Flask-2.1.2"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-darwin",
         "version": "python3.10-Flask-2.1.2"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-linux",
         "version": "python3.10-Flask-2.1.2"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-darwin",
         "version": "python3.10-Flask-2.1.2"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-linux",
         "version": "python3.10-Flask-2.0.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-darwin",
         "version": "python3.10-Flask-2.0.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-darwin",
         "version": "python3.10-Flask-2.0.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-linux",
         "version": "python3.10-Flask-2.0.3"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-darwin",
         "version": "python3.10-Flask-2.0.2"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-linux",
         "version": "python3.10-Flask-2.0.2"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "x86_64-darwin",
         "version": "python3.10-Flask-2.0.2"
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "flask"
+        ],
         "description": "The Python micro framework for building web applications",
         "input": "nixpkgs",
         "license": "BSD-3-Clause",
         "pkgPath": "nixpkgs/python310Packages.flask",
         "pname": "flask",
-        "relPath": [
-          "python310Packages",
-          "flask"
-        ],
         "system": "aarch64-linux",
         "version": "python3.10-Flask-2.0.2"
       }

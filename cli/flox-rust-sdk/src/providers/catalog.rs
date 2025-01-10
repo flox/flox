@@ -1264,7 +1264,7 @@ impl TryFrom<PackageInfoSearch> for SearchResult {
             input: package_info.catalog.unwrap_or(NIXPKGS_CATALOG.to_string()),
             system: package_info.system.to_string(),
             // The server does not include legacyPackages.<system> in attr_path
-            rel_path: package_info
+            attr_path: package_info
                 .attr_path
                 .split('.')
                 .map(String::from)
@@ -1291,7 +1291,7 @@ impl TryFrom<api_types::PackageResolutionInfo> for SearchResult {
             input: package_info.catalog.unwrap_or(NIXPKGS_CATALOG.to_string()),
             system: package_info.system.to_string(),
             // The server does not include legacyPackages.<system> in attr_path
-            rel_path: package_info
+            attr_path: package_info
                 .attr_path
                 .split('.')
                 .map(String::from)

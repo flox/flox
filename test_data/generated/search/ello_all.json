@@ -1,825 +1,877 @@
 [
   {
-    "count": 64,
+    "count": 68,
     "results": [
       {
+        "attrPath": [
+          "hello"
+        ],
         "description": "Program that produces a familiar, friendly greeting",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "hello",
         "pname": "hello",
-        "relPath": [
-          "hello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "jello"
+        ],
         "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "jello",
         "pname": "jello",
-        "relPath": [
-          "jello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "hello-go"
+        ],
         "description": "Simple program printing hello world in Go",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "hello-go",
         "pname": "hello-go",
-        "relPath": [
-          "hello-go"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "libcello"
+        ],
         "description": "Higher level programming in C",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "libcello",
         "pname": "libcello",
-        "relPath": [
-          "libcello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "hello-cpp"
+        ],
         "description": "Basic sanity check that C++ and cmake infrastructure are working",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "hello-cpp",
         "pname": "hello-cpp",
-        "relPath": [
-          "hello-cpp"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "nwg-hello"
+        ],
         "description": "GTK3-based greeter for the greetd daemon, written in python",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "nwg-hello",
         "pname": "nwg-hello",
-        "relPath": [
-          "nwg-hello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "cannelloni"
+        ],
         "description": "SocketCAN over Ethernet tunnel",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "cannelloni",
         "pname": "cannelloni",
-        "relPath": [
-          "cannelloni"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "hello-unfree"
+        ],
         "description": "Example package with unfree license (for testing)",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "hello-unfree",
         "pname": "hello-unfree",
-        "relPath": [
-          "hello-unfree"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "mellowplayer"
+        ],
         "description": "Cloud music integration for your desktop",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "mellowplayer",
         "pname": "mellowplayer",
-        "relPath": [
-          "mellowplayer"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "hello-wayland"
+        ],
         "description": "Hello world Wayland client",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "hello-wayland",
         "pname": "hello-wayland",
-        "relPath": [
-          "hello-wayland"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "marwaita-yellow"
+        ],
         "description": "Marwaita GTK theme with Pop_os Linux style",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "marwaita-yellow",
         "pname": "marwaita-yellow",
-        "relPath": [
-          "marwaita-yellow"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "libsForQt5",
+          "umbrello"
+        ],
         "description": "Unified Modelling Language (UML) diagram program",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "libsForQt5.umbrello",
         "pname": "umbrello",
-        "relPath": [
-          "libsForQt5",
-          "umbrello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "fcitx5-mellow-themes"
+        ],
         "description": "Aesthetic, modern fcitx5 theme featuring rounded rectangle design",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "fcitx5-mellow-themes",
         "pname": "fcitx5-mellow-themes",
-        "relPath": [
-          "fcitx5-mellow-themes"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "kdePackages",
+          "umbrello"
+        ],
         "description": "GUI for diagramming Unified Modelling Language (UML)",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "kdePackages.umbrello",
         "pname": "umbrello",
-        "relPath": [
-          "kdePackages",
-          "umbrello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "libsForQt512",
+          "umbrello"
+        ],
         "description": "A Unified Modelling Language (UML) diagram program",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "libsForQt512.umbrello",
         "pname": "umbrello",
-        "relPath": [
-          "libsForQt512",
-          "umbrello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "libsForQt514",
+          "umbrello"
+        ],
         "description": "A Unified Modelling Language (UML) diagram program",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "libsForQt514.umbrello",
         "pname": "umbrello",
-        "relPath": [
-          "libsForQt514",
-          "umbrello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "libsForQt515",
+          "umbrello"
+        ],
         "description": "A Unified Modelling Language (UML) diagram program",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "libsForQt515.umbrello",
         "pname": "umbrello",
-        "relPath": [
-          "libsForQt515",
-          "umbrello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "emacsPackages",
+          "ellocate"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "emacsPackages.ellocate",
         "pname": "ellocate",
-        "relPath": [
-          "emacsPackages",
-          "ellocate"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "jello"
+        ],
         "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python310Packages.jello",
         "pname": "jello",
-        "relPath": [
-          "python310Packages",
-          "jello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python311Packages",
+          "jello"
+        ],
         "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python311Packages.jello",
         "pname": "jello",
-        "relPath": [
-          "python311Packages",
-          "jello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python312Packages",
+          "jello"
+        ],
         "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python312Packages.jello",
         "pname": "jello",
-        "relPath": [
-          "python312Packages",
-          "jello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python313Packages",
+          "jello"
+        ],
+        "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
+        "input": "nixpkgs",
+        "license": null,
+        "pkgPath": "python313Packages.jello",
+        "pname": "jello",
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "attrPath": [
+          "sbclPackages",
+          "hello-clog"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "sbclPackages.hello-clog",
         "pname": "hello-clog",
-        "relPath": [
-          "sbclPackages",
-          "hello-clog"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "texlivePackages",
+          "othello"
+        ],
         "description": "Modification of a Go package to create othello boards",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "texlivePackages.othello",
         "pname": "othello",
-        "relPath": [
-          "texlivePackages",
-          "othello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "emacsPackages",
+          "org-trello"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "emacsPackages.org-trello",
         "pname": "org-trello",
-        "relPath": [
-          "emacsPackages",
-          "org-trello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "plasma5Packages",
+          "umbrello"
+        ],
         "description": "Unified Modelling Language (UML) diagram program",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "plasma5Packages.umbrello",
         "pname": "umbrello",
-        "relPath": [
-          "plasma5Packages",
-          "umbrello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python37Packages",
+          "bellows"
+        ],
         "description": "A Python 3 project to implement EZSP for EmberZNet devices",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python37Packages.bellows",
         "pname": "bellows",
-        "relPath": [
-          "python37Packages",
-          "bellows"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python38Packages",
+          "bellows"
+        ],
         "description": "Python module to implement EZSP for EmberZNet devices",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python38Packages.bellows",
         "pname": "bellows",
-        "relPath": [
-          "python38Packages",
-          "bellows"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python38Packages",
+          "pynello"
+        ],
         "description": "Python library for nello.io intercoms",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python38Packages.pynello",
         "pname": "pynello",
-        "relPath": [
-          "python38Packages",
-          "pynello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python39Packages",
+          "bellows"
+        ],
         "description": "Python module to implement EZSP for EmberZNet devices",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python39Packages.bellows",
         "pname": "bellows",
-        "relPath": [
-          "python39Packages",
-          "bellows"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python39Packages",
+          "pynello"
+        ],
         "description": "Python library for nello.io intercoms",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python39Packages.pynello",
         "pname": "pynello",
-        "relPath": [
-          "python39Packages",
-          "pynello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "bellows"
+        ],
         "description": "Python module to implement EZSP for EmberZNet devices",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python310Packages.bellows",
         "pname": "bellows",
-        "relPath": [
-          "python310Packages",
-          "bellows"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python310Packages",
+          "pynello"
+        ],
         "description": "Python library for nello.io intercoms",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python310Packages.pynello",
         "pname": "pynello",
-        "relPath": [
-          "python310Packages",
-          "pynello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python311Packages",
+          "bellows"
+        ],
         "description": "Python module to implement EZSP for EmberZNet devices",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python311Packages.bellows",
         "pname": "bellows",
-        "relPath": [
-          "python311Packages",
-          "bellows"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python311Packages",
+          "pynello"
+        ],
         "description": "Python library for nello.io intercoms",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python311Packages.pynello",
         "pname": "pynello",
-        "relPath": [
-          "python311Packages",
-          "pynello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python312Packages",
+          "bellows"
+        ],
         "description": "Python module to implement EZSP for EmberZNet devices",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python312Packages.bellows",
         "pname": "bellows",
-        "relPath": [
-          "python312Packages",
-          "bellows"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python312Packages",
+          "pynello"
+        ],
         "description": "Python library for nello.io intercoms",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python312Packages.pynello",
         "pname": "pynello",
-        "relPath": [
-          "python312Packages",
-          "pynello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python313Packages",
+          "bellows"
+        ],
+        "description": "Python module to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pkgPath": "python313Packages.bellows",
+        "pname": "bellows",
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "attrPath": [
+          "python313Packages",
+          "pynello"
+        ],
+        "description": "Python library for nello.io intercoms",
+        "input": "nixpkgs",
+        "license": null,
+        "pkgPath": "python313Packages.pynello",
+        "pname": "pynello",
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "attrPath": [
+          "emacsPackages",
+          "mellow-theme"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "emacsPackages.mellow-theme",
         "pname": "mellow-theme",
-        "relPath": [
-          "emacsPackages",
-          "mellow-theme"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "perlPackages",
+          "ParallelLoops"
+        ],
         "description": "Execute loops using parallel forked subprocesses",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "perlPackages.ParallelLoops",
         "pname": "ParallelLoops",
-        "relPath": [
-          "perlPackages",
-          "ParallelLoops"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "sbclPackages",
+          "hello-builder"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "sbclPackages.hello-builder",
         "pname": "hello-builder",
-        "relPath": [
-          "sbclPackages",
-          "hello-builder"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "javaPackages",
+          "mavenHello_1_0"
+        ],
         "description": "Maven Hello World",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "javaPackages.mavenHello_1_0",
         "pname": "mavenHello_1_0",
-        "relPath": [
-          "javaPackages",
-          "mavenHello_1_0"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "javaPackages",
+          "mavenHello_1_1"
+        ],
         "description": "Maven Hello World",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "javaPackages.mavenHello_1_1",
         "pname": "mavenHello_1_1",
-        "relPath": [
-          "javaPackages",
-          "mavenHello_1_1"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "texlivePackages",
+          "othelloboard"
+        ],
         "description": "Typeset Othello (Reversi) diagrams of any size, with annotations",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "texlivePackages.othelloboard",
         "pname": "othelloboard",
-        "relPath": [
-          "texlivePackages",
-          "othelloboard"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "emacsPackages",
+          "sly-hello-world"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "emacsPackages.sly-hello-world",
         "pname": "sly-hello-world",
-        "relPath": [
-          "emacsPackages",
-          "sly-hello-world"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "perl536Packages",
+          "ParallelLoops"
+        ],
         "description": "Execute loops using parallel forked subprocesses",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "perl536Packages.ParallelLoops",
         "pname": "ParallelLoops",
-        "relPath": [
-          "perl536Packages",
-          "ParallelLoops"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "perl538Packages",
+          "ParallelLoops"
+        ],
         "description": "Execute loops using parallel forked subprocesses",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "perl538Packages.ParallelLoops",
         "pname": "ParallelLoops",
-        "relPath": [
-          "perl538Packages",
-          "ParallelLoops"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "perl540Packages",
+          "ParallelLoops"
+        ],
         "description": "Execute loops using parallel forked subprocesses",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "perl540Packages.ParallelLoops",
         "pname": "ParallelLoops",
-        "relPath": [
-          "perl540Packages",
-          "ParallelLoops"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "sbclPackages",
+          "qtools-helloworld"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "sbclPackages.qtools-helloworld",
         "pname": "qtools-helloworld",
-        "relPath": [
-          "sbclPackages",
-          "qtools-helloworld"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "libsForQt5_openssl_1_1",
+          "umbrello"
+        ],
         "description": "A Unified Modelling Language (UML) diagram program",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "libsForQt5_openssl_1_1.umbrello",
         "pname": "umbrello",
-        "relPath": [
-          "libsForQt5_openssl_1_1",
-          "umbrello"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "apacheHttpdPackages",
+          "mod_auth_mellon"
+        ],
         "description": "Apache module with a simple SAML 2.0 service provider",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "apacheHttpdPackages.mod_auth_mellon",
         "pname": "mod_auth_mellon",
-        "relPath": [
-          "apacheHttpdPackages",
-          "mod_auth_mellon"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "apacheHttpdPackages_2_4",
+          "mod_auth_mellon"
+        ],
         "description": "Apache module with a simple SAML 2.0 service provider",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "apacheHttpdPackages_2_4.mod_auth_mellon",
         "pname": "mod_auth_mellon",
-        "relPath": [
-          "apacheHttpdPackages_2_4",
-          "mod_auth_mellon"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "lispPackages_new",
+          "sbclPackages",
+          "hello-clog"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "lispPackages_new.sbclPackages.hello-clog",
         "pname": "hello-clog",
-        "relPath": [
-          "lispPackages_new",
-          "sbclPackages",
-          "hello-clog"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "lispPackages_new",
+          "sbclPackages",
+          "hello-builder"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "lispPackages_new.sbclPackages.hello-builder",
         "pname": "hello-builder",
-        "relPath": [
-          "lispPackages_new",
-          "sbclPackages",
-          "hello-builder"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "lispPackages_new",
+          "sbclPackages",
+          "qtools-helloworld"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "lispPackages_new.sbclPackages.qtools-helloworld",
         "pname": "qtools-helloworld",
-        "relPath": [
-          "lispPackages_new",
-          "sbclPackages",
-          "qtools-helloworld"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "sbclPackages",
+          "cl-mw_dot_examples_dot_hello-world"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "sbclPackages.cl-mw_dot_examples_dot_hello-world",
         "pname": "cl-mw_dot_examples_dot_hello-world",
-        "relPath": [
-          "sbclPackages",
-          "cl-mw_dot_examples_dot_hello-world"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "home-assistant-component-tests",
+          "homeassistant_yellow"
+        ],
         "description": "Open source home automation that puts local control and privacy first",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "home-assistant-component-tests.homeassistant_yellow",
         "pname": "homeassistant_yellow",
-        "relPath": [
-          "home-assistant-component-tests",
-          "homeassistant_yellow"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "lispPackages_new",
+          "sbclPackages",
+          "cl-mw_dot_examples_dot_hello-world"
+        ],
         "description": null,
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "lispPackages_new.sbclPackages.cl-mw_dot_examples_dot_hello-world",
         "pname": "cl-mw_dot_examples_dot_hello-world",
-        "relPath": [
-          "lispPackages_new",
-          "sbclPackages",
-          "cl-mw_dot_examples_dot_hello-world"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "_3llo"
+        ],
         "description": "Trello interactive CLI on terminal",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "_3llo",
         "pname": "_3llo",
-        "relPath": [
-          "_3llo"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "iagno"
+        ],
         "description": "Computer version of the game Reversi, more popularly called Othello",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "iagno",
         "pname": "iagno",
-        "relPath": [
-          "iagno"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "gerbolyze"
+        ],
         "description": "Directly render SVG overlays into Gerber and Excellon files",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "gerbolyze",
         "pname": "gerbolyze",
-        "relPath": [
-          "gerbolyze"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "gnome",
+          "iagno"
+        ],
         "description": "Computer version of the game Reversi, more popularly called Othello",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "gnome.iagno",
         "pname": "iagno",
-        "relPath": [
-          "gnome",
-          "iagno"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "gnome3",
+          "iagno"
+        ],
         "description": "Computer version of the game Reversi, more popularly called Othello",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "gnome3.iagno",
         "pname": "iagno",
-        "relPath": [
-          "gnome3",
-          "iagno"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "texlivePackages",
+          "songs"
+        ],
         "description": "Produce song books for church or fellowship",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "texlivePackages.songs",
         "pname": "songs",
-        "relPath": [
-          "texlivePackages",
-          "songs"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python311Packages",
+          "gerbonara"
+        ],
         "description": "Pythonic library for reading/modifying/writing Gerber/Excellon/IPC-356 files",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python311Packages.gerbonara",
         "pname": "gerbonara",
-        "relPath": [
-          "python311Packages",
-          "gerbonara"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "python312Packages",
+          "gerbonara"
+        ],
         "description": "Pythonic library for reading/modifying/writing Gerber/Excellon/IPC-356 files",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "python312Packages.gerbonara",
         "pname": "gerbonara",
-        "relPath": [
-          "python312Packages",
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "attrPath": [
+          "python313Packages",
           "gerbonara"
         ],
+        "description": "Pythonic library for reading/modifying/writing Gerber/Excellon/IPC-356 files",
+        "input": "nixpkgs",
+        "license": null,
+        "pkgPath": "python313Packages.gerbonara",
+        "pname": "gerbonara",
         "system": "aarch64-darwin",
         "version": null
       }

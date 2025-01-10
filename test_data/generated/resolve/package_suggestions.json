@@ -16,41 +16,41 @@
     }
   ],
   {
-    "count": 3203,
+    "count": 3492,
     "results": [
       {
+        "attrPath": [
+          "packagekit"
+        ],
         "description": "System to facilitate installing and updating packages",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "packagekit",
         "pname": "packagekit",
-        "relPath": [
-          "packagekit"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "psc-package"
+        ],
         "description": "Package manager for PureScript based on package sets",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "psc-package",
         "pname": "psc-package",
-        "relPath": [
-          "psc-package"
-        ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
+        "attrPath": [
+          "patch-package"
+        ],
         "description": "Fix broken node modules instantly",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "patch-package",
         "pname": "patch-package",
-        "relPath": [
-          "patch-package"
-        ],
         "system": "aarch64-darwin",
         "version": null
       }
