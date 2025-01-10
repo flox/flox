@@ -1051,7 +1051,11 @@ mod realise_flakes_tests {
         );
 
         let result = buildenv.realise_flakes(&locked_package);
-        assert!(result.is_ok());
+        assert!(
+            result.is_ok(),
+            "failed to build flake: {}",
+            result.unwrap_err()
+        );
         assert!(buildenv
             .check_store_path(locked_package.locked_installable.outputs.values())
             .unwrap());

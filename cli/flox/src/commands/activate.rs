@@ -881,7 +881,6 @@ mod tests {
 mod upgrade_notification_tests {
     use std::io::Write;
     use std::sync::{Arc, Mutex};
-    use std::time::SystemTime;
 
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
@@ -889,6 +888,7 @@ mod upgrade_notification_tests {
     use flox_rust_sdk::models::lockfile::LockedPackage;
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
     use flox_rust_sdk::providers::upgrade_checks::UpgradeInformation;
+    use time::OffsetDateTime;
     use tracing::Subscriber;
     use tracing_subscriber::filter::FilterFn;
     use tracing_subscriber::layer::SubscriberExt;
@@ -983,7 +983,7 @@ mod upgrade_notification_tests {
             }
 
             let _ = locked.info_mut().insert(UpgradeInformation {
-                last_checked: SystemTime::now(),
+                last_checked: OffsetDateTime::now_utc(),
                 result: UpgradeResult {
                     old_lockfile: Some(environment.lockfile(&flox).unwrap()),
                     new_lockfile,
@@ -1027,7 +1027,7 @@ mod upgrade_notification_tests {
             old_lockfile.packages.clear();
 
             let _ = locked.info_mut().insert(UpgradeInformation {
-                last_checked: SystemTime::now(),
+                last_checked: OffsetDateTime::now_utc(),
                 result: UpgradeResult {
                     old_lockfile: Some(old_lockfile),
                     new_lockfile: environment.lockfile(&flox).unwrap(),
@@ -1072,7 +1072,7 @@ mod upgrade_notification_tests {
             let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
 
             let _ = locked.info_mut().insert(UpgradeInformation {
-                last_checked: SystemTime::now(),
+                last_checked: OffsetDateTime::now_utc(),
                 result,
             });
 

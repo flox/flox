@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use time::OffsetDateTime;
 use tracing::debug;
 
 use crate::models::environment::UpgradeResult;
@@ -26,7 +26,8 @@ pub enum UpgradeChecksError {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct UpgradeInformation {
     /// The last time the upgrade check was performed
-    pub last_checked: SystemTime,
+    #[serde(with = "time::serde::iso8601")]
+    pub last_checked: OffsetDateTime,
     /// The result of the last upgrade check
     pub result: UpgradeResult,
 }
@@ -262,7 +263,7 @@ mod tests {
         let mut locked = guard.lock_if_unlocked().unwrap().unwrap();
 
         *locked.info_mut() = Some(UpgradeInformation {
-            last_checked: SystemTime::now(),
+            last_checked: OffsetDateTime::now_utc(),
             result: UpgradeResult {
                 old_lockfile: None,
                 new_lockfile: Lockfile::default(),
@@ -283,7 +284,7 @@ mod tests {
         let guard = UpgradeInformationGuard::read_in(temp_dir.path()).unwrap();
         let mut locked = guard.lock_if_unlocked().unwrap().unwrap();
         let info = UpgradeInformation {
-            last_checked: SystemTime::now(),
+            last_checked: OffsetDateTime::now_utc(),
             result: UpgradeResult {
                 old_lockfile: None,
                 new_lockfile: Lockfile::default(),
