@@ -32,6 +32,7 @@ shell-escape.workspace = true
 temp-env.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
+time.workspace = true
 tokio.workspace = true
 toml_edit.workspace = true
 toml.workspace = true

@@ -10,19 +10,20 @@ use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::providers::upgrade_checks::{UpgradeInformation, UpgradeInformationGuard};
 use flox_rust_sdk::utils::CommandExt;
 use serde::de::DeserializeOwned;
+use time::{Duration, OffsetDateTime};
 use tracing::{debug, info_span, instrument};
 
 use super::UninitializedEnvironment;
 use crate::subcommand_metric;
 
 /// By default check once a day
-const DEFAULT_TIMEOUT_SECONDS: u64 = 24 * 60 * 60;
+const DEFAULT_TIMEOUT_SECONDS: i64 = 24 * 60 * 60;
 
 #[derive(Bpaf, Clone)]
 pub struct CheckForUpgrades {
     /// Skip checking for upgrade if checked less <timeout> seconds ago
     #[bpaf(long, argument("seconds"), fallback(DEFAULT_TIMEOUT_SECONDS))]
-    check_timeout: u64,
+    check_timeout: i64,
 
     #[bpaf(external(parse_uninitialized_environment_json))]
     environment: UninitializedEnvironment,
@@ -64,8 +65,8 @@ impl CheckForUpgrades {
 
             let is_information_for_current_lockfile =
                 info.result.old_lockfile == Some(environment_lockfile);
-            let is_checked_recently =
-                info.last_checked.elapsed().unwrap().as_secs() < self.check_timeout;
+            let is_checked_recently = (OffsetDateTime::now_utc() - info.last_checked)
+                < Duration::seconds(self.check_timeout);
 
             if is_information_for_current_lockfile && is_checked_recently {
                 debug!("Recently checked for upgrades. Skipping.");
@@ -89,13 +90,13 @@ impl CheckForUpgrades {
             // only update the last checked timestamp
             Some(old_info) if old_info.result.new_lockfile == result.new_lockfile => {
                 debug!("Resolution didn't change. Updating last checked timestamp.");
-                old_info.last_checked = SystemTime::now()
+                old_info.last_checked = OffsetDateTime::now_utc();
             },
             Some(_) | None => {
                 debug!(diff = ?result.diff(), "Upgrading information with new result.");
 
                 let new_info = UpgradeInformation {
-                    last_checked: SystemTime::now(),
+                    last_checked: OffsetDateTime::now_utc(),
                     result,
                 };
                 let _ = info.insert(new_info);
@@ -198,7 +199,7 @@ mod tests {
         // and mark it as checked recently (now)
         let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
         let _ = locked.info_mut().insert(UpgradeInformation {
-            last_checked: SystemTime::now(),
+            last_checked: OffsetDateTime::now_utc(),
             result: UpgradeResult {
                 old_lockfile: Some(environment.lockfile(&flox).unwrap()),
                 new_lockfile: environment.lockfile(&flox).unwrap(),
@@ -215,7 +216,7 @@ mod tests {
         // Check for upgrades with a timeout of u64::MAX
         // to ensure that the fake upgrade information is always considered recent
         let command = CheckForUpgrades {
-            check_timeout: u64::MAX,
+            check_timeout: i64::MAX,
             environment: serialized,
         };
 
