@@ -94,7 +94,7 @@ pub struct FloxConfig {
     /// Hide environments named 'default' from the shell prompt
     pub hide_default_prompt: Option<bool>,
 
-    /// Check for upgrades on `flox activate` (default: true)
+    /// Print notification if upgrades are available on `flox activate` (default: true)
     pub upgrade_notifications: Option<bool>,
 }
 
