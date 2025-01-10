@@ -117,7 +117,9 @@ enum NodeInstallAction {
     Node(NodeInstall),
 }
 
-struct PackageJSONVersions {
+/// Version strings extracted from `package.json` without any resolution against
+/// catalog packages.
+struct PackageJSONVersionsUnresolved {
     yarn: Option<String>,
     node: Option<String>,
 }
@@ -224,7 +226,7 @@ impl Node {
 
     /// Look for nodejs, npm, and yarn versions in a (possibly non-existent)
     /// `package.json` file
-    fn get_package_json_versions(path: &Path) -> Result<Option<PackageJSONVersions>> {
+    fn get_package_json_versions(path: &Path) -> Result<Option<PackageJSONVersionsUnresolved>> {
         let package_json = path.join("package.json");
         if !package_json.exists() {
             tracing::debug!(
@@ -245,7 +247,7 @@ impl Node {
                 let yarn = package_json_json["engines"]["yarn"]
                     .as_str()
                     .map(|s| s.to_string());
-                Ok(Some(PackageJSONVersions { node, yarn }))
+                Ok(Some(PackageJSONVersionsUnresolved { node, yarn }))
             },
         }
     }
@@ -254,9 +256,9 @@ impl Node {
     /// package.json
     async fn try_find_compatible_yarn(
         flox: &Flox,
-        versions: &PackageJSONVersions,
+        versions: &PackageJSONVersionsUnresolved,
     ) -> Result<Option<YarnInstall>> {
-        let PackageJSONVersions { yarn, node, .. } = versions;
+        let PackageJSONVersionsUnresolved { yarn, node, .. } = versions;
 
         let found_node = match node {
             Some(node_version) => {
@@ -285,9 +287,9 @@ impl Node {
     /// Try to find nodejs (alone) that satisfies constraints in package.json
     async fn try_find_compatible_nodejs(
         flox: &Flox,
-        versions: &PackageJSONVersions,
+        versions: &PackageJSONVersionsUnresolved,
     ) -> Result<Option<PackageJSONVersion>> {
-        let PackageJSONVersions { node, .. } = versions;
+        let PackageJSONVersionsUnresolved { node, .. } = versions;
 
         let found_node = match node {
             Some(node_version) => {
@@ -1141,7 +1143,7 @@ mod tests {
                 "1.22",
             )]);
         }
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
+        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: None,
             node: None,
         })
@@ -1176,7 +1178,7 @@ mod tests {
                 "1.22",
             )]);
         }
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
+        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: None,
             node: Some("18".to_string()),
         })
@@ -1200,7 +1202,7 @@ mod tests {
             // so resolution fails and you get no groups back
             client.push_resolve_response(vec![]);
         }
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
+        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: None,
             node: Some("20".to_string()),
         })
@@ -1233,7 +1235,7 @@ mod tests {
                 "1.22",
             )]);
         }
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
+        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: Some("1".to_string()),
             node: None,
         })
@@ -1264,7 +1266,7 @@ mod tests {
             // Response for yarn version 2 (resolution failure)
             client.push_resolve_response(vec![]);
         }
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
+        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: Some("2".to_string()),
             node: None,
         })
@@ -1298,7 +1300,7 @@ mod tests {
                 "1.22",
             )]);
         }
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
+        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: Some("1".to_string()),
             node: Some("18".to_string()),
         })
