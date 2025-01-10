@@ -10,8 +10,8 @@ use indoc::{formatdoc, indoc};
 use semver::VersionReq;
 
 use super::{
+    find_compatible_package,
     format_customization,
-    get_default_package,
     try_find_compatible_package,
     InitHook,
     ProvidedPackage,
@@ -425,19 +425,19 @@ impl Node {
                 (message, result.version.clone())
             },
             (_, Some(NVMRCVersion::Unsure)) => {
-                let result = get_default_package(flox, &"nodejs".into()).await?;
+                let result = find_compatible_package(flox, "nodejs", None).await?;
                 let message = format!("Flox detected an .nvmrc with a version specifier not understood by Flox, but Flox can provide {}",
                        result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
                 (message, result.version)
             },
             (_, Some(NVMRCVersion::Unavailable)) => {
-                let result = get_default_package(flox, &"nodejs".into()).await?;
+                let result = find_compatible_package(flox, "nodejs", None).await?;
                 let message = format!("Flox detected an .nvmrc with a version of nodejs not provided by Flox, but Flox can provide {}",
                 result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
                 (message, result.version.clone())
             },
             (Some(PackageJSONVersion::Unspecified), None) => {
-                let result = get_default_package(flox, &"nodejs".into()).await?;
+                let result = find_compatible_package(flox, "nodejs", None).await?;
                 mentions_package_json = true;
                 ("Flox detected a package.json".to_string(), result.version)
             },
@@ -531,7 +531,7 @@ impl Node {
         let node_version = Self::format_version_or_empty(
             match &node_install.node {
                 Some(found_node) => found_node.clone(),
-                None => get_default_package(flox, &"nodejs".into()).await?,
+                None => find_compatible_package(flox, "nodejs", None).await?,
             }
             .version
             .as_ref(),
