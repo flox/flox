@@ -65,7 +65,7 @@ impl CheckForUpgrades {
             let is_information_for_current_lockfile =
                 info.result.old_lockfile == Some(environment_lockfile);
             let is_checked_recently =
-                info.last_checked.elapsed().unwrap().as_secs() <= self.check_timeout;
+                info.last_checked.elapsed().unwrap().as_secs() < self.check_timeout;
 
             if is_information_for_current_lockfile && is_checked_recently {
                 debug!("Recently checked for upgrades. Skipping.");
