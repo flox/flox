@@ -20,7 +20,7 @@ use crate::models::lockfile::{
     LockedPackageStorePath,
     Lockfile,
 };
-use crate::models::pkgdb::{PkgDbError, PKGDB_BIN};
+use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::catalog::CatalogClientError;
 use crate::utils::CommandExt;
 
@@ -50,12 +50,6 @@ const FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE: &str = "flox-nixpkgs:v0/flox";
 
 #[derive(Debug, Error)]
 pub enum BuildEnvError {
-    /// An error that occurred while realising the packages in the lockfile.
-    /// Those are Nix errors pkgdb forwards to us as well as detection of
-    /// disallowed packages.
-    #[error("Failed to realise packages in lockfile")]
-    Realise(#[source] PkgDbError),
-
     #[error("Failed to realise '{install_id}':\n{message}")]
     Realise2 { install_id: String, message: String },
 
@@ -65,7 +59,7 @@ pub enum BuildEnvError {
     // TODO: this requires to capture the stderr of the `nix build` command
     // or essentially "tee" it if we also want to forward the logs to the user.
     // At the moment the "interesting" logs
-    // are emitted by the `pkgdb realise` portion of the build.
+    // are emitted by the `realise` portion of the build.
     // So in the interest of initial simplicity
     // we can defer forwarding the nix build logs and capture output with [Command::output].
     #[error("Failed to constructed environment: {0}")]
@@ -136,7 +130,7 @@ impl BuildEnvNix {
         let mut nix_build_command = Command::new(&*NIX_BIN);
         // Override nix config to use flake commands,
         // allow impure language features such as `builtins.storePath`,
-        // and use the auto store (which is used by the preceding `pkgdb realise` command)
+        // and use the auto store (which is used by the preceding `realise` command)
         // TODO: formalize this in a config file,
         // and potentially disable other user configs (allowing specific overrides)
         nix_build_command.args([
@@ -320,26 +314,7 @@ impl BuildEnvNix {
 
         let mut nix_build_command = self.base_command();
 
-        // for now assume the plugin is located relative to the pkgdb binary
-        // <pkgdb>
-        // ├── bin
-        // │   └── pkgdb
-        // └── lib
-        //     └── nix-plugins
-        //          └── wrapped-nixpkgs-input.(so|dylib)
-        {
-            let pkgdb_lib_dir = Path::new(&*PKGDB_BIN)
-                .ancestors()
-                .nth(2)
-                .expect("pkgdb is in '<store-path>/bin'")
-                .join("lib/nix-plugins");
-
-            nix_build_command.args([
-                "--option",
-                "extra-plugin-files",
-                &pkgdb_lib_dir.to_string_lossy(),
-            ]);
-        }
+        nix_build_command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
 
         nix_build_command.arg("build");
         nix_build_command.arg("--no-write-lock-file");
@@ -921,7 +896,7 @@ mod realise_flakes_tests {
 
     use super::*;
     use crate::models::manifest::ManifestPackageDescriptorFlake;
-    use crate::providers::flox_cpp_utils::{InstallableLocker, InstallableLockerImpl};
+    use crate::providers::flake_installable_locker::{InstallableLocker, InstallableLockerImpl};
 
     // region: tools to configure mock flakes for testing
     struct MockedLockedPackageFlakeBuilder {
@@ -1051,7 +1026,11 @@ mod realise_flakes_tests {
         );
 
         let result = buildenv.realise_flakes(&locked_package);
-        assert!(result.is_ok());
+        assert!(
+            result.is_ok(),
+            "failed to build flake: {}",
+            result.unwrap_err()
+        );
         assert!(buildenv
             .check_store_path(locked_package.locked_installable.outputs.values())
             .unwrap());

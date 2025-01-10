@@ -13,8 +13,7 @@ on:
         required: false
         type: choice
         options:
-          - "changes"
-          - "pkgdb-dev"
+          - "nix-plugins-dev"
           - "cli-dev"
           - "nix-build"
           - "trigger-flox-installers-workflow"
@@ -43,50 +42,11 @@ env:
 
 jobs:
 
-  changes:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # Required permissions
-    permissions:
-      pull-requests: read
-    # Set job outputs to values from filter step
-    outputs:
-      pkgdb: ${{ steps.filter.outputs.pkgdb }}
-    steps:
-    # For pull requests it's not necessary to checkout the code
-    - uses: "actions/checkout@v4"
 
-    - name: "Setup upterm session"
-      if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
-      uses: owenthereal/action-upterm@v1
-      with:
-        limit-access-to-actor: true
-        limit-access-to-users: ${{ inputs.allowedUptermUsers }}
-        wait-timeout-minutes: 15
-
-    - uses: dorny/paths-filter@v3
-      id: filter
-      with:
-        base: ${{ github.event.merge_group.base_ref || 'main' }}
-        ref: ${{ github.event.merge_group.head_ref || github.ref }}
-        filters: |
-          pkgdb:
-            - ".github/workflows/ci.yml"
-            - "pkgdb/**"
-            - "pkgs/**"
-            - "Justfile"
-            - "flake.nix"
-            - "flake.lock"
-            - "shells/**"
-
-  pkgdb-dev:
-    name: "Pkgdb"
+  nix-plugins-dev:
+    name: "Nix Plugins"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-
-    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.pkgdb == 'true' }}
-    needs:
-      - "changes"
 
     strategy:
       fail-fast: false
@@ -124,30 +84,10 @@ jobs:
           SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: "Build"
-        run: nix develop -L --no-update-lock-file --command just build-pkgdb
+        run: nix develop -L --no-update-lock-file --command just build-nix-plugins
 
       - name: "Test"
-        run: nix develop -L --no-update-lock-file --command just test-pkgdb
-
-      - name: "Build Docs"
-        run: |
-          nix develop -L                   \
-            --no-update-lock-file          \
-            --command make -C pkgdb docs;
-          chmod -c -R +rX "pkgdb/docs/"|while read line; do
-            echo "::warning title=Invalid file permissions fixed::$line";
-          done
-
-      - name: "Upload artifact"
-        uses: "actions/upload-pages-artifact@v3"
-        if: ${{ matrix.os == 'ubuntu-22.04-8core' }}
-        with:
-          path: "pkgdb/docs"
-
-      - name: "Deploy to GitHub Pages"
-        if: ${{ matrix.os == 'ubuntu-22.04-8core' }}
-        id: "deployment"
-        uses: "actions/deploy-pages@v4"
+        run: nix develop -L --no-update-lock-file --command just test-nix-plugins
 
   cli-dev:
     name: "dev"
@@ -282,7 +222,7 @@ jobs:
       - name: "Build"
         id: "build"
         run: |
-          for package in '.#packages.${{ matrix.system }}.flox-pkgdb' '.#packages.${{ matrix.system }}.flox-cli' '.#packages.${{ matrix.system }}.flox' '.#packages.${{ matrix.system }}.flox-cli-tests'; do
+          for package in '.#packages.${{ matrix.system }}.flox-nix-plugins' '.#packages.${{ matrix.system }}.flox-cli' '.#packages.${{ matrix.system }}.flox' '.#packages.${{ matrix.system }}.flox-cli-tests'; do
             echo "Building $package ..."
             git clean -xfd .
             if nix path-info                 \
@@ -385,7 +325,7 @@ jobs:
 
     needs:
       - "nix-build"
-      - "pkgdb-dev"
+      - "nix-plugins-dev"
       - "cli-dev"
       # TODO: enable these when deemed reliable - "nix-build-bats-tests"
 

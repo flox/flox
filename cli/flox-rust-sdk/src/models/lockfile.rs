@@ -14,7 +14,6 @@ pub type FlakeRef = Value;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 use std::fs;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use flox_core::Version;
@@ -30,7 +29,6 @@ use super::manifest::{
     DEFAULT_GROUP_NAME,
     DEFAULT_PRIORITY,
 };
-use super::pkgdb::CallPkgDbError;
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::providers::catalog::{
     self,
@@ -44,7 +42,7 @@ use crate::providers::catalog::{
     PackageGroup,
     ResolvedPackageGroup,
 };
-use crate::providers::flox_cpp_utils::{
+use crate::providers::flake_installable_locker::{
     FlakeInstallableError,
     InstallableLocker,
     LockedInstallable,
@@ -156,6 +154,14 @@ impl LockedPackage {
             LockedPackage::Flake(pkg) => Some(&pkg.locked_installable.derivation),
             // Technically store paths _may_ have a derivation,
             // but it's not quite relevant yet for us to record it in the lockfile.
+            LockedPackage::StorePath(_) => None,
+        }
+    }
+
+    pub fn version(&self) -> Option<&str> {
+        match self {
+            LockedPackage::Catalog(pkg) => Some(&pkg.version),
+            LockedPackage::Flake(pkg) => pkg.locked_installable.version.as_deref(),
             LockedPackage::StorePath(_) => None,
         }
     }
@@ -281,7 +287,7 @@ impl LockedPackageCatalog {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedPackageFlake {
     pub install_id: String,
-    /// Unaltered lock information as returned by `pkgdb lock-flake-installable`.
+    /// Unaltered lock information as returned by `lock-flake-installable`.
     /// In this case we completely own the data format in this repo
     /// and so far have to do no conversion.
     /// If this changes in the future, we can add a conversion layer here
@@ -468,9 +474,6 @@ fn format_multiple_resolution_failures(failures: &[ResolutionFailure]) -> String
 
 impl Lockfile {
     /// Convert a locked manifest to a list of installed packages for a given system.
-    ///
-    /// Catalog packages share a format with pkgdb.
-    /// Flake packages have their own format.
     pub fn list_packages(
         &self,
         system: &System,
@@ -480,21 +483,19 @@ impl Lockfile {
             .filter(|package| package.system() == system)
             .cloned()
             .map(|package| match package {
-                LockedPackage::Catalog(pkg) => {
-                    Ok(PackageToList::CatalogOrPkgdb(InstalledPackage {
-                        install_id: pkg.install_id,
-                        rel_path: pkg.attr_path,
-                        info: PackageInfo {
-                            description: pkg.description,
-                            broken: pkg.broken,
-                            license: pkg.license,
-                            pname: pkg.pname,
-                            unfree: pkg.unfree,
-                            version: Some(pkg.version),
-                        },
-                        priority: pkg.priority,
-                    }))
-                },
+                LockedPackage::Catalog(pkg) => Ok(PackageToList::Catalog(InstalledPackage {
+                    install_id: pkg.install_id,
+                    rel_path: pkg.attr_path,
+                    info: PackageInfo {
+                        description: pkg.description,
+                        broken: pkg.broken,
+                        license: pkg.license,
+                        pname: pkg.pname,
+                        unfree: pkg.unfree,
+                        version: Some(pkg.version),
+                    },
+                    priority: pkg.priority,
+                })),
                 LockedPackage::Flake(locked_package) => {
                     let descriptor = self
                         .manifest
@@ -1147,7 +1148,7 @@ impl Lockfile {
     /// At this point flake installables are resolved sequentially.
     /// In further iterations we may want to resolve them in parallel,
     /// either here, through a method of [InstallableLocker],
-    /// or the underlying `pkgdb lock-flake-installable` command itself.
+    /// or the underlying `lock-flake-installable` primop itself.
     ///
     /// Todo: [ResolutionFailures] may be caught downstream and used to provide suggestions.
     ///       Those suggestions are invalid for the flake installables case.
@@ -1233,75 +1234,6 @@ impl Lockfile {
     }
 }
 
-#[derive(Debug, Clone, derive_more::Deref, Serialize, Deserialize, PartialEq)]
-pub struct LockedManifestPkgdb(Value);
-
-// region: pkgdb lockfile operations
-
-#[derive(Debug)]
-pub struct UpdateResult {
-    pub new_lockfile: LockedManifestPkgdb,
-    pub old_lockfile: Option<LockedManifestPkgdb>,
-    pub store_path: Option<PathBuf>,
-}
-
-/// An environment (or global) pkgdb lockfile.
-///
-/// **DEPRECATED**: pkgdb lockfiles are being phased out
-/// in favor of catalog lockfiles.
-/// Since catalog backed lockfiles are managed within the CLI,
-/// [Lockfile] provides a typed interface directly,
-/// hence there is no catalog equivalent of this type.
-///
-/// This struct is meant **for reading only**.
-///
-/// It serves as a typed representation of the lockfile json produced by pkgdb.
-/// Parsing of the lockfile is done in [TypedLockedManifest::try_from]
-/// and should be as late as possible.
-/// Where possible, use the opaque [LockedManifest] instead of this struct
-/// to avoid incompatibility issues with the authoritative definition in C++.
-///
-/// In the optimal case the lockfile schema can be inferred from a common
-/// or `pkgdb`-defined schema.
-///
-/// This struct is used as the format to communicate with pkgdb.
-/// Many pkgdb commands will need to pass some of the information in the
-/// lockfile through to Rust.
-///
-/// And some commands (i.e. `list`) will need to read lockfiles
-/// to get information about the environment without having to call `pkgdb`.
-///
-/// Although we could selectively pass fields through,
-/// I'm hoping it will be easier to parse the entirety of the lockfile in Rust,
-/// rather than defining a separate set of fields for each different pkgdb
-/// command.
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct TypedLockedManifestPkgdb {
-    #[serde(rename = "lockfile-version")]
-    lockfile_version: Version<0>,
-    packages: BTreeMap<System, BTreeMap<String, Option<LockedPackagePkgdb>>>,
-    registry: Registry,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-struct LockedPackagePkgdb {
-    info: PackageInfo,
-    #[serde(rename = "attr-path")]
-    abs_path: Vec<String>,
-    priority: u64,
-}
-
-impl LockedPackagePkgdb {
-    pub fn rel_path(&self) -> String {
-        self.abs_path
-            .iter()
-            .skip(2)
-            .cloned()
-            .collect::<Vec<_>>()
-            .join(".")
-    }
-}
-
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct PackageInfo {
     pub description: Option<String>,
@@ -1312,64 +1244,22 @@ pub struct PackageInfo {
     pub version: Option<String>,
 }
 
-impl TryFrom<LockedManifestPkgdb> for TypedLockedManifestPkgdb {
-    type Error = LockedManifestError;
-
-    fn try_from(value: LockedManifestPkgdb) -> Result<Self, Self::Error> {
-        serde_json::from_value(value.0).map_err(LockedManifestError::ParseLockedManifest)
-    }
-}
-
-impl TypedLockedManifestPkgdb {
-    pub fn registry(&self) -> &Registry {
-        &self.registry
-    }
-
-    /// List all packages in the locked manifest for a given system
-    pub fn list_packages(&self, system: &System) -> Vec<PackageToList> {
-        let mut packages = vec![];
-        if let Some(system_packages) = self.packages.get(system) {
-            for (install_id, locked_package) in system_packages {
-                if let Some(locked_package) = locked_package {
-                    packages.push(
-                        InstalledPackage {
-                            install_id: install_id.clone(),
-                            rel_path: locked_package.rel_path(),
-                            info: locked_package.info.clone(),
-                            priority: locked_package.priority,
-                        }
-                        .into(),
-                    );
-                };
-            }
-        }
-        packages
-    }
-}
-
-// endregion
-
-/// `list` uses a common format for catalog and pkgdb packages,
-/// but then another format is used for flake packages.
-/// The info needed from catalog and pkgdb packages is so similar it makes sense
-/// to convert them to a common format,
-/// but flake packages need enough special handling that it makes sense to
-/// bubble LockedPackageFlake all the way up to `list`.
+/// Distinct types of packages that can be listed
+/// TODO: drop in favor of mapping to `(ManifestPackageDescriptor*, LockedPackage*)`
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackageToList {
-    CatalogOrPkgdb(InstalledPackage),
+    Catalog(InstalledPackage),
     Flake(ManifestPackageDescriptorFlake, LockedPackageFlake),
     StorePath(LockedPackageStorePath),
 }
 
 impl From<InstalledPackage> for PackageToList {
     fn from(installed: InstalledPackage) -> Self {
-        PackageToList::CatalogOrPkgdb(installed)
+        PackageToList::Catalog(installed)
     }
 }
 
 // TODO: consider dropping this in favor of mapping to [LockedPackageCatalog]?
-/// A common format for catalog and pkgdb packages use by list
 #[derive(Debug, Clone, PartialEq)]
 pub struct InstalledPackage {
     pub install_id: String,
@@ -1384,8 +1274,6 @@ pub enum LockedManifestError {
     CatalogResolve(#[from] catalog::ResolveError),
     #[error("didn't find packages on the first page of the group {0} for system {1}")]
     NoPackagesOnFirstPage(String, String),
-    #[error("failed to check lockfile")]
-    CheckLockfile(#[source] CallPkgDbError),
     #[error("failed to parse check warnings")]
     ParseCheckWarnings(#[source] serde_json::Error),
     #[error(transparent)]
@@ -1442,13 +1330,6 @@ pub enum LockedManifestError {
     LockFlakeNixError(FlakeInstallableError),
     #[error("catalog returned install id not in manifest: {0}")]
     InstallIdNotInManifest(String),
-}
-
-/// A warning produced by `pkgdb manifest check`
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct LockfileCheckWarning {
-    pub package: String,
-    pub message: String,
 }
 
 pub mod test_helpers {
@@ -1636,7 +1517,10 @@ pub(crate) mod tests {
     use super::*;
     use crate::models::manifest::{Manifest, RawManifest};
     use crate::models::search::{SearchLimit, SearchResults};
-    use crate::providers::flox_cpp_utils::{FlakeInstallableError, InstallableLockerMock};
+    use crate::providers::flake_installable_locker::{
+        FlakeInstallableError,
+        InstallableLockerMock,
+    };
 
     /// A mock client that panics if any of its methods are called
     struct PanickingClient;
@@ -1707,93 +1591,6 @@ pub(crate) mod tests {
         ) -> Result<LockedInstallable, FlakeInstallableError> {
             panic!("this flake locker always panics")
         }
-    }
-
-    /// Validate that the parser for the locked manifest can handle null values
-    /// for the `version`, `license`, and `description` fields.
-    #[test]
-    fn locked_package_tolerates_null_values() {
-        let locked_packages =
-            serde_json::from_value::<HashMap<String, LockedPackagePkgdb>>(serde_json::json!({
-                    "complete": {
-                        "info": {
-                            "description": "A package",
-                            "broken": false,
-                            "license": "MIT",
-                            "pname": "package1",
-                            "unfree": false,
-                            "version": "1.0.0"
-                        },
-                        "attr-path": ["package1"],
-                        "priority": 0
-                    },
-                    "missing_version": {
-                        "info": {
-                            "description": "Another package",
-                            "broken": false,
-                            "license": "MIT",
-                            "pname": "package2",
-                            "unfree": false,
-                            "version": null
-                        },
-                        "attr-path": ["package2"],
-                        "priority": 0
-                    },
-                    "missing_license": {
-                        "info": {
-                            "description": "Another package",
-                            "broken": false,
-                            "license": null,
-                            "pname": "package3",
-                            "unfree": false,
-                            "version": "1.0.0"
-                        },
-                        "attr-path": ["package3"],
-                        "priority": 0
-                    },
-                    "missing_description": {
-                        "info": {
-                            "description": null,
-                            "broken": false,
-                            "license": "MIT",
-                            "pname": "package4",
-                            "unfree": false,
-                            "version": "1.0.0"
-                        },
-                        "attr-path": ["package4"],
-                        "priority": 0
-                    },
-            }))
-            .unwrap();
-
-        assert_eq!(
-            locked_packages["complete"].info.version.as_deref(),
-            Some("1.0.0")
-        );
-        assert_eq!(
-            locked_packages["complete"].info.license.as_deref(),
-            Some("MIT")
-        );
-        assert_eq!(
-            locked_packages["complete"].info.description.as_deref(),
-            Some("A package")
-        );
-
-        assert_eq!(
-            locked_packages["missing_version"].info.version.as_deref(),
-            None
-        );
-        assert_eq!(
-            locked_packages["missing_license"].info.license.as_deref(),
-            None
-        );
-        assert_eq!(
-            locked_packages["missing_description"]
-                .info
-                .description
-                .as_deref(),
-            None
-        );
     }
 
     static TEST_RAW_MANIFEST: LazyLock<RawManifest> = LazyLock::new(|| {

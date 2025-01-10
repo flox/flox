@@ -13,7 +13,7 @@
 nix_options := "--extra-experimental-features nix-command \
                 --extra-experimental-features flakes"
 INPUT_DATA := "${PWD}/test_data/input_data"
-cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo nextest run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
+cargo_test_invocation := "cargo nextest run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
 
 
 # ---------------------------------------------------------------------------- #
@@ -26,27 +26,19 @@ cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo nextest run --manifest-pa
 
 # Print the paths of all of the binaries
 @bins:
-    echo "$PKGDB_BIN"
     echo "$FLOX_BIN"
 
 # ---------------------------------------------------------------------------- #
 
-# Build the compilation database
-build-cdb:
-    @make -C pkgdb -j 8 -s cdb
 
-# Build only pkgdb
-@build-pkgdb: build-activation-scripts
-    make -C pkgdb -j 8;
+# Build only nix-plugins
+@build-nix-plugins:
+    meson compile -C nix-plugins/builddir; \
+    meson install -C nix-plugins/builddir
 
-# Build pkgdb with debug symbols
-@build-pkgdb-debug:
-    # Note that you need to clean pkgdb first
-    make -C pkgdb -j 8 -s DEBUG=1
-
-# Clean the pkgdb build cache
-@clean-pkgdb:
-    make -C pkgdb -j 8 -s clean
+# Clean th e nix-plugins build cache
+@clean-nix-plugins:
+   meson compile -C nix-plugins/builddir --clean
 
 # ---------------------------------------------------------------------------- #
 # Nix built subsystems
@@ -94,7 +86,7 @@ build-cdb:
 # ---------------------------------------------------------------------------- #
 # Build the flox binary
 
-@build-cli: build-pkgdb build-package-builder build-activation-scripts build-watchdog build-buildenv
+@build-cli: build-nix-plugins build-package-builder build-activation-scripts build-watchdog build-buildenv
     pushd cli; cargo build -p flox
 
 
@@ -116,15 +108,14 @@ clean-builds:
 
 # ---------------------------------------------------------------------------- #
 
-# Run the pkgdb tests
-@test-pkgdb: build-pkgdb
-    make -C pkgdb -j 8 tests;
-    make -C pkgdb check;
+# Run the nix-plugins tests
+@test-nix-plugins: build-nix-plugins
+    meson test -C nix-plugins/builddir
 
 # Run the CLI integration test suite
 @integ-tests +bats_args="": build
     flox-cli-tests \
-        --pkgdb "$PKGDB_BIN" \
+        --nix-plugins "$NIX_PLUGINS" \
         --flox "$FLOX_BIN" \
         --watchdog "$WATCHDOG_BIN" \
         --input-data "{{INPUT_DATA}}" \
@@ -149,11 +140,11 @@ clean-builds:
 # Run the entire CLI test suite
 test-cli: impure-tests integ-tests
 
-# Run the test suite except for pkgdb
+# Run the test suite except for nix-plugins
 @test-rust: impure-tests integ-tests nix-integ-tests
 
 # Run the entire test suite, including impure unit tests
-test-all: test-pkgdb impure-tests integ-tests nix-integ-tests
+test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
 
 
 # ---------------------------------------------------------------------------- #
@@ -199,31 +190,28 @@ test-all: test-pkgdb impure-tests integ-tests nix-integ-tests
     echo "just: DEPRECATED TARGET: Use 'flox' instead" >&2;
     cli/target/debug/flox {{args}}
 
-# Run a `pkgdb` command
-@pkgdb +args="": build-pkgdb
-    pkgdb/bin/pkgdb {{args}}
-
 
 # ---------------------------------------------------------------------------- #
 
 # Clean ( remove ) built artifacts
-@clean:
-    pushd cli; cargo clean;
-    make -C pkgdb clean;
+@clean: clean-nix-plugins
+    pushd cli; cargo clean; popd
 
 # ---------------------------------------------------------------------------- #
 
 @format-cli:
     pushd cli; cargo fmt; popd
 
-@format-pkgdb:
-    pushd pkgdb; make fmt; popd
+@format-nix-plugins:
+    clang-format -i nix-plugins/src/**/*.cc; \
+    clang-format -i nix-plugins/include/**/*.hh
+
 
 @format-nix:
     treefmt
 
 # Format all the code
-format: format-cli format-pkgdb format-nix
+format: format-cli format-nix-plugins format-nix
 
 # ---------------------------------------------------------------------------- #
 #

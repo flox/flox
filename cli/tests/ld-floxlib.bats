@@ -94,7 +94,7 @@ teardown() {
 @test "test ld-floxlib.so on Linux only" {
   project_setup_catalog
 
-  # Revision PKGDB_NIXPKGS_REV_OLDER is expected to provide glibc 2.34.
+  # Revision TEST_NIXPKGS_REV_OLDER is expected to provide glibc 2.34.
   # Assert that here before going any further.
   run "$FLOX_BIN" list
   assert_success

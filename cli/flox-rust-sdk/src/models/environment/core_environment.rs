@@ -1,10 +1,11 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
+use itertools::Itertools;
 use pollster::FutureExt;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
 
@@ -29,7 +30,6 @@ use crate::models::manifest::{
     PackageToInstall,
     TomlEditError,
 };
-use crate::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError, PKGDB_BIN};
 use crate::providers::buildenv::{
     BuildEnv,
     BuildEnvError,
@@ -38,7 +38,7 @@ use crate::providers::buildenv::{
     BuiltStorePath,
 };
 use crate::providers::catalog::{self, ClientTrait};
-use crate::providers::flox_cpp_utils::InstallableLocker;
+use crate::providers::flake_installable_locker::InstallableLocker;
 use crate::providers::services::{maybe_make_service_config_file, ServiceError};
 
 pub struct ReadOnly {}
@@ -148,6 +148,8 @@ impl<State> CoreEnvironment<State> {
     /// The real point of this method is letting us skip locking for an already
     /// locked pkgdb manifest,
     /// since pkgdb manifests can no longer be locked.
+    ///
+    /// TODO: consider removing this
     pub fn ensure_locked(&mut self, flox: &Flox) -> Result<Lockfile, CoreEnvironmentError> {
         match self.lockfile_if_up_to_date()? {
             Some(lock) => Ok(lock),
@@ -270,12 +272,6 @@ impl CoreEnvironment<()> {
         out_link_path: impl AsRef<Path>,
         store_path: &BuiltStorePath,
     ) -> Result<(), CoreEnvironmentError> {
-        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_cmd
-            .arg("linkenv")
-            .args(["--out-link", &out_link_path.as_ref().to_string_lossy()])
-            .args(["--store-path", &store_path.as_ref().to_string_lossy()]);
-
         BuildEnvNix.link(out_link_path, store_path)?;
 
         Ok(())
@@ -484,51 +480,56 @@ impl CoreEnvironment<ReadOnly> {
 
     /// Atomically upgrade packages in this environment
     ///
-    /// First resolve a new lockfile with upgraded packages using either pkgdb or the catalog client.
+    /// First resolve a new lockfile with upgraded packages using the catalog client.
     /// Then verify the new lockfile by building the environment.
-    /// Finally replace the existing environment with the new, upgraded one.
+    ///
+    /// Finally if `write_lockfile` is true,
+    /// replace the existing environment with the new, upgraded one.
+    /// Otherwise, validate the upgrade by writing the new lockfile to a temporary file
+    /// and building it.
     pub fn upgrade(
         &mut self,
         flox: &Flox,
         groups_or_iids: &[&str],
+        write_lockfile: bool,
     ) -> Result<UpgradeResult, CoreEnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let manifest = self.manifest()?;
-        let (lockfile, upgraded) = {
-            Self::ensure_valid_upgrade(groups_or_iids, &manifest)?;
-            tracing::debug!("using catalog client to upgrade");
 
-            let (lockfile, upgraded) = self.upgrade_with_catalog_client(
-                &flox.catalog_client,
-                &flox.installable_locker,
-                groups_or_iids,
-                &manifest,
-            )?;
+        Self::ensure_valid_upgrade(groups_or_iids, &manifest)?;
+        tracing::debug!("using catalog client to upgrade");
 
-            let upgraded = {
-                let mut install_ids = upgraded
-                    .into_iter()
-                    .map(|(_, pkg)| pkg.install_id().to_owned())
-                    .collect::<HashSet<_>>()
-                    .into_iter()
-                    .collect::<Vec<_>>();
-                install_ids.sort();
-                install_ids
-            };
-
-            (lockfile, upgraded)
-        };
+        let mut result = self.upgrade_with_catalog_client(
+            &flox.catalog_client,
+            &flox.installable_locker,
+            groups_or_iids,
+            &manifest,
+        )?;
 
         // SAFETY: serde_json::to_string_pretty is only documented to fail if
         // the "Serialize decides to fail, or if T contains a map with non-string keys",
         // neither of which should happen here.
-        let lockfile_contents = serde_json::to_string_pretty(&lockfile).unwrap();
-        let store_path = self.transact_with_lockfile_contents(lockfile_contents, flox)?;
+        let lockfile_contents = serde_json::to_string_pretty(&result.new_lockfile).unwrap();
 
-        Ok(UpgradeResult {
-            packages: upgraded,
-            store_path: Some(store_path),
-        })
+        if write_lockfile {
+            if result.diff().is_empty() {
+                return Ok(result);
+            }
+
+            let store_path = self.transact_with_lockfile_contents(lockfile_contents, flox)?;
+            result.store_path = Some(store_path);
+        } else {
+            let tmp_lockfile = tempfile::NamedTempFile::new_in(&flox.temp_dir)
+                .map_err(CoreEnvironmentError::WriteLockfile)?;
+            fs::write(&tmp_lockfile, lockfile_contents)
+                .map_err(CoreEnvironmentError::WriteLockfile)?;
+
+            // We are not interested in the store path here, so we ignore the result
+            // Neither do we depend on services, so we pass `None`
+            let _ = BuildEnvNix.build(&flox.catalog_client, tmp_lockfile.path(), None)?;
+        }
+
+        Ok(result)
     }
 
     fn ensure_valid_upgrade(
@@ -591,7 +592,7 @@ impl CoreEnvironment<ReadOnly> {
         flake_locking: &impl InstallableLocker,
         groups_or_iids: &[&str],
         manifest: &Manifest,
-    ) -> Result<(Lockfile, Vec<(LockedPackage, LockedPackage)>), CoreEnvironmentError> {
+    ) -> Result<UpgradeResult, CoreEnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let existing_lockfile = 'lockfile: {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
@@ -601,21 +602,6 @@ impl CoreEnvironment<ReadOnly> {
                 Lockfile::read_from_file(&lockfile_path)
                     .map_err(CoreEnvironmentError::LockedManifest)?,
             )
-        };
-
-        // Record a nested map where you retrieve the locked package
-        // via pkgs[install_id][system]
-        let previous_packages = if let Some(ref lockfile) = existing_lockfile {
-            let mut pkgs_by_id = BTreeMap::new();
-            lockfile.packages.iter().for_each(|pkg| {
-                let by_system = pkgs_by_id
-                    .entry(pkg.install_id().to_owned())
-                    .or_insert(BTreeMap::new());
-                by_system.entry(pkg.system().clone()).or_insert(pkg.clone());
-            });
-            pkgs_by_id
-        } else {
-            BTreeMap::new()
         };
 
         // Create a seed lockfile by "unlocking" (i.e. removing the locked entries of)
@@ -636,48 +622,13 @@ impl CoreEnvironment<ReadOnly> {
                 .block_on()
                 .map_err(CoreEnvironmentError::LockedManifest)?;
 
-        let pkgs_after_upgrade = {
-            let mut pkgs_by_id = BTreeMap::new();
-            upgraded_lockfile.packages.iter().for_each(|pkg| {
-                let by_system = pkgs_by_id
-                    .entry(pkg.install_id().to_owned())
-                    .or_insert(BTreeMap::new());
-                by_system.entry(pkg.system().clone()).or_insert(pkg.clone());
-            });
-            pkgs_by_id
+        let result = UpgradeResult {
+            old_lockfile: existing_lockfile,
+            new_lockfile: upgraded_lockfile,
+            store_path: None,
         };
 
-        // todo: handle flake diffs
-        // Iterate over the two sorted maps in lockstep
-        // Since BTreeMap is ordered and we must have the same packages before
-        // and after upgrading, we can zip the two iterators together knowing
-        // that we'll visit the same install_id from each map at the same time.
-        let package_diff = previous_packages
-            .iter()
-            .zip(pkgs_after_upgrade.iter())
-            // Extract LockedPackage
-            .flat_map(|((_prev_id, prev_map), (_curr_id, curr_map))| {
-                let curr_iter = curr_map.iter().map(|(_sys, pkg)| pkg);
-                prev_map.iter().map(|(_sys, pkg)| pkg).zip(curr_iter)
-            })
-            // Keep anything that has been upgraded, using a change in
-            // derivation to define upgraded for both flake and catalog packages.
-            .filter_map(|(prev_pkg, curr_pkg)| {
-                if prev_pkg.derivation() != curr_pkg.derivation() {
-                    Some((prev_pkg.to_owned(), curr_pkg.to_owned()))
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let final_lockfile = if package_diff.is_empty() {
-            existing_lockfile.unwrap_or(upgraded_lockfile)
-        } else {
-            upgraded_lockfile
-        };
-
-        Ok((final_lockfile, package_diff))
+        Ok(result)
     }
 
     /// Makes a temporary copy of the environment so modifications to the manifest
@@ -778,10 +729,6 @@ impl CoreEnvironment<ReadOnly> {
     }
 
     /// Attempt to transactionally replace the lockfile contents
-    ///
-    /// The lockfile_contents passed to this function must be generated by pkgdb
-    /// so that calling `pkgdb manifest lock` with the new lockfile_contents is
-    /// idempotent.
     ///
     /// TODO: this is separate from transact_with_manifest_contents because it
     /// shouldn't have to call lock. Currently build calls lock, but we
@@ -901,10 +848,74 @@ impl EditResult {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct UpgradeResult {
-    pub packages: Vec<String>,
+    pub old_lockfile: Option<Lockfile>,
+    pub new_lockfile: Lockfile,
     pub store_path: Option<BuildEnvOutputs>,
+}
+
+impl UpgradeResult {
+    pub fn packages(&self) -> impl Iterator<Item = String> {
+        self.diff()
+            .into_iter()
+            .map(|(prev, _)| prev.install_id().to_string())
+            .unique()
+            .sorted()
+    }
+
+    pub fn diff(&self) -> Vec<(LockedPackage, LockedPackage)> {
+        // Record a nested map where you retrieve the locked package
+        // via pkgs[install_id][system]
+        let previous_packages = if let Some(ref lockfile) = self.old_lockfile {
+            let mut pkgs_by_id = BTreeMap::new();
+            lockfile.packages.iter().for_each(|pkg| {
+                let by_system = pkgs_by_id
+                    .entry(pkg.install_id().to_owned())
+                    .or_insert(BTreeMap::new());
+                by_system.entry(pkg.system().clone()).or_insert(pkg.clone());
+            });
+            pkgs_by_id
+        } else {
+            BTreeMap::new()
+        };
+
+        let pkgs_after_upgrade = {
+            let mut pkgs_by_id = BTreeMap::new();
+            self.new_lockfile.packages.iter().for_each(|pkg| {
+                let by_system = pkgs_by_id
+                    .entry(pkg.install_id().to_owned())
+                    .or_insert(BTreeMap::new());
+                by_system.entry(pkg.system().clone()).or_insert(pkg.clone());
+            });
+            pkgs_by_id
+        };
+
+        // Iterate over the two sorted maps in lockstep
+        // Since BTreeMap is ordered and we must have the same packages before
+        // and after upgrading, we can zip the two iterators together knowing
+        // that we'll visit the same install_id from each map at the same time.
+        let package_diff = previous_packages
+            .iter()
+            .zip(pkgs_after_upgrade.iter())
+            // Extract LockedPackage
+            .flat_map(|((_prev_id, prev_map), (_curr_id, curr_map))| {
+                let curr_iter = curr_map.iter().map(|(_sys, pkg)| pkg);
+                prev_map.iter().map(|(_sys, pkg)| pkg).zip(curr_iter)
+            })
+            // Keep anything that has been upgraded, using a change in
+            // derivation to define upgraded for both flake and catalog packages.
+            .filter_map(|(prev_pkg, curr_pkg)| {
+                if prev_pkg.derivation() != curr_pkg.derivation() {
+                    Some((prev_pkg.to_owned(), curr_pkg.to_owned()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        package_diff
+    }
 }
 
 #[derive(Debug, Error)]
@@ -953,8 +964,6 @@ pub enum CoreEnvironmentError {
     )]
     MultiplePackagesMatch(String, Vec<String>),
     // endregion
-
-    // region: pkgdb manifest errors
     #[error(transparent)]
     LockedManifest(LockedManifestError),
 
@@ -965,9 +974,6 @@ pub enum CoreEnvironmentError {
     #[error("failed to upgrade environment")]
     UpgradeFailedCatalog(#[source] UpgradeError),
     // endregion
-    #[error("package is unsupported for this system")]
-    UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
-
     #[error("could not automatically migrate manifest to version 1")]
     MigrateManifest(#[source] toml_edit::de::Error),
 
@@ -998,29 +1004,6 @@ impl CoreEnvironmentError {
         );
 
         is_lock_incompatible_system_error || is_build_incompatible_system_error
-    }
-
-    pub fn is_incompatible_package_error(&self) -> bool {
-        matches!(
-            self.pkgdb_exit_code().copied(),
-            Some(
-                error_codes::PACKAGE_BUILD_FAILURE
-                    | error_codes::PACKAGE_EVAL_FAILURE
-                    | error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-            )
-        )
-    }
-
-    /// If the error contains a PkgDbError with an exit_code, return it.
-    /// Otherwise return None.
-    pub fn pkgdb_exit_code(&self) -> Option<&u64> {
-        match self {
-            CoreEnvironmentError::BuildEnv(BuildEnvError::Realise(PkgDbError {
-                exit_code,
-                ..
-            })) => Some(exit_code),
-            _ => None,
-        }
     }
 }
 
@@ -1107,7 +1090,7 @@ mod tests {
     use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::manifest::{ManifestPackageDescriptorCatalog, DEFAULT_GROUP_NAME};
-    use crate::providers::flox_cpp_utils::InstallableLockerMock;
+    use crate::providers::flake_installable_locker::InstallableLockerMock;
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
     /// Create a CoreEnvironment with an empty manifest (with version = 1)
@@ -1288,14 +1271,15 @@ mod tests {
             msgs: vec![],
         }]);
 
-        let (_, upgraded_packages) = env_view
+        let upgraded_packages = env_view
             .upgrade_with_catalog_client(
                 &mock_client,
                 &InstallableLockerMock::new(),
                 &[],
                 &manifest,
             )
-            .unwrap();
+            .unwrap()
+            .diff();
 
         assert!(upgraded_packages.len() == 1);
     }

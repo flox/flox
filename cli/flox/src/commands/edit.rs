@@ -18,6 +18,7 @@ use flox_rust_sdk::models::environment::{
     Environment,
     EnvironmentError,
 };
+use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use flox_rust_sdk::providers::services::ServiceError;
 use itertools::Itertools;
 use log::debug;
@@ -33,7 +34,7 @@ use super::{
 use crate::commands::{ensure_floxhub_token, EnvironmentSelectError};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
-use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_core_error};
+use crate::utils::errors::format_core_error;
 use crate::utils::message;
 
 // Edit declarative environment configuration
@@ -175,7 +176,7 @@ impl Edit {
         let result = match contents {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
-            Some(new_manifest) => Self::edit_with_doc_link(flox, environment, new_manifest).await?,
+            Some(new_manifest) => environment.edit(flox, new_manifest)?,
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
             None => Self::interactive_edit(flox, environment).await?,
@@ -208,18 +209,6 @@ impl Edit {
         }
 
         Ok(())
-    }
-
-    /// Edit the environment, showing a spinner when supported.
-    #[instrument(skip_all, fields(progress = "Applying changes to the manifest"))]
-    async fn edit_with_doc_link(
-        flox: &Flox,
-        environment: &mut dyn Environment,
-        new_manifest: String,
-    ) -> Result<EditResult, EnvironmentError> {
-        environment
-            .edit(flox, new_manifest)
-            .map_err(apply_doc_link_for_unsupported_packages)
     }
 
     /// Interactively edit the manifest file
@@ -255,7 +244,7 @@ impl Edit {
         // decides to stop.
         loop {
             let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor, &args)?;
-            let result = Self::edit_with_doc_link(flox, environment, new_manifest.clone()).await;
+            let result = environment.edit(flox, new_manifest.clone());
             match Self::make_interactively_recoverable(result)? {
                 Ok(result) => return Ok(result),
 
@@ -281,16 +270,12 @@ impl Edit {
         match result {
             Err(EnvironmentError::Core(e @ CoreEnvironmentError::LockedManifest(_)))
             | Err(EnvironmentError::Core(e @ CoreEnvironmentError::DeserializeManifest(_)))
-            // TODO: detect path conflict with in builenv.nix output!
-            //
-            // | Err(EnvironmentError::Core(
-            //     e @ CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-            //         exit_code: error_codes::BUILDENV_CONFLICT,
-            //         ..
-            //     })),
-            // ))
-            => Ok(Err(e)),
-            Err(EnvironmentError::Core(
+            | Err(EnvironmentError::Core(
+                e @ CoreEnvironmentError::BuildEnv(
+                    BuildEnvError::Realise2 { .. } | BuildEnvError::Build(_),
+                ),
+            ))
+            | Err(EnvironmentError::Core(
                 e @ CoreEnvironmentError::Services(ServiceError::InvalidConfig(_)),
             )) => Ok(Err(e)),
             Err(e) => Err(e),

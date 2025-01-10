@@ -19,16 +19,16 @@
   flox-cli-tests,
   flox-activations,
   flox-watchdog,
-  flox-pkgdb,
+  flox-nix-plugins,
   stdenv,
   ci ? false,
 }:
 let
   # For use in GitHub Actions and local development.
-  ciPackages = [ ] ++ flox-pkgdb.ciPackages;
+  ciPackages = [ ] ++ flox-nix-plugins.ciPackages;
 
   devPackages =
-    flox-pkgdb.devPackages
+    flox-nix-plugins.devPackages
     ++ flox-cli.devPackages
     ++ [
       just
@@ -80,7 +80,7 @@ mkShell (
     # but in case we add specific ones,
     # it's good to have them here already.
     inputsFrom = [
-      flox-pkgdb
+      flox-nix-plugins
       flox-cli
       flox-watchdog
       flox-activations
@@ -124,7 +124,7 @@ mkShell (
         define_dev_env_var FLOX_ACTIVATIONS_BIN "''${REPO_ROOT}/cli/target/debug/flox-activations";
 
         # make built binaries
-        define_dev_env_var PKGDB_BIN "''${REPO_ROOT}/pkgdb/bin/pkgdb";
+        define_dev_env_var NIX_PLUGINS "''${REPO_ROOT}/build/nix-plugins/lib/nix-plugins";
 
         # static nix files
         define_dev_env_var FLOX_MK_CONTAINER_NIX "''${REPO_ROOT}/mkContainer/mkContainer.nix";
@@ -147,18 +147,18 @@ mkShell (
         export PATH="''${REPO_ROOT}/cli/target/debug":$PATH;
         echo -n "''${REPO_ROOT}/cli/target/debug:" >> "$REPO_ROOT/build/.PATH";
 
-        # Add the pkgdb binary to the path
-        export PATH="''${REPO_ROOT}/pkgdb/bin":$PATH;
-        echo -n "''${REPO_ROOT}/pkgdb/bin:" >> "$REPO_ROOT/build/.PATH";
-
         # Add the flox-manpages to the manpath
         export MANPATH="''${FLOX_MANPAGES}/share/man:$MANPATH"
+
+        # configure the nix-plugin meson build
+        meson setup --reconfigure \
+        --prefix "''${REPO_ROOT}/build/nix-plugins" \
+        "''${REPO_ROOT}/nix-plugins" "''${REPO_ROOT}/nix-plugins/builddir";
 
         echo;
         echo "run 'just build' to build flox and all its subsystems";
       '';
   }
-  // flox-pkgdb.devEnvs
   // flox-watchdog.devEnvs
   // flox-cli.devEnvs
 )

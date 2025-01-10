@@ -61,8 +61,8 @@ export FLOX_PROMPT_COLOR_2="${FLOX_PROMPT_COLOR_2:-141}"
 
 # Parse command-line arguments.
 OPTIONS="e:c:m:"
-LONGOPTS="command:,env:,mode:,noprofile,turbo"
-USAGE="Usage: $0 [-c \"<cmd> <args>\"] [(-e|--env) <env>] [--turbo] [--noprofile] [(-m|--mode) (dev|run)]"
+LONGOPTS="command:,env:,mode:,watchdog:,noprofile,turbo"
+USAGE="Usage: $0 [-c \"<cmd> <args>\"] [(-e|--env) <env>] [--turbo] [--noprofile] [(-m|--mode) (dev|run)] [--watchdog <path>]"
 
 PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@")
 # shellcheck disable=SC2181
@@ -79,6 +79,7 @@ FLOX_CMD=""
 FLOX_TURBO="${FLOX_TURBO:-}"
 FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
 _FLOX_ENV_ACTIVATION_MODE="dev"
+_FLOX_WATCHDOG_BIN=""
 while true; do
   case "$1" in
     -c | --command)
@@ -109,6 +110,16 @@ while true; do
         exit 1
       fi
       _FLOX_ENV_ACTIVATION_MODE="$1"
+      shift
+      ;;
+    --watchdog)
+      shift
+      if [ -z "${1:-}" ] || [ ! -f "$1" ]; then
+        echo "Option --watchdog requires a path to the watchdog binary as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_WATCHDOG_BIN="$1"
       shift
       ;;
     --turbo)

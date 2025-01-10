@@ -16,9 +16,6 @@
   # reach stable.
   inputs.nixpkgs.url = "github:flox/nixpkgs/stable";
 
-  inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
-  inputs.sqlite3pp.inputs.nixpkgs.follows = "nixpkgs";
-
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   inputs.pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -62,7 +59,6 @@
           cpp-semver = final.callPackage ./pkgs/cpp-semver { };
           t3 = final.callPackage ./pkgs/t3 { inherit (inputs) t3-src; };
         })
-        inputs.sqlite3pp.overlays.default
         inputs.fenix.overlays.default
       ];
 
@@ -106,7 +102,7 @@
           flox-package-builder = callPackage ./pkgs/flox-package-builder { };
 
           # Package Database Utilities: scrape, search, and resolve.
-          flox-pkgdb = callPackage ./pkgs/flox-pkgdb { };
+          flox-nix-plugins = callPackage ./pkgs/flox-nix-plugins { };
           flox-buildenv = callPackage ./pkgs/flox-buildenv { };
           flox-watchdog = callPackage ./pkgs/flox-watchdog { }; # Flox Command Line Interface ( development build ).
           flox-activations = callPackage ./pkgs/flox-activations { };
@@ -123,7 +119,7 @@
           rust-internal-deps = prev.rust-internal-deps.override {
             flox-buildenv = null;
             flox-package-builder = null;
-            flox-pkgdb = null;
+            flox-nix-plugins = null;
             flox-mk-container = null;
           };
 
@@ -142,13 +138,12 @@
           flox-package-builder = prev.flox-package-builder.override { };
           flox-buildenv = prev.flox-buildenv.override {
             flox-activation-scripts = null;
-            flox-pkgdb = null;
           };
           checksFor = checks.${prev.system};
 
           flox-cli-tests = prev.flox-cli-tests.override {
             PROJECT_TESTS_DIR = "/cli/tests";
-            PKGDB_BIN = null;
+            NIX_PLUGINS = null;
             FLOX_BIN = null;
             WATCHDOG_BIN = null;
             FLOX_ACTIVATIONS_BIN = null;
@@ -181,7 +176,7 @@
       packages = builtins.mapAttrs (system: pkgs: {
         inherit (pkgs)
           flox-activation-scripts
-          flox-pkgdb
+          flox-nix-plugins
           flox-buildenv
           flox-package-builder
           flox-watchdog

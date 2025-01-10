@@ -39,14 +39,14 @@ generate_bash_startup_commands() {
     # Restore environment variables set in the previous bash initialization.
     $_sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
     $_sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
-
-    # Propagate $_activate_d to the environment.
-    echo "export _activate_d='$_activate_d';"
-    # Propagate $_flox_activate_tracer to the environment.
-    echo "export _flox_activate_tracer='$_flox_activate_tracer';"
-    # Propagate $_flox_env_helper to the environment.
-    echo "export _flox_env_helper='$_flox_env_helper';"
   fi
+
+  # Propagate $_activate_d to the environment.
+  echo "export _activate_d='$_activate_d';"
+  # Propagate $_flox_activate_tracer to the environment.
+  echo "export _flox_activate_tracer='$_flox_activate_tracer';"
+  # Propagate $_flox_env_helper to the environment.
+  echo "export _flox_env_helper='$_flox_env_helper';"
 
   # Set the prompt if we're in an interactive shell.
   echo "if [ -t 1 ]; then source '$_activate_d/set-prompt.bash'; fi;"

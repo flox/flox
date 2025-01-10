@@ -20,6 +20,7 @@ use flox_rust_sdk::models::environment::{
     ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::manifest;
+use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use indoc::{formatdoc, indoc};
 use log::debug;
 use toml_edit::DocumentMut;
@@ -406,23 +407,23 @@ impl Pull {
             },
 
             // Failed to _build_ the environment due to an incompatible package
-            EnvironmentError::Core(ref core_err @ CoreEnvironmentError::BuildEnv(_))
-                if core_err.is_incompatible_package_error() =>
-            {
+            EnvironmentError::Core(
+                ref core_err @ CoreEnvironmentError::BuildEnv(BuildEnvError::Realise2 { .. }),
+            ) => {
                 debug!(
-                    "environment contains package incompatible with the current system: {err}",
+                    "Failed to build environment: {err}",
                     err = display_chain(core_err)
                 );
 
-                let pkgdb_error = format_core_error(core_err);
+                let build_error = format_core_error(core_err);
 
                 if !force && query_functions.is_none() {
                     fs::remove_dir_all(dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
-                    bail!("{pkgdb_error}");
+                    bail!("{build_error}");
                 }
 
-                message::error(pkgdb_error);
+                message::error(build_error);
 
                 // The unwrap() is only reached if !force,
                 // and we return above if !force and query_functions.is_none()
@@ -572,8 +573,6 @@ mod tests {
         unusable_mock_managed_environment,
     };
     use flox_rust_sdk::models::environment::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
-    use flox_rust_sdk::models::pkgdb::error_codes::PACKAGE_BUILD_FAILURE;
-    use flox_rust_sdk::models::pkgdb::PkgDbError;
     use flox_rust_sdk::providers::buildenv::BuildEnvError;
     use tempfile::tempdir_in;
 
@@ -587,11 +586,10 @@ mod tests {
 
     fn incompatible_package_result() -> Result<(), EnvironmentError> {
         Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
-            BuildEnvError::Realise(PkgDbError {
-                exit_code: PACKAGE_BUILD_FAILURE,
-                category_message: "category_message".to_string(),
-                context_message: None,
-            }),
+            BuildEnvError::Realise2 {
+                install_id: "install_id".to_string(),
+                message: "message".to_string(),
+            },
         )))
     }
 
@@ -599,14 +597,6 @@ mod tests {
     fn ensure_valid_mock_incompatible_system_result() {
         match incompatible_system_result() {
             Err(EnvironmentError::Core(core_err)) if core_err.is_incompatible_system_error() => {},
-            _ => panic!(),
-        }
-    }
-
-    #[test]
-    fn ensure_valid_mock_incompatible_package_result() {
-        match incompatible_package_result() {
-            Err(EnvironmentError::Core(core_err)) if core_err.is_incompatible_package_error() => {},
             _ => panic!(),
         }
     }

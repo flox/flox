@@ -1106,29 +1106,12 @@ pub struct ManifestContainerizeConfig {
 pub enum ManifestError {
     #[error("couldn't parse descriptor '{}': {}", desc, msg)]
     MalformedStringDescriptor { msg: String, desc: String },
-    /// FIXME: This is a temporary error variant until `flox` parses descriptors on its own
-    #[error("failed while calling pkgdb")]
-    PkgDbCall(#[source] std::io::Error),
     #[error("no package or group named '{0}' in the manifest")]
     PkgOrGroupNotFound(String),
     #[error("invalid flake ref: {0}")]
     InvalidFlakeRef(String),
     #[error("only remote flake refs are supported: {0}")]
     LocalFlakeRef(String),
-}
-
-/// A subset of the manifest used to check what type of edits users make. We
-/// don't use this struct for making our own edits.
-///
-/// The authoritative form of the manifest is in
-/// https://github.com/flox/pkgdb/blob/main/include/flox/resolver/manifest-raw.hh#L263
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct TypedManifestPkgdb {
-    pub vars: Option<toml::Table>,
-    pub hook: Option<toml::Table>,
-    pub profile: Option<toml::Table>,
-    #[serde(flatten)]
-    _toml: toml::Table,
 }
 
 /// An error encountered while manipulating a manifest using toml_edit.

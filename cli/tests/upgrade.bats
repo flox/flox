@@ -36,13 +36,13 @@ project_teardown() {
 assert_old_hello() {
   run jq -r ".packages.\"$NIX_SYSTEM\".hello.input.attrs.narHash" "$LOCK_PATH"
   assert_success
-  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
+  assert_output "$TEST_NIXPKGS_NAR_HASH_OLD"
 }
 
 assert_new_hello() {
   run jq -r ".packages.\"$NIX_SYSTEM\".hello.input.attrs.narHash" "$LOCK_PATH"
   assert_success
-  assert_output "$PKGDB_NIXPKGS_NAR_HASH_NEW"
+  assert_output "$TEST_NIXPKGS_NAR_HASH_NEW"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -180,11 +180,12 @@ setup_pkgdb_env() {
   assert_output "ℹ️  No packages need to be upgraded in environment 'test'."
 }
 
+# bats test_tags=upgrade:page-not-upgraded
 @test "page changes should not be considered an upgrade" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" \
     "$FLOX_BIN" install curl hello
-  prev_lock_hash=$(jq --sort-keys --compact-output . "$LOCK_PATH" | sha256sum)
+  prev_lock=$(jq --sort-keys . "$LOCK_PATH")
 
   # Update the page and revision but keep the same derivations.
   # This would fail to rebuild because the revs are faked.
@@ -205,14 +206,16 @@ setup_pkgdb_env() {
   assert_success
   assert_output "ℹ️  No packages need to be upgraded in environment 'test'."
 
-  curr_lock_hash=$(jq --sort-keys --compact-output . "$LOCK_PATH" | sha256sum)
-  assert_equal "$curr_lock_hash" "$prev_lock_hash"
+  curr_lock=$(jq --sort-keys . "$LOCK_PATH")
+
+  run diff -u <(echo "$prev_lock") <(echo "$curr_lock")
+  assert_success
 }
 
 @test "upgrade for flake installable" {
   "$FLOX_BIN" init
 
-  run "$FLOX_BIN" install "github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#hello"
+  run "$FLOX_BIN" install "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#hello"
 
   run "$FLOX_BIN" upgrade
   assert_success
@@ -229,7 +232,7 @@ setup_pkgdb_env() {
 @test "upgrade for flake installable by iid" {
   "$FLOX_BIN" init
 
-  run "$FLOX_BIN" install "github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#hello"
+  run "$FLOX_BIN" install "github:nixos/nixpkgs/$TEST_NIXPKGS_REV_NEW#hello"
 
   run "$FLOX_BIN" upgrade hello
   assert_success

@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use flox_core::Version;
+use itertools::Itertools;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -312,6 +313,18 @@ impl Environment for ManagedEnvironment {
         Ok(result)
     }
 
+    /// Try to upgrade packages in the current local checkout
+    /// without committing a new generation
+    fn dry_upgrade(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: &[&str],
+    ) -> Result<UpgradeResult, EnvironmentError> {
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
+        let result = local_checkout.upgrade(flox, groups_or_iids, false)?;
+        Ok(result)
+    }
+
     /// Atomically upgrade packages in this environment
     fn upgrade(
         &mut self,
@@ -335,9 +348,9 @@ impl Environment for ManagedEnvironment {
             ))?
         }
 
-        let result = local_checkout.upgrade(flox, groups_or_iids)?;
+        let result = local_checkout.upgrade(flox, groups_or_iids, true)?;
 
-        let metadata = format!("upgraded packages: {}", result.packages.join(", "));
+        let metadata = format!("upgraded packages: {}", result.packages().join(", "));
 
         generations
             .add_generation(&mut local_checkout, metadata)
