@@ -469,60 +469,6 @@ impl From<&PackageResolutionInfo> for ProvidedPackage {
     }
 }
 
-/// Get nixpkgs#rel_path,
-/// optionally verifying that it satisfies a version constraint.
-async fn get_default_package_if_compatible(
-    flox: &Flox,
-    rel_path: Vec<String>,
-    version: Option<String>,
-) -> Result<Option<ProvidedPackage>> {
-    let pkg = {
-        tracing::debug!(
-            pkg = rel_path.join("."),
-            version = version.as_ref().unwrap_or(&"null".to_string()),
-            "using catalog client to find default compatible package"
-        );
-        let resolved_groups = flox
-            .catalog_client
-            .resolve(vec![PackageGroup {
-                descriptors: vec![PackageDescriptor {
-                    attr_path: rel_path.join("."),
-                    install_id: "default".to_string(),
-                    version,
-                    allow_pre_releases: None,
-                    derivation: None,
-                    allow_broken: None,
-                    allow_insecure: None,
-                    allow_unfree: None,
-                    allowed_licenses: None,
-                    systems: vec![flox.system.parse()?],
-                }],
-                name: "default".to_string(),
-            }])
-            .await?;
-        let pkg: Option<ProvidedPackage> = resolved_groups
-            .first()
-            .and_then(|pkg_group| pkg_group.page.as_ref())
-            .and_then(|page| page.packages.as_ref())
-            .and_then(|pkgs| pkgs.first().cloned())
-            .map(|pkg| {
-                // Type-inference fails without the fully-qualified method call
-                <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
-            });
-        let Some(pkg) = pkg else {
-            tracing::debug!("no compatible default package");
-            return Ok(None);
-        };
-        pkg
-    };
-
-    tracing::debug!(
-        version = pkg.version.as_ref().unwrap_or(&"null".to_string()),
-        "found default package version"
-    );
-    Ok(Some(pkg))
-}
-
 /// Get a package as if installed with `flox install {package}`
 async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<ProvidedPackage> {
     let pkg = {
@@ -573,16 +519,16 @@ async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<Provided
     Ok(pkg)
 }
 
-/// Searches for a given pname and version
-async fn try_find_compatible_version(
+/// Searches for a given pname and optional version
+async fn try_find_compatible_package(
     flox: &Flox,
     pname: &str,
-    version: &str,
+    version: Option<&str>,
 ) -> Result<Option<ProvidedPackage>> {
     let pkg = {
         tracing::debug!(
             pname,
-            version,
+            version = version.unwrap_or("null"),
             "using catalog client to find compatible package version"
         );
 
@@ -592,7 +538,7 @@ async fn try_find_compatible_version(
                 descriptors: vec![PackageDescriptor {
                     attr_path: pname.to_string(),
                     install_id: pname.to_string(),
-                    version: Some(version.to_string()),
+                    version: version.map(|v| v.to_string()),
                     allow_pre_releases: None,
                     derivation: None,
                     allow_broken: None,
@@ -614,7 +560,7 @@ async fn try_find_compatible_version(
                 <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
             });
         let Some(pkg) = pkg else {
-            tracing::debug!(pname, version, "no compatible package version found");
+            tracing::debug!(pname, "no compatible package version found");
             return Ok(None);
         };
         pkg
