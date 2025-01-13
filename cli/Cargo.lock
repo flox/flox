@@ -1026,6 +1026,7 @@ dependencies = [
  "sentry",
  "serde",
  "serde_json",
+ "serde_with",
  "serde_yaml",
  "serial_test",
  "shell-escape",
