@@ -127,8 +127,14 @@ flox config --set 'trusted_environments."owner/name"' trust
     `"deny"`.
 
 `upgrade_notifications`
-:   Print notification if upgrades are available on `flox activate`
-    (default: true).
+:   Print notification if upgrades are available on `flox activate`.
+    The notification message is:
+    ```
+    Upgrades are available for packages in 'environment-name'.
+    Use 'flox upgrade' to get the latest.
+    ```
+
+    (default: true)
 
 # ENVIRONMENT VARIABLES
 
