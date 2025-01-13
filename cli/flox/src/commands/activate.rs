@@ -736,6 +736,7 @@ fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironmen
     let description =
         UninitializedEnvironment::from_concrete_environment(environment)?.message_description()?;
 
+    // Update this message in flox-config.md if you change it here
     let message = formatdoc! {"
         ℹ️  Upgrades are available for packages in {description}.
         Use 'flox upgrade' to get the latest.
