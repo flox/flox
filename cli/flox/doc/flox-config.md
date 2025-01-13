@@ -81,7 +81,7 @@ flox config --set 'trusted_environments."owner/name"' trust
 :   Directory where flox should load its configuration file
     (default: `$XDG_CONFIG_HOME/flox`).
     This option will only take effect if set with `$FLOX_CONFIG_DIR`.
-    `$FLOX_CONFIG_DIR` and `config_dir` are ignored.
+    `config_dir` is ignored.
 
 `cache_dir`
 :   Directory where flox should store ephemeral data
