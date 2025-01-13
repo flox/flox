@@ -20,7 +20,7 @@ blake3 = "1.5.5"
 bpaf = { version = "0.9.15", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.39", features = ["serde"] }
-clap = { version = "4.5.23", features = ["derive"] }
+clap = { version = "4.5.26", features = ["derive"] }
 clap_derive = "4.5.4"
 # Pinned due to bug: https://github.com/rust-cli/config-rs/issues/531
 config = { version = "0.13.4", default-features = false, features = ["toml"]}
