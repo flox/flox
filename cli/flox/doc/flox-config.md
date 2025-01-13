@@ -116,10 +116,19 @@ flox config --set 'trusted_environments."owner/name"' trust
     * "hide-all": disables the modification of the shell prompt
     * "hide-default": filters out environments named 'default' from the shell prompt
 
+`state_dir`
+:   Directory where flox should store data that's not critical but also
+    shouldn't be able to be freely deleted like data in the cache directory.
+    (default: `$XDG_STATE_HOME/flox` e.g. `~/.local/state/flox`)
+
 `trusted_environments`
 :   Remote environments that are trusted for activation.
     Contains keys of the form `"<owner>/<name>"` that map to either `"trust"` or
     `"deny"`.
+
+`upgrade_notifications`
+:   Print notification if upgrades are available on `flox activate`
+    (default: true).
 
 # ENVIRONMENT VARIABLES
 
