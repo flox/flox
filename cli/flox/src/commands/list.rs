@@ -3,7 +3,7 @@ use std::io::{stdout, Write};
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::{
     InstalledPackage,
     LockedPackageFlake,
@@ -58,8 +58,7 @@ impl List {
 
         let mut env = self
             .environment
-            .detect_concrete_environment(&flox, "List using")?
-            .into_dyn_environment();
+            .detect_concrete_environment(&flox, "List using")?;
 
         let manifest_contents = env.manifest_contents(&flox)?;
         if self.list_mode == ListMode::Config {
@@ -68,7 +67,7 @@ impl List {
         }
 
         let system = &flox.system;
-        let lockfile = Self::get_lockfile(&flox, &mut *env)?;
+        let lockfile = Self::get_lockfile(&flox, &mut env)?;
         let packages = lockfile.list_packages(system)?;
 
         if packages.is_empty() {
@@ -270,7 +269,7 @@ impl List {
     ///
     /// Check the implementation docs of [Environment::lockfile] for more
     /// information.
-    fn get_lockfile(flox: &Flox, env: &mut dyn Environment) -> Result<Lockfile> {
+    fn get_lockfile(flox: &Flox, env: &mut ConcreteEnvironment) -> Result<Lockfile> {
         // TODO: it would be better if we knew when a lock was actually happening
         let lockfile = env.lockfile(flox)?;
 
