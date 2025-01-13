@@ -57,6 +57,7 @@ xdg.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true
+serde_with.workspace = true
 serial_test.workspace = true
 temp-env.workspace = true
 tempfile.workspace = true
