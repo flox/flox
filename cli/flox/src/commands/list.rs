@@ -305,11 +305,14 @@ impl List {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use flox_rust_sdk::models::lockfile::test_helpers::{
         fake_catalog_package_lock,
         nix_eval_jobs_descriptor,
         LOCKED_NIX_EVAL_JOBS,
     };
+    use flox_rust_sdk::models::lockfile::LockedPackage;
     use flox_rust_sdk::models::manifest::DEFAULT_PRIORITY;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -423,6 +426,37 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             pip_install_id: python3Packages.pip (N/A)
+        "});
+    }
+
+    /// If packages have upgrades available, the output should indicate that
+    #[test]
+    fn test_print_extended_includes_upgrade_indicator() {
+        let mut out = Vec::new();
+
+        let mut packages = test_packages();
+        let PackageToList::Catalog(_, ref mut pip_lock) = packages[0] else {
+            unreachable!()
+        };
+        let mut pip_lock_upgraded = pip_lock.clone();
+        pip_lock_upgraded.version = format!("{}-upgraded", pip_lock.version);
+
+        let upgrades = UpgradeDiff::from_iter(vec![(
+            "pip_install_id".to_string(),
+            BTreeMap::from_iter(vec![(
+                "some-system".to_string(),
+                (
+                    LockedPackage::Catalog(pip_lock.clone()),
+                    LockedPackage::Catalog(pip_lock_upgraded),
+                ),
+            )]),
+        )]);
+
+        List::print_extended(&mut out, &packages, Some(upgrades)).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            pip_install_id: python3Packages.pip (20.3.4 - upgrade available)
+            python_install_id: python3Packages.python (3.9.5)
         "});
     }
 
