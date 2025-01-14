@@ -93,8 +93,9 @@ setup_pkgdb_env() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade
   assert_success
-  assert_line "✅  Upgrade sucessfully applied build changes to 1 package(s) in 'test':"
-  assert_line --regexp "- hello: $old_hello_response_version -> $hello_response_version"
+  assert_output \
+"✅  Upgraded 1 package(s) in 'test':
+- hello: $old_hello_response_version -> $hello_response_version"
 
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -122,8 +123,9 @@ setup_pkgdb_env() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade blue
   assert_success
-  assert_line "✅  Upgrade sucessfully applied build changes to 1 package(s) in 'test':"
-  assert_line --regexp "- hello: $old_hello_response_version -> $hello_response_version"
+  assert_output \
+"✅  Upgraded 1 package(s) in 'test':
+- hello: $old_hello_response_version -> $hello_response_version"
 
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -146,8 +148,9 @@ setup_pkgdb_env() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade toplevel
   assert_success
-  assert_line "✅  Upgrade sucessfully applied build changes to 1 package(s) in 'test':"
-  assert_line --regexp "- hello: $old_hello_response_version -> $hello_response_version"
+  assert_output \
+"✅  Upgraded 1 package(s) in 'test':
+- hello: $old_hello_response_version -> $hello_response_version"
 
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -170,8 +173,9 @@ setup_pkgdb_env() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade hello
   assert_success
-  assert_line "✅  Upgrade sucessfully applied build changes to 1 package(s) in 'test':"
-  assert_line --regexp "- hello: $old_hello_response_version -> $hello_response_version"
+  assert_output \
+"✅  Upgraded 1 package(s) in 'test':
+- hello: $old_hello_response_version -> $hello_response_version"
 
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
@@ -197,7 +201,7 @@ setup_pkgdb_env() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" \
     run "$FLOX_BIN" upgrade
   assert_success
-  assert_output "No package(s) need to be upgraded in 'test'."
+  assert_output "No upgrades available for packages in 'test'."
 }
 
 # bats test_tags=upgrade:page-not-upgraded
@@ -224,7 +228,7 @@ setup_pkgdb_env() {
   _FLOX_USE_CATALOG_MOCK="$BUMPED_REVS_RESPONE" \
     run "$FLOX_BIN" upgrade
   assert_success
-  assert_output "No package(s) need to be upgraded in 'test'."
+  assert_output "No upgrades available for packages in 'test'."
 
   curr_lock=$(jq --sort-keys . "$LOCK_PATH")
 
@@ -233,7 +237,7 @@ setup_pkgdb_env() {
 }
 
 # bats test_tags=upgrade:dry-run
-@test "'upgrade --dry-run' does not update the lockfil" {
+@test "'upgrade --dry-run' does not update the lockfile" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
 
@@ -248,9 +252,11 @@ setup_pkgdb_env() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade --dry-run
   assert_success
-  assert_line "Dry run: Upgrade will apply build changes to 1 package(s) in 'test':"
-  assert_line --regexp "- hello: $old_hello_response_version -> $hello_response_version"
-  assert_line "To apply these changes, run the command without the '--dry-run' flag."
+  assert_output \
+"Dry run: Upgrades available for 1 package(s) in 'test':
+- hello: $old_hello_response_version -> $hello_response_version
+
+To apply these changes, run upgrade without the '--dry-run' flag."
 
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$hello_locked_drv" "$old_hello_locked_drv"
@@ -263,7 +269,7 @@ setup_pkgdb_env() {
 
   run "$FLOX_BIN" upgrade
   assert_success
-  assert_output "No package(s) need to be upgraded in 'test'."
+  assert_output "No upgrades available for packages in 'test'."
 
   new_version="$(jq -r '.packages[0]."version"' "$LOCK_PATH")"
   old_version="2.10.0"
@@ -274,8 +280,9 @@ setup_pkgdb_env() {
   run "$FLOX_BIN" upgrade
   assert_success
 
-  assert_line "✅  Upgrade sucessfully applied build changes to 1 package(s) in 'test':"
-  assert_line --regexp "- hello: $old_version -> $new_version"
+  assert_output \
+"✅  Upgraded 1 package(s) in 'test':
+- hello: $old_version -> $new_version"
 }
 
 # bats test_tags=upgrade:flake:iid
@@ -286,5 +293,5 @@ setup_pkgdb_env() {
 
   run "$FLOX_BIN" upgrade hello
   assert_success
-  assert_output "The specified package(s) do not need to be upgraded in 'test'."
+  assert_output "No upgrades available for the specified packages in 'test'."
 }
