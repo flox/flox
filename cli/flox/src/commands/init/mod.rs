@@ -469,30 +469,30 @@ impl From<&PackageResolutionInfo> for ProvidedPackage {
     }
 }
 
-/// Searches for a given pname and optional version, returning an error if there
-/// are no matches.
+/// Searches for a given attr_path and optional version, returning an error if
+/// there are no matches.
 async fn find_compatible_package(
     flox: &Flox,
-    pname: &str,
+    attr_path: &str,
     version: Option<&str>,
 ) -> Result<ProvidedPackage> {
-    match try_find_compatible_package(flox, pname, version).await? {
+    match try_find_compatible_package(flox, attr_path, version).await? {
         Some(pkg) => Ok(pkg),
         None => Err(anyhow!(
-            "Flox couldn't find any compatible versions of {pname}"
+            "Flox couldn't find any compatible versions of {attr_path}"
         )),
     }
 }
 
-/// Searches for a given pname and optional version
+/// Searches for a given attr_path and optional version
 async fn try_find_compatible_package(
     flox: &Flox,
-    pname: &str,
+    attr_path: &str,
     version: Option<&str>,
 ) -> Result<Option<ProvidedPackage>> {
     let pkg = {
         tracing::debug!(
-            pname,
+            attr_path,
             version = version.unwrap_or("null"),
             "using catalog client to find compatible package version"
         );
@@ -501,8 +501,8 @@ async fn try_find_compatible_package(
             .catalog_client
             .resolve(vec![PackageGroup {
                 descriptors: vec![PackageDescriptor {
-                    attr_path: pname.to_string(),
-                    install_id: pname.to_string(),
+                    attr_path: attr_path.to_string(),
+                    install_id: attr_path.to_string(),
                     version: version.map(|v| v.to_string()),
                     allow_pre_releases: None,
                     derivation: None,
@@ -512,7 +512,7 @@ async fn try_find_compatible_package(
                     allowed_licenses: None,
                     systems: vec![flox.system.parse()?],
                 }],
-                name: pname.to_string(),
+                name: attr_path.to_string(),
             }])
             .await?;
         let pkg: Option<ProvidedPackage> = resolved_groups
@@ -525,14 +525,14 @@ async fn try_find_compatible_package(
                 <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
             });
         let Some(pkg) = pkg else {
-            tracing::debug!(pname, "no compatible package version found");
+            tracing::debug!(attr_path, "no compatible package version found");
             return Ok(None);
         };
         pkg
     };
 
     tracing::debug!(
-        pname,
+        attr_path,
         version = pkg.version.as_ref().unwrap_or(&"null".to_string()),
         "found matching package version"
     );
