@@ -410,7 +410,7 @@ EOF
 
   TAG="Cmd-runs-in-activation"
 
-  bash -c "FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=containerize-config $FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
+  bash -c "FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=main $FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
 
   run podman run --rm "test:$TAG"
   assert_success
