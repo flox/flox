@@ -223,14 +223,16 @@ mod tests {
         (subscriber, writer)
     }
 
+    /// Check message printed when there are no upgrades available
     #[tokio::test]
-    async fn no_notification_printed_if_absent() {
-        let (flox, _tempdir) = flox_instance();
+    async fn confirmation_when_up_to_date() {
+        let (mut flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber();
 
         let environment =
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
 
+        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         Upgrade {
             environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
             dry_run: true,
@@ -243,7 +245,7 @@ mod tests {
 
         let printed = writer.to_string();
 
-        assert!(printed.is_empty(), "printed: {printed}");
+        assert_eq!(printed, "No upgrades available for packages in 'name'.\n");
     }
 
     /// Run an upgrade of an environment that only has upgrades on other systems

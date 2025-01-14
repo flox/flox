@@ -194,16 +194,6 @@ setup_pkgdb_env() {
   assert_line "❌ ERROR: 'hello' is a package in the group 'toplevel' with multiple packages."
 }
 
-@test "check confirmation when all packages are up to date" {
-  "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" "$FLOX_BIN" install curl hello
-
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" \
-    run "$FLOX_BIN" upgrade
-  assert_success
-  assert_output "No upgrades available for packages in 'test'."
-}
-
 # bats test_tags=upgrade:page-not-upgraded
 @test "page changes should not be considered an upgrade" {
   "$FLOX_BIN" init
