@@ -3,7 +3,11 @@ use std::io::{stdout, Write};
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
+use flox_rust_sdk::models::environment::{
+    ConcreteEnvironment,
+    Environment,
+    SingleSystemUpgradeDiff,
+};
 use flox_rust_sdk::models::lockfile::{
     InstalledPackage,
     LockedPackageFlake,
@@ -12,9 +16,10 @@ use flox_rust_sdk::models::lockfile::{
     PackageToList,
 };
 use flox_rust_sdk::providers::flake_installable_locker::LockedInstallable;
+use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use indoc::formatdoc;
 use itertools::Itertools;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use super::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
@@ -85,7 +90,11 @@ impl List {
                 Self::print_name_only(stdout().lock(), &packages)?;
             },
             ListMode::Extended => {
-                Self::print_extended(stdout().lock(), &packages)?;
+                Self::print_extended(
+                    stdout().lock(),
+                    &packages,
+                    List::get_upgrades_for_system(&flox, &mut env, system)?,
+                )?;
             },
             ListMode::All => {
                 Self::print_detail(stdout().lock(), &packages)?;
@@ -114,13 +123,26 @@ impl List {
     /// e.g. `pip: python3Packages.pip (20.3.4)`
     ///
     /// This is the default mode
-    fn print_extended(mut out: impl Write, packages: &[PackageToList]) -> Result<()> {
+    fn print_extended(
+        mut out: impl Write,
+        packages: &[PackageToList],
+        upgrades: Option<SingleSystemUpgradeDiff>,
+    ) -> Result<()> {
         for p in packages {
             match p {
                 PackageToList::Catalog(p) => {
+                    let upgrade_available = if upgrades
+                        .as_ref()
+                        .and_then(|upgrades| upgrades.get(&p.install_id))
+                        .is_some()
+                    {
+                        " - upgrade available"
+                    } else {
+                        ""
+                    };
                     writeln!(
                         &mut out,
-                        "{id}: {path} ({version})",
+                        "{id}: {path} ({version}{upgrade_available})",
                         id = p.install_id,
                         path = p.rel_path,
                         version = p.info.version.as_deref().unwrap_or("N/A")
@@ -275,6 +297,28 @@ impl List {
 
         Ok(lockfile)
     }
+
+    fn get_upgrades_for_system(
+        flox: &Flox,
+        environment: &mut ConcreteEnvironment,
+        system: &str,
+    ) -> Result<Option<SingleSystemUpgradeDiff>> {
+        let upgrade_guard = UpgradeInformationGuard::read_in(environment.cache_path()?)?;
+        let Some(info) = upgrade_guard.info() else {
+            debug!("Not displaying upgrade information; no upgrade information available");
+            return Ok(None);
+        };
+
+        let current_lockfile = environment.lockfile(flox)?;
+
+        if Some(current_lockfile) != info.result.old_lockfile {
+            // todo: delete the info file?
+            debug!("Not using upgrade information; lockfile has changed since last check");
+            return Ok(None);
+        }
+
+        Ok(Some(info.result.diff_for_system(system)))
+    }
 }
 
 #[cfg(test)]
@@ -369,7 +413,7 @@ mod tests {
     #[test]
     fn test_print_extended_output() {
         let mut out = Vec::new();
-        List::print_extended(&mut out, &test_packages()).unwrap();
+        List::print_extended(&mut out, &test_packages(), None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             pip-iid: python3Packages.pip (20.3.4)
@@ -381,7 +425,7 @@ mod tests {
     #[test]
     fn test_print_extended_flake_output() {
         let mut out = Vec::new();
-        List::print_extended(&mut out, &[test_flake_package()]).unwrap();
+        List::print_extended(&mut out, &[test_flake_package()], None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs: github:nix-community/nix-eval-jobs
@@ -392,7 +436,7 @@ mod tests {
     #[test]
     fn test_print_extended_output_handles_missing_values() {
         let mut out = Vec::new();
-        List::print_extended(&mut out, &[uninformative_package()]).unwrap();
+        List::print_extended(&mut out, &[uninformative_package()], None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             pip-iid: python3Packages.pip (N/A)

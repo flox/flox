@@ -1068,7 +1068,7 @@ mod upgrade_notification_tests {
                 store_path: None,
             };
 
-            assert_eq!(result.diff(), vec![]);
+            assert!(result.diff().is_empty());
 
             let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
 
