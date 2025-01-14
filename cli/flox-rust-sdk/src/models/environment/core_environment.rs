@@ -855,16 +855,23 @@ pub struct UpgradeResult {
     pub store_path: Option<BuildEnvOutputs>,
 }
 
+/// Packages that have upgrades in the format
+/// packages[install_id][system] = (old_package, new_package)
+pub type UpgradeDiff = BTreeMap<String, BTreeMap<String, (LockedPackage, LockedPackage)>>;
+
+/// Packages for a single system that have upgrades in the format
+/// packages[install_id] = (old_package, new_package)
+pub type SingleSystemUpgradeDiff = BTreeMap<String, (LockedPackage, LockedPackage)>;
+
 impl UpgradeResult {
+    /// Return an iterator over sorted install IDs that have an upgrade
     pub fn packages(&self) -> impl Iterator<Item = String> {
-        self.diff()
-            .into_iter()
-            .map(|(prev, _)| prev.install_id().to_string())
-            .unique()
-            .sorted()
+        self.diff().into_keys().sorted()
     }
 
-    pub fn diff(&self) -> Vec<(LockedPackage, LockedPackage)> {
+    /// Return a map of packages that have upgrades in the format
+    /// packages[install_id][system] = (old_package, new_package)
+    pub fn diff(&self) -> UpgradeDiff {
         // Record a nested map where you retrieve the locked package
         // via pkgs[install_id][system]
         let previous_packages = if let Some(ref lockfile) = self.old_lockfile {
@@ -880,7 +887,7 @@ impl UpgradeResult {
             BTreeMap::new()
         };
 
-        let pkgs_after_upgrade = {
+        let mut pkgs_after_upgrade = {
             let mut pkgs_by_id = BTreeMap::new();
             self.new_lockfile.packages.iter().for_each(|pkg| {
                 let by_system = pkgs_by_id
@@ -891,30 +898,35 @@ impl UpgradeResult {
             pkgs_by_id
         };
 
-        // Iterate over the two sorted maps in lockstep
-        // Since BTreeMap is ordered and we must have the same packages before
-        // and after upgrading, we can zip the two iterators together knowing
-        // that we'll visit the same install_id from each map at the same time.
-        let package_diff = previous_packages
-            .iter()
-            .zip(pkgs_after_upgrade.iter())
-            // Extract LockedPackage
-            .flat_map(|((_prev_id, prev_map), (_curr_id, curr_map))| {
-                let curr_iter = curr_map.iter().map(|(_sys, pkg)| pkg);
-                prev_map.iter().map(|(_sys, pkg)| pkg).zip(curr_iter)
-            })
-            // Keep anything that has been upgraded, using a change in
-            // derivation to define upgraded for both flake and catalog packages.
-            .filter_map(|(prev_pkg, curr_pkg)| {
-                if prev_pkg.derivation() != curr_pkg.derivation() {
-                    Some((prev_pkg.to_owned(), curr_pkg.to_owned()))
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let mut packages_with_upgrades: UpgradeDiff = BTreeMap::new();
 
-        package_diff
+        for (prev_install_id, prev_packages_by_system) in previous_packages.into_iter() {
+            // We must have the same packages before and after upgrading
+            let mut after_packages_by_system = pkgs_after_upgrade.remove(&prev_install_id).unwrap();
+            for (prev_system, prev_package) in prev_packages_by_system {
+                // We must have the same packages before and after upgrading
+                let after_package = after_packages_by_system.remove(&prev_system).unwrap();
+                if prev_package.derivation() != after_package.derivation() {
+                    let by_system = packages_with_upgrades
+                        .entry(prev_install_id.to_owned())
+                        .or_default();
+                    by_system.insert(prev_system.to_owned(), (prev_package, after_package));
+                }
+            }
+        }
+
+        packages_with_upgrades
+    }
+
+    pub fn diff_for_system(&self, system: &str) -> SingleSystemUpgradeDiff {
+        self.diff()
+            .into_iter()
+            .filter_map(|(install_id, mut by_system)| {
+                by_system.remove(system).map(|(old_package, new_package)| {
+                    (install_id, (old_package.clone(), new_package.clone()))
+                })
+            })
+            .collect()
     }
 }
 

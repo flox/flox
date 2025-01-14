@@ -36,6 +36,7 @@ pub use core_environment::{
     CoreEnvironment,
     CoreEnvironmentError,
     EditResult,
+    SingleSystemUpgradeDiff,
     UpgradeResult,
 };
 
