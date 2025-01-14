@@ -87,7 +87,7 @@ impl List {
                 Self::print_extended(
                     stdout().lock(),
                     &packages,
-                    List::get_upgrades_for_system(&flox, &mut env, system)?,
+                    List::get_cached_upgrades_for_current_system(&flox, &mut env)?,
                 )?;
             },
             ListMode::All => {
@@ -280,10 +280,9 @@ impl List {
         Ok(lockfile)
     }
 
-    fn get_upgrades_for_system(
+    fn get_cached_upgrades_for_current_system(
         flox: &Flox,
         environment: &mut ConcreteEnvironment,
-        system: &str,
     ) -> Result<Option<SingleSystemUpgradeDiff>> {
         let upgrade_guard = UpgradeInformationGuard::read_in(environment.cache_path()?)?;
         let Some(info) = upgrade_guard.info() else {
@@ -299,14 +298,12 @@ impl List {
             return Ok(None);
         }
 
-        Ok(Some(info.result.diff_for_system(system)))
+        Ok(Some(info.result.diff_for_system(&flox.system)))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use flox_rust_sdk::models::lockfile::test_helpers::{
         fake_catalog_package_lock,
         nix_eval_jobs_descriptor,
@@ -428,7 +425,6 @@ mod tests {
             pip_install_id: python3Packages.pip (N/A)
         "});
     }
-
     /// If packages have upgrades available, the output should indicate that
     #[test]
     fn test_print_extended_includes_upgrade_indicator() {
@@ -441,15 +437,12 @@ mod tests {
         let mut pip_lock_upgraded = pip_lock.clone();
         pip_lock_upgraded.version = format!("{}-upgraded", pip_lock.version);
 
-        let upgrades = UpgradeDiff::from_iter(vec![(
+        let upgrades = SingleSystemUpgradeDiff::from_iter(vec![(
             "pip_install_id".to_string(),
-            BTreeMap::from_iter(vec![(
-                "some-system".to_string(),
-                (
-                    LockedPackage::Catalog(pip_lock.clone()),
-                    LockedPackage::Catalog(pip_lock_upgraded),
-                ),
-            )]),
+            (
+                LockedPackage::Catalog(pip_lock.clone()),
+                LockedPackage::Catalog(pip_lock_upgraded),
+            ),
         )]);
 
         List::print_extended(&mut out, &packages, Some(upgrades)).unwrap();
