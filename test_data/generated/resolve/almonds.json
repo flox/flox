@@ -11,33 +11,32 @@
             "attr_path": "almonds",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/rxlg3pwkhp1ckmy84bhjwbx0lmxqd31q-almonds-1.25b.drv",
+            "derivation": "/nix/store/b03w5q0mgxardrzrsq0r9knf81ipzcac-almonds-1.25b.drv",
             "description": "Terminal Mandelbrot fractal viewer",
             "insecure": false,
             "install_id": "almonds",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "almonds-1.25b",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/ycd3jihdx9y9s82xaw63z3lgdrhy8y8g-almonds-1.25b"
+                "store_path": "/nix/store/h6j143ip6fvvdsk1csyrf8cszwbr3zjl-almonds-1.25b"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/5h9ym73piqn7xjdxzz1lyrhjfk148kqc-almonds-1.25b-dist"
+                "store_path": "/nix/store/l7bll5pd67ppllh5pyn7mwj09fbbk8sq-almonds-1.25b-dist"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "almonds",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -48,33 +47,32 @@
             "attr_path": "almonds",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/b9pngy97z31mj57fl5qsxiasvp3iib33-almonds-1.25b.drv",
+            "derivation": "/nix/store/5aalc4ky5z612xy7lm0wx6pkmadjy3jw-almonds-1.25b.drv",
             "description": "Terminal Mandelbrot fractal viewer",
             "insecure": false,
             "install_id": "almonds",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "almonds-1.25b",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/skli4q5hfs99hnnb9lx4ca83bhrbl9jq-almonds-1.25b"
+                "store_path": "/nix/store/h8zzmgzn4xnh435nhj7wv25hvmbpnpfr-almonds-1.25b"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/xfvncg6i337l7fn7akni9w32pac86s2v-almonds-1.25b-dist"
+                "store_path": "/nix/store/c2m67ja625hxpbx726q2kx35k9kxy345-almonds-1.25b-dist"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "almonds",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -85,33 +83,32 @@
             "attr_path": "almonds",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/41bx2k7r7yla4kazcmgbhin4nf6a4jhg-almonds-1.25b.drv",
+            "derivation": "/nix/store/jrnhkk0rhf1sg5hg3fwv4sh5c010sl7k-almonds-1.25b.drv",
             "description": "Terminal Mandelbrot fractal viewer",
             "insecure": false,
             "install_id": "almonds",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "almonds-1.25b",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/fp2raabshhwfd6x97prvb3jdxwc42g42-almonds-1.25b"
+                "store_path": "/nix/store/5dkd3vrrsksx1dzch5bhfnqbgbf5cd79-almonds-1.25b"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/40z30sc5pzzzzi17gannmiyv8jjyj1sa-almonds-1.25b-dist"
+                "store_path": "/nix/store/fhb91wgvgbgxhcb9f5lzb8sb6c43wa04-almonds-1.25b-dist"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "almonds",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -122,33 +119,32 @@
             "attr_path": "almonds",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/6zzplzw7nxhqyp49a40f2ihlyswspy71-almonds-1.25b.drv",
+            "derivation": "/nix/store/gbazpc12r756rm4yi3phmdc6q6cpr7ig-almonds-1.25b.drv",
             "description": "Terminal Mandelbrot fractal viewer",
             "insecure": false,
             "install_id": "almonds",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "almonds-1.25b",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/1fzhsv4j3l5x5hm92azbykg055hwsl8r-almonds-1.25b"
+                "store_path": "/nix/store/5rx02dh1fmhrn4ac3g2ngwj38721hql5-almonds-1.25b"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/1d34b3alf19jdikvjq9s2dnp4jgj0jib-almonds-1.25b-dist"
+                "store_path": "/nix/store/h0qxjmg8prbfgpgzqdkdha4mzbid4cv6-almonds-1.25b-dist"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "almonds",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
@@ -156,7 +152,7 @@
             "version": "1.25b"
           }
         ],
-        "page": 710087,
+        "page": 736170,
         "url": ""
       }
     }

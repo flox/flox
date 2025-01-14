@@ -11,152 +11,148 @@
             "attr_path": "nodejs",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/v0v7dny82f4hmfp9s8zj31iykjrdblkn-nodejs-20.18.0.drv",
+            "derivation": "/nix/store/zh4vzz8z4g7k2p0iqpi8dfz6kgpxkgb1-nodejs-22.11.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "name": "nodejs-20.18.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "name": "nodejs-22.11.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/9grahx8677nlgbx3yfiggibw335lkgfr-nodejs-20.18.0"
+                "store_path": "/nix/store/9vkabbbbyfn8hv5l1r8fm59d27imq460-nodejs-22.11.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/hfchgw1as9fm02wcyr3iqya05ylll5f3-nodejs-20.18.0-libv8"
+                "store_path": "/nix/store/m3rxxwm6jp95kjmh4rklqn0d76biz6wm-nodejs-22.11.0-libv8"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "nodejs",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "20.18.0"
+            "version": "22.11.0"
           },
           {
             "attr_path": "nodejs",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/d3mn4dx774ppvnajxls24jkgsscv4sq5-nodejs-20.18.0.drv",
+            "derivation": "/nix/store/q23y2j34i9ydidrllrm4gj857hqhvda1-nodejs-22.11.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "name": "nodejs-20.18.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "name": "nodejs-22.11.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/hsh74yzdb9yk834w9j5qz0w3sw84wcfv-nodejs-20.18.0"
+                "store_path": "/nix/store/z2lznj5fq0wagkhj7nkgmb5yr4gyv0ws-nodejs-22.11.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/yajvza262cb3bri9cryfrgpm3pvc066n-nodejs-20.18.0-libv8"
+                "store_path": "/nix/store/0xiwppqyszilzy9cg71c26fxg5qcxh89-nodejs-22.11.0-libv8"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "nodejs",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "20.18.0"
+            "version": "22.11.0"
           },
           {
             "attr_path": "nodejs",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/lmn1hdq8i3gf5d3r64l13nhanlb2pnx5-nodejs-20.18.0.drv",
+            "derivation": "/nix/store/vzxxfv1f1i83bnjib0q144v5gndhci33-nodejs-22.11.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "name": "nodejs-20.18.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "name": "nodejs-22.11.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/v8p36abnvrn9i5h41zkgrayaj7sclv6z-nodejs-20.18.0"
+                "store_path": "/nix/store/s81s2z275wnjazk4ij3zvn6kslfa5ipf-nodejs-22.11.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/93xdzgjsm1dnnw33lnba4i7h7k5yph4k-nodejs-20.18.0-libv8"
+                "store_path": "/nix/store/mm87n14lp5akdjlfwh1yg4l93zm8gv9h-nodejs-22.11.0-libv8"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "nodejs",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "20.18.0"
+            "version": "22.11.0"
           },
           {
             "attr_path": "nodejs",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/l136ajs6lg3mic58rnb7cdwhfhl3qcyr-nodejs-20.18.0.drv",
+            "derivation": "/nix/store/542jkp10xz0nd5657bqksqwhhvjcmi9n-nodejs-22.11.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "name": "nodejs-20.18.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "name": "nodejs-22.11.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/z0ivg3dbal4sk5h0c7p1pfkxc7ff98ri-nodejs-20.18.0"
+                "store_path": "/nix/store/fkyp1bm5gll9adnfcj92snyym524mdrj-nodejs-22.11.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/czcxwki3zqih2pf355zk0vxbmrij2bzx-nodejs-20.18.0-libv8"
+                "store_path": "/nix/store/fyaac3q8qn3zfxy72airfabm3dakmgf5-nodejs-22.11.0-libv8"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "nodejs",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "20.18.0"
+            "version": "22.11.0"
           }
         ],
-        "page": 710087,
+        "page": 736170,
         "url": ""
       }
     }

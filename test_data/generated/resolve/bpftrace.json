@@ -31,21 +31,21 @@
             "attr_path": "bpftrace",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/wpqpghximcs4p4kk5s7j8c1xb7p2i9g2-bpftrace-0.21.2.drv",
+            "derivation": "/nix/store/6g6xnc73di6azqfh4z7b6llvqjh2djzn-bpftrace-0.21.3.drv",
             "description": "High-level tracing language for Linux eBPF",
             "insecure": false,
             "install_id": "bpftrace",
             "license": "Apache-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "name": "bpftrace-0.21.2",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "name": "bpftrace-0.21.3",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/7jsdcmzn61rw7fppplww2jnw4dvnrc1l-bpftrace-0.21.2-man"
+                "store_path": "/nix/store/5wx28y3hh96lg7rfni4gbncsdr9i4bbv-bpftrace-0.21.3-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/l40awkmh4y98sw0kadv8cpw5diyxizk2-bpftrace-0.21.2"
+                "store_path": "/nix/store/x9966ilqpfl5pvqlvn91j867hkjx5sj5-bpftrace-0.21.3"
               }
             ],
             "outputs_to_install": [
@@ -53,37 +53,36 @@
               "man"
             ],
             "pname": "bpftrace",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "0.21.2"
+            "version": "0.21.3"
           },
           {
             "attr_path": "bpftrace",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/8cvsnn4f0ksn9nsx53rsjdq1vdn374cp-bpftrace-0.21.2.drv",
+            "derivation": "/nix/store/j0f92xc5ghqcpwddiil37m8dd44r43f0-bpftrace-0.21.3.drv",
             "description": "High-level tracing language for Linux eBPF",
             "insecure": false,
             "install_id": "bpftrace",
             "license": "Apache-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "name": "bpftrace-0.21.2",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "name": "bpftrace-0.21.3",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/mw8gfbbi5n1j16gl6l2jjdplwwc18zr8-bpftrace-0.21.2-man"
+                "store_path": "/nix/store/bljfg54hnvpjvzn0g257i5jxflk9kp0r-bpftrace-0.21.3-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/nhk5kki340vghf9fjqlzbql6ipnvf2yh-bpftrace-0.21.2"
+                "store_path": "/nix/store/5x7v4si2yfyjsjka42zq6bv7sgspi4ag-bpftrace-0.21.3"
               }
             ],
             "outputs_to_install": [
@@ -91,20 +90,19 @@
               "man"
             ],
             "pname": "bpftrace",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "0.21.2"
+            "version": "0.21.3"
           }
         ],
-        "page": 710087,
+        "page": 736170,
         "url": ""
       }
     }
