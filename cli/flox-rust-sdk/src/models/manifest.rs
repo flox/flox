@@ -1068,7 +1068,9 @@ pub struct ManifestContainerizeConfig {
     pub exposed_ports: Option<BTreeSet<String>>,
     /// Default arguments to the entrypoint of the container.
     /// These values act as defaults and may be replaced by any specified when creating a container.
-    /// If an `Entrypoint` value is not specified, then the first entry of the `Cmd` array SHOULD be interpreted as the executable to run.
+    /// Flox sets an entrypoint to activate the containerized environment,
+    /// and `cmd` is then run inside the activation, similar to
+    /// `flox activate -- cmd`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cmd: Option<Vec<String>>,
     /// A set of directories describing where the process is
@@ -1079,11 +1081,11 @@ pub struct ManifestContainerizeConfig {
     /// This value acts as a default and may be replaced by a working directory specified when creating a container.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub working_dir: Option<String>,
-    /// The field contains arbitrary metadata for the container.
+    /// This field contains arbitrary metadata for the container.
     /// This property MUST use the [annotation rules](https://github.com/opencontainers/image-spec/blob/main/annotations.md#rules).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub labels: Option<BTreeMap<String, String>>,
-    /// The field contains the system call signal that will be sent to the container to exit. The signal can be a signal name in the format `SIGNAME`, for instance `SIGKILL` or `SIGRTMIN+3`.
+    /// This field contains the system call signal that will be sent to the container to exit. The signal can be a signal name in the format `SIGNAME`, for instance `SIGKILL` or `SIGRTMIN+3`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_signal: Option<String>,
 }
