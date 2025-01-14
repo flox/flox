@@ -906,7 +906,12 @@ impl UpgradeResult {
             for (prev_system, prev_package) in prev_packages_by_system {
                 // We must have the same packages before and after upgrading
                 let after_package = after_packages_by_system.remove(&prev_system).unwrap();
-                if prev_package.derivation() != after_package.derivation() {
+                // Store paths return None for the derivation,
+                // and we shouldn't say store paths have an upgrade.
+                if prev_package.derivation().is_some()
+                    && after_package.derivation().is_some()
+                    && prev_package.derivation() != after_package.derivation()
+                {
                     let by_system = packages_with_upgrades
                         .entry(prev_install_id.to_owned())
                         .or_default();
