@@ -483,19 +483,22 @@ impl Lockfile {
             .filter(|package| package.system() == system)
             .cloned()
             .map(|package| match package {
-                LockedPackage::Catalog(pkg) => Ok(PackageToList::Catalog(InstalledPackage {
-                    install_id: pkg.install_id,
-                    rel_path: pkg.attr_path,
-                    info: PackageInfo {
-                        description: pkg.description,
-                        broken: pkg.broken,
-                        license: pkg.license,
-                        pname: pkg.pname,
-                        unfree: pkg.unfree,
-                        version: Some(pkg.version),
-                    },
-                    priority: pkg.priority,
-                })),
+                LockedPackage::Catalog(pkg) => {
+                    let descriptor = self
+                        .manifest
+                        .pkg_descriptor_with_id(&pkg.install_id)
+                        .ok_or(LockedManifestError::MissingPackageDescriptor(
+                            pkg.install_id.clone(),
+                        ))?;
+
+                    let Some(descriptor) = descriptor.unwrap_catalog_descriptor() else {
+                        Err(LockedManifestError::MissingPackageDescriptor(
+                            pkg.install_id.clone(),
+                        ))?
+                    };
+
+                    Ok(PackageToList::Catalog(descriptor, pkg))
+                },
                 LockedPackage::Flake(locked_package) => {
                     let descriptor = self
                         .manifest
@@ -504,7 +507,7 @@ impl Lockfile {
                             locked_package.install_id.clone(),
                         ))?;
 
-                    let ManifestPackageDescriptor::FlakeRef(descriptor) = descriptor else {
+                    let Some(descriptor) = descriptor.unwrap_flake_descriptor() else {
                         Err(LockedManifestError::MissingPackageDescriptor(
                             locked_package.install_id.clone(),
                         ))?
@@ -1234,38 +1237,13 @@ impl Lockfile {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct PackageInfo {
-    pub description: Option<String>,
-    pub broken: Option<bool>,
-    pub license: Option<String>,
-    pub pname: String,
-    pub unfree: Option<bool>,
-    pub version: Option<String>,
-}
-
 /// Distinct types of packages that can be listed
 /// TODO: drop in favor of mapping to `(ManifestPackageDescriptor*, LockedPackage*)`
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackageToList {
-    Catalog(InstalledPackage),
+    Catalog(ManifestPackageDescriptorCatalog, LockedPackageCatalog),
     Flake(ManifestPackageDescriptorFlake, LockedPackageFlake),
     StorePath(LockedPackageStorePath),
-}
-
-impl From<InstalledPackage> for PackageToList {
-    fn from(installed: InstalledPackage) -> Self {
-        PackageToList::Catalog(installed)
-    }
-}
-
-// TODO: consider dropping this in favor of mapping to [LockedPackageCatalog]?
-#[derive(Debug, Clone, PartialEq)]
-pub struct InstalledPackage {
-    pub install_id: String,
-    pub rel_path: String,
-    pub info: PackageInfo,
-    pub priority: u64,
 }
 
 #[derive(Debug, Error)]
@@ -3341,48 +3319,18 @@ pub(crate) mod tests {
             ],
         };
 
-        let foo_pkg_path = foo_descriptor
-            .unwrap_catalog_descriptor()
-            .expect("expected catalog descriptor")
-            .pkg_path;
-
-        let bar_pkg_path = bar_descriptor
-            .unwrap_catalog_descriptor()
-            .expect("expected a catalog descriptor")
-            .pkg_path;
-
         let actual = locked
             .list_packages(&SystemEnum::Aarch64Darwin.to_string())
             .unwrap();
         let expected = [
-            InstalledPackage {
-                install_id: foo_iid,
-                rel_path: foo_pkg_path,
-                info: PackageInfo {
-                    description: foo_locked.description,
-                    broken: foo_locked.broken,
-                    license: foo_locked.license,
-                    pname: foo_locked.pname,
-                    unfree: foo_locked.unfree,
-                    version: Some(foo_locked.version),
-                },
-                priority: foo_locked.priority,
-            }
-            .into(),
-            InstalledPackage {
-                install_id: bar_iid,
-                rel_path: bar_pkg_path,
-                info: PackageInfo {
-                    description: bar_locked.description,
-                    broken: bar_locked.broken,
-                    license: bar_locked.license,
-                    pname: bar_locked.pname,
-                    unfree: bar_locked.unfree,
-                    version: Some(bar_locked.version),
-                },
-                priority: bar_locked.priority,
-            }
-            .into(),
+            PackageToList::Catalog(
+                foo_descriptor.unwrap_catalog_descriptor().unwrap(),
+                foo_locked,
+            ),
+            PackageToList::Catalog(
+                bar_descriptor.unwrap_catalog_descriptor().unwrap(),
+                bar_locked,
+            ),
             // baz is not in the list because it is not available for the requested system
         ];
 
