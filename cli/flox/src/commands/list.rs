@@ -8,13 +8,7 @@ use flox_rust_sdk::models::environment::{
     Environment,
     SingleSystemUpgradeDiff,
 };
-use flox_rust_sdk::models::lockfile::{
-    InstalledPackage,
-    LockedPackageFlake,
-    Lockfile,
-    PackageInfo,
-    PackageToList,
-};
+use flox_rust_sdk::models::lockfile::{LockedPackageFlake, Lockfile, PackageToList};
 use flox_rust_sdk::providers::flake_installable_locker::LockedInstallable;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use indoc::formatdoc;
@@ -109,7 +103,7 @@ impl List {
     fn print_name_only(mut out: impl Write, packages: &[PackageToList]) -> Result<()> {
         for p in packages {
             let install_id = match p {
-                PackageToList::Catalog(p) => &p.install_id,
+                PackageToList::Catalog(_, p) => &p.install_id,
                 PackageToList::Flake(_, p) => &p.install_id,
                 PackageToList::StorePath(p) => &p.install_id,
             };
@@ -130,11 +124,10 @@ impl List {
     ) -> Result<()> {
         for p in packages {
             match p {
-                PackageToList::Catalog(p) => {
+                PackageToList::Catalog(_, p) => {
                     let upgrade_available = if upgrades
                         .as_ref()
-                        .and_then(|upgrades| upgrades.get(&p.install_id))
-                        .is_some()
+                        .is_some_and(|diff| diff.contains_key(&p.install_id))
                     {
                         " - upgrade available"
                     } else {
@@ -144,8 +137,8 @@ impl List {
                         &mut out,
                         "{id}: {path} ({version}{upgrade_available})",
                         id = p.install_id,
-                        path = p.rel_path,
-                        version = p.info.version.as_deref().unwrap_or("N/A")
+                        path = p.attr_path,
+                        version = p.version,
                     )?;
                 },
                 PackageToList::Flake(descriptor, locked_package) => {
@@ -174,44 +167,33 @@ impl List {
         for (idx, package) in packages
             .iter()
             .sorted_by_key(|p| match p {
-                PackageToList::Catalog(p) => p.priority,
+                PackageToList::Catalog(_, locked) => locked.priority,
                 PackageToList::Flake(_, locked) => locked.locked_installable.priority,
                 PackageToList::StorePath(locked) => locked.priority,
             })
             .enumerate()
         {
             let message = match package {
-                PackageToList::Catalog(package) => {
-                    let InstalledPackage {
-                        install_id: name,
-                        rel_path,
-                        info:
-                            PackageInfo {
-                                pname,
-                                version,
-                                description,
-                                license,
-                                unfree,
-                                broken,
-                            },
-                        priority,
-                    } = package;
-
+                PackageToList::Catalog(_, locked) => {
                     formatdoc! {"
-                    {name}: ({pname})
-                      Description: {description}
-                      Path:     {rel_path}
-                      Priority: {priority}
-                      Version:  {version}
-                      License:  {license}
-                      Unfree:   {unfree}
-                      Broken:   {broken}
-                    ",
-                        description = description.as_deref().unwrap_or("N/A"),
-                        version = version.as_deref().unwrap_or("N/A"),
-                        license = license.as_deref().unwrap_or("N/A"),
-                        unfree = unfree.map(|u|u.to_string()).as_deref().unwrap_or("N/A"),
-                        broken = broken.map(|b|b.to_string()).as_deref().unwrap_or("N/A"),
+                        {name}: ({pname})
+                          Description: {description}
+                          Path:     {attr_path}
+                          Priority: {priority}
+                          Version:  {version}
+                          License:  {license}
+                          Unfree:   {unfree}
+                          Broken:   {broken}
+                        ",
+                        name = &locked.install_id,
+                        pname = &locked.pname,
+                        attr_path = &locked.attr_path,
+                        priority = locked.priority,
+                        version = &locked.version,
+                        description = locked.description.as_deref().unwrap_or("N/A"),
+                        license = locked.license.as_deref().unwrap_or("N/A"),
+                        unfree = locked.unfree.map(|u| u.to_string()).as_deref().unwrap_or("N/A"),
+                        broken = locked.broken.map(|b| b.to_string()).as_deref().unwrap_or("N/A"),
                     }
                 },
                 PackageToList::Flake(_, package) => {
@@ -323,8 +305,8 @@ impl List {
 
 #[cfg(test)]
 mod tests {
-
     use flox_rust_sdk::models::lockfile::test_helpers::{
+        fake_catalog_package_lock,
         nix_eval_jobs_descriptor,
         LOCKED_NIX_EVAL_JOBS,
     };
@@ -335,53 +317,54 @@ mod tests {
     use super::*;
 
     fn test_packages() -> [PackageToList; 2] {
+        let (_pip_iid, pip_descriptor, mut pip_lock) = fake_catalog_package_lock("pip", None);
+        let (_python_iid, python_descriptor, mut python_lock) =
+            fake_catalog_package_lock("python", None);
+
+        // populate the locks
+        // - pip
+        pip_lock.attr_path = "python3Packages.pip".to_string();
+        pip_lock.pname = "pip".to_string();
+        pip_lock.priority = 100;
+        pip_lock.version = "20.3.4".to_string();
+        pip_lock.description = Some("Python package installer".to_string());
+        pip_lock.license = Some("MIT".to_string());
+        pip_lock.unfree = Some(true);
+        pip_lock.broken = Some(false);
+
+        // - python
+        python_lock.priority = 200;
+        python_lock.attr_path = "python3Packages.python".to_string();
+        python_lock.version = "3.9.5".to_string();
+        python_lock.description = Some("Python interpreter".to_string());
+        python_lock.license = Some("PSF".to_string());
+        python_lock.unfree = Some(false);
+        python_lock.broken = Some(false);
+
         [
-            InstalledPackage {
-                install_id: "pip-iid".to_string(),
-                rel_path: "python3Packages.pip".to_string(),
-                info: PackageInfo {
-                    pname: "pip".to_string(),
-                    version: Some("20.3.4".to_string()),
-                    description: Some("Python package installer".to_string()),
-                    license: Some("MIT".to_string()),
-                    unfree: Some(true),
-                    broken: Some(false),
-                },
-                priority: 100,
-            }
-            .into(),
-            InstalledPackage {
-                install_id: "python".to_string(),
-                rel_path: "python3Packages.python".to_string(),
-                info: PackageInfo {
-                    pname: "python".to_string(),
-                    version: Some("3.9.5".to_string()),
-                    description: Some("Python interpreter".to_string()),
-                    license: Some("PSF".to_string()),
-                    unfree: Some(false),
-                    broken: Some(false),
-                },
-                priority: 200,
-            }
-            .into(),
+            PackageToList::Catalog(
+                pip_descriptor.unwrap_catalog_descriptor().unwrap(),
+                pip_lock,
+            ),
+            PackageToList::Catalog(
+                python_descriptor.unwrap_catalog_descriptor().unwrap(),
+                python_lock,
+            ),
         ]
     }
 
     fn uninformative_package() -> PackageToList {
-        InstalledPackage {
-            install_id: "pip-iid".to_string(),
-            rel_path: "python3Packages.pip".to_string(),
-            info: PackageInfo {
-                pname: "pip".to_string(),
-                version: None,
-                description: None,
-                license: None,
-                unfree: None,
-                broken: None,
-            },
-            priority: DEFAULT_PRIORITY,
-        }
-        .into()
+        let (_pip_iid, pip_descriptor, mut pip_lock) = fake_catalog_package_lock("pip", None);
+
+        // populate the lock
+        pip_lock.attr_path = "python3Packages.pip".to_string();
+        pip_lock.pname = "pip".to_string();
+        pip_lock.version = "N/A".to_string();
+
+        PackageToList::Catalog(
+            pip_descriptor.unwrap_catalog_descriptor().unwrap(),
+            pip_lock,
+        )
     }
 
     fn test_flake_package() -> PackageToList {
@@ -394,8 +377,8 @@ mod tests {
         List::print_name_only(&mut out, &test_packages()).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            pip-iid
-            python
+            pip_install_id
+            python_install_id
         "});
     }
 
@@ -416,8 +399,8 @@ mod tests {
         List::print_extended(&mut out, &test_packages(), None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            pip-iid: python3Packages.pip (20.3.4)
-            python: python3Packages.python (3.9.5)
+            pip_install_id: python3Packages.pip (20.3.4)
+            python_install_id: python3Packages.python (3.9.5)
         "});
     }
 
@@ -439,7 +422,7 @@ mod tests {
         List::print_extended(&mut out, &[uninformative_package()], None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            pip-iid: python3Packages.pip (N/A)
+            pip_install_id: python3Packages.pip (N/A)
         "});
     }
 
@@ -449,7 +432,7 @@ mod tests {
         List::print_detail(&mut out, &test_packages()).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            pip-iid: (pip)
+            pip_install_id: (pip)
               Description: Python package installer
               Path:     python3Packages.pip
               Priority: 100
@@ -458,7 +441,7 @@ mod tests {
               Unfree:   true
               Broken:   false
 
-            python: (python)
+            python_install_id: (python)
               Description: Python interpreter
               Path:     python3Packages.python
               Priority: 200
@@ -540,7 +523,7 @@ mod tests {
     #[test]
     fn test_print_detail_output_orders_by_priority_unknown_first() {
         let mut packages = test_packages();
-        let PackageToList::Catalog(ref mut package_2) = packages[1] else {
+        let PackageToList::Catalog(_, ref mut package_2) = packages[1] else {
             panic!();
         };
         package_2.priority = 5;
@@ -549,7 +532,7 @@ mod tests {
         List::print_detail(&mut out, &packages).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            python: (python)
+            python_install_id: (python)
               Description: Python interpreter
               Path:     python3Packages.python
               Priority: 5
@@ -558,7 +541,7 @@ mod tests {
               Unfree:   false
               Broken:   false
 
-            pip-iid: (pip)
+            pip_install_id: (pip)
               Description: Python package installer
               Path:     python3Packages.pip
               Priority: 100
@@ -572,7 +555,7 @@ mod tests {
     #[test]
     fn test_print_detail_output_orders_by_priority() {
         let mut packages = test_packages();
-        let PackageToList::Catalog(ref mut package_2) = packages[1] else {
+        let PackageToList::Catalog(_, ref mut package_2) = packages[1] else {
             panic!();
         };
         package_2.priority = 10;
@@ -581,7 +564,7 @@ mod tests {
         List::print_detail(&mut out, &packages).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            python: (python)
+            python_install_id: (python)
               Description: Python interpreter
               Path:     python3Packages.python
               Priority: 10
@@ -590,7 +573,7 @@ mod tests {
               Unfree:   false
               Broken:   false
 
-            pip-iid: (pip)
+            pip_install_id: (pip)
               Description: Python package installer
               Path:     python3Packages.pip
               Priority: 100
@@ -608,7 +591,7 @@ mod tests {
         List::print_detail(&mut out, &[uninformative_package()]).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, formatdoc! {"
-            pip-iid: (pip)
+            pip_install_id: (pip)
               Description: N/A
               Path:     python3Packages.pip
               Priority: {DEFAULT_PRIORITY}
