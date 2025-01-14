@@ -91,7 +91,11 @@ impl List {
                 )?;
             },
             ListMode::All => {
-                Self::print_detail(stdout().lock(), &packages)?;
+                Self::print_detail(
+                    stdout().lock(),
+                    &packages,
+                    List::get_cached_upgrades_for_current_system(&flox, &mut env)?,
+                )?;
             },
             ListMode::Config => unreachable!(),
         }
@@ -123,16 +127,22 @@ impl List {
         upgrades: Option<SingleSystemUpgradeDiff>,
     ) -> Result<()> {
         for p in packages {
+            let install_id = match p {
+                PackageToList::Catalog(_, p) => &p.install_id,
+                PackageToList::Flake(_, p) => &p.install_id,
+                PackageToList::StorePath(p) => &p.install_id,
+            };
+            let upgrade_available = if upgrades
+                .as_ref()
+                .is_some_and(|diff| diff.contains_key(install_id))
+            {
+                " - upgrade available"
+            } else {
+                ""
+            };
+
             match p {
                 PackageToList::Catalog(_, p) => {
-                    let upgrade_available = if upgrades
-                        .as_ref()
-                        .is_some_and(|diff| diff.contains_key(&p.install_id))
-                    {
-                        " - upgrade available"
-                    } else {
-                        ""
-                    };
                     writeln!(
                         &mut out,
                         "{id}: {path} ({version}{upgrade_available})",
@@ -144,7 +154,7 @@ impl List {
                 PackageToList::Flake(descriptor, locked_package) => {
                     writeln!(
                         &mut out,
-                        "{id}: {flake}",
+                        "{id}: {flake}{upgrade_available}",
                         id = locked_package.install_id,
                         flake = descriptor.flake
                     )?;
@@ -163,7 +173,11 @@ impl List {
     }
 
     /// print package ids, as well as extended detailed information
-    fn print_detail(mut out: impl Write, packages: &[PackageToList]) -> Result<()> {
+    fn print_detail(
+        mut out: impl Write,
+        packages: &[PackageToList],
+        upgrades: Option<SingleSystemUpgradeDiff>,
+    ) -> Result<()> {
         for (idx, package) in packages
             .iter()
             .sorted_by_key(|p| match p {
@@ -173,17 +187,32 @@ impl List {
             })
             .enumerate()
         {
+            let install_id = match package {
+                PackageToList::Catalog(_, p) => &p.install_id,
+                PackageToList::Flake(_, p) => &p.install_id,
+                PackageToList::StorePath(p) => &p.install_id,
+            };
+            let upgrade_available = if upgrades
+                .as_ref()
+                .is_some_and(|diff| diff.contains_key(install_id))
+            {
+                " (upgrade available)"
+            } else {
+                ""
+            };
+
             let message = match package {
                 PackageToList::Catalog(_, locked) => {
                     formatdoc! {"
-                        {name}: ({pname})
-                          Description: {description}
-                          Path:     {attr_path}
-                          Priority: {priority}
-                          Version:  {version}
-                          License:  {license}
-                          Unfree:   {unfree}
-                          Broken:   {broken}
+                        {name}:{upgrade_available}
+                          Description:  {description}
+                          Package Path: {attr_path}
+                          Package Name: {pname}
+                          Priority:     {priority}
+                          Version:      {version}
+                          License:      {license}
+                          Unfree:       {unfree}
+                          Broken:       {broken}
                         ",
                         name = &locked.install_id,
                         pname = &locked.pname,
@@ -222,21 +251,19 @@ impl List {
                         }
                     });
 
-                    // Add parenthesis and a space to pname if it's not None
-                    let formatted_pname = pname.as_ref().map(|pname| format!(" ({pname})"));
-
                     formatdoc! {"
-                    {install_id}:{formatted_pname}
+                    {install_id}:{upgrade_available}
                       Description:     {description}
                       Locked URL:      {locked_url}
                       Flake attribute: {locked_flake_attr_path}
+                      Package Name:    {formatted_pname}
                       Priority:        {priority}
                       Version:         {version}
                       {formatted_licenses}
                       Unfree:          {unfree}
                       Broken:          {broken}
                     ",
-                        formatted_pname = formatted_pname.as_deref().unwrap_or(""),
+                        formatted_pname = pname.as_deref().unwrap_or("N/A"),
                         description = description.as_deref().unwrap_or("N/A"),
                         version = version.as_deref().unwrap_or("N/A"),
                         formatted_licenses = formatted_licenses.as_deref().unwrap_or("License: N/A"),
@@ -456,26 +483,28 @@ mod tests {
     #[test]
     fn test_print_detail_output() {
         let mut out = Vec::new();
-        List::print_detail(&mut out, &test_packages()).unwrap();
+        List::print_detail(&mut out, &test_packages(), None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            pip_install_id: (pip)
-              Description: Python package installer
-              Path:     python3Packages.pip
-              Priority: 100
-              Version:  20.3.4
-              License:  MIT
-              Unfree:   true
-              Broken:   false
+            pip_install_id:
+              Description:  Python package installer
+              Package Path: python3Packages.pip
+              Package Name: pip
+              Priority:     100
+              Version:      20.3.4
+              License:      MIT
+              Unfree:       true
+              Broken:       false
 
-            python_install_id: (python)
-              Description: Python interpreter
-              Path:     python3Packages.python
-              Priority: 200
-              Version:  3.9.5
-              License:  PSF
-              Unfree:   false
-              Broken:   false
+            python_install_id:
+              Description:  Python interpreter
+              Package Path: python3Packages.python
+              Package Name: python
+              Priority:     200
+              Version:      3.9.5
+              License:      PSF
+              Unfree:       false
+              Broken:       false
         "})
     }
 
@@ -483,13 +512,14 @@ mod tests {
     #[test]
     fn test_print_detail_flake_output() {
         let mut out = Vec::new();
-        List::print_detail(&mut out, &[test_flake_package()]).unwrap();
+        List::print_detail(&mut out, &[test_flake_package()], None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            nix-eval-jobs: (nix-eval-jobs)
+            nix-eval-jobs:
               Description:     Hydra's builtin hydra-eval-jobs as a standalone
               Locked URL:      github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
               Flake attribute: packages.aarch64-darwin.default
+              Package Name:    nix-eval-jobs
               Priority:        5
               Version:         2.23.0
               License:         GPL-3.0
@@ -507,13 +537,14 @@ mod tests {
             locked_package.locked_installable.pname = None;
         }
 
-        List::print_detail(&mut out, &[package]).unwrap();
+        List::print_detail(&mut out, &[package], None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs:
               Description:     Hydra's builtin hydra-eval-jobs as a standalone
               Locked URL:      github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
               Flake attribute: packages.aarch64-darwin.default
+              Package Name:    N/A
               Priority:        5
               Version:         2.23.0
               License:         GPL-3.0
@@ -532,13 +563,14 @@ mod tests {
                 licenses.push("license 2".to_string());
             }
         }
-        List::print_detail(&mut out, &[package]).unwrap();
+        List::print_detail(&mut out, &[package], None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            nix-eval-jobs: (nix-eval-jobs)
+            nix-eval-jobs:
               Description:     Hydra's builtin hydra-eval-jobs as a standalone
               Locked URL:      github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
               Flake attribute: packages.aarch64-darwin.default
+              Package Name:    nix-eval-jobs
               Priority:        5
               Version:         2.23.0
               Licenses:        GPL-3.0, license 2
@@ -556,26 +588,28 @@ mod tests {
         package_2.priority = 5;
 
         let mut out = Vec::new();
-        List::print_detail(&mut out, &packages).unwrap();
+        List::print_detail(&mut out, &packages, None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            python_install_id: (python)
-              Description: Python interpreter
-              Path:     python3Packages.python
-              Priority: 5
-              Version:  3.9.5
-              License:  PSF
-              Unfree:   false
-              Broken:   false
+            python_install_id:
+              Description:  Python interpreter
+              Package Path: python3Packages.python
+              Package Name: python
+              Priority:     5
+              Version:      3.9.5
+              License:      PSF
+              Unfree:       false
+              Broken:       false
 
-            pip_install_id: (pip)
-              Description: Python package installer
-              Path:     python3Packages.pip
-              Priority: 100
-              Version:  20.3.4
-              License:  MIT
-              Unfree:   true
-              Broken:   false
+            pip_install_id:
+              Description:  Python package installer
+              Package Path: python3Packages.pip
+              Package Name: pip
+              Priority:     100
+              Version:      20.3.4
+              License:      MIT
+              Unfree:       true
+              Broken:       false
         "})
     }
 
@@ -588,26 +622,28 @@ mod tests {
         package_2.priority = 10;
 
         let mut out = Vec::new();
-        List::print_detail(&mut out, &packages).unwrap();
+        List::print_detail(&mut out, &packages, None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            python_install_id: (python)
-              Description: Python interpreter
-              Path:     python3Packages.python
-              Priority: 10
-              Version:  3.9.5
-              License:  PSF
-              Unfree:   false
-              Broken:   false
+            python_install_id:
+              Description:  Python interpreter
+              Package Path: python3Packages.python
+              Package Name: python
+              Priority:     10
+              Version:      3.9.5
+              License:      PSF
+              Unfree:       false
+              Broken:       false
 
-            pip_install_id: (pip)
-              Description: Python package installer
-              Path:     python3Packages.pip
-              Priority: 100
-              Version:  20.3.4
-              License:  MIT
-              Unfree:   true
-              Broken:   false
+            pip_install_id:
+              Description:  Python package installer
+              Package Path: python3Packages.pip
+              Package Name: pip
+              Priority:     100
+              Version:      20.3.4
+              License:      MIT
+              Unfree:       true
+              Broken:       false
         "})
     }
 
@@ -615,17 +651,63 @@ mod tests {
     #[test]
     fn test_print_detail_output_handles_missing_values() {
         let mut out = Vec::new();
-        List::print_detail(&mut out, &[uninformative_package()]).unwrap();
+        List::print_detail(&mut out, &[uninformative_package()], None).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, formatdoc! {"
-            pip_install_id: (pip)
-              Description: N/A
-              Path:     python3Packages.pip
-              Priority: {DEFAULT_PRIORITY}
-              Version:  N/A
-              License:  N/A
-              Unfree:   N/A
-              Broken:   N/A
+            pip_install_id:
+              Description:  N/A
+              Package Path: python3Packages.pip
+              Package Name: pip
+              Priority:     {DEFAULT_PRIORITY}
+              Version:      N/A
+              License:      N/A
+              Unfree:       N/A
+              Broken:       N/A
         "})
+    }
+
+    /// If packages have upgrades available, the output should indicate that
+    #[test]
+    fn test_print_detail_includes_upgrade_indicator() {
+        let mut out = Vec::new();
+
+        let mut packages = test_packages();
+        let PackageToList::Catalog(_, ref mut pip_lock) = packages[0] else {
+            unreachable!()
+        };
+        let mut pip_lock_upgraded = pip_lock.clone();
+        pip_lock_upgraded.version = format!("{}-upgraded", pip_lock.version);
+
+        let upgrades = SingleSystemUpgradeDiff::from_iter(vec![(
+            "pip_install_id".to_string(),
+            (
+                LockedPackage::Catalog(pip_lock.clone()),
+                LockedPackage::Catalog(pip_lock_upgraded),
+            ),
+        )]);
+
+        List::print_detail(&mut out, &packages, Some(upgrades)).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            pip_install_id: (upgrade available)
+              Description:  Python package installer
+              Package Path: python3Packages.pip
+              Package Name: pip
+              Priority:     100
+              Version:      20.3.4
+              License:      MIT
+              Unfree:       true
+              Broken:       false
+
+            python_install_id:
+              Description:  Python interpreter
+              Package Path: python3Packages.python
+              Package Name: python
+              Priority:     200
+              Version:      3.9.5
+              License:      PSF
+              Unfree:       false
+              Broken:       false
+        "});
     }
 }
