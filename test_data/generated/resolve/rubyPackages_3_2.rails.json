@@ -11,29 +11,28 @@
             "attr_path": "rubyPackages_3_2.rails",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/lqgp83jfawdmml07cnj5q2kvr8jpp2q9-ruby3.2-rails-7.1.3.4.drv",
+            "derivation": "/nix/store/r8ixlw9210v5hz3b0m9mcbqilhq9kwq9-ruby3.2-rails-7.1.3.4.drv",
             "description": null,
             "insecure": false,
             "install_id": "rails",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "ruby3.2-rails-7.1.3.4",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/lpcawsrfa1ra2xgrgv8r26rxxcfyzc23-ruby3.2-rails-7.1.3.4"
+                "store_path": "/nix/store/hl0ilb3c622l1bmwcvixvizlkwrbv35b-ruby3.2-rails-7.1.3.4"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "rails",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -44,29 +43,28 @@
             "attr_path": "rubyPackages_3_2.rails",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/1ss670h3mzqyppx1hmmxzvy6pfc64sy2-ruby3.2-rails-7.1.3.4.drv",
+            "derivation": "/nix/store/60bp740apn7p17jil0jj89hxxl29p5i8-ruby3.2-rails-7.1.3.4.drv",
             "description": null,
             "insecure": false,
             "install_id": "rails",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "ruby3.2-rails-7.1.3.4",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/f7bxzksbw0ib9vsiaw6rjy1c03vxkgck-ruby3.2-rails-7.1.3.4"
+                "store_path": "/nix/store/406s2bzxpqbqym0407y7qqzl664c88fm-ruby3.2-rails-7.1.3.4"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "rails",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -77,29 +75,28 @@
             "attr_path": "rubyPackages_3_2.rails",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/xh4j6qnm2j8z5z0ilwja53n6281hqv8m-ruby3.2-rails-7.1.3.4.drv",
+            "derivation": "/nix/store/yr1p8zr37jx15160dnrmlka47rnkd21h-ruby3.2-rails-7.1.3.4.drv",
             "description": null,
             "insecure": false,
             "install_id": "rails",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "ruby3.2-rails-7.1.3.4",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/ny8i0j5g7dijf8r0873yd9rp6kmllbha-ruby3.2-rails-7.1.3.4"
+                "store_path": "/nix/store/jazhf1w541h5rr9pxlc2k41awwq33c4i-ruby3.2-rails-7.1.3.4"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "rails",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -110,29 +107,28 @@
             "attr_path": "rubyPackages_3_2.rails",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/9wg4ap6g0jhiq6v9b0jwdq3k6gy5xh6f-ruby3.2-rails-7.1.3.4.drv",
+            "derivation": "/nix/store/7in5bhssmsrjd0c67rldqisy3by0vzgs-ruby3.2-rails-7.1.3.4.drv",
             "description": null,
             "insecure": false,
             "install_id": "rails",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "ruby3.2-rails-7.1.3.4",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/3c3pc6lhz7hilcgv98c73gl9jm7m4ly2-ruby3.2-rails-7.1.3.4"
+                "store_path": "/nix/store/zd7sfm3hhlzanra5j9kdig2vs1bqycyn-ruby3.2-rails-7.1.3.4"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
             "pname": "rails",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
@@ -140,7 +136,7 @@
             "version": "ruby3.2-rails-7.1.3.4"
           }
         ],
-        "page": 710087,
+        "page": 736170,
         "url": ""
       }
     }

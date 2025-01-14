@@ -11,25 +11,25 @@
             "attr_path": "darwin.ps",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/cjwbwvkakhard8ifvglanp9zaiij8k37-adv_cmds-231.drv",
+            "derivation": "/nix/store/hj6sic67398wlwgb34i7mfhh42izl9cy-adv_cmds-231.drv",
             "description": "Advanced commands package for Darwin",
             "insecure": false,
             "install_id": "ps",
             "license": "[ APSL-1.0, APSL-2.0 ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=23e89b7da85c3640bbc2173fe04f4bd114342367",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "adv_cmds-231",
             "outputs": [
               {
                 "name": "ps",
-                "store_path": "/nix/store/hvgagb1ckx9h00wxijj987ix8cw12afb-adv_cmds-231-ps"
+                "store_path": "/nix/store/1yg5prpnr3c620xxqkrf2m5ngmywicl4-adv_cmds-231-ps"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/avksjclqaqvsp9a6rrcd6aqgvas6nqbc-adv_cmds-231-man"
+                "store_path": "/nix/store/dy5qdi86y95cm2w8cfdix9414dpcck0a-adv_cmds-231-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/3ljcyqr576blfhzngzaci4pzp3801gr8-adv_cmds-231"
+                "store_path": "/nix/store/8kpn1n46hqzl2sbsmzw5k5xmwybaw7ir-adv_cmds-231"
               }
             ],
             "outputs_to_install": [
@@ -37,12 +37,11 @@
               "man"
             ],
             "pname": "ps",
-            "rev": "23e89b7da85c3640bbc2173fe04f4bd114342367",
-            "rev_count": 710087,
-            "rev_date": "2024-11-19T11:04:08Z",
-            "scrape_date": "2024-11-21T04:00:36Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -50,7 +49,7 @@
             "version": "adv_cmds-231"
           }
         ],
-        "page": 710087,
+        "page": 736170,
         "url": ""
       }
     }

@@ -16,7 +16,7 @@
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=8f3e1f807051e32d8c95cd12b9b421623850a34d",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "hello-2.12.1",
             "outputs": [
               {
@@ -28,12 +28,11 @@
               "out"
             ],
             "pname": "hello",
-            "rev": "8f3e1f807051e32d8c95cd12b9b421623850a34d",
-            "rev_count": 733374,
-            "rev_date": "2025-01-04T17:41:09Z",
-            "scrape_date": "2025-01-06T21:17:53Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -49,7 +48,7 @@
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=8f3e1f807051e32d8c95cd12b9b421623850a34d",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "hello-2.12.1",
             "outputs": [
               {
@@ -61,12 +60,11 @@
               "out"
             ],
             "pname": "hello",
-            "rev": "8f3e1f807051e32d8c95cd12b9b421623850a34d",
-            "rev_count": 733374,
-            "rev_date": "2025-01-04T17:41:09Z",
-            "scrape_date": "2025-01-06T21:17:53Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -82,7 +80,7 @@
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=8f3e1f807051e32d8c95cd12b9b421623850a34d",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "hello-2.12.1",
             "outputs": [
               {
@@ -94,12 +92,11 @@
               "out"
             ],
             "pname": "hello",
-            "rev": "8f3e1f807051e32d8c95cd12b9b421623850a34d",
-            "rev_count": 733374,
-            "rev_date": "2025-01-04T17:41:09Z",
-            "scrape_date": "2025-01-06T21:17:53Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -115,7 +112,7 @@
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=8f3e1f807051e32d8c95cd12b9b421623850a34d",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
             "name": "hello-2.12.1",
             "outputs": [
               {
@@ -127,12 +124,11 @@
               "out"
             ],
             "pname": "hello",
-            "rev": "8f3e1f807051e32d8c95cd12b9b421623850a34d",
-            "rev_count": 733374,
-            "rev_date": "2025-01-04T17:41:09Z",
-            "scrape_date": "2025-01-06T21:17:53Z",
+            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
+            "rev_count": 736170,
+            "rev_date": "2025-01-10T15:43:18Z",
+            "scrape_date": "2025-01-13T03:35:32Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
@@ -140,7 +136,7 @@
             "version": "2.10.1"
           }
         ],
-        "page": 733374,
+        "page": 736170,
         "url": ""
       }
     }
