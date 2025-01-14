@@ -66,6 +66,63 @@ similar to `flox activate --`.
 ./include/general-options.md
 ```
 
+# MANIFEST CONFIGURATION
+
+Configuration for the container image produced by `flox containerize` may be specified in a `[containerize.config]` table in the environment manifest.
+
+> **Warning:**
+> `containerize.config` is **experimental**,
+> and its behaviour is subject to change
+
+The following options from the OCI spec are supported, specified in `kebab-case` rather than `PascalCase`:
+```
+ContainerizeConfig ::= {
+  user                      = null | <STRING>
+, exposed-ports             = null | [<STRING>, ...]
+, cmd                       = null | [<STRING>, ...]
+, volumes                   = null | [<STRING>, ...]
+, working-dir               = null | <STRING>
+, labels                    = null | Map[STRING, STRING]
+, stop-signal               = null | <STRING>
+}
+```
+
+`user`
+:   The username or UID which is a platform-specific structure that allows specific control over which user the process run as.
+    This acts as a default value to use when the value is not specified when creating a container.
+    For Linux based systems, all of the following are valid: `user`, `uid`, `user:group`, `uid:gid`, `uid:group`, `user:gid`.
+    If `group`/`gid` is not specified, the default group and supplementary groups of the given `user`/`uid` in `/etc/passwd` and `/etc/group` from the container are applied.
+    If `group`/`gid` is specified, supplementary groups from the container are ignored.
+
+`exposed-ports`
+:   A set of ports to expose from a container running this image.
+    Its values can be in the format of:
+    `port/tcp`, `port/udp`, `port` with the default protocol being `tcp` if not specified.
+    These values act as defaults and are merged with any specified when creating a container.
+
+`cmd`
+:   Default arguments to the entrypoint of the container.
+    These values act as defaults and may be replaced by any specified when creating a container.
+    Flox sets an entrypoint to activate the containerized environment,
+    and `cmd` is then run inside the activation, similar to
+    `flox activate -- cmd`.
+
+`volumes`
+:   A set of directories describing where the process is
+    likely to write data specific to a container instance.
+
+`working-dir`
+:   Sets the current working directory of the entrypoint process in the container.
+    This value acts as a default and may be replaced by a working directory specified when creating a container.
+
+`labels`
+:   This field contains arbitrary metadata for the container.
+    This property MUST use the [annotation rules](https://github.com/opencontainers/image-spec/blob/main/annotations.md#rules).
+
+`stop-signal`
+:   This field contains arbitrary metadata for the container.
+    This property MUST use the [annotation rules](https://github.com/opencontainers/image-spec/blob/main/annotations.md#rules).
+
 # EXAMPLES
 
 Create a container image file and load it into Docker:
