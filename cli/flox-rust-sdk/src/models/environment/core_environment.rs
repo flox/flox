@@ -1261,6 +1261,7 @@ mod tests {
                 packages: Some(vec![ResolvedPackageDescriptor {
                     catalog: None,
                     attr_path: "foo".to_string(),
+                    pkg_path: "foo".to_string(),
                     broken: Some(false),
                     derivation: "new derivation".to_string(),
                     description: Some("description".to_string()),

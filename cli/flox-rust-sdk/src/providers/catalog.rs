@@ -1346,6 +1346,7 @@ pub mod test_helpers {
         let pkg = PackageResolutionInfo {
             catalog: None,
             attr_path: pkg_path.to_string(),
+            pkg_path: pkg_path.to_string(),
             broken: Some(false),
             derivation: String::new(),
             description: None,
