@@ -8,6 +8,8 @@
 #include <iostream>
 
 #include <nix/attrs.hh>
+#include <nix/command.hh>
+#include <nix/eval-gc.hh>
 #include <nix/eval.hh>
 #include <nix/search-path.hh>
 #include <nix/shared.hh>
@@ -28,11 +30,13 @@ using namespace flox;
 
 /** @brief Test a flox-nixpkgs URL can be parsed and then serialized. */
 bool
-test_URLRoundtrip()
+test_URLRoundtrip( nix::ref<nix::EvalState> & state )
 {
   WrappedNixpkgsInputScheme inputScheme;
   auto                      url = "flox-nixpkgs:v0/flox/" + nixpkgsRev;
-  auto input = inputScheme.inputFromURL( nix::parseURL( url ), true );
+  auto input = inputScheme.inputFromURL( state->fetchSettings,
+                                         nix::parseURL( url ),
+                                         true );
   EXPECT( input.has_value() );
   EXPECT_EQ( inputScheme.toURL( *input ).to_string(), url );
   return true;
@@ -46,15 +50,15 @@ test_URLRoundtrip()
  *        expected URL.
  **/
 bool
-test_inputFromAttrs()
+test_inputFromAttrs( nix::ref<nix::EvalState> & state )
 {
   nix::fetchers::Attrs      attrs = { { "version", (uint64_t) 0 },
                                       { "type", "flox-nixpkgs" },
                                       { "owner", "NixOS" },
                                       { "rev", nixpkgsRev } };
   WrappedNixpkgsInputScheme inputScheme;
-  auto                      url   = "flox-nixpkgs:v0/NixOS/" + nixpkgsRev;
-  auto                      input = inputScheme.inputFromAttrs( attrs );
+  auto                      url = "flox-nixpkgs:v0/NixOS/" + nixpkgsRev;
+  auto input = inputScheme.inputFromAttrs( state->fetchSettings, attrs );
   EXPECT( input.has_value() );
   EXPECT_EQ( inputScheme.toURL( *input ).to_string(), url );
   return true;
@@ -68,17 +72,19 @@ test_lockedFromUrl( nix::ref<nix::EvalState> & state )
 {
   WrappedNixpkgsInputScheme inputScheme;
   auto                      url = "flox-nixpkgs:v0/flox/" + nixpkgsRev;
-  auto input = inputScheme.inputFromURL( nix::parseURL( url ), true );
+  auto                 input = inputScheme.inputFromURL( state->fetchSettings,
+                                         nix::parseURL( url ),
+                                         true );
   nix::fetchers::Attrs attrs
-    = inputScheme.fetch( state->store, *input ).second.toAttrs();
+    = inputScheme.getAccessor( state->store, *input ).second.toAttrs();
   auto owner      = nix::fetchers::getStrAttr( attrs, "owner" );
   auto flake_type = nix::fetchers::getStrAttr( attrs, "type" );
   auto rev        = nix::fetchers::getStrAttr( attrs, "rev" );
-  auto version    = nix::fetchers::getStrAttr( attrs, "version" );
+  auto version    = nix::fetchers::getIntAttr( attrs, "version" );
   EXPECT_EQ( owner, "flox" );
   EXPECT_EQ( flake_type, "flox-nixpkgs" );
   EXPECT_EQ( rev, nixpkgsRev );
-  EXPECT_EQ( version, "0" );
+  EXPECT_EQ( version, (uint64_t) 0 );
 
   return true;
 }
@@ -97,10 +103,10 @@ test_lockedRepresentation( nix::ref<nix::EvalState> & state )
                                       { "owner", "NixOS" },
                                       { "rev", nixpkgsRev } };
   WrappedNixpkgsInputScheme inputScheme;
-  auto                      url   = "flox-nixpkgs:v0/NixOS/" + nixpkgsRev;
-  auto                      input = inputScheme.inputFromAttrs( attrs );
+  auto                      url = "flox-nixpkgs:v0/NixOS/" + nixpkgsRev;
+  auto input = inputScheme.inputFromAttrs( state->fetchSettings, attrs );
   EXPECT( input.has_value() );
-  auto locked = inputScheme.fetch( state->store, *input ).second;
+  auto locked = inputScheme.getAccessor( state->store, *input ).second;
   EXPECT( locked.toAttrs() == attrs );
   return true;
 }
@@ -119,10 +125,14 @@ main()
   nix::initNix();
   nix::initGC();
   auto store = nix::openStore();
-  auto state = nix::make_ref<nix::EvalState>( nix::SearchPath(), store, store );
+  auto state = nix::make_ref<nix::EvalState>( nix::LookupPath(),
+                                              store,
+                                              nix::fetchSettings,
+                                              nix::evalSettings );
 
-  RUN_TEST( URLRoundtrip );
-  RUN_TEST( inputFromAttrs );
+  RUN_TEST( URLRoundtrip, state );
+  RUN_TEST( inputFromAttrs, state );
+  RUN_TEST( lockedFromUrl, state );
   RUN_TEST( lockedRepresentation, state );
 
   return exitCode;

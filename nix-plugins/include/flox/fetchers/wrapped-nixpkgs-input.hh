@@ -28,32 +28,48 @@ githubAttrsToFloxNixpkgsAttrs( const nix::fetchers::Attrs & attrs );
 struct WrappedNixpkgsInputScheme : nix::fetchers::InputScheme
 {
 
-  [[nodiscard]] virtual std::string
-  type() const
+  [[nodiscard]] virtual std::string_view
+  schemeName() const override
   {
     return "flox-nixpkgs";
   }
 
+  /**
+   * Allowed attributes in an attribute set that is converted to an
+   * input.
+   *
+   * `type` is not included from this set, because the `type` field is
+   *  parsed first to choose which scheme; `type` is always required.
+   */
+  virtual nix::StringSet
+  allowedAttrs() const override
+  {
+    return { "version", "rev", "ref" };
+  }
+
+
   /** @brief Convert raw attributes into an input. */
   [[nodiscard]] std::optional<nix::fetchers::Input>
-  inputFromAttrs( const nix::fetchers::Attrs & attrs ) const override;
+  inputFromAttrs( const nix::fetchers::Settings & settings,
+                  const nix::fetchers::Attrs &    attrs ) const override;
 
   /** @brief Convert a URL string into an input. */
   [[nodiscard]] std::optional<nix::fetchers::Input>
-  inputFromURL( const nix::ParsedURL & url, bool requireTree ) const override;
+  inputFromURL( const nix::fetchers::Settings & settings,
+                const nix::ParsedURL &          url,
+                bool                            requireTree ) const override;
 
   /** @brief Convert input to a URL representation. */
   [[nodiscard]] nix::ParsedURL
   toURL( const nix::fetchers::Input & input ) const override;
 
   /**
-   * @brief Check to see if the input has all information necessary for use
-   *        with SQLite caches.
-   *
-   * We require `rev` and `version` fields to be present.
+   * Return `true` if this input is considered "locked", i.e. it has
+   * attributes like a Git revision or NAR hash that uniquely
+   * identify its contents.
    */
-  [[nodiscard]] bool
-  hasAllInfo( const nix::fetchers::Input & input ) const override;
+  virtual bool
+  isLocked( const nix::fetchers::Input & input ) const override;
 
   /**
    * @brief Override an input with a different `ref` or `rev`.
@@ -75,10 +91,10 @@ struct WrappedNixpkgsInputScheme : nix::fetchers::InputScheme
   clone( const nix::fetchers::Input & input,
          const nix::Path &            destDir ) const override;
 
-  /** @brief Generate a flake with wraps `nixpkgs`. */
-  [[nodiscard]] std::pair<nix::StorePath, nix::fetchers::Input>
-  fetch( nix::ref<nix::Store>         store,
-         const nix::fetchers::Input & _input ) override;
+  [[nodiscard]] virtual std::pair<nix::ref<nix::SourceAccessor>,
+                                  nix::fetchers::Input>
+  getAccessor( nix::ref<nix::Store>         store,
+               const nix::fetchers::Input & input ) const override;
 
 
 }; /* End class `WrappedNixpkgsInputScheme' */

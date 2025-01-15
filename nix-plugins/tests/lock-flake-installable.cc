@@ -7,7 +7,10 @@
  * -------------------------------------------------------------------------- */
 
 #include <fstream>
+#include <nix/eval-gc.hh>
 #include <nix/eval.hh>
+
+#include <nix/command.hh>
 #include <nix/flake/flake.hh>
 #include <nix/search-path.hh>
 #include <nix/shared.hh>
@@ -99,7 +102,9 @@ test_locksUrl( const nix::ref<nix::EvalState> & state,
   auto lockedInstallable
     = flox::lockFlakeInstallable( state, system, unlockedUrl );
 
-  EXPECT( nix::parseFlakeRef( lockedInstallable.lockedUrl ).input.isLocked() );
+  EXPECT(
+    nix::parseFlakeRef( state->fetchSettings, lockedInstallable.lockedUrl )
+      .input.isLocked() );
 
   return true;
 }
@@ -114,7 +119,8 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
                                   system,
                                   localTestFlake + "#multipleOutputs" );
 
-  EXPECT_EQ( nlohmann::json( defaultOutputs.outputsToInstall ),
+  EXPECT_EQ( nlohmann::json(
+               defaultOutputs.outputsToInstall.value_or( nix::StringSet {} ) ),
              nlohmann::json( nix::StringSet( { "out", "man" } ) ) );
 
   EXPECT( ! defaultOutputs.requestedOutputsToInstall.has_value() )
@@ -124,7 +130,8 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
                                   system,
                                   localTestFlake + "#multipleOutputs^man,dev" );
 
-  EXPECT_EQ( nlohmann::json( explicitOutputs.requestedOutputsToInstall ),
+  EXPECT_EQ( nlohmann::json( explicitOutputs.requestedOutputsToInstall.value_or(
+               nix::StringSet {} ) ),
              nlohmann::json( nix::StringSet( { "man", "dev" } ) ) );
 
   auto allOutputs
@@ -133,7 +140,8 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
                                   localTestFlake + "#multipleOutputs^*" );
 
 
-  EXPECT_EQ( nlohmann::json( allOutputs.requestedOutputsToInstall ),
+  EXPECT_EQ( nlohmann::json( allOutputs.requestedOutputsToInstall.value_or(
+               nix::StringSet {} ) ),
              nlohmann::json( nix::StringSet( { "out", "man", "dev" } ) ) );
 
   return true;
@@ -375,9 +383,14 @@ main( int argc, char * argv[] )
   nix::initNix();
   nix::initGC();
   auto store = nix::openStore();
-  auto state = nix::make_ref<nix::EvalState>( nix::SearchPath(), store, store );
 
-  std::string system = nix::nativeSystem;
+
+  auto state = nix::make_ref<nix::EvalState>( nix::LookupPath(),
+                                              store,
+                                              nix::fetchSettings,
+                                              nix::evalSettings );
+
+  std::string system = nix::settings.thisSystem;
 
   RUN_TEST( attrpathUsesDefaults, state, system );
   RUN_TEST( flakerefOrigins, state, system );

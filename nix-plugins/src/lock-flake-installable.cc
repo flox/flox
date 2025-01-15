@@ -38,11 +38,13 @@ namespace flox {
  * parsed
  */
 static std::tuple<nix::FlakeRef, std::string, nix::ExtendedOutputsSpec>
-parseInstallable( const std::string & installableStr )
+parseInstallable( const nix::ref<nix::EvalState> & state,
+                  const std::string &              installableStr )
 {
   try
     {
       return nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec(
+        state->fetchSettings,
         installableStr,
         nix::absPath( "." ) );
     }
@@ -117,17 +119,17 @@ readLicenseStringOrId( nix::EvalState & state, nix::Value * licenseValue )
 {
   if ( licenseValue->type() == nix::ValueType::nString )
     {
-      return std::string( licenseValue->str() );
+      return std::string( licenseValue->string_view() );
     }
   else if ( licenseValue->type() == nix::ValueType::nAttrs )
     {
       auto licenseIdValue
-        = licenseValue->attrs->find( state.symbols.create( "spdxId" ) );
+        = licenseValue->attrs()->find( state.symbols.create( "spdxId" ) );
 
-      if ( licenseIdValue != licenseValue->attrs->end()
+      if ( licenseIdValue != licenseValue->attrs()->end()
            && licenseIdValue->value->type() == nix::ValueType::nString )
         {
-          return std::string( licenseIdValue->value->str() );
+          return std::string( licenseIdValue->value->string_view() );
         };
     }
 
@@ -141,7 +143,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 {
   debugLog( nix::fmt( "original installable: %s", installableStr ) );
 
-  auto parsed = parseInstallable( installableStr );
+  auto parsed = parseInstallable( state, installableStr );
 
   nix::FlakeRef            flakeRef            = std::get<0>( parsed );
   std::string              fragment            = std::get<1>( parsed );
@@ -220,6 +222,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     {
       auto v = cursor->forceValue();
       throw nix::EvalError(
+        *state,
         "expected flake output attribute '%s' to be a derivation, but found %s",
         lockedAttrPath,
         nix::showType( v ) );
@@ -232,7 +235,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
       = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "drvPath" ) );
     if ( ! derivationCursor )
       {
-        throw nix::EvalError( "could not find '%s.%s' in derivation",
+        throw nix::EvalError( *state,
+                              "could not find '%s.%s' in derivation",
                               lockedAttrPath,
                               "drvPath" );
       }
@@ -247,7 +251,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
       = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "outputs" ) );
     if ( ! maybe_outputs_cursor )
       {
-        throw nix::EvalError( nix::fmt( "could not find '%s.%s' in derivation",
+        throw nix::EvalError( *state,
+                              nix::fmt( "could not find '%s.%s' in derivation",
                                         lockedAttrPath,
                                         "outputs" ) );
       }
@@ -259,7 +264,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
           nix::parseAttrPath( *state, output + ".outPath" ) );
         if ( ! outputCursor )
           {
-            throw nix::EvalError( "could not find '%s.%s' in derivation",
+            throw nix::EvalError( *state,
+                                  "could not find '%s.%s' in derivation",
                                   lockedAttrPath,
                                   output + ".outPath" );
           }
@@ -323,7 +329,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 
     if ( ! systemCursor )
       {
-        throw nix::EvalError( "could not find '%s.%s' in derivation",
+        throw nix::EvalError( *state,
+                              "could not find '%s.%s' in derivation",
                               lockedAttrPath,
                               "system" );
       }
@@ -338,7 +345,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 
     if ( ! nameCursor )
       {
-        throw nix::EvalError( "could not find '%s.%s' in derivation",
+        throw nix::EvalError( *state,
+                              "could not find '%s.%s' in derivation",
                               lockedAttrPath,
                               "name" );
       }
@@ -458,25 +466,28 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 void
 to_json( nlohmann::json & jto, const LockedInstallable & from )
 {
-  jto = nlohmann::json { { "locked-url", from.lockedUrl },
-                         { "flake-description", from.flakeDescription },
-                         { "locked-flake-attr-path", from.lockedFlakeAttrPath },
-                         { "derivation", from.derivation },
-                         { "outputs", from.outputs },
-                         { "output-names", from.outputNames },
-                         { "outputs-to-install", from.outputsToInstall },
-                         { "requested-outputs-to-install",
-                           from.requestedOutputsToInstall },
-                         { "package-system", from.packageSystem },
-                         { "system", from.system },
-                         { "name", from.name },
-                         { "pname", from.pname },
-                         { "version", from.version },
-                         { "description", from.description },
-                         { "licenses", from.licenses },
-                         { "broken", from.broken },
-                         { "unfree", from.unfree },
-                         { "priority", from.priority } };
+  jto = nlohmann::json {
+    { "locked-url", from.lockedUrl },
+    { "flake-description", from.flakeDescription },
+    { "locked-flake-attr-path", from.lockedFlakeAttrPath },
+    { "derivation", from.derivation },
+    { "outputs", from.outputs },
+    { "output-names", from.outputNames },
+    { "outputs-to-install",
+      from.outputsToInstall.value_or( nix::StringSet {} ) },
+    { "requested-outputs-to-install",
+      from.requestedOutputsToInstall.value_or( nix::StringSet {} ) },
+    { "package-system", from.packageSystem },
+    { "system", from.system },
+    { "name", from.name },
+    { "pname", from.pname },
+    { "version", from.version },
+    { "description", from.description },
+    { "licenses", from.licenses },
+    { "broken", from.broken },
+    { "unfree", from.unfree },
+    { "priority", from.priority }
+  };
 }
 
 void
@@ -529,14 +540,17 @@ prim_lockFlakeInstallable( nix::EvalState &  state,
       state.forceValue( *args[1], pos );
     }
 
-  auto state2 = nix::make_ref<nix::EvalState>( nix::SearchPath(),
+  auto state2 = nix::make_ref<nix::EvalState>( state.getLookupPath(),
                                                state.store,
-                                               state.store );
+                                               state.fetchSettings,
+                                               state.settings );
 
   auto system = nix::settings.thisSystem.get();
 
   auto lockedInstallable
-    = lockFlakeInstallable( state2, system, std::string( args[0]->str() ) );
+    = lockFlakeInstallable( state2,
+                            system,
+                            std::string( args[0]->string_view() ) );
 
   auto lockedInstallableJson = nlohmann::json( lockedInstallable );
   nix::parseJSON( state, lockedInstallableJson.dump(), value );
