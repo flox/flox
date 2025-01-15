@@ -131,6 +131,7 @@ pub mod types {
     ///      "name": "curl",
     ///      "outputs": "{}",
     ///      "outputs_to_install": "{}",
+    ///      "pkg_path": "foo.bar.curl",
     ///      "pname": "curl",
     ///      "rev": "xyz",
     ///      "rev_count": 4,
@@ -214,6 +215,7 @@ pub mod types {
     ///      "name": "curl",
     ///      "outputs": "{}",
     ///      "outputs_to_install": "{}",
+    ///      "pkg_path": "foo.bar.curl",
     ///      "pname": "curl",
     ///      "rev": "xyz",
     ///      "rev_count": 4,
@@ -361,6 +363,13 @@ pub mod types {
     ///      "type": "string",
     ///      "format": "date-time"
     ///    },
+    ///    "narinfos_ct": {
+    ///      "title": "Narinfos Ct",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "pages_ct": {
     ///      "title": "Pages Ct",
     ///      "type": "integer"
@@ -372,6 +381,13 @@ pub mod types {
     ///    "search_index_ct": {
     ///      "title": "Search Index Ct",
     ///      "type": "integer"
+    ///    },
+    ///    "storepaths_ct": {
+    ///      "title": "Storepaths Ct",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
     ///    },
     ///    "systems": {
     ///      "title": "Systems",
@@ -401,9 +417,13 @@ pub mod types {
         pub derivations_ct: i64,
         pub latest_rev: chrono::DateTime<chrono::offset::Utc>,
         pub latest_scrape: chrono::DateTime<chrono::offset::Utc>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub narinfos_ct: Option<i64>,
         pub pages_ct: i64,
         pub schema_version: String,
         pub search_index_ct: i64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub storepaths_ct: Option<i64>,
         pub systems: Vec<String>,
         pub tags: std::collections::HashMap<String, Vec<String>>,
     }
@@ -944,6 +964,7 @@ pub mod types {
     ///      "attr_path": "foo.bar.curl",
     ///      "description": "A very nice Item",
     ///      "name": "curl",
+    ///      "pkg_path": "foo.bar.curl",
     ///      "pname": "curl",
     ///      "stabilities": [
     ///        "stable",
@@ -1116,6 +1137,7 @@ pub mod types {
     ///    "name",
     ///    "outputs",
     ///    "outputs_to_install",
+    ///    "pkg_path",
     ///    "pname",
     ///    "rev",
     ///    "rev_count",
@@ -1202,6 +1224,10 @@ pub mod types {
     ///        "type": "string"
     ///      }
     ///    },
+    ///    "pkg_path": {
+    ///      "title": "Pkg Path",
+    ///      "type": "string"
+    ///    },
     ///    "pname": {
     ///      "title": "Pname",
     ///      "type": "string"
@@ -1268,6 +1294,7 @@ pub mod types {
         pub name: String,
         pub outputs: Vec<Output>,
         pub outputs_to_install: Option<Vec<String>>,
+        pub pkg_path: String,
         pub pname: String,
         pub rev: String,
         pub rev_count: i64,
@@ -1296,6 +1323,7 @@ pub mod types {
     ///        "attr_path": "foo.bar.curl",
     ///        "description": "A very nice Item",
     ///        "name": "curl",
+    ///        "pkg_path": "foo.bar.curl",
     ///        "pname": "curl",
     ///        "stabilities": [
     ///          "stable",
@@ -1349,6 +1377,7 @@ pub mod types {
     ///        "attr_path": "foo.bar.curl",
     ///        "description": "A very nice Item",
     ///        "name": "curl",
+    ///        "pkg_path": "foo.bar.curl",
     ///        "pname": "curl",
     ///        "stabilities": [
     ///          "stable",
@@ -1534,6 +1563,7 @@ pub mod types {
     ///    "name",
     ///    "outputs",
     ///    "outputs_to_install",
+    ///    "pkg_path",
     ///    "pname",
     ///    "rev",
     ///    "rev_count",
@@ -1624,6 +1654,10 @@ pub mod types {
     ///        "type": "string"
     ///      }
     ///    },
+    ///    "pkg_path": {
+    ///      "title": "Pkg Path",
+    ///      "type": "string"
+    ///    },
     ///    "pname": {
     ///      "title": "Pname",
     ///      "type": "string"
@@ -1691,6 +1725,7 @@ pub mod types {
         pub name: String,
         pub outputs: Vec<Output>,
         pub outputs_to_install: Option<Vec<String>>,
+        pub pkg_path: String,
         pub pname: String,
         pub rev: String,
         pub rev_count: i64,
@@ -1722,6 +1757,7 @@ pub mod types {
     ///      "name": "curl",
     ///      "outputs": "{}",
     ///      "outputs_to_install": "{}",
+    ///      "pkg_path": "foo.bar.curl",
     ///      "pname": "curl",
     ///      "rev": "xyz",
     ///      "rev_count": 4,
@@ -1786,6 +1822,7 @@ pub mod types {
     ///      "name": "curl",
     ///      "outputs": "{}",
     ///      "outputs_to_install": "{}",
+    ///      "pkg_path": "foo.bar.curl",
     ///      "pname": "curl",
     ///      "rev": "xyz",
     ///      "rev_count": 4,
@@ -3118,7 +3155,7 @@ Optional Query Parameters:
 - **pageSize**: Optional page size for pagination (def = 10)
 
 Returns:
-- **PackageSearchResult**: A list of PackageInfo and the total result count
+- **PackagesResult**: A list of PackageResolutionInfo and the total result count
 
 Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
 
