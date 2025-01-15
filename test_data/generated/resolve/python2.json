@@ -27,6 +27,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python2",
             "pname": "python2",
             "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
             "rev_count": 439146,
@@ -60,6 +61,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python2",
             "pname": "python2",
             "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
             "rev_count": 439146,
@@ -93,6 +95,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python2",
             "pname": "python2",
             "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
             "rev_count": 439146,
@@ -126,6 +129,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python2",
             "pname": "python2",
             "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
             "rev_count": 439146,

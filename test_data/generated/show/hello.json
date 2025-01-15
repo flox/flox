@@ -23,7 +23,7 @@
         "license": "GPL-3.0-or-later",
         "pkgPath": "nixpkgs/hello",
         "pname": "hello",
-        "system": "x86_64-darwin",
+        "system": "aarch64-darwin",
         "version": "2.12.1"
       },
       {
@@ -35,7 +35,7 @@
         "license": "GPL-3.0-or-later",
         "pkgPath": "nixpkgs/hello",
         "pname": "hello",
-        "system": "aarch64-darwin",
+        "system": "x86_64-darwin",
         "version": "2.12.1"
       },
       {

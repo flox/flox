@@ -16,7 +16,7 @@
             "insecure": false,
             "install_id": "gcc",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "gcc-wrapper-14-20241116",
             "outputs": [
               {
@@ -36,11 +36,12 @@
               "out",
               "man"
             ],
+            "pkg_path": "gcc",
             "pname": "gcc",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -57,7 +58,7 @@
             "insecure": false,
             "install_id": "gcc",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "gcc-wrapper-14-20241116",
             "outputs": [
               {
@@ -77,11 +78,12 @@
               "out",
               "man"
             ],
+            "pkg_path": "gcc",
             "pname": "gcc",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -98,7 +100,7 @@
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "go-1.23.4",
             "outputs": [
               {
@@ -109,11 +111,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "go",
             "pname": "go",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -130,7 +133,7 @@
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "go-1.23.4",
             "outputs": [
               {
@@ -141,11 +144,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "go",
             "pname": "go",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -162,7 +166,7 @@
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "go-1.23.4",
             "outputs": [
               {
@@ -173,11 +177,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "go",
             "pname": "go",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -194,7 +199,7 @@
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "go-1.23.4",
             "outputs": [
               {
@@ -205,11 +210,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "go",
             "pname": "go",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -218,7 +224,7 @@
             "version": "1.23.4"
           }
         ],
-        "page": 736170,
+        "page": 737779,
         "url": ""
       }
     }

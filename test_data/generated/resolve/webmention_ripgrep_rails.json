@@ -16,7 +16,7 @@
             "insecure": false,
             "install_id": "bar",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "ruby3.2-rails-7.1.3.4",
             "outputs": [
               {
@@ -27,11 +27,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "rubyPackages_3_2.rails",
             "pname": "rails",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -48,7 +49,7 @@
             "insecure": false,
             "install_id": "bar",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "ruby3.2-rails-7.1.3.4",
             "outputs": [
               {
@@ -59,11 +60,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "rubyPackages_3_2.rails",
             "pname": "rails",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -80,7 +82,7 @@
             "insecure": false,
             "install_id": "bar",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "ruby3.2-rails-7.1.3.4",
             "outputs": [
               {
@@ -91,11 +93,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "rubyPackages_3_2.rails",
             "pname": "rails",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -112,7 +115,7 @@
             "insecure": false,
             "install_id": "bar",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "ruby3.2-rails-7.1.3.4",
             "outputs": [
               {
@@ -123,11 +126,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "rubyPackages_3_2.rails",
             "pname": "rails",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -144,7 +148,7 @@
             "insecure": false,
             "install_id": "foo",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "ruby3.2-webmention-7.0.0",
             "outputs": [
               {
@@ -155,11 +159,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "rubyPackages_3_2.webmention",
             "pname": "webmention",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -176,7 +181,7 @@
             "insecure": false,
             "install_id": "foo",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "ruby3.2-webmention-7.0.0",
             "outputs": [
               {
@@ -187,11 +192,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "rubyPackages_3_2.webmention",
             "pname": "webmention",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -208,7 +214,7 @@
             "insecure": false,
             "install_id": "foo",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "ruby3.2-webmention-7.0.0",
             "outputs": [
               {
@@ -219,11 +225,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "rubyPackages_3_2.webmention",
             "pname": "webmention",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -240,7 +247,7 @@
             "insecure": false,
             "install_id": "foo",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "ruby3.2-webmention-7.0.0",
             "outputs": [
               {
@@ -251,11 +258,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "rubyPackages_3_2.webmention",
             "pname": "webmention",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -272,7 +280,7 @@
             "insecure": false,
             "install_id": "ripgrep",
             "license": "[ Unlicense, MIT ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "ripgrep-14.1.1",
             "outputs": [
               {
@@ -283,11 +291,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "ripgrep",
             "pname": "ripgrep",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -304,7 +313,7 @@
             "insecure": false,
             "install_id": "ripgrep",
             "license": "[ Unlicense, MIT ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "ripgrep-14.1.1",
             "outputs": [
               {
@@ -315,11 +324,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "ripgrep",
             "pname": "ripgrep",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -336,7 +346,7 @@
             "insecure": false,
             "install_id": "ripgrep",
             "license": "[ Unlicense, MIT ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "ripgrep-14.1.1",
             "outputs": [
               {
@@ -347,11 +357,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "ripgrep",
             "pname": "ripgrep",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -368,7 +379,7 @@
             "insecure": false,
             "install_id": "ripgrep",
             "license": "[ Unlicense, MIT ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "ripgrep-14.1.1",
             "outputs": [
               {
@@ -379,11 +390,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "ripgrep",
             "pname": "ripgrep",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -392,7 +404,7 @@
             "version": "14.1.1"
           }
         ],
-        "page": 736170,
+        "page": 737779,
         "url": ""
       }
     }

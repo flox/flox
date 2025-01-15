@@ -11,31 +11,32 @@
             "attr_path": "poetry",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/898m8vw5hl59d6kysgbq3vrcnz7jv58p-python3.12-poetry-2.0.0.drv",
+            "derivation": "/nix/store/snpvcx07xvdfcl3a9maynnn7v04lacys-python3.12-poetry-2.0.0.drv",
             "description": "Python dependency management and packaging made easy",
             "insecure": false,
             "install_id": "poetry",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "poetry-2.0.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/wg8vq6mam2q9s5jb2daxqi8wn65r8gj3-python3.12-poetry-2.0.0"
+                "store_path": "/nix/store/13j1bmndxwgphq4ng1cvwpbrl8jzszwg-python3.12-poetry-2.0.0"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/jzabl1fdy9id5d14afwld1gps70q85w8-python3.12-poetry-2.0.0-dist"
+                "store_path": "/nix/store/b41a96zmnk1cny0j8j4sf11j9mi992g2-python3.12-poetry-2.0.0-dist"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "poetry",
             "pname": "poetry",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -47,31 +48,32 @@
             "attr_path": "poetry",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/zckjfv2z9s94k0jmmhis4bc7rgh4a6ql-python3.12-poetry-2.0.0.drv",
+            "derivation": "/nix/store/dgfxrmmk0gxdd693ih5l8yclbp36c79w-python3.12-poetry-2.0.0.drv",
             "description": "Python dependency management and packaging made easy",
             "insecure": false,
             "install_id": "poetry",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "poetry-2.0.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/j0c1lg9m8zj7kfsnzxdn60lb7i9rikbv-python3.12-poetry-2.0.0"
+                "store_path": "/nix/store/0id2166i8ad7rssb1ilhplab739vhq72-python3.12-poetry-2.0.0"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/i089051gv82aa7d7chng0j8w0xx9sw04-python3.12-poetry-2.0.0-dist"
+                "store_path": "/nix/store/3m4lc95y78ij7bvqfq0286cqsbfgs3ib-python3.12-poetry-2.0.0-dist"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "poetry",
             "pname": "poetry",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -83,31 +85,32 @@
             "attr_path": "poetry",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/mfvvgbknjl2849zzgahnm9n5zgqfxwwg-python3.12-poetry-2.0.0.drv",
+            "derivation": "/nix/store/cimzfix7ijmkinsn12dd0ksmisy0d1bz-python3.12-poetry-2.0.0.drv",
             "description": "Python dependency management and packaging made easy",
             "insecure": false,
             "install_id": "poetry",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "poetry-2.0.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/jx8j1zhc2fz2rbkd33k6h67grj2if8k1-python3.12-poetry-2.0.0"
+                "store_path": "/nix/store/dqi8ya75gry33mfkpq93p32x32hwdma6-python3.12-poetry-2.0.0"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/4lq3f12k3mn461hld0fzh4sdk1rsq7r2-python3.12-poetry-2.0.0-dist"
+                "store_path": "/nix/store/z46ahrbrvnhgd9w35h3lzyws6p3dz18m-python3.12-poetry-2.0.0-dist"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "poetry",
             "pname": "poetry",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -119,31 +122,32 @@
             "attr_path": "poetry",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/5p8cqdcy7mp7clzhzx2rcixwc709kdq2-python3.12-poetry-2.0.0.drv",
+            "derivation": "/nix/store/7aqavy3j1l2vrmmhg14nrdmwcw0jqyyd-python3.12-poetry-2.0.0.drv",
             "description": "Python dependency management and packaging made easy",
             "insecure": false,
             "install_id": "poetry",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "poetry-2.0.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/yiqnrak3vhai33cfg21cpm7jlvv467as-python3.12-poetry-2.0.0"
+                "store_path": "/nix/store/kkvsbp087fq00gb1z9lvbjjd7c7zdy9d-python3.12-poetry-2.0.0"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/saqqw8ca6vny49jwy9v1khz9fjj3dwc1-python3.12-poetry-2.0.0-dist"
+                "store_path": "/nix/store/j0sfh1a17fc6hqfgsqrmkfm8kx8xhn6f-python3.12-poetry-2.0.0-dist"
               }
             ],
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "poetry",
             "pname": "poetry",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -160,7 +164,7 @@
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "python3-3.12.8",
             "outputs": [
               {
@@ -171,11 +175,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python3",
             "pname": "python3",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -192,7 +197,7 @@
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "python3-3.12.8",
             "outputs": [
               {
@@ -207,11 +212,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python3",
             "pname": "python3",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -228,7 +234,7 @@
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "python3-3.12.8",
             "outputs": [
               {
@@ -239,11 +245,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python3",
             "pname": "python3",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -260,7 +267,7 @@
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "python3-3.12.8",
             "outputs": [
               {
@@ -275,11 +282,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python3",
             "pname": "python3",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -296,7 +304,7 @@
             "insecure": false,
             "install_id": "zlib",
             "license": "Zlib",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "zlib-1.3.1",
             "outputs": [
               {
@@ -315,11 +323,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "zlib",
             "pname": "zlib",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -336,7 +345,7 @@
             "insecure": false,
             "install_id": "zlib",
             "license": "Zlib",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "zlib-1.3.1",
             "outputs": [
               {
@@ -355,11 +364,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "zlib",
             "pname": "zlib",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -376,7 +386,7 @@
             "insecure": false,
             "install_id": "zlib",
             "license": "Zlib",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "zlib-1.3.1",
             "outputs": [
               {
@@ -395,11 +405,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "zlib",
             "pname": "zlib",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -416,7 +427,7 @@
             "insecure": false,
             "install_id": "zlib",
             "license": "Zlib",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=130595eba61081acde9001f43de3248d8888ac4a",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
             "name": "zlib-1.3.1",
             "outputs": [
               {
@@ -435,11 +446,12 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "zlib",
             "pname": "zlib",
-            "rev": "130595eba61081acde9001f43de3248d8888ac4a",
-            "rev_count": 736170,
-            "rev_date": "2025-01-10T15:43:18Z",
-            "scrape_date": "2025-01-13T03:35:32Z",
+            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
+            "rev_count": 737779,
+            "rev_date": "2025-01-13T20:09:17Z",
+            "scrape_date": "2025-01-15T00:14:40Z",
             "stabilities": [
               "unstable"
             ],
@@ -448,7 +460,7 @@
             "version": "1.3.1"
           }
         ],
-        "page": 736170,
+        "page": 737779,
         "url": ""
       }
     }

@@ -31,6 +31,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "boost",
             "pname": "boost",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -70,6 +71,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "boost",
             "pname": "boost",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -126,6 +128,7 @@
               "bin",
               "man"
             ],
+            "pkg_path": "curl",
             "pname": "curl",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -182,6 +185,7 @@
               "bin",
               "man"
             ],
+            "pkg_path": "curl",
             "pname": "curl",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -226,6 +230,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "gcc",
             "pname": "gcc",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -270,6 +275,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "gcc",
             "pname": "gcc",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -318,6 +324,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "gcc-unwrapped",
             "pname": "gcc-unwrapped",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -366,6 +373,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "gcc-unwrapped",
             "pname": "gcc-unwrapped",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -417,6 +425,7 @@
             "outputs_to_install": [
               "bin"
             ],
+            "pkg_path": "glibc",
             "pname": "glibc",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -468,6 +477,7 @@
             "outputs_to_install": [
               "bin"
             ],
+            "pkg_path": "glibc",
             "pname": "glibc",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -511,6 +521,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "libarchive",
             "pname": "libarchive",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -554,6 +565,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "libarchive",
             "pname": "libarchive",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -606,6 +618,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "nix",
             "pname": "nix",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -658,6 +671,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "nix",
             "pname": "nix",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -693,6 +707,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "patchelf",
             "pname": "patchelf",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
@@ -728,6 +743,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "patchelf",
             "pname": "patchelf",
             "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
             "rev_count": 379159,
