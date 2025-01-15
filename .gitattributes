@@ -1,0 +1,13 @@
+
+# Auto detect text files and perform LF normalization
+*       text=auto
+
+# Image files
+img/*   binary
+
+# Text files where line endings should be preserved
+*.patch    -text
+
+# Mark test mock data as generated
+test_data/generated/**           linguist-generated=true
+test_data/manually_generated/**  linguist-generated=true
