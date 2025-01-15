@@ -982,7 +982,8 @@ pub mod types {
     ///    "pkg_path",
     ///    "pname",
     ///    "stabilities",
-    ///    "system"
+    ///    "system",
+    ///    "version"
     ///  ],
     ///  "properties": {
     ///    "attr_path": {
@@ -1024,6 +1025,13 @@ pub mod types {
     ///    },
     ///    "system": {
     ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    }
     ///  }
     ///}
@@ -1039,6 +1047,7 @@ pub mod types {
         pub pname: String,
         pub stabilities: Vec<String>,
         pub system: SystemEnum,
+        pub version: Option<String>,
     }
     impl From<&PackageInfoSearch> for PackageInfoSearch {
         fn from(value: &PackageInfoSearch) -> Self {

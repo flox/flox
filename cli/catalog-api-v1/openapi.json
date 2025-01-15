@@ -1667,6 +1667,11 @@
             "type": "string",
             "title": "Pname"
           },
+          "version": {
+            "title": "Version",
+            "nullable": true,
+            "type": "string"
+          },
           "description": {
             "title": "Description",
             "nullable": true,
@@ -1690,6 +1695,7 @@
           "pkg_path",
           "name",
           "pname",
+          "version",
           "description",
           "stabilities",
           "system"
