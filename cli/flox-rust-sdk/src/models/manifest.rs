@@ -1092,9 +1092,13 @@ pub struct ManifestContainerizeConfig<T> {
 impl From<ManifestContainerizeConfig<Vec<String>>> for ManifestContainerizeConfig<GoMap> {
     fn from(config: ManifestContainerizeConfig<Vec<String>>) -> Self {
         ManifestContainerizeConfig {
+            user: config.user,
             exposed_ports: config.exposed_ports.clone().map(GoMap::new),
+            cmd: config.cmd,
             volumes: config.volumes.clone().map(GoMap::new),
-            ..config.into()
+            working_dir: config.working_dir,
+            labels: config.labels,
+            stop_signal: config.stop_signal,
         }
     }
 }
@@ -2611,5 +2615,30 @@ pub(super) mod test {
             .copy_for_system(&"aarch64-darwin".to_string());
         assert_eq!(filtered.len(), 1, "{:?}", filtered);
         assert!(filtered.contains_key("postgres"));
+    }
+
+    #[test]
+    fn containerize_config_gomap_from() {
+        let config_vec: ManifestContainerizeConfig<Vec<String>> = ManifestContainerizeConfig {
+            user: Some("flox".to_string()),
+            exposed_ports: Some(vec!["123".to_string(), "456/tcp".to_string()]),
+            volumes: Some(vec!["/tmp".to_string()]),
+            ..Default::default()
+        };
+        let config_map: ManifestContainerizeConfig<GoMap> = config_vec.into();
+        let json = serde_json::to_string_pretty(&config_map).unwrap();
+        assert_eq!(
+            json,
+            r#"{
+  "User": "flox",
+  "ExposedPorts": {
+    "123": {},
+    "456/tcp": {}
+  },
+  "Volumes": {
+    "/tmp": {}
+  }
+}"#
+        );
     }
 }

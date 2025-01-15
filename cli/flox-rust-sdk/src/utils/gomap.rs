@@ -3,11 +3,11 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 /// Representation of Go's `struct{}`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct GoEmptyStruct(BTreeMap<(), ()>);
 
 /// Representation of Go's `map[string]struct{}`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct GoMap(BTreeMap<String, GoEmptyStruct>);
 
 impl GoMap {
