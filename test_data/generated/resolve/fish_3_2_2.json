@@ -27,6 +27,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "fish",
             "pname": "fish",
             "rev": "e1f8852faac7638e88d5e8a5b9ee2a7568685e3f",
             "rev_count": 297796,
@@ -60,6 +61,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "fish",
             "pname": "fish",
             "rev": "e1f8852faac7638e88d5e8a5b9ee2a7568685e3f",
             "rev_count": 297796,
@@ -93,6 +95,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "fish",
             "pname": "fish",
             "rev": "e1f8852faac7638e88d5e8a5b9ee2a7568685e3f",
             "rev_count": 297796,
@@ -126,6 +129,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "fish",
             "pname": "fish",
             "rev": "e1f8852faac7638e88d5e8a5b9ee2a7568685e3f",
             "rev_count": 297796,

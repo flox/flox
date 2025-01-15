@@ -1,6 +1,6 @@
 [
   {
-    "count": 859,
+    "count": 865,
     "results": [
       {
         "attrPath": [
@@ -125,13 +125,13 @@
     ]
   },
   {
-    "count": 142,
+    "count": 141,
     "results": [
       {
         "attrPath": [
           "jdk"
         ],
-        "description": "Open-source Java Development Kit",
+        "description": "Certified builds of OpenJDK",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "jdk",
@@ -143,7 +143,7 @@
         "attrPath": [
           "jdk8"
         ],
-        "description": "Certified builds of OpenJDK",
+        "description": "Open-source Java Development Kit",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "jdk8",
@@ -155,7 +155,7 @@
         "attrPath": [
           "jdk11"
         ],
-        "description": "Open-source Java Development Kit",
+        "description": "Certified builds of OpenJDK",
         "input": "nixpkgs",
         "license": null,
         "pkgPath": "jdk11",

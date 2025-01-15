@@ -27,6 +27,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "tabula",
             "pname": "tabula",
             "rev": "2caf4ef5005ecc68141ecb4aac271079f7371c44",
             "rev_count": 449318,
@@ -60,6 +61,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "tabula",
             "pname": "tabula",
             "rev": "2caf4ef5005ecc68141ecb4aac271079f7371c44",
             "rev_count": 449318,
@@ -93,6 +95,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "tabula",
             "pname": "tabula",
             "rev": "2caf4ef5005ecc68141ecb4aac271079f7371c44",
             "rev_count": 449318,
@@ -126,6 +129,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "tabula",
             "pname": "tabula",
             "rev": "2caf4ef5005ecc68141ecb4aac271079f7371c44",
             "rev_count": 449318,

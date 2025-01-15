@@ -36,6 +36,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "darwin.cctools",
             "pname": "cctools",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -78,6 +79,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "darwin.cctools",
             "pname": "cctools",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -111,6 +113,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "clang",
             "pname": "clang",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -144,6 +147,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "clang",
             "pname": "clang",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -186,6 +190,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "gcc",
             "pname": "gcc",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -228,6 +233,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "gcc",
             "pname": "gcc",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -265,6 +271,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "libcxx",
             "pname": "libcxx",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -302,6 +309,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "libcxx",
             "pname": "libcxx",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -339,6 +347,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "libcxxabi",
             "pname": "libcxxabi",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -376,6 +385,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "libcxxabi",
             "pname": "libcxxabi",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -418,6 +428,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "gnumake",
             "pname": "gnumake",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -460,6 +471,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "gnumake",
             "pname": "gnumake",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -506,6 +518,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "gnumake",
             "pname": "gnumake",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -552,6 +565,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "gnumake",
             "pname": "gnumake",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -589,6 +603,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "nodejs",
             "pname": "nodejs",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -626,6 +641,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "nodejs",
             "pname": "nodejs",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -663,6 +679,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "nodejs",
             "pname": "nodejs",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -700,6 +717,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "nodejs",
             "pname": "nodejs",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -733,6 +751,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python3",
             "pname": "python3",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -766,6 +785,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python3",
             "pname": "python3",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -803,6 +823,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python3",
             "pname": "python3",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
@@ -840,6 +861,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python3",
             "pname": "python3",
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,

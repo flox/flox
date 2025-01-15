@@ -36,6 +36,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "python311Packages.pip",
             "pname": "pip",
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
@@ -79,6 +80,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "python311Packages.pip",
             "pname": "pip",
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
@@ -122,6 +124,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "python311Packages.pip",
             "pname": "pip",
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
@@ -165,6 +168,7 @@
               "out",
               "man"
             ],
+            "pkg_path": "python311Packages.pip",
             "pname": "pip",
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
@@ -199,6 +203,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python3",
             "pname": "python3",
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
@@ -237,6 +242,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python3",
             "pname": "python3",
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
@@ -271,6 +277,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python3",
             "pname": "python3",
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
@@ -309,6 +316,7 @@
             "outputs_to_install": [
               "out"
             ],
+            "pkg_path": "python3",
             "pname": "python3",
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
