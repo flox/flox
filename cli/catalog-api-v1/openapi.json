@@ -103,7 +103,7 @@
           "catalog"
         ],
         "summary": "Shows available packages of a specific package",
-        "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
+        "description": "Returns a list of versions for a given attr_path\n\nRequired Query Parameters:\n- **attr_path**: The attr_path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackagesResult**: A list of PackageResolutionInfo and the total result count",
         "operationId": "packages_api_v1_catalog_packages__attr_path__get",
         "security": [
           {
@@ -1241,6 +1241,7 @@
           "name": "curl",
           "outputs": "{}",
           "outputs_to_install": "{}",
+          "pkg_path": "foo.bar.curl",
           "pname": "curl",
           "rev": "xyz",
           "rev_count": 4,
@@ -1299,6 +1300,7 @@
           "name": "curl",
           "outputs": "{}",
           "outputs_to_install": "{}",
+          "pkg_path": "foo.bar.curl",
           "pname": "curl",
           "rev": "xyz",
           "rev_count": 4,
@@ -1367,6 +1369,16 @@
           "derivations_ct": {
             "type": "integer",
             "title": "Derivations Ct"
+          },
+          "storepaths_ct": {
+            "title": "Storepaths Ct",
+            "nullable": true,
+            "type": "integer"
+          },
+          "narinfos_ct": {
+            "title": "Narinfos Ct",
+            "nullable": true,
+            "type": "integer"
           },
           "schema_version": {
             "type": "string",
@@ -1687,6 +1699,7 @@
           "attr_path": "foo.bar.curl",
           "description": "A very nice Item",
           "name": "curl",
+          "pkg_path": "foo.bar.curl",
           "pname": "curl",
           "stabilities": [
             "stable",
@@ -1705,6 +1718,10 @@
           "attr_path": {
             "type": "string",
             "title": "Attr Path"
+          },
+          "pkg_path": {
+            "type": "string",
+            "title": "Pkg Path"
           },
           "derivation": {
             "type": "string",
@@ -1804,6 +1821,7 @@
         "type": "object",
         "required": [
           "attr_path",
+          "pkg_path",
           "derivation",
           "name",
           "pname",
@@ -1850,6 +1868,7 @@
             "attr_path": "foo.bar.curl",
             "description": "A very nice Item",
             "name": "curl",
+            "pkg_path": "foo.bar.curl",
             "pname": "curl",
             "stabilities": [
               "stable",
@@ -1884,6 +1903,7 @@
             "attr_path": "foo.bar.curl",
             "description": "A very nice Item",
             "name": "curl",
+            "pkg_path": "foo.bar.curl",
             "pname": "curl",
             "stabilities": [
               "stable",
@@ -1974,6 +1994,10 @@
           "attr_path": {
             "type": "string",
             "title": "Attr Path"
+          },
+          "pkg_path": {
+            "type": "string",
+            "title": "Pkg Path"
           },
           "derivation": {
             "type": "string",
@@ -2077,6 +2101,7 @@
         "type": "object",
         "required": [
           "attr_path",
+          "pkg_path",
           "derivation",
           "name",
           "pname",
@@ -2131,6 +2156,7 @@
           "name": "curl",
           "outputs": "{}",
           "outputs_to_install": "{}",
+          "pkg_path": "foo.bar.curl",
           "pname": "curl",
           "rev": "xyz",
           "rev_count": 4,
@@ -2175,6 +2201,7 @@
           "name": "curl",
           "outputs": "{}",
           "outputs_to_install": "{}",
+          "pkg_path": "foo.bar.curl",
           "pname": "curl",
           "rev": "xyz",
           "rev_count": 4,
