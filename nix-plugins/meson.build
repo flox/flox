@@ -27,6 +27,7 @@ nix_store_dep = dependency('nix-store', required: true)
 nix_expr_dep = dependency('nix-expr', required: true)
 nix_cmd_dep = dependency('nix-cmd', required: true)
 nix_fetchers_dep = dependency('nix-fetchers', required: true)
+nix_flake_dep = dependency('nix-flake', required: true)
 
 dependencies = [
     nix_main_dep,
@@ -34,6 +35,7 @@ dependencies = [
     nix_expr_dep,
     nix_cmd_dep,
     nix_fetchers_dep,
+    nix_flake_dep,
 ]
 
 # nix global constants such as `SYSTEM`

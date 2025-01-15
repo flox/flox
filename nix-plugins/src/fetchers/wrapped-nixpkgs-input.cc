@@ -24,6 +24,7 @@
 
 #include <nix/attrs.hh>
 #include <nix/cache.hh>
+#include <nix/command.hh>
 #include <nix/error.hh>
 #include <nix/eval.hh>
 #include <nix/fetchers.hh>
@@ -36,6 +37,7 @@
 #include <nix/ref.hh>
 #include <nix/search-path.hh>
 #include <nix/store-api.hh>
+#include <nix/store-path-accessor.hh>
 #include <nix/types.hh>
 #include <nix/url-parts.hh>
 #include <nix/url.hh>
@@ -62,7 +64,7 @@ namespace flox {
  * @brief Create a temporary directory containing a `flake.nix` which wraps
  *        @a nixpkgsRef configuring it to allow unfree and broken packages.
  */
-static std::filesystem::path
+static nix::CanonPath
 createWrappedFlakeDirV0( nix::EvalState &      state,
                          const nix::FlakeRef & nixpkgsRef )
 {
@@ -95,11 +97,16 @@ createWrappedFlakeDirV0( nix::EvalState &      state,
   /* Lock the filled out template to avoid spurious re-locking and silence the
    * "Added input ..." message. */
 
-  nix::FlakeRef wrappedRef = nix::parseFlakeRef( "path:" + tmpDir.string() );
-  auto          _locked    = nix::flake::lockFlake( state, wrappedRef, {} );
+  nix::FlakeRef wrappedRef
+    = nix::parseFlakeRef( state.fetchSettings, "path:" + tmpDir.string() );
+
+  // Note: flakeSettings will likely be refactored upstream eventually!
+  auto _locked
+    = nix::flake::lockFlake( nix::flakeSettings, state, wrappedRef, {} );
   debugLog( "locked flake template" );
 
-  return tmpDir;
+
+  return nix::CanonPath( tmpDir.string() );
 }
 
 
@@ -115,7 +122,7 @@ static const uint64_t latestWrapperVersion = 0;
  * This alias should always refer to the routine associated
  * with `latestWrapperVersion`.
  */
-static inline std::filesystem::path
+static inline nix::CanonPath
 createWrappedFlakeDir( nix::EvalState &      state,
                        const nix::FlakeRef & nixpkgsRef,
                        uint64_t              version = 0 )
@@ -241,7 +248,8 @@ githubAttrsToFloxNixpkgsAttrs( const nix::fetchers::Attrs & attrs )
 
 std::optional<nix::fetchers::Input>
 WrappedNixpkgsInputScheme::inputFromAttrs(
-  const nix::fetchers::Attrs & attrs ) const
+  const nix::fetchers::Settings & settings,
+  const nix::fetchers::Attrs &    attrs ) const
 {
   if ( nix::fetchers::maybeGetStrAttr( attrs, "type" ) != "flox-nixpkgs" )
     {
@@ -281,7 +289,7 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
         }
     }
 
-  nix::fetchers::Input input;
+  nix::fetchers::Input input( settings );
   input.attrs = attrs;
   return input;
 }
@@ -295,13 +303,17 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
  */
 std::optional<nix::fetchers::Input>
 WrappedNixpkgsInputScheme::inputFromURL(
-  const nix::ParsedURL & url,
-  bool /* requireTree ( unused ) */ ) const
+  const nix::fetchers::Settings & settings,
+  const nix::ParsedURL &          url,
+  bool /* requireTree */
+) const
 {
-  if ( url.scheme != this->type() ) { return std::nullopt; }
 
-  nix::fetchers::Input input;
-  input.attrs.insert_or_assign( "type", this->type() );
+  if ( url.scheme != this->schemeName() ) { return std::nullopt; }
+
+  nix::fetchers::Input input( settings );
+
+  input.attrs.insert_or_assign( "type", std::string( this->schemeName() ) );
 
   auto path = nix::tokenizeString<std::vector<std::string>>( url.path, "/" );
 
@@ -382,7 +394,7 @@ nix::ParsedURL
 WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
 {
   nix::ParsedURL url;
-  url.scheme = type();
+  url.scheme = this->schemeName();
 
   if ( auto version = nix::fetchers::maybeGetIntAttr( input.attrs, "version" ) )
     {
@@ -410,15 +422,18 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Return `true` if this input is considered "locked", i.e. it has
+ * attributes like a Git revision or NAR hash that uniquely
+ * identify its contents.
+ */
 bool
-WrappedNixpkgsInputScheme::hasAllInfo(
-  const nix::fetchers::Input & input ) const
+WrappedNixpkgsInputScheme::isLocked( const nix::fetchers::Input & input ) const
 {
   return nix::fetchers::maybeGetStrAttr( input.attrs, "rev" ).has_value()
          && nix::fetchers::maybeGetIntAttr( input.attrs, "version" )
               .has_value();
 }
-
 
 /* -------------------------------------------------------------------------- */
 
@@ -461,6 +476,7 @@ WrappedNixpkgsInputScheme::clone( const nix::fetchers::Input & input,
                                   const nix::Path &            destDir ) const
 {
   auto githubInput = nix::fetchers::Input::fromAttrs(
+    *input.settings,
     floxNixpkgsAttrsToGithubAttrs( input.attrs ) );
   githubInput.clone( destDir );
 }
@@ -468,9 +484,10 @@ WrappedNixpkgsInputScheme::clone( const nix::fetchers::Input & input,
 
 /* -------------------------------------------------------------------------- */
 
-std::pair<nix::StorePath, nix::fetchers::Input>
-WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
-                                  const nix::fetchers::Input & _input )
+std::pair<nix::ref<nix::SourceAccessor>, nix::fetchers::Input>
+WrappedNixpkgsInputScheme::getAccessor(
+  nix::ref<nix::Store>         store,
+  const nix::fetchers::Input & _input ) const
 {
   nix::fetchers::Input input( _input );
 
@@ -493,8 +510,9 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
     {
       /* Use existing GitHub fetcher in `nix' to lookup `rev'. */
       auto githubInput = nix::fetchers::Input::fromAttrs(
+        *input.settings,
         floxNixpkgsAttrsToGithubAttrs( input.attrs ) );
-      rev = githubInput.fetch( store ).second.getRev();
+      rev = githubInput.getAccessor( store ).second.getRev();
     }
   /* Now that we have a `rev' we can drop the `ref' field. */
   input.attrs.erase( "ref" );
@@ -508,45 +526,55 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
       { "rev", rev->gitRev() } } );
 
   /* If we're already cached then we're done. */
-  if ( auto res = nix::fetchers::getCache()->lookup( store, lockedAttrs ) )
+  nix::fetchers::Cache::Key storeKey( "flox-nixpkgs", lockedAttrs );
+  if ( auto res
+       = nix::fetchers::getCache()->lookupStorePath( storeKey, *store ) )
     {
-      return { std::move( res->second ), input };
+      auto accessor = nix::makeStorePathAccessor( store, res->storePath );
+      return { accessor, input };
     }
 
-  nix::EvalState state = nix::EvalState( nix::SearchPath(), store, store );
+  nix::EvalState state( nix::LookupPath(),
+                        store,
+                        *input.settings,
+                        nix::evalSettings );
 
   /* Otherwise create our flake and add it the `nix' store. */
   auto flakeDir = createWrappedFlakeDir(
     state,
-    nix::FlakeRef::fromAttrs( floxNixpkgsAttrsToGithubAttrs( input.attrs ) ),
+    nix::FlakeRef::fromAttrs( *input.settings,
+                              floxNixpkgsAttrsToGithubAttrs( input.attrs ) ),
     nix::fetchers::getIntAttr( input.attrs, "version" ) );
 
-  nix::StorePath storePath = store->addToStore( input.getName(), flakeDir );
+
+  nix::StorePath storePath = store->addToStore(
+    input.getName(),
+    nix::SourcePath( nix::getFSSourceAccessor(), flakeDir ) );
+
 
   /* If we had to lookup a `rev' from a `ref', add a cache entry associated with
    * the `ref'.
-   * The final boolean argument to `add( ... )' tells the cache to only respect
-   * this entry for a short period of time
-   * ( according to _tarball TTL_ setting ). */
+   */
   if ( ! _input.getRev().has_value() )
     {
-      nix::fetchers::getCache()->add( store,
-                                      _input.attrs,
-                                      { { "rev", rev->gitRev() } },
-                                      storePath,
-                                      false );
+      nix::fetchers::Cache::Key storeKeyOriginaInput( "flox-nixpkgs",
+                                                      _input.attrs );
+
+      nix::fetchers::getCache()->upsert( storeKeyOriginaInput,
+                                         *store,
+                                         { { "rev", rev->gitRev() } },
+                                         storePath );
     }
 
   /* Add a cache entry for our locked reference. */
-  nix::fetchers::getCache()->add( store,
-                                  lockedAttrs,
-                                  { { "rev", rev->gitRev() } },
-                                  storePath,
-                                  true );
+  nix::fetchers::getCache()->upsert( storeKey,
+                                     *store,
+                                     { { "rev", rev->gitRev() } },
+                                     storePath );
 
   /* Return the store path for the generated flake, and it's
    * _locked_ input representation. */
-  return { storePath, input };
+  return { nix::makeStorePathAccessor( store, storePath ), input };
 }
 
 
