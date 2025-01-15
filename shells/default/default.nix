@@ -151,7 +151,7 @@ mkShell (
         export MANPATH="''${FLOX_MANPAGES}/share/man:$MANPATH"
 
         # configure the nix-plugin meson build
-        meson setup --reconfigure \
+        meson setup --reconfigure --wipe \
         --prefix "''${REPO_ROOT}/build/nix-plugins" \
         "''${REPO_ROOT}/nix-plugins" "''${REPO_ROOT}/nix-plugins/builddir";
 
