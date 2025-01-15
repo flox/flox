@@ -242,6 +242,7 @@ impl LockedPackageCatalog {
             version,
             system,
             cache_uri: _,
+            pkg_path: _,
         } = package;
 
         let outputs = outputs
@@ -1659,6 +1660,7 @@ pub(crate) mod tests {
                 packages: Some(vec![PackageResolutionInfo {
                     catalog: None,
                     attr_path: "hello".to_string(),
+                    pkg_path: "hello".to_string(),
                     broken: Some(false),
                     derivation: "derivation".to_string(),
                     description: Some("description".to_string()),
@@ -2286,6 +2288,7 @@ pub(crate) mod tests {
                 packages: Some(vec![PackageResolutionInfo {
                     catalog: None,
                     attr_path: "hello".to_string(),
+                    pkg_path: "hello".to_string(),
                     broken: Some(false),
                     derivation: "derivation".to_string(),
                     description: Some("description".to_string()),
@@ -2956,6 +2959,7 @@ pub(crate) mod tests {
                 packages: Some(vec![ResolvedPackageDescriptor {
                     catalog: None,
                     attr_path: foo_catalog_descriptor.pkg_path.clone(),
+                    pkg_path: foo_catalog_descriptor.pkg_path.clone(),
                     broken: Default::default(),
                     derivation: "derivation".to_string(),
                     description: Default::default(),
