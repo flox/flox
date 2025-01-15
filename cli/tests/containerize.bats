@@ -356,9 +356,9 @@ function assert_container_output() {
     version = 1
     [containerize.config]
     User = "user"
-    ExposedPorts = { "80/tcp" = {} }
+    ExposedPorts = [ "80/tcp" ]
     Cmd = [ "some", "command" ]
-    Volumes = { "/some/volume" = {} }
+    Volumes = [ "/some/volume" ]
     WorkingDir = "/working/dir"
     Labels = { "dev.flox.key" = "value" }
     StopSignal = "SIGKILL"

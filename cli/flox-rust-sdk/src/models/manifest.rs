@@ -18,8 +18,9 @@ use url::Url;
 use super::environment::path_environment::InitCustomization;
 use crate::data::System;
 use crate::providers::services::ServiceError;
+use crate::utils::gomap::GoMap;
 #[cfg(test)]
-use crate::utils::{proptest_btree_map_alphanum_keys, proptest_btree_map_alphanum_keys_empty_map};
+use crate::utils::proptest_btree_map_alphanum_keys;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub const DEFAULT_PRIORITY: u64 = 5;
@@ -1040,7 +1041,7 @@ pub enum ManifestBuildSandbox {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestContainerize {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub config: Option<ManifestContainerizeConfig>,
+    pub config: Option<ManifestContainerizeConfig<Vec<String>>>,
 }
 
 /// Container config derived from
@@ -1052,7 +1053,7 @@ pub struct ManifestContainerize {
 #[serde(rename_all = "PascalCase")]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestContainerizeConfig {
+pub struct ManifestContainerizeConfig<T> {
     /// The username or UID which is a platform-specific structure that allows specific control over which user the process run as.
     /// This acts as a default value to use when the value is not specified when creating a container.
     /// For Linux based systems, all of the following are valid: `user`, `uid`, `user:group`, `uid:gid`, `uid:group`, `user:gid`.
@@ -1064,15 +1065,8 @@ pub struct ManifestContainerizeConfig {
     /// Its keys can be in the format of:
     /// `port/tcp`, `port/udp`, `port` with the default protocol being `tcp` if not specified.
     /// These values act as defaults and are merged with any specified when creating a container.
-    /// **NOTE:** This JSON structure value is unusual because it is a direct JSON serialization of the Go type `map[string]struct{}` and is represented in JSON as an object mapping its keys to an empty object.
-    #[cfg_attr(
-        test,
-        proptest(
-            strategy = "proptest::option::of(proptest_btree_map_alphanum_keys_empty_map(10, 3))"
-        )
-    )]
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    exposed_ports: Option<BTreeMap<String, BTreeMap<(), ()>>>,
+    exposed_ports: Option<T>,
     /// Default arguments to the entrypoint of the container.
     /// These values act as defaults and may be replaced by any specified when creating a container.
     /// If an `Entrypoint` value is not specified, then the first entry of the `Cmd` array SHOULD be interpreted as the executable to run.
@@ -1080,15 +1074,8 @@ pub struct ManifestContainerizeConfig {
     cmd: Option<Vec<String>>,
     /// A set of directories describing where the process is
     /// likely to write data specific to a container instance.
-    /// This JSON structure value is unusual because it is a direct JSON serialization of the Go type map[string]struct{} and is represented in JSON as an object mapping its keys to an empty object.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(
-        test,
-        proptest(
-            strategy = "proptest::option::of(proptest_btree_map_alphanum_keys_empty_map(10, 3))"
-        )
-    )]
-    volumes: Option<BTreeMap<String, BTreeMap<(), ()>>>,
+    volumes: Option<T>,
     /// Sets the current working directory of the entrypoint process in the container.
     /// This value acts as a default and may be replaced by a working directory specified when creating a container.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1100,6 +1087,16 @@ pub struct ManifestContainerizeConfig {
     /// The field contains the system call signal that will be sent to the container to exit. The signal can be a signal name in the format `SIGNAME`, for instance `SIGKILL` or `SIGRTMIN+3`.
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_signal: Option<String>,
+}
+
+impl From<ManifestContainerizeConfig<Vec<String>>> for ManifestContainerizeConfig<GoMap> {
+    fn from(config: ManifestContainerizeConfig<Vec<String>>) -> Self {
+        ManifestContainerizeConfig {
+            exposed_ports: config.exposed_ports.clone().map(GoMap::new),
+            volumes: config.volumes.clone().map(GoMap::new),
+            ..config.into()
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

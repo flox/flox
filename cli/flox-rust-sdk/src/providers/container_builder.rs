@@ -12,6 +12,7 @@ use crate::flox::Flox;
 use crate::models::manifest::ManifestContainerizeConfig;
 use crate::providers::build::BUILDTIME_NIXPKGS_URL;
 use crate::providers::buildenv::NIX_BIN;
+use crate::utils::gomap::GoMap;
 use crate::utils::CommandExt;
 
 static MK_CONTAINER_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -48,7 +49,7 @@ pub trait ContainerBuilder {
 #[derive(Debug)]
 pub struct MkContainerNix {
     store_path: BuiltStorePath,
-    container_config: Option<ManifestContainerizeConfig>,
+    container_config: Option<ManifestContainerizeConfig<GoMap>>,
 }
 
 #[derive(Debug, Error)]
@@ -79,7 +80,7 @@ impl MkContainerNix {
     )]
     pub fn new(
         store_path: BuiltStorePath,
-        container_config: Option<ManifestContainerizeConfig>,
+        container_config: Option<ManifestContainerizeConfig<GoMap>>,
     ) -> Self {
         Self {
             store_path,
