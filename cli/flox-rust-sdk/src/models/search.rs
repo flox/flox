@@ -4,15 +4,6 @@ use serde::{Deserialize, Serialize};
 
 pub type SearchLimit = Option<NonZeroU8>;
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, Default, PartialEq)]
-#[serde(rename_all = "kebab-case")]
-pub enum SearchStrategy {
-    Match,
-    MatchName,
-    #[default]
-    MatchNameOrRelPath,
-}
-
 /// Representation of search results.
 /// Created via [crate::providers::catalog::ClientTrait::search],
 /// which translates raw api responses to this struct.
