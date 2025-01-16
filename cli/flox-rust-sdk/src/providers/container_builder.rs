@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument};
 
 use super::buildenv::BuiltStorePath;
 use crate::flox::Flox;
@@ -15,7 +15,7 @@ use crate::models::manifest::ManifestContainerizeConfig;
 use crate::providers::build::BUILDTIME_NIXPKGS_URL;
 use crate::providers::buildenv::NIX_BIN;
 use crate::utils::gomap::GoMap;
-use crate::utils::CommandExt;
+use crate::utils::{CommandExt, ReaderExt};
 
 static MK_CONTAINER_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("FLOX_MK_CONTAINER_NIX")
@@ -210,6 +210,7 @@ impl ContainerSource {
 
         // ensure the command writes to stdout
         container_source_command.stdout(Stdio::piped());
+        container_source_command.stderr(Stdio::piped());
 
         debug!(
             "running container source command: {}",
@@ -219,6 +220,14 @@ impl ContainerSource {
         let mut handle = container_source_command
             .spawn()
             .map_err(ContainerSourceError::CallContainerSourceCommand)?;
+
+        // log stream output to debug
+        handle
+            .stderr
+            .take()
+            .expect("stderr set to piped")
+            .tap_lines(|line| info!("{line}"));
+
         let mut stdout = handle.stdout.take().expect("stdout set to piped");
 
         io::copy(&mut stdout, sink).map_err(ContainerSourceError::StreamContainer)?;
