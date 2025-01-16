@@ -1,5 +1,7 @@
 pub mod errors;
+pub mod gomap;
 pub mod guard;
+
 #[cfg(any(test, feature = "tests"))]
 use std::collections::BTreeMap;
 use std::fmt::Display;

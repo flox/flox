@@ -14,6 +14,7 @@ use crate::flox::Flox;
 use crate::models::manifest::ManifestContainerizeConfig;
 use crate::providers::build::BUILDTIME_NIXPKGS_URL;
 use crate::providers::buildenv::NIX_BIN;
+use crate::utils::gomap::GoMap;
 use crate::utils::CommandExt;
 
 static MK_CONTAINER_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -38,9 +39,9 @@ pub trait ContainerBuilder {
 #[serde(rename_all = "PascalCase")]
 pub struct OCIConfig {
     user: Option<String>,
-    exposed_ports: Option<BTreeMap<String, BTreeMap<(), ()>>>,
+    exposed_ports: Option<GoMap>,
     cmd: Option<Vec<String>>,
-    volumes: Option<BTreeMap<String, BTreeMap<(), ()>>>,
+    volumes: Option<GoMap>,
     working_dir: Option<String>,
     labels: Option<BTreeMap<String, String>>,
     stop_signal: Option<String>,
@@ -50,9 +51,9 @@ impl From<ManifestContainerizeConfig> for OCIConfig {
     fn from(config: ManifestContainerizeConfig) -> Self {
         Self {
             user: config.user,
-            exposed_ports: config.exposed_ports,
+            exposed_ports: config.exposed_ports.map(GoMap::from),
             cmd: config.cmd,
-            volumes: config.volumes,
+            volumes: config.volumes.map(GoMap::from),
             working_dir: config.working_dir,
             labels: config.labels,
             stop_signal: config.stop_signal,
@@ -251,7 +252,8 @@ mod container_source_tests {
     fn oci_config_from_manifest() {
         let manifest_config = ManifestContainerizeConfig {
             user: Some("root".to_string()),
-            exposed_ports: Some(BTreeMap::from([("80/tcp".to_string(), BTreeMap::new())])),
+            exposed_ports: Some(vec![("80/tcp".to_string())]),
+            volumes: Some(vec![("/app".to_string())]),
             working_dir: Some("/app".to_string()),
             ..Default::default()
         };
@@ -261,10 +263,14 @@ mod container_source_tests {
         // Selection of fields that verify From + Serialize:
         // - omits fields that are `None`
         // - renames keys from kebab-case to PascalCase
+        // - converts values from `Vec` to `GoMap`
         assert_eq!(json, indoc! {r#"{
           "User": "root",
           "ExposedPorts": {
             "80/tcp": {}
+          },
+          "Volumes": {
+            "/app": {}
           },
           "WorkingDir": "/app"
         }"#});

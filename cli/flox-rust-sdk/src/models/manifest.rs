@@ -19,7 +19,7 @@ use super::environment::path_environment::InitCustomization;
 use crate::data::System;
 use crate::providers::services::ServiceError;
 #[cfg(test)]
-use crate::utils::{proptest_btree_map_alphanum_keys, proptest_btree_map_alphanum_keys_empty_map};
+use crate::utils::proptest_btree_map_alphanum_keys;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub const DEFAULT_PRIORITY: u64 = 5;
@@ -1064,15 +1064,8 @@ pub struct ManifestContainerizeConfig {
     /// Its keys can be in the format of:
     /// `port/tcp`, `port/udp`, `port` with the default protocol being `tcp` if not specified.
     /// These values act as defaults and are merged with any specified when creating a container.
-    /// **NOTE:** This JSON structure value is unusual because it is a direct JSON serialization of the Go type `map[string]struct{}` and is represented in JSON as an object mapping its keys to an empty object.
-    #[cfg_attr(
-        test,
-        proptest(
-            strategy = "proptest::option::of(proptest_btree_map_alphanum_keys_empty_map(10, 3))"
-        )
-    )]
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub exposed_ports: Option<BTreeMap<String, BTreeMap<(), ()>>>,
+    pub exposed_ports: Option<Vec<String>>,
     /// Default arguments to the entrypoint of the container.
     /// These values act as defaults and may be replaced by any specified when creating a container.
     /// If an `Entrypoint` value is not specified, then the first entry of the `Cmd` array SHOULD be interpreted as the executable to run.
@@ -1080,15 +1073,8 @@ pub struct ManifestContainerizeConfig {
     pub cmd: Option<Vec<String>>,
     /// A set of directories describing where the process is
     /// likely to write data specific to a container instance.
-    /// This JSON structure value is unusual because it is a direct JSON serialization of the Go type map[string]struct{} and is represented in JSON as an object mapping its keys to an empty object.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(
-        test,
-        proptest(
-            strategy = "proptest::option::of(proptest_btree_map_alphanum_keys_empty_map(10, 3))"
-        )
-    )]
-    pub volumes: Option<BTreeMap<String, BTreeMap<(), ()>>>,
+    pub volumes: Option<Vec<String>>,
     /// Sets the current working directory of the entrypoint process in the container.
     /// This value acts as a default and may be replaced by a working directory specified when creating a container.
     #[serde(skip_serializing_if = "Option::is_none")]
