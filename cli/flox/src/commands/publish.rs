@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -20,6 +20,7 @@ use url::Url;
 
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::ensure_floxhub_token;
+use crate::config::{Config, PublishConfig};
 use crate::subcommand_metric;
 use crate::utils::message;
 
@@ -38,12 +39,14 @@ pub struct Publish {
 #[derive(Debug, Bpaf, Clone)]
 struct CacheArgs {
     /// URL of store to copy packages to.
+    /// Takes precedence over a value from 'flox config'.
     #[bpaf(long, argument("URL"))]
-    store_url: Url,
+    store_url: Option<Url>,
 
     /// Path of the key file used to sign packages before copying.
+    /// Takes precedence over a value from 'flox config'.
     #[bpaf(long, argument("FILE"))]
-    signing_key: PathBuf,
+    signing_key: Option<PathBuf>,
 }
 
 #[derive(Debug, Bpaf, Clone)]
@@ -55,7 +58,7 @@ struct PublishTarget {
 }
 
 impl Publish {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         if !flox.features.publish {
             message::plain("🚧 👷 heja, a new command is in construction here, stay tuned!");
             bail!("'publish' feature is not enabled.");
@@ -66,11 +69,12 @@ impl Publish {
             .environment
             .detect_concrete_environment(&flox, "Publish")?;
 
-        Self::publish(flox, env, target, self.cache).await
+        Self::publish(config, flox, env, target, self.cache).await
     }
 
     #[instrument(name = "publish", skip_all, fields(package))]
     async fn publish(
+        config: Config,
         mut flox: Flox,
         mut env: ConcreteEnvironment,
         package: String,
@@ -87,14 +91,9 @@ impl Publish {
         }
 
         let env_metadata = check_environment_metadata(&flox, &mut env)?;
-
         let build_metadata = check_build_metadata(&env, &package)?;
 
-        let cache = cache_args.map(|args| NixCopyCache {
-            url: args.store_url,
-            key_file: args.signing_key,
-        });
-
+        let cache = merge_cache_options(config.flox.publish, cache_args)?;
         let publish_provider = PublishProvider::<&FloxBuildMk, &NixCopyCache> {
             build_metadata,
             env_metadata,
@@ -139,4 +138,156 @@ fn check_package(lockfile: &Lockfile, package: &str) -> Result<bool> {
     }
 
     Ok(true)
+}
+
+/// Merge cache values from config and args, with args taking precedence.
+/// Values must be mutually present or absent.
+fn merge_cache_options(
+    config: Option<PublishConfig>,
+    args: Option<CacheArgs>,
+) -> Result<Option<NixCopyCache>> {
+    let url = args
+        .as_ref()
+        .and_then(|args| args.store_url.clone())
+        .or(config.as_ref().and_then(|cfg| cfg.store_url.clone()));
+    let key_file = args
+        .as_ref()
+        .and_then(|args| args.signing_key.clone())
+        .or(config.as_ref().and_then(|cfg| cfg.signing_key.clone()));
+
+    match (url, key_file) {
+        (Some(url), Some(key_file)) => Ok(Some(NixCopyCache { url, key_file })),
+        (Some(_), None) | (None, Some(_)) => {
+            Err(anyhow!("cache URL and key are mutually required options"))
+        },
+        (None, None) => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_merge_cache_options_success() {
+        struct TestCase {
+            name: &'static str,
+            config: Option<PublishConfig>,
+            args: Option<CacheArgs>,
+            expected: Option<NixCopyCache>,
+        }
+
+        let url_args = Url::parse("http://example.com/args").unwrap();
+        let url_config = Url::parse("http://example.com/config").unwrap();
+        let key_args = PathBuf::from("args.key");
+        let key_config = PathBuf::from("config.key");
+
+        let test_cases = vec![
+            TestCase {
+                name: "None when both None",
+                config: None,
+                args: None,
+                expected: None,
+            },
+            TestCase {
+                name: "args when config None",
+                config: None,
+                args: Some(CacheArgs {
+                    store_url: Some(url_args.clone()),
+                    signing_key: Some(key_args.clone()),
+                }),
+                expected: Some(NixCopyCache {
+                    url: url_args.clone(),
+                    key_file: key_args.clone(),
+                }),
+            },
+            TestCase {
+                name: "config when args None",
+                config: Some(PublishConfig {
+                    store_url: Some(url_config.clone()),
+                    signing_key: Some(key_config.clone()),
+                }),
+                args: None,
+                expected: Some(NixCopyCache {
+                    url: url_config.clone(),
+                    key_file: key_config.clone(),
+                }),
+            },
+            TestCase {
+                name: "args when both Some",
+                config: Some(PublishConfig {
+                    store_url: Some(url_config.clone()),
+                    signing_key: Some(key_config.clone()),
+                }),
+                args: Some(CacheArgs {
+                    store_url: Some(url_args.clone()),
+                    signing_key: Some(key_args.clone()),
+                }),
+                expected: Some(NixCopyCache {
+                    url: url_args.clone(),
+                    key_file: key_args.clone(),
+                }),
+            },
+            TestCase {
+                name: "mix of url from config and key from args",
+                config: Some(PublishConfig {
+                    store_url: Some(url_config.clone()),
+                    signing_key: None,
+                }),
+                args: Some(CacheArgs {
+                    store_url: None,
+                    signing_key: Some(key_args.clone()),
+                }),
+                expected: Some(NixCopyCache {
+                    url: url_config.clone(),
+                    key_file: key_args.clone(),
+                }),
+            },
+        ];
+
+        for tc in test_cases {
+            assert_eq!(
+                merge_cache_options(tc.config, tc.args).unwrap(),
+                tc.expected,
+                "test case: {}",
+                tc.name
+            );
+        }
+    }
+
+    #[test]
+    fn test_merge_cache_options_error() {
+        let url = Url::parse("http://example.com").unwrap();
+        let key = PathBuf::from("key");
+
+        let test_cases = vec![
+            (
+                Some(PublishConfig {
+                    store_url: Some(url.clone()),
+                    signing_key: None,
+                }),
+                Some(CacheArgs {
+                    store_url: Some(url.clone()),
+                    signing_key: None,
+                }),
+            ),
+            (
+                Some(PublishConfig {
+                    store_url: None,
+                    signing_key: Some(key.clone()),
+                }),
+                Some(CacheArgs {
+                    store_url: None,
+                    signing_key: Some(key.clone()),
+                }),
+            ),
+        ];
+
+        for (config, args) in test_cases {
+            assert_eq!(
+                merge_cache_options(config, args).unwrap_err().to_string(),
+                "cache URL and key are mutually required options"
+            );
+        }
+    }
 }
