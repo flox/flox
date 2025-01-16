@@ -34,7 +34,7 @@ use tracing::instrument;
 
 use crate::data::System;
 use crate::flox::FLOX_VERSION;
-use crate::models::search::{ResultCount, SearchLimit, SearchResult, SearchResults, PackageDetails};
+use crate::models::search::{PackageBuild, PackageDetails, ResultCount, SearchLimit, SearchResult, SearchResults};
 use crate::utils::traceable_path;
 
 const NIXPKGS_CATALOG: &str = "nixpkgs";
@@ -534,7 +534,7 @@ impl ClientTrait for CatalogClient {
                     packages
                         .items
                         .into_iter()
-                        .map(TryInto::<SearchResult>::try_into)
+                        .map(TryInto::<PackageBuild>::try_into)
                         .collect::<Result<Vec<_>, _>>()?,
                 ))
             },
@@ -1270,7 +1270,7 @@ impl TryFrom<PackageInfoSearch> for SearchResult {
     }
 }
 
-impl TryFrom<api_types::PackageResolutionInfo> for SearchResult {
+impl TryFrom<api_types::PackageResolutionInfo> for PackageBuild {
     type Error = VersionsError;
 
     fn try_from(package_info: api_types::PackageResolutionInfo) -> Result<Self, VersionsError> {
