@@ -10,7 +10,6 @@ use url::Url;
 
 use crate::data::FloxVersion;
 pub use crate::models::environment_ref::{self, *};
-use crate::models::search::SearchStrategy;
 use crate::providers::{catalog, flake_installable_locker};
 
 pub static FLOX_VERSION_STRING: LazyLock<String> =
@@ -70,9 +69,6 @@ impl Flox {}
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Features {
-    /// Which matching logic to use when searching for packages
-    #[serde(default)]
-    pub search_strategy: SearchStrategy,
     #[serde(default)]
     pub build: bool,
     #[serde(default)]
