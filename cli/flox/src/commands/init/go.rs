@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::CatalogPackage;
-use flox_rust_sdk::utils::traceable_path;
+use flox_rust_sdk::utils::logging::traceable_path;
 use indoc::{formatdoc, indoc};
 use tracing::debug;
 

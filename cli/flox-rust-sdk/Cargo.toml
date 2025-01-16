@@ -43,6 +43,9 @@ uuid.workspace = true
 walkdir.workspace = true
 xdg.workspace = true
 serial_test = { workspace = true, features = ["file_locks"] }
+tracing-subscriber = { workspace = true, optional = true }
+proptest = {workspace = true, optional = true}
+proptest-derive= { workspace = true, optional = true }
 
 [dev-dependencies]
 anyhow.workspace = true
@@ -51,9 +54,10 @@ pretty_assertions.workspace = true
 proptest.workspace = true
 proptest-derive.workspace = true
 serial_test.workspace = true
+tracing-subscriber.workspace = true
 
 [features]
 # allow exporting test helpers in dev mode only
-tests = []
+tests = ["tracing-subscriber", "proptest", "proptest-derive"]
 extra-tests = ["impure-unit-tests"]
 impure-unit-tests = []

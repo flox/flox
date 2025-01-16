@@ -9,7 +9,7 @@ use flox_rust_sdk::providers::catalog::{
     MockClient,
     FLOX_CATALOG_MOCK_DATA_VAR,
 };
-use flox_rust_sdk::utils::traceable_path;
+use flox_rust_sdk::utils::logging::traceable_path;
 use tracing::debug;
 
 use crate::config::Config;

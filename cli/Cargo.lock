@@ -1134,6 +1134,7 @@ dependencies = [
  "toml 0.8.19",
  "toml_edit",
  "tracing",
+ "tracing-subscriber",
  "url",
  "url-escape",
  "uuid",

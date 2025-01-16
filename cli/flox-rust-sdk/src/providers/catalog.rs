@@ -34,7 +34,7 @@ use tracing::instrument;
 use crate::data::System;
 use crate::flox::FLOX_VERSION;
 use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
-use crate::utils::traceable_path;
+use crate::utils::logging::traceable_path;
 
 const NIXPKGS_CATALOG: &str = "nixpkgs";
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";

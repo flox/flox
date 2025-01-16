@@ -24,7 +24,8 @@ use tracing::debug;
 use crate::flox::Flox;
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::{ManifestServiceShutdown, ManifestServices};
-use crate::utils::{traceable_path, CommandExt};
+use crate::utils::logging::traceable_path;
+use crate::utils::CommandExt;
 
 const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
 /// The path to the nix provided `sleep` binary.

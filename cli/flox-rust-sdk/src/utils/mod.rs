@@ -1,11 +1,12 @@
 pub mod errors;
 pub mod gomap;
 pub mod guard;
+pub mod logging;
 
 #[cfg(any(test, feature = "tests"))]
 use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::SystemTime;
 use std::{fs, io};
 
@@ -183,15 +184,6 @@ impl Display for DisplayCommand<'_> {
         }
 
         Ok(())
-    }
-}
-
-/// Returns a `tracing`-compatible form of an `Option<PathBuf>`
-pub fn maybe_traceable_path(maybe_path: &Option<PathBuf>) -> impl tracing::Value {
-    if let Some(ref p) = maybe_path {
-        p.display().to_string()
-    } else {
-        String::from("null")
     }
 }
 
