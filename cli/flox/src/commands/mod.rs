@@ -346,6 +346,7 @@ impl FloxArgs {
             floxhub,
             catalog_client,
             installable_locker: Default::default(),
+            #[allow(deprecated, reason = "This should be the only internal use")]
             features: config.features.clone().unwrap_or_default(),
             verbosity: self.verbosity.to_i32(),
         };
@@ -943,9 +944,9 @@ impl InternalCommands {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
-            InternalCommands::Build(args) => args.handle(config, flox).await?,
-            InternalCommands::Publish(args) => args.handle(config, flox).await?,
-            InternalCommands::Upload(args) => args.handle(config, flox).await?,
+            InternalCommands::Build(args) => args.handle(flox).await?,
+            InternalCommands::Publish(args) => args.handle(flox).await?,
+            InternalCommands::Upload(args) => args.handle(flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
         }

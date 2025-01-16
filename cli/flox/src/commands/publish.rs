@@ -20,7 +20,6 @@ use url::Url;
 
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::ensure_floxhub_token;
-use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::message;
 
@@ -54,8 +53,8 @@ struct PublishTarget {
 }
 
 impl Publish {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        if !config.features.unwrap_or_default().publish {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        if !flox.features.publish {
             message::plain("🚧 👷 heja, a new command is in construction here, stay tuned!");
             bail!("'publish' feature is not enabled.");
         }
