@@ -17,7 +17,6 @@ use catalog_api_v1::types::{
     ErrorResponse,
     MessageLevel,
     MessageType,
-    PackageInfoSearch,
     ResolutionMessageGeneral,
 };
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
@@ -34,7 +33,7 @@ use tracing::instrument;
 
 use crate::data::System;
 use crate::flox::FLOX_VERSION;
-use crate::models::search::{PackageBuild, PackageDetails, ResultCount, SearchLimit, SearchResult, SearchResults};
+use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
 use crate::utils::traceable_path;
 
 const NIXPKGS_CATALOG: &str = "nixpkgs";
@@ -487,11 +486,7 @@ impl ClientTrait for CatalogClient {
 
                 Ok::<_, SearchError>((
                     packages.total_count,
-                    packages
-                        .items
-                        .into_iter()
-                        .map(TryInto::<SearchResult>::try_into)
-                        .collect::<Result<Vec<_>, _>>()?,
+                    packages.items
                 ))
             },
             page_size,
@@ -531,11 +526,7 @@ impl ClientTrait for CatalogClient {
 
                 Ok::<_, VersionsError>((
                     packages.total_count,
-                    packages
-                        .items
-                        .into_iter()
-                        .map(TryInto::<PackageBuild>::try_into)
-                        .collect::<Result<Vec<_>, _>>()?,
+                    packages.items
                 ))
             },
             RESPONSE_PAGE_SIZE,
@@ -1256,32 +1247,6 @@ impl From<api_types::CatalogPageInput> for CatalogPage {
 /// We should consider whether adding a shim to [api_types::PackageResolutionInfo]
 /// is not adding unnecessary complexity.
 pub type PackageResolutionInfo = api_types::ResolvedPackageDescriptor;
-
-impl TryFrom<PackageInfoSearch> for SearchResult {
-    type Error = SearchError;
-
-    fn try_from(package_info: PackageInfoSearch) -> Result<Self, SearchError> {
-        Ok(Self {
-            system: package_info.system.to_string(),
-            version: None,
-            description: package_info.description,
-            pkg_path: package_info.pkg_path,
-        })
-    }
-}
-
-impl TryFrom<api_types::PackageResolutionInfo> for PackageBuild {
-    type Error = VersionsError;
-
-    fn try_from(package_info: api_types::PackageResolutionInfo) -> Result<Self, VersionsError> {
-        Ok(Self {
-            system: package_info.system.to_string(),
-            version: Some(package_info.version),
-            description: package_info.description,
-            pkg_path: package_info.pkg_path,
-        })
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SearchTerm {

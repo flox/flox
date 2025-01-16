@@ -2,6 +2,8 @@ use std::num::NonZeroU8;
 
 use serde::{Deserialize, Serialize};
 
+use catalog_api_v1::types::{PackageInfoSearch, PackageResolutionInfo};
+
 pub type SearchLimit = Option<NonZeroU8>;
 
 /// Representation of search results.
@@ -14,34 +16,8 @@ pub struct ResultsPage<T> {
 }
 pub type ResultCount = Option<u64>;
 
+pub type SearchResult = PackageInfoSearch;
 pub type SearchResults = ResultsPage<SearchResult>;
 
+pub type PackageBuild = PackageResolutionInfo;
 pub type PackageDetails = ResultsPage<PackageBuild>;
-
-/// A package search result
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchResult {
-    /// The system that the package can be built for
-    pub system: String,
-    /// The package path including catalog name
-    pub pkg_path: String,
-    /// The package version
-    pub version: Option<String>,
-    /// The package description
-    pub description: Option<String>,
-}
-
-/// Details about a single build of a package
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PackageBuild {
-    /// The system that the package can be built for
-    pub system: String,
-    /// The package path including catalog name
-    pub pkg_path: String,
-    /// The package version
-    pub version: Option<String>,
-    /// The package description
-    pub description: Option<String>,
-}

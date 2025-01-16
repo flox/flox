@@ -80,11 +80,9 @@ fn render_show_catalog(
     let version_to_systems = {
         let mut map = BTreeMap::new();
         for pkg in search_results.iter() {
-            if let Some(ref version) = pkg.version {
-                map.entry(version.clone())
-                    .or_insert(HashSet::new())
-                    .insert(pkg.system.clone());
-            }
+            map.entry(pkg.version.clone())
+                .or_insert(HashSet::new())
+                .insert(pkg.system.to_string());
         }
         map
     };
@@ -94,34 +92,33 @@ fn render_show_catalog(
     // they are sorted lexically. This may be a different order than how the versions *should* be sorted,
     // so we defer to the order in which the server returns results to us.
     for pkg in search_results {
-        if let Some(ref version) = pkg.version {
-            if seen_versions.contains(&version) {
-                // We print everything in one go for each version, so if we've seen it once
-                // we don't need to do anything else.
-                continue;
-            }
-            let Some(systems) = version_to_systems.get(version) else {
-                // This should be unreachable since we've already iterated over the search results.
-                continue;
-            };
-            let available_systems = {
-                let mut intersection = expected_systems
-                    .intersection(systems)
-                    .cloned()
-                    .collect::<Vec<_>>();
-                intersection.sort();
-                intersection
-            };
-            if available_systems.len() != expected_systems.len() {
-                println!(
-                    "    {pkg_path}@{version} ({} only)",
-                    available_systems.join(", ")
-                );
-            } else {
-                println!("    {pkg_path}@{version}");
-            }
-            seen_versions.insert(version);
+        if seen_versions.contains(&pkg.version) {
+            // We print everything in one go for each version, so if we've seen it once
+            // we don't need to do anything else.
+            continue;
         }
+        let Some(systems) = version_to_systems.get(&pkg.version) else {
+            // This should be unreachable since we've already iterated over the search results.
+            continue;
+        };
+        let available_systems = {
+            let mut intersection = expected_systems
+                .intersection(systems)
+                .cloned()
+                .collect::<Vec<_>>();
+            intersection.sort();
+            intersection
+        };
+        if available_systems.len() != expected_systems.len() {
+            println!(
+                "    {pkg_path}@{} ({} only)",
+                pkg.version,
+                available_systems.join(", ")
+            );
+        } else {
+            println!("    {pkg_path}@{}", pkg.version);
+        }
+        seen_versions.insert(&pkg.version);
     }
     Ok(())
 }
