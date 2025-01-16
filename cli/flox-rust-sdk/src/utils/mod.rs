@@ -5,16 +5,18 @@ pub mod logging;
 
 #[cfg(any(test, feature = "tests"))]
 use std::collections::BTreeMap;
-use std::fmt::Display;
-use std::path::Path;
+use std::fmt::{Display, Write};
+use std::io::{BufRead, BufReader, Read};
+use std::path::{Path, PathBuf};
+use std::thread::{self, JoinHandle};
 use std::time::SystemTime;
 use std::{fs, io};
 
-use ::log::debug;
 pub use flox_core::traceable_path;
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use thiserror::Error;
+use tracing::{debug, trace};
 use walkdir;
 
 use self::errors::IoError;
@@ -139,6 +141,113 @@ impl Display for DisplayCommand<'_> {
     }
 }
 
+#[derive(Debug)]
+/// Allow synchronous processing of reader output
+pub struct WireTap<Context> {
+    reader_handle: JoinHandle<Context>,
+}
+
+impl WireTap<()> {
+    /// Create a new [WireTap] that will read lines from the `reader`.
+    /// The `tap_fn` is called with each line read from the reader and a mutable reference to the provided context.
+    /// The context can be used to store state between calls to the `tap_fn`.
+    ///
+    /// This function is mainly used for testing, where the context is used to store a [tracing::Dispatch].
+    /// Use [WireTap::tap_lines] for a simpler version that does not require a context.
+    pub(crate) fn tap_lines_with_context<Reader, TapContext, TapFn>(
+        reader: Reader,
+        mut context: TapContext,
+        tap_fn: TapFn,
+    ) -> WireTap<TapContext>
+    where
+        Reader: Read + Send + 'static,
+        TapContext: Send + 'static,
+        TapFn: Fn(&mut TapContext, &str) + Send + 'static,
+    {
+        let handle = thread::spawn(move || {
+            let mut s = BufReader::new(reader);
+            let mut line_buf = Vec::new();
+            loop {
+                match s.read_until(b'\n', &mut line_buf) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        let line = String::from_utf8_lossy(&line_buf).into_owned();
+                        tap_fn(&mut context, line.trim_end());
+
+                        line_buf.clear();
+                    },
+                    Err(err) => {
+                        trace!("Error reading line: {err}");
+                        continue;
+                    },
+                }
+            }
+            context
+        });
+
+        WireTap {
+            reader_handle: handle,
+        }
+    }
+}
+impl WireTap<String> {
+    /// Create a new [WireTap] that will read lines from the reader
+    /// and call the provided function with each line.
+    /// The output will be collected into a [String].
+    pub fn tap_lines<R, F>(r: R, tap_fn: F) -> WireTap<String>
+    where
+        R: Read + Send + 'static,
+        F: Fn(&str) + Send + 'static,
+    {
+        WireTap::tap_lines_with_context(r, String::new(), move |buf, line| {
+            writeln!(buf, "{line}").expect("Error writing line");
+            tap_fn(line)
+        })
+    }
+}
+impl<Buffer> WireTap<Buffer> {
+    /// Wait for the reader thread to finish and return the buffer
+    /// containing the collected output.
+    /// This will block until the reader thread finishes.
+    /// If the reader thread panics, this will also panic.
+    pub fn wait(self) -> Buffer {
+        self.reader_handle.join().expect("Reader thread panicked")
+    }
+}
+
+/// An extension trait for [std::io::Read] that allows creating [WireTap]s,
+/// from a reader that will collect the output into a buffer
+/// while allowing synchronous processing of the output.
+pub trait ReaderExt
+where
+    Self: Read + Send + Sized + 'static,
+{
+    fn tap_lines<F>(self, tap_fn: F) -> WireTap<String>
+    where
+        F: Fn(&str) + Send + 'static;
+}
+
+impl<R> ReaderExt for R
+where
+    Self: Read + Send + Sized + 'static,
+{
+    fn tap_lines<F>(self, tap_fn: F) -> WireTap<String>
+    where
+        F: Fn(&str) + Send + 'static,
+    {
+        WireTap::tap_lines(self, tap_fn)
+    }
+}
+
+/// Returns a `tracing`-compatible form of an `Option<PathBuf>`
+pub fn maybe_traceable_path(maybe_path: &Option<PathBuf>) -> impl tracing::Value {
+    if let Some(ref p) = maybe_path {
+        p.display().to_string()
+    } else {
+        String::from("null")
+    }
+}
+
 #[cfg(any(test, feature = "tests"))]
 pub fn proptest_chrono_strategy() -> impl Strategy<Value = chrono::DateTime<chrono::Utc>> {
     use chrono::TimeZone;
@@ -191,4 +300,48 @@ pub fn proptest_btree_map_alphanum_keys_empty_map(
         btree_map(any::<()>(), any::<()>(), 0),
         0..max_keys,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use indoc::indoc;
+    use logging::test_helpers::test_subscriber;
+    use pretty_assertions::assert_eq;
+    use tracing::error;
+
+    use super::*;
+
+    #[test]
+    fn tap_reader() {
+        let (subscriber, writer) = test_subscriber();
+        let dispatcher = tracing::Dispatch::new(subscriber);
+        let content = indoc! {
+            "
+            Bytes pile high like snow
+            Reader parses line by line
+            Winter of data
+
+            -- Phind
+            "
+        };
+
+        // test that the `WireTap::tap_lines` collects the output
+        let collected = WireTap::tap_lines(content.as_bytes(), |_| {}).wait();
+        assert_eq!(collected, content);
+
+        // Test that the lines can be logged
+        // using the `WireTap::tap_lines_into_with_context` helper.
+        // [tracing::dispatcher::with_default] only allows to set the dispatcher for the current thread,
+        // so we need to use the `WireTap::tap_lines_into_with_context` helper to pass the dispatcher to the reader thread as context.
+        // Unfortunately, that means that we basically only have a complex way of testing
+        // that the tap function is called with the correct lines.
+        // The behavior of a global dispatcher can not be tested with unit tests here.
+        WireTap::tap_lines_with_context(content.as_bytes(), dispatcher, |dispatcher, line| {
+            tracing::dispatcher::with_default(dispatcher, || error!("{line}"))
+        })
+        .wait();
+        let logged = writer.to_string();
+
+        assert_eq!(logged, content);
+    }
 }
