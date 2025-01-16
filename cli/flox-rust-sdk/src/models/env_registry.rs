@@ -9,7 +9,7 @@ use tracing::debug;
 use super::environment::{path_hash, EnvironmentPointer};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::utils::traceable_path;
+use crate::utils::logging::traceable_path;
 
 pub const ENV_REGISTRY_FILENAME: &str = "env-registry.json";
 

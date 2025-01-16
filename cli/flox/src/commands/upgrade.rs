@@ -159,10 +159,6 @@ fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::fmt::Display;
-    use std::io::Write;
-    use std::sync::{Arc, Mutex};
-
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_path_environment,
@@ -172,6 +168,7 @@ mod tests {
     use flox_rust_sdk::models::manifest::PackageToInstall;
     use flox_rust_sdk::providers::catalog::test_helpers::reset_mocks_from_file;
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
+    use flox_rust_sdk::utils::logging::test_helpers::CollectingWriter;
     use indoc::indoc;
     use tracing::instrument::WithSubscriber;
     use tracing::Subscriber;
@@ -181,45 +178,11 @@ mod tests {
     use super::*;
     use crate::commands::EnvironmentSelect;
 
-    #[derive(Debug, Default)]
-    struct CollectingWriter {
-        buffer: Mutex<Vec<u8>>,
-    }
-
-    impl Display for CollectingWriter {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let buffer = self.buffer.lock().unwrap();
-            let str_content = String::from_utf8_lossy(&buffer);
-            write!(f, "{str_content}")
-        }
-    }
-    impl Write for &CollectingWriter {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.buffer.lock().unwrap().write(buf)
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            self.buffer.lock().unwrap().flush()
-        }
-    }
-
-    // For now this is a POC of using tracing for output tests,
-    // evenatually we should probably move that to the tracing utils or `message` module.
-    fn test_subscriber() -> (impl Subscriber, Arc<CollectingWriter>) {
-        let writer = Arc::new(CollectingWriter::default());
-
-        // TODO: also tee to test output?
-        let subscriber = tracing_subscriber::fmt()
-            .with_writer(writer.clone())
-            .compact()
-            .without_time()
-            .with_level(false)
-            .with_target(false)
-            .finish()
-            .with(FilterFn::new(|metadata| {
-                metadata.target() == "flox::utils::message"
-            }));
-
+    fn test_subscriber() -> (impl Subscriber, CollectingWriter) {
+        let (subscriber, writer) = flox_rust_sdk::utils::logging::test_helpers::test_subscriber();
+        let subscriber = subscriber.with(FilterFn::new(|metadata| {
+            metadata.target() == "flox::utils::message"
+        }));
         (subscriber, writer)
     }
 

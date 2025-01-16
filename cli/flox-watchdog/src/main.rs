@@ -14,7 +14,7 @@ use flox_core::activations::{
 };
 use flox_rust_sdk::flox::FLOX_VERSION_STRING;
 use flox_rust_sdk::providers::services::process_compose_down;
-use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
+use flox_rust_sdk::utils::logging::{maybe_traceable_path, traceable_path};
 use logger::{init_logger, spawn_heartbeat_log, spawn_logs_gc_threads};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
