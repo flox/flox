@@ -37,6 +37,7 @@ pub struct Config {
     /// Accessing from `flox_rust_sdk::flox::Flox.features` should be preferred
     /// over `flox::config::Config.features` if both are available.
     #[serde(default)]
+    #[deprecated(note = "Access `flox_rust_sdk::flox::Flox.features` instead")]
     pub features: Option<Features>,
 }
 

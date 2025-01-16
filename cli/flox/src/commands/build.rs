@@ -12,7 +12,6 @@ use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::activate::FLOX_INTERPRETER;
-use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::message;
 
@@ -54,8 +53,8 @@ enum SubcommandOrBuildTargets {
 }
 
 impl Build {
-    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        if !config.features.unwrap_or_default().build {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        if !flox.features.build {
             message::plain("🚧 👷 heja, a new command is in construction here, stay tuned!");
             bail!("'build' feature is not enabled.");
         }

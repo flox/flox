@@ -7,7 +7,6 @@ use flox_rust_sdk::providers::publish::{BinaryCache, NixCopyCache};
 use tracing::instrument;
 use url::Url;
 
-use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::message;
 
@@ -31,8 +30,8 @@ struct CacheArgs {
 
 impl Upload {
     #[instrument(name = "upload", skip_all)]
-    pub async fn handle(self, config: Config, _flox: Flox) -> Result<()> {
-        if !config.features.unwrap_or_default().upload {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
+        if !flox.features.upload {
             message::plain("🚧 👷 heja, a new command is in construction here, stay tuned!");
             bail!("'upload' feature is not enabled.");
         }
