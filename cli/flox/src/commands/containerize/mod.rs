@@ -68,7 +68,8 @@ impl Containerize {
                 .lockfile(&flox)?
                 .manifest
                 .containerize
-                .and_then(|c| c.config);
+                .and_then(|c| c.config)
+                .map(|c| c.into());
             // this method is only executed on linux
             #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
             let builder = MkContainerNix::new(built_environment.develop, container_config);

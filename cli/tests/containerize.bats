@@ -353,13 +353,13 @@ function assert_container_output() {
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [containerize.config]
-    User = "user"
-    ExposedPorts = { "80/tcp" = {} }
-    Cmd = [ "some", "command" ]
-    Volumes = { "/some/volume" = {} }
-    WorkingDir = "/working/dir"
-    Labels = { "dev.flox.key" = "value" }
-    StopSignal = "SIGKILL"
+    user = "user"
+    exposed-ports = { "80/tcp" = {} }
+    cmd = [ "some", "command" ]
+    volumes = { "/some/volume" = {} }
+    working-dir = "/working/dir"
+    labels = { "dev.flox.key" = "value" }
+    stop-signal = "SIGKILL"
 EOF
   )"
 
@@ -391,7 +391,7 @@ EOF
 EOF
 }
 
-@test "Cmd can run binary from activated environment" {
+@test "cmd can run binary from activated environment" {
   "$FLOX_BIN" init
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -400,13 +400,13 @@ EOF
     hello.pkg-path = "hello"
 
     [containerize.config]
-    Cmd = [ "hello" ]
+    cmd = [ "hello" ]
 EOF
   )"
 
   echo "$MANIFEST_CONTENTS" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" "$FLOX_BIN" edit -f -
 
-  TAG="Cmd-runs-in-activation"
+  TAG="cmd-runs-in-activation"
 
   bash -c "FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=main $FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
 

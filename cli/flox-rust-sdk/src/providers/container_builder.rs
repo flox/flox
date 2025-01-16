@@ -1,9 +1,11 @@
+use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
@@ -30,6 +32,34 @@ pub trait ContainerBuilder {
     ) -> Result<ContainerSource, Self::Error>;
 }
 
+/// OCI representation of our more user-friendly `ManifestContainerizeConfig`.
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "PascalCase")]
+pub struct OCIConfig {
+    user: Option<String>,
+    exposed_ports: Option<BTreeMap<String, BTreeMap<(), ()>>>,
+    cmd: Option<Vec<String>>,
+    volumes: Option<BTreeMap<String, BTreeMap<(), ()>>>,
+    working_dir: Option<String>,
+    labels: Option<BTreeMap<String, String>>,
+    stop_signal: Option<String>,
+}
+
+impl From<ManifestContainerizeConfig> for OCIConfig {
+    fn from(config: ManifestContainerizeConfig) -> Self {
+        Self {
+            user: config.user,
+            exposed_ports: config.exposed_ports,
+            cmd: config.cmd,
+            volumes: config.volumes,
+            working_dir: config.working_dir,
+            labels: config.labels,
+            stop_signal: config.stop_signal,
+        }
+    }
+}
+
 /// An implementation of [ContainerBuilder] that uses a Nix script
 /// to build a native [ContainerSource] from a [BuiltStorePath].
 ///
@@ -48,7 +78,7 @@ pub trait ContainerBuilder {
 #[derive(Debug)]
 pub struct MkContainerNix {
     store_path: BuiltStorePath,
-    container_config: Option<ManifestContainerizeConfig>,
+    container_config: Option<OCIConfig>,
 }
 
 #[derive(Debug, Error)]
@@ -77,10 +107,7 @@ impl MkContainerNix {
         not(target_os = "linux"),
         deprecated(note = "MkContainerNix is not supported on this platform")
     )]
-    pub fn new(
-        store_path: BuiltStorePath,
-        container_config: Option<ManifestContainerizeConfig>,
-    ) -> Self {
+    pub fn new(store_path: BuiltStorePath, container_config: Option<OCIConfig>) -> Self {
         Self {
             store_path,
             container_config,
@@ -219,6 +246,29 @@ mod container_source_tests {
     use tempfile::TempDir;
 
     use super::*;
+
+    #[test]
+    fn oci_config_from_manifest() {
+        let manifest_config = ManifestContainerizeConfig {
+            user: Some("root".to_string()),
+            exposed_ports: Some(BTreeMap::from([("80/tcp".to_string(), BTreeMap::new())])),
+            working_dir: Some("/app".to_string()),
+            ..Default::default()
+        };
+        let oci_config: OCIConfig = manifest_config.into();
+        let json = serde_json::to_string_pretty(&oci_config).unwrap();
+
+        // Selection of fields that verify From + Serialize:
+        // - omits fields that are `None`
+        // - renames keys from kebab-case to PascalCase
+        assert_eq!(json, indoc! {r#"{
+          "User": "root",
+          "ExposedPorts": {
+            "80/tcp": {}
+          },
+          "WorkingDir": "/app"
+        }"#});
+    }
 
     /// OS error 26 is "Text file busy",
     /// which can happen when executing a script
