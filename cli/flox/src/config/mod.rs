@@ -104,6 +104,9 @@ pub struct FloxConfig {
     ///
     /// (default: true)
     pub upgrade_notifications: Option<bool>,
+
+    /// Configuration for 'flox publish'.
+    pub publish: Option<PublishConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -123,6 +126,15 @@ pub enum EnvironmentPromptConfig {
     /// Change the shell prompt to show the active environments,
     /// but omit 'default' environments
     HideDefault,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PublishConfig {
+    /// Default URL of the store used by 'flox publish'
+    pub store_url: Option<Url>,
+
+    /// Default path of the signing key used by 'flox publish'
+    pub signing_key: Option<PathBuf>,
 }
 
 /// Error returned by [`Config::get()`]

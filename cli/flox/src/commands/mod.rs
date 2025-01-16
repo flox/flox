@@ -945,7 +945,7 @@ impl InternalCommands {
             InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
             InternalCommands::Build(args) => args.handle(flox).await?,
-            InternalCommands::Publish(args) => args.handle(flox).await?,
+            InternalCommands::Publish(args) => args.handle(config, flox).await?,
             InternalCommands::Upload(args) => args.handle(flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,

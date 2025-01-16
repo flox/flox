@@ -109,6 +109,7 @@ pub trait BinaryCache {
     fn cache_url(&self) -> &Url;
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct NixCopyCache {
     pub url: Url,
     pub key_file: PathBuf,
