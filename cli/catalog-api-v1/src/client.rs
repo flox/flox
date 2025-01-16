@@ -1128,6 +1128,7 @@ pub mod types {
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
+    ///    "blah",
     ///    "broken",
     ///    "derivation",
     ///    "description",
@@ -1151,6 +1152,10 @@ pub mod types {
     ///  "properties": {
     ///    "attr_path": {
     ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "blah": {
+    ///      "title": "Blah",
     ///      "type": "string"
     ///    },
     ///    "broken": {
@@ -1281,6 +1286,7 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageResolutionInfo {
         pub attr_path: String,
+        pub blah: String,
         pub broken: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub cache_uri: Option<String>,
@@ -1553,6 +1559,7 @@ pub mod types {
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
+    ///    "blah",
     ///    "broken",
     ///    "derivation",
     ///    "description",
@@ -1577,6 +1584,10 @@ pub mod types {
     ///  "properties": {
     ///    "attr_path": {
     ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "blah": {
+    ///      "title": "Blah",
     ///      "type": "string"
     ///    },
     ///    "broken": {
@@ -1711,6 +1722,7 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ResolvedPackageDescriptor {
         pub attr_path: String,
+        pub blah: String,
         pub broken: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub cache_uri: Option<String>,

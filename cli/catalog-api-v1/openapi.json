@@ -1715,6 +1715,10 @@
             "nullable": true,
             "type": "string"
           },
+          "blah": {
+            "type": "string",
+            "title": "Blah"
+          },
           "attr_path": {
             "type": "string",
             "title": "Attr Path"
@@ -1820,6 +1824,7 @@
         },
         "type": "object",
         "required": [
+          "blah",
           "attr_path",
           "pkg_path",
           "derivation",
@@ -1991,6 +1996,10 @@
             "nullable": true,
             "type": "string"
           },
+          "blah": {
+            "type": "string",
+            "title": "Blah"
+          },
           "attr_path": {
             "type": "string",
             "title": "Attr Path"
@@ -2100,6 +2109,7 @@
         },
         "type": "object",
         "required": [
+          "blah",
           "attr_path",
           "pkg_path",
           "derivation",
