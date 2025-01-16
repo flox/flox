@@ -37,11 +37,13 @@ pub struct Publish {
 
 #[derive(Debug, Bpaf, Clone)]
 struct CacheArgs {
-    #[bpaf(long("cache"))]
-    url: Url,
+    /// URL of store to copy packages to.
+    #[bpaf(long, argument("URL"))]
+    store_url: Url,
 
-    #[bpaf(long("signing-key"))]
-    key_file: PathBuf,
+    /// Path of the key file used to sign packages before copying.
+    #[bpaf(long, argument("FILE"))]
+    signing_key: PathBuf,
 }
 
 #[derive(Debug, Bpaf, Clone)]
@@ -89,8 +91,8 @@ impl Publish {
         let build_metadata = check_build_metadata(&env, &package)?;
 
         let cache = cache_args.map(|args| NixCopyCache {
-            url: args.url,
-            key_file: args.key_file,
+            url: args.store_url,
+            key_file: args.signing_key,
         });
 
         let publish_provider = PublishProvider::<&FloxBuildMk, &NixCopyCache> {
