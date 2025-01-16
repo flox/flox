@@ -11,9 +11,10 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerNix};
+use flox_rust_sdk::utils::ReaderExt;
 use indoc::indoc;
 use macos_containerize_proxy::ContainerizeProxy;
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument};
 
 use super::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
@@ -279,11 +280,25 @@ impl Runtime {
             Runtime::Podman => "podman",
         };
 
-        let child = Command::new(cmd)
+        let mut child = Command::new(cmd)
             .arg("load")
             .stdin(Stdio::piped())
+            .stderr(Stdio::piped())
+            .stdout(Stdio::piped())
             .spawn()
             .context(format!("Failed to call runtime {cmd}"))?;
+
+        child
+            .stderr
+            .take()
+            .expect("Stderr is piped")
+            .tap_lines(|line| info!("{line}"));
+
+        child
+            .stdout
+            .take()
+            .expect("Stdout is piped")
+            .tap_lines(|line| info!("{line}"));
 
         Ok(RuntimeSink { child })
     }
