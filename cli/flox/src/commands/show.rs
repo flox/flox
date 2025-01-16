@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::search::{SearchResult, PackageDetails};
+use flox_rust_sdk::models::search::{PackageBuild, PackageDetails};
 use flox_rust_sdk::providers::catalog::{ClientTrait, VersionsError};
 use tracing::instrument;
 
@@ -59,7 +59,7 @@ impl Show {
 }
 
 fn render_show_catalog(
-    search_results: &[SearchResult],
+    search_results: &[PackageBuild],
     expected_systems: &HashSet<System>,
 ) -> Result<()> {
     if search_results.is_empty() {
@@ -80,10 +80,6 @@ fn render_show_catalog(
     let version_to_systems = {
         let mut map = BTreeMap::new();
         for pkg in search_results.iter() {
-            // The `version` field on `SearchResult` is optional for compatibility with `pkgdb`.
-            // Every package from the catalog will have a version, but right now `search` and `show`
-            // both convert to `SearchResult` with this optional `version` field for compatibility
-            // with `pkgdb` even though with the catalog we get much more data.
             if let Some(ref version) = pkg.version {
                 map.entry(version.clone())
                     .or_insert(HashSet::new())
