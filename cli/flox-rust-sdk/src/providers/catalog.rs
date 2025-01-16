@@ -34,7 +34,7 @@ use tracing::instrument;
 
 use crate::data::System;
 use crate::flox::FLOX_VERSION;
-use crate::models::search::{ResultCount, SearchLimit, SearchResult, SearchResults};
+use crate::models::search::{ResultCount, SearchLimit, SearchResult, SearchResults, PackageDetails};
 use crate::utils::traceable_path;
 
 const NIXPKGS_CATALOG: &str = "nixpkgs";
@@ -81,6 +81,7 @@ pub enum Response {
     // Note that this variant _also_ works for `flox show`/`package_versions` since they return
     // the same type
     Search(SearchResults),
+    Packages(PackageDetails),
     GetStoreInfo(StoreInfoResponse),
     Error(GenericResponse<ErrorResponse>),
 }
@@ -360,7 +361,7 @@ pub trait ClientTrait {
     async fn package_versions(
         &self,
         attr_path: impl AsRef<str> + Send + Sync,
-    ) -> Result<SearchResults, VersionsError>;
+    ) -> Result<PackageDetails, VersionsError>;
 
     /// Create a user catalog
     async fn create_catalog(
@@ -509,7 +510,7 @@ impl ClientTrait for CatalogClient {
     async fn package_versions(
         &self,
         attr_path: impl AsRef<str> + Send + Sync,
-    ) -> Result<SearchResults, VersionsError> {
+    ) -> Result<PackageDetails, VersionsError> {
         let attr_path = attr_path.as_ref();
         let stream = make_depaging_stream(
             |page_number, page_size| async move {
@@ -541,7 +542,7 @@ impl ClientTrait for CatalogClient {
         );
 
         let (count, results) = collect_search_results(stream, None).await?;
-        let search_results = SearchResults { results, count };
+        let search_results = PackageDetails { results, count };
 
         Self::maybe_dump_shim_response(&search_results);
 
@@ -790,14 +791,14 @@ impl ClientTrait for MockClient {
     async fn package_versions(
         &self,
         _attr_path: impl AsRef<str> + Send + Sync,
-    ) -> Result<SearchResults, VersionsError> {
+    ) -> Result<PackageDetails, VersionsError> {
         let mock_resp = self
             .mock_responses
             .lock()
             .expect("couldn't acquire mock lock")
             .pop_front();
         match mock_resp {
-            Some(Response::Search(resp)) => Ok(resp),
+            Some(Response::Packages(resp)) => Ok(resp),
             Some(Response::Error(err)) => Err(VersionsError::Versions(
                 err.try_into()
                     .expect("couldn't convert mock error response"),

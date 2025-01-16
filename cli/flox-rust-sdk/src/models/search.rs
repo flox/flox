@@ -17,11 +17,15 @@ pub enum SearchStrategy {
 /// Created via [crate::providers::catalog::ClientTrait::search],
 /// which translates raw api responses to this struct.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SearchResults {
-    pub results: Vec<SearchResult>,
+pub struct ResultsPage<T> {
+    pub results: Vec<T>,
     pub count: ResultCount,
 }
 pub type ResultCount = Option<u64>;
+
+pub type SearchResults = ResultsPage<SearchResult>;
+
+pub type PackageDetails = ResultsPage<SearchResult>;
 
 /// A package search result
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]

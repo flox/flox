@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::search::{SearchResult, SearchResults};
+use flox_rust_sdk::models::search::{SearchResult, PackageDetails};
 use flox_rust_sdk::providers::catalog::{ClientTrait, VersionsError};
 use tracing::instrument;
 
@@ -34,7 +34,7 @@ impl Show {
             // didn't match a package.
             // So translate 404 into an empty vec![].
             // Once we drop the pkgdb code path, we can clean this up.
-            Err(VersionsError::Versions(e)) if e.status() == 404 => SearchResults {
+            Err(VersionsError::Versions(e)) if e.status() == 404 => PackageDetails {
                 results: vec![],
                 count: None::<u64>,
             },

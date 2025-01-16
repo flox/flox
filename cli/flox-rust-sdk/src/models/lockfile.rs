@@ -1495,7 +1495,7 @@ pub(crate) mod tests {
     use self::catalog::PackageResolutionInfo;
     use super::*;
     use crate::models::manifest::{Manifest, RawManifest};
-    use crate::models::search::{SearchLimit, SearchResults};
+    use crate::models::search::{SearchLimit, PackageDetails};
     use crate::providers::flake_installable_locker::{
         FlakeInstallableError,
         InstallableLockerMock,
@@ -1523,7 +1523,7 @@ pub(crate) mod tests {
         async fn package_versions(
             &self,
             _: impl AsRef<str> + Send + Sync,
-        ) -> Result<SearchResults, VersionsError> {
+        ) -> Result<PackageDetails, VersionsError> {
             unreachable!("package_versions should not be called");
         }
 
