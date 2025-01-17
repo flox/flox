@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -10,8 +10,8 @@ pub struct GoEmptyStruct(BTreeMap<(), ()>);
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct GoMap(BTreeMap<String, GoEmptyStruct>);
 
-impl From<Vec<String>> for GoMap {
-    fn from(v: Vec<String>) -> Self {
+impl From<BTreeSet<String>> for GoMap {
+    fn from(v: BTreeSet<String>) -> Self {
         GoMap(
             v.into_iter()
                 .map(|s| (s, GoEmptyStruct::default()))
@@ -27,8 +27,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn new() {
-        let vals = vec!["aaa".to_string(), "bbb".to_string(), "ccc".to_string()];
+    fn from_btreeset_string() {
+        let vals = BTreeSet::from([
+            "aaa".to_string(),
+            "bbb".to_string(),
+            "ccc".to_string(),
+            // Set don't have dupes but just in case the type is later changed.
+            "aaa".to_string(),
+        ]);
         let gomap = GoMap::from(vals);
         let json = serde_json::to_string(&gomap).unwrap();
 

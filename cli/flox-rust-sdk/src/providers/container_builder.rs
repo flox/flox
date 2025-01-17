@@ -240,6 +240,7 @@ pub enum ContainerSourceError {
 
 #[cfg(test)]
 mod container_source_tests {
+    use std::collections::BTreeSet;
     use std::fs::{self, File};
     use std::os::unix::fs::PermissionsExt;
 
@@ -252,8 +253,8 @@ mod container_source_tests {
     fn oci_config_from_manifest() {
         let manifest_config = ManifestContainerizeConfig {
             user: Some("root".to_string()),
-            exposed_ports: Some(vec![("80/tcp".to_string())]),
-            volumes: Some(vec![("/app".to_string())]),
+            exposed_ports: Some(BTreeSet::from(["80/tcp".to_string()])),
+            volumes: Some(BTreeSet::from(["/app".to_string()])),
             working_dir: Some("/app".to_string()),
             ..Default::default()
         };
@@ -263,7 +264,7 @@ mod container_source_tests {
         // Selection of fields that verify From + Serialize:
         // - omits fields that are `None`
         // - renames keys from kebab-case to PascalCase
-        // - converts values from `Vec` to `GoMap`
+        // - converts values from `BTreeSet` to `GoMap`
         assert_eq!(json, indoc! {r#"{
           "User": "root",
           "ExposedPorts": {
