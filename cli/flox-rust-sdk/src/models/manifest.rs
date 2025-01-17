@@ -1014,16 +1014,23 @@ impl ManifestBuild {
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
 pub struct ManifestBuildDescriptor {
-    /// The command to run to build a package
+    /// The command to run to build a package.
     pub command: String,
-    /// Files to explicitly include in the build result
+    /// Files to explicitly include in the build result.
     pub files: Option<Vec<String>>,
-    /// Packages from the 'toplevel' group to include in the closure of the build result
+    /// Packages from the 'toplevel' group to include in the closure of the build result.
     pub runtime_packages: Option<Vec<String>>,
-    /// Systems to allow running the build
+    /// Systems to allow running the build.
     pub systems: Option<Vec<System>>,
-    /// Sandbox mode for the build
+    /// Sandbox mode for the build.
     pub sandbox: Option<ManifestBuildSandbox>,
+    /// The version to assign the package.
+    pub version: Option<String>,
+    /// A short description of the package that will appear on FloxHub and in
+    /// search results.
+    pub description: Option<String>,
+    /// A license to assign to the package in SPDX format.
+    pub license: Option<Vec<String>>,
 }
 
 /// The definition of a package built from within the environment
@@ -2569,7 +2576,10 @@ pub(super) mod test {
                     runtime_packages: None,
                     files: None,
                     systems: None,
-                    sandbox: None
+                    sandbox: None,
+                    version: None,
+                    description: None,
+                    license: None,
                 })]
                 .into()
             )

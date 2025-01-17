@@ -452,12 +452,13 @@ mod tests {
 
     #[test]
     fn build_no_dollar_out_sandbox_off() {
-        let package_name = String::from("foo");
+        let pname = String::from("foo");
+        let name = String::from("foo-unknown");
 
         let manifest = formatdoc! {r#"
             version = 1
 
-            [build.{package_name}]
+            [build.{pname}]
             command = "[ ! -e $out ]"
             sandbox = "off"
         "#};
@@ -465,14 +466,14 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
 
-        let output = assert_build_status(&flox, &mut env, &package_name, false);
+        let output = assert_build_status(&flox, &mut env, &pname, false);
 
         let expected_output = formatdoc! {r#"
-            {package_name}> ❌  ERROR: Build command did not copy outputs to '$out'.
-            {package_name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
-            {package_name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
-            {package_name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
-            {package_name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
+            {name}> ❌  ERROR: Build command did not copy outputs to '$out'.
+            {name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
+            {name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
+            {name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
+            {name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
         "#};
         assert!(
             output.stderr.contains(&expected_output),
@@ -482,12 +483,13 @@ mod tests {
 
     #[test]
     fn build_no_dollar_out_sandbox_pure() {
-        let package_name = String::from("foo");
+        let pname = String::from("foo");
+        let name = String::from("foo-unknown");
 
         let manifest = formatdoc! {r#"
             version = 1
 
-            [build.{package_name}]
+            [build.{pname}]
             command = "[ ! -e $out ]"
             sandbox = "pure"
         "#};
@@ -498,14 +500,14 @@ mod tests {
 
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        let output = assert_build_status(&flox, &mut env, &package_name, false);
+        let output = assert_build_status(&flox, &mut env, &pname, false);
 
         let expected_output = formatdoc! {r#"
-            {package_name}> ❌  ERROR: Build command did not copy outputs to '$out'.
-            {package_name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
-            {package_name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
-            {package_name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
-            {package_name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
+            {name}> ❌  ERROR: Build command did not copy outputs to '$out'.
+            {name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
+            {name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
+            {name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
+            {name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
         "#};
         assert!(
             output.stderr.contains(&expected_output),
@@ -524,12 +526,13 @@ mod tests {
     /// - executable files in directories other than {bin,sbin,libexec},
     ///   including subdirectories of {bin,sbin,libexec}
     fn build_verify_sane_out(mode: &str) {
-        let package_name = String::from("foo");
+        let pname = String::from("foo");
+        let name = String::from("foo-unknown");
 
         let manifest = formatdoc! {r#"
             version = 1
 
-            [build.{package_name}]
+            [build.{pname}]
             command = '''
                 mkdir -p $out/bin/subdir $out/not-bin
                 touch \
@@ -552,23 +555,23 @@ mod tests {
         }
 
         // expect the build to succeed
-        let output = assert_build_status(&flox, &mut env, &package_name, true);
+        let output = assert_build_status(&flox, &mut env, &pname, true);
 
         // [sic] newline before 'HINT: ...' ignored in 'nix build -L' output:
         // <https://github.com/NixOS/nix/issues/11991>
         let expected_output = formatdoc! {r#"
-            {package_name}> ⚠️  WARNING: $out/bin/not-executable is not executable.
-            {package_name}> ⚠️  WARNING: $out/bin/subdir is not a file.
-            {package_name}> ⚠️  WARNING: No executables found in '$out/bin'.
-            {package_name}> Only executables in '$out/bin' will be available on the PATH.
-            {package_name}> If your build produces executables, make sure they are copied to '$out/bin'.
-            {package_name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
-            {package_name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
-            {package_name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
-            {package_name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
-            {package_name}> HINT: The following executables were found outside of '$out/bin':
-            {package_name}>   - not-bin/hello
-            {package_name}>   - bin/subdir/executable-in-subdir
+            {name}> ⚠️  WARNING: $out/bin/not-executable is not executable.
+            {name}> ⚠️  WARNING: $out/bin/subdir is not a file.
+            {name}> ⚠️  WARNING: No executables found in '$out/bin'.
+            {name}> Only executables in '$out/bin' will be available on the PATH.
+            {name}> If your build produces executables, make sure they are copied to '$out/bin'.
+            {name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
+            {name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
+            {name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
+            {name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
+            {name}> HINT: The following executables were found outside of '$out/bin':
+            {name}>   - not-bin/hello
+            {name}>   - bin/subdir/executable-in-subdir
         "#};
         assert!(
             output.stderr.contains(&expected_output),
@@ -1525,5 +1528,49 @@ mod tests {
     #[test]
     fn build_script_persisted_no_sandbox_on_failure() {
         build_script_persisted("off", false);
+    }
+
+    fn assert_derivation_metadata_propagated(keypath: &[&str], expected: &str, store_path: &Path) {
+        let stdout = Command::new("nix")
+            .args(["derivation", "show", store_path.to_str().unwrap()])
+            .output()
+            .unwrap()
+            .stdout;
+        let drv = serde_json::from_slice::<serde_json::Value>(&stdout).unwrap();
+        // `nix derivation show` prints a map with the .drv path as the key
+        // We just care about the value and discard the key
+        let mut current = drv.as_object().unwrap().values().next().unwrap();
+        for key in keypath {
+            current = &current[key];
+        }
+        let drv_value = current.as_str().unwrap();
+        assert_eq!(drv_value, expected);
+    }
+
+    #[test]
+    fn build_version_propagated() {
+        let pname = "foo".to_string();
+        let version = "4.2.0".to_string();
+
+        for sandbox_mode in ["off", "pure"].iter() {
+            let manifest = formatdoc! {r#"
+                version = 1
+
+                [build.{pname}]
+                sandbox = "{sandbox_mode}"
+                command = """
+                    echo "foo" > $out
+                """
+                version = "{version}"
+            "#};
+            let (flox, _temp_dir_handle) = flox_instance();
+            let mut env = new_path_environment(&flox, &manifest);
+            let env_path = env.parent_path().unwrap();
+            let _git = GitCommandProvider::init(&env_path, false).unwrap();
+            assert_build_status(&flox, &mut env, &pname, true);
+            let result_path = env_path.join(format!("result-{pname}"));
+            let realpath = std::fs::read_link(&result_path).unwrap();
+            assert_derivation_metadata_propagated(&["env", "version"], &version, &realpath);
+        }
     }
 }
