@@ -3,124 +3,104 @@
     "count": 10,
     "results": [
       {
-        "attrPath": [
-          "python"
-        ],
+        "attr_path": "python",
+        "catalog": null,
         "description": "High-level dynamically-typed programming language",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "python",
+        "name": "python-2.7.18.8",
+        "pkg_path": "python",
         "pname": "python",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "gpython"
-        ],
+        "attr_path": "gpython",
+        "catalog": null,
         "description": "Python interpreter written in Go",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "gpython",
+        "name": "gpython-0.2.0",
+        "pkg_path": "gpython",
         "pname": "gpython",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "python2"
-        ],
+        "attr_path": "python2",
+        "catalog": null,
         "description": "High-level dynamically-typed programming language",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "python2",
+        "name": "python-2.7.18.8",
+        "pkg_path": "python2",
         "pname": "python2",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "python3"
-        ],
+        "attr_path": "python3",
+        "catalog": null,
         "description": "High-level dynamically-typed programming language",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "python3",
+        "name": "python3-3.12.8",
+        "pkg_path": "python3",
         "pname": "python3",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "python27"
-        ],
+        "attr_path": "python27",
+        "catalog": null,
         "description": "High-level dynamically-typed programming language",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "python27",
+        "name": "python-2.7.18.8",
+        "pkg_path": "python27",
         "pname": "python27",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "python36"
-        ],
+        "attr_path": "python36",
+        "catalog": null,
         "description": "A high-level dynamically-typed programming language",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "python36",
+        "name": "python3-3.6.14",
+        "pkg_path": "python36",
         "pname": "python36",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "python37"
-        ],
+        "attr_path": "python37",
+        "catalog": null,
         "description": "A high-level dynamically-typed programming language",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "python37",
+        "name": "python3-3.7.16",
+        "pkg_path": "python37",
         "pname": "python37",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "python38"
-        ],
+        "attr_path": "python38",
+        "catalog": null,
         "description": "A high-level dynamically-typed programming language",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "python38",
+        "name": "python3-3.8.18",
+        "pkg_path": "python38",
         "pname": "python38",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "python39"
-        ],
+        "attr_path": "python39",
+        "catalog": null,
         "description": "High-level dynamically-typed programming language",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "python39",
+        "name": "python3-3.9.21",
+        "pkg_path": "python39",
         "pname": "python39",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "python310"
-        ],
+        "attr_path": "python310",
+        "catalog": null,
         "description": "High-level dynamically-typed programming language",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "python310",
+        "name": "python3-3.10.16",
+        "pkg_path": "python310",
         "pname": "python310",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       }
     ]
   }

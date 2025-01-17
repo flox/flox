@@ -3,128 +3,104 @@
     "count": 22,
     "results": [
       {
-        "attrPath": [
-          "hello"
-        ],
+        "attr_path": "hello",
+        "catalog": null,
         "description": "Program that produces a familiar, friendly greeting",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "hello",
+        "name": "hello-2.12.1",
+        "pkg_path": "hello",
         "pname": "hello",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "hello-go"
-        ],
+        "attr_path": "hello-go",
+        "catalog": null,
         "description": "Simple program printing hello world in Go",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "hello-go",
+        "name": "hello-go",
+        "pkg_path": "hello-go",
         "pname": "hello-go",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "hello-cpp"
-        ],
+        "attr_path": "hello-cpp",
+        "catalog": null,
         "description": "Basic sanity check that C++ and cmake infrastructure are working",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "hello-cpp",
+        "name": "hello-cpp",
+        "pkg_path": "hello-cpp",
         "pname": "hello-cpp",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "nwg-hello"
-        ],
+        "attr_path": "nwg-hello",
+        "catalog": null,
         "description": "GTK3-based greeter for the greetd daemon, written in python",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "nwg-hello",
+        "name": "nwg-hello-0.3.0",
+        "pkg_path": "nwg-hello",
         "pname": "nwg-hello",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "hello-unfree"
-        ],
+        "attr_path": "hello-unfree",
+        "catalog": null,
         "description": "Example package with unfree license (for testing)",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "hello-unfree",
+        "name": "example-unfree-package-1.0",
+        "pkg_path": "hello-unfree",
         "pname": "hello-unfree",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "hello-wayland"
-        ],
+        "attr_path": "hello-wayland",
+        "catalog": null,
         "description": "Hello world Wayland client",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "hello-wayland",
+        "name": "hello-wayland-0-unstable-2024-03-04",
+        "pkg_path": "hello-wayland",
         "pname": "hello-wayland",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "sbclPackages",
-          "hello-clog"
-        ],
+        "attr_path": "sbclPackages.hello-clog",
+        "catalog": null,
         "description": null,
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "sbclPackages.hello-clog",
+        "name": "sbcl-hello-clog-20241012-git",
+        "pkg_path": "sbclPackages.hello-clog",
         "pname": "hello-clog",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "texlivePackages",
-          "othello"
-        ],
+        "attr_path": "texlivePackages.othello",
+        "catalog": null,
         "description": "Modification of a Go package to create othello boards",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "texlivePackages.othello",
+        "name": "othello-15878",
+        "pkg_path": "texlivePackages.othello",
         "pname": "othello",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "sbclPackages",
-          "hello-builder"
-        ],
+        "attr_path": "sbclPackages.hello-builder",
+        "catalog": null,
         "description": null,
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "sbclPackages.hello-builder",
+        "name": "sbcl-hello-builder-20241012-git",
+        "pkg_path": "sbclPackages.hello-builder",
         "pname": "hello-builder",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "javaPackages",
-          "mavenHello_1_0"
-        ],
+        "attr_path": "javaPackages.mavenHello_1_0",
+        "catalog": null,
         "description": "Maven Hello World",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "javaPackages.mavenHello_1_0",
+        "name": "maven-hello-1.0",
+        "pkg_path": "javaPackages.mavenHello_1_0",
         "pname": "mavenHello_1_0",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       }
     ]
   }
