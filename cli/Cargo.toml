@@ -27,6 +27,7 @@ config = { version = "0.13.4", default-features = false, features = ["toml"]}
 crossterm = "0.27"
 derive_more = "0.99.18"
 dirs = "5.0.0"
+duct = "0.13.7"
 enum_dispatch = "0.3.13"
 flox-activations = { path = "flox-activations" }
 flox-core = { path = "flox-core" }

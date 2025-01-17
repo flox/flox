@@ -55,6 +55,7 @@ proptest.workspace = true
 proptest-derive.workspace = true
 serial_test.workspace = true
 tracing-subscriber.workspace = true
+duct.workspace = true
 
 [features]
 # allow exporting test helpers in dev mode only

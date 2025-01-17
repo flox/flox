@@ -349,14 +349,6 @@ pub fn check_build_metadata(
         .map_err(|e| PublishError::NonexistentOutputs(e.to_string()))?;
 
     let metadata = check_build_metadata_from_storepath(pkg, &storepath.to_string_lossy())?;
-
-    // TODO - Once these fields are added to the manifest, we can add them here.
-    // if let Some(version) = env.manifest(flox)?.build[pkg].version {
-    //     metadata.version = Some(version);
-    // }
-    // if let Some(description) = env.manifest(flox)?.build[pkg].description {
-    //     metadata.description = Some(description);
-    // }
     Ok(metadata)
 }
 

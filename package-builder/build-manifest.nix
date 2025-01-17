@@ -5,6 +5,8 @@
   pkgs ? (builtins.getFlake nixpkgs-url).legacyPackages.${builtins.currentSystem},
   t3 ? "@t3@",
   name,
+  pname,
+  version,
   flox-env, # environment from which package is built
   build-wrapper-env, # environment with which to wrap contents of bin, sbin
   install-prefix ? null, # optional
@@ -49,7 +51,12 @@ let
 in
 pkgs.runCommandNoCC name
   {
-    inherit buildInputs srcTarball;
+    inherit
+      buildInputs
+      srcTarball
+      pname
+      version
+      ;
     nativeBuildInputs =
       with pkgs;
       [
