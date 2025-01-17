@@ -87,7 +87,7 @@ impl Publish {
     ) -> Result<()> {
         subcommand_metric!("publish");
 
-        if !check_package(&env.lockfile(&flox)?, &package)? {
+        if !check_target_exists(&env.lockfile(&flox)?, &package)? {
             bail!("Package '{}' not found in environment", package);
         }
 
@@ -131,7 +131,7 @@ impl Publish {
     }
 }
 
-fn check_package(lockfile: &Lockfile, package: &str) -> Result<bool> {
+fn check_target_exists(lockfile: &Lockfile, package: &str) -> Result<bool> {
     let environment_packages = &lockfile.manifest.build;
 
     if environment_packages.is_empty() {
