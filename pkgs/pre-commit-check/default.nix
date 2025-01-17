@@ -89,7 +89,19 @@ pre-commit-hooks.lib.${system}.run {
               if [ "$PRE_COMMIT" = "1" ] \
               && [ -n "$PRE_COMMIT_FROM_REF" ] \
               && [ -n "$PRE_COMMIT_TO_REF" ]; then
-                ${config.hooks.commitizen.package}/bin/cz check --rev-range "$PRE_COMMIT_FROM_REF".."$PRE_COMMIT_TO_REF"
+
+                # If the hook runs in a merge queue, we only allow Revert prefixes,
+                # to avoid merging with (fixup!, squash!, Merge, ..) commits.
+                # The $IS_MERGE_QUEUE variable is set by the merge-queue action in CI.
+                ALLOWED_PREFIXES_FLAG=""
+                ALLOWED_PREFIXES=("Revert")
+                if [ "$IS_MERGE_QUEUE" = "1" ]; then
+                  ALLOWED_PREFIXES_FLAG="--allowed-prefixes \"''${ALLOWED_PREFIXES[@]}\""
+                fi
+
+                ${config.hooks.commitizen.package}/bin/cz check \
+                  $ALLOWED_PREFIXES_FLAG \
+                  --rev-range "$PRE_COMMIT_FROM_REF".."$PRE_COMMIT_TO_REF"
               else
                 echo "Skipping commitizen check because --from-ref and --to-ref are not set"
                 exit 0
