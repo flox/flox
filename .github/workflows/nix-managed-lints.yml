@@ -60,6 +60,11 @@ jobs:
           echo 'TARGET_REF=${{ github.event.merge_group.base_ref }}' >> "$GITHUB_ENV";
           echo 'HEAD_REF=${{ github.event.merge_group.head_ref }}' >> "$GITHUB_ENV";
 
+      - name: "Set merge queue flag"
+        if : ${{ github.event_name == 'merge_group' }}
+        run: |
+          echo 'IS_MERGE_QUEUE=1' >> "$GITHUB_ENV";
+
       # Fetch the head and target branch and create a local reference to it.
       # Apparently git does not like fetching into the current branch,
       # so we fetch into temporary branches `target` and `head`.
@@ -83,6 +88,7 @@ jobs:
       # `git rev-parse`.
       - name: "Run Nix Git Hooks"
         run: |
+          echo "IS_MERGE_QUEUE: $IS_MERGE_QUEUE"
           echo "TARGET_REF: $TARGET_REF ($( git rev-parse "target" ))"
           echo "HEAD_REF: $HEAD_REF ($( git rev-parse "head" ))"
 
