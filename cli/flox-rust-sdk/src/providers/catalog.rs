@@ -77,10 +77,10 @@ impl<T> TryFrom<GenericResponse<T>> for ResponseValue<T> {
 #[serde(untagged)]
 pub enum Response {
     Resolve(ResolvedGroups),
-    // Note that this variant _also_ works for `flox show`/`package_versions` since they return
-    // the same type
-    Search(SearchResults),
+    // Search results contain a subset of the package result fields, so the more specific type
+    // needs to be listed first to deserialize correctly.
     Packages(PackageDetails),
+    Search(SearchResults),
     GetStoreInfo(StoreInfoResponse),
     Error(GenericResponse<ErrorResponse>),
 }
@@ -765,6 +765,17 @@ impl ClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::Search(resp)) => Ok(resp),
+            // Empty search results and empty packages responses are indistinguishable when
+            // deserializing, so we might get a Packages response here as that variant is tried
+            // first. That's okay. But if it has actual results of the wrong type, then it's an
+            // error.
+            Some(Response::Packages(PackageDetails {
+                results: _,
+                count: Some(0),
+            })) => Ok(SearchResults {
+                results: vec![],
+                count: Some(0),
+            }),
             Some(Response::Error(err)) => Err(SearchError::Search(
                 err.try_into()
                     .expect("couldn't convert mock error response"),
