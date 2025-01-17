@@ -32,6 +32,10 @@ pub struct Publish {
     #[bpaf(external(cache_args), optional)]
     cache: Option<CacheArgs>,
 
+    /// Do not copy packages to a store irrespective of other config or args.
+    #[bpaf(long, hide)]
+    no_store: bool,
+
     #[bpaf(external(publish_target))]
     publish_target: PublishTarget,
 }
@@ -69,7 +73,7 @@ impl Publish {
             .environment
             .detect_concrete_environment(&flox, "Publish")?;
 
-        Self::publish(config, flox, env, target, self.cache).await
+        Self::publish(config, flox, env, target, self.no_store, self.cache).await
     }
 
     #[instrument(name = "publish", skip_all, fields(package))]
@@ -78,6 +82,7 @@ impl Publish {
         mut flox: Flox,
         mut env: ConcreteEnvironment,
         package: String,
+        no_store: bool,
         cache_args: Option<CacheArgs>,
     ) -> Result<()> {
         subcommand_metric!("publish");
@@ -93,7 +98,11 @@ impl Publish {
         let env_metadata = check_environment_metadata(&flox, &mut env)?;
         let build_metadata = check_build_metadata(&env, &package)?;
 
-        let cache = merge_cache_options(config.flox.publish, cache_args)?;
+        let cache = if no_store {
+            None
+        } else {
+            merge_cache_options(config.flox.publish, cache_args)?
+        };
         let publish_provider = PublishProvider::<&FloxBuildMk, &NixCopyCache> {
             build_metadata,
             env_metadata,
