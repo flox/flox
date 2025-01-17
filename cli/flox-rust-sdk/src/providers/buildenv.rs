@@ -965,7 +965,10 @@ mod realise_flakes_tests {
                 .lock_flake_installable(
                     env!("NIX_TARGET_SYSTEM"),
                     &ManifestPackageDescriptorFlake {
-                        flake: format!("path:{}#package", tempdir.path().display()),
+                        flake: format!(
+                            "path:{}#package",
+                            tempdir.path().canonicalize().unwrap().display()
+                        ),
                         systems: None,
                         priority: None,
                     },
@@ -981,7 +984,8 @@ mod realise_flakes_tests {
                     r#"{ outputs = throw "should not eval""#,
                 )
                 .unwrap();
-                locked_installable.locked_url = format!("path:{}", tempdir.path().display());
+                locked_installable.locked_url =
+                    format!("path:{}", tempdir.path().canonicalize().unwrap().display());
             }
 
             let locked_package = LockedPackageFlake {
