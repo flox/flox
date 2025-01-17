@@ -251,7 +251,7 @@ define BUILD_local_template =
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  --out-link "result-$(_pname)" \
 	  '^*'
-	$(_V_) $(_nix) build -L `$(_nix) store add-file "$($(_pvarname)_logfile)"` \
+	$(_V_) $(_nix) build -L `$(_nix) store add-file "$(shell $(_realpath) "$($(_pvarname)_logfile)")"` \
 	  --out-link "result-$(_pname)-log"
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
