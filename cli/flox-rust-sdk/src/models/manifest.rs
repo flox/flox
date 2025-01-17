@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -1065,7 +1065,7 @@ pub struct ManifestContainerizeConfig {
     /// `port/tcp`, `port/udp`, `port` with the default protocol being `tcp` if not specified.
     /// These values act as defaults and are merged with any specified when creating a container.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub exposed_ports: Option<Vec<String>>,
+    pub exposed_ports: Option<BTreeSet<String>>,
     /// Default arguments to the entrypoint of the container.
     /// These values act as defaults and may be replaced by any specified when creating a container.
     /// If an `Entrypoint` value is not specified, then the first entry of the `Cmd` array SHOULD be interpreted as the executable to run.
@@ -1074,7 +1074,7 @@ pub struct ManifestContainerizeConfig {
     /// A set of directories describing where the process is
     /// likely to write data specific to a container instance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub volumes: Option<Vec<String>>,
+    pub volumes: Option<BTreeSet<String>>,
     /// Sets the current working directory of the entrypoint process in the container.
     /// This value acts as a default and may be replaced by a working directory specified when creating a container.
     #[serde(skip_serializing_if = "Option::is_none")]
