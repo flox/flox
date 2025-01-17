@@ -180,7 +180,8 @@ fi
 # The rust CLI contains sophisticated logic to set $FLOX_SHELL based on the
 # process listening on STDOUT, but that won't happen when activating from
 # the top-level activation script, so fall back to $SHELL as a default.
-declare -r _flox_shell="${FLOX_SHELL:-$SHELL}"
+# Respect _FLOX_SHELL_FORCE if set.
+declare -r _flox_shell="${_FLOX_SHELL_FORCE:-${FLOX_SHELL:-$SHELL}}"
 # Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
 unset FLOX_SHELL
 

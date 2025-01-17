@@ -155,18 +155,23 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 
 ## Variables used by `flox activate`
 
-`$FLOX_SHELL`
-:  When launching an interactive sub-shell, Flox launches the shell specified in
-   `$FLOX_SHELL` if it is set.
-   When printing a shell for sourcing in the current shell,
-   Flox will produce a script suitable for `$FLOX_SHELL` if it is set.
+`$FLOX_SHELL`, `$SHELL`
+:  When activating an environment
+   Flox will either launch a sub-shell
+   or emit commands to configure an already-running (parent) shell.
+   In both of these cases Flox needs to know which shell to use,
+   and these variables are used to control the selection process.
 
-`$SHELL`
-:  When launching an interactive sub-shell, Flox launches the shell specified in
-   `$SHELL` if it is set and `$FLOX_SHELL` is not set.
-   When printing a shell for sourcing in the current shell,
-   Flox will produce a script suitable for `$SHELL` if it is set
-   and `$FLOX_SHELL` is not set and Flox can't detect the parent shell.
+       * interactive and command modes: When launching a sub-shell
+         Flox will invoke
+         the shell specified in `$FLOX_SHELL` if set
+         or fall back to invoke `$SHELL` by default.
+
+       * in-place mode: When performing an "in place" activation
+         Flox will attempt to detect its parent shell type unless overridden by
+         the `$FLOX_SHELL` variable,
+         and if it cannot detect its parent shell type then will
+         produce a script with syntax determined by `$SHELL`.
 
 `$FLOX_PROMPT_COLOR_{1,2}`
 :   Flox adds text to the beginning of the shell prompt to indicate which
