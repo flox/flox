@@ -63,6 +63,7 @@ impl Containerize {
         );
 
         let built_environment = env.build(&flox)?;
+        let env_name = env.name();
 
         let source = if std::env::consts::OS == "linux" {
             let container_config = env
@@ -75,7 +76,7 @@ impl Containerize {
             #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
             let builder = MkContainerNix::new(built_environment.develop, container_config);
 
-            builder.create_container_source(&flox, env.name().as_ref(), output_tag)?
+            builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         } else {
             let env_path = env.parent_path()?;
             let Some(container_runtime) = Runtime::detect_from_path() else {
@@ -86,14 +87,14 @@ impl Containerize {
                 "#});
             };
             let builder = ContainerizeProxy::new(env_path, container_runtime);
-            builder.create_container_source(&flox, env.name().as_ref(), output_tag)?
+            builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         };
 
         let mut writer = output.to_writer()?;
         source.stream_container(&mut writer)?;
         writer.wait()?;
 
-        message::created(format!("Container written to {output}"));
+        message::created(format!("'{env_name}:{output_tag}' written to {output}"));
         Ok(())
     }
 }

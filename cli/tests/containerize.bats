@@ -256,7 +256,7 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
   run "$FLOX_BIN" containerize
   assert_success
-  assert_line --partial "Loaded image: localhost/test:latest"
+  assert_line "✨ 'test:latest' written to Podman runtime"
 }
 
 # bats test_tags=containerize:default-to-file
@@ -278,7 +278,7 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
   run "$FLOX_BIN" containerize --tag 'sometag'
   assert_success
-  assert_line --partial "Loaded image: localhost/test:sometag"
+  assert_line "✨ 'test:sometag' written to Podman runtime"
 }
 
 # bats test_tags=containerize:piped-to-runtime
@@ -287,7 +287,7 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
   run bash -c '"$FLOX_BIN" containerize --tag "runtime" --runtime podman' 3>&-
   assert_success
-  assert_line --partial "Loaded image:"
+  assert_line "✨ 'test:runtime' written to Podman runtime"
 
   run --separate-stderr podman run -q -i "localhost/test:runtime" -c 'echo $foo'
   assert_success
