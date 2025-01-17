@@ -3,419 +3,1127 @@
     "count": 32,
     "results": [
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/rrikvp9mgbrini920i4n2sf3lhbvlrx6-python3.10-flask-2.3.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=a9bf124c46ef298113270b1f84a164865987a91c",
+        "name": "python3.10-flask-2.3.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/b54vjn6jzrnvgw6wb57lmdnph8dh6ipj-python3.10-flask-2.3.3"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/yin372ygf3k1rcda1lvzag4p125dcizw-python3.10-flask-2.3.3-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "a9bf124c46ef298113270b1f84a164865987a91c",
+        "rev_count": 558881,
+        "rev_date": "2023-12-11T16:35:24Z",
+        "scrape_date": "2024-08-15T23:00:37Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-linux",
+        "unfree": false,
         "version": "python3.10-flask-2.3.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/30wf3q5j61xwi5pyb2i1bac8n7fzr638-python3.10-flask-2.3.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=8cfef6986adfb599ba379ae53c9f5631ecd2fd9c",
+        "name": "python3.10-flask-2.3.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/mcpc0b2gcgh0prhv084ls9yjzdpwnp1i-python3.10-flask-2.3.3"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/9mkv1f65kbrnfj6rz216g4j274l3ahmc-python3.10-flask-2.3.3-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "8cfef6986adfb599ba379ae53c9f5631ecd2fd9c",
+        "rev_count": 553283,
+        "rev_date": "2023-11-27T06:58:46Z",
+        "scrape_date": "2024-08-15T23:15:20Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-darwin",
+        "unfree": false,
         "version": "python3.10-flask-2.3.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/wz34qddi07hrk3dyvcpnjx939wv5zq74-python3.10-flask-2.3.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=8cfef6986adfb599ba379ae53c9f5631ecd2fd9c",
+        "name": "python3.10-flask-2.3.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/8gm4fxpfnjxqhxg54vhwz7gg1rbygjcx-python3.10-flask-2.3.3"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/gvdb50dibadwjhndkm82b6c8i4s71zal-python3.10-flask-2.3.3-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "8cfef6986adfb599ba379ae53c9f5631ecd2fd9c",
+        "rev_count": 553283,
+        "rev_date": "2023-11-27T06:58:46Z",
+        "scrape_date": "2024-08-15T23:15:20Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-darwin",
+        "unfree": false,
         "version": "python3.10-flask-2.3.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/s8ik593kqsi7rqsc822m6359cnbx8gb6-python3.10-flask-2.3.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=0cbe9f69c234a7700596e943bfae7ef27a31b735",
+        "name": "python3.10-flask-2.3.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/0hdwsijsmz4gcqf4xfrflvasvdajy64b-python3.10-flask-2.3.3"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/489gd4s4087ahqgnsj7vrrlpz9wyjjz2-python3.10-flask-2.3.3-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "0cbe9f69c234a7700596e943bfae7ef27a31b735",
+        "rev_count": 542330,
+        "rev_date": "2023-10-29T20:30:40Z",
+        "scrape_date": "2024-08-15T23:37:33Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-linux",
+        "unfree": false,
         "version": "python3.10-flask-2.3.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/1hz4gf66p4ssaiv35vyn2ra16r37w0a3-python3.10-flask-2.2.5.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=ca012a02bf8327be9e488546faecae5e05d7d749",
+        "name": "python3.10-flask-2.2.5",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/9zp9r2szafcj147jcsbbb3ghcaa35md9-python3.10-flask-2.2.5"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/2miqf6lgyaxshkhbal1an4ckabm2lhcq-python3.10-flask-2.2.5-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "ca012a02bf8327be9e488546faecae5e05d7d749",
+        "rev_count": 536534,
+        "rev_date": "2023-10-16T11:38:32Z",
+        "scrape_date": "2024-08-15T23:44:26Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-darwin",
+        "unfree": false,
         "version": "python3.10-flask-2.2.5"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/iaq409fxw812489sf52kz66df96q730k-python3.10-flask-2.2.5.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=f99e5f03cc0aa231ab5950a15ed02afec45ed51a",
+        "name": "python3.10-flask-2.2.5",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/wxasc1cp17p7bvx5h3ybwf3f7g9x8z0w-python3.10-flask-2.2.5"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/zn78ybl870c1c36pmfwfb81b74vgc3q2-python3.10-flask-2.2.5-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "f99e5f03cc0aa231ab5950a15ed02afec45ed51a",
+        "rev_count": 534224,
+        "rev_date": "2023-10-09T19:29:22Z",
+        "scrape_date": "2024-08-15T23:51:17Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-linux",
+        "unfree": false,
         "version": "python3.10-flask-2.2.5"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/59zdx6ycr3p9qss8mbl5bzbwlfpw9zxp-python3.10-flask-2.2.5.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=e56990880811a451abd32515698c712788be5720",
+        "name": "python3.10-flask-2.2.5",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/cdkf924n4mbz2qawrw9ljl669qdgnji3-python3.10-flask-2.2.5"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/d42vrvshrf7r025xd4iz2wk2x5bw5kyf-python3.10-flask-2.2.5-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "e56990880811a451abd32515698c712788be5720",
+        "rev_count": 521611,
+        "rev_date": "2023-09-02T14:03:41Z",
+        "scrape_date": "2024-08-16T00:19:10Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-linux",
+        "unfree": false,
         "version": "python3.10-flask-2.2.5"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/ps6bxvjl1ill2hrp2b233ya8hrxf2cmy-python3.10-flask-2.2.5.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=645ff62e09d294a30de823cb568e9c6d68e92606",
+        "name": "python3.10-flask-2.2.5",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/v616mwfr8b2hs6n51zblx7478kmyqgvr-python3.10-flask-2.2.5"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/r39p4m1cwpv8784w86aad70aq9ghr84s-python3.10-flask-2.2.5-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "645ff62e09d294a30de823cb568e9c6d68e92606",
+        "rev_count": 500267,
+        "rev_date": "2023-07-01T17:09:17Z",
+        "scrape_date": "2024-08-16T00:53:17Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-darwin",
+        "unfree": false,
         "version": "python3.10-flask-2.2.5"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/sxvawq8h68a74xplapgmialyknm72imq-python3.10-flask-2.2.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=963006aab35e3e8ebbf6052b6bf4ea712fdd3c28",
+        "name": "python3.10-flask-2.2.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/n0syiwyy2bxg30l13sia42y13isgacqg-python3.10-flask-2.2.3"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/yzfj0va1v94p6rv8ir5hx0kxjlb42qb4-python3.10-flask-2.2.3-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "963006aab35e3e8ebbf6052b6bf4ea712fdd3c28",
+        "rev_count": 484945,
+        "rev_date": "2023-05-16T05:42:51Z",
+        "scrape_date": "2024-08-16T01:05:45Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-linux",
+        "unfree": false,
         "version": "python3.10-flask-2.2.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/awv25lpkb73sdvjhlfpbhs6k06mn41rd-python3.10-flask-2.2.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=963006aab35e3e8ebbf6052b6bf4ea712fdd3c28",
+        "name": "python3.10-flask-2.2.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/56jrm3m0b0n41m315waxswq5jw3xgfkl-python3.10-flask-2.2.3"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/gnhyfgkc6yvd0syrca9kgvca3iqza93c-python3.10-flask-2.2.3-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "963006aab35e3e8ebbf6052b6bf4ea712fdd3c28",
+        "rev_count": 484945,
+        "rev_date": "2023-05-16T05:42:51Z",
+        "scrape_date": "2024-08-16T01:05:45Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-linux",
+        "unfree": false,
         "version": "python3.10-flask-2.2.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/s83vc8vlv4nh0gf2caws8afbflf2zl8n-python3.10-flask-2.2.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=897876e4c484f1e8f92009fd11b7d988a121a4e7",
+        "name": "python3.10-flask-2.2.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/dmqfwhvh615bhxkjrz7l0x4b9abnh60p-python3.10-flask-2.2.3"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/wp55hqjdac1slalcql037nq9nadk023x-python3.10-flask-2.2.3-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "897876e4c484f1e8f92009fd11b7d988a121a4e7",
+        "rev_count": 481752,
+        "rev_date": "2023-05-06T21:28:42Z",
+        "scrape_date": "2024-08-16T01:12:06Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-darwin",
+        "unfree": false,
         "version": "python3.10-flask-2.2.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/87kzgzrafkxw9j4jkhxab7h0hfsm6c5r-python3.10-flask-2.2.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=f00994e78cd39e6fc966f0c4103f908e63284780",
+        "name": "python3.10-flask-2.2.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/l4m0njksq280v5fah7j7hgrfgxn8nbmw-python3.10-flask-2.2.3"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/7f9i4ba8wn1xla5w5cdz8983l01fpl2j-python3.10-flask-2.2.3-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "f00994e78cd39e6fc966f0c4103f908e63284780",
+        "rev_count": 474575,
+        "rev_date": "2023-04-17T13:26:37Z",
+        "scrape_date": "2024-08-16T01:18:04Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-darwin",
+        "unfree": false,
         "version": "python3.10-flask-2.2.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/ml23yrz53g90lb503gza4cgxcprn8db3-python3.10-flask-2.2.2.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+        "name": "python3.10-flask-2.2.2",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/9l024wr0w428bqrxz4xzhlwbnwkd749i-python3.10-flask-2.2.2"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/3gx1xpmas1lc9mc8clismvraib9iga06-python3.10-flask-2.2.2-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+        "rev_count": 439146,
+        "rev_date": "2023-01-02T00:06:23Z",
+        "scrape_date": "2024-08-16T02:13:46Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-linux",
+        "unfree": false,
         "version": "python3.10-flask-2.2.2"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/63hh1fhvqldpcw7m0d2wvn46ky14azdb-python3.10-flask-2.2.2.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=2788904d26dda6cfa1921c5abb7a2466ffe3cb8c",
+        "name": "python3.10-flask-2.2.2",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/my9lm1j2687y8ip6a9fq20lm3wq08ca9-python3.10-flask-2.2.2"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/qw8gp8g5mb56rfickqf6jrd8ad32phsl-python3.10-flask-2.2.2-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "2788904d26dda6cfa1921c5abb7a2466ffe3cb8c",
+        "rev_count": 428801,
+        "rev_date": "2022-11-22T18:11:15Z",
+        "scrape_date": "2024-06-13T19:38:58Z",
+        "stabilities": [
+          "lts",
+          "stable",
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-linux",
+        "unfree": false,
         "version": "python3.10-flask-2.2.2"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/iqx0hxvj9hxwmp2zxzwxv5f6crphnbvj-python3.10-flask-2.2.2.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=d40fea9aeb8840fea0d377baa4b38e39b9582458",
+        "name": "python3.10-flask-2.2.2",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/2zbqrlhmw0v64qiv2a89l6zyj8irhby4-python3.10-flask-2.2.2"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/aby5gb608wbbk36a9zasrlmwn1i2apgf-python3.10-flask-2.2.2-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "d40fea9aeb8840fea0d377baa4b38e39b9582458",
+        "rev_count": 422531,
+        "rev_date": "2022-10-31T15:44:53Z",
+        "scrape_date": "2024-08-16T02:43:28Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-darwin",
+        "unfree": false,
         "version": "python3.10-flask-2.2.2"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/z0nsjvchmjxx6sickgyk3bi4jpp586p5-python3.10-flask-2.2.2.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=285e77efe87df64105ec14b204de6636fb0a7a27",
+        "name": "python3.10-flask-2.2.2",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/amllm8kxkrm1ac3y4pps597zjqpbvi70-python3.10-flask-2.2.2"
+          },
+          {
+            "name": "dist",
+            "store_path": "/nix/store/nwvx3gg67zplb761hsdlspp4lj6chf0n-python3.10-flask-2.2.2-dist"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "285e77efe87df64105ec14b204de6636fb0a7a27",
+        "rev_count": 416449,
+        "rev_date": "2022-10-11T00:47:48Z",
+        "scrape_date": "2024-08-16T02:52:51Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-darwin",
+        "unfree": false,
         "version": "python3.10-flask-2.2.2"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/w7ba025ln8jqxrg0h0ybcc6y5h34f7zm-python3.10-flask-2.1.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=a63021a330d8d33d862a8e29924b42d73037dd37",
+        "name": "python3.10-flask-2.1.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/7857wcgk27mcknxqv2ziqikmwwmip636-python3.10-flask-2.1.3"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "a63021a330d8d33d862a8e29924b42d73037dd37",
+        "rev_count": 404572,
+        "rev_date": "2022-08-28T21:06:20Z",
+        "scrape_date": "2024-08-16T03:01:21Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-linux",
+        "unfree": false,
         "version": "python3.10-flask-2.1.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/l0rap3wjkj9m2km8lsh10lrkmbk9rrfl-python3.10-flask-2.1.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=5e804cd8a27f835a402b22e086e36e797716ef8b",
+        "name": "python3.10-flask-2.1.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/pw5srfcfv41hxg5qa7j77mh80y1g6d3a-python3.10-flask-2.1.3"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "5e804cd8a27f835a402b22e086e36e797716ef8b",
+        "rev_count": 402830,
+        "rev_date": "2022-08-23T07:20:11Z",
+        "scrape_date": "2024-08-15T20:38:48Z",
+        "stabilities": [
+          "stable",
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-darwin",
+        "unfree": false,
         "version": "python3.10-flask-2.1.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/7yyyj5mhzq1nfpdfrkallgmfz5fh4vl4-python3.10-flask-2.1.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=12363fb6d89859a37cd7e27f85288599f13e49d9",
+        "name": "python3.10-flask-2.1.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/9xb032waj6zl11m4alabb708q8c4bg4i-python3.10-flask-2.1.3"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "12363fb6d89859a37cd7e27f85288599f13e49d9",
+        "rev_count": 397203,
+        "rev_date": "2022-08-03T00:52:54Z",
+        "scrape_date": "2024-08-16T03:05:00Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-darwin",
+        "unfree": false,
         "version": "python3.10-flask-2.1.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/9ryhhvnzhgm6b0i69i1ymmj7ghihyyc5-python3.10-flask-2.1.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=12363fb6d89859a37cd7e27f85288599f13e49d9",
+        "name": "python3.10-flask-2.1.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/1mn8p8k4m2hd1svl9si4c1x9rfs744jp-python3.10-flask-2.1.3"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "12363fb6d89859a37cd7e27f85288599f13e49d9",
+        "rev_count": 397203,
+        "rev_date": "2022-08-03T00:52:54Z",
+        "scrape_date": "2024-08-16T03:05:00Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-linux",
+        "unfree": false,
         "version": "python3.10-flask-2.1.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/blxhvh1m08wayx8fgjrj4wrczj6phxmd-python3.10-Flask-2.1.2.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=ce49cb7792a7ffd65ef352dda1110a4e4a204eac",
+        "name": "python3.10-Flask-2.1.2",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/kxqv24p3gaq517z1qw0pbk2arjp2pp09-python3.10-Flask-2.1.2"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "ce49cb7792a7ffd65ef352dda1110a4e4a204eac",
+        "rev_count": 394203,
+        "rev_date": "2022-07-26T09:07:44Z",
+        "scrape_date": "2024-08-15T20:42:32Z",
+        "stabilities": [
+          "stable",
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-linux",
+        "unfree": false,
         "version": "python3.10-Flask-2.1.2"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/y79ib0k16jksprvymhgpbhllma9mp51n-python3.10-Flask-2.1.2.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=614a842b74b7a1497e8cfca7c61bec38f51911b3",
+        "name": "python3.10-Flask-2.1.2",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/3ljajhn8v29rr83116hj1jqvs6dj1d22-python3.10-Flask-2.1.2"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "614a842b74b7a1497e8cfca7c61bec38f51911b3",
+        "rev_count": 393074,
+        "rev_date": "2022-07-20T04:19:55Z",
+        "scrape_date": "2024-08-16T03:08:48Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-darwin",
+        "unfree": false,
         "version": "python3.10-Flask-2.1.2"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/j0j7p5ljcayavy6blanf7gnlx1rhklj2-python3.10-Flask-2.1.2.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=614a842b74b7a1497e8cfca7c61bec38f51911b3",
+        "name": "python3.10-Flask-2.1.2",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/0qj20537vzq0ngm055g5aa1s8mzs4xa8-python3.10-Flask-2.1.2"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "614a842b74b7a1497e8cfca7c61bec38f51911b3",
+        "rev_count": 393074,
+        "rev_date": "2022-07-20T04:19:55Z",
+        "scrape_date": "2024-08-16T03:08:48Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-linux",
+        "unfree": false,
         "version": "python3.10-Flask-2.1.2"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/wys5cszi2kifiqn94kvnggccr2ybg2za-python3.10-Flask-2.1.2.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+        "name": "python3.10-Flask-2.1.2",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/pcv9l8k8qrzjfv282yy5k5bpfgfs4s03-python3.10-Flask-2.1.2"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+        "rev_count": 379159,
+        "rev_date": "2022-05-20T15:32:24Z",
+        "scrape_date": "2024-06-13T19:42:27Z",
+        "stabilities": [
+          "lts",
+          "stable",
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-darwin",
+        "unfree": false,
         "version": "python3.10-Flask-2.1.2"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/4sircldl84rb6hyyn2sl58yi8g8px35l-python3.10-Flask-2.0.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=1ffba9f2f683063c2b14c9f4d12c55ad5f4ed887",
+        "name": "python3.10-Flask-2.0.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/0szzxgphdmc86cf5529hcmwvwm8sfhfr-python3.10-Flask-2.0.3"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "1ffba9f2f683063c2b14c9f4d12c55ad5f4ed887",
+        "rev_count": 369988,
+        "rev_date": "2022-04-17T02:14:46Z",
+        "scrape_date": "2024-08-16T03:30:08Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-linux",
+        "unfree": false,
         "version": "python3.10-Flask-2.0.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/jvgqwh1w7wl0svqpgqn9n9228xj9jkrs-python3.10-Flask-2.0.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=a1d12edc46f08cf09a8caad32bfff64df8bca75e",
+        "name": "python3.10-Flask-2.0.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/n23hjnwc7ffs1ccd7ib1y1bc3jq82w60-python3.10-Flask-2.0.3"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "a1d12edc46f08cf09a8caad32bfff64df8bca75e",
+        "rev_count": 368870,
+        "rev_date": "2022-04-12T15:49:08Z",
+        "scrape_date": "2024-08-15T20:49:24Z",
+        "stabilities": [
+          "stable"
+        ],
         "system": "aarch64-darwin",
+        "unfree": false,
         "version": "python3.10-Flask-2.0.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/ylhq6ic7903sdl7nr625wd9s6sa2xc31-python3.10-Flask-2.0.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=a1d12edc46f08cf09a8caad32bfff64df8bca75e",
+        "name": "python3.10-Flask-2.0.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/cnh7nfx1v60pdhzk64g6i3yjpwrgxngz-python3.10-Flask-2.0.3"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "a1d12edc46f08cf09a8caad32bfff64df8bca75e",
+        "rev_count": 368870,
+        "rev_date": "2022-04-12T15:49:08Z",
+        "scrape_date": "2024-08-15T20:49:24Z",
+        "stabilities": [
+          "stable"
+        ],
         "system": "x86_64-darwin",
+        "unfree": false,
         "version": "python3.10-Flask-2.0.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/x2i2d01ppgn6c76mys522jpcnagr4r6r-python3.10-Flask-2.0.3.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=33772708c6d0e33f697426ba386aa0149cbcbecb",
+        "name": "python3.10-Flask-2.0.3",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/iqj6pq28982d92j89vsid393bhnh3y5l-python3.10-Flask-2.0.3"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "33772708c6d0e33f697426ba386aa0149cbcbecb",
+        "rev_count": 368735,
+        "rev_date": "2022-04-11T10:33:51Z",
+        "scrape_date": "2024-08-16T03:33:35Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-linux",
+        "unfree": false,
         "version": "python3.10-Flask-2.0.3"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/8zv5fzxgkmym4471n6w77hy6i95xw1b3-python3.10-Flask-2.0.2.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=bc4b9eef3ce3d5a90d8693e8367c9cbfc9fc1e13",
+        "name": "python3.10-Flask-2.0.2",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/w0l7bvp88syg6c26i4hdqx7r9cmc2h2a-python3.10-Flask-2.0.2"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "bc4b9eef3ce3d5a90d8693e8367c9cbfc9fc1e13",
+        "rev_count": 366144,
+        "rev_date": "2022-04-03T18:54:34Z",
+        "scrape_date": "2024-08-16T03:37:01Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-darwin",
+        "unfree": false,
         "version": "python3.10-Flask-2.0.2"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/75w845qgxl20hckd5is10jp2vni0npwq-python3.10-Flask-2.0.2.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=bc4b9eef3ce3d5a90d8693e8367c9cbfc9fc1e13",
+        "name": "python3.10-Flask-2.0.2",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/qzpclxj7x23wzikxxibi672h1sfnsq3z-python3.10-Flask-2.0.2"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "bc4b9eef3ce3d5a90d8693e8367c9cbfc9fc1e13",
+        "rev_count": 366144,
+        "rev_date": "2022-04-03T18:54:34Z",
+        "scrape_date": "2024-08-16T03:37:01Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-linux",
+        "unfree": false,
         "version": "python3.10-Flask-2.0.2"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/8wqnwhy4ag4bj69k2pqyf6ng3a8rl707-python3.10-Flask-2.0.2.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=73ad5f9e147c0d2a2061f1d4bd91e05078dc0b58",
+        "name": "python3.10-Flask-2.0.2",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/dp3p84nmblfx50jjdhbvbb25jvm20waq-python3.10-Flask-2.0.2"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "73ad5f9e147c0d2a2061f1d4bd91e05078dc0b58",
+        "rev_count": 360796,
+        "rev_date": "2022-03-14T22:40:14Z",
+        "scrape_date": "2024-08-16T03:43:46Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "x86_64-darwin",
+        "unfree": false,
         "version": "python3.10-Flask-2.0.2"
       },
       {
-        "attrPath": [
-          "python310Packages",
-          "flask"
-        ],
+        "attr_path": "python310Packages.flask",
+        "broken": false,
+        "catalog": "nixpkgs",
+        "derivation": "/nix/store/c0hmi86jsm3pskg1bq80czj5c3dnp6v9-python3.10-Flask-2.0.2.drv",
         "description": "The Python micro framework for building web applications",
-        "input": "nixpkgs",
+        "insecure": false,
         "license": "BSD-3-Clause",
-        "pkgPath": "python310Packages.flask",
+        "locked_url": "https://github.com/flox/nixpkgs?rev=c5051e2b5fe9fab43a64f0e0d06b62c81a890b90",
+        "name": "python3.10-Flask-2.0.2",
+        "outputs": [
+          {
+            "name": "out",
+            "store_path": "/nix/store/7iqapakj40fvwqf5shsf5nrpmi0mc8qj-python3.10-Flask-2.0.2"
+          }
+        ],
+        "outputs_to_install": [
+          "out"
+        ],
+        "pkg_path": "python310Packages.flask",
         "pname": "flask",
+        "rev": "c5051e2b5fe9fab43a64f0e0d06b62c81a890b90",
+        "rev_count": 352272,
+        "rev_date": "2022-02-08T22:27:14Z",
+        "scrape_date": "2024-08-16T03:53:32Z",
+        "stabilities": [
+          "staging",
+          "unstable"
+        ],
         "system": "aarch64-linux",
+        "unfree": false,
         "version": "python3.10-Flask-2.0.2"
       }
     ]

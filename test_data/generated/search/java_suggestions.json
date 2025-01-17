@@ -1,126 +1,106 @@
 [
   {
-    "count": 865,
+    "count": 864,
     "results": [
       {
-        "attrPath": [
-          "javacc"
-        ],
+        "attr_path": "javacc",
+        "catalog": null,
         "description": "Parser generator for building parsers from grammars",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "javacc",
+        "name": "javacc-7.0.13",
+        "pkg_path": "javacc",
         "pname": "javacc",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "javaCup"
-        ],
+        "attr_path": "javaCup",
+        "catalog": null,
         "description": "LALR parser generator for Java",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "javaCup",
+        "name": "java-cup-11b-20160615",
+        "pkg_path": "javaCup",
         "pname": "javaCup",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "hdf_java"
-        ],
+        "attr_path": "hdf_java",
+        "catalog": null,
         "description": "A Java package that implements HDF4 and HDF5 data objects in an object-oriented form",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "hdf_java",
+        "name": "hdf-java-3.3.2",
+        "pkg_path": "hdf_java",
         "pname": "hdf_java",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "dbus_java"
-        ],
+        "attr_path": "dbus_java",
+        "catalog": null,
         "description": null,
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "dbus_java",
+        "name": "dbus-java-2.7",
+        "pkg_path": "dbus_java",
         "pname": "dbus_java",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "geoipjava"
-        ],
+        "attr_path": "geoipjava",
+        "catalog": null,
         "description": "GeoIP Java API",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "geoipjava",
+        "name": "GeoIPJava-1.2.5",
+        "pkg_path": "geoipjava",
         "pname": "geoipjava",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "tabula-java"
-        ],
+        "attr_path": "tabula-java",
+        "catalog": null,
         "description": "Library for extracting tables from PDF files",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "tabula-java",
+        "name": "tabula-java-1.0.5",
+        "pkg_path": "tabula-java",
         "pname": "tabula-java",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "erlang_javac"
-        ],
+        "attr_path": "erlang_javac",
+        "catalog": null,
         "description": "Programming language used for massively scalable soft real-time systems",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "erlang_javac",
+        "name": "erlang_javac-25.3.2.12",
+        "pkg_path": "erlang_javac",
         "pname": "erlang_javac",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "swigWithJava"
-        ],
+        "attr_path": "swigWithJava",
+        "catalog": null,
         "description": "Interface compiler that connects C/C++ code to higher-level languages",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "swigWithJava",
+        "name": "swig-4.2.1",
+        "pkg_path": "swigWithJava",
         "pname": "swigWithJava",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "yourkit-java"
-        ],
+        "attr_path": "yourkit-java",
+        "catalog": null,
         "description": "Award winning, fully featured low overhead profiler for Java EE and Java SE platforms",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "yourkit-java",
+        "name": "yourkit-java-2024.9-b161",
+        "pkg_path": "yourkit-java",
         "pname": "yourkit-java",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "java-hamcrest"
-        ],
+        "attr_path": "java-hamcrest",
+        "catalog": null,
         "description": "Java library containing matchers that can be combined to create flexible expressions of intent",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "java-hamcrest",
+        "name": "java-hamcrest-3.0",
+        "pkg_path": "java-hamcrest",
         "pname": "java-hamcrest",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       }
     ]
   },
@@ -128,40 +108,34 @@
     "count": 141,
     "results": [
       {
-        "attrPath": [
-          "jdk"
-        ],
-        "description": "Certified builds of OpenJDK",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "jdk",
-        "pname": "jdk",
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "attrPath": [
-          "jdk8"
-        ],
+        "attr_path": "jdk",
+        "catalog": null,
         "description": "Open-source Java Development Kit",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "jdk8",
-        "pname": "jdk8",
-        "system": "aarch64-darwin",
-        "version": null
+        "name": "openjdk-21.0.5+11",
+        "pkg_path": "jdk",
+        "pname": "jdk",
+        "stabilities": [],
+        "system": "aarch64-darwin"
       },
       {
-        "attrPath": [
-          "jdk11"
-        ],
+        "attr_path": "jdk8",
+        "catalog": null,
         "description": "Certified builds of OpenJDK",
-        "input": "nixpkgs",
-        "license": null,
-        "pkgPath": "jdk11",
+        "name": "zulu-ca-jdk-8.0.422",
+        "pkg_path": "jdk8",
+        "pname": "jdk8",
+        "stabilities": [],
+        "system": "aarch64-darwin"
+      },
+      {
+        "attr_path": "jdk11",
+        "catalog": null,
+        "description": "Certified builds of OpenJDK",
+        "name": "zulu-ca-jdk-11.0.24",
+        "pkg_path": "jdk11",
         "pname": "jdk11",
-        "system": "aarch64-darwin",
-        "version": null
+        "stabilities": [],
+        "system": "aarch64-darwin"
       }
     ]
   }
