@@ -161,26 +161,32 @@ impl DisplaySearchResults {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use flox_rust_sdk::models::search::SearchResult;
+    use flox_rust_sdk::providers::catalog::SystemEnum;
     use indoc::indoc;
 
     use super::*;
 
+    fn stub_search_result(name: &str, description: Option<&str>) -> SearchResult {
+        SearchResult {
+            attr_path: name.to_string(),
+            name: name.to_string(),
+            pname: name.to_string(),
+            stabilities: vec![],
+            system: SystemEnum::from_str("aarch64-darwin").unwrap(),
+            catalog: None,
+            pkg_path: name.to_string(),
+            description: description.map(|s| s.to_string()),
+        }
+    }
+
     #[test]
     fn test_display_search_result() {
         let search_results = vec![
-            SearchResult {
-                input: "nixpkgs".to_string(),
-                pkg_path: "pkg1".to_string(),
-                description: Some("description of pkg1".to_string()),
-                ..Default::default()
-            },
-            SearchResult {
-                input: "mycatalog".to_string(),
-                pkg_path: "mycatalog/pkg1".to_string(),
-                description: Some("description of mycatalog/pkg1".to_string()),
-                ..Default::default()
-            },
+            stub_search_result("pkg1", Some("description of pkg1")),
+            stub_search_result("mycatalog/pkg1", Some("description of mycatalog/pkg1")),
         ];
 
         let display = DisplaySearchResults {
@@ -201,16 +207,8 @@ mod tests {
     #[test]
     fn test_display_empty_description() {
         let search_results = vec![
-            SearchResult {
-                pkg_path: "pkg1".to_string(),
-                description: None,
-                ..Default::default()
-            },
-            SearchResult {
-                pkg_path: "pkg2".to_string(),
-                description: Some("".to_string()),
-                ..Default::default()
-            },
+            stub_search_result("pkg1", None),
+            stub_search_result("pkg2", Some("")),
         ];
 
         let display = DisplaySearchResults {
