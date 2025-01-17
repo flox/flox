@@ -769,7 +769,7 @@ impl ClientTrait for MockClient {
                 err.try_into()
                     .expect("couldn't convert mock error response"),
             )),
-            _ => panic!("expected resolve response, found {:?}", &mock_resp),
+            _ => panic!("expected search response, found {:?}", &mock_resp),
         }
     }
 
@@ -788,7 +788,7 @@ impl ClientTrait for MockClient {
                 err.try_into()
                     .expect("couldn't convert mock error response"),
             )),
-            _ => panic!("expected resolve response, found {:?}", &mock_resp),
+            _ => panic!("expected packages response, found {:?}", &mock_resp),
         }
     }
 
