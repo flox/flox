@@ -484,10 +484,7 @@ impl ClientTrait for CatalogClient {
 
                 let packages = response.into_inner();
 
-                Ok::<_, SearchError>((
-                    packages.total_count,
-                    packages.items
-                ))
+                Ok::<_, SearchError>((packages.total_count, packages.items))
             },
             page_size,
         );
@@ -524,10 +521,7 @@ impl ClientTrait for CatalogClient {
 
                 let packages = response.into_inner();
 
-                Ok::<_, VersionsError>((
-                    packages.total_count,
-                    packages.items
-                ))
+                Ok::<_, VersionsError>((packages.total_count, packages.items))
             },
             RESPONSE_PAGE_SIZE,
         );
