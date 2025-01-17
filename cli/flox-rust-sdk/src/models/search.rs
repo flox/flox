@@ -1,8 +1,7 @@
 use std::num::NonZeroU8;
 
-use serde::{Deserialize, Serialize};
-
 use catalog_api_v1::types::{PackageInfoSearch, PackageResolutionInfo};
+use serde::{Deserialize, Serialize};
 
 pub type SearchLimit = Option<NonZeroU8>;
 
