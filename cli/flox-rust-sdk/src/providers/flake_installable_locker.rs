@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Debug;
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use enum_dispatch::enum_dispatch;
@@ -9,7 +8,7 @@ use serde_with::skip_serializing_none;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
-use super::buildenv::NIX_BIN;
+use super::nix::nix_base_command;
 use crate::models::manifest::{ManifestPackageDescriptorFlake, DEFAULT_PRIORITY};
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::utils::CommandExt;
@@ -206,12 +205,7 @@ impl InstallableLocker for Nix {
         system: impl AsRef<str>,
         descriptor: &ManifestPackageDescriptorFlake,
     ) -> Result<LockedInstallable, FlakeInstallableError> {
-        let mut command = Command::new(&*NIX_BIN);
-        command.args([
-            "--option",
-            "extra-experimental-features",
-            "nix-command flakes",
-        ]);
+        let mut command = nix_base_command();
         command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
 
         command.args(["--option", "pure-eval", "false"]);
