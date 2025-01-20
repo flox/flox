@@ -13,7 +13,7 @@ use super::buildenv::BuiltStorePath;
 use crate::flox::Flox;
 use crate::models::manifest::ManifestContainerizeConfig;
 use crate::providers::build::BUILDTIME_NIXPKGS_URL;
-use crate::providers::buildenv::NIX_BIN;
+use crate::providers::nix::nix_base_command;
 use crate::utils::gomap::GoMap;
 use crate::utils::{CommandExt, ReaderExt};
 
@@ -133,8 +133,7 @@ impl ContainerBuilder for MkContainerNix {
         name: impl AsRef<str>,
         tag: impl AsRef<str>,
     ) -> Result<ContainerSource, Self::Error> {
-        let mut command = Command::new(&*NIX_BIN);
-        command.args(["--extra-experimental-features", "nix-command flakes"]);
+        let mut command = nix_base_command();
         command.args(["--option", "pure-eval", "true"]);
         command.arg("build");
         command.arg("--json");

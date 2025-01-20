@@ -12,6 +12,7 @@ use thiserror::Error;
 use tracing::{debug, info_span, instrument};
 
 use super::catalog::ClientTrait;
+use super::nix::nix_base_command;
 use crate::data::System;
 use crate::models::lockfile::{
     LockedPackage,
@@ -23,12 +24,6 @@ use crate::models::lockfile::{
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::catalog::CatalogClientError;
 use crate::utils::CommandExt;
-
-pub static NIX_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
-    std::env::var("NIX_BIN")
-        .unwrap_or_else(|_| env!("NIX_BIN").to_string())
-        .into()
-});
 
 static BUILDENV_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("FLOX_BUILDENV_NIX")
@@ -127,17 +122,11 @@ pub struct BuildEnvNix;
 
 impl BuildEnvNix {
     fn base_command(&self) -> Command {
-        let mut nix_build_command = Command::new(&*NIX_BIN);
-        // Override nix config to use flake commands,
+        let mut nix_build_command = nix_base_command();
         // allow impure language features such as `builtins.storePath`,
         // and use the auto store (which is used by the preceding `realise` command)
         // TODO: formalize this in a config file,
         // and potentially disable other user configs (allowing specific overrides)
-        nix_build_command.args([
-            "--option",
-            "extra-experimental-features",
-            "nix-command flakes",
-        ]);
         nix_build_command.args(["--option", "pure-eval", "false"]);
 
         match std::env::var("_FLOX_NIX_STORE_URL").ok().as_deref() {
@@ -215,7 +204,7 @@ impl BuildEnvNix {
             // If there are no locations
             for location in locations {
                 // nix copy
-                let mut copy_command = Command::new(&*NIX_BIN);
+                let mut copy_command = nix_base_command();
                 copy_command
                     .arg("copy")
                     .arg("--from")

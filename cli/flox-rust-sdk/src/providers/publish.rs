@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::error;
 use std::path::PathBuf;
-use std::process::Command;
 
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
@@ -17,8 +16,8 @@ use super::catalog::{Client, ClientTrait, UserBuildInfo, UserDerivationInfo};
 use super::git::GitCommandProvider;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
-use crate::providers::buildenv::NIX_BIN;
 use crate::providers::git::GitProvider;
+use crate::providers::nix::nix_base_command;
 use crate::utils::CommandExt;
 
 #[derive(Debug, Error)]
@@ -127,7 +126,7 @@ impl BinaryCache for NixCopyCache {
             .append_pair("write-nar-listing", "true")
             .finish();
 
-        let mut copy_command = Command::new(&*NIX_BIN);
+        let mut copy_command = nix_base_command();
         copy_command
             .arg("copy")
             .arg("--to")
@@ -256,7 +255,7 @@ where
 }
 
 pub fn get_derivation_info(path: &str) -> Result<(String, DerivationInfo), PublishError> {
-    let mut info_cmd = Command::new(&*NIX_BIN);
+    let mut info_cmd = nix_base_command();
     info_cmd.arg("derivation").arg("show").arg(path);
     let output = info_cmd
         .output()
@@ -488,7 +487,7 @@ pub mod tests {
         let mut temp_key_file =
             tempfile::NamedTempFile::new().expect("Should create named temp file");
 
-        let mut key_command = Command::new(&*NIX_BIN);
+        let mut key_command = nix_base_command();
         key_command
             .arg("key")
             .arg("generate-secret")
