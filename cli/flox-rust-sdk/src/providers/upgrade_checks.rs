@@ -263,7 +263,7 @@ mod tests {
         let mut locked = guard.lock_if_unlocked().unwrap().unwrap();
 
         *locked.info_mut() = Some(UpgradeInformation {
-            last_checked: OffsetDateTime::now_utc(),
+            last_checked: OffsetDateTime::now_utc().replace_millisecond(0).unwrap(),
             result: UpgradeResult {
                 old_lockfile: None,
                 new_lockfile: Lockfile::default(),
@@ -284,7 +284,7 @@ mod tests {
         let guard = UpgradeInformationGuard::read_in(temp_dir.path()).unwrap();
         let mut locked = guard.lock_if_unlocked().unwrap().unwrap();
         let info = UpgradeInformation {
-            last_checked: OffsetDateTime::now_utc(),
+            last_checked: OffsetDateTime::now_utc().replace_millisecond(0).unwrap(),
             result: UpgradeResult {
                 old_lockfile: None,
                 new_lockfile: Lockfile::default(),
