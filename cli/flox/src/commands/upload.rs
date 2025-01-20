@@ -21,11 +21,13 @@ pub struct Upload {
 
 #[derive(Debug, Bpaf, Clone)]
 struct CacheArgs {
-    #[bpaf(long("cache"))]
-    url: Url,
+    /// URL of store to copy packages to.
+    #[bpaf(long, argument("URL"))]
+    store_url: Url,
 
-    #[bpaf(long("signing-key"))]
-    key_file: PathBuf,
+    /// Path of the key file used to sign packages before copying.
+    #[bpaf(long, argument("FILE"))]
+    signing_key: PathBuf,
 }
 
 impl Upload {
@@ -41,8 +43,8 @@ impl Upload {
         let store_path = validate_store_path(self.store_path)?;
 
         let cache = NixCopyCache {
-            url: self.cache.url,
-            key_file: self.cache.key_file,
+            url: self.cache.store_url,
+            key_file: self.cache.signing_key,
         };
 
         cache
