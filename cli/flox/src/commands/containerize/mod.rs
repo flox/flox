@@ -11,7 +11,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerNix};
-use flox_rust_sdk::utils::ReaderExt;
+use flox_rust_sdk::utils::{ReaderExt, WireTap};
 use indoc::indoc;
 use macos_containerize_proxy::ContainerizeProxy;
 use tracing::{debug, info, instrument};
@@ -213,6 +213,11 @@ impl ContainerSink for io::Stdout {
 
 #[derive(Debug)]
 struct RuntimeSink {
+    /// An optional collector for the runtime's stderr
+    /// to be displayed to the user in case of errors.
+    /// This is an Option, due to [ContainerSink::wait]
+    /// taking a mutable reference.
+    stderr: Option<WireTap<String>>,
     child: Child,
 }
 
@@ -231,8 +236,13 @@ impl ContainerSink for RuntimeSink {
         self.flush()?;
         drop(self.child.stdin.take());
         let status = self.child.wait()?;
+        let stderr = self
+            .stderr
+            .take()
+            .expect("stderr is tapped and `ContainerSink::wait` is called only once")
+            .wait();
         if !status.success() {
-            return Err(anyhow!("Writing to runtime was unsuccessful"));
+            return Err(anyhow!("Writing to runtime was unsuccessful").context(stderr));
         }
 
         Ok(())
@@ -289,7 +299,7 @@ impl Runtime {
             .spawn()
             .context(format!("Failed to call runtime {cmd}"))?;
 
-        child
+        let stderr_tap = child
             .stderr
             .take()
             .expect("Stderr is piped")
@@ -301,7 +311,10 @@ impl Runtime {
             .expect("Stdout is piped")
             .tap_lines(|line| info!("{line}"));
 
-        Ok(RuntimeSink { child })
+        Ok(RuntimeSink {
+            child,
+            stderr: Some(stderr_tap),
+        })
     }
 
     fn to_command(&self) -> Command {
