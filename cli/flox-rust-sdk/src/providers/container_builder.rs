@@ -221,8 +221,7 @@ impl ContainerSource {
             .spawn()
             .map_err(ContainerSourceError::CallContainerSourceCommand)?;
 
-        // log stream output to debug
-        handle
+        let tap = handle
             .stderr
             .take()
             .expect("stderr set to piped")
@@ -232,9 +231,14 @@ impl ContainerSource {
 
         io::copy(&mut stdout, sink).map_err(ContainerSourceError::StreamContainer)?;
 
-        handle
+        let status = handle
             .wait()
             .map_err(ContainerSourceError::CallContainerSourceCommand)?;
+
+        if !status.success() {
+            let stderr_content = tap.wait();
+            return Err(ContainerSourceError::CommandUnsuccessful(stderr_content));
+        }
         Ok(())
     }
 }
@@ -245,6 +249,13 @@ pub enum ContainerSourceError {
     CallContainerSourceCommand(#[source] std::io::Error),
     #[error("failed to stream container to sink")]
     StreamContainer(#[source] std::io::Error),
+    #[error(
+        "container source command unsuccessful\n\
+        \n\
+        stderr:\n\
+        {0}"
+    )]
+    CommandUnsuccessful(String),
 }
 
 #[cfg(test)]
