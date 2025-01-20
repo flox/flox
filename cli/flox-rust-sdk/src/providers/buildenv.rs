@@ -604,6 +604,7 @@ mod realise_nixpkgs_tests {
     use super::*;
     use crate::models::lockfile;
     use crate::providers::catalog::{MockClient, StoreInfo, StoreInfoResponse, GENERATED_DATA};
+    use crate::providers::nix::test_helpers::known_store_path;
 
     /// Read a single locked package for the current system from a mock lockfile.
     /// This is a helper function to avoid repetitive boilerplate in the tests.
@@ -819,15 +820,16 @@ mod realise_nixpkgs_tests {
 
     #[test]
     fn nixpkgs_published_pkg_cache_download_success() {
-        let real_storepath = env!("NIX_BIN").to_string();
-        let locked_package = locked_published_package(Some(&real_storepath));
+        let real_storepath = known_store_path();
+        let real_storepath_str = real_storepath.to_string_lossy();
+        let locked_package = locked_published_package(Some(&real_storepath_str));
         let mut client = MockClient::new(None::<String>).unwrap();
         let mut resp = StoreInfoResponse {
             items: std::collections::HashMap::new(),
         };
 
         // This is a trick for a known storepath
-        resp.items.insert(real_storepath.clone(), vec![
+        resp.items.insert(real_storepath_str.to_string(), vec![
             // Put something invalid first, to test that we try all locations
             StoreInfo {
                 url: "blasphemy*".to_string(),

@@ -225,7 +225,7 @@ fn available_packages(lockfile: &Lockfile, packages: Vec<String>) -> Result<Vec<
 mod test {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
-    use flox_rust_sdk::providers::buildenv::NIX_BIN;
+    use flox_rust_sdk::providers::nix::test_helpers::known_store_path;
     use tempfile::tempdir_in;
 
     use super::*;
@@ -244,7 +244,7 @@ mod test {
         let package = "foo";
         let symlink = dot_flox_parent_path.join(format!("result-{package}"));
         // We just want some random symlink possibly into the /nix/store
-        std::os::unix::fs::symlink(&*NIX_BIN, &symlink).unwrap();
+        std::os::unix::fs::symlink(known_store_path(), &symlink).unwrap();
         let displayed = Build::check_and_display_symlink(
             &environment,
             package,
