@@ -470,6 +470,7 @@ pub mod tests {
     use crate::providers::build::test_helpers::assert_build_status;
     use crate::providers::build::FloxBuildMk;
     use crate::providers::catalog::{MockClient, GENERATED_DATA};
+    use crate::providers::nix::test_helpers::known_store_path;
 
     fn example_remote() -> (tempfile::TempDir, GitCommandProvider, String) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -600,8 +601,9 @@ pub mod tests {
 
     #[test]
     fn test_check_build_meta_storepath_nominal() {
-        let real_storepath = env!("NIX_BIN").to_string();
-        let meta = check_build_metadata_from_storepath("mypkg", &real_storepath).unwrap();
+        let real_storepath = known_store_path();
+        let meta = check_build_metadata_from_storepath("mypkg", &real_storepath.to_string_lossy())
+            .unwrap();
 
         // Some of this found heuristically, and _probably_ won't change
         assert_eq!(meta.name.starts_with("nix-"), true);

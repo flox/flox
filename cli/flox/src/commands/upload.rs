@@ -77,7 +77,10 @@ fn validate_store_path(store_path: PathBuf) -> Result<PathBuf> {
     Ok(store_path)
 }
 
+#[cfg(test)]
 mod test {
+    use flox_rust_sdk::providers::nix::test_helpers::known_store_path;
+
     #[test]
     fn validate_store_path_nonexistent_file() {
         let store_path = std::path::PathBuf::from("/nix/store/nonexistent-store-path");
@@ -105,7 +108,7 @@ mod test {
 
     #[test]
     fn validate_store_path_folow_symlinks() {
-        let store_path = std::path::PathBuf::from(env!("NIX_BIN"));
+        let store_path = known_store_path();
         let tempdir = tempfile::tempdir().unwrap();
         let symlink = tempdir.path().join("test-link");
         std::os::unix::fs::symlink(&store_path, &symlink).unwrap();
