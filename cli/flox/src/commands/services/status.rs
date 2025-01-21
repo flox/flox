@@ -68,8 +68,30 @@ struct ProcessStateDisplay {
     name: String,
     status: String,
     pid: u64,
+    exit_code: Option<i32>,
     #[serde(skip_serializing)]
     is_running: bool,
+}
+
+impl From<ProcessState> for ProcessStateDisplay {
+    fn from(proc: ProcessState) -> Self {
+        ProcessStateDisplay {
+            name: proc.name,
+            status: proc.status,
+            pid: proc.pid,
+            // process-compose uses -1 to indicate
+            // that the process was stopped _by process-compose_.
+            // for running services, process-compose will set the exit code to 0,
+            // so exit code alone cannot be used to determine if the process is running.
+            // Neither case was a valid exit code, so we put `None` here.
+            exit_code: if proc.is_running || proc.exit_code == -1 {
+                None
+            } else {
+                Some(proc.exit_code)
+            },
+            is_running: proc.is_running,
+        }
+    }
 }
 
 impl ProcessStateDisplay {
@@ -92,7 +114,6 @@ impl From<ProcessStates> for ProcessStatesDisplay {
         ProcessStatesDisplay::from_iter(procs)
     }
 }
-
 impl IntoIterator for ProcessStatesDisplay {
     type IntoIter = std::vec::IntoIter<ProcessStateDisplay>;
     type Item = ProcessStateDisplay;
@@ -107,12 +128,7 @@ impl FromIterator<ProcessState> for ProcessStatesDisplay {
         ProcessStatesDisplay(
             iter.into_iter()
                 .sorted_by_key(|proc| proc.name.clone())
-                .map(|proc| ProcessStateDisplay {
-                    name: proc.name,
-                    status: proc.status,
-                    pid: proc.pid,
-                    is_running: proc.is_running,
-                })
+                .map(ProcessStateDisplay::from)
                 .collect(),
         )
     }
@@ -121,28 +137,41 @@ impl FromIterator<ProcessState> for ProcessStatesDisplay {
 /// Formats `ProcessStates` as a table for display in the CLI.
 impl Display for ProcessStatesDisplay {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn display_status(proc: &ProcessStateDisplay) -> String {
+            if let Some(exit_code) = proc.exit_code {
+                format!("{} ({})", proc.status, exit_code)
+            } else {
+                proc.status.clone()
+            }
+        }
+
         // TODO: Use a table writer library if we add any more variable width calculations.
         let name_width_min = 10;
         let name_width = max(
             name_width_min,
             self.0.iter().map(|proc| proc.name.len()).max().unwrap_or(0),
         );
-        // Max value based on the possible states in:
-        // https://github.com/F1bonacc1/process-compose/blob/v1.9.0/src/types/process.go#L125-L137
-        let status_width = 12;
+
+        let status_width = self
+            .0
+            .iter()
+            .map(|proc| display_status(proc).len())
+            .max()
+            .unwrap_or(6);
 
         writeln!(
             f,
             "{:<name_width$} {:<status_width$} {:>8}",
-            "NAME", "STATUS", "PID"
+            "NAME", "STATUS", "PID",
         )?;
+
         for proc in &self.0 {
             writeln!(
                 f,
                 "{:<name_width$} {:<status_width$} {:>8}",
                 proc.name,
-                proc.status,
-                proc.pid_display()
+                display_status(proc),
+                proc.pid_display(),
             )?;
         }
         Ok(())
@@ -153,7 +182,11 @@ impl Display for ProcessStatesDisplay {
 mod tests {
     use std::io::Write;
 
-    use flox_rust_sdk::providers::services::test_helpers::generate_process_state;
+    use flox_rust_sdk::providers::services::test_helpers::{
+        generate_completed_process_state,
+        generate_process_state,
+        generate_stopped_process_state,
+    };
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -169,11 +202,11 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS            PID
-            aaa        Running           123
-            bbb        Running           123
-            ccc        Running           123
-            zzz        Running           123
+            NAME       STATUS       PID
+            aaa        Running      123
+            bbb        Running      123
+            ccc        Running      123
+            zzz        Running      123
         "});
     }
 
@@ -185,9 +218,9 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME                 STATUS            PID
-            longlonglonglonglong Running           123
-            short                Running           123
+            NAME                 STATUS       PID
+            longlonglonglonglong Running      123
+            short                Running      123
         "});
     }
 
@@ -195,15 +228,15 @@ mod tests {
     fn test_processstatesdisplay_status_variants() {
         let states = ProcessStates::from(vec![
             generate_process_state("aaa", "Running", 123, true),
-            generate_process_state("bbb", "Stopped", 123, false),
-            generate_process_state("ccc", "Completed", 123, false),
+            generate_stopped_process_state("bbb", 456),
+            generate_completed_process_state("ccc", 789, 0),
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS            PID
-            aaa        Running           123
-            bbb        Stopped         [123]
-            ccc        Completed       [123]
+            NAME       STATUS             PID
+            aaa        Running            123
+            bbb        Stopped          [456]
+            ccc        Completed (0)    [789]
         "});
     }
 
@@ -218,12 +251,12 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS            PID
-            aaa        Running             1
-            bbb        Running            12
-            ccc        Running           123
-            ddd        Running          1234
-            eee        Running         12345
+            NAME       STATUS       PID
+            aaa        Running        1
+            bbb        Running       12
+            ccc        Running      123
+            ddd        Running     1234
+            eee        Running    12345
         "});
     }
 
@@ -231,8 +264,8 @@ mod tests {
     fn test_processstatedisplay_json_lines() {
         let states = ProcessStates::from(vec![
             generate_process_state("aaa", "Running", 123, true),
-            generate_process_state("bbb", "Stopped", 123, false),
-            generate_process_state("ccc", "Completed", 123, false),
+            generate_stopped_process_state("bbb", 456),
+            generate_completed_process_state("ccc", 789, 0),
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         let mut buffer = Vec::new();
@@ -242,9 +275,9 @@ mod tests {
         }
         let buffer_str = String::from_utf8(buffer).unwrap();
         assert_eq!(buffer_str, indoc! {r#"
-            {"name":"aaa","status":"Running","pid":123}
-            {"name":"bbb","status":"Stopped","pid":123}
-            {"name":"ccc","status":"Completed","pid":123}
+            {"name":"aaa","status":"Running","pid":123,"exit_code":null}
+            {"name":"bbb","status":"Stopped","pid":456,"exit_code":null}
+            {"name":"ccc","status":"Completed","pid":789,"exit_code":0}
         "#});
     }
 }

@@ -308,7 +308,7 @@ pub struct ProcessState {
     age: u64,
     is_ready: String,
     restarts: u64,
-    exit_code: i32,
+    pub exit_code: i32,
     pub pid: u64,
     #[serde(skip_serializing, rename = "IsRunning")]
     pub is_running: bool,
@@ -901,6 +901,38 @@ pub mod test_helpers {
             exit_code: 0,
             pid,
             is_running,
+        }
+    }
+
+    pub fn generate_completed_process_state(name: &str, pid: u64, exit_code: i32) -> ProcessState {
+        ProcessState {
+            name: name.to_string(),
+            namespace: "".to_string(),
+            status: "Completed".to_string(),
+            system_time: "".to_string(),
+            age: 0,
+            is_ready: "".to_string(),
+            restarts: 0,
+            exit_code,
+            pid,
+            is_running: false,
+        }
+    }
+
+    /// Shorthand for generating a ProcessState that resembles a *stopped* process.
+    /// Process-compose sets the status to "Stopped" and exit code to -1 for stopped processes.
+    pub fn generate_stopped_process_state(name: &str, pid: u64) -> ProcessState {
+        ProcessState {
+            name: name.to_string(),
+            namespace: "".to_string(),
+            status: "Stopped".to_string(),
+            system_time: "".to_string(),
+            age: 0,
+            is_ready: "".to_string(),
+            restarts: 0,
+            exit_code: -1,
+            pid,
+            is_running: false,
         }
     }
 
