@@ -3,6 +3,7 @@
 
 set dir [lindex $argv 0]
 set flox $env(FLOX_BIN)
+set env(NO_COLOR) 1
 
 spawn $flox activate --dir $dir
 expect_after {
