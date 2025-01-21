@@ -205,7 +205,7 @@ EOF
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
-  FLOX_SHELL="bash" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
 }
@@ -216,7 +216,7 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
-  FLOX_SHELL="fish" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
+  FLOX_SHELL="fish" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
 }
@@ -228,7 +228,7 @@ EOF
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
-  FLOX_SHELL="tcsh" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
+  FLOX_SHELL="tcsh" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
 }
@@ -241,7 +241,7 @@ EOF
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
 
-  FLOX_SHELL="zsh" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
+  FLOX_SHELL="zsh" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
 }
@@ -325,7 +325,7 @@ EOF
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="bash" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -457,7 +457,7 @@ EOF
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="fish" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
+  FLOX_SHELL="fish" run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -590,7 +590,7 @@ EOF
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="tcsh" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
+  FLOX_SHELL="tcsh" run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -723,7 +723,7 @@ EOF
 
 
   # FLOX_SHELL="zsh" run -0 bash -c "echo exit | $FLOX_CLI activate --dir $PROJECT_DIR";
-  FLOX_SHELL="zsh" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
+  FLOX_SHELL="zsh" run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -1072,7 +1072,7 @@ EOF
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
 
-  FLOX_SHELL="bash" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
   assert_success
   refute_output --partial "ERROR"
   assert_output --partial "sourcing hook.on-activate for first time"
@@ -1098,7 +1098,7 @@ EOF
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
 
-  FLOX_SHELL="zsh" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
+  FLOX_SHELL="zsh" run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
   assert_success
   refute_output --partial "ERROR"
   assert_output --partial "sourcing hook.on-activate for first time"
@@ -1113,7 +1113,7 @@ EOF
   project_setup
   echo "alias test_alias='echo testing'" >"$HOME/.bashrc.extra"
 
-  FLOX_SHELL="bash" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is aliased to \`echo testing'"
 }
 
@@ -1122,7 +1122,7 @@ EOF
   project_setup
   echo "alias test_alias='echo testing'" >"$HOME/.config/fish/config.fish.extra"
 
-  FLOX_SHELL="fish" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
+  FLOX_SHELL="fish" run -0 expect "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   # fish's liberal use of color codes forces us to use regex matching here,
   # and I've given up trying to match the single quotes. Here's the output
   # we're trying to match:
@@ -1139,7 +1139,7 @@ EOF
   project_setup
   echo 'alias test_alias "echo testing"' >"$HOME/.tcshrc.extra"
 
-  FLOX_SHELL="tcsh" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/rc-tcsh.exp" "$PROJECT_DIR"
+  FLOX_SHELL="tcsh" run -0 expect "$TESTS_DIR/activate/rc-tcsh.exp" "$PROJECT_DIR"
   assert_line --partial "echo testing"
 }
 
@@ -1148,7 +1148,7 @@ EOF
   project_setup
   echo "alias test_alias='echo testing'" >"$HOME/.zshrc.extra"
 
-  FLOX_SHELL="zsh" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
+  FLOX_SHELL="zsh" run -0 expect "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is an alias for echo testing"
 }
 
@@ -1242,7 +1242,7 @@ EOF
   project_setup
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="bash" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
+  FLOX_SHELL="bash" run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
   FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
@@ -1255,7 +1255,7 @@ EOF
   project_setup
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="fish" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
+  FLOX_SHELL="fish" run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
   FLOX_SHELL="fish" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
@@ -1268,7 +1268,7 @@ EOF
   project_setup
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="tcsh" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
+  FLOX_SHELL="tcsh" run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
   FLOX_SHELL="tcsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
@@ -1282,7 +1282,7 @@ EOF
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
 
-  FLOX_SHELL="zsh" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
+  FLOX_SHELL="zsh" run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
   FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
@@ -2554,7 +2554,7 @@ confirm_tracelevel() {
   # Activate the test environment, which will launch an interactive shell that
   # sources the relevant dotfile.
 
-  FLOX_SHELL="$shell" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
+  FLOX_SHELL="$shell" run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
   refute_output --partial "_flox_activate_tracelevel not defined"
   run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
   assert_success
@@ -2777,7 +2777,7 @@ attach_runs_hooks_once() {
 
   case "$mode" in
     interactive)
-      NO_COLOR=1 run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
+      run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
       ;;
     command)
       run "$FLOX_BIN" activate -- true
@@ -2838,7 +2838,7 @@ attach_runs_profile_twice() {
 
   case "$mode" in
     interactive)
-      FLOX_SHELL="$shell" NO_COLOR=1 run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
+      FLOX_SHELL="$shell" run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
       ;;
     command)
       FLOX_SHELL="$shell" run "$FLOX_BIN" activate -- true
@@ -2963,7 +2963,7 @@ EOF
 
   case "$mode" in
     interactive)
-      FLOX_SHELL="$shell" NO_COLOR=1 run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" "echo \$HOOK_ON_ACTIVATE"
+      FLOX_SHELL="$shell" run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" "echo \$HOOK_ON_ACTIVATE"
       ;;
     command)
       FLOX_SHELL="$shell" run "$FLOX_BIN" activate -- echo \$HOOK_ON_ACTIVATE
@@ -3080,7 +3080,7 @@ attach_sets_profile_vars() {
   case "$mode" in
     interactive)
       # using assert_line with expect is racey so just direct the output we need to a file
-      FLOX_SHELL="$shell" NO_COLOR=1 expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" "echo \$PROFILE_COMMON > output && echo \$PROFILE_$shell >> output"
+      FLOX_SHELL="$shell" expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" "echo \$PROFILE_COMMON > output && echo \$PROFILE_$shell >> output"
       run cat output
       ;;
     command)
@@ -3773,7 +3773,7 @@ EOF
     echo "$_FLOX_ACTIVE_ENVIRONMENTS"
     # We can't double check the alias has been loaded because bash isn't
     # interactive and discards it
-    FLOX_SHELL="bash" NO_COLOR=1 $_expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
+    FLOX_SHELL="bash" $_expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
 EOF
 )
   assert_success
@@ -3814,7 +3814,7 @@ EOF
       echo "default not in PATH: $PATH"
       exit 1
     fi
-    FLOX_SHELL="bash" NO_COLOR=1 $_expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "$PATH"'
+    FLOX_SHELL="bash" $_expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "$PATH"'
 EOF
 )
   assert_success
@@ -3955,7 +3955,7 @@ EOF
       echo "default_alias not found"
       exit 1
     end
-    FLOX_SHELL="$FISH" NO_COLOR=1 "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
+    FLOX_SHELL="$FISH" "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
 EOF
 )
   assert_success
@@ -3991,7 +3991,7 @@ EOF
       echo "default not in PATH: \$PATH"
       exit 1
     end
-    FLOX_SHELL="$FISH" NO_COLOR=1 "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "\$PATH"'
+    FLOX_SHELL="$FISH" "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "\$PATH"'
 EOF
 )
   assert_success
@@ -4036,7 +4036,7 @@ EOF
       echo "default_alias not found"
       exit 1
     fi
-    FLOX_SHELL="$ZSH" NO_COLOR=1 "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
+    FLOX_SHELL="$ZSH" "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" "type project_alias && type default_alias"
 EOF
 )
   assert_success
@@ -4096,7 +4096,7 @@ EOF
       echo "default not in PATH: \$PATH"
       exit 1
     fi
-    FLOX_SHELL="$ZSH" NO_COLOR=1 "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "\$PATH"'
+    FLOX_SHELL="$ZSH" "$EXPECT" "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR/project" 'echo "\$PATH"'
 EOF
 )
   assert_success
