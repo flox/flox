@@ -416,6 +416,7 @@ common_suite_setup() {
     print_var FLOX_META
     print_var FLOX_ENVIRONMENTS
     print_var NIX_SYSTEM
+    print_var FLOX_LATEST_VERSION
     print_var FLOX_TEST_SSH_KEY
     print_var SSH_AUTH_SOCK
     print_var GIT_CONFIG_SYSTEM

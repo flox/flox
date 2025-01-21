@@ -4147,3 +4147,93 @@ EOF
 
   zsh_repeat_activation_PATH .zshenv.extra .zshrc
 }
+
+# This test ensures forwards-compatible changes to state in:
+#
+# 1. the structure of `activations.json`
+# 2. arguments and environment variables used in activation scripts
+attach_previous_release() {
+  mode="${1?}"
+
+  echo "$HOOK_ONLY_ONCE" | "$FLOX_BIN" edit -f -
+
+  expected_content="Sourcing .bashrc
+Setting PATH from .bashrc"
+
+  mkfifo activate_finished
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # Start an activation with the previously released version.
+  nix run "github:flox/flox/v${FLOX_LATEST_VERSION}" -- \
+    activate -- \
+    bash -c "echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" > output 2>&1 &
+
+  # Longer timeout to allow for `nix run`.
+  timeout 15s cat activate_finished
+  run cat output
+  # This the only place we use `--partial` because we only want to know that the
+  # intial activation started.
+  assert_output --partial - << EOF
+sourcing hook.on-activate for first time
+${expected_content}
+EOF
+
+  # Attach to the activation with the current version. All assertions are on
+  # complete output (no partial) so that we can detect errors.
+  case "$mode" in
+    interactive)
+      run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
+      ;;
+    command)
+      run "$FLOX_BIN" activate -- true
+      ;;
+    in-place)
+      run bash -c 'eval "$("$FLOX_BIN" activate)" && true'
+      ;;
+  esac
+  assert_success
+
+  case "$mode" in
+    interactive)
+      # This is only output on failure and helps debugging non-printable characters.
+      echo "=== BEGIN DEBUG OUTPUT ==="
+      cat -ev expect.log
+      echo "=== END   DEBUG OUTPUT ==="
+
+      run tr -d '\r' < expect.log
+      assert_output - << EOF
+spawn ${FLOX_BIN} activate --dir ${PROJECT_DIR}
+✅ Attached to existing activation of environment '${PROJECT_NAME}'
+To stop using this environment, type 'exit'
+
+true && exit
+${expected_content}
+flox [${PROJECT_NAME}] myprompt> true && exit
+exit
+EOF
+      ;;
+    *)
+      assert_output "$expected_content"
+  ;;
+  esac
+}
+
+# bats test_tags=activate,activate:attach,activate:attach:previous-release
+@test "interactive: attachs to an activation from the previous release" {
+  project_setup
+  attach_previous_release interactive
+}
+
+# bats test_tags=activate,activate:attach,activate:attach:previous-release
+@test "command-mode: attachs to an activation from the previous release" {
+  project_setup
+  attach_previous_release command
+}
+
+# bats test_tags=activate,activate:attach,activate:attach:previous-release
+@test "in-place: attachs to an activation from the previous release" {
+  project_setup
+  attach_previous_release in-place
+}
