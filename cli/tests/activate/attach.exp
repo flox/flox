@@ -7,6 +7,8 @@ set flox $env(FLOX_BIN)
 set timeout 10
 set env(NO_COLOR) 1
 
+log_file -noappend expect.log
+
 spawn $flox activate --dir $dir
 expect_after {
   timeout { exit 1 }

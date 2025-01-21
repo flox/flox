@@ -141,6 +141,9 @@ writeShellScriptBin PROJECT_NAME ''
   esac
   export PROJECT_TESTS_DIR;
 
+  FLOX_LATEST_VERSION=${builtins.readFile ../../VERSION}
+  export FLOX_LATEST_VERSION
+
   # TODO: we shouldn't do this but rather use absolute paths
   # Look if we can use https://github.com/abathur/resholve
   export PATH="$PROJECT_PATH:${lib.makeBinPath paths}"
