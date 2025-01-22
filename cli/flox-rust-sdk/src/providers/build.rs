@@ -402,7 +402,6 @@ pub mod test_helpers {
 mod tests {
     use std::fs::{self};
 
-    use duct::cmd;
     use indoc::{formatdoc, indoc};
 
     use super::test_helpers::*;
@@ -1531,12 +1530,21 @@ mod tests {
         build_script_persisted("off", false);
     }
 
-    fn assert_derivation_metadata_propagated(keypath: &str, expected: &str, store_path: &Path) {
-        let drv_prop = cmd!("nix", "derivation", "show", store_path)
-            .pipe(cmd!("jq", "-r", "-c", keypath))
-            .read()
-            .unwrap();
-        assert_eq!(drv_prop.as_str(), expected);
+    fn assert_derivation_metadata_propagated(keypath: &[&str], expected: &str, store_path: &Path) {
+        let stdout = Command::new("nix")
+            .args(["derivation", "show", store_path.to_str().unwrap()])
+            .output()
+            .unwrap()
+            .stdout;
+        let drv = serde_json::from_slice::<serde_json::Value>(&stdout).unwrap();
+        // `nix derivation show` prints a map with the .drv path as the key
+        // We just care about the value and discard the key
+        let mut current = drv.as_object().unwrap().values().next().unwrap();
+        for key in keypath {
+            current = &current[key];
+        }
+        let drv_value = current.as_str().unwrap();
+        assert_eq!(drv_value, expected);
     }
 
     #[test]
@@ -1562,7 +1570,7 @@ mod tests {
             assert_build_status(&flox, &mut env, &pname, true);
             let result_path = env_path.join(format!("result-{pname}"));
             let realpath = std::fs::read_link(&result_path).unwrap();
-            assert_derivation_metadata_propagated(".[].env.version", &version, &realpath);
+            assert_derivation_metadata_propagated(&["env", "version"], &version, &realpath);
         }
     }
 }
