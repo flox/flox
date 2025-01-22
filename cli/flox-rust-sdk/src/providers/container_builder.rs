@@ -152,7 +152,7 @@ impl ContainerBuilder for MkContainerNix {
         if let Some(container_config) = &self.container_config {
             command.args([
                 "--argstr",
-                "containerConfig",
+                "containerConfigJSON",
                 &serde_json::to_string(container_config)
                     .map_err(MkContainerNixError::SerializeContainerConfig)?,
             ]);
