@@ -132,7 +132,6 @@ impl FloxBuildMk {
         if flox.verbosity <= 0 {
             command.arg("--no-print-directory"); // Only print directory with -v.
         }
-        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*BUILDTIME_NIXPKGS_URL));
 
         command
     }
@@ -165,6 +164,8 @@ impl ManifestBuilder for FloxBuildMk {
         packages: &[String],
     ) -> Result<BuildOutput, ManifestBuilderError> {
         let mut command = self.base_command(flox, base_dir);
+        command.arg("build");
+        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*BUILDTIME_NIXPKGS_URL));
         command.arg(format!("FLOX_ENV={}", built_environments.develop.display()));
         command.arg(format!(
             "FLOX_ENV_OUTPUTS={}",
@@ -179,7 +180,6 @@ impl ManifestBuilder for FloxBuildMk {
         // We previously attempted to provide a default target here which introduced
         // the possibility that those might not match.
         command.arg(format!("PACKAGES={}", packages.join(" ")));
-        command.arg("build");
 
         let build_result_path = NamedTempFile::new_in(&flox.temp_dir)
             .map_err(ManifestBuilderError::CreateBuildResultFile)?
