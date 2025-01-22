@@ -32,6 +32,10 @@ user_dotfiles_setup() {
 
   # Allow predictable output from interactive tests that use expect.
   KNOWN_PROMPT="myprompt> "
+  # This isn't honoured by zsh or fish.
+  cat >"${HOME}/.inputrc" <<EOF
+set enable-bracketed-paste off
+EOF
 
   # Posix-compliant shells
   for i in "profile" "bashrc" \
