@@ -244,15 +244,14 @@ define BUILD_local_template =
 	      $(_build_wrapper_env)/activate --env $(_build_wrapper_env) --mode dev --turbo -- \
 	        $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $($(_pvarname)_buildScript)
 	$(_V_) $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
-	  --argstr name "$(_name)" \
-      --argstr pname "$(_pname)" \
-      --argstr version "$(_version)" \
-      --argstr flox-env "$(FLOX_ENV)" \
-      --argstr build-wrapper-env "$(_build_wrapper_env)" \
-      --argstr install-prefix "$(_out)" \
-      --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
-      --out-link "result-$(_pname)" \
-      '^*'
+		--argstr pname "$(_pname)" \
+		--argstr version "$(_version)" \
+		--argstr flox-env "$(FLOX_ENV)" \
+		--argstr build-wrapper-env "$(_build_wrapper_env)" \
+		--argstr install-prefix "$(_out)" \
+		--argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
+		--out-link "result-$(_pname)" \
+		'^*'
 	$(_V_) $(_nix) build -L `$(_nix) store add-file "$(shell $(_realpath) "$($(_pvarname)_logfile)")"` \
 	  --out-link "result-$(_pname)-log"
 	@echo "Completed build of $(_name) in local mode" && echo ""
@@ -310,9 +309,8 @@ define BUILD_nix_sandbox_template =
 	  $(_readlink) "$(_result)-buildCache" > "$(_result)-buildCache.prevOutPath"; \
 	fi
 	$(_V_) $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
-	  --argstr name "$(_name)" \
-      --argstr pname "$(_pname)" \
-      --argstr version "$(_version)" \
+		--argstr pname "$(_pname)" \
+		--argstr version "$(_version)" \
 	  --argstr srcTarball "$($(_pvarname)_src_tar)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
 	  --argstr build-wrapper-env "$(_build_wrapper_env)" \
@@ -427,10 +425,6 @@ $(foreach build,$(BUILDS), \
     $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK))) \
   $(eval _version = $(shell \
     $(_jq) -r '.manifest.build."$(_pname)".version' $(MANIFEST_LOCK))) \
-  $(eval _description = $(shell \
-    $(_jq) -r '.manifest.build."$(_pname)".description' $(MANIFEST_LOCK))) \
-  $(eval _license = $(shell \
-    $(_jq) -c '.manifest.build."$(_pname)".license' $(MANIFEST_LOCK))) \
   $(if $(filter null off,$(_sandbox)), \
     $(eval $(call BUILD_template,local)), \
     $(eval $(call BUILD_template,nix_sandbox))))

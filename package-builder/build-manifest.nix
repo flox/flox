@@ -4,7 +4,6 @@
   nixpkgs-url ? "github:flox/nixpkgs/stable",
   pkgs ? (builtins.getFlake nixpkgs-url).legacyPackages.${builtins.currentSystem},
   t3 ? "@t3@",
-  name,
   pname,
   version,
   flox-env, # environment from which package is built
@@ -48,6 +47,7 @@ let
     echo "If your build produces executables, make sure they are copied to '\$out/bin'." 1>&2
     ${dollar_out_bin_copy_hints}
   '';
+  name = "${pname}-${version}";
 in
 pkgs.runCommandNoCC name
   {
