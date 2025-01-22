@@ -410,10 +410,16 @@ pub fn spawn_bash(timeout: Option<u64>) -> Result<PtyReplSession, Error> {
             quit_command: Some("exit".to_owned()),
             echo_on: false,
         };
+        pb.send_line(
+            r#"PS1="~~~~" && unset PROMPT_COMMAND && bind 'set enable-bracketed-paste off'"#,
+        )?;
         pb.exp_string("~~~~")?;
-        rcfile.close()?;
         let ps1 = format!("PS1='{new_prompt}'");
         pb.send_line(&ps1)?;
+        // pb.exp_string("~~~~")?;
+        // rcfile.close()?;
+        // let ps1 = format!("PS1='{new_prompt}'");
+        // pb.send_line(&ps1)?;
         // wait until the new prompt appears
         pb.wait_for_prompt()?;
         Ok(pb)

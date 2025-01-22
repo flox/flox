@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context};
+use duct::cmd;
 use flox_core::proc_status::{pid_is_running, pid_with_var};
 use indoc::formatdoc;
 use nix::sys::signal::Signal::{SIGKILL, SIGTERM};
@@ -117,6 +119,28 @@ impl std::fmt::Display for IsolatedHome {
     }
 }
 
+/// Returns the path to the root of the Cargo workspace.
+///
+/// This is necessary because the CARGO_MANIFEST_DIR variable can point
+/// to a package's manifest depending on which directory the cargo command
+/// is run from.
+fn workspace_root_path() -> PathBuf {
+    let output = cmd!(
+        "cargo",
+        "locate-project",
+        "--workspace",
+        "--message-format",
+        "plain"
+    )
+    .read()
+    .unwrap();
+    PathBuf::from_str(&output)
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf()
+}
+
 impl IsolatedHome {
     pub fn new() -> Result<Self, Error> {
         let home_tmp =
@@ -137,7 +161,7 @@ impl IsolatedHome {
         std::fs::write(config_dir.join("flox/flox.toml"), "disable_metrics = true")
             .context("failed to write flox config file")?;
 
-        // NOTE: This turned out to make no difference, so it's either not working properly
+        // FIXME: This turned out to make no difference, so it's either not working properly
         //       or the bottleneck isn't Nix evaluation.
         // Symlink the host's eval cache into this set of directories to speed up tests
         if let Some(path) = dirs::cache_dir().map(|p| p.join("nix")) {
@@ -164,6 +188,11 @@ impl IsolatedHome {
             String::from("XDG_CACHE_HOME"),
             cache_dir.to_string_lossy().to_string(),
         );
+        envs.insert(
+            String::from("PATH"),
+            format!("{}/target/debug:$PATH", workspace_root_path().display()),
+        );
+        // TODO: this doesn't belong here, put it in the shell config
         envs.insert(String::from("NO_COLOR"), String::from("1"));
 
         Ok(Self {
@@ -188,7 +217,7 @@ pub struct ShellProcess<'dirs> {
 
 impl std::fmt::Debug for ShellProcess<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        <IsolatedHome as std::fmt::Debug>::fmt(&self.dirs, f)
+        <IsolatedHome as std::fmt::Debug>::fmt(self.dirs, f)
     }
 }
 
@@ -208,9 +237,12 @@ impl DerefMut for ShellProcess<'_> {
 
 impl<'dirs> ShellProcess<'dirs> {
     pub fn spawn(dirs: &'dirs IsolatedHome, timeout_millis: Option<u64>) -> Result<Self, Error> {
-        let test_shell = std::env::var("FLOX_SHELL_BASH")?;
-        let mut shell =
-            spawn_specific_bash(&test_shell, timeout_millis).context("failed to spawn bash")?;
+        // TODO: change this to FLOX_TEST_SHELL_BASH
+        // let test_shell = std::env::var("FLOX_SHELL_BASH")?;
+        // let mut shell =
+        // spawn_specific_bash(&test_shell, timeout_millis).context("failed to spawn bash")?;
+        // spawn_specific_bash("/nix/store/jin4ifpw4bvi554g02phy668gvaylqn1-bash-interactive-5.2p32/bin/bash", timeout_millis).context("failed to spawn bash")?;
+        let mut shell = rexpect::spawn_bash(timeout_millis)?;
         for (var, value) in dirs.envs.iter() {
             shell
                 .send_line(&format!(r#"export {var}="{value}""#))
@@ -222,8 +254,14 @@ impl<'dirs> ShellProcess<'dirs> {
             .context("failed to set no-prompt var")?;
         shell.wait_for_prompt().context("prompt never appeared")?;
         shell
-            .send_line(&format!("export FLOX_SHELL={}", test_shell))
+            .send_line("export FLOX_SHELL=bash")
             .context("failed to set FLOX_SHELL")?;
+        // shell
+        //     .send_line(&format!(
+        //         "export FLOX_SHELL={}",
+        //         "/nix/store/jin4ifpw4bvi554g02phy668gvaylqn1-bash-interactive-5.2p32/bin/bash"
+        //     ))
+        //     .context("failed to set FLOX_SHELL")?;
         shell.wait_for_prompt().context("prompt never appeared")?;
 
         // I don't know why this is necessary
@@ -408,6 +446,7 @@ impl<'dirs> ShellProcess<'dirs> {
 
     /// Performs an activation and returns handles to the watchdog and process-compose
     pub fn activate_with_services(&mut self, args: &[&str]) -> Result<(ProcToGC, ProcToGC), Error> {
+        // TODO: remove the timing prints
         let start = start_timer();
         let mut all_args = vec!["--start-services"];
         all_args.extend_from_slice(args);
@@ -439,14 +478,12 @@ impl<'dirs> ShellProcess<'dirs> {
     ) -> String {
         let mut buf = String::from("flox activate");
         for arg in args_without_flox_activate.iter() {
-            if check_service_arg {
-                if (*arg == "-s") || (*arg == "--start-services") {
-                    // This ensures we always get handles to the processes
-                    // we want to GC at the end of a test
-                    panic!("use ShellProcess::activate_with_services to activate with services");
-                }
+            if check_service_arg && ((*arg == "-s") || (*arg == "--start-services")) {
+                // This ensures we always get handles to the processes
+                // we want to GC at the end of a test
+                panic!("use ShellProcess::activate_with_services to activate with services");
             }
-            buf.push_str(" ");
+            buf.push(' ');
             buf.push_str(arg);
         }
         buf
@@ -528,11 +565,11 @@ pub fn find_process_compose_pid_with_uuid(uuid: impl AsRef<str>) -> Option<u32> 
 }
 
 fn watchdog_with_uuid(uuid: impl AsRef<str>) -> Option<ProcToGC> {
-    find_watchdog_pid_with_uuid(uuid).map(|pid| ProcToGC::new_with_pid(pid))
+    find_watchdog_pid_with_uuid(uuid).map(ProcToGC::new_with_pid)
 }
 
 pub fn process_compose_with_uuid(uuid: impl AsRef<str>) -> Option<ProcToGC> {
-    find_process_compose_pid_with_uuid(uuid).map(|pid| ProcToGC::new_with_pid(pid))
+    find_process_compose_pid_with_uuid(uuid).map(ProcToGC::new_with_pid)
 }
 
 #[derive(Debug)]
@@ -627,14 +664,12 @@ impl Drop for ProcToGC {
         // check if we're already panicking.
         if panicking() {
             self.send_sigterm();
-        } else {
-            if self
-                .wait_for_termination_with_timeout(self.drop_timeout_millis)
-                .is_err()
-            {
-                self.send_sigterm();
-                panic!("background process was leaked");
-            }
+        } else if self
+            .wait_for_termination_with_timeout(self.drop_timeout_millis)
+            .is_err()
+        {
+            self.send_sigterm();
+            panic!("background process was leaked");
         }
     }
 }
@@ -678,7 +713,7 @@ mod tests {
     // Nothing should hit this in normal operation,
     // it's only there if you need to build an environment for
     // the first time on the host machine.
-    const DEFAULT_EXPECT_TIMEOUT: u64 = 30_000;
+    const DEFAULT_EXPECT_TIMEOUT: u64 = 5_000;
 
     // Just a helper function for less typing
     #[allow(dead_code)]
@@ -693,10 +728,22 @@ mod tests {
     }
 
     #[test]
+    fn calls_correct_flox() {
+        let dirs = IsolatedHome::new().unwrap();
+        let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
+        let output = shell.wait_for_prompt().unwrap();
+        shell.send_line("echo $PATH").unwrap();
+        let output = shell.wait_for_prompt().unwrap();
+        eprintln!("{output}");
+        shell.send_line("which flox").unwrap();
+        let output = shell.wait_for_prompt().unwrap();
+        eprintln!("{output}");
+    }
+
+    #[test]
     fn can_activate() {
         let dirs = IsolatedHome::new().unwrap();
         let mut shell = ShellProcess::spawn(&dirs, Some(DEFAULT_EXPECT_TIMEOUT)).unwrap();
-        // shell.init_env_with_name("myenv").unwrap();
         shell
             .init_from_generated_env("myenv", path_to_generated_env("hello"))
             .unwrap();
@@ -900,7 +947,7 @@ mod tests {
         shell.activate(&[]).unwrap();
         shell.send_line("flox services start").unwrap();
         shell.wait_for_prompt().unwrap();
-        assert!(shell.succeeded().is_ok_and(|r| r == false));
+        assert!(shell.succeeded().is_ok_and(|r| !r));
         shell.exit_shell(); // once for the activation
     }
 
