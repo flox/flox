@@ -147,17 +147,18 @@ impl ManifestBuilder for FloxBuildMk {
         ));
         command.arg(format!("FLOX_INTERPRETER={}", flox_interpreter.display()));
 
-        // Add build target arguments by prefixing the package names with "build/".
-        // If no packages are specified, build all packages.
-        // While the default target is "build", we explicitly specify it here
-        // to avoid unintentional changes in behavior.
-        if packages.is_empty() {
-            let build_all_target = "build";
-            command.arg(build_all_target);
-        } else {
-            let build_targets = packages.iter().map(|p| format!("build/{p}"));
-            command.args(build_targets);
+        // Add the list of packages to be built by passing a space-delimited list
+        // of pnames in the PACKAGES variable. If no packages are specified then
+        // the makefile will build all packages by default. Also let the makefile's
+        // .DEFAULT_GOAL define the default behavior in a single consistent place.
+        // We previously attempted to provide a default target here which introduced
+        // the possibility that those might not match.
+        if !packages.is_empty() {
+            command.arg(format!("PACKAGES={}", packages.join(" ")));
         };
+
+        // XXX TESTING - Yannik to replace with real logic.
+        command.arg("BUILD_RESULT_PIPE=/tmp/BUILD_RESULT_PIPE");
 
         // activate needs this var
         // TODO: we should probably figure out a more consistent way to pass
