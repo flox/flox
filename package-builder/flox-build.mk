@@ -24,19 +24,6 @@ ifeq (,$(wildcard $(MANIFEST_LOCK)))
   $(error $(MANIFEST_LOCK) not found)
 endif
 
-# Verify that BUILDTIME_NIXPKGS_URL is defined.
-ifeq (,$(BUILDTIME_NIXPKGS_URL))
-  $(error BUILDTIME_NIXPKGS_URL not defined)
-endif
-
-# Verify that BUILD_RESULT_FILE is defined and exists.
-ifeq (,$(BUILD_RESULT_FILE))
-  $(error BUILD_RESULT_FILE not defined)
-endif
-ifeq (,$(wildcard $(BUILD_RESULT_FILE)))
-  $(error $(BUILD_RESULT_FILE) not found)
-endif
-
 # Substitute Nix store paths for packages required by this Makefile.
 __bashInteractive := @bashInteractive@
 __coreutils := @coreutils@
@@ -92,13 +79,16 @@ SHELL := $(_bash)
 OS := $(shell $(_uname) -s)
 
 # Set the default goal to be all builds if one is not specified.
-.DEFAULT_GOAL := build
+.DEFAULT_GOAL := usage
 
 # Set a default TMPDIR variable if one is not already defined.
 TMPDIR ?= /tmp
 
 # Use the wildcard operator to identify builds in the provided $FLOX_ENV.
 BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
+
+# Quick sanity check; if no BUILDS then what are we doing?
+$(if $(BUILDS),,$(error no packages found in $(FLOX_ENV)/package-builds.d))
 
 # Set makefile verbosity based on the value of _FLOX_PKGDB_VERBOSITY [sic]
 # as set in the environment by the flox CLI. First set it to 0 if not defined.
@@ -110,6 +100,16 @@ $(eval _V_ = $(intcmp 0,$(_FLOX_PKGDB_VERBOSITY),,@))
 $(eval _VV_ = $(intcmp 1,$(_FLOX_PKGDB_VERBOSITY),,@))
 $(eval _VVV_ = $(intcmp 2,$(_FLOX_PKGDB_VERBOSITY),,@))
 
+# Define a usage target to provide a helpful message when no target is specified.
+.PHONY: usage
+usage:
+	@echo "Usage: make -f $(lastword $(MAKEFILE_LIST)) [TARGET]"
+	@echo "Targets:"
+	@echo "  build: build all packages"
+	@echo "  build/[pname]: build the specified package"
+	@echo "  clean: clean all build artifacts"
+	@echo "  clean/[pname]: clean build artifacts for the specified package"
+
 # The `nix build` command will attempt a rebuild in every instance,
 # and we will presumably want `flox build` to do the same. However,
 # we cannot just mark the various build targets as PHONY because they
@@ -120,8 +120,9 @@ $(eval _VVV_ = $(intcmp 2,$(_FLOX_PKGDB_VERBOSITY),,@))
 BUILDGOALS = $(if $(MAKECMDGOALS),$(MAKECMDGOALS),$(notdir $(BUILDS)))
 $(foreach _build,$(BUILDGOALS),\
   $(eval _pname = $(notdir $(_build)))\
+  $(eval _pvarname = $(subst -,_,$(_pname)))\
   $(foreach _buildtype,local sandbox,\
-    $(eval $(_pname)_$(_buildtype)_build: FORCE)))
+    $(eval $(_pvarname)_$(_buildtype)_build: FORCE)))
 
 # Scan for "${package}" references within the build instructions and add
 # target prerequisites for any inter-package prerequisites, letting make
@@ -235,7 +236,8 @@ define BUILD_local_template =
   # environment is the "inner" activation preferred for sourcing commands,
   # libraries, etc.  Also blat all env variables set by the outer activation
   # to avoid including the "develop" environment in the build closure.
-  $($(_pvarname)_buildMetaJSON): $($(_pvarname)_buildScript)
+  .INTERMEDIATE: $(_pvarname)_local_build
+  $(_pvarname)_local_build: $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
 	@echo "Building $(_name) in local mode"
 	$(_VV_) $(_rm) -rf $(_out)
@@ -259,7 +261,7 @@ define BUILD_local_template =
 	  --json '^*' | \
 	$(_jq) --arg pname "$(_pname)" --arg version "$(_version)" \
 	  --arg log "$(shell $(_readlink) result-$(_pname)-log)" \
-	  '.[0] * {pname:$$$$pname, version:$$$$version, log:$$$$log}' > $$@
+	  '.[0] * {pname:$$$$pname, version:$$$$version, log:$$$$log}' > $($(_pvarname)_buildMetaJSON)
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -304,7 +306,8 @@ define BUILD_nix_sandbox_template =
   # Create a target for cleaning up the buildCache result symlink.
   $(eval $(call CLEAN_result_link_template,$(_result)-buildCache))
 
-  $($(_pvarname)_buildMetaJSON): $($(_pvarname)_buildScript) $($(_pvarname)_src_tar) \
+  .PHONY: $(_pvarname)_nix_sandbox_build
+  $(_pvarname)_nix_sandbox_build: $($(_pvarname)_buildScript) $($(_pvarname)_src_tar) \
 		$(if $(_do_buildCache),$($(_pvarname)_buildCache))
 	@echo "Building $(_name) in Nix sandbox (pure) mode"
 	@# If a previous buildCache exists then move it out of the way
@@ -327,7 +330,7 @@ define BUILD_nix_sandbox_template =
 	  --out-link "result-$(_pname)" \
 	  --json '^*' | \
 	$(_jq) --arg pname "$(_pname)" --arg version "$(_version)" \
-	  '.[0] * {pname:$$$$pname, version:$$$$version, log:.[0].outputs.log}' > $$@
+	  '.[0] * {pname:$$$$pname, version:$$$$version, log:.[0].outputs.log}' > $($(_pvarname)_buildMetaJSON)
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
@@ -344,6 +347,17 @@ define BUILD_nix_sandbox_template =
 	fi
 
 endef
+
+# Verify certain prerequisites before kicking off the build DAG.
+.PHONY: check_BUILD_PREREQUISITES
+check_BUILD_PREREQUISITES: FORCE
+	@# The BUILD_RESULT_FILE must be defined and exist.
+	@$(if $(BUILD_RESULT_FILE), \
+	  $(if $(wildcard $(BUILD_RESULT_FILE)),-, \
+	    $$(error $(BUILD_RESULT_FILE) not found)), \
+	  $$(error BUILD_RESULT_FILE not defined))
+	@# Check that the BUILDTIME_NIXPKGS_URL is defined.
+	@$(if $(BUILDTIME_NIXPKGS_URL),-,$(error BUILDTIME_NIXPKGS_URL not defined))
 
 define BUILD_template =
 
@@ -388,13 +402,13 @@ define BUILD_template =
   # Iterate through this list, replacing all instances of "${package}" with the
   # corresponding storePath as identified by the result-* symlink.
   .PRECIOUS: $($(_pvarname)_buildScript)
-  $($(_pvarname)_buildScript): $(build) FORCE
+  $($(_pvarname)_buildScript): $(build) check_BUILD_PREREQUISITES
 	@echo "Rendering $(_pname) build script to $$@"
 	@# Always echo lines in the build script as they are invoked.
 	$(_VV_) echo "set -x" > $$@.new
 	$(_VV_) $(_cat) $$< >> $$@.new
 	$(_VV_) for i in $$^; do \
-	  if [ "$$$$i" != "FORCE" -a -L "$$$$i" ]; then \
+	  if [ "$$$$i" != "check_BUILD_PREREQUISITES" -a -L "$$$$i" ]; then \
 	    outpath="$$$$($(_readlink) $$$$i)"; \
 	    if [ -n "$$$$outpath" ]; then \
 	      pkgname="$$$$(echo $$$$i | $(_cut) -d- -f2-)"; \
@@ -408,7 +422,7 @@ define BUILD_template =
   $(call BUILD_$(_build_mode)_template)
 
   # Select the desired build mode as we declare the result symlink target.
-  $(_result): $($(_pvarname)_buildMetaJSON)
+  $(_result): $(_pvarname)_$(_build_mode)_build
 	@# Take this opportunity to fail the build if we spot fatal errors in the
 	@# build output. Recall that we force the Nix build to "succeed" in all
 	@# cases so that we can persist the buildCache, so when errors do happen
@@ -419,6 +433,9 @@ define BUILD_template =
 	  $(_rm) -f $$@; \
 	  exit 1; \
 	fi
+
+  # Note that the buildMetaJSON file is created as a side-effect of the build.
+  $($(_pvarname)_buildMetaJSON): $(_result)
 
   # Create targets for cleaning up the result and log symlinks.
   $(eval $(call CLEAN_result_link_template,$(_result)))
@@ -443,11 +460,14 @@ $(foreach build,$(BUILDS), \
     $(eval $(call BUILD_template,nix_sandbox))))
 
 # Combine JSON build data for each build and write to BUILD_RESULT_FILE.
-$(BUILD_RESULT_FILE): $(foreach pname,$(PACKAGES),$($(pname)_buildMetaJSON))
+# Mark it as phony to force it to be evaluated every time.
+.PHONY: $(BUILD_RESULT_FILE)
+$(BUILD_RESULT_FILE): $(foreach pname,$(PACKAGES),$($(subst -,_,$(pname))_buildMetaJSON))
+	$(_VV_) [ -n "$^" ] || ( echo "ERROR: PACKAGES not defined or empty" 1>&2; exit 1 )
 	$(_VV_) $(_jq) -s . $^ > $@
 
-# Finally, we create the "build" target to write to the BUILD_RESULT_FILE
-# which has the effect of building all known packages.
+# Finally, we create the "build" target to invoke the $(BUILD_RESULT_FILE)
+# target which has the effect of building all requested $(PACKAGES).
 .PHONY: build
 build: $(BUILD_RESULT_FILE)
 
