@@ -4153,12 +4153,31 @@ EOF
 # 1. the structure of `activations.json`
 # 2. arguments and environment variables used in activation scripts
 attach_previous_release() {
-  mode="${1?}"
+  shell="${1?}"
+  mode="${2?}"
 
   echo "$HOOK_ONLY_ONCE" | "$FLOX_BIN" edit -f -
 
-  expected_content="Sourcing .bashrc
-Setting PATH from .bashrc"
+  shell_path="$(which "$shell")"
+  export _FLOX_SHELL_FORCE="$shell_path"
+
+  case "$shell" in
+    bash)
+      rc_file=".bashrc";;
+    fish)
+      rc_file="config.fish";;
+    tcsh)
+      rc_file=".tcshrc";;
+    zsh)
+      rc_file=".zshenv";;
+    *)
+      echo "Unsupported shell: $shell"
+      exit 1
+      ;;
+  esac
+
+  expected_content="Sourcing ${rc_file}
+Setting PATH from ${rc_file}"
 
   mkfifo activate_finished
   # Will get cat'ed in teardown
@@ -4166,9 +4185,10 @@ Setting PATH from .bashrc"
   mkfifo "$TEARDOWN_FIFO"
 
   # Start an activation with the previously released version.
+  # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
   nix run "github:flox/flox/v${FLOX_LATEST_VERSION}" -- \
     activate -- \
-    bash -c "echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" > output 2>&1 &
+    "$shell_path" -c "echo > activate_finished && echo > $TEARDOWN_FIFO" > output 2>&1 &
 
   # Longer timeout to allow for `nix run`.
   timeout 15s cat activate_finished
@@ -4185,18 +4205,8 @@ EOF
   case "$mode" in
     interactive)
       run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
-      ;;
-    command)
-      run "$FLOX_BIN" activate -- true
-      ;;
-    in-place)
-      run bash -c 'eval "$("$FLOX_BIN" activate)" && true'
-      ;;
-  esac
-  assert_success
+      assert_success
 
-  case "$mode" in
-    interactive)
       # This is only output on failure and helps debugging non-printable characters.
       echo "=== BEGIN DEBUG OUTPUT ==="
       cat -ev expect.log
@@ -4214,26 +4224,90 @@ flox [${PROJECT_NAME}] myprompt> true && exit
 exit
 EOF
       ;;
-    *)
+    command)
+      run "$FLOX_BIN" activate -- true
+      assert_success
       assert_output "$expected_content"
-  ;;
+      ;;
+    in-place)
+      if [ "$shell" == "tcsh" ]; then
+        eval_command='eval "`$FLOX_BIN activate`" && true'
+      else
+        eval_command='eval "$("$FLOX_BIN" activate)" && true'
+      fi
+      run "$shell_path" -c "$eval_command"
+      assert_success
+      assert_output "$expected_content"
+      ;;
+    *)
+      echo "Unsupported mode: $mode"
+      exit 1
+      ;;
   esac
 }
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "interactive: attachs to an activation from the previous release" {
+@test "interactive: bash attachs to an activation from the previous release" {
   project_setup
-  attach_previous_release interactive
+  attach_previous_release bash interactive
 }
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "command-mode: attachs to an activation from the previous release" {
+@test "interactive: tcsh attachs to an activation from the previous release" {
   project_setup
-  attach_previous_release command
+  attach_previous_release tcsh interactive
+}
+
+# We don't test the following because preventing control characters in the
+# output from expect is too hard.
+#
+# attach_previous_release fish interactive
+# attach_previous_release zsh interactive
+
+# bats test_tags=activate,activate:attach,activate:attach:previous-release
+@test "command-mode: bash attachs to an activation from the previous release" {
+  project_setup
+  attach_previous_release bash command
 }
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "in-place: attachs to an activation from the previous release" {
+@test "command-mode: fish attachs to an activation from the previous release" {
   project_setup
-  attach_previous_release in-place
+  attach_previous_release fish command
+}
+
+# bats test_tags=activate,activate:attach,activate:attach:previous-release
+@test "command-mode: tcsh attachs to an activation from the previous release" {
+  project_setup
+  attach_previous_release tcsh command
+}
+
+# bats test_tags=activate,activate:attach,activate:attach:previous-release
+@test "command-mode: zsh attachs to an activation from the previous release" {
+  project_setup
+  attach_previous_release zsh command
+}
+
+# bats test_tags=activate,activate:attach,activate:attach:previous-release
+@test "in-place: bash attachs to an activation from the previous release" {
+  project_setup
+  attach_previous_release bash in-place
+}
+
+# bats test_tags=activate,activate:attach,activate:attach:previous-release
+@test "in-place: fish attachs to an activation from the previous release" {
+  project_setup
+  attach_previous_release fish in-place
+}
+
+# bats test_tags=activate,activate:attach,activate:attach:previous-release
+@test "in-place: tcsh attachs to an activation from the previous release" {
+  project_setup
+  attach_previous_release tcsh in-place
+}
+
+# bats test_tags=activate,activate:attach,activate:attach:previous-release
+@test "in-place: zsh attachs to an activation from the previous release" {
+  project_setup
+  attach_previous_release zsh in-place
 }
