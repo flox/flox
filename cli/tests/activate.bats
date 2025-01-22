@@ -30,6 +30,9 @@ user_dotfiles_setup() {
 
   BADPATH="/usr/local/bin:/usr/bin:/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin"
 
+  # Allow predictable output from interactive tests that use expect.
+  KNOWN_PROMPT="myprompt> "
+
   # Posix-compliant shells
   for i in "profile" "bashrc" \
     "zshrc" "zshenv" "zlogin" "zlogout" "zprofile"; do
@@ -37,6 +40,7 @@ user_dotfiles_setup() {
 echo "Sourcing .$i" >&2
 echo "Setting PATH from .$i" >&2
 export PATH="$BADPATH"
+export PS1="$KNOWN_PROMPT"
 if [ -f "$HOME/.$i.extra" ]; then
   source "$HOME/.$i.extra";
 fi
@@ -49,6 +53,9 @@ EOF
 echo "Sourcing config.fish" >&2
 echo "Setting PATH from config.fish" >&2
 set -gx PATH "$BADPATH"
+function fish_prompt
+  echo -n "$KNOWN_PROMPT"
+end
 if test -e "$HOME/.config/fish/config.fish.extra"
   source "$HOME/.config/fish/config.fish.extra"
 end
@@ -60,6 +67,7 @@ EOF
 sh -c "echo 'Sourcing .$i' >&2"
 sh -c "echo 'Setting PATH from .$i' >&2"
 setenv PATH "$BADPATH"
+set prompt = "$KNOWN_PROMPT"
 if ( -e "$HOME/.$i.extra" ) then
   source "$HOME/.$i.extra"
 endif
