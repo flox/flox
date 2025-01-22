@@ -245,6 +245,8 @@ define BUILD_local_template =
 	    $(_env) -i out=$(_out) $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
 	      $(_build_wrapper_env)/activate --env $(_build_wrapper_env) --mode dev --turbo -- \
 	        $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $($(_pvarname)_buildScript)
+	$(_V_) $(_nix) build -L `$(_nix) store add-file "$(shell $(_realpath) "$($(_pvarname)_logfile)")"` \
+	  --out-link "result-$(_pname)-log"
 	$(_V_) set -o pipefail && \
 	$(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr name "$(_name)" \
@@ -255,9 +257,8 @@ define BUILD_local_template =
 	  --out-link "result-$(_pname)" \
 	  --json '^*' | \
 	$(_jq) --arg pname "$(_pname)" --arg version "$(_version)" \
-	  '.[0] * {pname:$$$$pname, version:$$$$version}' > $$@
-	$(_V_) $(_nix) build -L `$(_nix) store add-file "$(shell $(_realpath) "$($(_pvarname)_logfile)")"` \
-	  --out-link "result-$(_pname)-log"
+	  --arg log "$(shell $(_readlink) result-$(_pname)-log)" \
+	  '.[0] * {pname:$$$$pname, version:$$$$version, log:$$$$log}' > $$@
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -324,7 +325,7 @@ define BUILD_nix_sandbox_template =
 	  --out-link "result-$(_pname)" \
 	  --json '^*' | \
 	$(_jq) --arg pname "$(_pname)" --arg version "$(_version)" \
-	  '.[0] * {pname:$$$$pname, version:$$$$version}' > $$@
+	  '.[0] * {pname:$$$$pname, version:$$$$version, log:.[0].outputs.log}' > $$@
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
