@@ -570,7 +570,7 @@ EOF
 @test "services: errors if services are not started" {
   setup_sleeping_services
 
-  commands=("logs" "status" "stop")
+  commands=("logs" "stop")
   for command in "${commands[@]}"; do
     echo "Testing: flox services $command"
 
@@ -901,6 +901,30 @@ EOF
   assert_output --regexp "two +Running +[0-9]+"
 }
 
+@test "status: prints requested services (before start)" {
+  setup_sleeping_services
+
+  run "$FLOX_BIN" services status one
+  assert_success
+
+  
+  # Note that the PID is omitted if the service hasn't been started
+  assert_output --regexp "NAME +STATUS +PID"
+  assert_output --regexp "one +Stopped +"
+}
+
+@test "status: prints requested services (after start)" {
+  setup_sleeping_services
+
+  run "$FLOX_BIN" activate -s -- bash -c '
+    "$FLOX_BIN" services status one
+  '
+  assert_success
+
+  assert_output --regexp "NAME +STATUS +PID"
+  assert_output --regexp "one +Running +[0-9]+"
+}
+
 # ---------------------------------------------------------------------------- #
 
 @test "activate services: shows warning when services already running" {
@@ -1143,9 +1167,9 @@ EOF
   )"
 
   run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
-  assert_failure
+  assert_success # only a success because we ignore the error from start
   assert_output --partial "Service 'invalid' does not exist."
-  assert_output --partial "Services not started or quit unexpectedly."
+  assert_output --partial "one        Stopped"
 }
 
 @test "start: errors if service not available" {
@@ -1170,9 +1194,10 @@ EOF
   )"
 
   run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
-  assert_failure
+  assert_success # only a success because we ignore the error from start
   assert_output --partial "Service 'invalid' is not available on '$NIX_SYSTEM'."
-  assert_output --partial "Services not started or quit unexpectedly."
+  assert_output --partial "invalid    Stopped"
+  assert_output --partial "one        Stopped"
 }
 
 # Also tests service names with spaces in them, because starting them is handled
@@ -1518,8 +1543,7 @@ EOF
 
   # Make sure services have stopped
   timeout 1s bash -c '
-    while "$FLOX_BIN" services status; do
-      sleep .1
-    done
+    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Stopped two:Stopped
   '
 }
+

@@ -1,10 +1,10 @@
 use std::cmp::max;
 use std::fmt::Display;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::services::{ProcessState, ProcessStates};
+use flox_rust_sdk::providers::services::{LoggedError, ProcessState, ProcessStates, ServiceError};
 use itertools::Itertools;
 use serde::Serialize;
 use tracing::instrument;
@@ -35,19 +35,50 @@ impl Status {
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
         guard_service_commands_available(&env, &flox.system)?;
 
-        let processes = ProcessStates::read(env.socket())?;
+        let processes = ProcessStates::read(env.socket());
 
-        let named_processes = super::processes_by_name_or_default_to_all(
-            &processes,
-            &env.manifest.services,
-            &flox.system,
-            &self.names,
-        )?;
+        let process_states_display = match processes {
+            // When services haven't been started, there's no socket yet. Rather than
+            // print an error for `flox services status` we should display the process
+            // statuses as not yet started.
+            Err(ServiceError::LoggedError(LoggedError::SocketDoesntExist)) => {
+                let mut states = vec![];
+                let service_names = if self.names.is_empty() {
+                    env.manifest.services.keys().cloned().collect::<Vec<_>>()
+                } else {
+                    self.names.clone()
+                };
+                for service in service_names.into_iter() {
+                    let state = ProcessStateDisplay {
+                        name: service,
+                        status: "Stopped".to_string(),
+                        pid: None,
+                        exit_code: None,
+                        is_running: false,
+                    };
+                    states.push(state);
+                }
+                Ok(ProcessStatesDisplay(states))
+            },
+            // Successful retrieval of process statuses get passed through.
+            Ok(processes) => {
+                let named_processes = super::processes_by_name_or_default_to_all(
+                    &processes,
+                    &env.manifest.services,
+                    &flox.system,
+                    &self.names,
+                )?;
 
-        let process_states_display = named_processes
-            .into_iter()
-            .cloned()
-            .collect::<ProcessStatesDisplay>();
+                Ok(named_processes
+                    .into_iter()
+                    .cloned()
+                    .collect::<ProcessStatesDisplay>())
+            },
+            // All other errors will be returned and handled.
+            // The unwrapping and re-wrapping here is just to make the types
+            // work out for the Ok(_) variant, which doesn't exist at this point.
+            Err(err) => Err(anyhow!(err)),
+        }?;
 
         if self.json {
             for proc in process_states_display {
@@ -67,7 +98,7 @@ impl Status {
 struct ProcessStateDisplay {
     name: String,
     status: String,
-    pid: u64,
+    pid: Option<u64>,
     exit_code: Option<i32>,
     #[serde(skip_serializing)]
     is_running: bool,
@@ -78,7 +109,7 @@ impl From<ProcessState> for ProcessStateDisplay {
         ProcessStateDisplay {
             name: proc.name,
             status: proc.status,
-            pid: proc.pid,
+            pid: Some(proc.pid),
             // process-compose uses -1 to indicate
             // that the process was stopped _by process-compose_.
             // for running services, process-compose will set the exit code to 0,
@@ -97,10 +128,14 @@ impl From<ProcessState> for ProcessStateDisplay {
 impl ProcessStateDisplay {
     /// Formats the PID for display to indicate whether it's currently running.
     fn pid_display(&self) -> String {
-        if self.is_running {
-            self.pid.to_string()
+        if let Some(pid) = self.pid {
+            if self.is_running {
+                pid.to_string()
+            } else {
+                format!("[{}]", pid)
+            }
         } else {
-            format!("[{}]", self.pid)
+            String::new()
         }
     }
 }
