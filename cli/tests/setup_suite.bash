@@ -321,50 +321,6 @@ xdg_tmp_setup() {
 
 # ---------------------------------------------------------------------------- #
 
-# Set variables related to `pkgdb' settings.
-pkgdb_vars_setup() {
-  if [[ -n ${__FT_RAN_PKGDB_VARS_SETUP-} ]]; then return 0; fi
-
-  export _PKGDB_TEST_SUITE_MODE=:
-
-  # This revision is a bit old, but it was created from `release-23.05'.
-  # Notably its default `nodejs' version is `18.16.0' which is referenced in
-  # some test cases.
-  TEST_NIXPKGS_REV_OLD='e8039594435c68eb4f780f3e9bf3972a7399c4b1'
-  NODEJS_VERSION_OLD="18.16.0"
-  export NODEJS_VERSION_OLD
-
-  # A revision of release-23.11
-  TEST_NIXPKGS_REV_NEW='ab5fd150146dcfe41fda501134e6503932cc8dfd'
-  NODEJS_VERSION_NEW="18.18.2"
-  export NODEJS_VERSION_NEW
-  # This revision is even older than OLD, selected for the purpose of serving up
-  # a different and incompatible version of glibc (2.34) than the latest (2.37).
-  # This could probably replace the TEST_NIXPKGS_REV_OLD revision with a
-  # refactoring of other test data but we'll tackle that in a separate effort.
-  TEST_NIXPKGS_REV_OLDER='bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3'
-
-  TEST_NIXPKGS_REF_OLD="github:NixOS/nixpkgs/$TEST_NIXPKGS_REV_OLD"
-  TEST_NIXPKGS_REF_NEW="github:NixOS/nixpkgs/$TEST_NIXPKGS_REV_NEW"
-
-  TEST_NIXPKGS_NAR_HASH_OLD="sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8="
-  TEST_NIXPKGS_NAR_HASH_NEW="sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4="
-
-
-  export \
-    TEST_NIXPKGS_REV_OLD \
-    TEST_NIXPKGS_REV_NEW \
-    TEST_NIXPKGS_REV_OLDER \
-    TEST_NIXPKGS_REF_OLD \
-    TEST_NIXPKGS_REF_NEW \
-    TEST_NIXPKGS_NAR_HASH_OLD \
-    TEST_NIXPKGS_NAR_HASH_NEW
-
-  export __FT_RAN_PKGDB_VARS_SETUP=:
-}
-
-# ---------------------------------------------------------------------------- #
-
 # This helper should be run after setting `FLOX_TEST_HOME'.
 flox_vars_setup() {
   xdg_vars_setup
@@ -444,8 +400,7 @@ common_suite_setup() {
   # TODO: fix gpg setup and re-enable along with `gpgsign.bats' tests.
   #gpg_key_setup;
   gitconfig_setup
-  # setup pkgdb and populate cache
-  pkgdb_vars_setup
+  export TEST_NIXPKGS_REV_NEW='ab5fd150146dcfe41fda501134e6503932cc8dfd'
   {
     print_var FLOX_TEST_HOME
     print_var HOME
@@ -466,9 +421,6 @@ common_suite_setup() {
     print_var GIT_CONFIG_SYSTEM
     print_var GIT_CONFIG_GLOBAL
     print_var TEST_NIXPKGS_REV_NEW
-    print_var TEST_NIXPKGS_REV_OLD
-    print_var TEST_NIXPKGS_REF_NEW
-    print_var TEST_NIXPKGS_REF_OLD
   } >&3
 }
 
