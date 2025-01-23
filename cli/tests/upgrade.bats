@@ -35,18 +35,6 @@ project_teardown() {
   unset TMP_MANIFEST_PATH
 }
 
-assert_old_hello() {
-  run jq -r ".packages.\"$NIX_SYSTEM\".hello.input.attrs.narHash" "$LOCK_PATH"
-  assert_success
-  assert_output "$TEST_NIXPKGS_NAR_HASH_OLD"
-}
-
-assert_new_hello() {
-  run jq -r ".packages.\"$NIX_SYSTEM\".hello.input.attrs.narHash" "$LOCK_PATH"
-  assert_success
-  assert_output "$TEST_NIXPKGS_NAR_HASH_NEW"
-}
-
 # ---------------------------------------------------------------------------- #
 
 setup() {

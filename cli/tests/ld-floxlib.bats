@@ -94,8 +94,7 @@ teardown() {
 @test "test ld-floxlib.so on Linux only" {
   project_setup_catalog
 
-  # Revision TEST_NIXPKGS_REV_OLDER is expected to provide glibc 2.34.
-  # Assert that here before going any further.
+  # Assert we have glibc 2.34
   run "$FLOX_BIN" list
   assert_success
   assert_output --partial "glibc: glibc (2.34-210)"
