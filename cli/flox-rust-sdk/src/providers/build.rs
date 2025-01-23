@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -5,10 +6,12 @@ use std::sync::mpsc::Receiver;
 use std::sync::LazyLock;
 use std::{env, thread};
 
+use serde::Deserialize;
+use tempfile::NamedTempFile;
 use thiserror::Error;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
-use super::buildenv::BuildEnvOutputs;
+use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
 use crate::utils::CommandExt;
@@ -59,6 +62,9 @@ pub enum ManifestBuilderError {
     #[error("failed to call package builder: {0}")]
     CallBuilderError(#[source] std::io::Error),
 
+    #[error("failed to create file for build results")]
+    CreateBuildResultFile(#[source] std::io::Error),
+
     #[error("failed to clean up build artifacts: {stderr}")]
     RunClean {
         stdout: String,
@@ -67,13 +73,32 @@ pub enum ManifestBuilderError {
     },
 }
 
+#[derive(Debug)]
 pub enum Output {
     /// A line of stdout output from the build process.
     Stdout(String),
     /// A line of stderr output from the build process.
     Stderr(String),
-    /// The build process has exited with the given status.
-    Exit(ExitStatus),
+    /// The build process has successfully and produced the given [BuildResults].
+    Success(BuildResults),
+    /// The build process has failed with the given exit status.
+    /// On error `flox-build.mk` will not produce a build result file,
+    /// so we don't have build results to return.
+    /// Todo: we may want to recombine [Output::Failure] and [Output::Success]
+    /// eventually if `flox-build.mk` is updated to always produce a build result file,
+    /// e.g. containing error context for the failing builds.
+    Failure(ExitStatus),
+}
+
+#[derive(Debug, PartialEq, Deserialize, Default, derive_more::Deref)]
+pub struct BuildResults(Vec<BuildResult>);
+
+#[derive(Debug, PartialEq, Deserialize)]
+pub struct BuildResult {
+    pub pname: String,
+    pub outputs: HashMap<String, BuiltStorePath>,
+    pub version: String,
+    pub log: BuiltStorePath,
 }
 
 /// Output received from an ongoing build process.
@@ -147,17 +172,25 @@ impl ManifestBuilder for FloxBuildMk {
         ));
         command.arg(format!("FLOX_INTERPRETER={}", flox_interpreter.display()));
 
-        // Add build target arguments by prefixing the package names with "build/".
-        // If no packages are specified, build all packages.
-        // While the default target is "build", we explicitly specify it here
-        // to avoid unintentional changes in behavior.
-        if packages.is_empty() {
-            let build_all_target = "build";
-            command.arg(build_all_target);
-        } else {
-            let build_targets = packages.iter().map(|p| format!("build/{p}"));
-            command.args(build_targets);
-        };
+        // Add the list of packages to be built by passing a space-delimited list
+        // of pnames in the PACKAGES variable. If no packages are specified then
+        // the makefile will build all packages by default. Also let the makefile's
+        // .DEFAULT_GOAL define the default behavior in a single consistent place.
+        // We previously attempted to provide a default target here which introduced
+        // the possibility that those might not match.
+        command.arg(format!("PACKAGES={}", packages.join(" ")));
+        command.arg("build");
+
+        let build_result_path = NamedTempFile::new_in(&flox.temp_dir)
+            .map_err(ManifestBuilderError::CreateBuildResultFile)?
+            .into_temp_path();
+
+        // SAFETY: according to the docs, this is fallible on _Windows_
+        let build_result_path = build_result_path
+            .keep()
+            .expect("failed to keep build result fifo");
+
+        command.arg(format!("BUILD_RESULT_FILE={}", build_result_path.display()));
 
         // activate needs this var
         // TODO: we should probably figure out a more consistent way to pass
@@ -192,7 +225,33 @@ impl ManifestBuilder for FloxBuildMk {
 
         thread::spawn(move || {
             let status = child.wait().expect("failed to wait on child");
-            let _ = command_status_sender.send(Output::Exit(status));
+
+            // `flox-build.mk` will not produce/write to a build result file on failure.
+            if !status.success() {
+                let _ = command_status_sender.send(Output::Failure(status));
+                return;
+            }
+
+            // TODO: should we bubble up errors through the channel?
+            let build_results = 'results: {
+                let build_results = match std::fs::read_to_string(&build_result_path) {
+                    Ok(build_results) => build_results,
+                    Err(e) => {
+                        error!("failed to read build results file at {build_result_path:?}: {e}");
+                        break 'results BuildResults::default();
+                    },
+                };
+
+                match serde_json::from_str(&build_results) {
+                    Ok(build_results) => build_results,
+                    Err(e) => {
+                        error!("failed to parse build results: {e}");
+                        BuildResults::default()
+                    },
+                }
+            };
+
+            let _ = command_status_sender.send(Output::Success(build_results));
         });
 
         Ok(BuildOutput { receiver })
@@ -303,8 +362,9 @@ pub mod test_helpers {
         parent.join(format!("result-{package}-buildCache"))
     }
 
-    #[derive(Default, Debug, Clone, PartialEq)]
+    #[derive(Default, Debug, PartialEq)]
     pub struct CollectedOutput {
+        pub build_results: Option<BuildResults>,
         pub stdout: String,
         pub stderr: String,
     }
@@ -329,27 +389,36 @@ pub mod test_helpers {
             )
             .unwrap();
 
-        let mut output = CollectedOutput::default();
+        let mut output_stdout = String::new();
+        let mut output_stderr = String::new();
+        let mut output_build_results = None;
         for message in output_stream {
             match message {
-                Output::Exit(status) => match expect_success {
-                    true => assert!(status.success()),
-                    false => assert!(!status.success()),
+                Output::Success(build_results) => {
+                    assert!(expect_success, "expected build to fail");
+                    let _ = output_build_results.insert(build_results);
+                },
+                Output::Failure(_) => {
+                    assert!(!expect_success, "expected build to succeed");
                 },
                 Output::Stdout(line) => {
                     println!("stdout: {line}"); // To debug failing tests
-                    output.stdout.push_str(&line);
-                    output.stdout.push('\n');
+                    output_stdout.push_str(&line);
+                    output_stdout.push('\n');
                 },
                 Output::Stderr(line) => {
                     println!("stderr: {line}"); // To debug failing tests
-                    output.stderr.push_str(&line);
-                    output.stderr.push('\n');
+                    output_stderr.push_str(&line);
+                    output_stderr.push('\n');
                 },
             }
         }
 
-        output
+        CollectedOutput {
+            build_results: output_build_results,
+            stdout: output_stdout,
+            stderr: output_stderr,
+        }
     }
 
     pub fn assert_clean_success(flox: &Flox, env: &mut PathEnvironment, package_names: &[&str]) {
@@ -1567,8 +1636,11 @@ mod tests {
             let mut env = new_path_environment(&flox, &manifest);
             let env_path = env.parent_path().unwrap();
             let _git = GitCommandProvider::init(&env_path, false).unwrap();
-            assert_build_status(&flox, &mut env, &pname, true);
+            let collected = assert_build_status(&flox, &mut env, &pname, true);
             let result_path = env_path.join(format!("result-{pname}"));
+            let build_results = collected.build_results.unwrap();
+            assert_eq!(build_results.len(), 1);
+            assert_eq!(build_results[0].version, version);
             let realpath = std::fs::read_link(&result_path).unwrap();
             assert_derivation_metadata_propagated(&["env", "version"], &version, &realpath);
         }

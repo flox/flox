@@ -126,7 +126,7 @@ impl Build {
             match message {
                 Output::Stdout(line) => println!("{line}"),
                 Output::Stderr(line) => eprintln!("{line}"),
-                Output::Exit(status) if status.success() => {
+                Output::Success { .. } => {
                     let current_dir = env::current_dir()
                         .context("could not get current directory")?
                         .canonicalize()
@@ -149,7 +149,7 @@ impl Build {
                     }
                     break;
                 },
-                Output::Exit(status) => {
+                Output::Failure(status) => {
                     bail!("Build failed with status: {status}");
                 },
             }
