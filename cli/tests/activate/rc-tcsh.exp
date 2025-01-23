@@ -4,6 +4,8 @@
 set dir [lindex $argv 0]
 set flox $env(FLOX_BIN)
 set env(NO_COLOR) 1
+set env(TERM) xterm-mono
+set stty_init "cols 1000"
 
 set timeout 300
 spawn $flox activate --dir $dir

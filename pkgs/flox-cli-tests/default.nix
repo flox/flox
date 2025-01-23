@@ -30,6 +30,7 @@
   jq,
   man,
   nix,
+  ncurses,
   yq,
   openssh,
   parallel,
@@ -81,6 +82,7 @@ let
       gnutar
       jq
       man
+      ncurses
       nix
       openssh
       parallel

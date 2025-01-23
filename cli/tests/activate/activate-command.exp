@@ -5,6 +5,8 @@ set command [lindex $argv 1]
 set flox $env(FLOX_BIN)
 set timeout 10
 set env(NO_COLOR) 1
+set env(TERM) xterm-mono
+set stty_init "cols 1000"
 
 spawn $flox activate --dir $dir
 expect_after {
