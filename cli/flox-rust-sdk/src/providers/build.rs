@@ -175,10 +175,7 @@ impl ManifestBuilder for FloxBuildMk {
 
         // Add the list of packages to be built by passing a space-delimited list
         // of pnames in the PACKAGES variable. If no packages are specified then
-        // the makefile will build all packages by default. Also let the makefile's
-        // .DEFAULT_GOAL define the default behavior in a single consistent place.
-        // We previously attempted to provide a default target here which introduced
-        // the possibility that those might not match.
+        // the makefile will build all packages by default.
         command.arg(format!("PACKAGES={}", packages.join(" ")));
 
         let build_result_path = NamedTempFile::new_in(&flox.temp_dir)
