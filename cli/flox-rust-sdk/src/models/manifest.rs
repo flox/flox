@@ -1042,11 +1042,11 @@ pub enum ManifestBuildSandbox {
     Pure,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestContainerize {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<ManifestContainerizeConfig>,
 }
 
@@ -1055,6 +1055,7 @@ pub struct ManifestContainerize {
 ///
 /// Env and Entrypoint are left out since they interfere with our activation implementation
 /// Deprecated and reserved keys are also left out
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
@@ -1065,35 +1066,28 @@ pub struct ManifestContainerizeConfig {
     /// For Linux based systems, all of the following are valid: `user`, `uid`, `user:group`, `uid:gid`, `uid:group`, `user:gid`.
     /// If `group`/`gid` is not specified, the default group and supplementary groups of the given `user`/`uid` in `/etc/passwd` and `/etc/group` from the container are applied.
     /// If `group`/`gid` is specified, supplementary groups from the container are ignored.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
     /// A set of ports to expose from a container running this image.
     /// Its keys can be in the format of:
     /// `port/tcp`, `port/udp`, `port` with the default protocol being `tcp` if not specified.
     /// These values act as defaults and are merged with any specified when creating a container.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exposed_ports: Option<BTreeSet<String>>,
     /// Default arguments to the entrypoint of the container.
     /// These values act as defaults and may be replaced by any specified when creating a container.
     /// Flox sets an entrypoint to activate the containerized environment,
     /// and `cmd` is then run inside the activation, similar to
     /// `flox activate -- cmd`.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub cmd: Option<Vec<String>>,
     /// A set of directories describing where the process is
     /// likely to write data specific to a container instance.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub volumes: Option<BTreeSet<String>>,
     /// Sets the current working directory of the entrypoint process in the container.
     /// This value acts as a default and may be replaced by a working directory specified when creating a container.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub working_dir: Option<String>,
     /// This field contains arbitrary metadata for the container.
     /// This property MUST use the [annotation rules](https://github.com/opencontainers/image-spec/blob/main/annotations.md#rules).
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub labels: Option<BTreeMap<String, String>>,
     /// This field contains the system call signal that will be sent to the container to exit. The signal can be a signal name in the format `SIGNAME`, for instance `SIGKILL` or `SIGRTMIN+3`.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_signal: Option<String>,
 }
 
