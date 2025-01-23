@@ -764,6 +764,7 @@ pub struct ManifestPackageDescriptorFlake {
     pub(crate) systems: Option<Vec<System>>,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
@@ -907,6 +908,7 @@ impl ManifestServices {
 }
 
 /// The definition of a service in a manifest
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
@@ -1009,6 +1011,7 @@ impl ManifestBuild {
 }
 
 /// The definition of a package built from within the environment
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
@@ -2345,6 +2348,32 @@ pub(super) mod test {
             let toml = toml_edit::ser::to_string(&manifest).unwrap();
             let parsed = toml_edit::de::from_str::<Manifest>(&toml).unwrap();
             prop_assert_eq!(manifest, parsed);
+        }
+    }
+
+    fn has_null_fields(json_str: &str) -> bool {
+        type Value = serde_json::Value;
+        let json_value: Value = serde_json::from_str(json_str).unwrap();
+
+        // Recursively check if any field in the JSON is `null`
+        fn check_for_null(value: &Value) -> bool {
+            match value {
+                Value::Null => true,
+                Value::Object(map) => map.values().any(check_for_null),
+                Value::Array(arr) => arr.iter().any(check_for_null),
+                _ => false,
+            }
+        }
+
+        check_for_null(&json_value)
+    }
+
+    // Null fields rendered into the lockfile cause backwards-compatibility issues for new fields.
+    proptest! {
+        #[test]
+        fn manifest_does_not_serialize_null_fields(manifest in any::<Manifest>()) {
+            let json_str = serde_json::to_string_pretty(&manifest).unwrap();
+            prop_assert!(!has_null_fields(&json_str), "json: {}", &json_str);
         }
     }
 
