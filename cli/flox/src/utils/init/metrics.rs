@@ -81,7 +81,7 @@ pub fn init_telemetry_uuid(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pat
 
           environment: FLOX_DISABLE_METRICS=true
             user-wide: flox config --set-bool disable_metrics true
-          system-wide: update /etc/flox.toml as described in flox(1)
+          system-wide: update /etc/flox.toml as described in flox-config(1)
 
         This is a one-time notice.
 
