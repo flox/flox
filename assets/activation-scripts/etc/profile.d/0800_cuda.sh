@@ -62,8 +62,6 @@ activate_cuda() {
     --symbolic \
     --force \
     --target-directory="$LIB_DIR"
-
-  export FLOX_ENV_LIB_DIRS="$FLOX_ENV_LIB_DIRS":"$LIB_DIR"
 }
 
 activate_cuda "/" "$_ldconfig"

@@ -42,9 +42,10 @@ BEGIN {
   # subshells.
   new_flox_env_dirs = prepend_if_not_found(ENVIRON["FLOX_ENV"], ENVIRON["FLOX_ENV_DIRS"])
 
-  # The FLOX_ENV_LIB_DIRS variable is a direct translation of the FLOX_ENV_DIRS
-  # variable but with each directory having "/lib" appended to it.
-  new_flox_env_lib_dirs = append_dirs("/lib", new_flox_env_dirs)
+  # The FLOX_ENV_LIB_DIRS variable is derived from the FLOX_ENV_DIRS variable
+  # by appending a "/lib" to each directory in FLOX_ENV_DIRS variable, and
+  # appending the ".flox/lib" path from each directory in FLOX_ENV_DIRS.
+  new_flox_env_lib_dirs = mk_flox_env_lib_dirs(new_flox_env_dirs)
 
   # Calculate the values to be prepended to the PATH and MANPATH variables.
   # First add directories found in FLOX_ENV_DIRS, then add the current value
@@ -131,16 +132,33 @@ BEGIN {
 # So the presence of "extra" parameters in the following function
 # definitions is intentional and for declaring local variables.
 
-function append_dirs(string, path, _path_array, _result, i)
+function dot_flox_from_flox_env_path(flox_env_path, _dot_flox_path, _n_segments, _segments_array, i)
+{
+  # local variables: _dot_flox_path, _n_segments, _segments_array, i
+  _dot_flox_path = ""
+  _n_segments = split(flox_env_path, _segments_array, "/")
+  if (_n_segments > 2) {
+    for (i = 1; i <= _n_segments - 2; i++) {
+      _dot_flox_path = _dot_flox_path (i > 1 ? "/" : "") _segments_array[i]
+    }
+  } else {
+    # If the path is less than 3 path segments, we can't drop the last two path
+    # segments, so just return the whole thing. I really hope this never
+    # becomes an issue in practice.
+    _dot_flox_path = flox_env_path
+  }
+  return _dot_flox_path
+}
+
+function mk_flox_env_lib_dirs(joined_flox_env_dirs, _path_array, _flox_env_lib_path, _dot_flox_lib_path, result, i)
 {
   # local variables: _path_array, _result, i
   _result = ""
-  for (i = 1; i <= split(path, _path_array, ":"); i++) {
-    if (_result == "") {
-      _result = _path_array[i] string
-    } else {
-      _result = _result ":" _path_array[i] string
-    }
+  for (i = 1; i <= split(joined_flox_env_dirs, _path_array, ":"); i++) {
+    _dot_flox_lib_path = dot_flox_from_flox_env_path(_path_array[i]) "/lib"
+    _flox_env_lib_path = _path_array[i] "/lib"
+    # Only prepend the ":" separator if there are already contents in "_result"
+    _result = _result (i > 1 ? ":" : "") _flox_env_lib_path ":" _dot_flox_lib_path
   }
   return _result
 }
