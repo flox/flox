@@ -168,3 +168,12 @@ teardown() {
     "${TESTS_DIR}/cuda/ldconfig-mock-present.sh"
   assert_success
 }
+
+# Even if we successfully link the libraries to the right location (.flox/lib)
+# CUDA acceleration will fail if that directory isn't added to FLOX_ENV_LIB_DIRS
+@test "linked cuda library location present in FLOX_ENV_LIB_DIRS" {
+  dot_flox_lib="$PWD/.flox/lib"
+  run "$FLOX_BIN" activate -- bash -c 'echo "$FLOX_ENV_LIB_DIRS"'
+  assert_success
+  assert_output --partial "$dot_flox_lib"
+}
