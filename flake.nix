@@ -190,6 +190,7 @@
           rust-external-deps
           rust-internal-deps
           floxDevelopmentPackages
+          t3
           ;
 
         default = pkgs.flox;

@@ -22,6 +22,7 @@
   flox-nix-plugins,
   stdenv,
   ci ? false,
+  t3,
 }:
 let
   # For use in GitHub Actions and local development.
@@ -86,7 +87,7 @@ mkShell (
       flox-activations
     ];
 
-    packages = ciPackages ++ lib.optionals (!ci) devPackages;
+    packages = [ t3 ] ++ ciPackages ++ lib.optionals (!ci) devPackages;
 
     shellHook =
       pre-commit-check.shellHook
