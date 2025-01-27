@@ -31,7 +31,7 @@ $ just test-all;
 
 CI can only be run against the flox/flox repository - it can't be run on forks.
 To run CI on external contributions, a maintainer will have to fetch the branch
-for a PR and push it to a branch in the flox/flox repo.
+for a PR and force push it to the `community-CI` branch in the flox/flox repo.
 The maintainer reviewing a PR will run CI after approving the PR.
 If you ever need a run triggered, feel free to ping your reviewer!
 
