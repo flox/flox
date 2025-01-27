@@ -1034,7 +1034,7 @@ pub struct ManifestBuildDescriptor {
 }
 
 /// The definition of a package built from within the environment
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, derive_more::Display)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 pub enum ManifestBuildSandbox {

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -6,7 +5,8 @@ use std::sync::mpsc::Receiver;
 use std::sync::LazyLock;
 use std::{env, thread};
 
-use serde::Deserialize;
+use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 use thiserror::Error;
 use tracing::{debug, error, warn};
@@ -90,13 +90,15 @@ pub enum Output {
     Failure(ExitStatus),
 }
 
-#[derive(Debug, PartialEq, Deserialize, Default, derive_more::Deref)]
+#[derive(
+    Debug, PartialEq, Deserialize, Serialize, Default, derive_more::Deref, derive_more::From,
+)]
 pub struct BuildResults(Vec<BuildResult>);
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub struct BuildResult {
     pub pname: String,
-    pub outputs: HashMap<String, BuiltStorePath>,
+    pub outputs: IndexMap<String, BuiltStorePath>,
     pub version: String,
     pub log: BuiltStorePath,
 }
