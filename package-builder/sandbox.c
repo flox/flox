@@ -9,7 +9,7 @@
  * set in the environment, and we do this when wrapping files in the bin
  * directory in the course of performing a manifest build.
  *
- * As with the parsing of FLOX_ENV_LIB_DIRS, it is essential that this parsing
+ * As with the parsing of FLOX_ENV_DIRS, it is essential that this parsing
  * of the closure be performant and initialized only once per invocation, so we
  * start by reading closure paths into a btable from $FLOX_ENV/requisites.txt.
  */

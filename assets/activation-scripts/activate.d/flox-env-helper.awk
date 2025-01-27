@@ -42,10 +42,6 @@ BEGIN {
   # subshells.
   new_flox_env_dirs = prepend_if_not_found(ENVIRON["FLOX_ENV"], ENVIRON["FLOX_ENV_DIRS"])
 
-  # The FLOX_ENV_LIB_DIRS variable is a direct translation of the FLOX_ENV_DIRS
-  # variable but with each directory having "/lib" appended to it.
-  new_flox_env_lib_dirs = append_dirs("/lib", new_flox_env_dirs)
-
   # Calculate the values to be prepended to the PATH and MANPATH variables.
   # First add directories found in FLOX_ENV_DIRS, then add the current value
   # of FLOX_ENV. Don't worry about duplicating the FLOX_ENV directory as
@@ -93,22 +89,18 @@ BEGIN {
   flox_shell_basename = basename(ARGV[1])
   if (flox_shell_basename == "bash") {
     print "export FLOX_ENV_DIRS=\"" new_flox_env_dirs "\";"
-    print "export FLOX_ENV_LIB_DIRS=\"" new_flox_env_lib_dirs "\";"
     print "export PATH=\"" new_path "\";"
     print "export MANPATH=\"" new_manpath "\";"
   } else if (flox_shell_basename == "tcsh") {
     print "setenv FLOX_ENV_DIRS \"" new_flox_env_dirs "\";"
-    print "setenv FLOX_ENV_LIB_DIRS \"" new_flox_env_lib_dirs "\";"
     print "setenv PATH \"" new_path "\";"
     print "setenv MANPATH \"" new_manpath "\";"
   } else if (flox_shell_basename == "fish") {
     print "set -gx FLOX_ENV_DIRS \"" new_flox_env_dirs "\";"
-    print "set -gx FLOX_ENV_LIB_DIRS \"" new_flox_env_lib_dirs "\";"
     print "set -gx PATH \"" new_path "\";"
     print "set -gx MANPATH \"" new_manpath "\";"
   } else if (flox_shell_basename == "zsh") {
     print "export FLOX_ENV_DIRS=\"" new_flox_env_dirs "\";"
-    print "export FLOX_ENV_LIB_DIRS=\"" new_flox_env_lib_dirs "\";"
     print "export PATH=\"" new_path "\";"
     print "export MANPATH=\"" new_manpath "\";"
   } else {
@@ -130,20 +122,6 @@ BEGIN {
 #
 # So the presence of "extra" parameters in the following function
 # definitions is intentional and for declaring local variables.
-
-function append_dirs(string, path, _path_array, _result, i)
-{
-  # local variables: _path_array, _result, i
-  _result = ""
-  for (i = 1; i <= split(path, _path_array, ":"); i++) {
-    if (_result == "") {
-      _result = _path_array[i] string
-    } else {
-      _result = _result ":" _path_array[i] string
-    }
-  }
-  return _result
-}
 
 function basename(file, _a, _n)
 {

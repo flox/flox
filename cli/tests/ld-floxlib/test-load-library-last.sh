@@ -5,8 +5,8 @@
 # assertion (-e) and be verbose about it (-x).
 set -ex
 
-# FLOX_ENV_LIB_DIRS is defined
-test -n "$FLOX_ENV_LIB_DIRS"
+# FLOX_ENV_DIRS is defined
+test -n "$FLOX_ENV_DIRS"
 
 # LD_AUDIT is defined, exists and points to ld-floxlib.so
 test -e "$LD_AUDIT"
