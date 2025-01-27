@@ -27,10 +27,10 @@ export \
 
 # ---------------------------------------------------------------------------- #
 
-if [ -n "${FLOX_ENV_LIB_DIRS:-}" ]; then
+if [ -n "${FLOX_ENV_DIRS:-}" ]; then
   case "$($_uname -s)" in
     Linux*)
-      # N.B. ld-floxlib.so makes use of FLOX_ENV_LIB_DIRS directly.
+      # N.B. ld-floxlib.so makes use of FLOX_ENV_DIRS directly.
       LD_FLOXLIB="${LD_FLOXLIB:-$_ld_floxlib_so}"
       if [ -z "${FLOX_NOSET_LD_AUDIT:-}" ] && [ -e "$LD_FLOXLIB" ]; then
         LD_AUDIT="$LD_FLOXLIB"
@@ -39,7 +39,15 @@ if [ -n "${FLOX_ENV_LIB_DIRS:-}" ]; then
       ;;
     Darwin*)
       if [ -z "${FLOX_NOSET_DYLD_FALLBACK_LIBRARY_PATH:-}" ]; then
-        DYLD_FALLBACK_LIBRARY_PATH="$FLOX_ENV_LIB_DIRS:${DYLD_FALLBACK_LIBRARY_PATH:-/usr/local/lib:/usr/lib}"
+        # Calculate a list of FLOX_ENV directories with "/lib" appended.
+        _flox_env_lib_dirs=""
+        _ifs_orig="$IFS"
+        IFS=:
+        for dir in $FLOX_ENV_DIRS; do
+          _flox_env_lib_dirs="${_flox_env_lib_dirs:+${_flox_env_lib_dirs}:}$dir/lib"
+        done
+        IFS="$_ifs_orig"
+        DYLD_FALLBACK_LIBRARY_PATH="$_flox_env_lib_dirs:${DYLD_FALLBACK_LIBRARY_PATH:-/usr/local/lib:/usr/lib}"
         export DYLD_FALLBACK_LIBRARY_PATH
       fi
       ;;

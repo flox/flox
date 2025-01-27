@@ -7,28 +7,39 @@ LDCONFIG_MOCK="${2}"
 # Get the function without executing it all.
 _FLOX_ENV_CUDA_DETECTION=0 source "${FLOX_ENV}/etc/profile.d/0800_cuda.sh"
 
-LIBS_BEFORE="$FLOX_ENV_LIB_DIRS"
+LD_FLOXLIB_FILES_PATH_BEFORE="${LD_FLOXLIB_FILES_PATH:-}"
 activate_cuda "${FHS_ROOT}" "${LDCONFIG_MOCK}"
-LIBS_AFTER="$FLOX_ENV_LIB_DIRS"
+LD_FLOXLIB_FILES_PATH_AFTER="${LD_FLOXLIB_FILES_PATH:-}"
 
-if [[ "$LIBS_AFTER" == "$LIBS_BEFORE" ]]; then
+if [[ "$LD_FLOXLIB_FILES_PATH_AFTER" == "$LD_FLOXLIB_FILES_PATH_BEFORE" ]]; then
     set +x # make it easier to read the comparison
-    echo "FLOX_ENV_LIB_DIRS was not modified and it should have been"
-    echo "  before: ${LIBS_BEFORE}"
-    echo "  after:  ${LIBS_AFTER}"
+    echo "LD_FLOXLIB_FILES_PATH was not modified and it should have been"
+    echo "  before: ${LD_FLOXLIB_FILES_PATH_BEFORE}"
+    echo "  after:  ${LD_FLOXLIB_FILES_PATH_AFTER}"
     exit 1
 fi
 
-# Assert directory presence and list contents to help debug test failures.
-ls -al "${FLOX_ENV_PROJECT}/.flox/lib"
+# Assert LD_FLOXLIB_FILES_PATH_AFTER is not empty and list its contents
+# to help debug test failures.
+[ -n "$LD_FLOXLIB_FILES_PATH_AFTER" ]
+echo "LD_FLOXLIB_FILES_PATH_AFTER=$LD_FLOXLIB_FILES_PATH_AFTER"
 
 # Non-exhaustive selection of patterns from the mock output.
 # NB: libdxcore isn't covered by the mock.
-[ -L "${FLOX_ENV_PROJECT}/.flox/lib/libcuda.so" ]
-[ -L "${FLOX_ENV_PROJECT}/.flox/lib/libcuda.so.1" ]
-[ -L "${FLOX_ENV_PROJECT}/.flox/lib/libcudart.so" ]
-[ -L "${FLOX_ENV_PROJECT}/.flox/lib/libcudart.so.12" ]
-[ -L "${FLOX_ENV_PROJECT}/.flox/lib/libnvidia-ml.so" ]
-[ -L "${FLOX_ENV_PROJECT}/.flox/lib/libnvidia-ml.so.1" ]
-[ -L "${FLOX_ENV_PROJECT}/.flox/lib/libnvidia-nvvm.so" ]
-[ -L "${FLOX_ENV_PROJECT}/.flox/lib/libnvidia-nvvm.so.4" ]
+declare -a expected=(
+  "libcuda.so"
+  "libcuda.so.1"
+  "libcudart.so"
+  "libcudart.so.12"
+  "libnvidia-ml.so"
+  "libnvidia-ml.so.1"
+  "libnvidia-nvvm.so"
+  "libnvidia-nvvm.so.4"
+)
+IFS=":"
+for pattern in "${expected[@]}"; do
+  echo "Checking for ${pattern}" 1>&2
+  echo $LD_FLOXLIB_FILES_PATH_AFTER \
+    | xargs -n 1 basename | grep "^${pattern}$" > /dev/null \
+    || { echo "Failed to find ${pattern}" 1>&2; exit 1; }
+done

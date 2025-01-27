@@ -523,8 +523,7 @@ Semver ::= {
 :   Whether to detect CUDA libraries and provide them to the environment.
     The default is `true`.
     When enabled, Flox will detect if you have an Nvidia device and attempt to
-    locate `libcuda` in well-known paths. Then it will symlink the libraries
-    into `.flox/lib` and add that path to `FLOX_ENV_LIB_DIRS`.
+    locate `libcuda` in well-known paths.
 
 # SEE ALSO
 [`flox-init(1)`](./flox-init.md),

@@ -17,7 +17,8 @@ bats_require_minimum_version '1.5.0'
 # back into test activations.
 unset_flox_env_setup() {
   for var in $(env | awk -F= '{print $1}'); do
-    if [[ $var == FLOX_ENV* || $var == _FLOX_ENV* ]]; then
+    if [[ $var == FLOX_ENV* || $var == _FLOX_ENV* || $var == LD_FLOXLIB_* ]];
+    then
       unset "$var"
     fi
   done

@@ -12,7 +12,7 @@
 # * curl, libarchive (runtime libraries required by libnixmain.so)
 #
 # It then activates the env to perform three distinct tests:
-# 1: load libraries found in $FLOX_ENV_LIB_DIRS last, i.e. don't use env-
+# 1: load libraries found in $FLOX_ENV_DIRS last, i.e. don't use env-
 #    provided libraries in preference to ones available on the system
 #   - invoke /bin/sh
 #   - confirm that the one version of glibc present in the namespace is
@@ -103,7 +103,7 @@ teardown() {
   assert_success
   assert_output --partial -- "-glibc-2.34-210/lib/ld-linux-"
 
-  ### Test 1: load libraries found in $FLOX_ENV_LIB_DIRS last
+  ### Test 1: load libraries found in $FLOX_ENV_DIRS last
   run "$FLOX_BIN" activate -- bash ./test-load-library-last.sh
   assert_success
 

@@ -9,11 +9,7 @@ _ldconfig="@iconv@/bin/ldconfig"
 
 activate_cuda() {
   local _find="@findutils@/bin/find"
-  local _ln="@coreutils@/bin/ln"
-  local _mkdir="@coreutils@/bin/mkdir"
   local _nawk="@nawk@/bin/nawk"
-  local _realpath="@coreutils@/bin/realpath"
-  local _xargs="@findutils@/bin/xargs"
   # Strip a trailing or lone slash so that we can construct it later.
   local fhs_root_prefix="${1%/}"
   # Path to ldconfig that can be substituted for testing.
@@ -37,16 +33,20 @@ activate_cuda() {
   fi
 
   # Use system library cache.
+  # shellcheck disable=SC2016
   SYSTEM_LIBS=$(
     { "$ldconfig_bin" --print-cache -C /etc/ld.so.cache 2> /dev/null || echo; } \
-      | "$_nawk" "\$1 ~ /^${lib_pattern}/ { print \$4 }"
+      | "$_nawk" -v lib_pattern="^${lib_pattern}" \
+        'BEGIN {files=""} $1 ~ lib_pattern {files = ( files == "" ? $NF : files ":" $NF)} END {print files}'
   )
 
   # Fallback for NixOS.
   if [ -z "$SYSTEM_LIBS" ]; then
+    # shellcheck disable=SC2016
     SYSTEM_LIBS=$(
       "$_find" "${fhs_root_prefix}/run/opengl-driver" -type f -print 2> /dev/null \
-        | "$_nawk" "/\/${lib_pattern}/ { print }"
+        | "$_nawk" -v lib_pattern="${lib_pattern}" \
+          'BEGIN {files=""} $0 ~ lib_pattern {files = ( files == "" ? $NF : files ":" $NF)} END {print files}'
     )
   fi
 
@@ -55,15 +55,7 @@ activate_cuda() {
     return 0
   fi
 
-  LIB_DIR="$("$_realpath" --no-symlinks "${FLOX_ENV}/../../lib")"
-  "$_mkdir" -p "$LIB_DIR"
-
-  echo "$SYSTEM_LIBS" | "$_xargs" "$_ln" \
-    --symbolic \
-    --force \
-    --target-directory="$LIB_DIR"
-
-  export FLOX_ENV_LIB_DIRS="$FLOX_ENV_LIB_DIRS":"$LIB_DIR"
+  export LD_FLOXLIB_FILES_PATH="${LD_FLOXLIB_FILES_PATH:+${LD_FLOXLIB_FILES_PATH}:}$SYSTEM_LIBS"
 }
 
 activate_cuda "/" "$_ldconfig"

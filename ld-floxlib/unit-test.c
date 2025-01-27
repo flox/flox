@@ -1,7 +1,7 @@
 /*
  * Unit test runner for ld-floxlib.so.
  *
- * By design ld-floxlib only parses FLOX_ENV_LIB_DIRS once per invocation,
+ * By design ld-floxlib only parses FLOX_ENV_DIRS once per invocation,
  * so testing la_objsearch() for various combinations of env and arg input
  * requires multiple invocations. This test program calls the ld-floxlib.so
  * la_objsearch() function with the provided "name" arg and asserts that it
@@ -37,7 +37,7 @@ main( int argc, char **argv )
   assert(la_version(3) != 2);
   assert(la_version(-1) == -1);
 
-  // la_objsearch() searches the contents of the FLOX_ENV_LIB_DIRS
+  // la_objsearch() searches the contents of the FLOX_ENV_DIRS
   // variable looking for library matches, but only when invoked
   // with the LA_SER_DEFAULT flag. Take a moment to ensure all other
   // flags return the input unaltered.
