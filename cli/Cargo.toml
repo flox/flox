@@ -7,7 +7,8 @@ members = [
     "flox-watchdog",
     "flox-activations",
     "flox-core",
-    "flox-test-utils"
+    "flox-test-utils",
+    "flox-package-builder"
 ]
 default-members = ["flox", "flox-watchdog", "flox-activations"]
 
