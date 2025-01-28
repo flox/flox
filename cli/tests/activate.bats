@@ -4198,13 +4198,16 @@ Setting PATH from ${rc_file}"
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
 
+  # Pre-fetch without a timeout.
+  nix build "github:flox/flox/v${FLOX_LATEST_VERSION}"
+
   # Start an activation with the previously released version.
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
   nix run "github:flox/flox/v${FLOX_LATEST_VERSION}" -- \
     activate -- \
     "$shell_path" -c "echo > activate_finished && echo > $TEARDOWN_FIFO" > output 2>&1 &
 
-  # Longer timeout to allow for `nix run`.
+  # Longer timeout to allow for `nix run` locking.
   wait_for_background_activation 15s
   run cat output
   # This the only place we use `--partial` because we only want to know that the
