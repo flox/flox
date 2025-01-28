@@ -1,6 +1,7 @@
 # shellcheck disable=SC2154
 
 _sed="@gnused@/bin/sed"
+_flox_activations="@flox_activations@"
 
 # N.B. the output of
 # these scripts may be eval'd with backticks which have the effect of removing
@@ -37,15 +38,16 @@ generate_fish_startup_commands() {
   echo "set -gx _activate_d '$_activate_d';"
   # Propagate $_flox_activate_tracer to the environment.
   echo "set -gx _flox_activate_tracer '$_flox_activate_tracer';"
-  # Propagate $_flox_env_helper to the environment.
-  echo "set -gx _flox_env_helper '$_flox_env_helper';"
+  # Propagate $_flox_activations to the environment
+  echo "set -gx _flox_activations '$_flox_activations';"
 
   # Set the prompt if we're in an interactive shell.
   echo "if isatty 1; source '$_activate_d/set-prompt.fish'; end;"
 
   # We already customized the PATH and MANPATH, but the user and system
   # dotfiles may have changed them, so finish by doing this again.
-  echo "$_flox_env_helper fish | source;"
+  echo "$_flox_activations set-env-dirs --shell fish --flox-env $FLOX_ENV --env-dirs ${FLOX_ENV_DIRS:-} | source;"
+  echo "$_flox_activations fix-paths --shell fish --env-dirs $FLOX_ENV_DIRS --path $PATH --manpath ${MANPATH:-} | source;"
 
   # Iterate over $FLOX_ENV_DIRS in reverse order and
   # source user-specified profile scripts if they exist.

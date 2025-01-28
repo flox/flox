@@ -78,10 +78,6 @@ runCommandNoCC "flox-activation-scripts"
     chmod +x $out/activate
     patchShebangs $out/activate
 
-    mv $out/activate.d/flox-env-helper.awk $out/activate.d/flox-env-helper
-    chmod +x $out/activate.d/flox-env-helper
-    patchShebangs $out/activate.d/flox-env-helper
-
     mv $out/activate.d/trace.bash $out/activate.d/trace
     chmod +x $out/activate.d/trace
     patchShebangs $out/activate.d/trace
@@ -91,9 +87,7 @@ runCommandNoCC "flox-activation-scripts"
 
     # Replace __OUT__ with the output path for both outputs.
     substituteInPlace $out/activate --replace-fail "__OUT__" "$out"
-    substituteInPlace $out/activate.d/zsh --replace-fail "__OUT__" "$out"
     substituteInPlace $build_wrapper/activate --replace-fail "__OUT__" "$build_wrapper"
-    substituteInPlace $build_wrapper/activate.d/zsh --replace-fail "__OUT__" "$build_wrapper"
 
     # TODO: come up with neater way to master activate script for build_wrapper case.
 

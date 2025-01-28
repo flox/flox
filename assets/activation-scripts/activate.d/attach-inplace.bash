@@ -1,7 +1,9 @@
+# shellcheck disable=SC2154
 "$_flox_activate_tracer" "$_activate_d/attach-inplace.bash" START
 
 expiring_pid="$$"
 # Put a 5 second timeout on the activation
+# shellcheck disable=SC2154
 "$_flox_activations" \
   attach \
   --runtime-dir "$FLOX_RUNTIME_DIR" \
@@ -15,6 +17,7 @@ expiring_pid="$$"
 # these scripts may be eval'd with backticks which have the effect of removing
 # newlines from the output, so we must ensure that the output is a valid shell
 # script fragment when represented on a single line.
+# shellcheck disable=SC2154
 case "$_flox_shell" in
   *bash)
     echo "$_flox_activations  attach --runtime-dir \"$FLOX_RUNTIME_DIR\" --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
@@ -41,7 +44,6 @@ case "$_flox_shell" in
     echo "export FLOX_ZSH_INIT_SCRIPT=\"$_activate_d/zsh\";"
     echo "export _activate_d=\"$_activate_d\";"
     echo "export _flox_activate_tracer=\"$_flox_activate_tracer\";"
-    echo "export _flox_env_helper=\"$_flox_env_helper\";"
     echo "source '$_activate_d/zsh';"
     ;;
   *)
