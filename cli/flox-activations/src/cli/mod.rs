@@ -4,9 +4,13 @@ use attach::AttachArgs;
 use clap::{Parser, Subcommand};
 
 pub mod attach;
+mod fix_paths;
+mod set_env_dirs;
 mod set_ready;
 mod start_or_attach;
 
+use fix_paths::FixPathsArgs;
+use set_env_dirs::SetEnvDirsArgs;
 pub use set_ready::SetReadyArgs;
 pub use start_or_attach::StartOrAttachArgs;
 
@@ -33,6 +37,27 @@ pub enum Command {
     SetReady(SetReadyArgs),
     #[command(about = "Attach to an existing activation.")]
     Attach(AttachArgs),
+    #[command(about = "Print sourceable output fixing PATH and MANPATH for a shell.")]
+    FixPaths(FixPathsArgs),
+    #[command(about = "Print sourceable output setting FLOX_ENV_DIRS.")]
+    SetEnvDirs(SetEnvDirsArgs),
+}
+
+/// Splits PATH-like variables into individual paths, removing any empty strings.
+fn separate_dir_list(joined: &str) -> Vec<PathBuf> {
+    let split = std::env::split_paths(joined).collect::<Vec<_>>();
+    if (split.len() == 1) && (split[0] == PathBuf::from("")) {
+        vec![]
+    } else {
+        split
+    }
+}
+
+fn join_dir_list(dirs: Vec<PathBuf>) -> String {
+    dirs.into_iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join(":")
 }
 
 #[cfg(test)]
