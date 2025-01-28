@@ -17,6 +17,8 @@ fn main() -> Result<(), Error> {
         },
         cli::Command::SetReady(args) => args.handle(runtime_dir)?,
         cli::Command::Attach(args) => args.handle(runtime_dir)?,
+        cli::Command::FixPaths(args) => args.handle()?,
+        cli::Command::SetEnvDirs(args) => args.handle()?,
     }
     Ok(())
 }
