@@ -15,12 +15,24 @@ nix_options := "--extra-experimental-features nix-command \
 INPUT_DATA := "${PWD}/test_data/input_data"
 cargo_test_invocation := "cargo nextest run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
 
+# Set the FLOX_VERSION variable so that it can be used in the build/runtime
+# It's important to add the git revision to the version string,
+# so to that `containerize` can build the correct version of flox in CI.
+# While technically we'd want to add `-dirty` to the version string if the
+# working directory is dirty, we omit this here because in practice
+# it causes tests to fail that expect a FLAKE_VERSION to be "clean",
+# and doesn't add practical information.
+export FLOX_VERSION := shell('cat ./VERSION') + "-g" + shell('git rev-parse --short HEAD')
 
 # ---------------------------------------------------------------------------- #
 
 @_default:
     just --list --unsorted
 
+# ---------------------------------------------------------------------------- #
+
+version:
+    echo "${FLOX_VERSION}"
 
 # ---------------------------------------------------------------------------- #
 
