@@ -7,6 +7,7 @@ use anyhow::{bail, Context, Result};
 use bpaf::{Bpaf, Parser};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::providers::catalog::{self, CatalogQoS};
 use flox_rust_sdk::providers::upgrade_checks::{UpgradeInformation, UpgradeInformationGuard};
 use flox_rust_sdk::utils::CommandExt;
 use serde::de::DeserializeOwned;
@@ -44,8 +45,28 @@ enum ExitBranch {
 
 impl CheckForUpgrades {
     #[instrument(name = "check-upgrade", skip_all)]
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("check-upgrade");
+
+        // For catalog requests made by this command, set the QoS to background.
+        // Eventually we might want to prioritize these requests differently,
+        // since they are not as time-sensitive as the ones actively made by the user.
+        //
+        // @billlevine brought up that if we start mutating the catalog client
+        // or `Flox` object in multiple places, it would be preferable
+        // to do som in a more scoped way and have the changes be reverted at some point [1].
+        // For now, in this command we're modifying the `Flox` object only once
+        // and for the rest of the command's (short) lifetime.
+        // A possible future improvement was sketched out in the comment above [1].
+        //
+        // [1]: <https://github.com/flox/flox/pull/2658#discussion_r1932362747>
+        if let catalog::Client::Catalog(ref mut catalog_client) = flox.catalog_client {
+            catalog_client.update_config(|config| {
+                let (qos_key, qos_value) = CatalogQoS::Background.as_header_pair();
+                config.extra_headers.insert(qos_key, qos_value);
+            });
+        }
+
         self.check_for_upgrades(&flox)?;
         Ok(())
     }
