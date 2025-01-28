@@ -121,7 +121,8 @@ pub enum Client {
 pub struct CatalogClientConfig {
     pub catalog_url: String,
     pub floxhub_token: Option<String>,
-    pub extra_headers: Option<BTreeMap<String, String>>,
+    pub extra_headers: BTreeMap<String, String>,
+}
 }
 
 /// A client for the catalog service.
@@ -189,13 +190,11 @@ impl CatalogClient {
             );
         };
 
-        if let Some(extra_headers) = &config.extra_headers {
-            for (key, value) in extra_headers {
-                header_map.insert(
-                    header::HeaderName::from_str(key).unwrap(),
-                    header::HeaderValue::from_str(value).unwrap(),
-                );
-            }
+        for (key, value) in &config.extra_headers {
+            header_map.insert(
+                header::HeaderName::from_str(key).unwrap(),
+                header::HeaderValue::from_str(value).unwrap(),
+            );
         }
 
         header_map
@@ -1352,7 +1351,7 @@ mod tests {
         CatalogClientConfig {
             catalog_url: url.to_string(),
             floxhub_token: None,
-            extra_headers: None,
+            extra_headers: Default::default(),
         }
     }
 
@@ -1440,7 +1439,7 @@ mod tests {
         let config = CatalogClientConfig {
             catalog_url: server.base_url().to_string(),
             floxhub_token: None,
-            extra_headers: Some(extra_headers),
+            extra_headers,
         };
 
         let client = CatalogClient::new(config);
