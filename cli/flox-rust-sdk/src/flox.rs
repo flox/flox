@@ -15,10 +15,14 @@ use crate::providers::{catalog, flake_installable_locker};
 pub static FLOX_VERSION_STRING: LazyLock<String> =
     LazyLock::new(|| std::env::var("FLOX_VERSION").unwrap_or(env!("FLOX_VERSION").to_string()));
 pub static FLOX_VERSION: LazyLock<FloxVersion> = LazyLock::new(|| {
-    (*FLOX_VERSION_STRING)
-        .parse()
-        // Won't panic since we run flox --version in pkgs/flox/default.nix
-        .expect("Version '{version}' can not be parsed.")
+    let Ok(version) = (*FLOX_VERSION_STRING).parse() else {
+        // Production builds won't panic since we run `flox --version` in pkgs/flox/default.nix.
+        panic!(
+            "Version '{version}' can not be parsed",
+            version = *FLOX_VERSION_STRING
+        )
+    };
+    version
 });
 pub static FLOX_SENTRY_ENV: LazyLock<Option<String>> =
     LazyLock::new(|| std::env::var("FLOX_SENTRY_ENV").ok());
