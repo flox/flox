@@ -51,9 +51,9 @@ pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
                         metrics_headers.insert(k.to_string(), v);
                     }
                 }
-                Some(metrics_headers)
+                metrics_headers
             } else {
-                None
+                Default::default()
             }
         };
 
