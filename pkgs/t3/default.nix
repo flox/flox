@@ -3,17 +3,13 @@
   lib,
   stdenv,
   fetchFromGitHub,
-  t3-src,
+  src,
+  version,
 }:
 
-let
-  pname = "t3";
-  version = "1.0.3";
-  src = t3-src;
-
-in
 stdenv.mkDerivation rec {
-  inherit pname version src;
+  pname = "t3";
+  inherit version src;
 
   installFlags = [
     "PREFIX=$(out)"
