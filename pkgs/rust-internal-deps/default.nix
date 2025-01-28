@@ -41,9 +41,6 @@ let
       # b) use this version of nixpkgs i.e. (nix library utils such as `lib` and `runCommand`)
       COMMON_NIXPKGS_URL = "path:${inputs.nixpkgs.outPath}";
 
-      # The current version of flox being built
-      inherit FLOX_VERSION;
-
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
     }
@@ -66,7 +63,7 @@ in
 (craneLib.buildDepsOnly (
   {
     pname = "flox-internal-deps";
-    version = envs.FLOX_VERSION;
+    version = FLOX_VERSION;
     src = flox-src;
 
     # `buildDepsOnly` replaces the source of _all_ crates in the workspace

@@ -58,9 +58,6 @@ let
       # used internally to ensure CA certificates are available
       NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
-      # The current version of flox being built
-      inherit FLOX_VERSION;
-
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
     }
@@ -84,7 +81,7 @@ in
 craneLib.buildPackage (
   {
     pname = "flox";
-    version = envs.FLOX_VERSION;
+    version = FLOX_VERSION;
     src = flox-src;
 
     # Set up incremental compilation
