@@ -24,7 +24,7 @@
   inputs.fenix.url = "github:nix-community/fenix";
   inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
 
-  inputs.t3-src.url = "github:flox/t3";
+  inputs.t3-src.url = "github:flox/t3/v1.0.7"; # Keep in sync with t3 overlay below.
   inputs.t3-src.flake = false;
 
   # -------------------------------------------------------------------------- #
@@ -57,7 +57,10 @@
           nix = final.callPackage ./pkgs/nix { };
 
           cpp-semver = final.callPackage ./pkgs/cpp-semver { };
-          t3 = final.callPackage ./pkgs/t3 { inherit (inputs) t3-src; };
+          t3 = final.callPackage ./pkgs/t3 {
+            src = inputs.t3-src;
+            version = "1.0.7"; # Keep in sync with input line above.
+          };
         })
         inputs.fenix.overlays.default
       ];
