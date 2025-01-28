@@ -1,5 +1,6 @@
 {
   inputs,
+  lib,
   gnused,
   pkgsFor,
   rust-toolchain,
@@ -8,6 +9,8 @@
   flox-src,
 }:
 let
+  FLOX_VERSION = lib.fileContents ./../../VERSION;
+
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = (inputs.crane.mkLib pkgsFor).overrideToolchain rust-toolchain.toolchain;
 
@@ -17,7 +20,7 @@ in
 craneLib.buildPackage (
   {
     pname = "flox-watchdog";
-    version = envs.FLOX_VERSION;
+    version = FLOX_VERSION;
     src = flox-src;
 
     # Set up incremental compilation
