@@ -14,7 +14,7 @@ const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE: &str = "ghcr.io/flox/flox";
 pub static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
     LazyLock::new(|| env::var("FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
-const CONTAINER_VOLUME_NAME: &str = "flox-nix";
+const CONTAINER_VOLUME_PREFIX: &str = "flox-nix-";
 
 const MOUNT_ENV: &str = "/flox_env";
 const MOUNT_HOME: &str = "/flox_home";
@@ -69,6 +69,15 @@ impl ContainerBuilder for ContainerizeProxy {
                 self.environment_path.to_string_lossy(),
                 MOUNT_ENV
             ),
+        ]);
+
+        let flox_version = &*FLOX_VERSION;
+        let flox_version_tag = format!("v{}", flox_version.base_semver());
+
+        // The cache volume must be unique per Flox version, otherwise store
+        // paths in the container will be shadowed by the cache.
+        let volume_name = format!("{}{}", CONTAINER_VOLUME_PREFIX, flox_version_tag);
+        command.args([
             // From https://docs.docker.com/engine/storage/volumes
             // If you mount an empty volume into a directory in the container in
             // which files or directories exist, these files or directories are
@@ -90,7 +99,7 @@ impl ContainerBuilder for ContainerizeProxy {
             // There are no tests for this behavior since that would just be
             // testing podman and Docker work as expected.
             "--mount",
-            &format!("type=volume,src={},dst=/nix", CONTAINER_VOLUME_NAME),
+            &format!("type=volume,src={},dst=/nix", volume_name),
         ]);
 
         // Honour config from the user's home directory on their host machine if
@@ -117,9 +126,6 @@ impl ContainerBuilder for ContainerizeProxy {
                 &format!("{}={}", FLOX_DISABLE_METRICS_VAR, disable_metrics),
             ]);
         }
-
-        let flox_version = &*FLOX_VERSION;
-        let flox_version_tag = format!("v{}", flox_version.base_semver());
 
         // Use a released Flox container of the same semantic version as a base
         // because it already has:
