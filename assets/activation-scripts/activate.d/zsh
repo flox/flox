@@ -1,7 +1,7 @@
 "$_flox_activate_tracer" "$_activate_d/zsh" START
 
 _sed="@gnused@/bin/sed"
-_flox_env_helper="__OUT__/activate.d/flox-env-helper"
+_flox_activations="@flox_activations@"
 
 # Confirm _flox_activate_tracelevel is defined before proceeding.
 if [ -z "${_flox_activate_tracelevel:=}" ]; then
@@ -74,7 +74,8 @@ fi
 
 # We already customized the PATH and MANPATH, but the user and system
 # dotfiles may have changed them, so finish by doing this again.
-source =("$_flox_env_helper" "zsh")
+source <("$_flox_activations" set-env-dirs --shell zsh --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
+source <("$_flox_activations" fix-paths --shell zsh --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
 
 # Source user-specified profile scripts if they exist.
 # Iterate over $FLOX_ENV_DIRS in reverse order using zsh-specific "(Oa)".

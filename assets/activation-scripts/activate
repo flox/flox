@@ -39,7 +39,6 @@ export _activate_d="__OUT__/activate.d"
 export _profile_d="__OUT__/etc/profile.d"
 export _tcsh_home="__OUT__/activate.d/tcsh_home"
 export _zdotdir="__OUT__/activate.d/zdotdir"
-export _flox_env_helper="__OUT__/activate.d/flox-env-helper"
 
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/generate-bash-startup-commands.bash"
@@ -168,7 +167,9 @@ _FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
 export FLOX_ENV="${FLOX_ENV:-$_FLOX_ENV}"
 
 # shellcheck disable=SC1090
-source <("$_flox_env_helper" "bash")
+source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
+# shellcheck disable=SC1090
+source <("$_flox_activations" fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
 
 # Set a default for _FLOX_ACTIVATE_STORE_PATH for container and build
 # invocations

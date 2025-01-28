@@ -2,6 +2,7 @@
 # shellcheck disable=SC2154
 
 _sed="@gnused@/bin/sed"
+_flox_activations="@flox_activations@"
 
 # N.B. the output of
 # these scripts may be eval'd with backticks which have the effect of removing
@@ -43,15 +44,17 @@ generate_bash_startup_commands() {
   echo "export _activate_d='$_activate_d';"
   # Propagate $_flox_activate_tracer to the environment.
   echo "export _flox_activate_tracer='$_flox_activate_tracer';"
-  # Propagate $_flox_env_helper to the environment.
-  echo "export _flox_env_helper='$_flox_env_helper';"
+  # Propagate $_flox_activations to the environment
+  echo "export _flox_activations='$_flox_activations';"
 
   # Set the prompt if we're in an interactive shell.
   echo "if [ -t 1 ]; then source '$_activate_d/set-prompt.bash'; fi;"
 
   # We already customized the PATH and MANPATH, but the user and system
   # dotfiles may have changed them, so finish by doing this again.
-  echo "eval \"\$($_flox_env_helper bash)\";"
+  # shellcheck disable=SC1090
+  echo "source <('$_flox_activations' set-env-dirs --shell bash --flox-env '$FLOX_ENV' --env-dirs '${FLOX_ENV_DIRS:-}');"
+  echo "source <('$_flox_activations' fix-paths --shell bash --env-dirs '$FLOX_ENV_DIRS' --path '$PATH' --manpath '${MANPATH:-}');"
 
   # Iterate over $FLOX_ENV_DIRS in reverse order and
   # source user-specified profile scripts if they exist.
