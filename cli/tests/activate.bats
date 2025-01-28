@@ -112,6 +112,20 @@ project_teardown() {
   unset PROJECT_NAME
 }
 
+# Wait for a backgrounded activation to start, signalled by a blocking writing
+# to a FIFO file.
+wait_for_background_activation() {
+  timeout="${1:-2s}"
+  fifo_file="activate_finished"
+  output_file="output"
+
+  timeout "$timeout" cat "$fifo_file" || (
+    echo "Background activation did not start within timeout: $timeout" >&2
+    [ -f "$output_file" ] && cat "$output_file" >&2
+    exit 1
+  )
+}
+
 # ---------------------------------------------------------------------------- #
 
 setup() {
@@ -2782,7 +2796,7 @@ attach_runs_hooks_once() {
 
   "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" 2> output &
 
-  timeout 2s cat activate_finished
+  wait_for_background_activation
   run cat output
   assert_output --partial "sourcing hook.on-activate for first time"
   assert_output --partial "hook.on-activate"
@@ -2843,7 +2857,7 @@ attach_runs_profile_twice() {
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
   FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" >> output 2>&1 &
 
-  timeout 2s cat activate_finished
+  wait_for_background_activation
   run cat output
   assert_output --partial "sourcing profile.common"
   assert_output --partial "sourcing profile.$shell"
@@ -2971,7 +2985,7 @@ EOF
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
   FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" >> output 2>&1 &
 
-  timeout 2s cat activate_finished
+  wait_for_background_activation
 
   case "$mode" in
     interactive)
@@ -3087,7 +3101,7 @@ attach_sets_profile_vars() {
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
   FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" &
 
-  timeout 2s cat activate_finished
+  wait_for_background_activation
 
   case "$mode" in
     interactive)
@@ -3279,7 +3293,7 @@ EOF
       ;;
   esac
 
-  timeout 2s cat activate_finished
+  wait_for_background_activation
 
   run cat output
   assert_success
@@ -3563,7 +3577,7 @@ EOF
 
       # vim gets added to MANPATH
       _man=$_man "$FLOX_BIN" activate -d vim -- bash -c "$_man --path vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
-      timeout 2s cat activate_finished
+      wait_for_background_activation
       run cat output
       assert_success
       assert_output "$VIM_MAN"
@@ -3588,7 +3602,7 @@ EOF
 
       # vim gets added to MANPATH
       "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output && echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
-      timeout 2s cat activate_finished
+      wait_for_background_activation
       run cat output
       assert_success
       assert_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
@@ -3635,7 +3649,7 @@ EOF
   refute_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
 
   "$FLOX_BIN" activate -d vim -- bash -c "command -v vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
-  timeout 2s cat activate_finished
+  wait_for_background_activation
 
   run cat output
   assert_success
@@ -4191,7 +4205,7 @@ Setting PATH from ${rc_file}"
     "$shell_path" -c "echo > activate_finished && echo > $TEARDOWN_FIFO" > output 2>&1 &
 
   # Longer timeout to allow for `nix run`.
-  timeout 15s cat activate_finished
+  wait_for_background_activation 15s
   run cat output
   # This the only place we use `--partial` because we only want to know that the
   # intial activation started.
