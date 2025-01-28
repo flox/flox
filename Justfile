@@ -15,12 +15,17 @@ nix_options := "--extra-experimental-features nix-command \
 INPUT_DATA := "${PWD}/test_data/input_data"
 cargo_test_invocation := "cargo nextest run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
 
+export FLOX_VERSION := shell('cat ./VERSION') + "-g" + shell('git rev-parse --short HEAD') + "-dirty"
 
 # ---------------------------------------------------------------------------- #
 
 @_default:
     just --list --unsorted
 
+# ---------------------------------------------------------------------------- #
+
+version:
+    echo "${FLOX_VERSION}"
 
 # ---------------------------------------------------------------------------- #
 
