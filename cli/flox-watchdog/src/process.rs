@@ -251,13 +251,15 @@ pub mod test {
             pid: pid1,
             flox_env: flox_env.clone(),
             store_path: store_path.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id = start_or_attach_pid1.handle(runtime_dir.path()).unwrap();
+        let activation_id = start_or_attach_pid1.handle().unwrap();
         let set_ready_pid1 = SetReadyArgs {
             id: activation_id.clone(),
             flox_env: flox_env.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        set_ready_pid1.handle(runtime_dir.path()).unwrap();
+        set_ready_pid1.handle().unwrap();
 
         let proc2 = start_process();
         let pid2 = proc2.id() as i32;
@@ -265,8 +267,9 @@ pub mod test {
             pid: pid2,
             flox_env: flox_env.clone(),
             store_path: store_path.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id_2 = start_or_attach_pid2.handle(runtime_dir.path()).unwrap();
+        let activation_id_2 = start_or_attach_pid2.handle().unwrap();
         assert_eq!(activation_id, activation_id_2);
 
         let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
@@ -306,13 +309,15 @@ pub mod test {
             pid: pid1,
             flox_env: flox_env.clone(),
             store_path: store_path.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id = start_or_attach_pid1.handle(runtime_dir.path()).unwrap();
+        let activation_id = start_or_attach_pid1.handle().unwrap();
         let set_ready_pid1 = SetReadyArgs {
             id: activation_id.clone(),
             flox_env: flox_env.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        set_ready_pid1.handle(runtime_dir.path()).unwrap();
+        set_ready_pid1.handle().unwrap();
 
         let proc2 = start_process();
         let pid2 = proc2.id() as i32;
@@ -320,8 +325,9 @@ pub mod test {
             pid: pid2,
             flox_env: flox_env.clone(),
             store_path: store_path.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id_2 = start_or_attach_pid2.handle(runtime_dir.path()).unwrap();
+        let activation_id_2 = start_or_attach_pid2.handle().unwrap();
         assert_eq!(activation_id, activation_id_2);
 
         let proc3 = start_process();
@@ -335,10 +341,11 @@ pub mod test {
                 timeout_ms: Some(timeout_ms),
                 remove_pid: None,
             },
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
         let now = OffsetDateTime::now_utc();
         let expiration = Some(now + Duration::from_millis(timeout_ms as u64));
-        attach_pid3.handle_inner(runtime_dir.path(), now).unwrap();
+        attach_pid3.handle_inner(now).unwrap();
 
         let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
         let (terminate_flag, cleanup_flag) = shutdown_flags();
@@ -396,13 +403,15 @@ pub mod test {
             pid: pid1,
             flox_env: flox_env.clone(),
             store_path: store_path.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id = start_or_attach_pid1.handle(runtime_dir.path()).unwrap();
+        let activation_id = start_or_attach_pid1.handle().unwrap();
         let set_ready_pid1 = SetReadyArgs {
             id: activation_id.clone(),
             flox_env: flox_env.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        set_ready_pid1.handle(runtime_dir.path()).unwrap();
+        set_ready_pid1.handle().unwrap();
 
         let proc2 = start_process();
         let pid2 = proc2.id() as i32;
@@ -410,8 +419,9 @@ pub mod test {
             pid: pid2,
             flox_env: flox_env.clone(),
             store_path: store_path.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id_2 = start_or_attach_pid2.handle(runtime_dir.path()).unwrap();
+        let activation_id_2 = start_or_attach_pid2.handle().unwrap();
         assert_eq!(activation_id, activation_id_2);
 
         let proc3 = start_process();
@@ -424,11 +434,10 @@ pub mod test {
                 timeout_ms: Some(0),
                 remove_pid: None,
             },
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
         let the_past = OffsetDateTime::now_utc() - Duration::from_secs(9999);
-        attach_pid3
-            .handle_inner(runtime_dir.path(), the_past)
-            .unwrap();
+        attach_pid3.handle_inner(the_past).unwrap();
 
         let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
         let (terminate_flag, cleanup_flag) = shutdown_flags();
@@ -479,13 +488,15 @@ pub mod test {
             pid,
             flox_env: flox_env.clone(),
             store_path: store_path.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id = start_or_attach.handle(runtime_dir.path()).unwrap();
+        let activation_id = start_or_attach.handle().unwrap();
         let set_ready = SetReadyArgs {
             id: activation_id.clone(),
             flox_env: flox_env.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        set_ready.handle(runtime_dir.path()).unwrap();
+        set_ready.handle().unwrap();
 
         let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
         let (terminate_flag, cleanup_flag) = shutdown_flags();
@@ -524,13 +535,15 @@ pub mod test {
             pid,
             flox_env: flox_env.clone(),
             store_path: store_path.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        let activation_id = start_or_attach.handle(runtime_dir.path()).unwrap();
+        let activation_id = start_or_attach.handle().unwrap();
         let set_ready = SetReadyArgs {
             id: activation_id.clone(),
             flox_env: flox_env.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
-        set_ready.handle(runtime_dir.path()).unwrap();
+        set_ready.handle().unwrap();
 
         let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
         let (terminate_flag, cleanup_flag) = shutdown_flags();

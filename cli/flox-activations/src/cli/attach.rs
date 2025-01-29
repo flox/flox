@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Context;
 use clap::Args;
@@ -20,6 +20,9 @@ pub struct AttachArgs {
     pub id: String,
     #[command(flatten)]
     pub exclusive: AttachExclusiveArgs,
+    /// The path to the runtime directory keeping activation data.
+    #[arg(long, value_name = "PATH")]
+    pub runtime_dir: PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -34,12 +37,13 @@ pub struct AttachExclusiveArgs {
 }
 
 impl AttachArgs {
-    pub fn handle(self, runtime_dir: &Path) -> Result<(), Error> {
-        self.handle_inner(runtime_dir, OffsetDateTime::now_utc())
+    pub fn handle(self) -> Result<(), Error> {
+        self.handle_inner(OffsetDateTime::now_utc())
     }
 
-    pub fn handle_inner(self, runtime_dir: &Path, now: OffsetDateTime) -> Result<(), Error> {
-        let activations_json_path = activations::activations_json_path(runtime_dir, &self.flox_env);
+    pub fn handle_inner(self, now: OffsetDateTime) -> Result<(), Error> {
+        let activations_json_path =
+            activations::activations_json_path(&self.runtime_dir, &self.flox_env);
 
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
         let Some(activations) = activations else {
@@ -117,9 +121,10 @@ mod test {
                 timeout_ms: Some(1000),
                 remove_pid: None,
             },
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
 
-        args.handle(runtime_dir.path()).unwrap();
+        args.handle().unwrap();
 
         let activation = read_activations(&runtime_dir, &flox_env, |activations| {
             activations.activation_for_id_ref(id).unwrap().clone()
@@ -155,9 +160,10 @@ mod test {
                 timeout_ms: None,
                 remove_pid: Some(old_pid),
             },
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
 
-        args.handle(runtime_dir.path()).unwrap();
+        args.handle().unwrap();
 
         let activation = read_activations(&runtime_dir, &flox_env, |activations| {
             activations.activation_for_id_ref(id).unwrap().clone()

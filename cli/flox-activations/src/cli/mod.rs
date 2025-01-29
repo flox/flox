@@ -23,10 +23,6 @@ const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
-
-    /// The path to the runtime directory keeping activation data.
-    #[arg(short, long, value_name = "PATH")]
-    pub runtime_dir: PathBuf,
 }
 
 #[derive(Debug, Subcommand)]

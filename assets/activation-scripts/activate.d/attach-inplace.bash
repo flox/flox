@@ -3,8 +3,8 @@
 expiring_pid="$$"
 # Put a 5 second timeout on the activation
 "$_flox_activations" \
-  --runtime-dir "$FLOX_RUNTIME_DIR" \
   attach \
+  --runtime-dir "$FLOX_RUNTIME_DIR" \
   --pid "$expiring_pid" \
   --flox-env "$FLOX_ENV" \
   --id "$_FLOX_ACTIVATION_ID" \
@@ -17,20 +17,20 @@ expiring_pid="$$"
 # script fragment when represented on a single line.
 case "$_flox_shell" in
   *bash)
-    echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
+    echo "$_flox_activations  attach --runtime-dir \"$FLOX_RUNTIME_DIR\" --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
     generate_bash_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$_activate_d" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}"
     ;;
   *fish)
-    echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$fish_pid --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
+    echo "$_flox_activations attach --runtime-dir \"$FLOX_RUNTIME_DIR\" --pid \$fish_pid --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
     generate_fish_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$_activate_d" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}"
     ;;
   *tcsh)
-    echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
+    echo "$_flox_activations attach --runtime-dir \"$FLOX_RUNTIME_DIR\" --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
     generate_tcsh_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$_activate_d" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}"
     ;;
   # Any additions should probably be restored in zdotdir/* scripts
   *zsh)
-    echo "$_flox_activations --runtime-dir \"$FLOX_RUNTIME_DIR\" attach --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
+    echo "$_flox_activations attach --runtime-dir \"$FLOX_RUNTIME_DIR\" --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
     echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
     echo "export FLOX_ENV=\"$FLOX_ENV\";"
     if [ -n "${ZDOTDIR:-}" ]; then
