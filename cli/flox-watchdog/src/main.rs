@@ -282,13 +282,15 @@ mod test {
             pid,
             flox_env: flox_env.clone(),
             store_path: store_path.clone(),
+            runtime_dir: runtime_dir.to_path_buf(),
         };
-        let activation_id = start_or_attach.handle(runtime_dir).unwrap();
+        let activation_id = start_or_attach.handle().unwrap();
         let set_ready = SetReadyArgs {
             id: activation_id.clone(),
             flox_env: flox_env.clone(),
+            runtime_dir: runtime_dir.to_path_buf(),
         };
-        set_ready.handle(runtime_dir).unwrap();
+        set_ready.handle().unwrap();
 
         let activations_json_path = activations_json_path(runtime_dir, &flox_env);
 

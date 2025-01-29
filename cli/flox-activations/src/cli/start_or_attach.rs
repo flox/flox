@@ -24,15 +24,18 @@ pub struct StartOrAttachArgs {
     #[arg(help = "The store path of the rendered environment for this activation.")]
     #[arg(short, long, value_name = "PATH")]
     pub store_path: String,
+    /// The path to the runtime directory keeping activation data.
+    #[arg(long, value_name = "PATH")]
+    pub runtime_dir: PathBuf,
 }
 
 impl StartOrAttachArgs {
     // Returns activation_id for use in tests
-    pub fn handle(self, runtime_dir: &Path) -> Result<String, anyhow::Error> {
+    pub fn handle(self) -> Result<String, anyhow::Error> {
         let mut retries = 3;
 
         loop {
-            let result = self.handle_inner(runtime_dir, attach, start, std::io::stdout());
+            let result = self.handle_inner(&self.runtime_dir, attach, start, std::io::stdout());
 
             let Err(err) = result else {
                 return result;
@@ -267,6 +270,7 @@ mod tests {
             pid,
             flox_env: flox_env.clone(),
             store_path: store_path.to_string(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
 
         let mut output = Vec::new();
@@ -306,6 +310,7 @@ mod tests {
             pid,
             flox_env: flox_env.clone(),
             store_path: store_path.to_string(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
         };
 
         let mut output = Vec::new();

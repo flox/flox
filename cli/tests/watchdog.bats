@@ -91,7 +91,8 @@ process_compose_pids_called_with_arg() {
   target_pid="$$"
 
   # sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
-  to_eval="$("$FLOX_ACTIVATIONS_BIN" --runtime-dir "$BATS_TEST_TMPDIR" start-or-attach \
+  to_eval="$("$FLOX_ACTIVATIONS_BIN" start-or-attach \
+    --runtime-dir "$BATS_TEST_TMPDIR" \
     --pid "$target_pid" \
     --flox-env "$BATS_TEST_TMPDIR" \
     --store-path "$BATS_TEST_TMPDIR"
@@ -128,7 +129,8 @@ process_compose_pids_called_with_arg() {
 
 @test "watchdog: exits on termination signal (SIGUSR1)" {
   # sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
-  to_eval="$("$FLOX_ACTIVATIONS_BIN" --runtime-dir "$BATS_TEST_TMPDIR" start-or-attach \
+  to_eval="$("$FLOX_ACTIVATIONS_BIN" start-or-attach \
+    --runtime-dir "$BATS_TEST_TMPDIR" \
     --pid "$$" \
     --flox-env "$BATS_TEST_TMPDIR" \
     --store-path "$BATS_TEST_TMPDIR"
@@ -185,7 +187,8 @@ EOF
   target_pid="$$"
 
   # sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
-  to_eval="$("$FLOX_ACTIVATIONS_BIN" --runtime-dir "$BATS_TEST_TMPDIR" start-or-attach \
+  to_eval="$("$FLOX_ACTIVATIONS_BIN" start-or-attach \
+    --runtime-dir "$BATS_TEST_TMPDIR" \
     --pid "$target_pid" \
     --flox-env "$BATS_TEST_TMPDIR" \
     --store-path "$BATS_TEST_TMPDIR"
@@ -237,7 +240,8 @@ EOF
   fi
 
   # sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
-  to_eval="$("$FLOX_ACTIVATIONS_BIN" --runtime-dir "$BATS_TEST_TMPDIR" start-or-attach \
+  to_eval="$("$FLOX_ACTIVATIONS_BIN" start-or-attach \
+    --runtime-dir "$BATS_TEST_TMPDIR" \
     --pid "$test_pid" \
     --flox-env "$BATS_TEST_TMPDIR" \
     --store-path "$BATS_TEST_TMPDIR"

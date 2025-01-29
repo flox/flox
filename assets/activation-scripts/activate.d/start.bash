@@ -116,8 +116,8 @@ LC_ALL=C $_comm -23 "$_start_env" "$_end_env" \
 
 # Finally mark the environment as ready to use for attachments.
 "$_flox_activations" \
-  --runtime-dir "$FLOX_RUNTIME_DIR" \
   set-ready \
+  --runtime-dir "$FLOX_RUNTIME_DIR" \
   --flox-env "$FLOX_ENV" --id "$_FLOX_ACTIVATION_ID"
 
 "$_flox_activate_tracer" "$_activate_d/start.bash" END

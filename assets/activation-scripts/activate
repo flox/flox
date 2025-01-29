@@ -167,7 +167,6 @@ fi
 _FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
 export FLOX_ENV="${FLOX_ENV:-$_FLOX_ENV}"
 
-# Now that FLOX_ENV has been updated by way of getopt, fix the env accordingly.
 # shellcheck disable=SC1090
 source <("$_flox_env_helper" "bash")
 
@@ -205,8 +204,8 @@ esac
 # sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
 # Don't eval on one line so that we exit if flox-activations fails
 to_eval="$($_flox_activations \
-  --runtime-dir "$FLOX_RUNTIME_DIR" \
   start-or-attach \
+  --runtime-dir "$FLOX_RUNTIME_DIR" \
   --pid "$$" --flox-env "$FLOX_ENV" --store-path "$_FLOX_ACTIVATE_STORE_PATH")"
 eval "$to_eval"
 export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
