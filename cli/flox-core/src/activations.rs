@@ -90,7 +90,7 @@ impl Activations<UncheckedVersion> {
             });
         }
 
-        return Err(Unsupported {
+        Err(Unsupported {
             version: self.version,
             pids: self
                 .activations
@@ -102,7 +102,7 @@ impl Activations<UncheckedVersion> {
                         .map(|attached_pid| attached_pid.pid)
                 })
                 .collect(),
-        });
+        })
     }
 }
 

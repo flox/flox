@@ -268,7 +268,7 @@ impl Config {
             *config_guard = read_raw_config()?;
         }
 
-        return Ok(config_guard.deref().clone());
+        Ok(config_guard.deref().clone())
     }
 
     /// Creates a [Config] from the environment and config file

@@ -175,7 +175,6 @@ pub(crate) fn pkg_descriptors_in_named_group(
 
 /// Scans the provided package descriptors to determine if the search term is a package or
 /// group in the manifest.
-
 fn pkg_or_group_found_in_manifest(
     search_term: impl AsRef<str>,
     descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
