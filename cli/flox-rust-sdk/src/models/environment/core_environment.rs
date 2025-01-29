@@ -1409,7 +1409,7 @@ mod tests {
     }
 
     /// UNINSTALL TESTS
-
+    ///
     /// Generates a mock `TypedManifest` for testing purposes.
     /// This function is designed to simplify the creation of test data by
     /// generating a `TypedManifest` based on a list of install IDs and

@@ -64,7 +64,7 @@ macro_rules! environment_subcommand_metric {
 /// Extracts [MetricEvent] data from a raw [tracing] event
 struct MetricVisitor<'a>(&'a mut Option<String>, &'a mut HashMap<String, String>);
 
-impl<'a> tracing::field::Visit for MetricVisitor<'a> {
+impl tracing::field::Visit for MetricVisitor<'_> {
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
         if field.name() == "subcommand" {
             *self.0 = Some(value.to_string());

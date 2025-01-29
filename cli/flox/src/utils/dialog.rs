@@ -25,7 +25,7 @@ pub struct Dialog<'a, Type> {
     pub typed: Type,
 }
 
-impl<'a> Dialog<'a, Confirm> {
+impl Dialog<'_, Confirm> {
     #[allow(unused)]
     pub async fn prompt(self) -> inquire::error::InquireResult<bool> {
         let message = self.message.to_owned();
@@ -84,7 +84,7 @@ impl Display for Choice {
     }
 }
 
-impl<'a, T: Display> Dialog<'a, Select<T>> {
+impl<T: Display> Dialog<'_, Select<T>> {
     #[allow(dead_code)]
     pub async fn prompt(self) -> inquire::error::InquireResult<T> {
         let message = self.message.to_owned();
