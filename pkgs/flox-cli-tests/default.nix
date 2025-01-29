@@ -143,8 +143,15 @@ writeShellScriptBin PROJECT_NAME ''
   esac
   export PROJECT_TESTS_DIR;
 
+  # Find the latest released version of flox.
+  # Despite the name this is generally _older_ than the tested version of flox.
   FLOX_LATEST_VERSION=${builtins.readFile ../../VERSION}
   export FLOX_LATEST_VERSION
+
+  # if FLOX_VERSION is not set, use the latest released version
+  # otherwise use the provided version
+  # when running tests with just, just will set FLOX_VERSION.
+  export FLOX_VERSION="''${FLOX_VERSION:-$FLOX_LATEST_VERSION}"
 
   # TODO: we shouldn't do this but rather use absolute paths
   # Look if we can use https://github.com/abathur/resholve
