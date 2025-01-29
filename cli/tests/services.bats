@@ -126,7 +126,7 @@ setup_start_counter_services() {
 @test "can call process-compose" {
   run "$PROCESS_COMPOSE_BIN" version
   assert_success
-  assert_output --partial "v1.34.0"
+  assert_output --partial "v1.40.1"
 }
 
 @test "process-compose can run generated config file" {
@@ -907,7 +907,7 @@ EOF
   run "$FLOX_BIN" services status one
   assert_success
 
-  
+
   # Note that the PID is omitted if the service hasn't been started
   assert_output --regexp "NAME +STATUS +PID"
   assert_output --regexp "one +Stopped +"
@@ -1546,4 +1546,3 @@ EOF
     "${TESTS_DIR}"/services/wait_for_service_status.sh one:Stopped two:Stopped
   '
 }
-
