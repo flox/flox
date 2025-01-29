@@ -202,16 +202,16 @@ impl PartialOrd for FloxVersion {
             (Some(self_num), Some(other_num)) => return Some(self_num.cmp(&other_num)),
         }
 
-        // Skip commit comparison if there are pre-release fields
-        match (
-            self.commit_vcs,
-            other.commit_vcs,
-            self.is_dirty,
-            other.is_dirty,
-        ) {
-            (None, None, false, false) => Some(Ordering::Equal),
-            _ => None,
+        // Skip commit comparison if the pre-release part is different or either version is dirty
+        if self.commit_vcs == other.commit_vcs
+            && self.commit_sha == other.commit_sha
+            && !self.is_dirty
+            && !other.is_dirty
+        {
+            return Some(Ordering::Equal);
         }
+
+        None
     }
 }
 
@@ -371,7 +371,7 @@ mod tests {
             is_dirty: false,
         });
         assert_eq!(version.to_string(), version_str);
-        assert_eq!(version.partial_cmp(&version), None);
+        assert_eq!(version.partial_cmp(&version), Some(Ordering::Equal));
     }
 
     #[test]
@@ -384,10 +384,21 @@ mod tests {
 
     #[test]
     fn test_parse_version_with_commits_and_dirty() {
-        assert!(matches!(
-            "1.2.3-gb91c3f1-diry".parse::<FloxVersion>(),
-            Err(VersionParseError::InvalidFormat),
-        ));
+        let version_str = "1.2.3-gb91c3f1-dirty";
+        let version: FloxVersion = version_str.parse().unwrap();
+        assert_eq!(version, FloxVersion {
+            major: 1,
+            minor: 2,
+            patch: 3,
+            pre_name: None,
+            pre_number: None,
+            num_of_commits: None,
+            commit_vcs: Some('g'),
+            commit_sha: Some("b91c3f1".to_string()),
+            is_dirty: true,
+        });
+        assert_eq!(version.to_string(), version_str);
+        assert_eq!(version.partial_cmp(&version), None);
     }
 
     #[test]
@@ -448,12 +459,33 @@ mod tests {
         let v1: FloxVersion = "1.2.2".parse().unwrap();
         let v2: FloxVersion = "1.2.2-gb91c3f1".parse().unwrap();
         let v3: FloxVersion = "1.2.2-dirty".parse().unwrap();
+        let v4: FloxVersion = "1.2.2-gb91c3f1-dirty".parse().unwrap();
 
         assert!(v1 != v2);
         assert!(v1 != v3);
+        assert!(v1 != v4);
         assert!(v2 != v3);
+        assert!(v2 != v4);
+        assert!(v3 != v4);
+
+        assert_eq!(v1.partial_cmp(&v1), Some(Ordering::Equal));
         assert_eq!(v1.partial_cmp(&v2), None);
         assert_eq!(v1.partial_cmp(&v3), None);
+        assert_eq!(v1.partial_cmp(&v4), None);
+
+        assert_eq!(v2.partial_cmp(&v1), None);
+        assert_eq!(v2.partial_cmp(&v2), Some(Ordering::Equal));
         assert_eq!(v2.partial_cmp(&v3), None);
+        assert_eq!(v2.partial_cmp(&v4), None);
+
+        assert_eq!(v3.partial_cmp(&v1), None);
+        assert_eq!(v3.partial_cmp(&v2), None);
+        assert_eq!(v3.partial_cmp(&v3), None);
+        assert_eq!(v3.partial_cmp(&v4), None);
+
+        assert_eq!(v4.partial_cmp(&v1), None);
+        assert_eq!(v4.partial_cmp(&v2), None);
+        assert_eq!(v4.partial_cmp(&v3), None);
+        assert_eq!(v4.partial_cmp(&v4), None);
     }
 }
