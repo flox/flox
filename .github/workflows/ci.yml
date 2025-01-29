@@ -152,7 +152,9 @@ jobs:
         if: ${{ matrix.test-tags == '!activate,!containerize,!catalog' }}
         env:
           RUST_BACKTRACE: 1
-        run: nix develop -L --no-update-lock-file --command just impure-tests
+        run: |
+         git status
+         nix develop -L --no-update-lock-file --command just impure-tests
 
       # This differs from `nix-build-bats-tests` in that:
       #   - a cargo-built debug binary is used, like you would in local development

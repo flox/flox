@@ -549,6 +549,8 @@ impl UpdateNotification {
             )));
         };
 
+        dbg!(&FLOX_VERSION, &new_version);
+
         match FLOX_VERSION.partial_cmp(&new_version) {
             None => Ok(UpdateCheckResult::Skipped),
             Some(std::cmp::Ordering::Less) => {
