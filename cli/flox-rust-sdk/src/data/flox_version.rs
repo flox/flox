@@ -202,16 +202,16 @@ impl PartialOrd for FloxVersion {
             (Some(self_num), Some(other_num)) => return Some(self_num.cmp(&other_num)),
         }
 
-        // Skip commit comparison if there are pre-release fields
-        match (
-            self.commit_vcs,
-            other.commit_vcs,
-            self.is_dirty,
-            other.is_dirty,
-        ) {
-            (None, None, false, false) => Some(Ordering::Equal),
-            _ => None,
+        // Skip commit comparison if the pre-release part is different or either version is dirty
+        if self.commit_vcs == other.commit_vcs
+            && self.commit_sha == other.commit_sha
+            && !self.is_dirty
+            && !other.is_dirty
+        {
+            return Some(Ordering::Equal);
         }
+
+        None
     }
 }
 
@@ -371,7 +371,7 @@ mod tests {
             is_dirty: false,
         });
         assert_eq!(version.to_string(), version_str);
-        assert_eq!(version.partial_cmp(&version), None);
+        assert_eq!(version.partial_cmp(&version), Some(Ordering::Equal));
     }
 
     #[test]
