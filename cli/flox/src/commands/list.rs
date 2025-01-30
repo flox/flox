@@ -16,9 +16,9 @@ use itertools::Itertools;
 use tracing::{debug, instrument};
 
 use super::{environment_select, EnvironmentSelect};
-use crate::subcommand_metric;
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 // List packages installed in an environment
 #[derive(Bpaf, Clone)]
@@ -53,7 +53,7 @@ impl List {
     #[instrument(name = "list", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         sentry_set_tag("list_mode", format!("{:?}", &self.list_mode));
-        subcommand_metric!("list");
+        environment_subcommand_metric!("list", self.environment);
 
         let mut env = self
             .environment

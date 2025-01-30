@@ -21,8 +21,8 @@ use crate::commands::services::{
 };
 use crate::commands::{environment_select, EnvironmentSelect};
 use crate::config::Config;
-use crate::subcommand_metric;
 use crate::utils::message;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Bpaf, Debug, Clone)]
 pub struct Start {
@@ -37,7 +37,7 @@ pub struct Start {
 impl Start {
     #[instrument(name = "start", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        subcommand_metric!("services::start");
+        environment_subcommand_metric!("services::start", self.environment);
 
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
         guard_is_within_activation(&env, "start")?;

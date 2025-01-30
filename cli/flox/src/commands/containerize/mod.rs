@@ -17,9 +17,9 @@ use macos_containerize_proxy::ContainerizeProxy;
 use tracing::{debug, info, instrument};
 
 use super::{environment_select, EnvironmentSelect};
-use crate::subcommand_metric;
 use crate::utils::message;
 use crate::utils::openers::first_in_path;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 mod macos_containerize_proxy;
 
@@ -42,7 +42,7 @@ pub struct Containerize {
 impl Containerize {
     #[instrument(name = "containerize", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("containerize");
+        environment_subcommand_metric!("containerize", self.environment);
 
         let mut env = self
             .environment

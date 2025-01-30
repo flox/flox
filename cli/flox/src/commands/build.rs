@@ -12,8 +12,8 @@ use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::activate::FLOX_INTERPRETER;
-use crate::subcommand_metric;
 use crate::utils::message;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[allow(unused)] // remove when we implement the command
 #[derive(Bpaf, Clone)]
@@ -61,6 +61,7 @@ impl Build {
 
         match self.subcommand_or_targets {
             SubcommandOrBuildTargets::Clean { targets } => {
+                environment_subcommand_metric!("build::clean", self.environment);
                 let env = self
                     .environment
                     .detect_concrete_environment(&flox, "Build packages of")?;
@@ -68,6 +69,7 @@ impl Build {
                 Self::clean(flox, env, targets).await
             },
             SubcommandOrBuildTargets::BuildTargets { targets } => {
+                environment_subcommand_metric!("build", self.environment);
                 let env = self
                     .environment
                     .detect_concrete_environment(&flox, "Clean build files of")?;
@@ -79,8 +81,6 @@ impl Build {
 
     #[instrument(name = "build::clean", skip_all)]
     async fn clean(flox: Flox, env: ConcreteEnvironment, packages: Vec<String>) -> Result<()> {
-        subcommand_metric!("build::clean");
-
         if let ConcreteEnvironment::Remote(_) = &env {
             bail!("Cannot build from a remote environment");
         };
@@ -102,8 +102,6 @@ impl Build {
 
     #[instrument(name = "build", skip_all, fields(packages))]
     async fn build(flox: Flox, mut env: ConcreteEnvironment, packages: Vec<String>) -> Result<()> {
-        subcommand_metric!("build");
-
         if let ConcreteEnvironment::Remote(_) = &env {
             bail!("Cannot build from a remote environment");
         };
