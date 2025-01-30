@@ -126,7 +126,11 @@ pub struct Activate {
 
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
-        environment_subcommand_metric!("activate", self.environment);
+        environment_subcommand_metric!(
+            "activate",
+            self.environment,
+            start_services = self.start_services
+        );
 
         let mut concrete_environment = match self.environment.to_concrete_environment(&flox) {
             Ok(concrete_environment) => concrete_environment,
