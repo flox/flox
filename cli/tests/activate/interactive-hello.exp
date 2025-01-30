@@ -22,6 +22,7 @@ expect_after {
 
 # check that prompt is set for interactive shell
 expect {flox \[project-*\]}
+expect $env(KNOWN_PROMPT)
 
 # check for hello
 send "command -v hello||which hello||type -P hello || echo not found\n"

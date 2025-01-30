@@ -20,6 +20,7 @@ expect_after {
 }
 
 expect "Attached to existing activation"
+expect $env(KNOWN_PROMPT)
 
 send "$command && exit\n"
 expect eof

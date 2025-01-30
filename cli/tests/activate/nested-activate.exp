@@ -14,6 +14,7 @@ expect_after {
   "*\r" { exp_continue }
 }
 expect "You are now using the environment"
+expect $env(KNOWN_PROMPT)
 
 send "$inner_activate_command\r"
 expect_after {
@@ -26,12 +27,15 @@ expect "common hook running"
 
 send "inner\r"
 expect "the inner alias is defined"
+expect $env(KNOWN_PROMPT)
 
 send "outer\r"
 expect "the outer alias is defined"
+expect $env(KNOWN_PROMPT)
 
 send "current\r"
 expect "the current alias is inner"
+expect $env(KNOWN_PROMPT)
 
 puts "INFO: exiting inner env"
 send "exit 0\r"

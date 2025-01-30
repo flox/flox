@@ -31,7 +31,7 @@ user_dotfiles_setup() {
   BADPATH="/usr/local/bin:/usr/bin:/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin"
 
   # Allow predictable output from interactive tests that use expect.
-  KNOWN_PROMPT="myprompt> "
+  export KNOWN_PROMPT="myprompt> "
   # This isn't honoured by zsh or fish.
   cat >"${HOME}/.inputrc" <<EOF
 set enable-bracketed-paste off
@@ -287,6 +287,7 @@ EOF
   cat > "${HOME}/.zshrc" <<EOF
 autoload -Uz add-zsh-hook vcs_info
 add-zsh-hook precmd vcs_info
+export PS1="$KNOWN_PROMPT"
 EOF
 
   # Mimic a different `hello` coming from an outside PATH.
@@ -4244,7 +4245,6 @@ spawn ${FLOX_BIN} activate --dir ${PROJECT_DIR}
 ✅ Attached to existing activation of environment '${PROJECT_NAME}'
 To stop using this environment, type 'exit'
 
-true && exit
 ${expected_content}
 flox [${PROJECT_NAME}] myprompt> true && exit
 exit

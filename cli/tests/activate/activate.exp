@@ -16,6 +16,7 @@ expect_after {
 }
 
 expect "You are now using the environment"
+expect $env(KNOWN_PROMPT)
 
 send "exit\n"
 expect eof
