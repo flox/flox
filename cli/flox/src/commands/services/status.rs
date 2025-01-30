@@ -11,7 +11,7 @@ use tracing::instrument;
 
 use crate::commands::services::{guard_service_commands_available, ServicesEnvironment};
 use crate::commands::{environment_select, EnvironmentSelect};
-use crate::subcommand_metric;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Bpaf, Debug, Clone)]
 pub struct Status {
@@ -30,7 +30,7 @@ pub struct Status {
 impl Status {
     #[instrument(name = "status", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("services::status");
+        environment_subcommand_metric!("services::status", self.environment);
 
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
         guard_service_commands_available(&env, &flox.system)?;

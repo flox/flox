@@ -47,7 +47,7 @@ use crate::commands::{ensure_environment_trust, EnvironmentSelectError};
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::openers::Shell;
 use crate::utils::{default_nix_env_vars, message};
-use crate::{subcommand_metric, utils};
+use crate::{environment_subcommand_metric, subcommand_metric, utils};
 
 pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(
@@ -126,7 +126,7 @@ pub struct Activate {
 
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
-        subcommand_metric!("activate");
+        environment_subcommand_metric!("activate", self.environment);
 
         let mut concrete_environment = match self.environment.to_concrete_environment(&flox) {
             Ok(concrete_environment) => concrete_environment,

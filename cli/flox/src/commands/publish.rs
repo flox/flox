@@ -21,8 +21,8 @@ use url::Url;
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::ensure_floxhub_token;
 use crate::config::{Config, PublishConfig};
-use crate::subcommand_metric;
 use crate::utils::message;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct Publish {
@@ -68,6 +68,7 @@ impl Publish {
             bail!("'publish' feature is not enabled.");
         }
 
+        environment_subcommand_metric!("publish", self.environment);
         let PublishTarget { target } = self.publish_target;
         let env = self
             .environment
@@ -85,8 +86,6 @@ impl Publish {
         no_store: bool,
         cache_args: Option<CacheArgs>,
     ) -> Result<()> {
-        subcommand_metric!("publish");
-
         if !check_target_exists(&env.lockfile(&flox)?, &package)? {
             bail!("Package '{}' not found in environment", package);
         }

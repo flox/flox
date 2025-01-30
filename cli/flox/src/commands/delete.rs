@@ -7,9 +7,9 @@ use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::environment_description;
-use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::message;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Delete an environment
 #[derive(Bpaf, Clone)]
@@ -25,7 +25,7 @@ pub struct Delete {
 impl Delete {
     #[instrument(name = "delete", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("delete");
+        environment_subcommand_metric!("delete", self.environment);
         let environment = self
             .environment
             .detect_concrete_environment(&flox, "Delete")?;

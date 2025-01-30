@@ -56,7 +56,7 @@ use crate::utils::errors::format_error;
 use crate::utils::message;
 use crate::utils::openers::Shell;
 use crate::utils::tracing::sentry_set_tag;
-use crate::{subcommand_metric, Exit};
+use crate::{environment_subcommand_metric, subcommand_metric, Exit};
 
 // Install a package into an environment
 #[derive(Bpaf, Clone)]
@@ -94,7 +94,7 @@ pub struct PkgWithIdOption {
 impl Install {
     #[instrument(name = "install", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        subcommand_metric!("install");
+        environment_subcommand_metric!("install", self.environment);
 
         debug!(
             "attempting to install packages [{}] to {:?}",

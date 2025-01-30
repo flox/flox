@@ -10,9 +10,9 @@ use tracing::{info_span, instrument};
 use super::services::warn_manifest_changes_for_services;
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{ensure_floxhub_token, environment_description, EnvironmentSelectError};
-use crate::subcommand_metric;
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Uninstall installed packages from an environment
 #[derive(Bpaf, Clone)]
@@ -28,7 +28,7 @@ pub struct Uninstall {
 impl Uninstall {
     #[instrument(name = "uninstall", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        subcommand_metric!("uninstall");
+        environment_subcommand_metric!("uninstall", self.environment);
         sentry_set_tag("packages", self.packages.iter().join(","));
 
         debug!(

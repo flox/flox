@@ -32,10 +32,10 @@ use super::{
     UninitializedEnvironment,
 };
 use crate::commands::{ensure_floxhub_token, EnvironmentSelectError};
-use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_core_error;
 use crate::utils::message;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
@@ -76,7 +76,7 @@ pub enum EditAction {
 impl Edit {
     #[instrument(name = "edit", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        subcommand_metric!("edit");
+        environment_subcommand_metric!("edit", self.environment);
 
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
