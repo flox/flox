@@ -769,7 +769,6 @@ pub struct ManifestPackageDescriptorFlake {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-#[skip_serializing_none]
 pub struct ManifestPackageDescriptorStorePath {
     pub(crate) store_path: String,
     #[cfg_attr(
