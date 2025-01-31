@@ -93,6 +93,7 @@ ContainerizeConfig ::= {
     For Linux based systems, all of the following are valid: `user`, `uid`, `user:group`, `uid:gid`, `uid:group`, `user:gid`.
     If `group`/`gid` is not specified, the default group and supplementary groups of the given `user`/`uid` in `/etc/passwd` and `/etc/group` from the container are applied.
     If `group`/`gid` is specified, supplementary groups from the container are ignored.
+    This will add an entry to /etc/passwd and /etc/groups inside the container, so no manual useradd is required.
 
 `exposed-ports`
 :   A set of ports to expose from a container running this image.
