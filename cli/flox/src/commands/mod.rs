@@ -1221,7 +1221,7 @@ impl UninitializedEnvironment {
             ConcreteEnvironment::Managed(managed_env) => {
                 let pointer = managed_env.pointer().clone().into();
                 Ok(Self::DotFlox(DotFlox {
-                    path: managed_env.path.to_path_buf(),
+                    path: managed_env.dot_flox_path().to_path_buf(),
                     pointer,
                 }))
             },
