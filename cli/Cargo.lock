@@ -1005,6 +1005,7 @@ dependencies = [
  "dirs",
  "enum_dispatch",
  "flox-rust-sdk",
+ "flox-test-utils",
  "fslock",
  "futures",
  "indent",

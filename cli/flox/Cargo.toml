@@ -63,6 +63,7 @@ temp-env.workspace = true
 tempfile.workspace = true
 toml.workspace = true
 flox-rust-sdk = { workspace = true, features = ["tests"] }
+flox-test-utils.workspace = true
 
 
 [features]

@@ -68,6 +68,7 @@ pub struct Install {
     #[bpaf(external(pkg_with_id_option), many)]
     id: Vec<PkgWithIdOption>,
 
+    /// Packages specified without explicit ids
     #[bpaf(positional("packages"))]
     packages: Vec<String>,
 }
@@ -100,8 +101,16 @@ pub struct PkgWithIdOption {
 /// this second installation attempt.
 #[derive(Debug, Clone)]
 struct PackageToInstallRetry {
-    warn: bool,
+    system_subset: bool,
     pkg: PackageToInstall,
+}
+
+/// A container for the packages that a user attempted to install.
+#[derive(Debug, Clone)]
+struct PartitionedPackages {
+    successes: Vec<PackageToInstall>,
+    system_subsets: Vec<PackageToInstall>,
+    already_installed: Vec<PackageToInstall>,
 }
 
 impl Install {
@@ -225,8 +234,8 @@ impl Install {
         );
         let installation = span.in_scope(|| environment.install(&packages_to_install, &flox));
 
-        let installation = match installation {
-            Ok(installation) => installation,
+        let (packages_retried, installation) = match installation {
+            Ok(installation) => (None, installation),
             Err(err) => {
                 if let Some((failures, packages_retry)) =
                     Self::need_retry_with_valid_systems(&err, &packages_to_install)
@@ -238,11 +247,11 @@ impl Install {
                         &packages_retry,
                     );
                     match res {
-                        Ok(installation) => installation,
-                        Err(err) => Self::handle_error(err, &flox, &packages_to_install)?,
+                        Ok(installation) => (Some(packages_retry), installation),
+                        Err(err) => (None, Self::handle_error(err, &flox, &packages_to_install)?),
                     }
                 } else {
-                    Self::handle_error(err, &flox, &packages_to_install)?
+                    (None, Self::handle_error(err, &flox, &packages_to_install)?)
                 }
             },
         };
@@ -262,17 +271,24 @@ impl Install {
             message::warning(warning);
         }
 
-        // Print which new packages were installed
-        for pkg in packages_to_install.iter() {
-            if let Some(false) = installation.already_installed.get(pkg.id()) {
-                message::package_installed(pkg, &description);
-            } else {
-                message::warning(format!(
-                    "Package with id '{}' already installed to environment {description}",
-                    pkg.id()
-                ));
-            }
-        }
+        let installed = if let Some(packages_retried) = packages_retried {
+            packages_retried
+        } else {
+            packages_to_install
+                .iter()
+                .map(|p| PackageToInstallRetry {
+                    system_subset: false,
+                    pkg: p.clone(),
+                })
+                .collect::<Vec<_>>()
+        };
+        let partitioned =
+            Self::partition_installed_packages(&installed, &installation.already_installed);
+
+        // Print status messages for the installation attempt
+        message::packages_successfully_installed(&partitioned.successes, &description);
+        message::packages_installed_with_system_subsets(&partitioned.system_subsets);
+        message::packages_already_installed(&partitioned.already_installed, &description);
 
         if installation.new_manifest.is_some() {
             warn_manifest_changes_for_services(&flox, environment.as_ref());
@@ -292,6 +308,32 @@ impl Install {
             .join(",")
     }
 
+    fn partition_installed_packages(
+        pkgs: &[PackageToInstallRetry],
+        already_installed_map: &HashMap<String, bool>,
+    ) -> PartitionedPackages {
+        let (partials, maybe_successes): (Vec<_>, Vec<_>) =
+            pkgs.iter().partition(|p| p.system_subset);
+        let partials = partials
+            .into_iter()
+            .cloned()
+            .map(|p| p.pkg)
+            .collect::<Vec<_>>();
+        let maybe_successes = maybe_successes
+            .into_iter()
+            .cloned()
+            .map(|p| p.pkg)
+            .collect::<Vec<_>>();
+        let (successes, already_installed): (Vec<_>, Vec<_>) = maybe_successes
+            .into_iter()
+            .partition(|p| already_installed_map.get(p.id()).is_some_and(|v| !*v));
+        PartitionedPackages {
+            successes,
+            system_subsets: partials,
+            already_installed,
+        }
+    }
+
     fn need_retry_with_valid_systems(
         err: &EnvironmentError,
         requested_packages: &[PackageToInstall],
@@ -308,7 +350,7 @@ impl Install {
                     .cloned()
                     .map(|p| {
                         (p.id().to_string(), PackageToInstallRetry {
-                            warn: false,
+                            system_subset: false,
                             pkg: p,
                         })
                     })
@@ -347,7 +389,7 @@ impl Install {
 
                     // Update this package retry
                     *systems = Some(valid_systems.clone());
-                    pkg_retry.warn = true;
+                    pkg_retry.system_subset = true;
                 }
 
                 let packages = packages.into_values().collect::<Vec<_>>();
@@ -376,23 +418,7 @@ impl Install {
         let install_result = span.in_scope(|| environment.install(&packages_installable, flox));
 
         match install_result {
-            Ok(install_attempt) => {
-                for pkg_retry in packages_to_retry.iter() {
-                    if pkg_retry.warn {
-                        // FIXME: Remove this during the refactor
-                        message::warning(format!(
-                            "Installing '{}' for the following systems: {:?}",
-                            pkg_retry.pkg.id(),
-                            // This will only be `None` for flake packages,
-                            // but this branch is already unreachable for
-                            // flakes because they don't produce the kind of
-                            // error that triggers a retry in the first place.
-                            pkg_retry.pkg.systems().unwrap_or_default()
-                        ));
-                    }
-                }
-                Ok(install_attempt)
-            },
+            Ok(install_attempt) => Ok(install_attempt),
             Err(err) => {
                 debug!("install error: {:?}", err);
                 let mut failures = failures;
@@ -652,13 +678,18 @@ fn add_activation_to_rc_file(
 
 #[cfg(test)]
 mod tests {
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
     use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
     use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall};
-    use flox_rust_sdk::providers::catalog::SystemEnum;
+    use flox_rust_sdk::providers::catalog::{Client, MockClient, SystemEnum, GENERATED_DATA};
+    use flox_test_utils::manifests::EMPTY_ALL_SYSTEMS;
 
     use super::{add_activation_to_rc_file, ensure_rc_file_exists};
     use crate::commands::install::{package_list_for_prompt, Install};
+    use crate::commands::EnvironmentSelect;
+    use crate::utils::message::history::History;
 
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
     #[test]
@@ -684,7 +715,7 @@ mod tests {
             systems: None,
         }];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, &packages_to_install),
+            Install::generate_warnings(&locked_packages, packages_to_install.as_slice()),
             vec![format!(
                 "The package '{foo_iid}' has an unfree license, please verify the licensing terms of use"
             )]
@@ -712,7 +743,7 @@ mod tests {
             systems: None,
         }];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, &packages_to_install),
+            Install::generate_warnings(&locked_packages, packages_to_install.as_slice()),
             vec![format!(
                 "The package '{foo_iid}' has an unfree license, please verify the licensing terms of use"
             )]
@@ -732,7 +763,7 @@ mod tests {
             systems: None,
         }];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, &packages_to_install),
+            Install::generate_warnings(&locked_packages, packages_to_install.as_slice()),
             vec![format!(
                 "The package '{foo_iid}' is marked as broken, it may not behave as expected during runtime."
             )]
@@ -760,7 +791,7 @@ mod tests {
             systems: None,
         }];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, &packages_to_install),
+            Install::generate_warnings(&locked_packages, packages_to_install.as_slice()),
             vec![format!(
                 "The package '{foo_iid}' is marked as broken, it may not behave as expected during runtime."
             )]
@@ -813,5 +844,37 @@ mod tests {
         let backup = rc_file_path.with_extension(".pre_flox");
         add_activation_to_rc_file(&rc_file_path, "be activated").unwrap();
         assert!(backup.exists());
+    }
+
+    #[tokio::test]
+    async fn warns_about_incomplete_system_availability() {
+        let (mut flox, tempdir) = flox_instance();
+        let is_linux = flox.system.ends_with("linux");
+        let response_path = if is_linux {
+            GENERATED_DATA.join("resolve/darwin_ps_all.json")
+        } else {
+            GENERATED_DATA.join("resolve/bpftrace.json")
+        };
+        let pkg_path = if is_linux { "darwin.ps" } else { "bpftrace" };
+        let install_id = if is_linux { "ps" } else { "bpftrace" };
+        let installed_systems = if is_linux {
+            "aarch64-darwin, x86_64-darwin"
+        } else {
+            "aarch64-linux, x86_64-linux"
+        };
+        let client = MockClient::new(Some(response_path)).unwrap();
+        flox.catalog_client = Client::Mock(client);
+
+        let _env = new_path_environment_in(&flox, EMPTY_ALL_SYSTEMS, tempdir.path());
+        let install_cmd = Install {
+            environment: EnvironmentSelect::Dir(tempdir.path().to_path_buf()),
+            id: vec![],
+            packages: vec![pkg_path.to_string()],
+        };
+        install_cmd.handle(flox).await.expect("installation failed");
+        let msgs = &History::global().messages();
+        let expected = format!("⚠\u{fe0f}  '{install_id}' installed only for the following systems: {installed_systems}");
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0], expected);
     }
 }

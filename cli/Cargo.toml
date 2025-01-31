@@ -31,6 +31,7 @@ enum_dispatch = "0.3.13"
 flox-activations = { path = "flox-activations" }
 flox-core = { path = "flox-core" }
 flox-rust-sdk = { path = "flox-rust-sdk" }
+flox-test-utils = { path = "flox-test-utils" }
 fslock = "0.2.1"
 fs_extra = "1.3.0"
 futures = "0.3"
