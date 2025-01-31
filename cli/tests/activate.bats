@@ -4199,7 +4199,16 @@ Setting PATH from ${rc_file}"
   mkfifo "$TEARDOWN_FIFO"
 
   # Pre-fetch without a timeout.
-  nix build "github:flox/flox/v${FLOX_LATEST_VERSION}"
+  # Skip the test if we're running a release
+  if ! OUTPUT=$(nix build "github:flox/flox/v${FLOX_LATEST_VERSION}" 2>&1); then
+    if [[ "$OUTPUT" == *"No commit found for SHA: v${FLOX_LATEST_VERSION}"* ]]; then
+      skip "skipping compatibility check for what is likely a release commit"
+    else
+      echo "$OUTPUT"
+      exit 1
+    fi
+  fi
+
 
   # Start an activation with the previously released version.
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
