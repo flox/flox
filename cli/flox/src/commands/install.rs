@@ -91,6 +91,19 @@ pub struct PkgWithIdOption {
     pub pkg: String,
 }
 
+/// A container for packages during a retry attempt.
+///
+/// If some packages fail to resolve because they lack all of the requested
+/// systems, we retry the installation with only the available systems. In that
+/// case we warn about those packages, but install the other packages as usual.
+/// This container allows us to record whether we should warn or not during
+/// this second installation attempt.
+#[derive(Debug, Clone)]
+struct PackageToInstallRetry {
+    warn: bool,
+    pkg: PackageToInstall,
+}
+
 impl Install {
     #[instrument(name = "install", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
@@ -214,7 +227,24 @@ impl Install {
 
         let installation = match installation {
             Ok(installation) => installation,
-            Err(err) => Self::handle_error(err, &flox, &mut *environment, &packages_to_install)?,
+            Err(err) => {
+                if let Some((failures, packages_retry)) =
+                    Self::need_retry_with_valid_systems(&err, &packages_to_install)
+                {
+                    let res = Self::retry_install_for_valid_systems(
+                        &flox,
+                        environment.as_mut(),
+                        failures,
+                        &packages_retry,
+                    );
+                    match res {
+                        Ok(installation) => installation,
+                        Err(err) => Self::handle_error(err, &flox, &packages_to_install)?,
+                    }
+                } else {
+                    Self::handle_error(err, &flox, &packages_to_install)?
+                }
+            },
         };
 
         let lockfile_path = environment.lockfile_path(&flox)?;
@@ -262,21 +292,10 @@ impl Install {
             .join(",")
     }
 
-    /// Handle an error that occurred during installation.
-    /// Some errors are recoverable and will return with [Ok].
-    fn handle_error(
-        err: EnvironmentError,
-        flox: &Flox,
-        environment: &mut dyn Environment,
-        packages: &[PackageToInstall],
-    ) -> Result<InstallationAttempt> {
-        debug!("install error: {:?}", err);
-
-        subcommand_metric!(
-            "install",
-            "failed_packages" = Install::format_packages_for_tracing(packages)
-        );
-
+    fn need_retry_with_valid_systems(
+        err: &EnvironmentError,
+        requested_packages: &[PackageToInstall],
+    ) -> Option<(ResolutionFailures, Vec<PackageToInstallRetry>)> {
         match err {
             EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::ResolutionFailed(failures),
@@ -284,10 +303,15 @@ impl Install {
                 matches!(f, ResolutionFailure::PackageUnavailableOnSomeSystems { .. })
             }) =>
             {
-                let mut packages = packages
+                let mut packages = requested_packages
                     .iter()
                     .cloned()
-                    .map(|p| (p.id().to_string(), p))
+                    .map(|p| {
+                        (p.id().to_string(), PackageToInstallRetry {
+                            warn: false,
+                            pkg: p,
+                        })
+                    })
                     .collect::<HashMap<_, _>>();
 
                 for failure in &failures.0 {
@@ -304,56 +328,104 @@ impl Install {
                         unreachable!("already checked that these failures are 'package unavailable on some systems'")
                     };
 
-                    let Some(package_to_install) = packages.get_mut(install_id) else {
+                    let Some(pkg_retry) = packages.get_mut(install_id) else {
                         warn!(install_id, "resolution failure for non-existent package");
                         continue;
                     };
 
-                    let PackageToInstall::Catalog(CatalogPackage { systems, .. }) =
-                        package_to_install
+                    let PackageToInstall::Catalog(CatalogPackage {
+                        ref mut systems, ..
+                    }) = pkg_retry.pkg
                     else {
                         warn!(
                             install_id,
-                            ?package_to_install,
+                            ?pkg_retry.pkg,
                             "resolution failure for non-catalog package"
                         );
                         continue;
                     };
 
+                    // Update this package retry
                     *systems = Some(valid_systems.clone());
-                    message::warning(format!(
-                        "Installing '{install_id}' for the following systems: {valid_systems:?}"
-                    ));
+                    pkg_retry.warn = true;
                 }
 
                 let packages = packages.into_values().collect::<Vec<_>>();
-
-                let span = span!(
-                    tracing::Level::INFO,
-                    "install",
-                    progress = "Installing packages for available systems"
-                );
-                let install_result = span.in_scope(|| environment.install(&packages, flox));
-
-                match install_result {
-                    Ok(install_attempt) => Ok(install_attempt),
-                    Err(err) => {
-                        debug!("install error: {:?}", err);
-                        let mut failures = failures;
-                        let msg = formatdoc! {"
-                            While attempting to install for available systems, the following error occurred:
-                            {err}
-                            ", err = format_error(&err).trim()
-                        };
-                        failures.0.push(ResolutionFailure::FallbackMessage { msg });
-                        Err(EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
-                            LockedManifestError::ResolutionFailed(failures),
-                        ))
-                        .into())
-                    },
-                }
+                Some((failures.clone(), packages))
             },
+            _ => None,
+        }
+    }
 
+    fn retry_install_for_valid_systems(
+        flox: &Flox,
+        environment: &mut dyn Environment,
+        failures: ResolutionFailures,
+        packages_to_retry: &[PackageToInstallRetry],
+    ) -> Result<InstallationAttempt, EnvironmentError> {
+        let span = span!(
+            tracing::Level::INFO,
+            "install",
+            progress = "Installing packages for available systems"
+        );
+        let packages_installable = packages_to_retry
+            .iter()
+            .cloned()
+            .map(|p| p.pkg)
+            .collect::<Vec<_>>();
+        let install_result = span.in_scope(|| environment.install(&packages_installable, flox));
+
+        match install_result {
+            Ok(install_attempt) => {
+                for pkg_retry in packages_to_retry.iter() {
+                    if pkg_retry.warn {
+                        // FIXME: Remove this during the refactor
+                        message::warning(format!(
+                            "Installing '{}' for the following systems: {:?}",
+                            pkg_retry.pkg.id(),
+                            // This will only be `None` for flake packages,
+                            // but this branch is already unreachable for
+                            // flakes because they don't produce the kind of
+                            // error that triggers a retry in the first place.
+                            pkg_retry.pkg.systems().unwrap_or_default()
+                        ));
+                    }
+                }
+                Ok(install_attempt)
+            },
+            Err(err) => {
+                debug!("install error: {:?}", err);
+                let mut failures = failures;
+                let msg = formatdoc! {"
+                    While attempting to install for available systems, the following error occurred:
+                    {err}
+                    ", err = format_error(&err).trim()
+                };
+                failures.0.push(ResolutionFailure::FallbackMessage { msg });
+                Err(EnvironmentError::Core(
+                    CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(
+                        failures,
+                    )),
+                ))
+            },
+        }
+    }
+
+    /// Handle an error that occurred during installation.
+    /// Some errors are recoverable and will return with [Ok].
+    fn handle_error(
+        err: EnvironmentError,
+        flox: &Flox,
+        packages: &[PackageToInstall],
+    ) -> Result<InstallationAttempt> {
+        debug!("install error: {:?}", err);
+
+        subcommand_metric!(
+            "install",
+            "failed_packages" = Install::format_packages_for_tracing(packages)
+        );
+
+        match err {
             // Try to make suggestions when a package isn't found
             EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::ResolutionFailed(failures),

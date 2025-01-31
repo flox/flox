@@ -426,6 +426,14 @@ impl PackageToInstall {
             _ => Ok(PackageToInstall::Catalog(s.parse()?)),
         }
     }
+
+    pub fn systems(&self) -> Option<Vec<String>> {
+        match self {
+            PackageToInstall::Catalog(pkg) => pkg.systems.clone(),
+            PackageToInstall::Flake(_) => None,
+            PackageToInstall::StorePath(pkg) => Some(vec![pkg.system.clone()]),
+        }
+    }
 }
 
 /// Tries to infer an install id from the flake ref URL, or falls back to "flake".
