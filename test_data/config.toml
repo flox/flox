@@ -91,6 +91,14 @@ ignore_cmd_errors = true # build will fail on macos, that's fine
 pre_cmd = "flox init"
 cmd = "flox install influxdb2"
 
+# This is used to trigger the "only install for some systems" code path
+[resolve.darwin_ps_all]
+pre_cmd = '''
+    flox init
+'''
+cmd = "flox install darwin.ps"
+ignore_cmd_errors = true # build will fail on linux, that's fine
+
 [resolve.darwin_ps]
 pre_cmd = '''
     flox init

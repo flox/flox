@@ -14,6 +14,8 @@ use nix::unistd::Pid;
 // use rexpect::session::{spawn_specific_bash, PtyReplSession};
 use tempfile::TempDir;
 
+pub mod manifests;
+
 type Error = anyhow::Error;
 
 // Modifications to `rexpect`:

@@ -59,8 +59,7 @@ teardown() {
       run "$FLOX_BIN" install -i pip python310Packages.pip python3
 
   assert_success
-  assert_output --partial "✅ 'pip' installed to environment"
-  assert_output --partial "✅ 'python3' installed to environment"
+  assert_output --partial "✅ 'python3', 'pip' installed to environment"
 
   "$FLOX_BIN" activate -- bash "$INPUT_DATA/init/python/requests-with-pip.sh"
 }

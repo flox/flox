@@ -55,6 +55,60 @@ pub(crate) fn package_installed(pkg: &PackageToInstall, environment_description:
     ));
 }
 
+/// Display a message for packages that were successfully installed for all
+/// requested systems.
+pub(crate) fn packages_successfully_installed(
+    pkgs: &[PackageToInstall],
+    environment_description: &str,
+) {
+    if !pkgs.is_empty() {
+        let pkg_list = pkgs
+            .iter()
+            .map(|p| format!("'{}'", p.id()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        updated(format!(
+            "{pkg_list} installed to environment {environment_description}"
+        ));
+    }
+}
+
+/// Display messages for each package that could only be installed for some of
+/// the requested systems.
+pub(crate) fn packages_installed_with_system_subsets(pkgs: &[PackageToInstall]) {
+    for pkg in pkgs.iter() {
+        warning(format!(
+            "'{}' installed only for the following systems: {}",
+            pkg.id(),
+            // Only `None` for flakes, which can't reach this code
+            // path anyway.
+            pkg.systems().unwrap_or_default().join(", ")
+        ))
+    }
+}
+
+/// Display a message for packages that were requested but were already installed.
+pub(crate) fn packages_already_installed(pkgs: &[PackageToInstall], environment_description: &str) {
+    let already_installed_msg = match pkgs {
+        [] => None,
+        [pkg] => Some(format!(
+            "Package with id '{}' already installed to environment {environment_description}",
+            pkg.id()
+        )),
+        pkgs => {
+            let joined = pkgs
+                .iter()
+                .map(|p| format!("'{}'", p.id()))
+                .collect::<Vec<_>>();
+            let joined = joined.join(", ");
+            Some(format!("Packages with ids {joined} already installed to environment {environment_description}"))
+        },
+    };
+    if let Some(msg) = already_installed_msg {
+        warning(msg)
+    }
+}
+
 /// A history for messages printed to stderr through the `message` module .
 /// In unit tests, the messaging functions of the `message` module will,
 /// populate a `History` in addition to printing the message to stderr.
