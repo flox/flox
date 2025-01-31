@@ -28,7 +28,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;
-use super::{copy_dir_recursive, ENV_DIR_NAME};
+use super::{copy_dir_recursive, ENV_DIR_NAME, LOCKFILE_FILENAME};
 use crate::flox::EnvironmentName;
 use crate::models::environment::MANIFEST_FILENAME;
 use crate::providers::git::{
@@ -61,7 +61,11 @@ pub struct ReadOnly {}
 /// Todo: rename to `CheckedOut`, `Filesystem`, ...?
 ///
 /// /// See also: [ReadOnly]
-pub struct ReadWrite {}
+pub struct ReadWrite<'a> {
+    /// A reference to the [ReadOnly] instance that will be released
+    /// when this instance is dropped.
+    _read_only: &'a mut Generations<ReadOnly>,
+}
 
 /// A representation of the generations of an environment
 ///
@@ -108,7 +112,24 @@ impl<S> Generations<S> {
             ))
             .map_err(GenerationsError::ShowManifest)?;
 
-        return Ok(manifest_osstr.to_string_lossy().to_string());
+        Ok(manifest_osstr.to_string_lossy().to_string())
+    }
+
+    /// Read the lockfile of a given generation and return its contents as a string.
+    pub fn lockfile(&self, generation: usize) -> Result<String, GenerationsError> {
+        let metadata = self.metadata()?;
+        if !metadata.generations.contains_key(&generation.into()) {
+            return Err(GenerationsError::GenerationNotFound(generation));
+        }
+        let lockfile_osstr = self
+            .repo
+            .show(&format!(
+                "{}:{}/{}/{}",
+                self.branch, generation, ENV_DIR_NAME, LOCKFILE_FILENAME
+            ))
+            .map_err(GenerationsError::ShowLockfile)?;
+
+        Ok(lockfile_osstr.to_string_lossy().to_string())
     }
 
     /// Read the manifest of the current generation and return its contents as a string
@@ -119,6 +140,16 @@ impl<S> Generations<S> {
             .ok_or(GenerationsError::NoGenerations)?;
 
         self.manifest(*current_gen)
+    }
+
+    /// Read the lockfile of the current generation and return its contents as a string.
+    pub fn current_gen_lockfile(&self) -> Result<String, GenerationsError> {
+        let metadata = self.metadata()?;
+        let current_gen = metadata
+            .current_gen
+            .ok_or(GenerationsError::NoGenerations)?;
+
+        self.lockfile(*current_gen)
     }
 
     pub(super) fn git(&self) -> &GitCommandProvider {
@@ -178,9 +209,9 @@ impl Generations<ReadOnly> {
     /// Create a writable copy of this generations instance
     /// in a temporary directory.
     pub fn writable(
-        self,
+        &mut self,
         tempdir: impl AsRef<Path>,
-    ) -> Result<Generations<ReadWrite>, GenerationsError> {
+    ) -> Result<Generations<ReadWrite<'_>>, GenerationsError> {
         let repo = checkout_to_tempdir(
             &self.repo,
             &self.branch,
@@ -189,13 +220,13 @@ impl Generations<ReadOnly> {
 
         Ok(Generations {
             repo,
-            branch: self.branch,
-            _state: ReadWrite {},
+            branch: self.branch.clone(),
+            _state: ReadWrite { _read_only: self },
         })
     }
 }
 
-impl Generations<ReadWrite> {
+impl Generations<ReadWrite<'_>> {
     /// Return a mutable [CoreEnvironment] instance for a given generation
     /// contained in the generations branch.
     ///
@@ -406,6 +437,8 @@ pub enum GenerationsError {
     WriteManifest(#[source] std::io::Error),
     #[error("could not show manifest file")]
     ShowManifest(#[source] GitCommandError),
+    #[error("could not show lockfile")]
+    ShowLockfile(#[source] GitCommandError),
     // endregion
 }
 
