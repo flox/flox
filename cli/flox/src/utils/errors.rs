@@ -397,7 +397,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         .to_string(),
 
         ManagedEnvironmentError::ReadLocalManifest(_) => display_chain(err),
-        ManagedEnvironmentError::ReadGenerationManifest(_) => display_chain(err),
+        ManagedEnvironmentError::Generations(_) => display_chain(err),
 
         ManagedEnvironmentError::BadBranchName(_) => display_chain(err),
 
