@@ -19,7 +19,7 @@ use flox_rust_sdk::models::environment::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
 };
-use flox_rust_sdk::models::manifest;
+use flox_rust_sdk::models::manifest::raw::add_system;
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use indoc::{formatdoc, indoc};
 use log::debug;
@@ -481,7 +481,7 @@ impl Pull {
         env: &impl Environment,
         flox: &Flox,
     ) -> Result<DocumentMut, anyhow::Error> {
-        manifest::add_system(&env.manifest_contents(flox)?, &flox.system)
+        add_system(&env.manifest_contents(flox)?, &flox.system)
             .context("Could not add system to manifest")
     }
 

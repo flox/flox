@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::io::Write;
 
-use flox_rust_sdk::models::manifest::PackageToInstall;
+use flox_rust_sdk::models::manifest::raw::PackageToInstall;
 use tracing::info;
 /// Write a message to stderr.
 ///

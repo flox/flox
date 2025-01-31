@@ -337,7 +337,7 @@ mod tests {
         LOCKED_NIX_EVAL_JOBS,
     };
     use flox_rust_sdk::models::lockfile::LockedPackage;
-    use flox_rust_sdk::models::manifest::DEFAULT_PRIORITY;
+    use flox_rust_sdk::models::manifest::typed::DEFAULT_PRIORITY;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 

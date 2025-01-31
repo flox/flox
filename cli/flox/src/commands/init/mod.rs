@@ -8,7 +8,7 @@ use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
-use flox_rust_sdk::models::manifest::{insert_packages, CatalogPackage, PackageToInstall};
+use flox_rust_sdk::models::manifest::raw::{insert_packages, CatalogPackage, PackageToInstall};
 use flox_rust_sdk::providers::catalog::{
     ClientTrait,
     PackageDescriptor,

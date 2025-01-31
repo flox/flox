@@ -20,7 +20,7 @@ use flox_core::Version;
 use log::debug;
 use thiserror::Error;
 
-use super::manifest::{
+use super::manifest::typed::{
     Allows,
     Manifest,
     ManifestPackageDescriptor,
@@ -1313,7 +1313,7 @@ pub enum LockedManifestError {
 
 pub mod test_helpers {
     use super::*;
-    use crate::models::manifest::ManifestPackageDescriptorStorePath;
+    use crate::models::manifest::typed::ManifestPackageDescriptorStorePath;
 
     pub fn fake_catalog_package_lock(
         name: &str,
@@ -1494,7 +1494,8 @@ pub(crate) mod tests {
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
-    use crate::models::manifest::{Manifest, RawManifest};
+    use crate::models::manifest::raw::RawManifest;
+    use crate::models::manifest::typed::Manifest;
     use crate::models::search::{PackageDetails, SearchLimit, SearchResults};
     use crate::providers::flake_installable_locker::{
         FlakeInstallableError,

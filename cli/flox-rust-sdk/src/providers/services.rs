@@ -23,7 +23,7 @@ use tracing::debug;
 
 use crate::flox::Flox;
 use crate::models::lockfile::Lockfile;
-use crate::models::manifest::{ManifestServiceShutdown, ManifestServices};
+use crate::models::manifest::typed::{ManifestServiceShutdown, ManifestServices};
 use crate::utils::logging::traceable_path;
 use crate::utils::CommandExt;
 

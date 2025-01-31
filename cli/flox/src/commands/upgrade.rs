@@ -165,7 +165,7 @@ mod tests {
         new_path_environment_from_env_files,
     };
     use flox_rust_sdk::models::environment::Environment;
-    use flox_rust_sdk::models::manifest::PackageToInstall;
+    use flox_rust_sdk::models::manifest::raw::PackageToInstall;
     use flox_rust_sdk::providers::catalog::test_helpers::reset_mocks_from_file;
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
     use flox_rust_sdk::utils::logging::test_helpers::CollectingWriter;

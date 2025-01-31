@@ -886,7 +886,7 @@ mod realise_flakes_tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::models::manifest::ManifestPackageDescriptorFlake;
+    use crate::models::manifest::typed::ManifestPackageDescriptorFlake;
     use crate::providers::flake_installable_locker::{InstallableLocker, InstallableLockerImpl};
 
     // region: tools to configure mock flakes for testing
@@ -1091,7 +1091,7 @@ mod realise_flakes_tests {
 #[cfg(test)]
 mod realise_store_path_tests {
     use super::*;
-    use crate::models::manifest::DEFAULT_PRIORITY;
+    use crate::models::manifest::typed::DEFAULT_PRIORITY;
 
     fn mock_store_path(valid: bool) -> LockedPackageStorePath {
         LockedPackageStorePath {

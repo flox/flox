@@ -11,7 +11,7 @@ use tracing::{debug, info, instrument};
 
 use super::buildenv::BuiltStorePath;
 use crate::flox::Flox;
-use crate::models::manifest::ManifestContainerizeConfig;
+use crate::models::manifest::typed::ManifestContainerizeConfig;
 use crate::providers::build::BUILDTIME_NIXPKGS_URL;
 use crate::providers::nix::nix_base_command;
 use crate::utils::gomap::GoMap;
