@@ -415,6 +415,36 @@ EOF
   assert_output --partial "Hello, world!"
 }
 
+@test "container with user:group set can run as specified user:group" {
+  skip_if_not_linux # config is implemented in the Linux build of flox entirely
+  
+  "$FLOX_BIN" init
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+    
+    [containerize.config]
+    user = "foo:bar"
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" "$FLOX_BIN" edit -f -
+
+  TAG="whoami-in-container"
+
+  bash -c "FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=main $FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
+
+  run podman run --rm "test:$TAG" 'whoami'
+  assert_success
+  assert_output --partial "foo"
+
+  run bash -c "podman inspect test:$TAG | jq '.[0].Config | .User'"
+  assert_success
+  assert_output  --partial - <<EOF
+"foo:bar"
+EOF
+}
+
 # ---------------------------------------------------------------------------- #
 #
 #
