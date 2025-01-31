@@ -26,7 +26,8 @@ use crate::models::environment::RenderedEnvironmentLink;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
 use crate::models::lockfile::Lockfile;
-use crate::models::manifest::{Manifest, PackageToInstall};
+use crate::models::manifest::raw::PackageToInstall;
+use crate::models::manifest::typed::Manifest;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
 

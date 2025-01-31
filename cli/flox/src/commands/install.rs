@@ -22,7 +22,7 @@ use flox_rust_sdk::models::lockfile::{
     ResolutionFailure,
     ResolutionFailures,
 };
-use flox_rust_sdk::models::manifest::{
+use flox_rust_sdk::models::manifest::raw::{
     catalog_packages_to_install,
     CatalogPackage,
     PackageToInstall,
@@ -582,7 +582,7 @@ fn add_activation_to_rc_file(
 mod tests {
     use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
-    use flox_rust_sdk::models::manifest::{CatalogPackage, PackageToInstall};
+    use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall};
     use flox_rust_sdk::providers::catalog::SystemEnum;
 
     use super::{add_activation_to_rc_file, ensure_rc_file_exists};

@@ -5,7 +5,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
-use flox_rust_sdk::models::manifest::{Manifest, ManifestServices};
+use flox_rust_sdk::models::manifest::typed::{Manifest, ManifestServices};
 use flox_rust_sdk::providers::services::{new_services_to_start, ProcessState, ProcessStates};
 use tracing::{debug, instrument};
 
@@ -366,7 +366,7 @@ fn defined_service_not_active_error(name: &str) -> ServicesCommandsError {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::models::manifest::ManifestServiceDescriptor;
+    use flox_rust_sdk::models::manifest::typed::ManifestServiceDescriptor;
     use flox_rust_sdk::providers::services::test_helpers::generate_process_state;
 
     use super::*;

@@ -9,7 +9,7 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 
 use super::nix::nix_base_command;
-use crate::models::manifest::{ManifestPackageDescriptorFlake, DEFAULT_PRIORITY};
+use crate::models::manifest::typed::{ManifestPackageDescriptorFlake, DEFAULT_PRIORITY};
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::utils::CommandExt;
 
@@ -251,7 +251,7 @@ mod tests {
     use crate::flox::test_helpers::flox_instance;
     use crate::models::environment::path_environment::test_helpers::new_path_environment;
     use crate::models::environment::Environment;
-    use crate::models::manifest::{FlakePackage, PackageToInstall};
+    use crate::models::manifest::raw::{FlakePackage, PackageToInstall};
 
     /// Returns the path to a bundled flake that contains a number of test packages
     /// for sped up evaluation

@@ -48,7 +48,8 @@ use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{Lockfile, DEFAULT_SYSTEMS_STR};
-use crate::models::manifest::{CatalogPackage, Manifest, PackageToInstall, RawManifest};
+use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
+use crate::models::manifest::typed::Manifest;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::utils::mtime_of;
 

@@ -46,7 +46,8 @@ use crate::models::environment::copy_dir_recursive;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
 use crate::models::lockfile::Lockfile;
-use crate::models::manifest::{Manifest, PackageToInstall};
+use crate::models::manifest::raw::PackageToInstall;
+use crate::models::manifest::typed::Manifest;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
     GitCommandBranchHashError,
@@ -1690,7 +1691,7 @@ mod test {
     use crate::models::floxmeta::floxmeta_dir;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::Lockfile;
-    use crate::models::manifest::{Manifest, ManifestPackageDescriptorCatalog};
+    use crate::models::manifest::typed::{Manifest, ManifestPackageDescriptorCatalog};
     use crate::providers::catalog::test_helpers::reset_mocks_from_file;
     use crate::providers::catalog::{MockClient, GENERATED_DATA};
     use crate::providers::git::tests::commit_file;

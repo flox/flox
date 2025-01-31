@@ -21,15 +21,13 @@ use super::{
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::lockfile::{LockedManifestError, LockedPackage, Lockfile, ResolutionFailure};
-use crate::models::manifest::{
+use crate::models::manifest::raw::{
     insert_packages,
     remove_packages,
-    Manifest,
-    ManifestError,
-    ManifestPackageDescriptor,
     PackageToInstall,
     TomlEditError,
 };
+use crate::models::manifest::typed::{Manifest, ManifestError, ManifestPackageDescriptor};
 use crate::providers::buildenv::{
     BuildEnv,
     BuildEnvError,
@@ -1108,7 +1106,7 @@ mod tests {
     use crate::flox::test_helpers::flox_instance;
     use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
-    use crate::models::manifest::{ManifestPackageDescriptorCatalog, DEFAULT_GROUP_NAME};
+    use crate::models::manifest::typed::{ManifestPackageDescriptorCatalog, DEFAULT_GROUP_NAME};
     use crate::providers::flake_installable_locker::InstallableLockerMock;
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 

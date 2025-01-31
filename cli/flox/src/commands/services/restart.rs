@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::manifest::ManifestServices;
+use flox_rust_sdk::models::manifest::typed::ManifestServices;
 use flox_rust_sdk::providers::services::{
     process_compose_down,
     restart_service,

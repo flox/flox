@@ -6,7 +6,7 @@ use std::str::FromStr;
 use anyhow::{anyhow, Context, Error, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
-use flox_rust_sdk::models::manifest::CatalogPackage;
+use flox_rust_sdk::models::manifest::raw::CatalogPackage;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::debug;
