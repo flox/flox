@@ -280,11 +280,11 @@ impl Config {
         let reload = false;
 
         let final_config = Self::raw_config(reload)?;
-        let cli_confg: Config = final_config
+        let cli_config: Config = final_config
             .to_owned()
             .try_deserialize()
             .context("Could not parse config")?;
-        Ok(cli_confg)
+        Ok(cli_config)
     }
 
     /// get a value from the config
