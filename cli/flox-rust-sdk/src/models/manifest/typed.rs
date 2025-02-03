@@ -467,6 +467,10 @@ pub struct ManifestVariables(
 );
 
 impl ManifestVariables {
+    pub(crate) fn into_inner(self) -> BTreeMap<String, String> {
+        self.0
+    }
+
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }

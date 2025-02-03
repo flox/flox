@@ -107,12 +107,14 @@ impl ManifestMergeStrategy for ShallowMerger {
         Ok(ManifestInstall::default())
     }
 
-    /// TODO: Not implemented.
+    /// Keys in `manifest2` overwrite keys in `manifest1`.
     fn merge_vars(
-        _vars1: &ManifestVariables,
-        _vars2: &ManifestVariables,
+        vars1: &ManifestVariables,
+        vars2: &ManifestVariables,
     ) -> Result<ManifestVariables, MergeError> {
-        Ok(ManifestVariables::default())
+        let mut merged = vars1.clone().into_inner();
+        merged.extend(vars2.clone().into_inner());
+        Ok(ManifestVariables(merged))
     }
 
     /// TODO: Not implemented.
@@ -182,6 +184,8 @@ impl ManifestMergeStrategy for ShallowMerger {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -190,6 +194,10 @@ mod tests {
     fn shallow_merger_no_deps() {
         let composer = Manifest {
             version: Version::<1>,
+            vars: ManifestVariables(BTreeMap::from([
+                ("composer_a".to_string(), "set by composer".to_string()),
+                ("composer_b".to_string(), "set by composer".to_string()),
+            ])),
             ..Manifest::default()
         };
 
@@ -206,16 +214,32 @@ mod tests {
     fn shallow_merger_with_deps() {
         let dep1 = Manifest {
             version: Version::<1>,
+            vars: ManifestVariables(BTreeMap::from([
+                ("dep1_a".to_string(), "set by dep1".to_string()),
+                ("dep1_b".to_string(), "set by dep1".to_string()),
+                ("dep1_c".to_string(), "set by dep1".to_string()),
+            ])),
             ..Manifest::default()
         };
 
         let dep2 = Manifest {
             version: Version::<1>,
+            vars: ManifestVariables(BTreeMap::from([
+                ("dep1_a".to_string(), "updated by dep2".to_string()),
+                ("dep1_b".to_string(), "updated by dep2".to_string()),
+                ("dep2_a".to_string(), "set by dep2".to_string()),
+                ("dep2_b".to_string(), "set by dep2".to_string()),
+            ])),
             ..Manifest::default()
         };
 
         let composer = Manifest {
             version: Version::<1>,
+            vars: ManifestVariables(BTreeMap::from([
+                ("dep1_a".to_string(), "updated by composer".to_string()),
+                ("dep2_a".to_string(), "updated by composer".to_string()),
+                ("composer_a".to_string(), "set by composer".to_string()),
+            ])),
             ..Manifest::default()
         };
 
@@ -228,9 +252,16 @@ mod tests {
 
         assert_eq!(merged, Manifest {
             version: Version::<1>,
+            vars: ManifestVariables(BTreeMap::from([
+                ("dep1_a".to_string(), "updated by composer".to_string()),
+                ("dep1_b".to_string(), "updated by dep2".to_string()),
+                ("dep1_c".to_string(), "set by dep1".to_string()),
+                ("dep2_a".to_string(), "updated by composer".to_string()),
+                ("dep2_b".to_string(), "set by dep2".to_string()),
+                ("composer_a".to_string(), "set by composer".to_string()),
+            ])),
             // TODO: Not implemented.
             install: ManifestInstall::default(),
-            vars: ManifestVariables::default(),
             hook: ManifestHook::default(),
             profile: ManifestProfile::default(),
             options: ManifestOptions::default(),
