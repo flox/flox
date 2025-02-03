@@ -27,6 +27,7 @@ endif
 # Substitute Nix store paths for packages required by this Makefile.
 __bashInteractive := @bashInteractive@
 __coreutils := @coreutils@
+__daemonize := @daemonize@
 __gitMinimal := @gitMinimal@
 __gnugrep := @gnugrep@
 __gnused := @gnused@
@@ -45,6 +46,7 @@ _bash := $(call __package_bin,$(__bashInteractive),bash)
 _cat := $(call __package_bin,$(__coreutils),cat)
 _cp := $(call __package_bin,$(__coreutils),cp)
 _cut := $(call __package_bin,$(__coreutils),cut)
+_daemonize := $(call __package_bin,$(__daemonize),daemonize)
 _env := $(call __package_bin,$(__coreutils),env)
 _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
@@ -206,7 +208,7 @@ define CLEAN_result_link_template =
 
   .PHONY: clean_result_storepath/$(1)
   clean_result_storepath/$(1): clean_result_link/$(1)
-	-$(_nix) store delete $(_storePath) >/dev/null 2>&1
+	$(_daemonize) $(_nix) store delete $(_storePath)
 
   clean/$(_pname): clean_result_link/$(1) \
     $(if $(_storePath),clean_result_storepath/$(1))
@@ -339,8 +341,8 @@ define BUILD_nix_sandbox_template =
 	$(_VV_) if [ -n "$(_do_buildCache)" ]; then \
 	  if [ -f "$(_result)-buildCache" ] && [ -f "$(_result)-buildCache.prevOutPath" ]; then \
 	    if [ $$$$($(_readlink) "$(_result)-buildCache") != $$$$(cat "$(_result)-buildCache.prevOutPath") ]; then \
-	      $(_nix) store delete \
-	        $$$$(cat "$(_result)-buildCache.prevOutPath") >/dev/null 2>&1 || true; \
+	      $(_daemonize) $(_nix) store delete \
+	        $$$$(cat "$(_result)-buildCache.prevOutPath"); \
 	    fi; \
 	  fi; \
 	  $(_rm) -f "$(_result)-buildCache.prevOutPath"; \

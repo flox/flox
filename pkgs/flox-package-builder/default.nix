@@ -1,6 +1,7 @@
 {
   bashInteractive,
   coreutils,
+  daemonize,
   gitMinimal,
   gnugrep,
   gnused,
@@ -23,6 +24,7 @@ let
     inherit
       bashInteractive
       coreutils
+      daemonize
       gitMinimal
       gnugrep
       gnused
