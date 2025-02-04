@@ -107,6 +107,8 @@ pub struct FloxConfig {
 
     /// Configuration for 'flox publish'.
     pub publish: Option<PublishConfig>,
+
+    pub installer_channel: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

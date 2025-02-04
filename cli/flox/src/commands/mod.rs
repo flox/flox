@@ -41,6 +41,7 @@ use flox_rust_sdk::flox::{
     FloxhubTokenError,
     DEFAULT_FLOXHUB_URL,
     DEFAULT_NAME,
+    FLOX_RELEASE_ENV,
     FLOX_SENTRY_ENV,
     FLOX_VERSION,
 };
@@ -218,6 +219,8 @@ impl FloxArgs {
         let temp_dir = TempDir::new_in(process_dir)?;
         let temp_dir_path = temp_dir.path().to_owned();
 
+        let update_channel = config.flox.installer_channel.clone();
+
         // Given no command, skip initialization and print welcome message
         if self.command.is_none() {
             let envs = env_registry::read_environment_registry(
@@ -226,14 +229,15 @@ impl FloxArgs {
             .unwrap_or_default();
             let active_environments = activated_environments();
             print_welcome_message(envs, active_environments);
-            UpdateNotification::check_for_and_print_update_notification(&config.flox.cache_dir)
+            UpdateNotification::check_for_and_print_update_notification(&config.flox.cache_dir,update_channel)
                 .await;
             return Ok(());
         }
 
         let cache_dir = config.flox.cache_dir.clone();
+
         let check_for_update_handle =
-            tokio::spawn(async { UpdateNotification::check_for_update(cache_dir).await });
+            tokio::spawn(async { UpdateNotification::check_for_update(cache_dir,update_channel).await });
 
         // migrate metrics denial
         // metrics could be turned off by writing an empty UUID file
@@ -492,19 +496,20 @@ enum UpdateCheckResult {
 }
 
 impl UpdateNotification {
-    pub async fn check_for_and_print_update_notification(cache_dir: impl AsRef<Path>) {
-        Self::handle_update_result(Self::check_for_update(cache_dir).await)
+    pub async fn check_for_and_print_update_notification(cache_dir: impl AsRef<Path>,release_channel: Option<String>) {
+        Self::handle_update_result(Self::check_for_update(cache_dir,release_channel).await)
     }
 
     /// If the user hasn't been notified of an update after
     /// UPDATE_NOTIFICATION_EXPIRY time has passed, check for an update.
     pub async fn check_for_update(
         cache_dir: impl AsRef<Path>,
+        release_channel: Option<String>,
     ) -> Result<UpdateCheckResult, UpdateNotificationError> {
         let notification_file = cache_dir.as_ref().join(UPDATE_NOTIFICATION_FILE_NAME);
-        // FLOX_SENTRY_ENV won't be set for development builds.
+        // FLOX_RELEASE_ENV won't be set for development builds.
         // Skip printing an update notification.
-        let Some(ref sentry_env) = *FLOX_SENTRY_ENV else {
+        let Some(ref release_env) = release_channel else {
             debug!("Skipping update check in development mode");
             return Ok(UpdateCheckResult::Skipped);
         };
@@ -516,7 +521,7 @@ impl UpdateNotification {
 
         Self::check_for_update_inner(
             notification_file,
-            Self::get_latest_version(sentry_env),
+            Self::get_latest_version(release_env),
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await
@@ -598,6 +603,7 @@ impl UpdateNotification {
     // Check for update instructions file which is located relative to the current executable
     // and is created by an installer
     fn update_instructions(update_instructions_relative_file_path: &str) -> String {
+        let result : String;
         if let Ok(exe) = env::current_exe() {
             if let Ok(update_instructions_file) = exe
                 .join(update_instructions_relative_file_path)
@@ -607,31 +613,49 @@ impl UpdateNotification {
                     "Looking for update instructions file at: {}",
                     update_instructions_file.display()
                 );
-                fs::read_to_string(update_instructions_file)
+                result = fs::read_to_string(update_instructions_file)
                     .map(|docs| format!("Get the latest with:\n{}", indent::indent_all_by(2, docs)))
-                    .unwrap_or(DEFAULT_UPDATE_INSTRUCTIONS.to_string())
+                    .unwrap_or(DEFAULT_UPDATE_INSTRUCTIONS.to_string());
             } else {
-                DEFAULT_UPDATE_INSTRUCTIONS.to_string()
+                result = DEFAULT_UPDATE_INSTRUCTIONS.to_string();
             }
         } else {
-            DEFAULT_UPDATE_INSTRUCTIONS.to_string()
+            result = DEFAULT_UPDATE_INSTRUCTIONS.to_string();
         }
+        result.replace(
+            FLOX_SENTRY_ENV.clone().unwrap_or("stable".to_string()).as_str(),
+            FLOX_RELEASE_ENV.clone().unwrap_or("stable".to_string()).as_str())
     }
 
     /// If a new version is available, print a message to the user.
     ///
     /// Write the notification_file with the current time.
     fn print_new_version_available(self) {
-        message::plain(formatdoc! {"
+        let release_env = FLOX_RELEASE_ENV.clone().unwrap_or("stable".to_string());
+        if release_env == *FLOX_SENTRY_ENV.clone().unwrap_or("stable".to_string()) {
+            message::plain(formatdoc! {"
 
-            🚀  Flox has a new version available. {} -> {}
+                🚀  Flox has a new version available. {} -> {}
 
-            {}
-        ",
-            *FLOX_VERSION,
-            self.new_version,
-            Self::update_instructions(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH),
-        });
+                {}
+            ",
+                *FLOX_VERSION,
+                self.new_version,
+                Self::update_instructions(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH),
+            });
+        } else {
+            message::plain(formatdoc! {"
+
+                🚀  Flox has a new version available on the {} channel. {} -> {}
+
+                Go to https://downloads.flox.dev/?prefix=by-env/{} to download
+            ",
+                release_env,
+                *FLOX_VERSION,
+                self.new_version,
+                release_env,
+            });
+        }
     }
 
     fn write_notification_file(notification_file: impl AsRef<Path>) {
@@ -659,12 +683,12 @@ impl UpdateNotification {
     /// Get latest version from downloads.flox.dev
     ///
     /// Timeout after TRAILING_NETWORK_CALL_TIMEOUT
-    async fn get_latest_version(sentry_env: &str) -> Result<String, UpdateNotificationError> {
+    async fn get_latest_version(release_env: &str) -> Result<String, UpdateNotificationError> {
         let client = reqwest::Client::new();
 
         let request = client
             .get(format!(
-                "https://downloads.flox.dev/by-env/{sentry_env}/LATEST_VERSION",
+                "https://downloads.flox.dev/by-env/{release_env}/LATEST_VERSION",
             ))
             .timeout(TRAILING_NETWORK_CALL_TIMEOUT);
 
