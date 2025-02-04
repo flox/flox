@@ -525,3 +525,20 @@ EOF
   assert_success
   refute_output --partial "sourcing hook.on-activate"
 }
+
+# bats test_tags=activate,activate:attach
+@test "activating a managed environment doesn't create a writable instance" {
+  project_setup
+  export OWNER="owner"
+  floxhub_setup "$OWNER"
+
+  "$FLOX_BIN" init
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+  "$FLOX_BIN" push --owner "$OWNER"
+
+  _FLOX_TESTING_NO_WRITABLE=true "$FLOX_BIN" activate -- true
+}

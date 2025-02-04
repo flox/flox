@@ -73,7 +73,7 @@ pub struct RemoteEnvironment {
 
 impl RemoteEnvironment {
     /// Pull a remote environment into a provided (temporary) managed environment.
-    /// Constructiing a [RemoteEnvironment] _does not_ create a gc-root
+    /// Constructing a [RemoteEnvironment] _does not_ create a gc-root
     /// or guarantee that the environment is valid.
     #[instrument(skip_all, fields(progress = "Pulling remote environment"))]
     pub fn new_in(
