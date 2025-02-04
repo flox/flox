@@ -89,23 +89,26 @@ impl Publish {
             bail!("Package '{}' not found in environment", package);
         }
 
-        if matches!(env, ConcreteEnvironment::Remote(_)) {
-            bail!("Unsupported environment type");
-        }
+        let path_env = match env {
+            ConcreteEnvironment::Path(path_env) => path_env,
+            _ => bail!("Unsupported environment type"),
+        };
 
-        let env_metadata = check_environment_metadata(&flox, &mut env)?;
-        let build_metadata = check_build_metadata(&env, &package)?;
+        // Check the environment for appropriate state to build and publish
+        let env_metadata = check_environment_metadata(&flox, &path_env, &package)?;
+
+        let build_metadata =
+            check_build_metadata(&flox, &env_metadata, &path_env, &FloxBuildMk, &package)?;
 
         let cache = if no_store {
             None
         } else {
             merge_cache_options(config.flox.publish, cache_args)?
         };
-        let publish_provider = PublishProvider::<&FloxBuildMk, &NixCopyCache> {
-            build_metadata,
+        let publish_provider = PublishProvider::<&NixCopyCache> {
             env_metadata,
+            build_metadata,
             cache: cache.as_ref(),
-            _builder: None,
         };
 
         let token = ensure_floxhub_token(&mut flox).await?;
