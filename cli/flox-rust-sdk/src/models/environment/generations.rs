@@ -18,8 +18,8 @@
 //! ```
 
 use std::collections::BTreeMap;
-use std::fs;
 use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 use chrono::{DateTime, Utc};
 use flox_core::Version;
@@ -212,6 +212,10 @@ impl Generations<ReadOnly> {
         &mut self,
         tempdir: impl AsRef<Path>,
     ) -> Result<Generations<ReadWrite<'_>>, GenerationsError> {
+        if env::var("_FLOX_TESTING_NO_WRITABLE").is_ok() {
+            panic!("Can't create writable generations when _FLOX_TESTING_NO_WRITABLE is set");
+        }
+
         let repo = checkout_to_tempdir(
             &self.repo,
             &self.branch,
