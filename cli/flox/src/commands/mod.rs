@@ -41,7 +41,6 @@ use flox_rust_sdk::flox::{
     FloxhubTokenError,
     DEFAULT_FLOXHUB_URL,
     DEFAULT_NAME,
-    FLOX_RELEASE_ENV,
     FLOX_SENTRY_ENV,
     FLOX_VERSION,
 };
@@ -229,15 +228,20 @@ impl FloxArgs {
             .unwrap_or_default();
             let active_environments = activated_environments();
             print_welcome_message(envs, active_environments);
-            UpdateNotification::check_for_and_print_update_notification(&config.flox.cache_dir,update_channel)
-                .await;
+            UpdateNotification::check_for_and_print_update_notification(
+                &config.flox.cache_dir,
+                &update_channel,
+            )
+            .await;
             return Ok(());
         }
 
         let cache_dir = config.flox.cache_dir.clone();
 
-        let check_for_update_handle =
-            tokio::spawn(async { UpdateNotification::check_for_update(cache_dir,update_channel).await });
+        let update_channel_clone = update_channel.clone();
+        let check_for_update_handle = tokio::spawn(async move {
+            UpdateNotification::check_for_update(cache_dir, &update_channel_clone).await
+        });
 
         // migrate metrics denial
         // metrics could be turned off by writing an empty UUID file
@@ -393,7 +397,7 @@ impl FloxArgs {
         // but I'm not sure it's worth a refactor.
         match check_for_update_handle.await {
             Ok(update_notification) => {
-                UpdateNotification::handle_update_result(update_notification);
+                UpdateNotification::handle_update_result(update_notification, &update_channel);
             },
             Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
         }
@@ -496,18 +500,24 @@ enum UpdateCheckResult {
 }
 
 impl UpdateNotification {
-    pub async fn check_for_and_print_update_notification(cache_dir: impl AsRef<Path>,release_channel: Option<String>) {
-        Self::handle_update_result(Self::check_for_update(cache_dir,release_channel).await)
+    pub async fn check_for_and_print_update_notification(
+        cache_dir: impl AsRef<Path>,
+        release_channel: &Option<String>,
+    ) {
+        Self::handle_update_result(
+            Self::check_for_update(cache_dir, release_channel).await,
+            release_channel,
+        )
     }
 
     /// If the user hasn't been notified of an update after
     /// UPDATE_NOTIFICATION_EXPIRY time has passed, check for an update.
     pub async fn check_for_update(
         cache_dir: impl AsRef<Path>,
-        release_channel: Option<String>,
+        release_channel: &Option<String>,
     ) -> Result<UpdateCheckResult, UpdateNotificationError> {
         let notification_file = cache_dir.as_ref().join(UPDATE_NOTIFICATION_FILE_NAME);
-        // FLOX_RELEASE_ENV won't be set for development builds.
+        // Release channel won't be set for development builds.
         // Skip printing an update notification.
         let Some(ref release_env) = release_channel else {
             debug!("Skipping update check in development mode");
@@ -577,6 +587,7 @@ impl UpdateNotification {
     /// or handle an error
     pub fn handle_update_result(
         update_notification: Result<UpdateCheckResult, UpdateNotificationError>,
+        release_env: &Option<String>,
     ) {
         match update_notification {
             Ok(UpdateCheckResult::Skipped) => {},
@@ -585,7 +596,7 @@ impl UpdateNotification {
             },
             Ok(UpdateCheckResult::UpdateAvailable(update_notification)) => {
                 Self::write_notification_file(&update_notification.notification_file);
-                update_notification.print_new_version_available();
+                update_notification.print_new_version_available(release_env);
             },
             Err(UpdateNotificationError::WeMayHaveMessedUp(e)) => {
                 debug!("Failed to check for CLI updates. Sending error to Sentry if enabled");
@@ -602,8 +613,11 @@ impl UpdateNotification {
 
     // Check for update instructions file which is located relative to the current executable
     // and is created by an installer
-    fn update_instructions(update_instructions_relative_file_path: &str) -> String {
-        let result : String;
+    fn update_instructions(
+        update_instructions_relative_file_path: &str,
+        release_env: &Option<String>,
+    ) -> String {
+        let result: String;
         if let Ok(exe) = env::current_exe() {
             if let Ok(update_instructions_file) = exe
                 .join(update_instructions_relative_file_path)
@@ -623,16 +637,20 @@ impl UpdateNotification {
             result = DEFAULT_UPDATE_INSTRUCTIONS.to_string();
         }
         result.replace(
-            FLOX_SENTRY_ENV.clone().unwrap_or("stable".to_string()).as_str(),
-            FLOX_RELEASE_ENV.clone().unwrap_or("stable".to_string()).as_str())
+            FLOX_SENTRY_ENV
+                .clone()
+                .unwrap_or("stable".to_string())
+                .as_str(),
+            release_env.clone().unwrap_or("stable".to_string()).as_str(),
+        )
     }
 
     /// If a new version is available, print a message to the user.
     ///
     /// Write the notification_file with the current time.
-    fn print_new_version_available(self) {
-        let release_env = FLOX_RELEASE_ENV.clone().unwrap_or("stable".to_string());
-        if release_env == *FLOX_SENTRY_ENV.clone().unwrap_or("stable".to_string()) {
+    fn print_new_version_available(self, release_env: &Option<String>) {
+        let release_env_unwrapped = release_env.clone().unwrap_or("stable".to_string());
+        if release_env_unwrapped == *FLOX_SENTRY_ENV.clone().unwrap_or("stable".to_string()) {
             message::plain(formatdoc! {"
 
                 🚀  Flox has a new version available. {} -> {}
@@ -641,7 +659,7 @@ impl UpdateNotification {
             ",
                 *FLOX_VERSION,
                 self.new_version,
-                Self::update_instructions(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH),
+                Self::update_instructions(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH,release_env),
             });
         } else {
             message::plain(formatdoc! {"
@@ -650,10 +668,10 @@ impl UpdateNotification {
 
                 Go to https://downloads.flox.dev/?prefix=by-env/{} to download
             ",
-                release_env,
+                release_env_unwrapped,
                 *FLOX_VERSION,
                 self.new_version,
-                release_env,
+                release_env_unwrapped,
             });
         }
     }
@@ -1794,12 +1812,13 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let notification_file = temp_dir.path().join("notification_file");
 
-        UpdateNotification::handle_update_result(Ok(UpdateCheckResult::UpdateAvailable(
-            UpdateNotification {
+        UpdateNotification::handle_update_result(
+            Ok(UpdateCheckResult::UpdateAvailable(UpdateNotification {
                 new_version: "new_version".to_string(),
                 notification_file: notification_file.clone(),
-            },
-        )));
+            })),
+            release_env,
+        );
 
         serde_json::from_str::<LastUpdateCheck>(&fs::read_to_string(notification_file).unwrap())
             .unwrap();
