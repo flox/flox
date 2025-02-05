@@ -404,9 +404,6 @@ fn gather_base_repo_meta(
     let lockfile = Lockfile::read_from_file(&lockfile_path.unwrap())
         .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
 
-    // let lockfile = environment
-    //     .lockfile(flox)
-    //     .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
     let install_ids_in_toplevel_group = lockfile
         .manifest
         .pkg_descriptors_in_toplevel_group()
@@ -590,10 +587,7 @@ pub mod tests {
 
         let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
         match meta {
-            Err(PublishError::UnsupportedEnvironmentState(msg)) => {
-                println!("{}", msg);
-                ()
-            },
+            Err(PublishError::UnsupportedEnvironmentState(_msg)) => {},
             _ => panic!("Expected error to be of type UnsupportedEnvironmentState"),
         }
     }
@@ -614,10 +608,7 @@ pub mod tests {
 
         let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
         match meta {
-            Err(PublishError::UnsupportedEnvironmentState(msg)) => {
-                println!("{}", msg);
-                ()
-            },
+            Err(PublishError::UnsupportedEnvironmentState(_msg)) => {},
             _ => panic!("Expected error to be of type UnsupportedEnvironmentState"),
         }
     }
@@ -629,6 +620,7 @@ pub mod tests {
         let (env, build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
         let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME).unwrap();
+        let description_in_manifest = "Some sample package description from our tests";
 
         let build_repo_meta = meta.build_repo_ref;
         assert!(build_repo_meta.url.contains(&remote_uri));
@@ -649,10 +641,7 @@ pub mod tests {
         );
         assert_eq!(meta.base_catalog_ref.rev_date, locked_base_pkg.rev_date);
         assert_eq!(meta.package, EXAMPLE_PACKAGE_NAME);
-        assert_eq!(
-            meta.description,
-            Some("Some sample package description from our tests".to_string())
-        );
+        assert_eq!(meta.description, Some(description_in_manifest.to_string()));
     }
 
     #[test]
@@ -669,11 +658,13 @@ pub mod tests {
         let meta = check_build_metadata(&flox, &env_metadata, &env, &builder, EXAMPLE_PACKAGE_NAME)
             .unwrap();
 
+        let version_in_manifest = "1.0.2a";
+
         assert_eq!(meta.outputs.len(), 1);
         assert_eq!(meta.outputs_to_install.len(), 1);
         assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
-        assert_eq!(meta.version, Some("1.0.2a".to_string()));
+        assert_eq!(meta.version, Some(version_in_manifest.to_string()));
         assert_eq!(meta.pname, EXAMPLE_PACKAGE_NAME.to_string());
         assert_eq!(meta.system.to_string(), flox.system);
     }
