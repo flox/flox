@@ -1,23 +1,23 @@
 use std::convert::Infallible;
 use std::env;
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use dirs::home_dir;
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
 
 use super::Runtime;
-use crate::config::FLOX_DISABLE_METRICS_VAR;
+use crate::config::{FLOX_CONFIG_FILE, FLOX_DISABLE_METRICS_VAR};
 
 const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE: &str = "ghcr.io/flox/flox";
+const FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR: &str = "/root/.config/flox";
 pub static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
     LazyLock::new(|| env::var("FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
 const CONTAINER_VOLUME_PREFIX: &str = "flox-nix-";
 
 const MOUNT_ENV: &str = "/flox_env";
-const MOUNT_HOME: &str = "/flox_home";
 
 /// An implementation of [ContainerBuilder] for macOS that uses `flox
 /// containerize` within a proxy container of a given [Runtime].
@@ -102,24 +102,28 @@ impl ContainerBuilder for ContainerizeProxy {
             &format!("type=volume,src={},dst=/nix", volume_name),
         ]);
 
-        // Honour config from the user's home directory on their host machine if
-        // available.
-        if let Some(home_dir) = home_dir() {
-            command.args(["--env", &format!("HOME={}", MOUNT_HOME)]);
-            command.args([
-                "--mount",
-                &format!(
-                    "type=bind,source={},target={}",
-                    home_dir.to_string_lossy(),
-                    MOUNT_HOME
-                ),
-            ]);
+        // Honour config from the user's flox.toml
+        // This could include things like floxhub_token and floxhub_url
+        let flox_toml = flox.config_dir.join(FLOX_CONFIG_FILE);
+        if flox_toml.exists() {
+            let mut flox_toml_mount = OsString::new();
+            flox_toml_mount.push("type=bind,source=");
+            flox_toml_mount.push(flox_toml);
+            flox_toml_mount.push(format!(
+                ",target={}/{}",
+                FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR, FLOX_CONFIG_FILE
+            ));
+            command.arg("--mount");
+            command.arg(flox_toml_mount);
         }
 
         // Honour `FLOX_DISABLE_METRICS` if set. Aside from being set by the
         // user, it may also be set at runtime by  [Flox::Commands::FloxArgs]
         // from another config path like `/etc/flox.toml` which isn't mounted
         // into the proxy container.
+        // TODO: it would be better to check config.flox.disable_metrics than
+        // FLOX_DISABLE_METRICS if we store config on Flox struct
+        // https://github.com/flox/flox/issues/1666
         if let Ok(disable_metrics) = std::env::var(FLOX_DISABLE_METRICS_VAR) {
             command.args([
                 "--env",
