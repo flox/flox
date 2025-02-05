@@ -95,9 +95,13 @@ pub struct BuildResults(Vec<BuildResult>);
 
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct BuildResult {
+    #[serde(rename = "drvPath")]
+    pub drv_path: String,
+    pub name: String,
     pub pname: String,
     pub outputs: HashMap<String, BuiltStorePath>,
     pub version: String,
+    pub system: Option<String>,
     pub log: BuiltStorePath,
 }
 
@@ -239,6 +243,7 @@ impl ManifestBuilder for FloxBuildMk {
                     },
                 };
 
+                println!("build results: {build_results}");
                 match serde_json::from_str(&build_results) {
                     Ok(build_results) => build_results,
                     Err(e) => {

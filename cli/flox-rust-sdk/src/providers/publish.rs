@@ -1,12 +1,10 @@
-use std::collections::HashMap;
 use std::error;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
-use serde::de::Error;
-use serde::Deserialize;
-use serde_json::Value;
+use log::info;
 use thiserror::Error;
 use tracing::instrument;
 use url::Url;
@@ -255,62 +253,10 @@ where
     }
 }
 
-pub fn get_derivation_info(path: &str) -> Result<(String, DerivationInfo), PublishError> {
-    let mut info_cmd = nix_base_command();
-    info_cmd.arg("derivation").arg("show").arg(path);
-    let output = info_cmd
-        .output()
-        .map_err(|e| PublishError::MissingDerivationInfo(e.to_string()))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let json: Value =
-        serde_json::from_str(&stdout).map_err(PublishError::DeserializeDerivationInfo)?;
-    match json {
-        Value::Object(map) if map.len() == 1 => {
-            let (drv_path, drv_info_value) = map
-                .into_iter()
-                .next()
-                .expect("Proven to have a single key.");
-            let drv_info = serde_json::from_value(drv_info_value)
-                .map_err(PublishError::DeserializeDerivationInfo)?;
-            Ok((drv_path, drv_info))
-        },
-        Value::Object(map) if map.len() > 1 => Err(PublishError::DeserializeDerivationInfo(
-            serde_json::Error::custom("Multiple derivations found"),
-        )),
-        _ => Err(PublishError::DeserializeDerivationInfo(
-            serde_json::Error::custom("Invalid JSON"),
-        )),
-    }
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct DerivationOutput {
-    _path: String,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct DerivationInfo {
-    name: String,
-    system: SystemEnum,
-    outputs: HashMap<String, DerivationOutput>,
-}
-
 pub fn check_build_metadata_from_build_result(
     build_result: &BuildResult,
+    system: SystemEnum,
 ) -> Result<CheckedBuildMetadata, PublishError> {
-    // Use any storepath from the build to get the derivation info
-    let any_storepath = build_result
-        .outputs
-        .iter()
-        .next()
-        .map(|(_o, sp)| sp)
-        .unwrap();
-    let (drv_path, drv_info) = get_derivation_info(any_storepath.as_path().to_str().unwrap())?;
-
-    let name = drv_info.name;
-    let system = drv_info.system;
-
     let outputs = Outputs(
         build_result
             .outputs
@@ -323,11 +269,11 @@ pub fn check_build_metadata_from_build_result(
             .collect(),
     );
 
-    let outputs_to_install: Vec<String> = drv_info.outputs.into_keys().collect();
+    let outputs_to_install: Vec<String> = build_result.outputs.clone().into_keys().collect();
 
     Ok(CheckedBuildMetadata {
-        drv_path: drv_path.to_string(),
-        name,
+        drv_path: build_result.drv_path.clone(),
+        name: build_result.name.clone(),
         pname: build_result.pname.clone(),
         outputs,
         outputs_to_install,
@@ -347,12 +293,15 @@ pub fn check_build_metadata(
 ) -> Result<CheckedBuildMetadata, PublishError> {
     // git clone into a temp directory
     let clean_repo_path = tempfile::tempdir_in(flox.temp_dir.clone()).unwrap();
-    let _ = GitCommandProvider::clone_branch(
+    let git = <GitCommandProvider as GitProvider>::clone(
         env.parent_path().unwrap(),
         &clean_repo_path,
-        &env_metadata.build_repo_ref.rev,
         false,
-    );
+    )
+    .unwrap();
+    // checkout the rev we want to publish
+    git.checkout(env_metadata.build_repo_ref.rev.as_str(), true)
+        .unwrap();
 
     let dot_flox_path = CanonicalPath::new(clean_repo_path.path().join(".flox"))
         .map_err(|err| EnvironmentError::DotFloxNotFound(err.path))?;
@@ -373,26 +322,20 @@ pub fn check_build_metadata(
         )
         .unwrap();
 
-    let mut output_stdout = String::new();
-    let mut output_stderr = String::new();
     let mut output_build_results: Option<BuildResults> = None;
     for message in output_stream {
         match message {
             build::Output::Success(build_results) => {
-                let _ = output_build_results.insert(build_results);
+                output_build_results = Some(build_results);
             },
             build::Output::Failure(_) => {
                 panic!("expected build to succeed");
             },
             build::Output::Stdout(line) => {
-                println!("stdout: {line}"); // To debug failing tests
-                output_stdout.push_str(&line);
-                output_stdout.push('\n');
+                info!("stdout: {line}");
             },
             build::Output::Stderr(line) => {
-                println!("stderr: {line}"); // To debug failing tests
-                output_stderr.push_str(&line);
-                output_stderr.push('\n');
+                info!("stderr: {line}");
             },
         }
     }
@@ -407,7 +350,10 @@ pub fn check_build_metadata(
     }
     let build_result = &build_results[0];
 
-    let metadata = check_build_metadata_from_build_result(build_result)?;
+    let metadata = check_build_metadata_from_build_result(
+        build_result,
+        SystemEnum::from_str(flox.system.as_str()).unwrap(),
+    )?;
     Ok(metadata)
 }
 
@@ -664,7 +610,7 @@ pub mod tests {
         assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.version, Some("1.0.2a".to_string()));
-        assert_eq!(meta.pname, "".to_string());
+        assert_eq!(meta.pname, EXAMPLE_PACKAGE_NAME.to_string());
         assert_eq!(meta.system.to_string(), flox.system);
     }
 
