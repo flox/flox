@@ -261,9 +261,9 @@ define BUILD_local_template =
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  --out-link "result-$(_pname)" \
 	  --json '^*' | \
-	$(_jq) --arg pname "$(_pname)" --arg version "$(_version)" \
+	$(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
 	  --arg log "$(shell $(_readlink) result-$(_pname)-log)" \
-	  '.[0] * {pname:$$$$pname, version:$$$$version, log:$$$$log}' > $($(_pvarname)_buildMetaJSON)
+	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log}' > $($(_pvarname)_buildMetaJSON)
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
