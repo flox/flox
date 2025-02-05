@@ -1817,7 +1817,7 @@ mod tests {
                 new_version: "new_version".to_string(),
                 notification_file: notification_file.clone(),
             })),
-            release_env,
+            &Some("stable".to_string()),
         );
 
         serde_json::from_str::<LastUpdateCheck>(&fs::read_to_string(notification_file).unwrap())
@@ -1831,9 +1831,12 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let notification_file = temp_dir.path().join("notification_file");
 
-        UpdateNotification::handle_update_result(Ok(UpdateCheckResult::RefreshNotificationFile(
-            notification_file.clone(),
-        )));
+        UpdateNotification::handle_update_result(
+            Ok(UpdateCheckResult::RefreshNotificationFile(
+                notification_file.clone(),
+            )),
+            &Some("stable".to_string()),
+        );
 
         serde_json::from_str::<LastUpdateCheck>(&fs::read_to_string(notification_file).unwrap())
             .unwrap();
@@ -1843,9 +1846,10 @@ mod tests {
     #[test]
     fn test_handle_update_result_sends_error_to_sentry() {
         let events = with_captured_events(|| {
-            UpdateNotification::handle_update_result(Err(
-                UpdateNotificationError::WeMayHaveMessedUp(anyhow!("error")),
-            ));
+            UpdateNotification::handle_update_result(
+                Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!("error"))),
+                &None,
+            );
         });
         assert_eq!(events.len(), 1);
         assert_eq!(
@@ -1858,9 +1862,12 @@ mod tests {
     #[test]
     fn test_handle_update_result_does_not_send_io_error_to_sentry() {
         let events = with_captured_events(|| {
-            UpdateNotification::handle_update_result(Err(UpdateNotificationError::Io(
-                io::Error::from(io::ErrorKind::UnexpectedEof),
-            )));
+            UpdateNotification::handle_update_result(
+                Err(UpdateNotificationError::Io(io::Error::from(
+                    io::ErrorKind::UnexpectedEof,
+                ))),
+                &None,
+            );
         });
         assert_eq!(events.len(), 0);
     }
@@ -2015,7 +2022,7 @@ mod tests {
     // does not exits
     #[test]
     fn test_update_instructions_default_message() {
-        let message = UpdateNotification::update_instructions("does-not-exists");
+        let message = UpdateNotification::update_instructions("does-not-exists", &None);
         assert!(message == DEFAULT_UPDATE_INSTRUCTIONS);
     }
 
@@ -2028,8 +2035,10 @@ mod tests {
 
         fs::write(&update_instructions_file, custom_message).unwrap();
 
-        let message =
-            UpdateNotification::update_instructions(update_instructions_file.to_str().unwrap());
+        let message = UpdateNotification::update_instructions(
+            update_instructions_file.to_str().unwrap(),
+            &Some("stable".to_string()),
+        );
         assert!(message.contains(custom_message));
     }
 }
