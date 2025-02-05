@@ -243,7 +243,6 @@ impl ManifestBuilder for FloxBuildMk {
                     },
                 };
 
-                println!("build results: {build_results}");
                 match serde_json::from_str(&build_results) {
                     Ok(build_results) => build_results,
                     Err(e) => {

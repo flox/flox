@@ -75,11 +75,17 @@ pub struct LockedUrlInfo {
 #[allow(clippy::manual_non_exhaustive)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckedEnvironmentMetadata {
+    // This is the local root path of the repo containing the environment
+    pub repo_root_path: PathBuf,
+    // This is the path to the .flox for the build environment relative to the repo_root_path
+    pub rel_dotflox_path: PathBuf,
+
     // There may or may not be a locked base catalog reference in the environment
     pub base_catalog_ref: LockedUrlInfo,
     // The build repo reference is always present
     pub build_repo_ref: LockedUrlInfo,
 
+    // These are collected from the environment manifest
     pub package: String,
     pub description: Option<String>,
 
@@ -294,7 +300,7 @@ pub fn check_build_metadata(
     // git clone into a temp directory
     let clean_repo_path = tempfile::tempdir_in(flox.temp_dir.clone()).unwrap();
     let git = <GitCommandProvider as GitProvider>::clone(
-        env.parent_path().unwrap(),
+        env_metadata.repo_root_path.as_path(),
         &clean_repo_path,
         false,
     )
@@ -303,8 +309,12 @@ pub fn check_build_metadata(
     git.checkout(env_metadata.build_repo_ref.rev.as_str(), true)
         .unwrap();
 
-    let dot_flox_path = CanonicalPath::new(clean_repo_path.path().join(".flox"))
-        .map_err(|err| EnvironmentError::DotFloxNotFound(err.path))?;
+    let dot_flox_path = CanonicalPath::new(
+        clean_repo_path
+            .path()
+            .join(env_metadata.rel_dotflox_path.as_path()),
+    )
+    .map_err(|err| EnvironmentError::DotFloxNotFound(err.path))?;
     let mut clean_build_env =
         PathEnvironment::open(flox, PathPointer::new(env.name()), dot_flox_path)?;
 
@@ -357,21 +367,17 @@ pub fn check_build_metadata(
     Ok(metadata)
 }
 
-fn gather_build_repo_meta(environment: &impl Environment) -> Result<LockedUrlInfo, PublishError> {
+fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, PublishError> {
     // Gather build repo info
-    let git = match environment.parent_path() {
-        Ok(env_path) => GitCommandProvider::discover(env_path)
-            .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git error {e}")))?,
-        Err(e) => return Err(PublishError::UnsupportedEnvironmentState(e.to_string())),
-    };
 
+    // This call will fail if the local head is not in the remote
     let origin = git
         .get_origin()
-        .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git error {e}")))?;
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git get origin {e}")))?;
 
     let status = git
         .status()
-        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git get status {e}")))?;
 
     if status.is_dirty {
         return Err(PublishError::UnsupportedEnvironmentState(
@@ -445,8 +451,19 @@ pub fn check_environment_metadata(
     environment: &impl Environment,
     pkg: &str,
 ) -> Result<CheckedEnvironmentMetadata, PublishError> {
-    // TODO - Ensure current commit is in remote (needed for repeatable builds)
-    let build_repo_meta = gather_build_repo_meta(environment)?;
+    // Gather build repo info
+    let git = match environment.parent_path() {
+        Ok(env_path) => GitCommandProvider::discover(env_path)
+            .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git discover {e}")))?,
+        Err(e) => return Err(PublishError::UnsupportedEnvironmentState(e.to_string())),
+    };
+
+    let dot_flox_path = environment.dot_flox_path();
+    let rel_dotflox_path = dot_flox_path.strip_prefix(git.path()).map_err(|e| {
+        PublishError::UnsupportedEnvironmentState(format!("Flox path not in git repo: {e}"))
+    })?;
+
+    let build_repo_meta = gather_build_repo_meta(&git)?;
 
     let base_repo_meta = gather_base_repo_meta(flox, environment)?;
 
@@ -460,6 +477,8 @@ pub fn check_environment_metadata(
         base_catalog_ref: base_repo_meta,
         build_repo_ref: build_repo_meta,
         package: pkg.to_string(),
+        repo_root_path: git.path().to_path_buf(),
+        rel_dotflox_path: rel_dotflox_path.to_path_buf(),
         description,
         _private: (),
     })
@@ -479,7 +498,7 @@ pub mod tests {
     use super::*;
     use crate::data::CanonicalPath;
     use crate::flox::test_helpers::{create_test_token, flox_instance};
-    use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::lockfile::Lockfile;
     use crate::providers::build::FloxBuildMk;
@@ -529,13 +548,16 @@ pub mod tests {
         flox: &Flox,
         remote: Option<&String>,
     ) -> (PathEnvironment, GitCommandProvider) {
-        let env = new_path_environment_from_env_files(flox, GENERATED_DATA.join(EXAMPLE_MANIFEST));
+        let repo_root = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let repo_subdir = repo_root.join("subdir_for_flox_stuff");
 
-        let git = GitCommandProvider::init(
-            env.parent_path().expect("Parent path must be accessible"),
-            false,
-        )
-        .unwrap();
+        let env = new_path_environment_from_env_files_in(
+            flox,
+            GENERATED_DATA.join(EXAMPLE_MANIFEST),
+            repo_subdir,
+        );
+
+        let git = GitCommandProvider::init(repo_root, false).unwrap();
 
         git.checkout("main", true).expect("checkout main branch");
         git.add(&[&env.dot_flox_path()]).expect("adding flox files");
@@ -556,6 +578,48 @@ pub mod tests {
 
         let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
         meta.expect_err("Should fail due to not being a git repo");
+    }
+
+    #[test]
+    fn test_check_env_meta_dirty() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let (env, _git) = example_path_environment(&flox, None);
+
+        std::fs::write(env.manifest_path(&flox).unwrap(), "dirty content")
+            .expect("to write some additional text to the .flox");
+
+        let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
+        match meta {
+            Err(PublishError::UnsupportedEnvironmentState(msg)) => {
+                println!("{}", msg);
+                ()
+            },
+            _ => panic!("Expected error to be of type UnsupportedEnvironmentState"),
+        }
+    }
+
+    #[test]
+    fn test_check_env_meta_not_in_remote() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let (env, git) = example_path_environment(&flox, None);
+
+        let manifest_path = env
+            .manifest_path(&flox)
+            .expect("to be able to get manifest path");
+        std::fs::write(&manifest_path, "dirty content")
+            .expect("to write some additional text to the .flox");
+        git.add(&[manifest_path.as_path()])
+            .expect("adding flox files");
+        git.commit("dirty comment").expect("be able to commit");
+
+        let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
+        match meta {
+            Err(PublishError::UnsupportedEnvironmentState(msg)) => {
+                println!("{}", msg);
+                ()
+            },
+            _ => panic!("Expected error to be of type UnsupportedEnvironmentState"),
+        }
     }
 
     #[test]

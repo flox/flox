@@ -555,10 +555,18 @@ pub mod test_helpers {
         flox: &Flox,
         env_files_dir: impl AsRef<Path>,
     ) -> PathEnvironment {
+        let dot_flox_parent_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+        new_path_environment_from_env_files_in(flox, env_files_dir, dot_flox_parent_path)
+    }
+
+    pub fn new_path_environment_from_env_files_in(
+        flox: &Flox,
+        env_files_dir: impl AsRef<Path>,
+        dot_flox_parent_path: impl AsRef<Path>,
+    ) -> PathEnvironment {
         let env_files_dir = env_files_dir.as_ref();
         let manifest_contents = fs::read_to_string(env_files_dir.join(MANIFEST_FILENAME)).unwrap();
         let lockfile_contents = fs::read_to_string(env_files_dir.join(LOCKFILE_FILENAME)).unwrap();
-        let dot_flox_parent_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
         let pointer = PathPointer::new("name".parse().unwrap());
         PathEnvironment::write_new_unchecked(
             flox,
@@ -567,7 +575,8 @@ pub mod test_helpers {
             &manifest_contents,
         )
         .unwrap();
-        let dot_flox_path = CanonicalPath::new(dot_flox_parent_path.join(DOT_FLOX)).unwrap();
+        let dot_flox_path =
+            CanonicalPath::new(dot_flox_parent_path.as_ref().join(DOT_FLOX)).unwrap();
         let env_dir = dot_flox_path.join(ENV_DIR_NAME);
         let lockfile_path = env_dir.join(LOCKFILE_FILENAME);
         fs::write(lockfile_path, lockfile_contents).unwrap();
