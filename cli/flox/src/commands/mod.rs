@@ -1124,6 +1124,12 @@ pub fn detect_environment(
             Some(UninitializedEnvironment::DotFlox(detected))
         },
 
+        // If an environment is activated and a 'default' environment is present
+        // in the current directory or git repo, prefer the activated one.
+        (Some(activated), Some(detected)) if detected.pointer.name().as_ref() == DEFAULT_NAME => {
+            Some(activated.clone())
+        },
+
         // If we can't prompt, use the environment found in the current directory or git repo
         (Some(_), Some(found)) if !Dialog::can_prompt() => {
             debug!("No TTY detected, using the environment {found:?} found in the current directory or an ancestor directory");
