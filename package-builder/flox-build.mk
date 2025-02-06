@@ -331,8 +331,8 @@ define BUILD_nix_sandbox_template =
 	  $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
 	  --out-link "result-$(_pname)" \
 	  --json '^*' | \
-	$(_jq) --arg pname "$(_pname)" --arg version "$(_version)" \
-	  '.[0] * {pname:$$$$pname, version:$$$$version, log:.[0].outputs.log}' > $($(_pvarname)_buildMetaJSON)
+	$(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
+	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log}' > $($(_pvarname)_buildMetaJSON)
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
