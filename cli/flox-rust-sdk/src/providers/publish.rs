@@ -83,7 +83,7 @@ pub struct CheckedEnvironmentMetadata {
 
     // These are collected from the environment manifest
     pub package: String,
-    pub description: Option<String>,
+    pub description: String,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
@@ -215,7 +215,7 @@ where
         let build_info = UserBuildInfo {
             derivation: UserDerivationInfo {
                 broken: Some(false),
-                description: "".to_string(),
+                description: self.env_metadata.description.clone(),
                 drv_path: self.build_metadata.drv_path.clone(),
                 license: None,
                 name: self.build_metadata.name.clone(),
@@ -474,7 +474,7 @@ pub fn check_environment_metadata(
         package: pkg.to_string(),
         repo_root_path: git.path().to_path_buf(),
         rel_dotflox_path: rel_dotflox_path.to_path_buf(),
-        description,
+        description: description.unwrap_or_else(|| "Not Provided".to_string()),
         _private: (),
     })
 }
@@ -639,7 +639,7 @@ pub mod tests {
         );
         assert_eq!(meta.base_catalog_ref.rev_date, locked_base_pkg.rev_date);
         assert_eq!(meta.package, EXAMPLE_PACKAGE_NAME);
-        assert_eq!(meta.description, Some(description_in_manifest.to_string()));
+        assert_eq!(meta.description, description_in_manifest.to_string());
     }
 
     #[test]
