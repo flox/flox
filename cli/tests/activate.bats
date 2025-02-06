@@ -114,13 +114,24 @@ project_teardown() {
 
 # Wait for a backgrounded activation to start, signalled by a blocking writing
 # to a FIFO file.
+# $1: background_pid
+#       This PID must be in a new process group otherwise this will kill bats as
+#       well
+# $2: (optional) timeout
 wait_for_background_activation() {
+  background_pid="${1?}"
+  shift
   timeout="${1:-2s}"
   fifo_file="activate_finished"
   output_file="output"
 
   timeout "$timeout" cat "$fifo_file" || (
     echo "Background activation did not start within timeout: $timeout" >&2
+    # activate may be running a command like bash -c "cmd1 && cmd2"
+    # Bash won't kill its children when it receives SIGTERM,
+    # so we need to kill the whole process group.
+    background_group="$(ps -o pgid= -p "$background_pid")"
+    kill -SIGTERM -"$background_group"
     [ -f "$output_file" ] && cat "$output_file" >&2
     exit 1
   )
@@ -4213,12 +4224,13 @@ Setting PATH from ${rc_file}"
 
   # Start an activation with the previously released version.
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  nix run "github:flox/flox/v${FLOX_LATEST_VERSION}" -- \
-    activate -- \
+  # Use setsid so that wait_for_background_activation can kill the process group
+  setsid ./result/bin/flox activate -- \
     "$shell_path" -c "echo > activate_finished && echo > $TEARDOWN_FIFO" > output 2>&1 &
 
   # Longer timeout to allow for `nix run` locking.
-  wait_for_background_activation 15s
+  background_pid="$!"
+  wait_for_background_activation "$background_pid" 15s
   run cat output
   # This the only place we use `--partial` because we only want to know that the
   # intial activation started.
