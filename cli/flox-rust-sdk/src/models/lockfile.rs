@@ -1,6 +1,8 @@
 use std::sync::LazyLock;
 
 use catalog_api_v1::types::{MessageLevel, SystemEnum};
+#[cfg(test)]
+use flox_test_utils::proptest::chrono_strat;
 use indent::{indent_all_by, indent_by};
 use indoc::formatdoc;
 use itertools::{Either, Itertools};
@@ -185,9 +187,9 @@ pub struct LockedPackageCatalog {
     pub pname: String,
     pub rev: String,
     pub rev_count: i64,
-    #[cfg_attr(test, proptest(strategy = "crate::utils::proptest_chrono_strategy()"))]
+    #[cfg_attr(test, proptest(strategy = "chrono_strat()"))]
     pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-    #[cfg_attr(test, proptest(strategy = "crate::utils::proptest_chrono_strategy()"))]
+    #[cfg_attr(test, proptest(strategy = "chrono_strat()"))]
     pub scrape_date: chrono::DateTime<chrono::offset::Utc>,
     pub stabilities: Option<Vec<String>>,
     pub unfree: Option<bool>,

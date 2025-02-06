@@ -13,6 +13,8 @@ indoc.workspace = true
 temp-env.workspace = true
 dirs.workspace = true
 serde_json.workspace = true
+proptest.workspace = true
+chrono.workspace = true
 
 # flox-core = { workspace = true, features = ["proc_status"]}
 

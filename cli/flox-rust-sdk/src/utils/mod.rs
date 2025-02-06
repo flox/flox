@@ -3,8 +3,6 @@ pub mod gomap;
 pub mod guard;
 pub mod logging;
 
-#[cfg(any(test, feature = "tests"))]
-use std::collections::BTreeMap;
 use std::fmt::{Display, Write};
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -13,8 +11,6 @@ use std::time::SystemTime;
 use std::{fs, io};
 
 pub use flox_core::traceable_path;
-#[cfg(any(test, feature = "tests"))]
-use proptest::prelude::*;
 use thiserror::Error;
 use tracing::{debug, trace};
 use walkdir;
@@ -246,60 +242,6 @@ pub fn maybe_traceable_path(maybe_path: &Option<PathBuf>) -> impl tracing::Value
     } else {
         String::from("null")
     }
-}
-
-#[cfg(any(test, feature = "tests"))]
-pub fn proptest_chrono_strategy() -> impl Strategy<Value = chrono::DateTime<chrono::Utc>> {
-    use chrono::TimeZone;
-
-    let start = chrono::Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
-    let end = chrono::Utc.with_ymd_and_hms(2100, 1, 1, 0, 0, 0).unwrap();
-
-    (start.timestamp()..end.timestamp())
-        .prop_map(|timestamp| chrono::Utc.timestamp_opt(timestamp, 0).unwrap())
-}
-
-/// Produces strings that only contain alphanumeric characters.
-///
-/// This is handy when you want to generate valid TOML keys without worrying about quoting
-/// or escaping.
-#[cfg(any(test, feature = "tests"))]
-pub fn proptest_alphanum_string(max_size: usize) -> impl Strategy<Value = String> {
-    let ranges = vec!['a'..='z', 'A'..='Z', '0'..='9'];
-    prop::collection::vec(
-        proptest::char::ranges(std::borrow::Cow::Owned(ranges)),
-        1..max_size,
-    )
-    .prop_map(|v| v.into_iter().collect())
-}
-
-/// Produces maps whose keys are strings that only contain alphanumeric characters.
-#[cfg(any(test, feature = "tests"))]
-pub fn proptest_btree_map_alphanum_keys<T: proptest::arbitrary::Arbitrary>(
-    key_max_size: usize,
-    max_keys: usize,
-) -> impl Strategy<Value = BTreeMap<String, T>> {
-    prop::collection::btree_map(
-        proptest_alphanum_string(key_max_size),
-        any::<T>(),
-        0..max_keys,
-    )
-}
-
-/// Produces maps whose keys are strings that only contain alphanumeric
-/// characters and whose values are empty BTreeMaps
-#[cfg(any(test, feature = "tests"))]
-pub fn proptest_btree_map_alphanum_keys_empty_map(
-    key_max_size: usize,
-    max_keys: usize,
-) -> impl Strategy<Value = BTreeMap<String, BTreeMap<(), ()>>> {
-    use prop::collection::btree_map;
-
-    prop::collection::btree_map(
-        proptest_alphanum_string(key_max_size),
-        btree_map(any::<()>(), any::<()>(), 0),
-        0..max_keys,
-    )
 }
 
 #[cfg(test)]

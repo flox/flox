@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
+pub mod proptest;
+
 use anyhow::{anyhow, bail, Context};
 // use flox_core::proc_status::{pid_is_running, pid_with_var};
 use indoc::formatdoc;
