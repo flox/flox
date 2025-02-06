@@ -26,6 +26,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
     FLOX_SERVICES_SOCKET_VAR,
 };
+use flox_rust_sdk::models::manifest::typed::Inner;
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
@@ -384,17 +385,26 @@ impl Activate {
         if self.start_services {
             ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
 
-            if manifest.services.is_empty() {
+            if manifest.services.inner().is_empty() {
                 message::warning(ServicesCommandsError::NoDefinedServices);
-            } else if manifest.services.copy_for_system(&flox.system).is_empty() {
+            } else if manifest
+                .services
+                .copy_for_system(&flox.system)
+                .inner()
+                .is_empty()
+            {
                 message::warning(ServicesCommandsError::NoDefinedServicesForSystem {
                     system: flox.system.clone(),
                 });
             }
         }
 
-        let should_have_services =
-            self.start_services && !manifest.services.copy_for_system(&flox.system).is_empty();
+        let should_have_services = self.start_services
+            && !manifest
+                .services
+                .copy_for_system(&flox.system)
+                .inner()
+                .is_empty();
         let start_new_process_compose = should_have_services
             && if socket_path.exists() {
                 // Returns `Ok(true)` if `process-compose` was shutdown

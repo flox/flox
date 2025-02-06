@@ -6,6 +6,7 @@ use flox_core::Version;
 use thiserror::Error;
 
 use super::typed::{
+    Inner,
     Manifest,
     ManifestBuild,
     ManifestContainerize,

@@ -23,7 +23,7 @@ use tracing::debug;
 
 use crate::flox::Flox;
 use crate::models::lockfile::Lockfile;
-use crate::models::manifest::typed::{ManifestServiceShutdown, ManifestServices};
+use crate::models::manifest::typed::{Inner, ManifestServiceShutdown, ManifestServices};
 use crate::utils::logging::traceable_path;
 use crate::utils::CommandExt;
 
@@ -280,7 +280,7 @@ pub fn maybe_make_service_config_file(
     flox: &Flox,
     lockfile: &Lockfile,
 ) -> Result<Option<PathBuf>, ServiceError> {
-    let service_config_path = if !lockfile.manifest.services.is_empty() {
+    let service_config_path = if !lockfile.manifest.services.inner().is_empty() {
         let config_path = service_config_write_location(&flox.temp_dir)?;
         write_process_compose_config(
             &lockfile

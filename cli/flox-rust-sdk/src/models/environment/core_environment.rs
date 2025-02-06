@@ -27,7 +27,7 @@ use crate::models::manifest::raw::{
     PackageToInstall,
     TomlEditError,
 };
-use crate::models::manifest::typed::{Manifest, ManifestError, ManifestPackageDescriptor};
+use crate::models::manifest::typed::{Inner, Manifest, ManifestError, ManifestPackageDescriptor};
 use crate::providers::buildenv::{
     BuildEnv,
     BuildEnvError,
@@ -349,7 +349,7 @@ impl CoreEnvironment<ReadOnly> {
         let mut install_ids = Vec::new();
         for pkg in packages {
             // User passed an install id directly
-            if manifest.install.contains_key(&pkg) {
+            if manifest.install.inner().contains_key(&pkg) {
                 install_ids.push(pkg);
                 continue;
             }
@@ -359,6 +359,7 @@ impl CoreEnvironment<ReadOnly> {
             // `<pkg-path>` and `<pkg-path>@<version>`.
             let matching_iids_by_pkg_path = manifest
                 .install
+                .inner()
                 .iter()
                 .filter(|(_iid, descriptor)| {
                     // Find matching pkg-paths and select for uninstall
@@ -1241,7 +1242,10 @@ mod tests {
 
         let mut manifest = Manifest::default();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
-        manifest.install.insert(foo_iid.clone(), foo_descriptor);
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor);
         let lockfile = lockfile::Lockfile {
             version: Version,
             packages: vec![foo_locked.into()],
@@ -1426,7 +1430,7 @@ mod tests {
         let mut typed_manifest_mock = Manifest::default();
 
         for (test_iid, dotted_package) in entries {
-            typed_manifest_mock.install.insert(
+            typed_manifest_mock.install.inner_mut().insert(
                 test_iid.to_string(),
                 ManifestPackageDescriptor::Catalog(ManifestPackageDescriptorCatalog {
                     pkg_path: dotted_package.to_string(),
@@ -1511,8 +1515,11 @@ mod tests {
     fn test_get_install_ids_to_uninstall_with_version() {
         let mut manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
 
-        if let ManifestPackageDescriptor::Catalog(descriptor) =
-            manifest_mock.install.get_mut("testInstallID").unwrap()
+        if let ManifestPackageDescriptor::Catalog(descriptor) = manifest_mock
+            .install
+            .inner_mut()
+            .get_mut("testInstallID")
+            .unwrap()
         {
             descriptor.version = Some("1.0".to_string());
         };

@@ -5,7 +5,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
-use flox_rust_sdk::models::manifest::typed::{Manifest, ManifestServices};
+use flox_rust_sdk::models::manifest::typed::{Inner, Manifest, ManifestServices};
 use flox_rust_sdk::providers::services::{new_services_to_start, ProcessState, ProcessStates};
 use tracing::{debug, instrument};
 
@@ -171,13 +171,16 @@ pub fn guard_service_commands_available(
     services_environment: &ServicesEnvironment,
     system: &System,
 ) -> Result<()> {
-    if !services_environment.socket.exists() && services_environment.manifest.services.is_empty() {
+    if !services_environment.socket.exists()
+        && services_environment.manifest.services.inner().is_empty()
+    {
         return Err(ServicesCommandsError::NoDefinedServices.into());
     } else if !services_environment.socket.exists()
         && services_environment
             .manifest
             .services
             .copy_for_system(system)
+            .inner()
             .is_empty()
     {
         return Err(ServicesCommandsError::NoDefinedServicesForSystem {
@@ -256,8 +259,8 @@ fn processes_by_name_or_default_to_all<'a>(
         }
 
         // Check if the service is available at all
-        let is_defined = manifest_services.contains_key(name);
-        let is_defined_for_system = services_for_system.contains_key(name);
+        let is_defined = manifest_services.inner().contains_key(name);
+        let is_defined_for_system = services_for_system.inner().contains_key(name);
 
         if !is_defined {
             Err(service_does_not_exist_error(name))?;
@@ -291,13 +294,14 @@ pub async fn start_services_with_new_process_compose(
         // for starting `process-compose`. This does a similar job as
         // `processes_by_name_or_default_to_all` where we don't yet have a
         // running `process-compose` instance.
-        if !lockfile.manifest.services.contains_key(name) {
+        if !lockfile.manifest.services.inner().contains_key(name) {
             return Err(service_does_not_exist_error(name))?;
         }
         if !lockfile
             .manifest
             .services
             .copy_for_system(&system)
+            .inner()
             .contains_key(name)
         {
             return Err(service_not_available_on_system_error(name, &system))?;
@@ -330,6 +334,7 @@ pub async fn start_services_with_new_process_compose(
             .manifest
             .services
             .copy_for_system(&system)
+            .inner()
             .keys()
             .cloned()
             .collect::<Vec<_>>()
@@ -426,13 +431,15 @@ mod tests {
     fn processes_by_name_fails_if_service_not_available_on_current_system() {
         let processes = [].into();
         let mut manifest_services = ManifestServices::default();
-        manifest_services.insert("foo".to_string(), ManifestServiceDescriptor {
-            command: "".to_string(),
-            vars: None,
-            is_daemon: None,
-            shutdown: None,
-            systems: Some(vec!["another-system".to_string()]),
-        });
+        manifest_services
+            .inner_mut()
+            .insert("foo".to_string(), ManifestServiceDescriptor {
+                command: "".to_string(),
+                vars: None,
+                is_daemon: None,
+                shutdown: None,
+                systems: Some(vec!["another-system".to_string()]),
+            });
 
         let err: ServicesCommandsError = processes_by_name_or_default_to_all(
             &processes,
@@ -460,13 +467,15 @@ mod tests {
     fn processes_by_name_fails_if_service_not_available_in_current_activation() {
         let processes = [].into();
         let mut manifest_services = ManifestServices::default();
-        manifest_services.insert("foo".to_string(), ManifestServiceDescriptor {
-            command: "".to_string(),
-            vars: None,
-            is_daemon: None,
-            shutdown: None,
-            systems: Some(vec!["system".to_string()]),
-        });
+        manifest_services
+            .inner_mut()
+            .insert("foo".to_string(), ManifestServiceDescriptor {
+                command: "".to_string(),
+                vars: None,
+                is_daemon: None,
+                shutdown: None,
+                systems: Some(vec!["system".to_string()]),
+            });
 
         let err: ServicesCommandsError =
             processes_by_name_or_default_to_all(&processes, &manifest_services, "system", &[
