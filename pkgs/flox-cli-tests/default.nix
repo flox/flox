@@ -38,6 +38,7 @@
   procps,
   pstree,
   unixtools,
+  util-linux,
   which,
   writeShellScriptBin,
   process-compose,
@@ -88,6 +89,7 @@ let
       parallel
       pstree
       unixtools.util-linux
+      util-linux # for setsid
       which
       yq
       process-compose
