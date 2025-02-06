@@ -32,14 +32,11 @@ pub enum PublishError {
     #[error("The outputs from the build do not exist: {0}")]
     NonexistentOutputs(String),
 
-    #[error("Unable to get derivation info: {0}")]
-    MissingDerivationInfo(String),
-
-    #[error("Unable to interpret derivation info: {0}")]
-    DeserializeDerivationInfo(#[source] serde_json::Error),
-
     #[error("The environment is in an unsupported state for publishing: {0}")]
     UnsupportedEnvironmentState(String),
+
+    #[error("The package could not be built: {0}")]
+    BuildError(String),
 
     #[error("There was an error communicating with the catalog")]
     CatalogError(#[source] Box<dyn error::Error + Send + Sync>),
@@ -304,10 +301,10 @@ pub fn check_build_metadata(
         &clean_repo_path,
         false,
     )
-    .unwrap();
+    .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
     // checkout the rev we want to publish
     git.checkout(env_metadata.build_repo_ref.rev.as_str(), true)
-        .unwrap();
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
 
     let dot_flox_path = CanonicalPath::new(
         clean_repo_path
@@ -323,14 +320,14 @@ pub fn check_build_metadata(
         .build(
             flox,
             &clean_build_env.parent_path()?,
-            &clean_build_env.build(flox).unwrap(),
+            &clean_build_env.build(flox)?,
             &clean_build_env
                 .rendered_env_links(flox)
                 .unwrap()
                 .development,
             &[pkg.to_owned()],
         )
-        .unwrap();
+        .map_err(|e| PublishError::BuildError(e.to_string()))?;
 
     let mut output_build_results: Option<BuildResults> = None;
     for message in output_stream {
@@ -362,7 +359,9 @@ pub fn check_build_metadata(
 
     let metadata = check_build_metadata_from_build_result(
         build_result,
-        SystemEnum::from_str(flox.system.as_str()).unwrap(),
+        SystemEnum::from_str(flox.system.as_str()).map_err(|_e| {
+            PublishError::UnsupportedEnvironmentState("Invalid system".to_string())
+        })?,
     )?;
     Ok(metadata)
 }
