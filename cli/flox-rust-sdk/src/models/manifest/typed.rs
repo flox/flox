@@ -503,7 +503,7 @@ impl_into_inner!(ManifestVariables, BTreeMap<String, String>);
 pub struct ManifestHook {
     /// A script that is run at activation time,
     /// in a flox provided bash shell
-    on_activate: Option<String>,
+    pub(crate) on_activate: Option<String>,
 }
 
 #[skip_serializing_none]
@@ -512,15 +512,15 @@ pub struct ManifestHook {
 #[serde(deny_unknown_fields)]
 pub struct ManifestProfile {
     /// When defined, this hook is run by _all_ shells upon activation
-    common: Option<String>,
+    pub(crate) common: Option<String>,
     /// When defined, this hook is run upon activation in a bash shell
-    bash: Option<String>,
+    pub(crate) bash: Option<String>,
     /// When defined, this hook is run upon activation in a zsh shell
-    zsh: Option<String>,
+    pub(crate) zsh: Option<String>,
     /// When defined, this hook is run upon activation in a fish shell
-    fish: Option<String>,
+    pub(crate) fish: Option<String>,
     /// When defined, this hook is run upon activation in a tcsh shell
-    tcsh: Option<String>,
+    pub(crate) tcsh: Option<String>,
 }
 
 #[skip_serializing_none]
