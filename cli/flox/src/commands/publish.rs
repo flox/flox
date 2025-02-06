@@ -5,6 +5,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
+use flox_rust_sdk::models::manifest::typed::Inner;
 use flox_rust_sdk::providers::build::FloxBuildMk;
 use flox_rust_sdk::providers::publish::{
     check_build_metadata,
@@ -135,7 +136,7 @@ impl Publish {
 fn check_target_exists(lockfile: &Lockfile, package: &str) -> Result<bool> {
     let environment_packages = &lockfile.manifest.build;
 
-    if environment_packages.is_empty() {
+    if environment_packages.inner().is_empty() {
         bail!(indoc! {"
         No builds found.
 
@@ -143,7 +144,7 @@ fn check_target_exists(lockfile: &Lockfile, package: &str) -> Result<bool> {
         "});
     }
 
-    if !environment_packages.contains_key(package) {
+    if !environment_packages.inner().contains_key(package) {
         bail!("Package '{}' not found in environment", package);
     }
 

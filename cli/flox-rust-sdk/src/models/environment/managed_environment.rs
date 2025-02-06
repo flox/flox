@@ -1664,7 +1664,7 @@ mod test {
     use crate::models::floxmeta::floxmeta_dir;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::Lockfile;
-    use crate::models::manifest::typed::{Manifest, ManifestPackageDescriptorCatalog};
+    use crate::models::manifest::typed::{Inner, Manifest, ManifestPackageDescriptorCatalog};
     use crate::providers::catalog::test_helpers::reset_mocks_from_file;
     use crate::providers::catalog::{MockClient, GENERATED_DATA};
     use crate::providers::git::tests::commit_file;
@@ -2446,7 +2446,7 @@ mod test {
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
 
         let mut new_manifest = Manifest::default();
-        new_manifest.install.insert(
+        new_manifest.install.inner_mut().insert(
             "hello".to_string(),
             ManifestPackageDescriptorCatalog {
                 pkg_path: "hello".to_string(),
@@ -2523,7 +2523,7 @@ mod test {
         let env_b_generations = init_generations_from_core_env(&flox.temp_dir, "env_b", &mut env_b);
 
         let (iid, descriptor, _) = fake_catalog_package_lock("package", None);
-        manifest_a.install.insert(iid, descriptor);
+        manifest_a.install.inner_mut().insert(iid, descriptor);
 
         fs::write(
             env_a.path().join(MANIFEST_FILENAME),

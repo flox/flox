@@ -4,6 +4,7 @@ use std::fmt::Display;
 use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::manifest::typed::Inner;
 use flox_rust_sdk::providers::services::{LoggedError, ProcessState, ProcessStates, ServiceError};
 use itertools::Itertools;
 use serde::Serialize;
@@ -44,7 +45,12 @@ impl Status {
             Err(ServiceError::LoggedError(LoggedError::SocketDoesntExist)) => {
                 let mut states = vec![];
                 let service_names = if self.names.is_empty() {
-                    env.manifest.services.keys().cloned().collect::<Vec<_>>()
+                    env.manifest
+                        .services
+                        .inner()
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<_>>()
                 } else {
                     self.names.clone()
                 };

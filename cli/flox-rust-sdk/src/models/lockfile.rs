@@ -22,6 +22,7 @@ use tracing::debug;
 
 use super::manifest::typed::{
     Allows,
+    Inner,
     Manifest,
     ManifestPackageDescriptor,
     ManifestPackageDescriptorCatalog,
@@ -700,6 +701,7 @@ impl Lockfile {
 
             let new_priority = manifest
                 .install
+                .inner()
                 .get(install_id)
                 .and_then(|descriptor| descriptor.as_catalog_descriptor_ref())
                 .and_then(|descriptor| descriptor.priority)
@@ -719,7 +721,7 @@ impl Lockfile {
             .filter_map(|locked| {
                 let system = locked.system().as_str();
                 let install_id = locked.install_id();
-                let descriptor = seed.manifest.install.get(locked.install_id())?;
+                let descriptor = seed.manifest.install.inner().get(locked.install_id())?;
                 Some(((install_id, system), (descriptor, locked)))
             })
             .collect()
@@ -763,7 +765,7 @@ impl Lockfile {
             Some(manifest.options.allow.licenses.clone())
         };
 
-        for (install_id, manifest_descriptor) in manifest.install.iter() {
+        for (install_id, manifest_descriptor) in manifest.install.inner().iter() {
             // package groups are only relevant to catalog descriptors
             let Some(manifest_descriptor) = manifest_descriptor.as_catalog_descriptor_ref() else {
                 continue;
@@ -1073,6 +1075,7 @@ impl Lockfile {
     ) -> impl Iterator<Item = FlakeInstallableToLock> + '_ {
         manifest
             .install
+            .inner()
             .iter()
             .filter_map(|(install_id, descriptor)| {
                 descriptor
@@ -1188,6 +1191,7 @@ impl Lockfile {
     fn collect_store_paths(manifest: &Manifest) -> Vec<LockedPackageStorePath> {
         manifest
             .install
+            .inner()
             .iter()
             .filter_map(|(install_id, descriptor)| {
                 descriptor
@@ -1983,7 +1987,7 @@ pub(crate) mod tests {
         let mut manifest = TEST_TYPED_MANIFEST.clone();
 
         // Add a package to the manifest that is not already locked
-        manifest.install.insert(
+        manifest.install.inner_mut().insert(
             "unlocked".to_string(),
             ManifestPackageDescriptorCatalog {
                 pkg_path: "unlocked".to_string(),
@@ -2044,6 +2048,7 @@ pub(crate) mod tests {
         let mut manifest_before = Manifest::default();
         manifest_before
             .install
+            .inner_mut()
             .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
 
         let seed = Lockfile {
@@ -2075,6 +2080,7 @@ pub(crate) mod tests {
         let mut manifest_before = Manifest::default();
         manifest_before
             .install
+            .inner_mut()
             .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
 
         let seed = Lockfile {
@@ -2098,6 +2104,7 @@ pub(crate) mod tests {
         let mut manifest_after = Manifest::default();
         manifest_after
             .install
+            .inner_mut()
             .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
 
         let actual_params = Lockfile::collect_package_groups(&manifest_after, Some(&seed))
@@ -2120,6 +2127,7 @@ pub(crate) mod tests {
         let mut manifest_before = Manifest::default();
         manifest_before
             .install
+            .inner_mut()
             .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
 
         let seed = Lockfile {
@@ -2142,6 +2150,7 @@ pub(crate) mod tests {
         let mut manifest_after = Manifest::default();
         manifest_after
             .install
+            .inner_mut()
             .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
 
         let actual_params = Lockfile::collect_package_groups(&manifest_after, Some(&seed))
@@ -2209,6 +2218,7 @@ pub(crate) mod tests {
 
         manifest
             .install
+            .inner_mut()
             .insert(foo_install_id.clone(), foo_descriptor.clone().into());
 
         let expected = DEFAULT_SYSTEMS_STR
@@ -2237,6 +2247,7 @@ pub(crate) mod tests {
 
         manifest
             .install
+            .inner_mut()
             .insert(foo_install_id.clone(), foo_descriptor.clone().into());
 
         let expected = [FlakeInstallableToLock {
@@ -2261,9 +2272,11 @@ pub(crate) mod tests {
 
         manifest
             .install
+            .inner_mut()
             .insert(foo_install_id.clone(), foo_descriptor.clone().into());
         manifest
             .install
+            .inner_mut()
             .insert(bar_install_id.clone(), bar_descriptor.clone());
 
         let expected = DEFAULT_SYSTEMS_STR
@@ -2332,6 +2345,7 @@ pub(crate) mod tests {
 
         let descriptor = manifest
             .install
+            .inner()
             .get(&groups[0].page.as_ref().unwrap().packages.as_ref().unwrap()[0].install_id)
             .and_then(ManifestPackageDescriptor::as_catalog_descriptor_ref)
             .expect("expected a catalog descriptor")
@@ -2356,13 +2370,21 @@ pub(crate) mod tests {
         let (bar_iid, bar_descriptor, bar_locked) = fake_catalog_package_lock("bar", None);
         let (baz_iid, baz_descriptor, baz_locked) = fake_flake_installable_lock("baz");
         let (qux_iid, qux_descriptor, qux_locked) = fake_flake_installable_lock("qux");
-        manifest.install.insert(foo_iid.clone(), foo_descriptor);
-        manifest.install.insert(bar_iid.clone(), bar_descriptor);
         manifest
             .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor);
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_iid.clone(), bar_descriptor);
+        manifest
+            .install
+            .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.into());
         manifest
             .install
+            .inner_mut()
             .insert(qux_iid.clone(), qux_descriptor.into());
         let mut lockfile = Lockfile {
             version: Version::<1>,
@@ -2389,8 +2411,14 @@ pub(crate) mod tests {
         let mut manifest = Manifest::default();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", Some("group"));
         let (bar_iid, bar_descriptor, bar_locked) = fake_catalog_package_lock("bar", Some("group"));
-        manifest.install.insert(foo_iid.clone(), foo_descriptor);
-        manifest.install.insert(bar_iid.clone(), bar_descriptor);
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor);
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_iid.clone(), bar_descriptor);
         let mut lockfile = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
@@ -2411,8 +2439,14 @@ pub(crate) mod tests {
             fake_catalog_package_lock("foo", Some("foo_install_id"));
         let (bar_iid, bar_descriptor, bar_locked) =
             fake_catalog_package_lock("bar", Some("foo_install_id"));
-        manifest.install.insert(foo_iid.clone(), foo_descriptor);
-        manifest.install.insert(bar_iid.clone(), bar_descriptor);
+        manifest
+            .install
+            .inner_mut()
+            .insert(foo_iid.clone(), foo_descriptor);
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_iid.clone(), bar_descriptor);
         let mut lockfile = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
@@ -2573,10 +2607,17 @@ pub(crate) mod tests {
         let (yeet_iid, yeet_descriptor, _) = fake_catalog_package_lock("yeet", Some("group2"));
 
         let mut manifest = Manifest::default();
-        manifest.install.insert(foo_iid, foo_descriptor.clone());
-        manifest.install.insert(bar_iid, bar_descriptor.clone());
         manifest
             .install
+            .inner_mut()
+            .insert(foo_iid, foo_descriptor.clone());
+        manifest
+            .install
+            .inner_mut()
+            .insert(bar_iid, bar_descriptor.clone());
+        manifest
+            .install
+            .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.clone());
 
         let locked = Lockfile {
@@ -2589,6 +2630,7 @@ pub(crate) mod tests {
 
         manifest
             .install
+            .inner_mut()
             .insert(yeet_iid.clone(), yeet_descriptor.clone());
 
         let groups = Lockfile::collect_package_groups(&manifest, Some(&locked)).unwrap();
@@ -2669,6 +2711,7 @@ pub(crate) mod tests {
         let mut manifest = Manifest::default();
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor_two_systems.clone());
 
         let locked = Lockfile {
@@ -2682,6 +2725,7 @@ pub(crate) mod tests {
 
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid, foo_descriptor_one_system.clone());
 
         let groups = Lockfile::collect_package_groups(&manifest, Some(&locked))
@@ -2726,6 +2770,7 @@ pub(crate) mod tests {
         let mut manifest = Manifest::default();
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
 
         let locked = Lockfile {
@@ -2736,6 +2781,7 @@ pub(crate) mod tests {
 
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid, foo_descriptor_two_systems.clone());
 
         let groups = Lockfile::collect_package_groups(&manifest, Some(&locked))
@@ -2775,9 +2821,11 @@ pub(crate) mod tests {
 
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
         manifest
             .install
+            .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor.clone().into());
 
         let locked = Lockfile {
@@ -2840,6 +2888,7 @@ pub(crate) mod tests {
 
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
 
         let locked = Lockfile {
@@ -2870,6 +2919,7 @@ pub(crate) mod tests {
         let mut manifest = Manifest::default();
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
 
         // lockfile for only system_1
@@ -2908,9 +2958,11 @@ pub(crate) mod tests {
         manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone());
         manifest
             .install
+            .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor.clone().into());
 
         let locked = Lockfile {
@@ -2938,9 +2990,11 @@ pub(crate) mod tests {
         manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone());
         manifest
             .install
+            .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor.clone().into());
 
         let locked = Lockfile {
@@ -3007,9 +3061,11 @@ pub(crate) mod tests {
         manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone());
         manifest
             .install
+            .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor.clone().into());
 
         let locked = Lockfile {
@@ -3039,6 +3095,7 @@ pub(crate) mod tests {
         manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone());
 
         let locked = Lockfile {
@@ -3054,7 +3111,7 @@ pub(crate) mod tests {
         foo_locked_priority_after.priority = 1;
 
         let mut manifest_pririty_after = manifest.clone();
-        manifest_pririty_after.install.insert(
+        manifest_pririty_after.install.inner_mut().insert(
             foo_iid.clone(),
             foo_descriptor_priority_after.clone().into(),
         );
@@ -3086,6 +3143,7 @@ pub(crate) mod tests {
         let mut manifest = Manifest::default();
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
 
         let locked = Lockfile {
@@ -3121,6 +3179,7 @@ pub(crate) mod tests {
         let mut manifest = Manifest::default();
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
         manifest.options.allow.unfree = Some(false);
 
@@ -3306,12 +3365,15 @@ pub(crate) mod tests {
         let mut manifest = Manifest::default();
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone());
         manifest
             .install
+            .inner_mut()
             .insert(bar_iid.clone(), bar_descriptor.clone());
         manifest
             .install
+            .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.clone());
 
         let locked = Lockfile {
@@ -3352,9 +3414,11 @@ pub(crate) mod tests {
         let mut manifest = Manifest::default();
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
         manifest
             .install
+            .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.into());
 
         let locked = Lockfile {
@@ -3383,9 +3447,11 @@ pub(crate) mod tests {
         let mut manifest = Manifest::default();
         manifest
             .install
+            .inner_mut()
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
         manifest
             .install
+            .inner_mut()
             .insert(baz_iid.clone(), baz_descriptor.into());
 
         let locked = Lockfile {

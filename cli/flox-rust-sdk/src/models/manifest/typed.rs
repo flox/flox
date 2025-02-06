@@ -16,6 +16,34 @@ use crate::utils::proptest_btree_map_alphanum_keys;
 pub(crate) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub const DEFAULT_PRIORITY: u64 = 5;
 
+pub trait Inner {
+    type Inner;
+
+    fn inner(&self) -> &Self::Inner;
+    fn inner_mut(&mut self) -> &mut Self::Inner;
+    fn into_inner(self) -> Self::Inner;
+}
+
+macro_rules! impl_into_inner {
+    ($wrapper:ty, $inner_type:ty) => {
+        impl Inner for $wrapper {
+            type Inner = $inner_type;
+
+            fn inner(&self) -> &Self::Inner {
+                &self.0
+            }
+
+            fn inner_mut(&mut self) -> &mut Self::Inner {
+                &mut self.0
+            }
+
+            fn into_inner(self) -> Self::Inner {
+                self.0
+            }
+        }
+    };
+}
+
 /// Not meant for writing manifest files, only for reading them.
 /// Modifications should be made using the the raw functions in this module.
 
@@ -234,16 +262,7 @@ fn pkg_belongs_to_non_empty_toplevel_group(
     Ok(other_toplevel_packages_exist)
 }
 
-#[derive(
-    Debug,
-    Clone,
-    Serialize,
-    Deserialize,
-    Default,
-    PartialEq,
-    derive_more::Deref,
-    derive_more::DerefMut,
-)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestInstall(
     #[cfg_attr(
@@ -252,7 +271,7 @@ pub struct ManifestInstall(
             strategy = "proptest_btree_map_alphanum_keys::<ManifestPackageDescriptor>(10, 3)"
         )
     )]
-    BTreeMap<String, ManifestPackageDescriptor>,
+    pub(crate) BTreeMap<String, ManifestPackageDescriptor>,
 );
 
 impl ManifestInstall {
@@ -260,6 +279,8 @@ impl ManifestInstall {
         self.0.is_empty()
     }
 }
+
+impl_into_inner!(ManifestInstall, BTreeMap<String, ManifestPackageDescriptor>);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -467,14 +488,12 @@ pub struct ManifestVariables(
 );
 
 impl ManifestVariables {
-    pub(crate) fn into_inner(self) -> BTreeMap<String, String> {
-        self.0
-    }
-
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
 }
+
+impl_into_inner!(ManifestVariables, BTreeMap<String, String>);
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
@@ -557,16 +576,7 @@ pub struct SemverOptions {
 }
 
 /// A map of service names to service definitions
-#[derive(
-    Debug,
-    Clone,
-    Serialize,
-    Deserialize,
-    Default,
-    PartialEq,
-    derive_more::Deref,
-    derive_more::DerefMut,
-)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestServices(
     #[cfg_attr(
@@ -583,6 +593,8 @@ impl ManifestServices {
         self.0.is_empty()
     }
 }
+
+impl_into_inner!(ManifestServices, BTreeMap<String, ManifestServiceDescriptor>);
 
 /// The definition of a service in a manifest
 #[skip_serializing_none]
@@ -662,16 +674,7 @@ pub struct ManifestServiceShutdown {
 }
 
 /// A map of package ids to package build descriptors
-#[derive(
-    Debug,
-    Clone,
-    Serialize,
-    Deserialize,
-    Default,
-    PartialEq,
-    derive_more::Deref,
-    derive_more::DerefMut,
-)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestBuild(
     #[cfg_attr(
@@ -680,6 +683,8 @@ pub struct ManifestBuild(
     )]
     pub(crate) BTreeMap<String, ManifestBuildDescriptor>,
 );
+
+impl_into_inner!(ManifestBuild, BTreeMap<String,ManifestBuildDescriptor>);
 
 impl ManifestBuild {
     fn skip_serializing(&self) -> bool {
@@ -909,17 +914,17 @@ pub(super) mod test {
 
         let parsed = toml_edit::de::from_str::<Manifest>(manifest).unwrap();
 
-        assert_eq!(parsed.services.len(), 3, "{:?}", parsed.services);
+        assert_eq!(parsed.services.inner().len(), 3, "{:?}", parsed.services);
 
         let filtered = parsed.services.copy_for_system(&"x86_64-linux".to_string());
-        assert_eq!(filtered.len(), 2, "{:?}", filtered);
-        assert!(filtered.contains_key("postgres"));
-        assert!(filtered.contains_key("mysql"));
+        assert_eq!(filtered.inner().len(), 2, "{:?}", filtered);
+        assert!(filtered.inner().contains_key("postgres"));
+        assert!(filtered.inner().contains_key("mysql"));
 
         let filtered = parsed
             .services
             .copy_for_system(&"aarch64-darwin".to_string());
-        assert_eq!(filtered.len(), 1, "{:?}", filtered);
-        assert!(filtered.contains_key("postgres"));
+        assert_eq!(filtered.inner().len(), 1, "{:?}", filtered);
+        assert!(filtered.inner().contains_key("postgres"));
     }
 }

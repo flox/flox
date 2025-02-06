@@ -6,6 +6,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
+use flox_rust_sdk::models::manifest::typed::Inner;
 use flox_rust_sdk::providers::build::{build_symlink_path, FloxBuildMk, ManifestBuilder, Output};
 use indoc::{formatdoc, indoc};
 use tracing::instrument;
@@ -197,7 +198,7 @@ impl Build {
 fn available_packages(lockfile: &Lockfile, packages: Vec<String>) -> Result<Vec<String>> {
     let environment_packages = &lockfile.manifest.build;
 
-    if environment_packages.is_empty() {
+    if environment_packages.inner().is_empty() {
         bail!(indoc! {"
         No builds found.
 
@@ -206,13 +207,13 @@ fn available_packages(lockfile: &Lockfile, packages: Vec<String>) -> Result<Vec<
     }
 
     let packages_to_build = if packages.is_empty() {
-        environment_packages.keys().cloned().collect()
+        environment_packages.inner().keys().cloned().collect()
     } else {
         packages
     };
 
     for package in &packages_to_build {
-        if !environment_packages.contains_key(package) {
+        if !environment_packages.inner().contains_key(package) {
             bail!("Package '{}' not found in environment", package);
         }
     }
