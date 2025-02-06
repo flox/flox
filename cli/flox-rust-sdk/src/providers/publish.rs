@@ -4,9 +4,8 @@ use std::str::FromStr;
 
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
-use log::info;
 use thiserror::Error;
-use tracing::instrument;
+use tracing::{info, instrument};
 use url::Url;
 
 use super::build::{BuildResult, BuildResults, ManifestBuilder};
