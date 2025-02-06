@@ -347,11 +347,11 @@ pub fn check_build_metadata(
     }
 
     let build_results = output_build_results.ok_or(PublishError::NonexistentOutputs(
-        "No build results".to_string(),
+        "No results returned from build command.".to_string(),
     ))?;
     if build_results.len() != 1 {
         return Err(PublishError::NonexistentOutputs(
-            "No build results".to_string(),
+            "No results returned from build command.".to_string(),
         ));
     }
     let build_result = &build_results[0];
@@ -369,17 +369,19 @@ fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, Publi
     // Gather build repo info
 
     // This call will fail if the local head is not in the remote
-    let origin = git
-        .get_origin()
-        .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git get origin {e}")))?;
+    let origin = git.get_origin().map_err(|_e| {
+        PublishError::UnsupportedEnvironmentState(
+            "Unable to identify repository origin info, are all commits pushed?".to_string(),
+        )
+    })?;
 
-    let status = git
-        .status()
-        .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git get status {e}")))?;
+    let status = git.status().map_err(|_e| {
+        PublishError::UnsupportedEnvironmentState("Unable to get respository status.".to_string())
+    })?;
 
     if status.is_dirty {
         return Err(PublishError::UnsupportedEnvironmentState(
-            "Build repo is dirty".to_string(),
+            "Build repository must be clean, but has dirty tracked files.".to_string(),
         ));
     }
 
