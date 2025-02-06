@@ -15,7 +15,7 @@ use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use flox_rust_sdk::providers::services::{LoggedError, ServiceError};
 use indoc::{formatdoc, indoc};
-use log::trace;
+use tracing::trace;
 
 use crate::commands::EnvironmentSelectError;
 

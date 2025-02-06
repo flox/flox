@@ -11,11 +11,11 @@ use anyhow::{bail, Context, Result};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use fslock::LockFile;
 use indoc::indoc;
-use log::debug;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::format_description::well_known::Iso8601;
 use time::{Duration, OffsetDateTime};
+use tracing::debug;
 use uuid::Uuid;
 
 use super::TRAILING_NETWORK_CALL_TIMEOUT;

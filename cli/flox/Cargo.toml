@@ -23,7 +23,6 @@ indicatif.workspace = true
 indoc.workspace = true
 inquire.workspace = true
 itertools.workspace = true
-log.workspace = true
 nix.workspace = true
 oauth2.workspace = true
 once_cell.workspace = true

@@ -4,8 +4,8 @@ use std::path::Path;
 use anyhow::Result;
 use fslock::LockFile;
 use indoc::formatdoc;
-use log::debug;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tracing::debug;
 
 use crate::utils::message;
 use crate::utils::metrics::{METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};

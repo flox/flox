@@ -4,8 +4,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::EnvironmentError;
 use indoc::formatdoc;
 use itertools::Itertools;
-use log::debug;
-use tracing::{info_span, instrument};
+use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{environment_select, EnvironmentSelect};

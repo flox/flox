@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use log::{debug, error};
+use tracing::{debug, error};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::reload::Handle;
 use tracing_subscriber::util::SubscriberInitExt;

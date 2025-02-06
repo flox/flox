@@ -4,12 +4,12 @@ use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
 pub use flox_core::{path_hash, Version};
-use log::debug;
 use managed_environment::ManagedEnvironment;
 use path_environment::PathEnvironment;
 use remote_environment::RemoteEnvironment;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::debug;
 use url::Url;
 use walkdir::WalkDir;
 

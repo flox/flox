@@ -18,8 +18,7 @@ use flox_rust_sdk::models::environment::{
     PathPointer,
 };
 use indoc::formatdoc;
-use log::debug;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::commands::ensure_floxhub_token;
 use crate::subcommand_metric;

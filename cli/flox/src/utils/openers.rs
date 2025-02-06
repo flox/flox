@@ -5,8 +5,8 @@ use std::process::Command;
 
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
-use log::debug;
 use sysinfo::{Pid, ProcessesToUpdate, System};
+use tracing::debug;
 
 const OPENERS: &[&str] = &["xdg-open", "gnome-open", "kde-open"];
 

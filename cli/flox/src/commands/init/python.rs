@@ -9,8 +9,8 @@ use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::raw::CatalogPackage;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use log::debug;
 use regex::Regex;
+use tracing::debug;
 
 use super::{
     format_customization,
@@ -337,7 +337,7 @@ impl PoetryPyProject {
                 };
             }
 
-            log::debug!("poetry config requires python version {required_python_version}, but no compatible version found in the catalogs");
+            debug!("poetry config requires python version {required_python_version}, but no compatible version found in the catalogs");
 
             let substitute = try_find_compatible_package(flox, "python3", None)
                 .await?
@@ -544,7 +544,7 @@ impl PyProject {
                 };
             }
 
-            log::debug!("pyproject.toml requires python version {required_python_version}, but no compatible version found in the catalogs");
+            debug!("pyproject.toml requires python version {required_python_version}, but no compatible version found in the catalogs");
 
             ProvidedVersion::Incompatible {
                 substitute: search_default().await?,

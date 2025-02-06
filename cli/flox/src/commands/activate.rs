@@ -32,7 +32,7 @@ use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::logging::traceable_path;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use log::{debug, warn};
+use tracing::{debug, warn};
 
 use super::services::ServicesEnvironment;
 use super::{

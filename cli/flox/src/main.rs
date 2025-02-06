@@ -10,7 +10,7 @@ use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentE
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::EnvironmentError;
 use flox_rust_sdk::providers::services::ServiceError;
-use log::{debug, warn};
+use tracing::{debug, warn};
 use utils::errors::format_service_error;
 use utils::init::{init_logger, init_sentry};
 use utils::{message, populate_default_nix_env_vars};

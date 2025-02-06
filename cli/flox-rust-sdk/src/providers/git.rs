@@ -7,8 +7,8 @@ use std::process::Command;
 use std::sync::LazyLock;
 
 use chrono::{DateTime, Utc};
-use log::{debug, error, warn};
 use thiserror::Error;
+use tracing::{debug, error, warn};
 
 use crate::utils::CommandExt;
 

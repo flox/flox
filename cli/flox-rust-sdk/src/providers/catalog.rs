@@ -23,13 +23,12 @@ use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
-use log::debug;
 use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::data::System;
 use crate::flox::FLOX_VERSION;

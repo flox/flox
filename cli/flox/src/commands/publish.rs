@@ -14,8 +14,7 @@ use flox_rust_sdk::providers::publish::{
     Publisher,
 };
 use indoc::{formatdoc, indoc};
-use log::debug;
-use tracing::instrument;
+use tracing::{debug, instrument};
 use url::Url;
 
 use super::{environment_select, EnvironmentSelect};

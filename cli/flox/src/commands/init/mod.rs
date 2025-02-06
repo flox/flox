@@ -16,10 +16,9 @@ use flox_rust_sdk::providers::catalog::{
     PackageResolutionInfo,
 };
 use indoc::formatdoc;
-use log::debug;
 use path_dedot::ParseDot;
 use toml_edit::{DocumentMut, Formatted, Item, Table, Value};
-use tracing::{info_span, instrument};
+use tracing::{debug, info_span, instrument};
 
 use crate::commands::environment_description;
 use crate::subcommand_metric;

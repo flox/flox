@@ -62,13 +62,13 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::{env_registry, environment_ref};
 use futures::Future;
 use indoc::{formatdoc, indoc};
-use log::{debug, info};
 use sentry::integrations::anyhow::capture_anyhow;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use thiserror::Error;
 use time::{Duration, OffsetDateTime};
 use toml_edit::Key;
+use tracing::{debug, info};
 use url::Url;
 use xdg::BaseDirectories;
 
@@ -309,7 +309,7 @@ impl FloxArgs {
                     "floxhub_token",
                     None::<String>,
                 ) {
-                    log::debug!("Could not remove token from user config: {e}");
+                    debug!("Could not remove token from user config: {e}");
                 }
                 None
             },
@@ -324,7 +324,7 @@ impl FloxArgs {
                     "floxhub_token",
                     None::<String>,
                 ) {
-                    log::debug!("Could not remove token from user config: {e}");
+                    debug!("Could not remove token from user config: {e}");
                 }
                 None
             },
@@ -1638,11 +1638,11 @@ pub(super) async fn ensure_environment_trust(
 pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<&FloxhubToken> {
     match flox.floxhub_token {
         Some(ref token) => {
-            log::debug!("floxhub token is present; logged in as {}", token.handle());
+            debug!("floxhub token is present; logged in as {}", token.handle());
             Ok(token)
         },
         None if !Dialog::can_prompt() => {
-            log::debug!("floxhub token is not present; can not prompt user");
+            debug!("floxhub token is not present; can not prompt user");
             let message = formatdoc! {"
                 You are not logged in to FloxHub.
 
@@ -1656,7 +1656,7 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<&FloxhubToke
             bail!(message);
         },
         None => {
-            log::debug!("floxhub token is not present; prompting user");
+            debug!("floxhub token is not present; prompting user");
 
             message::plain("You are not logged in to FloxHub. Logging in...");
             let token = auth::login_flox(flox).await?;

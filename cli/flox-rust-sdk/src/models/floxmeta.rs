@@ -1,8 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use log::debug;
 use thiserror::Error;
-use tracing::instrument;
+use tracing::{debug, instrument};
 use url::Url;
 
 use super::environment::managed_environment::remote_branch_name;

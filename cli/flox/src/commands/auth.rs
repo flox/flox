@@ -8,7 +8,6 @@ use chrono::{DateTime, Duration};
 use flox_rust_sdk::flox::{Flox, FloxhubToken};
 use flox_rust_sdk::providers::catalog::Client;
 use indoc::formatdoc;
-use log::debug;
 use oauth2::basic::BasicClient;
 use oauth2::{
     AuthUrl,
@@ -22,7 +21,7 @@ use oauth2::{
     TokenUrl,
 };
 use serde::Serialize;
-use tracing::instrument;
+use tracing::{debug, instrument};
 use url::Url;
 
 use crate::commands::general::update_config;

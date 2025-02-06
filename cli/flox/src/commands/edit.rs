@@ -21,8 +21,7 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use flox_rust_sdk::providers::services::ServiceError;
 use itertools::Itertools;
-use log::debug;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{

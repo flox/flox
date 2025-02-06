@@ -17,8 +17,8 @@ use std::fs;
 use std::str::FromStr;
 
 use flox_core::Version;
-use log::debug;
 use thiserror::Error;
+use tracing::debug;
 
 use super::manifest::typed::{
     Allows,

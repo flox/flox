@@ -5,9 +5,8 @@ use anyhow::Result;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::search::SearchResults;
 use flox_rust_sdk::providers::catalog::{Client, ClientTrait};
-use log::debug;
 use pollster::FutureExt;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use super::search::{DisplayItems, DisplaySearchResults};
 

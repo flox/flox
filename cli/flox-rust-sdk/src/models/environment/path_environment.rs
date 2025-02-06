@@ -19,7 +19,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use indoc::formatdoc;
-use log::debug;
+use tracing::debug;
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::{

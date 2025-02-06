@@ -3,10 +3,9 @@ use std::{fs, io};
 
 use flox_core::Version;
 use itertools::Itertools;
-use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::generations::{Generations, GenerationsError};

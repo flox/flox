@@ -22,9 +22,8 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::manifest::raw::add_system;
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use indoc::{formatdoc, indoc};
-use log::debug;
 use toml_edit::DocumentMut;
-use tracing::{info_span, instrument};
+use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{open_path, ConcreteEnvironment};

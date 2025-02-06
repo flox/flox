@@ -7,8 +7,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::search::SearchResults;
 use flox_rust_sdk::providers::catalog::{ClientTrait, SearchTerm};
 use indoc::formatdoc;
-use log::debug;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::config::Config;
 use crate::subcommand_metric;

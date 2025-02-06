@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use anyhow::anyhow;
 use flox_rust_sdk::flox::{FLOX_SENTRY_ENV, FLOX_VERSION};
-use log::{debug, warn};
 use sentry::{ClientInitGuard, IntoDsn};
+use tracing::{debug, warn};
 
 pub fn init_sentry() -> Option<ClientInitGuard> {
     let Ok(sentry_dsn) = std::env::var("FLOX_SENTRY_DSN") else {

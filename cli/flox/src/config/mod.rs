@@ -9,12 +9,12 @@ use config::{Config as HierarchicalConfig, Environment};
 use flox_rust_sdk::flox::{EnvironmentRef, Features};
 use flox_rust_sdk::models::search::SearchLimit;
 use itertools::{Either, Itertools};
-use log::{debug, trace};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tempfile::PersistError;
 use thiserror::Error;
 use toml_edit::{DocumentMut, Item, Key, Table, TableLike};
+use tracing::{debug, trace};
 use url::Url;
 use xdg::BaseDirectories;
 
