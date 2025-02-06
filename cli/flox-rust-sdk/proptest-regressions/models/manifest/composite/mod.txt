@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 90f43b4f06167de73c84234f6d2450278ef60b31e63a0a3ccfb1d40e1fea76b2 # shrinks to cfg_lp = ManifestContainerizeConfig { user: Some("a"), exposed_ports: None, cmd: None, volumes: None, working_dir: None, labels: None, stop_signal: None }, cfg_hp = ManifestContainerizeConfig { user: None, exposed_ports: None, cmd: None, volumes: None, working_dir: None, labels: None, stop_signal: None }

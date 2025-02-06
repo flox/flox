@@ -2,7 +2,16 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use flox_core::Version;
 #[cfg(test)]
-use flox_test_utils::proptest::btree_map_alphanum_keys;
+use flox_test_utils::proptest::{
+    alphanum_and_whitespace_string,
+    alphanum_string,
+    btree_map_strategy,
+    optional_btree_map,
+    optional_btree_set,
+    optional_string,
+    optional_vec_of_strings,
+    vec_of_strings,
+};
 use indoc::formatdoc;
 use itertools::Itertools;
 #[cfg(test)]
@@ -267,7 +276,7 @@ fn pkg_belongs_to_non_empty_toplevel_group(
 pub struct ManifestInstall(
     #[cfg_attr(
         test,
-        proptest(strategy = "btree_map_alphanum_keys::<ManifestPackageDescriptor>(10, 3)")
+        proptest(strategy = "btree_map_strategy::<ManifestPackageDescriptor>(10, 3)")
     )]
     pub(crate) BTreeMap<String, ManifestPackageDescriptor>,
 );
@@ -403,17 +412,15 @@ impl From<ManifestPackageDescriptorStorePath> for ManifestPackageDescriptor {
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
 pub struct ManifestPackageDescriptorCatalog {
+    #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub(crate) pkg_path: String,
+    #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
     pub(crate) pkg_group: Option<String>,
     #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
     pub(crate) priority: Option<u64>,
+    #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
     pub(crate) version: Option<String>,
-    #[cfg_attr(
-        test,
-        proptest(
-            strategy = "proptest::option::of(proptest::collection::vec(any::<System>(), 1..3))"
-        )
-    )]
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub(crate) systems: Option<Vec<System>>,
 }
 
@@ -445,15 +452,11 @@ impl ManifestPackageDescriptorCatalog {
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
 pub struct ManifestPackageDescriptorFlake {
+    #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub flake: String,
     #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
     pub(crate) priority: Option<u64>,
-    #[cfg_attr(
-        test,
-        proptest(
-            strategy = "proptest::option::of(proptest::collection::vec(any::<System>(), 1..3))"
-        )
-    )]
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub(crate) systems: Option<Vec<System>>,
 }
 
@@ -463,13 +466,9 @@ pub struct ManifestPackageDescriptorFlake {
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
 pub struct ManifestPackageDescriptorStorePath {
+    #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub(crate) store_path: String,
-    #[cfg_attr(
-        test,
-        proptest(
-            strategy = "proptest::option::of(proptest::collection::vec(any::<System>(), 1..3))"
-        )
-    )]
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub(crate) systems: Option<Vec<System>>,
     #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
     pub(crate) priority: Option<u64>,
@@ -478,7 +477,7 @@ pub struct ManifestPackageDescriptorStorePath {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestVariables(
-    #[cfg_attr(test, proptest(strategy = "btree_map_alphanum_keys::<String>(10, 3)"))]
+    #[cfg_attr(test, proptest(strategy = "btree_map_strategy::<String>(5, 3)"))]
     pub(crate)  BTreeMap<String, String>,
 );
 
@@ -498,6 +497,10 @@ impl_into_inner!(ManifestVariables, BTreeMap<String, String>);
 pub struct ManifestHook {
     /// A script that is run at activation time,
     /// in a flox provided bash shell
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest::option::of(alphanum_and_whitespace_string(5))")
+    )]
     pub(crate) on_activate: Option<String>,
 }
 
@@ -507,14 +510,34 @@ pub struct ManifestHook {
 #[serde(deny_unknown_fields)]
 pub struct ManifestProfile {
     /// When defined, this hook is run by _all_ shells upon activation
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest::option::of(alphanum_and_whitespace_string(5))")
+    )]
     pub(crate) common: Option<String>,
     /// When defined, this hook is run upon activation in a bash shell
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest::option::of(alphanum_and_whitespace_string(5))")
+    )]
     pub(crate) bash: Option<String>,
     /// When defined, this hook is run upon activation in a zsh shell
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest::option::of(alphanum_and_whitespace_string(5))")
+    )]
     pub(crate) zsh: Option<String>,
     /// When defined, this hook is run upon activation in a fish shell
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest::option::of(alphanum_and_whitespace_string(5))")
+    )]
     pub(crate) fish: Option<String>,
     /// When defined, this hook is run upon activation in a tcsh shell
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest::option::of(alphanum_and_whitespace_string(5))")
+    )]
     pub(crate) tcsh: Option<String>,
 }
 
@@ -525,12 +548,7 @@ pub struct ManifestProfile {
 #[serde(deny_unknown_fields)]
 pub struct ManifestOptions {
     /// A list of systems that each package is resolved for.
-    #[cfg_attr(
-        test,
-        proptest(
-            strategy = "proptest::option::of(proptest::collection::vec(any::<System>(), 1..4))"
-        )
-    )]
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub systems: Option<Vec<System>>,
     /// Options that control what types of packages are allowed.
     #[serde(default)]
@@ -552,10 +570,7 @@ pub struct Allows {
     pub broken: Option<bool>,
     /// A list of license descriptors that are allowed
     #[serde(default)]
-    #[cfg_attr(
-        test,
-        proptest(strategy = "proptest::collection::vec(any::<String>(), 0..3)")
-    )]
+    #[cfg_attr(test, proptest(strategy = "vec_of_strings(3, 4)"))]
     pub licenses: Vec<String>,
 }
 
@@ -576,7 +591,7 @@ pub struct SemverOptions {
 pub struct ManifestServices(
     #[cfg_attr(
         test,
-        proptest(strategy = "btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)")
+        proptest(strategy = "btree_map_strategy::<ManifestServiceDescriptor>(5, 3)")
     )]
     pub(crate) BTreeMap<String, ManifestServiceDescriptor>,
 );
@@ -597,6 +612,7 @@ impl_into_inner!(ManifestServices, BTreeMap<String, ManifestServiceDescriptor>);
 #[serde(deny_unknown_fields)]
 pub struct ManifestServiceDescriptor {
     /// The command to run to start the service
+    #[cfg_attr(test, proptest(strategy = "alphanum_string(3)"))]
     pub command: String,
     /// Service-specific environment variables
     pub vars: Option<ManifestVariables>,
@@ -607,6 +623,7 @@ pub struct ManifestServiceDescriptor {
     /// How to shut down the service
     pub shutdown: Option<ManifestServiceShutdown>,
     /// Systems to allow running the service on
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub systems: Option<Vec<System>>,
 }
 
@@ -663,6 +680,7 @@ impl ManifestServices {
 #[serde(deny_unknown_fields)]
 pub struct ManifestServiceShutdown {
     /// What command to run to shut down the service
+    #[cfg_attr(test, proptest(strategy = "alphanum_string(3)"))]
     pub command: String,
 }
 
@@ -672,7 +690,7 @@ pub struct ManifestServiceShutdown {
 pub struct ManifestBuild(
     #[cfg_attr(
         test,
-        proptest(strategy = "btree_map_alphanum_keys::<ManifestBuildDescriptor>(10, 3)")
+        proptest(strategy = "btree_map_strategy::<ManifestBuildDescriptor>(5, 3)")
     )]
     pub(crate) BTreeMap<String, ManifestBuildDescriptor>,
 );
@@ -693,21 +711,28 @@ impl ManifestBuild {
 #[serde(deny_unknown_fields)]
 pub struct ManifestBuildDescriptor {
     /// The command to run to build a package.
+    #[cfg_attr(test, proptest(strategy = "alphanum_string(3)"))]
     pub command: String,
     /// Files to explicitly include in the build result.
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub files: Option<Vec<String>>,
     /// Packages from the 'toplevel' group to include in the closure of the build result.
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub runtime_packages: Option<Vec<String>>,
     /// Systems to allow running the build.
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub systems: Option<Vec<System>>,
     /// Sandbox mode for the build.
     pub sandbox: Option<ManifestBuildSandbox>,
     /// The version to assign the package.
+    #[cfg_attr(test, proptest(strategy = "optional_string(3)"))]
     pub version: Option<String>,
     /// A short description of the package that will appear on FloxHub and in
     /// search results.
+    #[cfg_attr(test, proptest(strategy = "optional_string(3)"))]
     pub description: Option<String>,
     /// A license to assign to the package in SPDX format.
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub license: Option<Vec<String>>,
 }
 
@@ -744,28 +769,35 @@ pub struct ManifestContainerizeConfig {
     /// For Linux based systems, all of the following are valid: `user`, `uid`, `user:group`, `uid:gid`, `uid:group`, `user:gid`.
     /// If `group`/`gid` is not specified, the default group and supplementary groups of the given `user`/`uid` in `/etc/passwd` and `/etc/group` from the container are applied.
     /// If `group`/`gid` is specified, supplementary groups from the container are ignored.
+    #[cfg_attr(test, proptest(strategy = "optional_string(3)"))]
     pub user: Option<String>,
     /// A set of ports to expose from a container running this image.
     /// Its keys can be in the format of:
     /// `port/tcp`, `port/udp`, `port` with the default protocol being `tcp` if not specified.
     /// These values act as defaults and are merged with any specified when creating a container.
+    #[cfg_attr(test, proptest(strategy = "optional_btree_set(3, 4)"))]
     pub exposed_ports: Option<BTreeSet<String>>,
     /// Default arguments to the entrypoint of the container.
     /// These values act as defaults and may be replaced by any specified when creating a container.
     /// Flox sets an entrypoint to activate the containerized environment,
     /// and `cmd` is then run inside the activation, similar to
     /// `flox activate -- cmd`.
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub cmd: Option<Vec<String>>,
     /// A set of directories describing where the process is
     /// likely to write data specific to a container instance.
+    #[cfg_attr(test, proptest(strategy = "optional_btree_set(3, 4)"))]
     pub volumes: Option<BTreeSet<String>>,
     /// Sets the current working directory of the entrypoint process in the container.
     /// This value acts as a default and may be replaced by a working directory specified when creating a container.
+    #[cfg_attr(test, proptest(strategy = "optional_string(3)"))]
     pub working_dir: Option<String>,
     /// This field contains arbitrary metadata for the container.
     /// This property MUST use the [annotation rules](https://github.com/opencontainers/image-spec/blob/main/annotations.md#rules).
+    #[cfg_attr(test, proptest(strategy = "optional_btree_map::<String>(3, 4)"))]
     pub labels: Option<BTreeMap<String, String>>,
     /// This field contains the system call signal that will be sent to the container to exit. The signal can be a signal name in the format `SIGNAME`, for instance `SIGKILL` or `SIGRTMIN+3`.
+    #[cfg_attr(test, proptest(strategy = "optional_string(3)"))]
     pub stop_signal: Option<String>,
 }
 

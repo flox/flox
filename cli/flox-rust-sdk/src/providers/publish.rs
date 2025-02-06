@@ -16,6 +16,7 @@ use crate::flox::Flox;
 use crate::models::environment::path_environment::PathEnvironment;
 use crate::models::environment::{Environment, EnvironmentError, PathPointer};
 use crate::models::lockfile::Lockfile;
+use crate::models::manifest::typed::Inner;
 use crate::providers::build;
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
@@ -479,6 +480,7 @@ pub fn check_environment_metadata(
     let manifest = environment.manifest(flox)?;
     let description = manifest
         .build
+        .inner()
         .get(pkg)
         .and_then(|desc| desc.description.clone());
 
