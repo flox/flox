@@ -39,7 +39,7 @@ impl CompositeManifest {
             .skip(1) // First dep is used as initializer.
             .chain(once(&self.composer)) // Composer goes last.
             .try_fold(first_dep.clone(), |merged, next| {
-                merger.merge(merged, next.clone())
+                merger.merge(&merged, next)
             })
     }
 }
@@ -48,39 +48,46 @@ impl CompositeManifest {
 /// multiple manifests.
 trait ManifestMergeStrategy {
     fn merge_version(
-        version1: &Version<1>,
-        version2: &Version<1>,
+        low_priority: &Version<1>,
+        high_priority: &Version<1>,
     ) -> Result<Version<1>, MergeError>;
     fn merge_install(
-        install1: &ManifestInstall,
-        install2: &ManifestInstall,
+        low_priority: &ManifestInstall,
+        high_priority: &ManifestInstall,
     ) -> Result<ManifestInstall, MergeError>;
     fn merge_vars(
-        vars1: &ManifestVariables,
-        vars2: &ManifestVariables,
+        low_priority: &ManifestVariables,
+        high_priority: &ManifestVariables,
     ) -> Result<ManifestVariables, MergeError>;
-    fn merge_hook(hook1: &ManifestHook, hook2: &ManifestHook) -> Result<ManifestHook, MergeError>;
+    fn merge_hook(
+        low_priority: &ManifestHook,
+        high_priority: &ManifestHook,
+    ) -> Result<ManifestHook, MergeError>;
     fn merge_profile(
-        profile1: &ManifestProfile,
-        profile2: &ManifestProfile,
+        low_priority: &ManifestProfile,
+        high_priority: &ManifestProfile,
     ) -> Result<ManifestProfile, MergeError>;
     fn merge_options(
-        options1: &ManifestOptions,
-        options2: &ManifestOptions,
+        low_priority: &ManifestOptions,
+        high_priority: &ManifestOptions,
     ) -> Result<ManifestOptions, MergeError>;
     fn merge_services(
-        services1: &ManifestServices,
-        services2: &ManifestServices,
+        low_priority: &ManifestServices,
+        high_priority: &ManifestServices,
     ) -> Result<ManifestServices, MergeError>;
     fn merge_build(
-        build1: &ManifestBuild,
-        build2: &ManifestBuild,
+        low_priority: &ManifestBuild,
+        high_priority: &ManifestBuild,
     ) -> Result<ManifestBuild, MergeError>;
     fn merge_containerize(
-        containerize1: Option<ManifestContainerize>,
-        containerize2: Option<ManifestContainerize>,
+        low_priority: Option<&ManifestContainerize>,
+        high_priority: Option<&ManifestContainerize>,
     ) -> Result<Option<ManifestContainerize>, MergeError>;
-    fn merge(&self, manifest1: Manifest, manifest2: Manifest) -> Result<Manifest, MergeError>;
+    fn merge(
+        &self,
+        low_priority: &Manifest,
+        high_priority: &Manifest,
+    ) -> Result<Manifest, MergeError>;
 }
 
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
@@ -90,185 +97,266 @@ struct ShallowMerger;
 
 impl ManifestMergeStrategy for ShallowMerger {
     fn merge_version(
-        version1: &Version<1>,
-        version2: &Version<1>,
+        low_priority: &Version<1>,
+        high_priority: &Version<1>,
     ) -> Result<Version<1>, MergeError> {
-        if version1 != version2 {
+        if low_priority != high_priority {
             unreachable!("versions are hardcoded into Manifest");
         }
 
-        Ok(version2.clone())
+        Ok(high_priority.clone())
     }
 
-    /// TODO: Not implemented.
     fn merge_install(
-        _install1: &ManifestInstall,
-        _install2: &ManifestInstall,
+        low_priority: &ManifestInstall,
+        high_priority: &ManifestInstall,
     ) -> Result<ManifestInstall, MergeError> {
-        Ok(ManifestInstall::default())
+        let mut merged = low_priority.inner().clone();
+        merged.extend(high_priority.inner().clone());
+        Ok(ManifestInstall(merged))
     }
 
     /// Keys in `manifest2` overwrite keys in `manifest1`.
     fn merge_vars(
-        vars1: &ManifestVariables,
-        vars2: &ManifestVariables,
+        low_priority: &ManifestVariables,
+        high_priority: &ManifestVariables,
     ) -> Result<ManifestVariables, MergeError> {
-        let mut merged = vars1.clone().into_inner();
-        merged.extend(vars2.clone().into_inner());
+        let mut merged = low_priority.clone().into_inner();
+        merged.extend(high_priority.clone().into_inner());
         Ok(ManifestVariables(merged))
     }
 
-    /// TODO: Not implemented.
     fn merge_hook(
-        _hook1: &ManifestHook,
-        _hook2: &ManifestHook,
+        low_priority: &ManifestHook,
+        high_priority: &ManifestHook,
     ) -> Result<ManifestHook, MergeError> {
-        Ok(ManifestHook::default())
+        Ok(ManifestHook {
+            on_activate: append_optional_strings(
+                low_priority.on_activate.as_ref(),
+                high_priority.on_activate.as_ref(),
+            ),
+        })
     }
 
-    /// TODO: Not implemented.
     fn merge_profile(
-        _profile1: &ManifestProfile,
-        _profile2: &ManifestProfile,
+        low_priority: &ManifestProfile,
+        high_priority: &ManifestProfile,
     ) -> Result<ManifestProfile, MergeError> {
-        Ok(ManifestProfile::default())
+        let common =
+            append_optional_strings(low_priority.common.as_ref(), high_priority.common.as_ref());
+        let bash = append_optional_strings(low_priority.bash.as_ref(), high_priority.bash.as_ref());
+        let zsh = append_optional_strings(low_priority.zsh.as_ref(), high_priority.zsh.as_ref());
+        let tcsh = append_optional_strings(low_priority.tcsh.as_ref(), high_priority.tcsh.as_ref());
+        let fish = append_optional_strings(low_priority.fish.as_ref(), high_priority.fish.as_ref());
+        let merged = ManifestProfile {
+            common,
+            bash,
+            zsh,
+            fish,
+            tcsh,
+        };
+        Ok(merged)
     }
 
     /// TODO: Not implemented.
     fn merge_options(
-        _options1: &ManifestOptions,
-        _options2: &ManifestOptions,
+        low_priority: &ManifestOptions,
+        high_priority: &ManifestOptions,
     ) -> Result<ManifestOptions, MergeError> {
-        Ok(ManifestOptions::default())
+        let mut merged = low_priority.clone();
+        merged.allow.unfree = high_priority.allow.unfree;
+        merged.allow.broken = high_priority.allow.broken;
+        merged.allow.licenses = high_priority.allow.licenses.clone();
+        merged.semver.allow_pre_releases = high_priority.semver.allow_pre_releases;
+        merged.cuda_detection = high_priority.cuda_detection;
+        merged.systems = high_priority.systems.clone();
+        Ok(merged)
     }
 
     /// TODO: Not implemented.
     fn merge_services(
-        _services1: &ManifestServices,
-        _services2: &ManifestServices,
+        low_priority: &ManifestServices,
+        high_priority: &ManifestServices,
     ) -> Result<ManifestServices, MergeError> {
-        Ok(ManifestServices::default())
+        let mut merged = low_priority.inner().clone();
+        merged.extend(high_priority.inner().clone());
+        Ok(ManifestServices(merged))
     }
 
     /// TODO: Not implemented.
     fn merge_build(
-        _build1: &ManifestBuild,
-        _build2: &ManifestBuild,
+        low_priority: &ManifestBuild,
+        high_priority: &ManifestBuild,
     ) -> Result<ManifestBuild, MergeError> {
-        Ok(ManifestBuild::default())
+        let mut merged = low_priority.inner().clone();
+        merged.extend(high_priority.inner().clone());
+        Ok(ManifestBuild(merged))
     }
 
     /// TODO: Not implemented.
     fn merge_containerize(
-        _containerize1: Option<ManifestContainerize>,
-        _containerize2: Option<ManifestContainerize>,
+        low_priority: Option<&ManifestContainerize>,
+        high_priority: Option<&ManifestContainerize>,
     ) -> Result<Option<ManifestContainerize>, MergeError> {
-        Ok(None)
+        let merged_containerize = if let Some(lp) = low_priority {
+            if let Some(hp) = high_priority {
+                let mut merged = lp.config.clone();
+                if let Some(ref config) = hp.config {
+                    merged = merged.map(|mut c| {
+                        c.user = config.user.clone();
+                        c.exposed_ports = config.exposed_ports.clone();
+                        c.cmd = config.cmd.clone();
+                        c.volumes = config.volumes.clone();
+                        c.working_dir = config.working_dir.clone();
+                        c.labels = config.labels.clone();
+                        c.stop_signal = config.stop_signal.clone();
+                        c
+                    });
+                }
+                Some(ManifestContainerize { config: merged })
+            } else {
+                low_priority.cloned()
+            }
+        } else {
+            high_priority.cloned()
+        };
+        Ok(merged_containerize)
     }
 
-    fn merge(&self, manifest1: Manifest, manifest2: Manifest) -> Result<Manifest, MergeError> {
+    fn merge(
+        &self,
+        low_priority: &Manifest,
+        high_priority: &Manifest,
+    ) -> Result<Manifest, MergeError> {
         let manifest = Manifest {
-            version: Self::merge_version(&manifest1.version, &manifest2.version)?,
-            install: Self::merge_install(&manifest1.install, &manifest2.install)?,
-            vars: Self::merge_vars(&manifest1.vars, &manifest2.vars)?,
-            hook: Self::merge_hook(&manifest1.hook, &manifest2.hook)?,
-            profile: Self::merge_profile(&manifest1.profile, &manifest2.profile)?,
-            options: Self::merge_options(&manifest1.options, &manifest2.options)?,
-            services: Self::merge_services(&manifest1.services, &manifest2.services)?,
-            build: Self::merge_build(&manifest1.build, &manifest2.build)?,
-            containerize: Self::merge_containerize(manifest1.containerize, manifest2.containerize)?,
+            version: Self::merge_version(&low_priority.version, &high_priority.version)?,
+            install: Self::merge_install(&low_priority.install, &high_priority.install)?,
+            vars: Self::merge_vars(&low_priority.vars, &high_priority.vars)?,
+            hook: Self::merge_hook(&low_priority.hook, &high_priority.hook)?,
+            profile: Self::merge_profile(&low_priority.profile, &high_priority.profile)?,
+            options: Self::merge_options(&low_priority.options, &high_priority.options)?,
+            services: Self::merge_services(&low_priority.services, &high_priority.services)?,
+            build: Self::merge_build(&low_priority.build, &high_priority.build)?,
+            containerize: Self::merge_containerize(
+                low_priority.containerize.as_ref(),
+                high_priority.containerize.as_ref(),
+            )?,
         };
 
         Ok(manifest)
     }
 }
 
+/// Given two optional strings, append them if they're present, return the present one or `None` if not.
+fn append_optional_strings(first: Option<&String>, second: Option<&String>) -> Option<String> {
+    if let Some(first) = first {
+        if let Some(second) = second {
+            Some(format!("{first}\n{second}"))
+        } else {
+            Some(first.clone())
+        }
+    } else {
+        second.cloned()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    mod shallow {
 
-    use pretty_assertions::assert_eq;
+        use std::collections::BTreeMap;
 
-    use super::*;
+        use pretty_assertions::assert_eq;
+        use proptest::prelude::*;
 
-    #[test]
-    fn shallow_merger_no_deps() {
-        let composer = Manifest {
-            version: Version::<1>,
-            vars: ManifestVariables(BTreeMap::from([
-                ("composer_a".to_string(), "set by composer".to_string()),
-                ("composer_b".to_string(), "set by composer".to_string()),
-            ])),
-            ..Manifest::default()
-        };
+        use super::super::*;
 
-        let composite_manifest = CompositeManifest {
-            composer: composer.clone(),
-            deps: vec![],
-        };
+        #[test]
+        fn vars_no_deps() {
+            let composer = Manifest {
+                version: Version::<1>,
+                vars: ManifestVariables(BTreeMap::from([
+                    ("composer_a".to_string(), "set by composer".to_string()),
+                    ("composer_b".to_string(), "set by composer".to_string()),
+                ])),
+                ..Manifest::default()
+            };
 
-        let merged = composite_manifest.merge_all(ShallowMerger).unwrap();
-        assert_eq!(merged, composer);
-    }
+            let composite_manifest = CompositeManifest {
+                composer: composer.clone(),
+                deps: vec![],
+            };
 
-    #[test]
-    fn shallow_merger_with_deps() {
-        let dep1 = Manifest {
-            version: Version::<1>,
-            vars: ManifestVariables(BTreeMap::from([
-                ("dep1_a".to_string(), "set by dep1".to_string()),
-                ("dep1_b".to_string(), "set by dep1".to_string()),
-                ("dep1_c".to_string(), "set by dep1".to_string()),
-            ])),
-            ..Manifest::default()
-        };
+            let merged = composite_manifest.merge_all(ShallowMerger).unwrap();
+            assert_eq!(merged, composer);
+        }
 
-        let dep2 = Manifest {
-            version: Version::<1>,
-            vars: ManifestVariables(BTreeMap::from([
-                ("dep1_a".to_string(), "updated by dep2".to_string()),
-                ("dep1_b".to_string(), "updated by dep2".to_string()),
-                ("dep2_a".to_string(), "set by dep2".to_string()),
-                ("dep2_b".to_string(), "set by dep2".to_string()),
-            ])),
-            ..Manifest::default()
-        };
+        #[test]
+        fn vars_with_deps() {
+            let dep1 = Manifest {
+                version: Version::<1>,
+                vars: ManifestVariables(BTreeMap::from([
+                    ("dep1_a".to_string(), "set by dep1".to_string()),
+                    ("dep1_b".to_string(), "set by dep1".to_string()),
+                    ("dep1_c".to_string(), "set by dep1".to_string()),
+                ])),
+                ..Manifest::default()
+            };
 
-        let composer = Manifest {
-            version: Version::<1>,
-            vars: ManifestVariables(BTreeMap::from([
-                ("dep1_a".to_string(), "updated by composer".to_string()),
-                ("dep2_a".to_string(), "updated by composer".to_string()),
-                ("composer_a".to_string(), "set by composer".to_string()),
-            ])),
-            ..Manifest::default()
-        };
+            let dep2 = Manifest {
+                version: Version::<1>,
+                vars: ManifestVariables(BTreeMap::from([
+                    ("dep1_a".to_string(), "updated by dep2".to_string()),
+                    ("dep1_b".to_string(), "updated by dep2".to_string()),
+                    ("dep2_a".to_string(), "set by dep2".to_string()),
+                    ("dep2_b".to_string(), "set by dep2".to_string()),
+                ])),
+                ..Manifest::default()
+            };
 
-        let composite_manifest = CompositeManifest {
-            composer,
-            deps: vec![dep1, dep2],
-        };
+            let composer = Manifest {
+                version: Version::<1>,
+                vars: ManifestVariables(BTreeMap::from([
+                    ("dep1_a".to_string(), "updated by composer".to_string()),
+                    ("dep2_a".to_string(), "updated by composer".to_string()),
+                    ("composer_a".to_string(), "set by composer".to_string()),
+                ])),
+                ..Manifest::default()
+            };
 
-        let merged = composite_manifest.merge_all(ShallowMerger).unwrap();
+            let composite_manifest = CompositeManifest {
+                composer,
+                deps: vec![dep1, dep2],
+            };
 
-        assert_eq!(merged, Manifest {
-            version: Version::<1>,
-            vars: ManifestVariables(BTreeMap::from([
-                ("dep1_a".to_string(), "updated by composer".to_string()),
-                ("dep1_b".to_string(), "updated by dep2".to_string()),
-                ("dep1_c".to_string(), "set by dep1".to_string()),
-                ("dep2_a".to_string(), "updated by composer".to_string()),
-                ("dep2_b".to_string(), "set by dep2".to_string()),
-                ("composer_a".to_string(), "set by composer".to_string()),
-            ])),
-            // TODO: Not implemented.
-            install: ManifestInstall::default(),
-            hook: ManifestHook::default(),
-            profile: ManifestProfile::default(),
-            options: ManifestOptions::default(),
-            services: ManifestServices::default(),
-            build: ManifestBuild::default(),
-            containerize: None,
-        })
+            let merged = composite_manifest.merge_all(ShallowMerger).unwrap();
+
+            assert_eq!(merged, Manifest {
+                version: Version::<1>,
+                vars: ManifestVariables(BTreeMap::from([
+                    ("dep1_a".to_string(), "updated by composer".to_string()),
+                    ("dep1_b".to_string(), "updated by dep2".to_string()),
+                    ("dep1_c".to_string(), "set by dep1".to_string()),
+                    ("dep2_a".to_string(), "updated by composer".to_string()),
+                    ("dep2_b".to_string(), "set by dep2".to_string()),
+                    ("composer_a".to_string(), "set by composer".to_string()),
+                ])),
+                // TODO: Not implemented.
+                install: ManifestInstall::default(),
+                hook: ManifestHook::default(),
+                profile: ManifestProfile::default(),
+                options: ManifestOptions::default(),
+                services: ManifestServices::default(),
+                build: ManifestBuild::default(),
+                containerize: None,
+            })
+        }
+
+        proptest! {
+            #[test]
+            fn install_section(lp: ManifestInstall, hp: ManifestInstall) {
+                // todo
+            }
+        }
     }
 }
