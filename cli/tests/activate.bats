@@ -2796,7 +2796,7 @@ attach_runs_hooks_once() {
 
   "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" 2> output &
 
-  wait_for_background_activation
+  cat activate_finished
   run cat output
   assert_output --partial "sourcing hook.on-activate for first time"
   assert_output --partial "hook.on-activate"
@@ -2857,7 +2857,7 @@ attach_runs_profile_twice() {
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
   FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" >> output 2>&1 &
 
-  wait_for_background_activation
+  cat activate_finished
   run cat output
   assert_output --partial "sourcing profile.common"
   assert_output --partial "sourcing profile.$shell"
@@ -2985,7 +2985,7 @@ EOF
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
   FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" >> output 2>&1 &
 
-  wait_for_background_activation
+  cat activate_finished
 
   case "$mode" in
     interactive)
@@ -3101,7 +3101,7 @@ attach_sets_profile_vars() {
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
   FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" &
 
-  wait_for_background_activation
+  cat activate_finished
 
   case "$mode" in
     interactive)
@@ -3293,7 +3293,7 @@ EOF
       ;;
   esac
 
-  wait_for_background_activation
+  cat activate_finished
 
   run cat output
   assert_success
@@ -3577,7 +3577,7 @@ EOF
 
       # vim gets added to MANPATH
       _man=$_man "$FLOX_BIN" activate -d vim -- bash -c "$_man --path vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
-      wait_for_background_activation
+      cat activate_finished
       run cat output
       assert_success
       assert_output "$VIM_MAN"
@@ -3602,7 +3602,7 @@ EOF
 
       # vim gets added to MANPATH
       "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output && echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
-      wait_for_background_activation
+      cat activate_finished
       run cat output
       assert_success
       assert_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
@@ -3649,7 +3649,7 @@ EOF
   refute_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
 
   "$FLOX_BIN" activate -d vim -- bash -c "command -v vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
-  wait_for_background_activation
+  cat activate_finished
 
   run cat output
   assert_success
