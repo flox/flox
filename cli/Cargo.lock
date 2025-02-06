@@ -1104,6 +1104,7 @@ dependencies = [
  "derive_more",
  "enum_dispatch",
  "flox-core",
+ "flox-test-utils",
  "fslock",
  "futures",
  "httpmock",
@@ -1146,9 +1147,11 @@ name = "flox-test-utils"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "dirs",
  "indoc",
  "nix",
+ "proptest",
  "serde_json",
  "temp-env",
  "tempfile",

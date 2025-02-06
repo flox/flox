@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use flox_core::Version;
+#[cfg(test)]
+use flox_test_utils::proptest::btree_map_alphanum_keys;
 use indoc::formatdoc;
 use itertools::Itertools;
 #[cfg(test)]
@@ -10,8 +12,6 @@ use serde_with::skip_serializing_none;
 
 use crate::data::System;
 use crate::providers::services::ServiceError;
-#[cfg(test)]
-use crate::utils::proptest_btree_map_alphanum_keys;
 
 pub(crate) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub const DEFAULT_PRIORITY: u64 = 5;
@@ -267,9 +267,7 @@ fn pkg_belongs_to_non_empty_toplevel_group(
 pub struct ManifestInstall(
     #[cfg_attr(
         test,
-        proptest(
-            strategy = "proptest_btree_map_alphanum_keys::<ManifestPackageDescriptor>(10, 3)"
-        )
+        proptest(strategy = "btree_map_alphanum_keys::<ManifestPackageDescriptor>(10, 3)")
     )]
     pub(crate) BTreeMap<String, ManifestPackageDescriptor>,
 );
@@ -480,11 +478,8 @@ pub struct ManifestPackageDescriptorStorePath {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestVariables(
-    #[cfg_attr(
-        test,
-        proptest(strategy = "proptest_btree_map_alphanum_keys::<String>(10, 3)")
-    )]
-    pub(crate) BTreeMap<String, String>,
+    #[cfg_attr(test, proptest(strategy = "btree_map_alphanum_keys::<String>(10, 3)"))]
+    pub(crate)  BTreeMap<String, String>,
 );
 
 impl ManifestVariables {
@@ -581,9 +576,7 @@ pub struct SemverOptions {
 pub struct ManifestServices(
     #[cfg_attr(
         test,
-        proptest(
-            strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
-        )
+        proptest(strategy = "btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)")
     )]
     pub(crate) BTreeMap<String, ManifestServiceDescriptor>,
 );
@@ -679,7 +672,7 @@ pub struct ManifestServiceShutdown {
 pub struct ManifestBuild(
     #[cfg_attr(
         test,
-        proptest(strategy = "proptest_btree_map_alphanum_keys::<ManifestBuildDescriptor>(10, 3)")
+        proptest(strategy = "btree_map_alphanum_keys::<ManifestBuildDescriptor>(10, 3)")
     )]
     pub(crate) BTreeMap<String, ManifestBuildDescriptor>,
 );
