@@ -1,8 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::ffi::OsStr;
+use std::hash::Hash;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
 use flox_core::canonical_path::CanonicalPath;
@@ -12,7 +14,7 @@ use thiserror::Error;
 use tracing::{debug, info_span, instrument};
 
 use super::catalog::ClientTrait;
-use super::nix::nix_base_command;
+use super::nix::{self, nix_base_command};
 use crate::data::System;
 use crate::models::lockfile::{
     LockedPackage,
@@ -145,6 +147,29 @@ impl BuildEnvNix {
         nix_build_command
     }
 
+    fn pre_check_store_paths(
+        &self,
+        lockfile: &Lockfile,
+        system: &System,
+    ) -> Result<CheckedStorePaths, BuildEnvError> {
+        let mut all_paths = Vec::new();
+        for package in lockfile.packages.iter() {
+            if package.system() != system {
+                continue;
+            }
+
+            match package {
+                LockedPackage::Catalog(locked) => all_paths.extend(locked.outputs.values()),
+                LockedPackage::Flake(locked) => {
+                    all_paths.extend(locked.locked_installable.outputs.values())
+                },
+                LockedPackage::StorePath(locked) => all_paths.extend([&locked.store_path]),
+            }
+        }
+
+        check_store_paths(all_paths)
+    }
+
     /// Realise all store paths of packages that are installed to the environment,
     /// for the given system.
     /// This goes through all packages in the lockfile and realises them with
@@ -158,15 +183,22 @@ impl BuildEnvNix {
         client: &impl ClientTrait,
         lockfile: &Lockfile,
         system: &System,
+        pre_checked_store_paths: &CheckedStorePaths,
     ) -> Result<(), BuildEnvError> {
         for package in lockfile.packages.iter() {
             if package.system() != system {
                 continue;
             }
             match package {
-                LockedPackage::Catalog(locked) => self.realise_nixpkgs(client, locked)?,
-                LockedPackage::Flake(locked) => self.realise_flakes(locked)?,
-                LockedPackage::StorePath(locked) => self.realise_store_path(locked)?,
+                LockedPackage::Catalog(locked) => {
+                    self.realise_nixpkgs(client, locked, pre_checked_store_paths)?
+                },
+                LockedPackage::Flake(locked) => {
+                    self.realise_flakes(locked, pre_checked_store_paths)?
+                },
+                LockedPackage::StorePath(locked) => {
+                    self.realise_store_path(locked, pre_checked_store_paths)?
+                },
             }
         }
         Ok(())
@@ -258,18 +290,30 @@ impl BuildEnvNix {
         &self,
         client: &impl ClientTrait,
         locked: &LockedPackageCatalog,
+        pre_checked_store_paths: &CheckedStorePaths,
     ) -> Result<(), BuildEnvError> {
         // Check if all store paths are valid, or can be substituted.
-        let all_valid = {
+        let all_valid_in_pre_checked = locked
+            .outputs
+            .values()
+            .all(|path| pre_checked_store_paths.valid(path).unwrap_or_default());
+
+        // If all store paths are already valid, we can return early.
+        if all_valid_in_pre_checked {
+            return Ok(());
+        }
+
+        // Check if store paths have _become_ valid in the meantime or can be substituted.
+        let all_valid_after_build_or_substitution = {
             let span = info_span!(
-                "subsitute catalog package",
+                "substitute catalog package",
                 progress = format!("Downloading '{}'", locked.attr_path)
             );
             span.in_scope(|| self.check_store_path_with_substituters(locked.outputs.values()))?
         };
 
-        // If so, return without eval.
-        if all_valid {
+        // If all store paths are valid after substitution, we can return early.
+        if all_valid_after_build_or_substitution {
             return Ok(());
         }
 
@@ -338,8 +382,23 @@ impl BuildEnvNix {
     /// We set `--option pure-eval true` to avoid improve reproducibility,
     /// and allow the use of the eval-cache to avoid costly re-evaluations.
     #[instrument(skip(self), fields(progress = format!("Realising flake package '{}'", locked.install_id)))]
-    fn realise_flakes(&self, locked: &LockedPackageFlake) -> Result<(), BuildEnvError> {
+    fn realise_flakes(
+        &self,
+        locked: &LockedPackageFlake,
+        pre_checked_store_paths: &CheckedStorePaths,
+    ) -> Result<(), BuildEnvError> {
+        let all_valid_in_pre_checked = locked
+            .locked_installable
+            .outputs
+            .values()
+            .all(|path| pre_checked_store_paths.valid(path).unwrap_or_default());
+
         // check if all store paths are valid, if so, return without eval
+        if all_valid_in_pre_checked {
+            return Ok(());
+        }
+
+        // check if store paths have _become_ valid in the meantime
         let all_valid = self.check_store_path(locked.locked_installable.outputs.values())?;
         if all_valid {
             return Ok(());
@@ -390,8 +449,16 @@ impl BuildEnvNix {
     /// if the store path is not valid (and the store lacks the ability to reproduce it),
     /// This function will return an error.
     #[instrument(skip(self), fields(progress = format!("Realising store path for '{}'", locked.install_id)))]
-    fn realise_store_path(&self, locked: &LockedPackageStorePath) -> Result<(), BuildEnvError> {
-        let valid = self.check_store_path_with_substituters([&locked.store_path])?;
+    fn realise_store_path(
+        &self,
+        locked: &LockedPackageStorePath,
+        pre_checked_store_paths: &CheckedStorePaths,
+    ) -> Result<(), BuildEnvError> {
+        let valid = pre_checked_store_paths
+            .valid(&locked.store_path)
+            .unwrap_or_default()
+            || self.check_store_path([&locked.store_path])?;
+
         if !valid {
             return Err(BuildEnvError::Realise2 {
                 install_id: locked.install_id.clone(),
@@ -422,15 +489,6 @@ impl BuildEnvNix {
         &self,
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<bool, BuildEnvError> {
-        let paths = paths.into_iter().collect::<Vec<_>>();
-
-        // Check if the given store paths _exists_ on the filesystem.
-        debug!("checking if store paths exist in file system");
-        let all_exist = paths.iter().all(|p| Path::new(p).exists());
-        if all_exist {
-            return Ok(true);
-        }
-
         let mut cmd = self.base_command();
         cmd.arg("build");
         cmd.arg("--no-link");
@@ -464,33 +522,9 @@ impl BuildEnvNix {
     /// which allows checking against alternative stores.
     fn check_store_path(
         &self,
-        paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
+        paths: impl IntoIterator<Item = impl AsRef<str> + Hash + Eq>,
     ) -> Result<bool, BuildEnvError> {
-        let paths = paths.into_iter().collect::<Vec<_>>();
-
-        // Check if the given store paths _exists_ on the filesystem.
-        debug!("checking if store paths exist in file system");
-        let all_exist = paths.iter().all(|p| Path::new(p).exists());
-        if all_exist {
-            return Ok(true);
-        }
-
-        let mut cmd = self.base_command();
-        cmd.arg("path-info");
-        cmd.args(paths);
-
-        // only check the local store, return as early as possible
-        cmd.arg("--offline");
-
-        debug!(cmd=%cmd.display(), "checking store paths");
-
-        let success = cmd
-            .output()
-            .map_err(BuildEnvError::CallNixBuild)?
-            .status
-            .success();
-
-        Ok(success)
+        Ok(check_store_paths(paths)?.all_valid())
     }
 
     /// Build the environment by evaluating and building
@@ -578,6 +612,21 @@ impl BuildEnv for BuildEnvNix {
             }
         }
 
+        // Check all store paths of the lockfile packages,
+        // for validity _in the current store_ as a single bulk operation.
+        // This is a performance optimization to avoid the overhead
+        // of individual `nix path-info` calls per package.
+        // `nix path-info` takes about 50ms to 100ms per call,
+        // most of which is overhead, since empirically
+        // the command shows relatively constant runtime with the number of paths.
+        // However, for large environments with many packages,
+        // the individual calls add up.
+        // Instead we use `nix path-info --stdin` to check all paths at once,
+        // and pass on the result as a cache to the `realise` step,
+        // which can query the validity of paths efficiently on a per package basis.
+        let pre_checked_store_paths =
+            self.pre_check_store_paths(&lockfile, &env!("NIX_TARGET_SYSTEM").to_string())?;
+
         // Realise the packages in the lockfile, for the current system.
         // "Realising" a package means to check if the associated store paths are valid
         // and otherwise building the package to _create_ valid store paths.
@@ -594,7 +643,12 @@ impl BuildEnv for BuildEnvNix {
         // This will prevent failures due to e.g. non-deterministic,
         // non-sandboxed manifest builds which may produce different store paths,
         // than previously locked in the lockfile.
-        self.realise_lockfile(client, &lockfile, &env!("NIX_TARGET_SYSTEM").to_string())?;
+        self.realise_lockfile(
+            client,
+            &lockfile,
+            &env!("NIX_TARGET_SYSTEM").to_string(),
+            &pre_checked_store_paths,
+        )?;
 
         // Build the lockfile by evaluating and building the `buildenv.nix` expression.
         let outputs = self.call_buildenv_nix(lockfile_path, service_config_path)?;
@@ -630,6 +684,98 @@ impl BuildEnv for BuildEnvNix {
 
         Ok(())
     }
+}
+
+/// A helper struct to keep track of the store paths that have been checked
+/// and which of them are valid.
+#[derive(Clone, Debug, Default)]
+struct CheckedStorePaths {
+    /// The store paths that have been checked.
+    /// The validity of `CheckedStorePaths` is limited to the store paths actually checked.
+    /// I.e. if a store path was not checked, it can not be considered valid nor invalid.
+    checked: HashSet<String>,
+    /// The store paths that have been checked and are valid.
+    /// The construction of [CheckedStorePaths], i.e. [check_store_paths]
+    /// ensures that `valid ⊆ checked`
+    valid: HashSet<String>,
+}
+
+impl CheckedStorePaths {
+    /// Check whether all checked store paths are valid.
+    fn all_valid(&self) -> bool {
+        self.checked.len() == self.valid.len()
+    }
+
+    /// Check whether a store path is valid.
+    /// If the store path has not been checked, the function will return `None`.
+    fn valid(&self, path: impl AsRef<str>) -> Option<bool> {
+        self.checked(&path)
+            .then(|| self.valid.contains(path.as_ref()))
+    }
+
+    /// Check whether a store path has been checked.
+    fn checked(&self, path: impl AsRef<str>) -> bool {
+        self.checked.contains(path.as_ref())
+    }
+}
+
+/// Check the validity of store paths in the nix store,
+/// without attempting to build or substitute them.
+/// The [CheckedStorePaths] struct returned by this function
+/// will be used to inform the various `realise_*` functions,
+/// whether a package needs to be built or substituted.
+///
+/// SAFTETY: [CheckedStorePaths] poses the risk of TOCTOU issues,
+/// especially when held for a long time.
+/// We acknowledge, that store paths might be _created_,
+/// after [CheckedStorePaths] is created;
+/// Consumers may check the validity of invalid store paths again
+/// before attempting expensive operations like building or substituting,
+/// in case the paths have been created separately in the meantime.
+/// However, we assume that the store paths are not being _deleted_,
+/// which would invalidate the [CheckedStorePaths] struct.
+/// Concurrent deletion of store paths is a rare event,
+/// but can lead to intermittent build failures.
+/// Since the nix store is not in our control, or transactional,
+/// we accept this risk as a trade-off for performance and try to mitigate it
+/// by limiting the scope/lifetime of the [CheckedStorePaths] struct.
+fn check_store_paths(
+    paths: impl IntoIterator<Item = impl AsRef<str> + Eq + Hash>,
+) -> Result<CheckedStorePaths, BuildEnvError> {
+    let mut command = nix::nix_base_command();
+    command.stdin(Stdio::piped());
+    command.stderr(Stdio::null());
+    command.stdout(Stdio::piped());
+    command.args(["path-info", "--offline", "--stdin"]);
+
+    let mut child = command.spawn().map_err(BuildEnvError::CallNixBuild)?;
+    let stdin = child.stdin.as_mut().unwrap();
+
+    let paths = paths
+        .into_iter()
+        .map(|p| p.as_ref().to_string())
+        .collect::<HashSet<_>>();
+
+    for path in paths.iter() {
+        stdin.write_all(path.as_bytes()).unwrap();
+        stdin.write_all(b"\n").unwrap();
+    }
+
+    stdin.flush().unwrap();
+
+    let output = child
+        .wait_with_output()
+        .map_err(BuildEnvError::CallNixBuild)?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let valid_paths = stdout
+        .lines()
+        .map(|p| p.to_string())
+        .collect::<HashSet<_>>();
+
+    Ok(CheckedStorePaths {
+        checked: paths,
+        valid: valid_paths,
+    })
 }
 
 #[cfg(test)]
@@ -699,7 +845,7 @@ mod realise_nixpkgs_tests {
 
         let buildenv = BuildEnvNix;
 
-        let result = buildenv.realise_nixpkgs(&client, &locked_package);
+        let result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
         assert!(result.is_ok());
 
         // Note: per the above this may be incidentally true
@@ -718,13 +864,13 @@ mod realise_nixpkgs_tests {
         // build the package to ensure it is in the store
         let buildenv = BuildEnvNix;
         buildenv
-            .realise_nixpkgs(&client, &locked_package)
+            .realise_nixpkgs(&client, &locked_package, &Default::default())
             .expect("'hello' package should build");
 
         // replace the attr_path with one that is known to fail to evaluate
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
         buildenv
-            .realise_nixpkgs(&client, &locked_package)
+            .realise_nixpkgs(&client, &locked_package, &Default::default())
             .expect("'hello' package should be realised without eval/build");
     }
 
@@ -753,7 +899,7 @@ mod realise_nixpkgs_tests {
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
 
         let buildenv = BuildEnvNix;
-        let result = buildenv.realise_nixpkgs(&client, &locked_package);
+        let result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
         let err = result.expect_err("realising nixpkgs#AAAAAASomeThingsFailToEvaluate should fail");
         assert!(matches!(err, BuildEnvError::Realise2 { .. }));
     }
@@ -781,7 +927,7 @@ mod realise_nixpkgs_tests {
         );
 
         let buildenv = BuildEnvNix;
-        let result = buildenv.realise_nixpkgs(&client, &locked_package);
+        let result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
         assert!(result.is_ok(), "{}", result.unwrap_err());
     }
 
@@ -809,7 +955,7 @@ mod realise_nixpkgs_tests {
         );
 
         let buildenv = BuildEnvNix;
-        let result = buildenv.realise_nixpkgs(&client, &locked_package);
+        let result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
         assert!(result.is_ok(), "{}", result.unwrap_err());
     }
 
@@ -904,7 +1050,7 @@ mod realise_nixpkgs_tests {
         client.push_store_info_response(resp);
 
         let buildenv = BuildEnvNix;
-        let _result = buildenv.realise_nixpkgs(&client, &locked_package);
+        let _result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
@@ -1065,7 +1211,7 @@ mod realise_flakes_tests {
             "store path should be invalid before building"
         );
 
-        let result = buildenv.realise_flakes(&locked_package);
+        let result = buildenv.realise_flakes(&locked_package, &Default::default());
         assert!(
             result.is_ok(),
             "failed to build flake: {}",
@@ -1083,7 +1229,7 @@ mod realise_flakes_tests {
             .succeed_build(false)
             .build();
         let buildenv = BuildEnvNix;
-        let result = buildenv.realise_flakes(&locked_package);
+        let result = buildenv.realise_flakes(&locked_package, &Default::default());
         let err = result.expect_err("realising flake should fail");
         assert!(matches!(err, BuildEnvError::Realise2 { .. }));
     }
@@ -1104,7 +1250,7 @@ mod realise_flakes_tests {
             "store path should be invalid before building"
         );
 
-        let result = buildenv.realise_flakes(&locked_package);
+        let result = buildenv.realise_flakes(&locked_package, &Default::default());
         let err = result.expect_err("realising flake should fail");
         assert!(matches!(err, BuildEnvError::Realise2 { .. }));
     }
@@ -1128,7 +1274,7 @@ mod realise_flakes_tests {
             "store path should be valid before building"
         );
 
-        let result = buildenv.realise_flakes(&locked_package);
+        let result = buildenv.realise_flakes(&locked_package, &Default::default());
         assert!(result.is_ok(), "failed to skip building flake");
     }
 }
@@ -1160,7 +1306,7 @@ mod realise_store_path_tests {
         assert!(buildenv.check_store_path([&locked.store_path]).unwrap());
 
         buildenv
-            .realise_store_path(&locked)
+            .realise_store_path(&locked, &Default::default())
             .expect("an existing store path should realise");
     }
 
@@ -1173,7 +1319,7 @@ mod realise_store_path_tests {
         assert!(!buildenv.check_store_path([&locked.store_path]).unwrap());
 
         let result = buildenv
-            .realise_store_path(&locked)
+            .realise_store_path(&locked, &Default::default())
             .expect_err("invalid store path should fail to realise");
         assert!(matches!(result, BuildEnvError::Realise2 { .. }));
     }
