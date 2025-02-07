@@ -373,11 +373,9 @@ pub fn check_build_metadata(
 
 fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, PublishError> {
     // Gather build repo info
-
-    // This call will fail if the local head is not in the remote
     let origin = git.get_origin().map_err(|_e| {
         PublishError::UnsupportedEnvironmentState(
-            "Unable to identify repository origin info, are all commits pushed?".to_string(),
+            "Unable to identify repository origin info. Checkout a branch with 'git checkout -b' and set upstream with 'git branch --set-upstream-to origin/branch'".to_string(),
         )
     })?;
 
@@ -388,6 +386,14 @@ fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, Publi
     if status.is_dirty {
         return Err(PublishError::UnsupportedEnvironmentState(
             "Build repository must be clean, but has dirty tracked files.".to_string(),
+        ));
+    }
+
+    // This may be too strict, we may want to allow an older local revision to
+    // be published, as long as it exists in the remote.
+    if origin.revision != Some(status.rev.clone()) {
+        return Err(PublishError::UnsupportedEnvironmentState(
+            "Build repository must be at the same revision as the remote.".to_string(),
         ));
     }
 
@@ -586,7 +592,11 @@ pub mod tests {
     #[test]
     fn test_check_env_meta_dirty() {
         let (flox, _temp_dir_handle) = flox_instance();
-        let (env, _git) = example_path_environment(&flox, None);
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
+        let (env, _git) = example_path_environment(&flox, Some(&remote_uri));
+
+        let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
+        assert!(meta.is_ok());
 
         std::fs::write(env.manifest_path(&flox).unwrap(), "dirty content")
             .expect("to write some additional text to the .flox");
@@ -601,7 +611,11 @@ pub mod tests {
     #[test]
     fn test_check_env_meta_not_in_remote() {
         let (flox, _temp_dir_handle) = flox_instance();
-        let (env, git) = example_path_environment(&flox, None);
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
+        let (env, git) = example_path_environment(&flox, Some(&remote_uri));
+
+        let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
+        assert!(meta.is_ok());
 
         let manifest_path = env
             .manifest_path(&flox)
