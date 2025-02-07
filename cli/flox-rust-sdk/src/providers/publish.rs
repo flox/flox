@@ -310,7 +310,15 @@ pub fn check_build_metadata(
             .path()
             .join(env_metadata.rel_dotflox_path.as_path()),
     )
-    .map_err(|err| EnvironmentError::DotFloxNotFound(err.path))?;
+    .map_err(|err| {
+        PublishError::UnsupportedEnvironmentState(
+            format!(
+                ".flox folder not found at {:?}, is it tracked in the repository?",
+                err.path
+            )
+            .to_string(),
+        )
+    })?;
     let mut clean_build_env =
         PathEnvironment::open(flox, PathPointer::new(env.name()), dot_flox_path)?;
 
