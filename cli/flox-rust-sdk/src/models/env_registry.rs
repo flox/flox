@@ -116,6 +116,11 @@ impl EnvRegistry {
         }
         res
     }
+
+    /// Prunes environments from the registry that no longer exist on disk.
+    fn prune_nonexistent(&mut self) {
+        self.entries.retain(|entry| entry.exists());
+    }
 }
 
 /// Metadata about the location at which one or more environments were registered over time.
@@ -132,6 +137,11 @@ pub struct RegistryEntry {
 }
 
 impl RegistryEntry {
+    /// Returns true if the `.flox` path still exists on disk.
+    pub fn exists(&self) -> bool {
+        self.path.exists()
+    }
+
     /// Returns the latest environment registered at this location.
     pub fn latest_env(&self) -> Option<&RegisteredEnv> {
         self.envs.iter().last()
@@ -294,6 +304,16 @@ pub fn deregister(
     Ok(())
 }
 
+/// Garbage collect non-existent environments from the registry.
+pub fn garbage_collect(flox: &Flox) -> Result<(), EnvRegistryError> {
+    let reg_path = env_registry_path(flox);
+    let lock = acquire_env_registry_lock(&reg_path)?;
+    let mut reg = read_environment_registry(&reg_path)?.ok_or(EnvRegistryError::NoEnvRegistry)?;
+    reg.prune_nonexistent();
+    write_environment_registry(&reg, &reg_path, lock)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use std::fs::OpenOptions;
@@ -308,6 +328,7 @@ mod test {
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment;
 
     impl Arbitrary for RegistryEntry {
         type Parameters = ();
@@ -461,5 +482,33 @@ mod test {
             // Empty entries should be removed
             prop_assert!(reg.entry_for_hash(&hash).is_none());
         }
+    }
+
+    #[test]
+    fn garbage_collect_envs() {
+        let (flox, _temp_dir) = flox_instance();
+        let reg_path = env_registry_path(&flox);
+
+        // This also registers the environment.
+        let env = new_path_environment(&flox, "version = 1");
+        let env_hash = path_hash(&env.path);
+
+        garbage_collect(&flox).unwrap();
+        let reg = read_environment_registry(&reg_path).unwrap().unwrap();
+        assert!(
+            reg.entry_for_hash(&env_hash).is_some(),
+            "should survive GC when it exists on disk, reg: {:#?}",
+            reg
+        );
+
+        std::fs::remove_dir_all(&env.path).unwrap();
+
+        garbage_collect(&flox).unwrap();
+        let reg = read_environment_registry(&reg_path).unwrap().unwrap();
+        assert!(
+            reg.entry_for_hash(&env_hash).is_none(),
+            "should not survive GC when deleted from disk, reg: {:#?}",
+            reg
+        );
     }
 }
