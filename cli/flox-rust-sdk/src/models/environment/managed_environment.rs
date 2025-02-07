@@ -41,7 +41,7 @@ use crate::models::env_registry::{
     EnvRegistry,
     EnvRegistryError,
 };
-use crate::models::environment::copy_dir_recursive;
+use crate::models::environment::{copy_dir_recursive, LOCKFILE_FILENAME};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
 use crate::models::lockfile::Lockfile;
@@ -54,7 +54,6 @@ use crate::providers::git::{
     GitProvider,
     GitRemoteCommandError,
 };
-use crate::utils::mtime_of;
 
 pub const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
@@ -372,22 +371,36 @@ impl Environment for ManagedEnvironment {
         flox: &Flox,
     ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
-
         self.ensure_locked(flox, &mut local_checkout)?;
 
-        let local_manifest_path = local_checkout.manifest_path();
+        let lockfile_contents = local_checkout
+            .existing_lockfile_contents()
+            .map_err(ManagedEnvironmentError::Core)?
+            .expect("lockfile presence checked");
 
-        let local_manifest = mtime_of(local_manifest_path);
-        let out_link_modified_at = mtime_of(&self.rendered_env_links.development);
+        let rendered_env_lockfile_path =
+            self.rendered_env_links.development.join(LOCKFILE_FILENAME);
 
-        debug!(
-            "local_manifest: {local_manifest:?}
-            out_link_modified_at: {out_link_modified_at:?}"
-        );
-
-        if local_manifest >= out_link_modified_at || !self.rendered_env_links.development.exists() {
+        let mut build_and_link = || -> Result<(), EnvironmentError> {
             let store_paths = self.build(flox)?;
-            self.link(&store_paths)?
+            self.link(&store_paths)?;
+            Ok(())
+        };
+
+        if !rendered_env_lockfile_path.exists() {
+            build_and_link()?;
+            return Ok(self.rendered_env_links.clone());
+        }
+
+        let Ok(rendered_env_lockfile_contents) = fs::read_to_string(&rendered_env_lockfile_path)
+        else {
+            build_and_link()?;
+            return Ok(self.rendered_env_links.clone());
+        };
+
+        if lockfile_contents != rendered_env_lockfile_contents {
+            build_and_link()?;
+            return Ok(self.rendered_env_links.clone());
         }
 
         Ok(self.rendered_env_links.clone())
