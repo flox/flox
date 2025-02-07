@@ -90,7 +90,6 @@ impl UpgradeInformationGuard<Unlocked> {
 
         debug!(
             ?upgrade_information_path,
-            ?info,
             "created unlocked upgrade information guard"
         );
 
