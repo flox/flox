@@ -401,13 +401,36 @@ impl BuildEnvNix {
         Ok(())
     }
 
-    /// Check if the given store paths are valid,
-    /// i.e. if the store paths exist in the store,
-    /// substitute store paths if necessary and possible.
+    /// Check if the given store paths _exists_ on the filesystem,
+    /// or in the configured nix store.
+    /// Substitute store paths if necessary and possible.
+    ///
+    /// If the store paths do not exist,
+    /// the function will fall back to querying the nix store for the store paths.
+    /// Formerly, this function checked the store paths with `nix build` immediately,
+    /// which would also ensure the integrity of the references of the store paths.
+    /// However, the runtime profile of the `nix build` command
+    /// has significant overhead for large environments.
+    /// 50ms to 100ms per package in an environment of 50 packages,
+    /// is very noticeable.
+    /// To address this we replace the nix call with a number of `stat`
+    /// calls for the paths that are checked, with the optimistic assumption
+    /// that if a path exists, it and its references are valid.
+    /// If they are not, we fall back to the nix call,
+    /// which checking against alternative stores and substitution from binary caches.
     fn check_store_path_with_substituters(
         &self,
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<bool, BuildEnvError> {
+        let paths = paths.into_iter().collect::<Vec<_>>();
+
+        // Check if the given store paths _exists_ on the filesystem.
+        debug!("checking if store paths exist in file system");
+        let all_exist = paths.iter().all(|p| Path::new(p).exists());
+        if all_exist {
+            return Ok(true);
+        }
+
         let mut cmd = self.base_command();
         cmd.arg("build");
         cmd.arg("--no-link");
@@ -424,12 +447,34 @@ impl BuildEnvNix {
         Ok(success)
     }
 
-    /// Check if the given store paths are valid,
-    /// i.e. if the store paths exist in the store.
+    /// Check if the given store paths _exists_ on the filesystem.
+    ///
+    /// If the store paths do not exist,
+    /// the function will fall back to querying the nix store for the store paths.
+    /// Formerly, this function checked the store paths with `nix path-info` immediately,
+    /// which would also ensure the integrity of the references of the store paths.
+    /// However, the runtime profile of the `nix path-info` command
+    /// has significant overhead for large environments.
+    /// 50ms to 100ms per package in an environment of 50 packages,
+    /// is very noticeable.
+    /// To address this we replace the nix call with a number of `stat`
+    /// calls for the paths that are checked, with the optimistic assumption
+    /// that if a path exists, it and its references are valid.
+    /// If they are not, we fall back to the nix call,
+    /// which allows checking against alternative stores.
     fn check_store_path(
         &self,
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<bool, BuildEnvError> {
+        let paths = paths.into_iter().collect::<Vec<_>>();
+
+        // Check if the given store paths _exists_ on the filesystem.
+        debug!("checking if store paths exist in file system");
+        let all_exist = paths.iter().all(|p| Path::new(p).exists());
+        if all_exist {
+            return Ok(true);
+        }
+
         let mut cmd = self.base_command();
         cmd.arg("path-info");
         cmd.args(paths);
