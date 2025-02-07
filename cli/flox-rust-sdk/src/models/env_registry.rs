@@ -304,14 +304,16 @@ pub fn deregister(
     Ok(())
 }
 
-/// Garbage collect non-existent environments from the registry.
-pub fn garbage_collect(flox: &Flox) -> Result<(), EnvRegistryError> {
+/// Garbage collect non-existent environments from the registry. Writes to the
+/// registry file, in addition to returning the updated registry to avoid a
+/// second read by any consumers.
+pub fn garbage_collect(flox: &Flox) -> Result<EnvRegistry, EnvRegistryError> {
     let reg_path = env_registry_path(flox);
     let lock = acquire_env_registry_lock(&reg_path)?;
     let mut reg = read_environment_registry(&reg_path)?.ok_or(EnvRegistryError::NoEnvRegistry)?;
     reg.prune_nonexistent();
     write_environment_registry(&reg, &reg_path, lock)?;
-    Ok(())
+    Ok(reg)
 }
 
 #[cfg(test)]
@@ -493,22 +495,30 @@ mod test {
         let env = new_path_environment(&flox, "version = 1");
         let env_hash = path_hash(&env.path);
 
-        garbage_collect(&flox).unwrap();
-        let reg = read_environment_registry(&reg_path).unwrap().unwrap();
+        let reg_gc = garbage_collect(&flox).unwrap();
+        let reg_read = read_environment_registry(&reg_path).unwrap().unwrap();
+        assert_eq!(
+            reg_gc, reg_read,
+            "registry returned by GC should match what's on disk"
+        );
         assert!(
-            reg.entry_for_hash(&env_hash).is_some(),
+            reg_read.entry_for_hash(&env_hash).is_some(),
             "should survive GC when it exists on disk, reg: {:#?}",
-            reg
+            reg_read
         );
 
         std::fs::remove_dir_all(&env.path).unwrap();
 
-        garbage_collect(&flox).unwrap();
-        let reg = read_environment_registry(&reg_path).unwrap().unwrap();
+        let reg_gc = garbage_collect(&flox).unwrap();
+        let reg_read = read_environment_registry(&reg_path).unwrap().unwrap();
+        assert_eq!(
+            reg_gc, reg_read,
+            "registry returned by GC should match what's on disk"
+        );
         assert!(
-            reg.entry_for_hash(&env_hash).is_none(),
+            reg_read.entry_for_hash(&env_hash).is_none(),
             "should not survive GC when deleted from disk, reg: {:#?}",
-            reg
+            reg_read
         );
     }
 }
