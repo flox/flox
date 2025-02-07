@@ -270,10 +270,9 @@ endef
 
 # The following template renders targets for the sandbox build mode.
 define BUILD_nix_sandbox_template =
-  # We anticipate that we may eventually want to specify the caching mode
-  # on a per-build basis within the manifest, but in the meantime we configure
-  # the use of a build cache for all pure builds.
-  $(eval _do_buildCache = true)
+  # If set, the DISABLE_BUILDCACHE variable will cause the build to omit the
+  # build cache.  This is used for (at least) publish.
+  $(eval _do_buildCache = $(if $(DISABLE_BUILDCACHE),,true))
 
   # The sourceTarball value needs to be stable when nothing changes across builds,
   # so we create a tarball at a stable TMPDIR path and pass that to the derivation

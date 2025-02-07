@@ -118,6 +118,7 @@ impl Build {
             &built_environments,
             &FLOX_INTERPRETER,
             &packages_to_build,
+            None,
         )?;
 
         for message in output {

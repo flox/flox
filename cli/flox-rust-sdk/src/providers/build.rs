@@ -46,6 +46,7 @@ pub trait ManifestBuilder {
         built_environments: &BuildEnvOutputs,
         flox_interpreter: &Path,
         package: &[String],
+        build_cache: Option<bool>,
     ) -> Result<BuildOutput, ManifestBuilderError>;
 
     fn clean(
@@ -166,6 +167,7 @@ impl ManifestBuilder for FloxBuildMk {
         built_environments: &BuildEnvOutputs,
         flox_interpreter: &Path,
         packages: &[String],
+        build_cache: Option<bool>,
     ) -> Result<BuildOutput, ManifestBuilderError> {
         let mut command = self.base_command(flox, base_dir);
         command.arg("build");
@@ -192,6 +194,11 @@ impl ManifestBuilder for FloxBuildMk {
             .expect("failed to keep build result fifo");
 
         command.arg(format!("BUILD_RESULT_FILE={}", build_result_path.display()));
+
+        let build_cache = build_cache.unwrap_or(true);
+        if !build_cache {
+            command.arg("DISABLE_BUILDCACHE=true");
+        }
 
         // activate needs this var
         // TODO: we should probably figure out a more consistent way to pass
@@ -377,6 +384,7 @@ pub mod test_helpers {
         flox: &Flox,
         env: &mut PathEnvironment,
         package_name: &str,
+        build_cache: Option<bool>,
         expect_success: bool,
     ) -> CollectedOutput {
         let builder = FloxBuildMk;
@@ -387,6 +395,7 @@ pub mod test_helpers {
                 &env.build(flox).unwrap(),
                 &env.rendered_env_links(flox).unwrap().development,
                 &[package_name.to_owned()],
+                build_cache,
             )
             .unwrap();
 
@@ -493,7 +502,7 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, "version = 1");
 
-        assert_build_status(&flox, &mut env, &package_name, false);
+        assert_build_status(&flox, &mut env, &package_name, None, false);
     }
 
     #[test]
@@ -516,7 +525,7 @@ mod tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
@@ -536,7 +545,7 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
 
-        let output = assert_build_status(&flox, &mut env, &pname, false);
+        let output = assert_build_status(&flox, &mut env, &pname, None, false);
 
         let expected_output = formatdoc! {r#"
             {name}> ❌  ERROR: Build command did not copy outputs to '$out'.
@@ -570,7 +579,7 @@ mod tests {
 
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        let output = assert_build_status(&flox, &mut env, &pname, false);
+        let output = assert_build_status(&flox, &mut env, &pname, None, false);
 
         let expected_output = formatdoc! {r#"
             {name}> ❌  ERROR: Build command did not copy outputs to '$out'.
@@ -625,7 +634,7 @@ mod tests {
         }
 
         // expect the build to succeed
-        let output = assert_build_status(&flox, &mut env, &pname, true);
+        let output = assert_build_status(&flox, &mut env, &pname, None, true);
 
         // [sic] newline before 'HINT: ...' ignored in 'nix build -L' output:
         // <https://github.com/NixOS/nix/issues/11991>
@@ -680,7 +689,7 @@ mod tests {
 
         fs::write(env_path.join(&file_name), &file_content).unwrap();
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
@@ -708,7 +717,7 @@ mod tests {
 
         fs::write(env_path.join(&file_name), &file_content).unwrap();
 
-        assert_build_status(&flox, &mut env, &package_name, false);
+        assert_build_status(&flox, &mut env, &package_name, None, false);
         let dir = result_dir(&env_path, &package_name);
         assert!(!dir.exists());
     }
@@ -738,7 +747,7 @@ mod tests {
 
         // This file is not accessible from a pure build.
         fs::write(env_path.join(&file_name), &file_content).unwrap();
-        let output = assert_build_status(&flox, &mut env, &package_name, false);
+        let output = assert_build_status(&flox, &mut env, &package_name, None, false);
         assert!(output.stderr.contains(&format!(
             "cp: cannot stat '{file_name}': No such file or directory",
         )));
@@ -769,7 +778,7 @@ mod tests {
 
         // This file is accessible from an impure build.
         fs::write(env_path.join(&file_name), &file_content).unwrap();
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
@@ -804,7 +813,7 @@ mod tests {
 
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
 
         // Asserts that the build script did not write to the actual $HOME
@@ -843,12 +852,49 @@ mod tests {
 
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         let file_content = result_content(&env_path, &package_name, &file_name);
 
         // Asserts that the build result uses the cached value of the previous build
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    #[test]
+    fn build_can_disable_buildcache() {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "pure"
+            command = """
+                mkdir -p $out
+
+                if [ ! -e ./cached-value ]; then
+                    # Generate a random value to cache,
+                    # successive builds should use this value
+                    # RANDOM is a bash builtin that returns a random integer
+                    # each time it's evaluated
+                    echo "$RANDOM" > ./cached-value
+                fi
+
+                cp ./cached-value $out/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let _git = GitCommandProvider::init(&env_path, false).unwrap();
+
+        assert_build_status(&flox, &mut env, &package_name, Some(false), true);
+
+        let cache_dir = cache_dir(&env_path, &package_name);
+        assert!(!cache_dir.exists());
     }
 
     #[test]
@@ -882,14 +928,14 @@ mod tests {
 
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         let file_content_first_run = result_content(&env_path, &package_name, &file_name);
 
         let cache_dir = cache_dir(&env_path, &package_name);
         assert!(cache_dir.exists());
         fs::remove_file(cache_dir).unwrap();
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         let file_content_second_run = result_content(&env_path, &package_name, &file_name);
 
         assert_ne!(file_content_first_run, file_content_second_run);
@@ -925,10 +971,10 @@ mod tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         let file_content = result_content(&env_path, &package_name, &file_name);
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
@@ -958,7 +1004,7 @@ mod tests {
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
@@ -991,7 +1037,7 @@ mod tests {
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
 
         let result_path = result_dir(&env_path, &package_name)
             .join("bin")
@@ -1039,7 +1085,7 @@ mod tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
@@ -1068,7 +1114,7 @@ mod tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
@@ -1098,7 +1144,7 @@ mod tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
@@ -1120,7 +1166,7 @@ mod tests {
             """
         "#});
         let env_path = env.parent_path().unwrap();
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, content_before);
 
         let _ = env
@@ -1134,7 +1180,7 @@ mod tests {
             """
         "#})
             .unwrap();
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, content_after);
     }
 
@@ -1176,7 +1222,7 @@ mod tests {
         fs::write(env_path.join("main.go"), arg0_code).unwrap();
 
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/go.json");
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         let result_path = result_dir(&env_path, &package_name)
             .join("bin")
             .join(&file_name);
@@ -1217,7 +1263,7 @@ mod tests {
         "#};
         fs::write(env_path.join(&file_name), arg0_code).unwrap();
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         let result_path = result_dir(&env_path, &package_name)
             .join("bin")
             .join(&file_name);
@@ -1283,7 +1329,7 @@ mod tests {
         fs::write(env_path.join("main.go"), exe_code).unwrap();
 
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/go.json");
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
         let result_path = result_dir(&env_path, &package_name)
             .join("bin")
             .join(&file_name);
@@ -1355,7 +1401,7 @@ mod tests {
         fs::write(env_path.join(source_name), source_code).unwrap();
 
         reset_mocks_from_file(&mut flox.catalog_client, "envs/go_gcc.json");
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
 
         let result_path = result_dir(&env_path, &package_name)
             .join("bin")
@@ -1408,7 +1454,7 @@ mod tests {
         let result = result_dir(&env_path, &package_name);
         let cache = cache_dir(&env_path, &package_name);
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
 
         assert!(result.exists());
         assert!(cache.exists());
@@ -1441,7 +1487,7 @@ mod tests {
 
         let result = result_dir(&env_path, &package_name);
 
-        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_status(&flox, &mut env, &package_name, None, true);
 
         assert!(result.exists());
 
@@ -1484,8 +1530,8 @@ mod tests {
         let cache_foo = cache_dir(&env_path, &package_foo);
         let result_bar = result_dir(&env_path, &package_bar);
 
-        assert_build_status(&flox, &mut env, &package_foo, true);
-        assert_build_status(&flox, &mut env, &package_bar, true);
+        assert_build_status(&flox, &mut env, &package_foo, None, true);
+        assert_build_status(&flox, &mut env, &package_bar, None, true);
 
         assert!(result_foo.exists());
         assert!(cache_foo.exists());
@@ -1516,7 +1562,7 @@ mod tests {
         let mut env = new_path_environment(&flox, &manifest);
 
         let output = temp_env::with_var("_FLOX_PKGDB_VERBOSITY", Some("1"), || {
-            assert_build_status(&flox, &mut env, &package_name, false)
+            assert_build_status(&flox, &mut env, &package_name, None, false)
         });
 
         let out_path_message_regex = regex::Regex::new("out=(.+?)\\s").unwrap();
@@ -1556,7 +1602,7 @@ mod tests {
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
         let output = temp_env::with_var("_FLOX_PKGDB_VERBOSITY", Some("1"), || {
-            assert_build_status(&flox, &mut env, &package_name, succeed)
+            assert_build_status(&flox, &mut env, &package_name, None, succeed)
         });
 
         let build_script_path_message_regex =
@@ -1637,7 +1683,7 @@ mod tests {
             let mut env = new_path_environment(&flox, &manifest);
             let env_path = env.parent_path().unwrap();
             let _git = GitCommandProvider::init(&env_path, false).unwrap();
-            let collected = assert_build_status(&flox, &mut env, &pname, true);
+            let collected = assert_build_status(&flox, &mut env, &pname, None, true);
             let result_path = env_path.join(format!("result-{pname}"));
             let build_results = collected.build_results.unwrap();
             assert_eq!(build_results.len(), 1);
