@@ -6,6 +6,7 @@ mod containerize;
 mod delete;
 mod edit;
 mod envs;
+mod gc;
 mod general;
 mod init;
 mod install;
@@ -110,7 +111,7 @@ static FLOX_DESCRIPTION: &'_ str = indoc! {"
 
 /// Manually documented commands that are to keep the help text short
 const ADDITIONAL_COMMANDS: &str = indoc! {"
-    auth, config, envs, upgrade
+    auth, config, envs, gc, upgrade
 "};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
@@ -932,6 +933,10 @@ enum AdditionalCommands {
     /// Show active and available environments
     #[bpaf(command, hide, footer("Run 'man flox-envs' for more details."))]
     Envs(#[bpaf(external(envs::envs))] envs::Envs),
+
+    /// Garbage collect data for deleted environments
+    #[bpaf(command, hide, footer("Run 'man flox-gc' for more details."))]
+    Gc(#[bpaf(external(gc::gc))] gc::Gc),
 }
 
 impl AdditionalCommands {
@@ -948,6 +953,7 @@ impl AdditionalCommands {
             AdditionalCommands::Envs(args) => args.handle(flox)?,
             AdditionalCommands::Update(args) => args.handle(flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
+            AdditionalCommands::Gc(args) => args.handle(flox)?,
         }
         Ok(())
     }
