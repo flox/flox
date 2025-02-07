@@ -51,7 +51,6 @@ use crate::models::lockfile::{Lockfile, DEFAULT_SYSTEMS_STR};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
 use crate::models::manifest::typed::Manifest;
 use crate::providers::buildenv::BuildEnvOutputs;
-use crate::utils::mtime_of;
 
 /// Struct representing a local environment
 ///
@@ -294,7 +293,7 @@ impl Environment for PathEnvironment {
     ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
         let out_paths = self.rendered_env_links.clone();
 
-        if self.needs_rebuild(flox)? {
+        if self.needs_rebuild()? {
             let store_paths = self.build(flox)?;
             self.link(flox, &store_paths)?;
         }
@@ -488,33 +487,36 @@ impl PathEnvironment {
         Self::open(flox, pointer, dot_flox_path)
     }
 
-    /// Determine if the environment needs to be rebuilt
-    /// based on the modification times of the manifest and the out link
+    /// Determine if the environment needs to be rebuilt,
+    /// based on the lockfile contents in the environment
+    /// and the rendered environment link.
     ///
-    /// If the manifest was modified after the out link was set,
-    /// the environment needs to be rebuilt.
-    ///
-    /// This is a heuristic to avoid rebuilding the environment when it is not necessary.
-    /// However, it is not perfect.
-    /// For example,
-    /// if the manifest is modified through as a whole idempotent git operations
-    ///   e.g. from branch `a`
-    ///   `git switch b; git switch a;`
-    /// or the manifest was reformatted,
-    /// the modification time of the manifest will change triggering a rebuild although nothing changed.
-    ///
-    /// Similarly, if any adjacent files are modified, the environment will not be rebuilt.
-    fn needs_rebuild(&self, flox: &Flox) -> Result<bool, EnvironmentError> {
-        let manifest_modified_at = mtime_of(self.manifest_path(flox)?);
-        let out_link_modified_at = mtime_of(&self.rendered_env_links.development);
+    /// If no lockfile exists in the rendered environment,
+    /// or differs from the definition in the environment,
+    /// the environment will be rebuilt.
+    fn needs_rebuild(&self) -> Result<bool, EnvironmentError> {
+        let env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let Some(lockfile_contents) = env_view.existing_lockfile_contents()? else {
+            return Ok(true);
+        };
 
-        debug!(
-            "manifest_modified_at: {manifest_modified_at:?},
-             out_link_modified_at: {out_link_modified_at:?}"
-        );
+        let rendered_env_lockfile_path =
+            self.rendered_env_links.development.join(LOCKFILE_FILENAME);
 
-        Ok(manifest_modified_at >= out_link_modified_at
-            || !self.rendered_env_links.development.exists())
+        if !rendered_env_lockfile_path.exists() {
+            return Ok(true);
+        }
+
+        let Ok(rendered_env_lockfile_contents) = fs::read_to_string(&rendered_env_lockfile_path)
+        else {
+            return Ok(true);
+        };
+
+        if lockfile_contents != rendered_env_lockfile_contents {
+            return Ok(true);
+        }
+
+        Ok(false)
     }
 
     fn link(
@@ -638,7 +640,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(env.needs_rebuild(&flox).unwrap());
+        assert!(env.needs_rebuild().unwrap());
 
         // build the environment -> out link is created -> no rebuild necessary
         let mut env_view = CoreEnvironment::new(env.path.join(ENV_DIR_NAME));
@@ -646,13 +648,15 @@ mod tests {
         let store_paths = env_view.build(&flox).unwrap();
         env.link(&flox, &store_paths).unwrap();
 
-        assert!(!env.needs_rebuild(&flox).unwrap());
+        assert!(!env.needs_rebuild().unwrap());
 
-        // "modify" the manifest -> rebuild necessary
-        // TODO: there will be better methods to explicitly set mtime when we upgrade to rust >= 1.75.0
-        let file = fs::write(env.manifest_path(&flox).unwrap(), "");
+        // "modify" the lockfile by changing its formatting -> rebuild necessary
+        let file = fs::write(
+            env.lockfile_path(&flox).unwrap(),
+            env.lockfile(&flox).unwrap().to_string(),
+        );
         drop(file);
-        assert!(env.needs_rebuild(&flox).unwrap());
+        assert!(env.needs_rebuild().unwrap());
     }
 
     #[test]
