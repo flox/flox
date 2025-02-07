@@ -1335,7 +1335,8 @@ mod buildenv_tests {
         let result = buildenv.build(&client, &lockfile_path, None);
         assert!(
             result.is_ok(),
-            "conflicting packages should be resolved by priority"
+            "conflicting packages should be resolved by priority: {}",
+            result.unwrap_err()
         );
     }
 
