@@ -13,7 +13,7 @@ use tracing_subscriber::{EnvFilter, Layer};
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(3600);
 const WATCHDOG_GC_INTERVAL: Duration = Duration::from_secs(3600);
 const KEEP_WATCHDOG_DAYS: u64 = 3;
-const KEEP_SERVICES_LAST: usize = 5;
+const KEEP_LAST_N_PROCESSES: usize = 5;
 
 /// Initializes a logger that persists logs to an optional file in addition to `stderr`
 pub(crate) fn init_logger(
@@ -70,16 +70,19 @@ pub(crate) fn spawn_logs_gc_threads(dir: impl AsRef<Path>) {
     spawn(move || loop {
         gc_logs_watchdog(&dir, KEEP_WATCHDOG_DAYS)
             .unwrap_or_else(|err| error!(%err, "failed to delete watchdog logs"));
-        gc_logs_services(&dir, KEEP_SERVICES_LAST)
+        gc_logs_per_process(&dir, "services.*.log", KEEP_LAST_N_PROCESSES)
             .unwrap_or_else(|err| error!(%err, "failed to delete services logs"));
+        gc_logs_per_process(&dir, "upgrade-check.*.log", KEEP_LAST_N_PROCESSES)
+            .unwrap_or_else(|err| error!(%err, "failed to delete upgrade-check logs"));
 
         std::thread::sleep(WATCHDOG_GC_INTERVAL);
     });
 }
 
-/// Garbage collects watchdog log files, keeping the last N days by modified
-/// time. This relies on the watchdog emitting a heartbeat log file from
-/// `log_heartbeat`.
+/// Garbage collects watchdog log files. There may be multiple watchdog
+/// processes running, each performing its own log rotation, so we keep the last
+/// N days by modified time. This relies on the watchdog emitting a heartbeat
+/// log file from `log_heartbeat`.
 fn gc_logs_watchdog(dir: impl AsRef<Path>, keep_days: u64) -> Result<()> {
     let dir = dir.as_ref().to_path_buf();
     let files = watchdog_logs_to_gc(&dir, keep_days)?;
@@ -104,10 +107,11 @@ fn watchdog_logs_to_gc(dir: impl AsRef<Path>, keep_days: u64) -> Result<Vec<Path
     Ok(files)
 }
 
-/// Garbage collects services log files, keeping the last N files by filename.
-/// This relies on the log files having a timestamp in their filename.
-fn gc_logs_services(dir: impl AsRef<Path>, keep_last: usize) -> Result<()> {
-    let mut files = glob_log_files(dir, "services.*.log")?;
+/// Garbage collects log files from processes that create one log file per
+/// invocation, keeping the last (most recent) N files by filename. This relies
+/// on the log files having a sortable timestamp in their filename.
+fn gc_logs_per_process(dir: impl AsRef<Path>, glob: &str, keep_last: usize) -> Result<()> {
+    let mut files = glob_log_files(dir, glob)?;
     if files.len() <= keep_last {
         return Ok(());
     }
@@ -247,27 +251,29 @@ mod tests {
     }
 
     #[test]
-    fn test_gc_logs_services_removes_old_files() {
+    fn test_gc_logs_per_process_removes_old_files() {
+        let glob = "services.*.log";
         let keep_days = 2;
         let dir = tempdir().unwrap();
         let files: Vec<PathBuf> = (1..=keep_days * 2)
             .map(|i| create_log_file(dir.path(), &format!("services.{i}.log"), None))
             .collect();
 
-        gc_logs_services(dir.path(), keep_days).unwrap();
+        gc_logs_per_process(dir.path(), glob, keep_days).unwrap();
         assert!(!files[0].exists());
         assert!(!files[1].exists());
         assert!(files[2].exists());
         assert!(files[3].exists());
 
         // Keeps the same files on second run.
-        gc_logs_services(dir.path(), keep_days).unwrap();
+        gc_logs_per_process(dir.path(), glob, keep_days).unwrap();
         assert!(files[2].exists());
         assert!(files[3].exists());
     }
 
     #[test]
-    fn test_gc_logs_services_ignores_other_files() {
+    fn test_gc_logs_per_process_ignores_other_files() {
+        let glob = "services.*.log";
         let keep_days: usize = 2;
         let dir = tempdir().unwrap();
         let filenames = vec![
@@ -283,7 +289,7 @@ mod tests {
             .collect();
         assert_eq!(files.len(), filenames.len());
 
-        gc_logs_services(dir.path(), keep_days).unwrap();
+        gc_logs_per_process(dir.path(), glob, keep_days).unwrap();
         for file in files {
             assert!(file.exists(), "file should exist: {}", file.display());
         }
