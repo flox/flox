@@ -16,7 +16,7 @@
     }
   ],
   {
-    "count": 3496,
+    "count": 3528,
     "results": [
       {
         "attr_path": "packagekit",
@@ -26,7 +26,8 @@
         "pkg_path": "packagekit",
         "pname": "packagekit",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "1.3.0"
       },
       {
         "attr_path": "psc-package",
@@ -36,7 +37,8 @@
         "pkg_path": "psc-package",
         "pname": "psc-package",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "simple-0.6.2"
       },
       {
         "attr_path": "patch-package",
@@ -46,7 +48,8 @@
         "pkg_path": "patch-package",
         "pname": "patch-package",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "8.0.0"
       }
     ]
   }

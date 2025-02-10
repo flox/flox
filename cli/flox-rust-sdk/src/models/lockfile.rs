@@ -246,6 +246,7 @@ impl LockedPackageCatalog {
             system,
             cache_uri: _,
             pkg_path: _,
+            missing_builds: _,
         } = package;
 
         let outputs = outputs
@@ -783,6 +784,7 @@ impl Lockfile {
                 // TODO: add support for insecure
                 allow_insecure: None,
                 allow_unfree: manifest.options.allow.unfree,
+                allow_missing_builds: None,
                 allowed_licenses: maybe_licenses.clone(),
                 systems: vec![],
             };
@@ -1653,6 +1655,7 @@ pub(crate) mod tests {
                 allow_insecure: None,
                 allow_unfree: None,
                 allowed_licenses: None,
+                allow_missing_builds: None,
                 systems: vec![SystemEnum::Aarch64Darwin],
             }],
         }]
@@ -1695,6 +1698,7 @@ pub(crate) mod tests {
                     unfree: Some(false),
                     version: "version".to_string(),
                     cache_uri: None,
+                    missing_builds: None,
                 }]),
                 msgs: vec![],
             }),
@@ -1778,6 +1782,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::Aarch64Darwin],
                 },
                 PackageDescriptor {
@@ -1790,6 +1795,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::X8664Linux],
                 },
                 PackageDescriptor {
@@ -1802,6 +1808,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::Aarch64Darwin],
                 },
                 PackageDescriptor {
@@ -1814,6 +1821,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::X8664Linux],
                 },
             ],
@@ -1857,6 +1865,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::Aarch64Darwin],
                 },
                 PackageDescriptor {
@@ -1869,6 +1878,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::Aarch64Darwin],
                 },
                 PackageDescriptor {
@@ -1881,6 +1891,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::X8664Linux],
                 },
             ],
@@ -1956,6 +1967,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::Aarch64Darwin],
                 }],
             },
@@ -1971,6 +1983,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::Aarch64Darwin],
                 }],
             },
@@ -2020,6 +2033,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::Aarch64Darwin],
                 },
                 // The unlocked package should not have a derivation
@@ -2033,6 +2047,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::Aarch64Darwin],
                 },
             ],
@@ -2196,6 +2211,7 @@ pub(crate) mod tests {
                         allow_insecure: None,
                         allow_unfree: None,
                         allowed_licenses: None,
+                        allow_missing_builds: None,
                         systems: vec![system],
                     }]
                 })
@@ -2332,6 +2348,7 @@ pub(crate) mod tests {
                     version: "version".to_string(),
                     system: SystemEnum::Aarch64Darwin,
                     cache_uri: None,
+                    missing_builds: None,
                 }]),
                 msgs: vec![],
             }),
@@ -2657,6 +2674,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::Aarch64Darwin,],
                 },
                 PackageDescriptor {
@@ -2669,6 +2687,7 @@ pub(crate) mod tests {
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![SystemEnum::Aarch64Darwin,],
                 }
             ],
@@ -3037,6 +3056,7 @@ pub(crate) mod tests {
                     unfree: Default::default(),
                     version: Default::default(),
                     cache_uri: Default::default(),
+                    missing_builds: Default::default(),
                 }]),
                 page: 1,
                 url: "url".to_string(),

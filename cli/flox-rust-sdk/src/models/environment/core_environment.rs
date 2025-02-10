@@ -1284,6 +1284,7 @@ mod tests {
                     version: "1.0".to_string(),
                     system: SystemEnum::Aarch64Darwin,
                     cache_uri: None,
+                    missing_builds: None,
                 }]),
                 msgs: vec![],
                 page: 1,

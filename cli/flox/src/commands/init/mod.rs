@@ -509,6 +509,7 @@ async fn try_find_compatible_package(
                     allow_insecure: None,
                     allow_unfree: None,
                     allowed_licenses: None,
+                    allow_missing_builds: None,
                     systems: vec![flox.system.parse()?],
                 }],
                 name: attr_path.to_string(),

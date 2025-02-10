@@ -17,6 +17,7 @@
             "install_id": "python2",
             "license": "Python-2.0",
             "locked_url": "https://github.com/flox/nixpkgs?rev=0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+            "missing_builds": false,
             "name": "python-2.7.18.5",
             "outputs": [
               {
@@ -32,7 +33,7 @@
             "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
             "rev_count": 439146,
             "rev_date": "2023-01-02T00:06:23Z",
-            "scrape_date": "2024-08-16T02:13:46Z",
+            "scrape_date": "2024-08-08T01:50:21Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -51,6 +52,7 @@
             "install_id": "python2",
             "license": "Python-2.0",
             "locked_url": "https://github.com/flox/nixpkgs?rev=0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+            "missing_builds": false,
             "name": "python-2.7.18.5",
             "outputs": [
               {
@@ -66,7 +68,7 @@
             "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
             "rev_count": 439146,
             "rev_date": "2023-01-02T00:06:23Z",
-            "scrape_date": "2024-08-16T02:13:46Z",
+            "scrape_date": "2024-08-08T01:50:21Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -85,6 +87,7 @@
             "install_id": "python2",
             "license": "Python-2.0",
             "locked_url": "https://github.com/flox/nixpkgs?rev=0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+            "missing_builds": false,
             "name": "python-2.7.18.5",
             "outputs": [
               {
@@ -100,7 +103,7 @@
             "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
             "rev_count": 439146,
             "rev_date": "2023-01-02T00:06:23Z",
-            "scrape_date": "2024-08-16T02:13:46Z",
+            "scrape_date": "2024-08-08T01:50:21Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -119,6 +122,7 @@
             "install_id": "python2",
             "license": "Python-2.0",
             "locked_url": "https://github.com/flox/nixpkgs?rev=0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+            "missing_builds": false,
             "name": "python-2.7.18.5",
             "outputs": [
               {
@@ -134,7 +138,7 @@
             "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
             "rev_count": 439146,
             "rev_date": "2023-01-02T00:06:23Z",
-            "scrape_date": "2024-08-16T02:13:46Z",
+            "scrape_date": "2024-08-08T01:50:21Z",
             "stabilities": [
               "staging",
               "unstable"

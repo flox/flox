@@ -10,7 +10,8 @@
         "pkg_path": "python",
         "pname": "python",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "2.7.18.8"
       },
       {
         "attr_path": "gpython",
@@ -20,7 +21,8 @@
         "pkg_path": "gpython",
         "pname": "gpython",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "0.2.0"
       },
       {
         "attr_path": "python2",
@@ -30,7 +32,8 @@
         "pkg_path": "python2",
         "pname": "python2",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "python-2.7.18.8"
       },
       {
         "attr_path": "python3",
@@ -40,7 +43,8 @@
         "pkg_path": "python3",
         "pname": "python3",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "3.12.8"
       },
       {
         "attr_path": "python27",
@@ -50,7 +54,8 @@
         "pkg_path": "python27",
         "pname": "python27",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "python-2.7.18.8"
       },
       {
         "attr_path": "python36",
@@ -60,7 +65,8 @@
         "pkg_path": "python36",
         "pname": "python36",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "python3-3.6.14"
       },
       {
         "attr_path": "python37",
@@ -70,7 +76,8 @@
         "pkg_path": "python37",
         "pname": "python37",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "python3-3.7.16"
       },
       {
         "attr_path": "python38",
@@ -80,7 +87,8 @@
         "pkg_path": "python38",
         "pname": "python38",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "python3-3.8.18"
       },
       {
         "attr_path": "python39",
@@ -90,17 +98,19 @@
         "pkg_path": "python39",
         "pname": "python39",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "python3-3.9.21"
       },
       {
-        "attr_path": "python310",
+        "attr_path": "python-qt",
         "catalog": null,
-        "description": "High-level dynamically-typed programming language",
-        "name": "python3-3.10.16",
-        "pkg_path": "python310",
-        "pname": "python310",
+        "description": "PythonQt is a dynamic Python binding for the Qt framework. It offers an easy way to embed the Python scripting language into your C++ Qt applications",
+        "name": "python-qt-3.5.7",
+        "pkg_path": "python-qt",
+        "pname": "python-qt",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "3.5.7"
       }
     ]
   }

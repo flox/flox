@@ -17,6 +17,7 @@
             "install_id": "pip",
             "license": "[ MIT ]",
             "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+            "missing_builds": false,
             "name": "python3.11-pip-24.0",
             "outputs": [
               {
@@ -33,15 +34,15 @@
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "python311Packages.pip",
             "pname": "pip",
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
             "rev_date": "2024-12-19T23:01:11Z",
-            "scrape_date": "2024-12-23T03:54:12Z",
+            "scrape_date": "2024-12-23T03:03:04Z",
             "stabilities": [
               "stable",
               "staging",
@@ -61,6 +62,7 @@
             "install_id": "pip",
             "license": "[ MIT ]",
             "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+            "missing_builds": false,
             "name": "python3.11-pip-24.0",
             "outputs": [
               {
@@ -77,15 +79,15 @@
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "python311Packages.pip",
             "pname": "pip",
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
             "rev_date": "2024-12-19T23:01:11Z",
-            "scrape_date": "2024-12-23T03:54:12Z",
+            "scrape_date": "2024-12-23T03:03:04Z",
             "stabilities": [
               "stable",
               "staging",
@@ -105,6 +107,7 @@
             "install_id": "pip",
             "license": "[ MIT ]",
             "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+            "missing_builds": false,
             "name": "python3.11-pip-24.0",
             "outputs": [
               {
@@ -121,15 +124,15 @@
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "python311Packages.pip",
             "pname": "pip",
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
             "rev_date": "2024-12-19T23:01:11Z",
-            "scrape_date": "2024-12-23T03:54:12Z",
+            "scrape_date": "2024-12-23T03:03:04Z",
             "stabilities": [
               "stable",
               "staging",
@@ -149,6 +152,7 @@
             "install_id": "pip",
             "license": "[ MIT ]",
             "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+            "missing_builds": false,
             "name": "python3.11-pip-24.0",
             "outputs": [
               {
@@ -165,15 +169,15 @@
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "python311Packages.pip",
             "pname": "pip",
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
             "rev_date": "2024-12-19T23:01:11Z",
-            "scrape_date": "2024-12-23T03:54:12Z",
+            "scrape_date": "2024-12-23T03:03:04Z",
             "stabilities": [
               "stable",
               "staging",
@@ -193,6 +197,7 @@
             "install_id": "python3",
             "license": "Python-2.0",
             "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+            "missing_builds": false,
             "name": "python3-3.12.7",
             "outputs": [
               {
@@ -208,7 +213,7 @@
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
             "rev_date": "2024-12-19T23:01:11Z",
-            "scrape_date": "2024-12-23T03:54:12Z",
+            "scrape_date": "2024-12-23T03:03:04Z",
             "stabilities": [
               "stable",
               "staging",
@@ -228,6 +233,7 @@
             "install_id": "python3",
             "license": "Python-2.0",
             "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+            "missing_builds": false,
             "name": "python3-3.12.7",
             "outputs": [
               {
@@ -247,7 +253,7 @@
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
             "rev_date": "2024-12-19T23:01:11Z",
-            "scrape_date": "2024-12-23T03:54:12Z",
+            "scrape_date": "2024-12-23T03:03:04Z",
             "stabilities": [
               "stable",
               "staging",
@@ -267,6 +273,7 @@
             "install_id": "python3",
             "license": "Python-2.0",
             "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+            "missing_builds": false,
             "name": "python3-3.12.7",
             "outputs": [
               {
@@ -282,7 +289,7 @@
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
             "rev_date": "2024-12-19T23:01:11Z",
-            "scrape_date": "2024-12-23T03:54:12Z",
+            "scrape_date": "2024-12-23T03:03:04Z",
             "stabilities": [
               "stable",
               "staging",
@@ -302,6 +309,7 @@
             "install_id": "python3",
             "license": "Python-2.0",
             "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+            "missing_builds": false,
             "name": "python3-3.12.7",
             "outputs": [
               {
@@ -321,7 +329,7 @@
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
             "rev_date": "2024-12-19T23:01:11Z",
-            "scrape_date": "2024-12-23T03:54:12Z",
+            "scrape_date": "2024-12-23T03:03:04Z",
             "stabilities": [
               "stable",
               "staging",

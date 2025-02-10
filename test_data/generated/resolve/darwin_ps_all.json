@@ -31,25 +31,26 @@
             "attr_path": "darwin.ps",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/jmvl0q00vdqm22910djbl0l4pphv1bd5-adv_cmds-231.drv",
+            "derivation": "/nix/store/j8xnzx3mgqsxs3d9qyixldphdal529xz-adv_cmds-231.drv",
             "description": "Advanced commands package for Darwin",
             "insecure": false,
             "install_id": "ps",
             "license": "[ APSL-1.0, APSL-2.0 ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=799ba5bffed04ced7067a91798353d360788b30d",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "missing_builds": false,
             "name": "adv_cmds-231",
             "outputs": [
               {
                 "name": "ps",
-                "store_path": "/nix/store/1h357r2s3xgl9pi29pjbdw4h333v4z38-adv_cmds-231-ps"
+                "store_path": "/nix/store/889n42xilrpjxqv9493jzv9qmmsczd5n-adv_cmds-231-ps"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/8wmmlj8gdcvfmayrrhr9r844qvcrlaqj-adv_cmds-231-man"
+                "store_path": "/nix/store/cfjlpl8z6rskalj58zmjq68vlwdvjvzv-adv_cmds-231-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/gwr4kii7wvds0f76hp10s4q1gypd5awb-adv_cmds-231"
+                "store_path": "/nix/store/j1h1gnggg2s687vin5cv6js2bkggjdq6-adv_cmds-231"
               }
             ],
             "outputs_to_install": [
@@ -58,10 +59,10 @@
             ],
             "pkg_path": "darwin.ps",
             "pname": "ps",
-            "rev": "799ba5bffed04ced7067a91798353d360788b30d",
-            "rev_count": 747653,
-            "rev_date": "2025-02-04T14:46:40Z",
-            "scrape_date": "2025-02-05T00:30:07Z",
+            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "rev_count": 750629,
+            "rev_date": "2025-02-08T13:21:17Z",
+            "scrape_date": "2025-02-09T04:06:52Z",
             "stabilities": [
               "unstable"
             ],
@@ -73,25 +74,26 @@
             "attr_path": "darwin.ps",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/dbs8ibnaq3x26av6ay00pwq1nymyriaq-adv_cmds-231.drv",
+            "derivation": "/nix/store/fdqznlzrivim12gq7yxhrybfg47xfwq3-adv_cmds-231.drv",
             "description": "Advanced commands package for Darwin",
             "insecure": false,
             "install_id": "ps",
             "license": "[ APSL-1.0, APSL-2.0 ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=799ba5bffed04ced7067a91798353d360788b30d",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "missing_builds": false,
             "name": "adv_cmds-231",
             "outputs": [
               {
                 "name": "ps",
-                "store_path": "/nix/store/x0nz7rkn54sgs992jb8z36vfd4g8m943-adv_cmds-231-ps"
+                "store_path": "/nix/store/s9l3cadkr7yqa58y3i7qjxp9mxzy605q-adv_cmds-231-ps"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/bk1qm5q8fcc4wg86qd9g3zp09qr69vsw-adv_cmds-231-man"
+                "store_path": "/nix/store/x2i9w7nq4y3yw5i708h5s1warq6m0k1r-adv_cmds-231-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/jsrx6jhbf5dc7s53ylngbji04idnpbrz-adv_cmds-231"
+                "store_path": "/nix/store/rn3ypwqx4m4z9pj32apkr57iffa6r9l7-adv_cmds-231"
               }
             ],
             "outputs_to_install": [
@@ -100,10 +102,10 @@
             ],
             "pkg_path": "darwin.ps",
             "pname": "ps",
-            "rev": "799ba5bffed04ced7067a91798353d360788b30d",
-            "rev_count": 747653,
-            "rev_date": "2025-02-04T14:46:40Z",
-            "scrape_date": "2025-02-05T00:30:07Z",
+            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "rev_count": 750629,
+            "rev_date": "2025-02-08T13:21:17Z",
+            "scrape_date": "2025-02-09T04:06:52Z",
             "stabilities": [
               "unstable"
             ],
@@ -112,7 +114,7 @@
             "version": "adv_cmds-231"
           }
         ],
-        "page": 747653,
+        "page": 750629,
         "url": ""
       }
     }

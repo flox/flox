@@ -43,172 +43,176 @@
             "attr_path": "bpftrace",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/6g6xnc73di6azqfh4z7b6llvqjh2djzn-bpftrace-0.21.3.drv",
+            "derivation": "/nix/store/2iq83vk6injwx7fhiccs8gz74i1q2hmv-bpftrace-0.22.1.drv",
             "description": "High-level tracing language for Linux eBPF",
             "insecure": false,
             "install_id": "bpftrace",
             "license": "Apache-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
-            "name": "bpftrace-0.21.3",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "missing_builds": false,
+            "name": "bpftrace-0.22.1",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/5wx28y3hh96lg7rfni4gbncsdr9i4bbv-bpftrace-0.21.3-man"
+                "store_path": "/nix/store/6xxmnyv8cvh2f3ak3vxhi47c4vi0isv1-bpftrace-0.22.1-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/x9966ilqpfl5pvqlvn91j867hkjx5sj5-bpftrace-0.21.3"
+                "store_path": "/nix/store/ni76h1lfjczfs70yp673ms43qm12yz1c-bpftrace-0.22.1"
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "bpftrace",
             "pname": "bpftrace",
-            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
-            "rev_count": 737779,
-            "rev_date": "2025-01-13T20:09:17Z",
-            "scrape_date": "2025-01-15T00:14:40Z",
+            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "rev_count": 750629,
+            "rev_date": "2025-02-08T13:21:17Z",
+            "scrape_date": "2025-02-09T04:06:52Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "0.21.3"
+            "version": "0.22.1"
           },
           {
             "attr_path": "bpftrace",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/j0f92xc5ghqcpwddiil37m8dd44r43f0-bpftrace-0.21.3.drv",
+            "derivation": "/nix/store/h88lpxrk8lw75mfbv114igk7vwa6ah3b-bpftrace-0.22.1.drv",
             "description": "High-level tracing language for Linux eBPF",
             "insecure": false,
             "install_id": "bpftrace",
             "license": "Apache-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
-            "name": "bpftrace-0.21.3",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "missing_builds": false,
+            "name": "bpftrace-0.22.1",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/bljfg54hnvpjvzn0g257i5jxflk9kp0r-bpftrace-0.21.3-man"
+                "store_path": "/nix/store/0rlzwd2bmhagc47nqxwbqad9gk0k0ghg-bpftrace-0.22.1-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/5x7v4si2yfyjsjka42zq6bv7sgspi4ag-bpftrace-0.21.3"
+                "store_path": "/nix/store/6f3mznp9dbwgsz773jkpin470sphcp29-bpftrace-0.22.1"
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "bpftrace",
             "pname": "bpftrace",
-            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
-            "rev_count": 737779,
-            "rev_date": "2025-01-13T20:09:17Z",
-            "scrape_date": "2025-01-15T00:14:40Z",
+            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "rev_count": 750629,
+            "rev_date": "2025-02-08T13:21:17Z",
+            "scrape_date": "2025-02-09T04:06:52Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "0.21.3"
+            "version": "0.22.1"
           },
           {
             "attr_path": "systemd",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/nsrard6xcvw6cgcchi47ywki27gk49ar-systemd-256.8.drv",
+            "derivation": "/nix/store/7f8v5115x3khsk97drnbzfw0hc12w602-systemd-257.2.drv",
             "description": "System and service manager for Linux",
             "insecure": false,
             "install_id": "systemd",
             "license": "[ BSD-2-Clause, BSD-3-Clause, CC0-1.0, LGPL-2.1-or-later, LGPL-2.0-or-later, MIT, MIT-0, OFL-1.1, Public Domain ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
-            "name": "systemd-256.8",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "missing_builds": false,
+            "name": "systemd-257.2",
             "outputs": [
               {
                 "name": "dev",
-                "store_path": "/nix/store/1jkmjkhc1gh697a7dr85crflb0dc6r0i-systemd-256.8-dev"
+                "store_path": "/nix/store/pp157g65bifw3whvxgdvkxf25a8m3ij3-systemd-257.2-dev"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/4m8a67mw04gpglgaz4y0iq7g3i1sa0m7-systemd-256.8-man"
+                "store_path": "/nix/store/w84gydqgvndwyszyca3a9i2mwyhvzrsw-systemd-257.2-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/cjvamvl1gw2p1vyzjfa5zsq5lhwnmyqf-systemd-256.8"
+                "store_path": "/nix/store/xa0y3h7dfvl5c4l7wvbnm8kg7z019v5w-systemd-257.2"
               },
               {
                 "name": "debug",
-                "store_path": "/nix/store/3cywm5l780ph20f03l83vgpl4viqi4ih-systemd-256.8-debug"
+                "store_path": "/nix/store/b51shpxpyayfz0p945jx2ma25vgqkw56-systemd-257.2-debug"
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "systemd",
             "pname": "systemd",
-            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
-            "rev_count": 737779,
-            "rev_date": "2025-01-13T20:09:17Z",
-            "scrape_date": "2025-01-15T00:14:40Z",
+            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "rev_count": 750629,
+            "rev_date": "2025-02-08T13:21:17Z",
+            "scrape_date": "2025-02-09T04:06:52Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "256.8"
+            "version": "257.2"
           },
           {
             "attr_path": "systemd",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/dzcpsdp4p3w2r5cxgj1s2irkqzzypzw4-systemd-256.8.drv",
+            "derivation": "/nix/store/9bj66bngakkp5bxgwvapckgnvghjm4yj-systemd-257.2.drv",
             "description": "System and service manager for Linux",
             "insecure": false,
             "install_id": "systemd",
             "license": "[ BSD-2-Clause, BSD-3-Clause, CC0-1.0, LGPL-2.1-or-later, LGPL-2.0-or-later, MIT, MIT-0, OFL-1.1, Public Domain ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
-            "name": "systemd-256.8",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "missing_builds": false,
+            "name": "systemd-257.2",
             "outputs": [
               {
                 "name": "dev",
-                "store_path": "/nix/store/ixwyfddsia31qxchy5rjm3nz0j0f4011-systemd-256.8-dev"
+                "store_path": "/nix/store/yjn80xknhhiaf7fb2paz22z7ig10kzl1-systemd-257.2-dev"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/da87j1q0yl3g4k4sclizf61396swhi1p-systemd-256.8-man"
+                "store_path": "/nix/store/isncykdglv4m4w0kvdj0bkk0acvgynqm-systemd-257.2-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/lji0hh2w2rv6q9mal3vpxbg413d57vfd-systemd-256.8"
+                "store_path": "/nix/store/3x67153zchawpzm78wrxd96lni3nf3sj-systemd-257.2"
               },
               {
                 "name": "debug",
-                "store_path": "/nix/store/n0imqhyjwcyajkrd91887mqrigfmva66-systemd-256.8-debug"
+                "store_path": "/nix/store/m80w5h1mmi3nmrb3ay2mz64g36viwin2-systemd-257.2-debug"
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "systemd",
             "pname": "systemd",
-            "rev": "9abb87b552b7f55ac8916b6fc9e5cb486656a2f3",
-            "rev_count": 737779,
-            "rev_date": "2025-01-13T20:09:17Z",
-            "scrape_date": "2025-01-15T00:14:40Z",
+            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "rev_count": 750629,
+            "rev_date": "2025-02-08T13:21:17Z",
+            "scrape_date": "2025-02-09T04:06:52Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "256.8"
+            "version": "257.2"
           }
         ],
-        "page": 737779,
+        "page": 750629,
         "url": ""
       }
     }
