@@ -208,7 +208,7 @@ pub fn env_registry_path(flox: &Flox) -> PathBuf {
 /// of the lock file does not indicate an active lock because the file isn't
 /// removed after use. This is a separate file because we replace the registry
 /// on write.
-pub(crate) fn env_registry_lock_path(reg_path: impl AsRef<Path>) -> PathBuf {
+fn env_registry_lock_path(reg_path: impl AsRef<Path>) -> PathBuf {
     reg_path.as_ref().with_extension("lock")
 }
 
@@ -236,7 +236,7 @@ pub fn read_environment_registry(
 /// atomic. This also takes a [LockFile] argument to ensure that the write can only be performed
 /// when the lock is acquired. It is a bug if you pass a [LockFile] that doesn't correspond to the
 /// environment registry, as that is essentially bypassing the lock.
-pub fn write_environment_registry(
+fn write_environment_registry(
     reg: &EnvRegistry,
     reg_path: impl AsRef<Path>,
     _lock: LockFile,
@@ -245,7 +245,7 @@ pub fn write_environment_registry(
 }
 
 /// Acquires the filesystem-based lock on the user's environment registry file
-pub fn acquire_env_registry_lock(reg_path: impl AsRef<Path>) -> Result<LockFile, EnvRegistryError> {
+fn acquire_env_registry_lock(reg_path: impl AsRef<Path>) -> Result<LockFile, EnvRegistryError> {
     let lock_path = env_registry_lock_path(reg_path);
     let mut lock = LockFile::open(lock_path.as_os_str()).map_err(EnvRegistryError::AcquireLock)?;
     lock.lock().map_err(EnvRegistryError::AcquireLock)?;

@@ -1654,21 +1654,13 @@ pub mod test_helpers {
 mod test {
     use std::str::FromStr;
 
-    use fslock::LockFile;
     use indoc::indoc;
     use test_helpers::{mock_managed_environment, mock_managed_environment_from_env_files};
     use url::Url;
 
     use super::*;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
-    use crate::models::env_registry::{
-        env_registry_lock_path,
-        env_registry_path,
-        read_environment_registry,
-        write_environment_registry,
-        RegisteredEnv,
-        RegistryEntry,
-    };
+    use crate::models::env_registry::read_environment_registry;
     use crate::models::environment::test_helpers::{
         new_core_environment,
         new_core_environment_with_lockfile,
@@ -2597,20 +2589,8 @@ mod test {
             floxhub_git_url_override: None,
             version: Version::<1>,
         };
-        let reg = EnvRegistry {
-            version: Version,
-            entries: vec![RegistryEntry {
-                path_hash: path_hash(&path),
-                path: path.to_path_buf(),
-                envs: vec![RegisteredEnv {
-                    created_at: 0,
-                    pointer: EnvironmentPointer::Managed(pointer.clone()),
-                }],
-            }],
-        };
-        let reg_path = env_registry_path(&flox);
-        let lock = LockFile::open(&env_registry_lock_path(reg_path)).unwrap();
-        write_environment_registry(&reg, env_registry_path(&flox), lock).unwrap();
+        ensure_registered(&flox, &path, &EnvironmentPointer::Managed(pointer.clone())).unwrap();
+
         let branch_name = branch_name(&pointer, &path);
         let decoded_path = ManagedEnvironment::decode(&flox, &branch_name).unwrap();
         let canonicalized_decoded_path = std::fs::canonicalize(decoded_path).unwrap();
