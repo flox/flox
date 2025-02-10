@@ -10,7 +10,8 @@
         "pkg_path": "hello",
         "pname": "hello",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "2.12.1"
       },
       {
         "attr_path": "hello-go",
@@ -20,7 +21,8 @@
         "pkg_path": "hello-go",
         "pname": "hello-go",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "hello-go"
       },
       {
         "attr_path": "hello-cpp",
@@ -30,7 +32,8 @@
         "pkg_path": "hello-cpp",
         "pname": "hello-cpp",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "hello-cpp"
       },
       {
         "attr_path": "nwg-hello",
@@ -40,7 +43,8 @@
         "pkg_path": "nwg-hello",
         "pname": "nwg-hello",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "0.3.0"
       },
       {
         "attr_path": "hello-unfree",
@@ -50,7 +54,8 @@
         "pkg_path": "hello-unfree",
         "pname": "hello-unfree",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "example-unfree-package-1.0"
       },
       {
         "attr_path": "hello-wayland",
@@ -60,7 +65,8 @@
         "pkg_path": "hello-wayland",
         "pname": "hello-wayland",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "0-unstable-2024-03-04"
       },
       {
         "attr_path": "sbclPackages.hello-clog",
@@ -70,7 +76,8 @@
         "pkg_path": "sbclPackages.hello-clog",
         "pname": "hello-clog",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "sbcl-hello-clog-20241012-git"
       },
       {
         "attr_path": "texlivePackages.othello",
@@ -80,7 +87,8 @@
         "pkg_path": "texlivePackages.othello",
         "pname": "othello",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "15878"
       },
       {
         "attr_path": "sbclPackages.hello-builder",
@@ -90,7 +98,8 @@
         "pkg_path": "sbclPackages.hello-builder",
         "pname": "hello-builder",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "sbcl-hello-builder-20241012-git"
       },
       {
         "attr_path": "javaPackages.mavenHello_1_0",
@@ -100,7 +109,8 @@
         "pkg_path": "javaPackages.mavenHello_1_0",
         "pname": "mavenHello_1_0",
         "stabilities": [],
-        "system": "aarch64-darwin"
+        "system": "x86_64-linux",
+        "version": "maven-hello-1.0"
       }
     ]
   }

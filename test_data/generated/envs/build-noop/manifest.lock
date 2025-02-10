@@ -12,11 +12,7 @@
     },
     "build": {
       "hello": {
-        "command": "echo hello",
-        "files": null,
-        "runtime-packages": null,
-        "systems": null,
-        "sandbox": null
+        "command": "echo hello"
       }
     }
   },

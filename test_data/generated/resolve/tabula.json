@@ -17,6 +17,7 @@
             "install_id": "tabula",
             "license": "MIT",
             "locked_url": "https://github.com/flox/nixpkgs?rev=2caf4ef5005ecc68141ecb4aac271079f7371c44",
+            "missing_builds": false,
             "name": "tabula-1.2.1",
             "outputs": [
               {
@@ -32,7 +33,7 @@
             "rev": "2caf4ef5005ecc68141ecb4aac271079f7371c44",
             "rev_count": 449318,
             "rev_date": "2023-01-30T21:55:03Z",
-            "scrape_date": "2024-08-16T02:08:55Z",
+            "scrape_date": "2024-08-08T01:45:22Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -51,6 +52,7 @@
             "install_id": "tabula",
             "license": "MIT",
             "locked_url": "https://github.com/flox/nixpkgs?rev=2caf4ef5005ecc68141ecb4aac271079f7371c44",
+            "missing_builds": false,
             "name": "tabula-1.2.1",
             "outputs": [
               {
@@ -66,7 +68,7 @@
             "rev": "2caf4ef5005ecc68141ecb4aac271079f7371c44",
             "rev_count": 449318,
             "rev_date": "2023-01-30T21:55:03Z",
-            "scrape_date": "2024-08-16T02:08:55Z",
+            "scrape_date": "2024-08-08T01:45:22Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -85,6 +87,7 @@
             "install_id": "tabula",
             "license": "MIT",
             "locked_url": "https://github.com/flox/nixpkgs?rev=2caf4ef5005ecc68141ecb4aac271079f7371c44",
+            "missing_builds": false,
             "name": "tabula-1.2.1",
             "outputs": [
               {
@@ -100,7 +103,7 @@
             "rev": "2caf4ef5005ecc68141ecb4aac271079f7371c44",
             "rev_count": 449318,
             "rev_date": "2023-01-30T21:55:03Z",
-            "scrape_date": "2024-08-16T02:08:55Z",
+            "scrape_date": "2024-08-08T01:45:22Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -119,6 +122,7 @@
             "install_id": "tabula",
             "license": "MIT",
             "locked_url": "https://github.com/flox/nixpkgs?rev=2caf4ef5005ecc68141ecb4aac271079f7371c44",
+            "missing_builds": false,
             "name": "tabula-1.2.1",
             "outputs": [
               {
@@ -134,7 +138,7 @@
             "rev": "2caf4ef5005ecc68141ecb4aac271079f7371c44",
             "rev_count": 449318,
             "rev_date": "2023-01-30T21:55:03Z",
-            "scrape_date": "2024-08-16T02:08:55Z",
+            "scrape_date": "2024-08-08T01:45:22Z",
             "stabilities": [
               "staging",
               "unstable"

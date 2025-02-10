@@ -1346,6 +1346,7 @@ pub mod test_helpers {
             version: version.to_string(),
             system: system.parse().unwrap(),
             cache_uri: None,
+            missing_builds: None,
         };
         let page = CatalogPage {
             packages: Some(vec![pkg]),

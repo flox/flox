@@ -17,6 +17,7 @@
             "install_id": "boost",
             "license": "BSL-1.0",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "boost-1.77.0",
             "outputs": [
               {
@@ -57,6 +58,7 @@
             "install_id": "boost",
             "license": "BSL-1.0",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "boost-1.77.0",
             "outputs": [
               {
@@ -97,6 +99,7 @@
             "install_id": "curl",
             "license": "curl",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "curl-7.83.1",
             "outputs": [
               {
@@ -154,6 +157,7 @@
             "install_id": "curl",
             "license": "curl",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "curl-7.83.1",
             "outputs": [
               {
@@ -211,6 +215,7 @@
             "install_id": "gcc",
             "license": "GPL-3.0-or-later",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "gcc-wrapper-9.3.0",
             "outputs": [
               {
@@ -227,8 +232,8 @@
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "gcc",
             "pname": "gcc",
@@ -256,6 +261,7 @@
             "install_id": "gcc",
             "license": "GPL-3.0-or-later",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "gcc-wrapper-11.3.0",
             "outputs": [
               {
@@ -272,8 +278,8 @@
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "gcc",
             "pname": "gcc",
@@ -301,6 +307,7 @@
             "install_id": "gcc-unwrapped",
             "license": "GPL-3.0-or-later",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "gcc-9.3.0",
             "outputs": [
               {
@@ -321,8 +328,8 @@
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "gcc-unwrapped",
             "pname": "gcc-unwrapped",
@@ -350,6 +357,7 @@
             "install_id": "gcc-unwrapped",
             "license": "GPL-3.0-or-later",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "gcc-11.3.0",
             "outputs": [
               {
@@ -370,8 +378,8 @@
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "gcc-unwrapped",
             "pname": "gcc-unwrapped",
@@ -399,6 +407,7 @@
             "install_id": "glibc",
             "license": "LGPL-2.0-or-later",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "glibc-2.34-210",
             "outputs": [
               {
@@ -451,6 +460,7 @@
             "install_id": "glibc",
             "license": "LGPL-2.0-or-later",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "glibc-2.34-210",
             "outputs": [
               {
@@ -503,6 +513,7 @@
             "install_id": "libarchive",
             "license": "BSD-3-Clause",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "libarchive-3.6.1",
             "outputs": [
               {
@@ -547,6 +558,7 @@
             "install_id": "libarchive",
             "license": "BSD-3-Clause",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "libarchive-3.6.1",
             "outputs": [
               {
@@ -591,6 +603,7 @@
             "install_id": "nix",
             "license": "LGPL-2.0-or-later",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "nix-2.8.1",
             "outputs": [
               {
@@ -615,8 +628,8 @@
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "nix",
             "pname": "nix",
@@ -644,6 +657,7 @@
             "install_id": "nix",
             "license": "LGPL-2.0-or-later",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "nix-2.8.1",
             "outputs": [
               {
@@ -668,8 +682,8 @@
               }
             ],
             "outputs_to_install": [
-              "out",
-              "man"
+              "man",
+              "out"
             ],
             "pkg_path": "nix",
             "pname": "nix",
@@ -697,6 +711,7 @@
             "install_id": "patchelf",
             "license": "GPL-3.0-or-later",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "patchelf-0.14.5",
             "outputs": [
               {
@@ -733,6 +748,7 @@
             "install_id": "patchelf",
             "license": "GPL-3.0-or-later",
             "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "missing_builds": false,
             "name": "patchelf-0.14.5",
             "outputs": [
               {

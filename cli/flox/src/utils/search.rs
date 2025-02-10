@@ -179,6 +179,7 @@ mod tests {
             catalog: None,
             pkg_path: name.to_string(),
             description: description.map(|s| s.to_string()),
+            version: None,
         }
     }
 
