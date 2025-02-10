@@ -181,7 +181,7 @@
           "catalog"
         ],
         "summary": "Resolve a list of Package Groups",
-        "description": "Resolves a list of package groups, each being a list of package descriptors.\n\nRequired Body:\n- **groups**: An object with an `items` array of PackageGroups to resolve.\n\nOptional Query Parameters:\n- **none**\n\nReturns:\n- **ResolvedPackageGroups**: A object with an `items` array of\n    `ResolvedPackageGroup` items.\n\nResolution Rules:\n- Each `PackageGroup` is resolved independently.\n- Each page that has a package that meets each of the descriptors in that group is returned in the results\n- The latest page will include details for each package in the group from that page\n- The remainder pages are returned without details (to get those details... TBD)\n\nA Package Descriptor match:\n- **name**: [required] - is not used in matching, only for reference (TBD is\n            there a uniqueness constraint?)\n- **attr_path**: [required] - this must match the nix attribute path exactly and in full\n- **version**: [optional] - Either a literal version to match or a **semver** constraint.\n    This will be treated as a **semver** IFF TBD, otherwise it will be treated as\n    a literal string match to the nix `version` field.  If this is detected as a **semver**,\n    packages whose `version` field cannot be parsed as a **semver** will be excluded.\n    - **allow_pre_release**: [optional] - Defaults to False.  Only applies\n        when a **semver** constraint is given.  If true, a `version` that can\n        be parsed as a valid semver, that includes a pre-release suffix will\n        be included as a candidate.  Otherwise, they will be excluded.",
+        "description": "Resolves a list of package groups, each being a list of package descriptors.\n\nRequired Body:\n- **groups**: An object with an `items` array of PackageGroups to resolve.\n\nOptional Query Parameters:\n- **none**\n\nReturns:\n- **ResolvedPackageGroups**: A object with an `items` array of\n    `ResolvedPackageGroup` items.\n\nResolution Rules:\n- Each `PackageGroup` is resolved independently.\n- Each page that has a package that meets each of the descriptors in that group is returned in the results\n- The latest page will include details for each package in the group from that page\n- The remainder pages are returned without details (to get those details... TBD)\n\nA Package Descriptor match:\n- **name**: [required] - is not used in matching, only for reference (TBD is\n            there a uniqueness constraint?)\n- **attr_path**: [required] - this must match the nix attribute path exactly and in full\n- **version**: [optional] - Either a literal version to match or a **semver** constraint.\n    This will be treated as a **semver** IFF TBD, otherwise it will be treated as\n    a literal string match to the nix `version` field.  If this is detected as a **semver**,\n    packages whose `version` field cannot be parsed as a **semver** will be excluded.\n- **allow_pre_release**: [optional] - Defaults to False.  Only applies\n    when a **semver** constraint is given.  If true, a `version` that can\n    be parsed as a valid semver, that includes a pre-release suffix will\n    be included as a candidate.  Otherwise, they will be excluded.\n- **allow_broken**: [optional] - Defaults to False.  A package\n    marked as broken = True will be excluded unless this is set to True.\n- **allow_unfree**: [optional] - Defaults to True.  A package\n    marked as unfree = True will be excluded unless this is set to True.\n- **allow_insecure**: [optional] - Defaults to False.  A package\n    marked as insecure = True will be excluded unless this is set to True.\n- **allow_missing_builds**: [optional] - Defaults to\n    False.  A package is expected to have been built if it\n    is not marked as broken, unfree, or insecure.  A package\n    that is expected to have been built, but none of it's outputs have been\n    observed to build, will attempt to be excluded unless this is set to\n    True.  This constraint may be softened if the group can not be resolved\n    with it enforced.  If this occurs, the ressponse will note this by\n    including a warning level message.",
         "operationId": "resolve_api_v1_catalog_resolve_post",
         "requestBody": {
           "content": {
@@ -261,6 +261,38 @@
           },
           "422": {
             "description": "Request validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/status/healthcheck": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "summary": "Perform basic catalog health check",
+        "description": "Run some basic health checks on the catalog service.\n\nReturns:\n- **HealthCheck**: A dictionary of various health check values.",
+        "operationId": "get_catalog_health_check_api_v1_catalog_status_healthcheck_get",
+        "responses": {
+          "200": {
+            "description": "Health check results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthCheck-Input"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
             "content": {
               "application/json": {
                 "schema": {
@@ -1423,6 +1455,114 @@
         ],
         "title": "ErrorResponse"
       },
+      "HealthCheck-Input": {
+        "properties": {
+          "check_parameters": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/params"
+              }
+            ],
+            "default": {
+              "show_term": "hello",
+              "search_term": "in Go",
+              "search_system": "x86_64-linux",
+              "resolve_package": "cowsay",
+              "resolve_systems": [
+                "x86_64-linux"
+              ]
+            }
+          },
+          "search_ok": {
+            "type": "boolean",
+            "title": "Search Ok"
+          },
+          "search_elapsed_ms": {
+            "type": "integer",
+            "title": "Search Elapsed Ms"
+          },
+          "resolve_ok": {
+            "type": "boolean",
+            "title": "Resolve Ok"
+          },
+          "resolve_elapsed_ms": {
+            "type": "integer",
+            "title": "Resolve Elapsed Ms"
+          },
+          "show_ok": {
+            "type": "boolean",
+            "title": "Show Ok"
+          },
+          "show_elapsed_ms": {
+            "type": "integer",
+            "title": "Show Elapsed Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "search_ok",
+          "search_elapsed_ms",
+          "resolve_ok",
+          "resolve_elapsed_ms",
+          "show_ok",
+          "show_elapsed_ms"
+        ],
+        "title": "HealthCheck"
+      },
+      "HealthCheck-Output": {
+        "properties": {
+          "check_parameters": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/params"
+              }
+            ],
+            "default": {
+              "show_term": "hello",
+              "search_term": "in Go",
+              "search_system": "x86_64-linux",
+              "resolve_package": "cowsay",
+              "resolve_systems": [
+                "x86_64-linux"
+              ]
+            }
+          },
+          "search_ok": {
+            "type": "boolean",
+            "title": "Search Ok"
+          },
+          "search_elapsed_ms": {
+            "type": "integer",
+            "title": "Search Elapsed Ms"
+          },
+          "resolve_ok": {
+            "type": "boolean",
+            "title": "Resolve Ok"
+          },
+          "resolve_elapsed_ms": {
+            "type": "integer",
+            "title": "Resolve Elapsed Ms"
+          },
+          "show_ok": {
+            "type": "boolean",
+            "title": "Show Ok"
+          },
+          "show_elapsed_ms": {
+            "type": "integer",
+            "title": "Show Elapsed Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "search_ok",
+          "search_elapsed_ms",
+          "resolve_ok",
+          "resolve_elapsed_ms",
+          "show_ok",
+          "show_elapsed_ms"
+        ],
+        "title": "HealthCheck"
+      },
       "MessageLevel": {
         "type": "string",
         "enum": [
@@ -1442,7 +1582,9 @@
           "constraints_too_tight",
           "attr_path_not_found.not_in_catalog",
           "attr_path_not_found.systems_not_on_same_page",
-          "attr_path_not_found.not_found_for_all_systems"
+          "attr_path_not_found.not_found_for_all_systems",
+          "missing_builds",
+          "unacceptable_licenses"
         ],
         "title": "MessageType"
       },
@@ -1524,6 +1666,12 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "allow_missing_builds": {
+            "title": "Allow Missing Builds",
+            "default": false,
+            "nullable": true,
+            "type": "boolean"
           },
           "derivation": {
             "title": "Derivation",
@@ -1667,6 +1815,11 @@
             "type": "string",
             "title": "Pname"
           },
+          "version": {
+            "title": "Version",
+            "nullable": true,
+            "type": "string"
+          },
           "description": {
             "title": "Description",
             "nullable": true,
@@ -1690,6 +1843,7 @@
           "pkg_path",
           "name",
           "pname",
+          "version",
           "description",
           "stabilities",
           "system"
@@ -1799,6 +1953,11 @@
             "nullable": true,
             "type": "boolean"
           },
+          "missing_builds": {
+            "title": "Missing Builds",
+            "nullable": true,
+            "type": "boolean"
+          },
           "stabilities": {
             "title": "Stabilities",
             "nullable": true,
@@ -1838,6 +1997,7 @@
           "broken",
           "insecure",
           "unfree",
+          "missing_builds",
           "stabilities",
           "scrape_date"
         ],
@@ -2075,6 +2235,11 @@
             "nullable": true,
             "type": "boolean"
           },
+          "missing_builds": {
+            "title": "Missing Builds",
+            "nullable": true,
+            "type": "boolean"
+          },
           "stabilities": {
             "title": "Stabilities",
             "nullable": true,
@@ -2118,6 +2283,7 @@
           "broken",
           "insecure",
           "unfree",
+          "missing_builds",
           "stabilities",
           "scrape_date",
           "install_id"
@@ -2785,6 +2951,45 @@
           "items"
         ],
         "title": "UserPackageList"
+      },
+      "params": {
+        "properties": {
+          "show_term": {
+            "type": "string",
+            "title": "Show Term",
+            "default": "hello"
+          },
+          "search_term": {
+            "type": "string",
+            "title": "Search Term",
+            "default": "in Go"
+          },
+          "search_system": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SystemEnum"
+              }
+            ],
+            "default": "x86_64-linux"
+          },
+          "resolve_package": {
+            "type": "string",
+            "title": "Resolve Package",
+            "default": "cowsay"
+          },
+          "resolve_systems": {
+            "items": {
+              "$ref": "#/components/schemas/SystemEnum"
+            },
+            "type": "array",
+            "title": "Resolve Systems",
+            "default": [
+              "x86_64-linux"
+            ]
+          }
+        },
+        "type": "object",
+        "title": "params"
       }
     },
     "securitySchemes": {
