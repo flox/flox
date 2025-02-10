@@ -61,17 +61,19 @@ pub(crate) fn spawn_heartbeat_log() {
 
 /// Starts a background thread which garbage collects known log files. This is
 /// done on a best effort basis; errors are traced rather than being bubbled up
-/// and the thread will run until the watchdog exits.
+/// and the thread will loop until the watchdog exits.
+///
+/// All of the functions called here must be deterministic because there may be
+/// multiple watchdogs running for the same environment log dir.
 pub(crate) fn spawn_logs_gc_threads(dir: impl AsRef<Path>) {
     let dir = dir.as_ref().to_path_buf();
-    let dir_clone = dir.clone();
-    spawn(move || {
-        gc_logs_watchdog(dir_clone, KEEP_WATCHDOG_DAYS)
+    spawn(move || loop {
+        gc_logs_watchdog(&dir, KEEP_WATCHDOG_DAYS)
             .unwrap_or_else(|err| error!(%err, "failed to delete watchdog logs"));
-    });
-    spawn(move || {
         gc_logs_services(&dir, KEEP_SERVICES_LAST)
             .unwrap_or_else(|err| error!(%err, "failed to delete services logs"));
+
+        std::thread::sleep(WATCHDOG_GC_INTERVAL);
     });
 }
 
@@ -80,14 +82,13 @@ pub(crate) fn spawn_logs_gc_threads(dir: impl AsRef<Path>) {
 /// `log_heartbeat`.
 fn gc_logs_watchdog(dir: impl AsRef<Path>, keep_days: u64) -> Result<()> {
     let dir = dir.as_ref().to_path_buf();
-    loop {
-        let files = watchdog_logs_to_gc(&dir, keep_days)?;
+    let files = watchdog_logs_to_gc(&dir, keep_days)?;
 
-        for file in files {
-            try_delete_log(file);
-        }
-        std::thread::sleep(WATCHDOG_GC_INTERVAL);
+    for file in files {
+        try_delete_log(file);
     }
+
+    Ok(())
 }
 
 /// Returns a list of watchdog logs ready to be garbage collected
