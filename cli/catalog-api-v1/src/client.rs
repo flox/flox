@@ -461,6 +461,160 @@ pub mod types {
             value.clone()
         }
     }
+    ///HealthCheckInput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "HealthCheck",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "resolve_elapsed_ms",
+    ///    "resolve_ok",
+    ///    "search_elapsed_ms",
+    ///    "search_ok",
+    ///    "show_elapsed_ms",
+    ///    "show_ok"
+    ///  ],
+    ///  "properties": {
+    ///    "check_parameters": {
+    ///      "default": {
+    ///        "resolve_package": "cowsay",
+    ///        "resolve_systems": [
+    ///          "x86_64-linux"
+    ///        ],
+    ///        "search_system": "x86_64-linux",
+    ///        "search_term": "in Go",
+    ///        "show_term": "hello"
+    ///      },
+    ///      "allOf": [
+    ///        {
+    ///          "$ref": "#/components/schemas/params"
+    ///        }
+    ///      ]
+    ///    },
+    ///    "resolve_elapsed_ms": {
+    ///      "title": "Resolve Elapsed Ms",
+    ///      "type": "integer"
+    ///    },
+    ///    "resolve_ok": {
+    ///      "title": "Resolve Ok",
+    ///      "type": "boolean"
+    ///    },
+    ///    "search_elapsed_ms": {
+    ///      "title": "Search Elapsed Ms",
+    ///      "type": "integer"
+    ///    },
+    ///    "search_ok": {
+    ///      "title": "Search Ok",
+    ///      "type": "boolean"
+    ///    },
+    ///    "show_elapsed_ms": {
+    ///      "title": "Show Elapsed Ms",
+    ///      "type": "integer"
+    ///    },
+    ///    "show_ok": {
+    ///      "title": "Show Ok",
+    ///      "type": "boolean"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct HealthCheckInput {
+        #[serde(default = "defaults::health_check_input_check_parameters")]
+        pub check_parameters: Params,
+        pub resolve_elapsed_ms: i64,
+        pub resolve_ok: bool,
+        pub search_elapsed_ms: i64,
+        pub search_ok: bool,
+        pub show_elapsed_ms: i64,
+        pub show_ok: bool,
+    }
+    impl From<&HealthCheckInput> for HealthCheckInput {
+        fn from(value: &HealthCheckInput) -> Self {
+            value.clone()
+        }
+    }
+    ///HealthCheckOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "HealthCheck",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "resolve_elapsed_ms",
+    ///    "resolve_ok",
+    ///    "search_elapsed_ms",
+    ///    "search_ok",
+    ///    "show_elapsed_ms",
+    ///    "show_ok"
+    ///  ],
+    ///  "properties": {
+    ///    "check_parameters": {
+    ///      "default": {
+    ///        "resolve_package": "cowsay",
+    ///        "resolve_systems": [
+    ///          "x86_64-linux"
+    ///        ],
+    ///        "search_system": "x86_64-linux",
+    ///        "search_term": "in Go",
+    ///        "show_term": "hello"
+    ///      },
+    ///      "allOf": [
+    ///        {
+    ///          "$ref": "#/components/schemas/params"
+    ///        }
+    ///      ]
+    ///    },
+    ///    "resolve_elapsed_ms": {
+    ///      "title": "Resolve Elapsed Ms",
+    ///      "type": "integer"
+    ///    },
+    ///    "resolve_ok": {
+    ///      "title": "Resolve Ok",
+    ///      "type": "boolean"
+    ///    },
+    ///    "search_elapsed_ms": {
+    ///      "title": "Search Elapsed Ms",
+    ///      "type": "integer"
+    ///    },
+    ///    "search_ok": {
+    ///      "title": "Search Ok",
+    ///      "type": "boolean"
+    ///    },
+    ///    "show_elapsed_ms": {
+    ///      "title": "Show Elapsed Ms",
+    ///      "type": "integer"
+    ///    },
+    ///    "show_ok": {
+    ///      "title": "Show Ok",
+    ///      "type": "boolean"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct HealthCheckOutput {
+        #[serde(default = "defaults::health_check_output_check_parameters")]
+        pub check_parameters: Params,
+        pub resolve_elapsed_ms: i64,
+        pub resolve_ok: bool,
+        pub search_elapsed_ms: i64,
+        pub search_ok: bool,
+        pub show_elapsed_ms: i64,
+        pub show_ok: bool,
+    }
+    impl From<&HealthCheckOutput> for HealthCheckOutput {
+        fn from(value: &HealthCheckOutput) -> Self {
+            value.clone()
+        }
+    }
     ///MessageLevel
     ///
     /// <details><summary>JSON schema</summary>
@@ -729,6 +883,14 @@ pub mod types {
     ///        "null"
     ///      ]
     ///    },
+    ///    "allow_missing_builds": {
+    ///      "title": "Allow Missing Builds",
+    ///      "default": false,
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "allow_pre_releases": {
     ///      "title": "Allow Pre Releases",
     ///      "default": false,
@@ -794,6 +956,8 @@ pub mod types {
         pub allow_broken: Option<bool>,
         #[serde(default = "defaults::package_descriptor_allow_insecure")]
         pub allow_insecure: Option<bool>,
+        #[serde(default = "defaults::package_descriptor_allow_missing_builds")]
+        pub allow_missing_builds: Option<bool>,
         #[serde(default = "defaults::package_descriptor_allow_pre_releases")]
         pub allow_pre_releases: Option<bool>,
         #[serde(default = "defaults::package_descriptor_allow_unfree")]
@@ -982,7 +1146,8 @@ pub mod types {
     ///    "pkg_path",
     ///    "pname",
     ///    "stabilities",
-    ///    "system"
+    ///    "system",
+    ///    "version"
     ///  ],
     ///  "properties": {
     ///    "attr_path": {
@@ -1024,6 +1189,13 @@ pub mod types {
     ///    },
     ///    "system": {
     ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    }
     ///  }
     ///}
@@ -1039,6 +1211,7 @@ pub mod types {
         pub pname: String,
         pub stabilities: Vec<String>,
         pub system: SystemEnum,
+        pub version: Option<String>,
     }
     impl From<&PackageInfoSearch> for PackageInfoSearch {
         fn from(value: &PackageInfoSearch) -> Self {
@@ -1134,6 +1307,7 @@ pub mod types {
     ///    "insecure",
     ///    "license",
     ///    "locked_url",
+    ///    "missing_builds",
     ///    "name",
     ///    "outputs",
     ///    "outputs_to_install",
@@ -1202,6 +1376,13 @@ pub mod types {
     ///    "locked_url": {
     ///      "title": "Locked Url",
     ///      "type": "string"
+    ///    },
+    ///    "missing_builds": {
+    ///      "title": "Missing Builds",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
     ///    },
     ///    "name": {
     ///      "title": "Name",
@@ -1291,6 +1472,7 @@ pub mod types {
         pub insecure: Option<bool>,
         pub license: Option<String>,
         pub locked_url: String,
+        pub missing_builds: Option<bool>,
         pub name: String,
         pub outputs: Vec<Output>,
         pub outputs_to_install: Option<Vec<String>>,
@@ -1494,6 +1676,70 @@ pub mod types {
             value.clone()
         }
     }
+    ///Params
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "params",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "resolve_package": {
+    ///      "title": "Resolve Package",
+    ///      "default": "cowsay",
+    ///      "type": "string"
+    ///    },
+    ///    "resolve_systems": {
+    ///      "title": "Resolve Systems",
+    ///      "default": [
+    ///        "x86_64-linux"
+    ///      ],
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/SystemEnum"
+    ///      }
+    ///    },
+    ///    "search_system": {
+    ///      "default": "x86_64-linux",
+    ///      "allOf": [
+    ///        {
+    ///          "$ref": "#/components/schemas/SystemEnum"
+    ///        }
+    ///      ]
+    ///    },
+    ///    "search_term": {
+    ///      "title": "Search Term",
+    ///      "default": "in Go",
+    ///      "type": "string"
+    ///    },
+    ///    "show_term": {
+    ///      "title": "Show Term",
+    ///      "default": "hello",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct Params {
+        #[serde(default = "defaults::params_resolve_package")]
+        pub resolve_package: String,
+        #[serde(default = "defaults::params_resolve_systems")]
+        pub resolve_systems: Vec<SystemEnum>,
+        #[serde(default = "defaults::params_search_system")]
+        pub search_system: SystemEnum,
+        #[serde(default = "defaults::params_search_term")]
+        pub search_term: String,
+        #[serde(default = "defaults::params_show_term")]
+        pub show_term: String,
+    }
+    impl From<&Params> for Params {
+        fn from(value: &Params) -> Self {
+            value.clone()
+        }
+    }
     ///ResolutionMessageGeneral
     ///
     /// <details><summary>JSON schema</summary>
@@ -1560,6 +1806,7 @@ pub mod types {
     ///    "install_id",
     ///    "license",
     ///    "locked_url",
+    ///    "missing_builds",
     ///    "name",
     ///    "outputs",
     ///    "outputs_to_install",
@@ -1632,6 +1879,13 @@ pub mod types {
     ///    "locked_url": {
     ///      "title": "Locked Url",
     ///      "type": "string"
+    ///    },
+    ///    "missing_builds": {
+    ///      "title": "Missing Builds",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
     ///    },
     ///    "name": {
     ///      "title": "Name",
@@ -1722,6 +1976,7 @@ pub mod types {
         pub install_id: String,
         pub license: Option<String>,
         pub locked_url: String,
+        pub missing_builds: Option<bool>,
         pub name: String,
         pub outputs: Vec<Output>,
         pub outputs_to_install: Option<Vec<String>>,
@@ -3006,10 +3261,31 @@ pub mod types {
         pub(super) fn catalog_share_info_allow_read_users() -> Option<Vec<String>> {
             Some(vec![])
         }
+        pub(super) fn health_check_input_check_parameters() -> super::Params {
+            super::Params {
+                resolve_package: "cowsay".to_string(),
+                resolve_systems: vec![super::SystemEnum::X8664Linux],
+                search_system: super::SystemEnum::X8664Linux,
+                search_term: "in Go".to_string(),
+                show_term: "hello".to_string(),
+            }
+        }
+        pub(super) fn health_check_output_check_parameters() -> super::Params {
+            super::Params {
+                resolve_package: "cowsay".to_string(),
+                resolve_systems: vec![super::SystemEnum::X8664Linux],
+                search_system: super::SystemEnum::X8664Linux,
+                search_term: "in Go".to_string(),
+                show_term: "hello".to_string(),
+            }
+        }
         pub(super) fn package_descriptor_allow_broken() -> Option<bool> {
             Some(false)
         }
         pub(super) fn package_descriptor_allow_insecure() -> Option<bool> {
+            Some(false)
+        }
+        pub(super) fn package_descriptor_allow_missing_builds() -> Option<bool> {
             Some(false)
         }
         pub(super) fn package_descriptor_allow_pre_releases() -> Option<bool> {
@@ -3017,6 +3293,21 @@ pub mod types {
         }
         pub(super) fn package_descriptor_allow_unfree() -> Option<bool> {
             Some(true)
+        }
+        pub(super) fn params_resolve_package() -> String {
+            "cowsay".to_string()
+        }
+        pub(super) fn params_resolve_systems() -> Vec<super::SystemEnum> {
+            vec![super::SystemEnum::X8664Linux]
+        }
+        pub(super) fn params_search_system() -> super::SystemEnum {
+            super::SystemEnum::X8664Linux
+        }
+        pub(super) fn params_search_term() -> String {
+            "in Go".to_string()
+        }
+        pub(super) fn params_show_term() -> String {
+            "hello".to_string()
         }
     }
 }
@@ -3228,10 +3519,24 @@ A Package Descriptor match:
     This will be treated as a **semver** IFF TBD, otherwise it will be treated as
     a literal string match to the nix `version` field.  If this is detected as a **semver**,
     packages whose `version` field cannot be parsed as a **semver** will be excluded.
-    - **allow_pre_release**: [optional] - Defaults to False.  Only applies
-        when a **semver** constraint is given.  If true, a `version` that can
-        be parsed as a valid semver, that includes a pre-release suffix will
-        be included as a candidate.  Otherwise, they will be excluded.
+- **allow_pre_release**: [optional] - Defaults to False.  Only applies
+    when a **semver** constraint is given.  If true, a `version` that can
+    be parsed as a valid semver, that includes a pre-release suffix will
+    be included as a candidate.  Otherwise, they will be excluded.
+- **allow_broken**: [optional] - Defaults to False.  A package
+    marked as broken = True will be excluded unless this is set to True.
+- **allow_unfree**: [optional] - Defaults to True.  A package
+    marked as unfree = True will be excluded unless this is set to True.
+- **allow_insecure**: [optional] - Defaults to False.  A package
+    marked as insecure = True will be excluded unless this is set to True.
+- **allow_missing_builds**: [optional] - Defaults to
+    False.  A package is expected to have been built if it
+    is not marked as broken, unfree, or insecure.  A package
+    that is expected to have been built, but none of it's outputs have been
+    observed to build, will attempt to be excluded unless this is set to
+    True.  This constraint may be softened if the group can not be resolved
+    with it enforced.  If this occurs, the ressponse will note this by
+    including a warning level message.
 
 Sends a `POST` request to `/api/v1/catalog/resolve`
 
@@ -3303,6 +3608,39 @@ Sends a `POST` request to `/api/v1/catalog/settings/{key}`
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
             422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Perform basic catalog health check
+
+Run some basic health checks on the catalog service.
+
+Returns:
+- **HealthCheck**: A dictionary of various health check values.
+
+Sends a `GET` request to `/api/v1/catalog/status/healthcheck`
+
+*/
+    pub async fn get_catalog_health_check_api_v1_catalog_status_healthcheck_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<types::HealthCheckInput>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/status/healthcheck", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            500u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             _ => Err(Error::UnexpectedResponse(response)),
