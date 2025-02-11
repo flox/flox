@@ -1015,6 +1015,7 @@ dependencies = [
  "derive_more",
  "dirs",
  "enum_dispatch",
+ "flox-core",
  "flox-rust-sdk",
  "flox-test-utils",
  "fslock",
