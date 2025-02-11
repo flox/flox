@@ -3514,6 +3514,7 @@ EOF
   link_name="$NIX_SYSTEM.bad_interpreter.dev"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" "$FLOX_BIN" install hello
   hello_path="$(realpath ".flox/run/$link_name/bin/hello")"
+  lockfile_path="$(realpath ".flox/run/$link_name/manifest.lock")"
 
   # Delete the symlink to the environment
   rm .flox/run/*
@@ -3523,6 +3524,7 @@ EOF
   mkdir ./fake_env/bin
   echo "exit 1" > ./fake_env/activate # this is our dummy interpreter
   chmod +x ./fake_env/activate
+  cp "$lockfile_path" ./fake_env/manifest.lock # this is so flox doesnt try to rebuild over the fake-env
   ln -s "$PWD/fake_env" ".flox/run/$link_name"
 
   # Attempt activation with the bundled interpreter
