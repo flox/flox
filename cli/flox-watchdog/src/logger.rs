@@ -4,6 +4,7 @@ use std::thread::{sleep, spawn};
 use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result};
+use flox_core::log_file_format_upgrade_check;
 use glob::glob;
 use tracing::{debug, error};
 use tracing_subscriber::layer::SubscriberExt;
@@ -72,8 +73,12 @@ pub(crate) fn spawn_logs_gc_threads(dir: impl AsRef<Path>) {
             .unwrap_or_else(|err| error!(%err, "failed to delete watchdog logs"));
         gc_logs_per_process(&dir, "services.*.log", KEEP_LAST_N_PROCESSES)
             .unwrap_or_else(|err| error!(%err, "failed to delete services logs"));
-        gc_logs_per_process(&dir, "upgrade-check.*.log", KEEP_LAST_N_PROCESSES)
-            .unwrap_or_else(|err| error!(%err, "failed to delete upgrade-check logs"));
+        gc_logs_per_process(
+            &dir,
+            &log_file_format_upgrade_check("*"),
+            KEEP_LAST_N_PROCESSES,
+        )
+        .unwrap_or_else(|err| error!(%err, "failed to delete upgrade-check logs"));
 
         std::thread::sleep(WATCHDOG_GC_INTERVAL);
     });

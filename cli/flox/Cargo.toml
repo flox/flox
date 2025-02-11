@@ -54,6 +54,7 @@ tracing-subscriber.workspace = true
 url.workspace = true
 uuid.workspace = true
 xdg.workspace = true
+flox-core.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true

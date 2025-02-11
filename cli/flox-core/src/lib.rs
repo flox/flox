@@ -4,6 +4,7 @@ pub mod canonical_path;
 pub mod proc_status;
 mod version;
 
+use std::fmt::Display;
 use std::io::BufWriter;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -71,4 +72,9 @@ where
 pub fn traceable_path(p: impl AsRef<Path>) -> impl tracing::Value {
     let path = p.as_ref();
     path.display().to_string()
+}
+
+/// Returns a log file name, or glob pattern, for upgrade-check logs.
+pub fn log_file_format_upgrade_check(index: impl Display) -> String {
+    format!("upgrade-check.{}.log", index)
 }

@@ -6,6 +6,7 @@ use std::time::SystemTime;
 
 use anyhow::{bail, Context, Result};
 use bpaf::{Bpaf, Parser};
+use flox_core::log_file_format_upgrade_check;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::providers::catalog::{self, CatalogQoS};
@@ -187,7 +188,7 @@ pub fn spawn_detached_check_for_upgrades_process(
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("now is after UNIX EPOCH")
         .as_secs();
-    let upgrade_check_log = log_dir.join(format!("upgrade-check.{}.log", timestamp));
+    let upgrade_check_log = log_dir.join(log_file_format_upgrade_check(timestamp));
 
     debug!(
         log_file=?upgrade_check_log,
