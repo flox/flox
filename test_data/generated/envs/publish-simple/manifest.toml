@@ -4,8 +4,12 @@ version = 1
 hello.pkg-path = "hello"
 
 [build]
+mypkg.description = "Some sample package description from our tests"
+mypkg.version = "1.0.2a"
 mypkg.command = """
-    mkdir $out
-    echo -n "Happy Floxing!" > $out/mypkg
+    mkdir -p $out/bin
+    echo -n "!#/bin/sh" > $out/bin/mypkg
+    echo -n "echo Happy Floxing!" > $out/bin/mypkg
+    chmod +x $out/bin/mypkg
 """
 

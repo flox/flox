@@ -17,7 +17,9 @@
     },
     "build": {
       "mypkg": {
-        "command": "    mkdir $out\n    echo -n \"Happy Floxing!\" > $out/mypkg\n"
+        "command": "    mkdir -p $out/bin\n    echo -n \"!#/bin/sh\" > $out/bin/mypkg\n    echo -n \"echo Happy Floxing!\" > $out/bin/mypkg\n    chmod +x $out/bin/mypkg\n",
+        "version": "1.0.2a",
+        "description": "Some sample package description from our tests"
       }
     }
   },
