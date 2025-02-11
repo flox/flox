@@ -181,17 +181,17 @@ setup_file() {
     # The develop is responsible for starting the VM.
     cat > "$FLOX_TEST_HOME/bin/podman" << EOF
 #!/usr/bin/env bash
-HOME=$HOME USER=podman-user XDG_DATA_HOME="$REAL_XDG_DATA_HOME" XDG_CONFIG_HOME="$REAL_XDG_CONFIG_HOME" exec $ORIGINAL_PODMAN "\$@"
+HOME=$HOME XDG_DATA_HOME="$REAL_XDG_DATA_HOME" XDG_CONFIG_HOME="$REAL_XDG_CONFIG_HOME" exec $ORIGINAL_PODMAN "\$@"
 EOF
   else
     cat > "$FLOX_TEST_HOME/bin/podman" << EOF
 #!/usr/bin/env bash
-HOME=$HOME USER=podman-user exec $ORIGINAL_PODMAN "\$@"
+HOME=$HOME exec $ORIGINAL_PODMAN "\$@"
 EOF
   fi
 
   chmod +x "$FLOX_TEST_HOME/bin/podman"
-  export PATH="$FLOX_TEST_HOME/bin:$PATH"
+  export PATH="$FLOX_TEST_HOME/bin:$PATH:/run/wrappers/bin"
 }
 
 teardown() {

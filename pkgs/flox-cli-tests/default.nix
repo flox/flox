@@ -94,7 +94,10 @@ let
       yq
       process-compose
       procps
-      podman
+      (podman.override (prev: {
+        extraPackages = [ "/run/wrappers" ];
+      }))
+      "/run/wrappers"
     ]
     # TODO: this hack is not going to be needed once we test against stuff on system
     ++ lib.optional stdenv.isDarwin (
