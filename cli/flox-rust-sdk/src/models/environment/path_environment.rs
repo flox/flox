@@ -479,6 +479,7 @@ impl PathEnvironment {
             {CACHE_DIR_NAME}/
             {LIB_DIR_NAME}/
             {LOG_DIR_NAME}/
+            !{ENV_DIR_NAME}/
             "})
         .map_err(EnvironmentError::WriteGitignore)?;
 
