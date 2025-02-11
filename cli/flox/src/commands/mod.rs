@@ -22,6 +22,7 @@ mod update;
 mod upgrade;
 mod upload;
 
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -238,10 +239,12 @@ impl FloxArgs {
 
         let cache_dir = config.flox.cache_dir.clone();
 
-        let update_channel_clone = update_channel.clone();
-        let check_for_update_handle = tokio::spawn(async move {
-            UpdateNotification::check_for_update(cache_dir, &update_channel_clone).await
-        });
+        let check_for_update_handle = {
+            let update_channel = update_channel.clone();
+            tokio::spawn(async move {
+                UpdateNotification::check_for_update(cache_dir, &update_channel).await
+            })
+        };
 
         // migrate metrics denial
         // metrics could be turned off by writing an empty UUID file
@@ -613,26 +616,29 @@ impl UpdateNotification {
         update_instructions_relative_file_path: &str,
         release_env: &Option<String>,
     ) -> String {
-        let result: String;
-        if let Ok(exe) = env::current_exe() {
-            if let Ok(update_instructions_file) = exe
+        let instructions: Cow<str> = 'inst: {
+            let Ok(exe) = env::current_exe() else {
+                break 'inst DEFAULT_UPDATE_INSTRUCTIONS.into();
+            };
+
+            let Ok(update_instructions_file) = exe
                 .join(update_instructions_relative_file_path)
                 .canonicalize()
-            {
-                debug!(
-                    "Looking for update instructions file at: {}",
-                    update_instructions_file.display()
-                );
-                result = fs::read_to_string(update_instructions_file)
-                    .map(|docs| format!("Get the latest with:\n{}", indent::indent_all_by(2, docs)))
-                    .unwrap_or(DEFAULT_UPDATE_INSTRUCTIONS.to_string());
-            } else {
-                result = DEFAULT_UPDATE_INSTRUCTIONS.to_string();
-            }
-        } else {
-            result = DEFAULT_UPDATE_INSTRUCTIONS.to_string();
-        }
-        result.replace(
+            else {
+                break 'inst DEFAULT_UPDATE_INSTRUCTIONS.into();
+            };
+
+            debug!(
+                "Looking for update instructions file at: {}",
+                update_instructions_file.display()
+            );
+            break 'inst fs::read_to_string(update_instructions_file)
+                .map(|docs| format!("Get the latest with:\n{}", indent::indent_all_by(2, docs)))
+                .unwrap_or(DEFAULT_UPDATE_INSTRUCTIONS.to_string())
+                .into();
+        };
+
+        instructions.replace(
             FLOX_SENTRY_ENV
                 .clone()
                 .unwrap_or("stable".to_string())
