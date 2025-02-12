@@ -80,7 +80,7 @@ pub enum ManagedEnvironmentError {
     LocalRevDoesNotExist,
     #[error("can't find environment at revision specified in lockfile; this could have been caused by force pushing")]
     RevDoesNotExist,
-    #[error("invalid {} file: {0}", GENERATION_LOCK_FILENAME)]
+    #[error("invalid {0} file: {filename}", filename = GENERATION_LOCK_FILENAME)]
     InvalidLock(serde_json::Error),
     #[error("failed to read pointer lockfile")]
     ReadPointerLock(#[source] io::Error),

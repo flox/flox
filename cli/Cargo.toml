@@ -76,7 +76,7 @@ sysinfo = "0.32.1"
 sys-info = "0.9"
 tempfile = "3.16.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
-thiserror = "1"
+thiserror = "2"
 time = { version = "0.3", features = ["serde", "formatting"] }
 tokio = { version = "1", features = ["full"] }
 toml = "0.8.19"
