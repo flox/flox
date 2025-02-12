@@ -1,4 +1,5 @@
 use std::fs::{self, File};
+use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::SystemTime;
@@ -137,6 +138,17 @@ impl CheckForUpgrades {
 /// When multiple processes are spawned, e.g. due to multiple successive activations,
 /// one (usually the first) process will grab a lock on the upgrade information file,
 /// and the others will exit early.
+///
+/// ## SAFETY:
+///
+/// [pre_exec](std::os::unix::process::CommandExt::pre_exec)
+/// is unsafe because it runs in an environment atypical for Rust,
+/// where many guarantees provided by the rust ownership model
+/// do not necessarily hold.
+/// It is strongly recommended to limit the scope `pre_exec`.
+/// Here we limit the scope to the `pre_exec` call to closing (duplicated) file descriptors
+/// Closing file descriptors _before_ executing is considerably safer
+/// than closing them in the child process, which may have already opened its own unknown descriptors.
 pub fn spawn_detached_check_for_upgrades_process(
     environment: &UninitializedEnvironment,
     self_executable: Option<PathBuf>,
@@ -180,10 +192,26 @@ pub fn spawn_detached_check_for_upgrades_process(
     );
 
     fs::create_dir_all(log_dir)?;
-    let file = File::create(upgrade_check_log)?;
-    command.stderr(file);
+    let log_file = File::create(upgrade_check_log)?;
+    let log_file_fd = log_file.as_raw_fd();
+    command.stderr(log_file);
     command.stdout(Stdio::null());
     command.stdin(Stdio::null());
+
+    let keep_fds = [log_file_fd];
+
+    // Close all additional file descriptors except the log file
+    // See the SAFETY section above for more information on the safety of this operation.
+    unsafe {
+        use std::os::unix::process::CommandExt as _;
+        command.pre_exec(move || {
+            close_fds::CloseFdsBuilder::new()
+                .keep_fds(&keep_fds)
+                .cloexecfrom(3);
+
+            Ok(())
+        });
+    }
 
     command.display();
     debug!(cmd=%command.display(), "Spawning check-for-upgrades process in background");
