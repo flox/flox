@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 
 use flox_core::Version;
 #[cfg(test)]
@@ -102,6 +103,9 @@ pub struct Manifest {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub containerize: Option<Containerize>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Include::skip_serializing")]
+    pub include: Include,
 }
 
 impl Manifest {
@@ -802,6 +806,37 @@ pub enum ManifestError {
     PkgOrGroupNotFound(String),
 }
 
+/// The section where users can declare dependencies on other environments.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct Include {
+    pub environments: Vec<IncludeDescriptor>,
+}
+
+impl Include {
+    pub(crate) fn skip_serializing(&self) -> bool {
+        self.environments.is_empty()
+    }
+}
+
+/// The structure for how a user is able to declare a dependency on an environment.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(
+    untagged,
+    expecting = "Expected either a local or remote include descriptor."
+)]
+pub enum IncludeDescriptor {
+    Local {
+        /// The directory where the environment is located.
+        dir: PathBuf,
+        /// A name similar to an install ID that a user could use to specify
+        /// the environment on the command line e.g. for upgrades, or in an
+        /// error message.
+        name: String,
+    },
+}
+
 #[cfg(test)]
 pub(super) mod test {
     use indoc::indoc;
@@ -946,5 +981,24 @@ pub(super) mod test {
             .copy_for_system(&"aarch64-darwin".to_string());
         assert_eq!(filtered.inner().len(), 1, "{:?}", filtered);
         assert!(filtered.inner().contains_key("postgres"));
+    }
+
+    #[test]
+    fn parses_include_section_manifest() {
+        let manifest = indoc! {r#"
+            version = 1
+
+            [include]
+            environments = [
+                { dir = "../foo", name = "bar" },
+            ]
+        "#};
+        let parsed = toml_edit::de::from_str::<Manifest>(manifest).unwrap();
+
+        assert_eq!(parsed.include.environments.len(), 1);
+        let included = parsed.include.environments[0].clone();
+        let IncludeDescriptor::Local { dir, name } = included;
+        assert_eq!(dir, PathBuf::from("../foo"));
+        assert_eq!(name.as_str(), "bar");
     }
 }

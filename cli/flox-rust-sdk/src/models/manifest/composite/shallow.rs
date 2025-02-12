@@ -12,6 +12,7 @@ use crate::models::manifest::typed::{
     Build,
     Containerize,
     Hook,
+    Include,
     Inner,
     Install,
     Manifest,
@@ -164,6 +165,9 @@ impl ManifestMergeStrategy for ShallowMerger {
                 low_priority.containerize.as_ref(),
                 high_priority.containerize.as_ref(),
             )?,
+            // Intentionally blank out the includes since the includes are
+            // inputs to the merge operation.
+            include: Include::default(),
         };
 
         Ok(manifest)
