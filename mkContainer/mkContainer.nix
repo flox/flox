@@ -42,19 +42,24 @@ let
 
   nixStoreOwner = (containerConfig.User or "0:0");
 
-  isNixStoreUserOwned = (null == (match "^(root|0):\?(root|0)\?$" nixStoreOwner));
+  isNixStoreUserOwnedRegex = "^(root|0):\?(root|0)\?$";
 
-  nixStoreUserGroup =
+  unameGnameRegex = "^(([_]*[[:alpha:]]+):?|([[:digit:]]+):?)(([_]*[[:alpha:]]+)|([[:digit:]]+))?$";
+
+  isNixStoreUserOwned = (null == (match isNixStoreUserOwnedRegex nixStoreOwner));
+
+  mkUnameGnameUidGid =
+    userGroup:
     let
       userGroupValues =
         let
-          values = match "^(([_]*[[:alpha:]]+):?|([[:digit:]]+):?)(([_]*[[:alpha:]]+)|([[:digit:]]+))?$" nixStoreOwner;
+          values = match unameGnameRegex userGroup;
         in
         assert assertMsg (
           null != values
-        ) "Failed to parse nixStoreOwner, ${nixStoreOwner} did not match the expected pattern";
+        ) "Failed to parse containerize.config.User, ${userGroup} did not match the expected pattern";
         values;
-      uname = elemAt userGroupValues 1;
+      uname = if (null != (elemAt userGroupValues 1)) then (elemAt userGroupValues 1) else "flox";
       gname = if (null != (elemAt userGroupValues 4)) then (elemAt userGroupValues 4) else "flox";
       uid =
         if (null != (elemAt userGroupValues 2)) then toIntBase10 (elemAt userGroupValues 2) else 10000;
@@ -77,6 +82,8 @@ let
         gid
         ;
     };
+
+  nixStoreUserGroup = mkUnameGnameUidGid nixStoreOwner;
 
   fakeNss = containerPkgs.dockerTools.fakeNss.override {
     extraPasswdLines = optionals isNixStoreUserOwned [
@@ -152,6 +159,19 @@ let
           "_FLOX_FORCE_INTERACTIVE" = "1"; # Required when running podman without "-t"
           "FLOX_SHELL" = "${containerPkgs.bashInteractive}/bin/bash";
           "FLOX_RUNTIME_DIR" = "/run/flox";
+        };
+      };
+
+      passthru = {
+        # This tests can be ran with the following command from the root of the repository:
+        #     $ nix eval --impure --expr '(import ./mkContainer/mkContainer.nix { nixpkgsFlakeRef = "github:nixos/nixpkgs?ref=nixos-24.11"; environmentOutPath = null; system = builtins.currentSystem; containerSystem = builtins.currentSystem; }).passthru.tests'
+        #     $ [ ]
+        # If it returns anything else than [ ], then the tests failed. The output will contain the failing tests.
+        tests = import ./tests.nix {
+          lib = pkgs.lib;
+          internals = {
+            inherit isNixStoreUserOwnedRegex unameGnameRegex mkUnameGnameUidGid;
+          };
         };
       };
     };
