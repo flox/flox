@@ -145,10 +145,13 @@ impl CheckForUpgrades {
 /// is unsafe because it runs in an environment atypical for Rust,
 /// where many guarantees provided by the rust ownership model
 /// do not necessarily hold.
-/// It is strongly recommended to limit the scope `pre_exec`.
-/// Here we limit the scope to the `pre_exec` call to closing (duplicated) file descriptors
-/// Closing file descriptors _before_ executing is considerably safer
+/// It is strongly recommended to limit the scope to `pre_exec`.
+/// Here we limit the scope of the `pre_exec` call to closing (duplicated) file descriptors
+/// and detaching the process from the parent process group.
+/// Closing file descriptors _before_ exec'ing is considerably safer
 /// than closing them in the child process, which may have already opened its own unknown descriptors.
+/// Likewise, detaching the process from the parent process group
+/// applies only to the subprocess and only when spawning the process as a background process.
 pub fn spawn_detached_check_for_upgrades_process(
     environment: &UninitializedEnvironment,
     self_executable: Option<PathBuf>,
@@ -201,6 +204,7 @@ pub fn spawn_detached_check_for_upgrades_process(
     let keep_fds = [log_file_fd];
 
     // Close all additional file descriptors except the log file
+    // and detach the process from the parent process group.
     // See the SAFETY section above for more information on the safety of this operation.
     unsafe {
         use std::os::unix::process::CommandExt as _;
@@ -209,6 +213,9 @@ pub fn spawn_detached_check_for_upgrades_process(
                 .keep_fds(&keep_fds)
                 .cloexecfrom(3);
 
+            // Detach the process from the parent process group
+            // so that it wont receive signals from the parent
+            nix::unistd::setsid()?;
             Ok(())
         });
     }
