@@ -157,6 +157,8 @@ fn main() -> ExitCode {
 
             if let Some(message) = message {
                 message::error(message);
+                debug!(target: "flox::backtrace", "{}", e.backtrace());
+
                 return ExitCode::from(1);
             }
 
@@ -167,6 +169,8 @@ fn main() -> ExitCode {
                 .fold(e.to_string(), |acc, cause| format!("{acc}: {cause}"));
 
             message::error(err_str);
+
+            debug!(target: "flox::backtrace", "{}", e.backtrace());
 
             ExitCode::from(1)
         },
