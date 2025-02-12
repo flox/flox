@@ -22,6 +22,7 @@ catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.39", features = ["serde"] }
 clap = { version = "4.5.27", features = ["derive"] }
 clap_derive = "4.5.4"
+close_fds = "0.3"
 # Pinned due to bug: https://github.com/rust-cli/config-rs/issues/531
 config = { version = "0.13.4", default-features = false, features = ["toml"]}
 crossterm = "0.27"
