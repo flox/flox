@@ -24,21 +24,9 @@ export | LC_ALL=C $_sort > "$_start_env"
 # Process the flox environment customizations, which includes (amongst
 # other things) prepending this environment's bin directory to the PATH.
 # shellcheck disable=SC2154 # set in the main `activate` script
-if [ "$_FLOX_ENV_ACTIVATION_MODE" = "dev" ] && [ -d "$_profile_d" ]; then
-  declare -a _profile_scripts
-  # TODO: figure out why this is needed
-  set +e
-  read -r -d '' -a _profile_scripts < <(
-    cd "$_profile_d" || exit
-    shopt -s nullglob
-    echo *.sh
-  )
-  set -e
-  for profile_script in "${_profile_scripts[@]}"; do
-    # shellcheck disable=SC1090 # from rendered environment
-    source "$_profile_d/$profile_script"
-  done
-  unset _profile_scripts
+if [ "$_FLOX_ENV_ACTIVATION_MODE" = "dev" ]; then
+  # shellcheck disable=SC1090 # from rendered environment
+  source_profile_d "$_profile_d"
 fi
 
 # Capture post-etc-profiles.env.
