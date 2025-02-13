@@ -1147,13 +1147,9 @@ fn write_pointer_lockfile(
 /// unique copies of the environment are created.
 /// I.e. `install`ing a package in one directory does not affect the other
 /// until synchronized through FloxHub.
-/// To identify the individual branches per directory,
-/// the directory path is encoded using [`ManagedEnvironment::encode`].
 ///
 /// `dot_flox_path` is expected to point to the `.flox/` directory
 /// that link to an environment identified by `pointer`.
-/// `dot_flox_path` does _not_ need to be passed in its canonicalized form;
-/// [`ManagedEnvironment::encode`] will canonicalize the path if necessary.
 fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> String {
     format!("{}.{}", pointer.name, path_hash(dot_flox_path))
 }
