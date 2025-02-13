@@ -186,7 +186,16 @@ pub enum ManagedEnvironmentError {
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 pub struct GenerationLock {
+    /// Revision of the environment on FloxHub.
+    /// This could be stale if the environment has since been changed.
     rev: String,
+    /// Revision of the environment in local floxmeta repository.
+    /// Since an environment can be pulled into multiple different directories
+    /// locally, each could have its own local_rev if the environments are
+    /// modified.
+    /// This is changed when the environment is modified locally,
+    /// so it can diverge from both the remote environment and other copies of
+    /// the environment pulled into other directories.
     local_rev: Option<String>,
     version: Version<1>,
 }
