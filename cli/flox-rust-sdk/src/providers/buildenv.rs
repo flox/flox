@@ -84,8 +84,11 @@ pub enum BuildEnvError {
     CallNixBuild(#[source] std::io::Error),
 
     /// An error that occurred while deserializing the output of the `nix build` command.
-    #[error("Failed to deserialize 'nix build' output")]
-    ReadOutputs(#[source] serde_json::Error),
+    #[error("Failed to deserialize 'nix build' output:\n{output}\nError: {err}")]
+    ReadOutputs {
+        output: String,
+        err: serde_json::Error,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -571,8 +574,11 @@ impl BuildEnvNix {
         struct BuildEnvResultRaw {
             outputs: BuildEnvOutputs,
         }
-        let [build_env_result]: [BuildEnvResultRaw; 1] =
-            serde_json::from_slice(&output.stdout).map_err(BuildEnvError::ReadOutputs)?;
+        let [build_env_result]: [BuildEnvResultRaw; 1] = serde_json::from_slice(&output.stdout)
+            .map_err(|err| BuildEnvError::ReadOutputs {
+                output: String::from_utf8_lossy(&output.stdout).to_string(),
+                err,
+            })?;
         let outputs = build_env_result.outputs;
         Ok(outputs)
     }
