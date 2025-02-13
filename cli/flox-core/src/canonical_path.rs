@@ -33,6 +33,13 @@ impl CanonicalPath {
         Ok(Self(canonicalized))
     }
 
+    /// Create a [`CanonicalPath`] without checking if the path is canonical or
+    /// exists. Only to be used when dealing with paths that are known to be
+    /// deleted.
+    pub fn new_unchecked(path: impl AsRef<Path>) -> Self {
+        Self(path.as_ref().to_path_buf())
+    }
+
     /// Destruct the [`CanonicalPath`] and return the inner [`PathBuf`]
     pub fn into_inner(self) -> PathBuf {
         self.0

@@ -1,15 +1,17 @@
 use std::path::{Path, PathBuf};
 
+use flox_core::canonical_path::CanonicalPath;
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
 
-use super::environment::managed_environment::remote_branch_name;
+use super::environment::managed_environment::{branch_name, remote_branch_name};
 use super::environment::ManagedPointer;
 use super::environment_ref::EnvironmentOwner;
 use crate::flox::{Flox, Floxhub, FloxhubError, FloxhubToken};
 use crate::providers::git::{
     GitCommandBranchHashError,
+    GitCommandError,
     GitCommandOpenError,
     GitCommandOptions,
     GitCommandProvider,
@@ -18,8 +20,9 @@ use crate::providers::git::{
 };
 
 pub const FLOXMETA_DIR_NAME: &str = "meta";
+pub const BRANCH_NAME_PATH_SEPARATOR: &str = ".";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FloxMeta {
     pub(super) git: GitCommandProvider,
 }
@@ -37,6 +40,10 @@ pub enum FloxMetaError {
     FetchBranch(GitRemoteCommandError),
     #[error("Failed to clone environment: {0}")]
     CloneBranch(GitRemoteCommandError),
+    #[error("Failed to list branches: {0}")]
+    ListBranch(GitCommandError),
+    #[error("Failed to delete branch: {0}")]
+    DeleteBranch(GitCommandError),
 
     #[error(transparent)]
     FloxhubError(FloxhubError),
@@ -171,6 +178,38 @@ impl FloxMeta {
         git.rename_branch(&remote_branch_name(pointer)).unwrap();
 
         Ok(FloxMeta { git })
+    }
+
+    /// Prune the local branch for a deleted environment. If there are no more
+    /// local branches, then also prune the remote branch.
+    pub fn prune_branches(
+        &self,
+        pointer: &ManagedPointer,
+        dot_flox_path: &CanonicalPath,
+    ) -> Result<(), FloxMetaError> {
+        self.git
+            .delete_branch(&branch_name(pointer, dot_flox_path), true)
+            .map_err(FloxMetaError::DeleteBranch)?;
+
+        let branch_prefix = pointer.name.to_string();
+        let branches = self
+            .git
+            .list_branches()
+            .map_err(FloxMetaError::ListBranch)?;
+        let branches_for_other_paths = branches.iter().any(|branch| {
+            match branch.name.rsplit_once(BRANCH_NAME_PATH_SEPARATOR) {
+                Some((prefix, _)) => prefix == branch_prefix,
+                _ => false,
+            }
+        });
+
+        if !branches_for_other_paths {
+            self.git
+                .delete_branch(&remote_branch_name(pointer), true)
+                .map_err(FloxMetaError::DeleteBranch)?;
+        }
+
+        Ok(())
     }
 }
 

@@ -35,7 +35,12 @@ use crate::flox::{EnvironmentRef, Flox};
 use crate::models::env_registry::{deregister, ensure_registered, EnvRegistryError};
 use crate::models::environment::{copy_dir_recursive, LOCKFILE_FILENAME};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
-use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
+use crate::models::floxmeta::{
+    floxmeta_git_options,
+    FloxMeta,
+    FloxMetaError,
+    BRANCH_NAME_PATH_SEPARATOR,
+};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::Manifest;
@@ -62,6 +67,8 @@ pub struct ManagedEnvironment {
 pub enum ManagedEnvironmentError {
     #[error("failed to open floxmeta git repo: {0}")]
     OpenFloxmeta(FloxMetaError),
+    #[error("failed to update floxmeta git repo: {0}")]
+    UpdateFloxmeta(FloxMetaError),
     #[error("failed to fetch environment: {0}")]
     Fetch(GitRemoteCommandError),
     #[error("failed to check for git revision: {0}")]
@@ -471,9 +478,8 @@ impl Environment for ManagedEnvironment {
             .map_err(|e| ManagedEnvironmentError::DeleteEnvironment(self.path.to_path_buf(), e))?;
 
         self.floxmeta
-            .git
-            .delete_branch(&branch_name(&self.pointer, &self.path), true)
-            .map_err(ManagedEnvironmentError::DeleteBranch)?;
+            .prune_branches(&self.pointer, &self.path)
+            .map_err(ManagedEnvironmentError::UpdateFloxmeta)?;
 
         deregister(flox, &self.path, &EnvironmentPointer::Managed(self.pointer))?;
 
@@ -1150,8 +1156,13 @@ fn write_pointer_lockfile(
 ///
 /// `dot_flox_path` is expected to point to the `.flox/` directory
 /// that link to an environment identified by `pointer`.
-fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> String {
-    format!("{}.{}", pointer.name, path_hash(dot_flox_path))
+pub fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> String {
+    format!(
+        "{}{}{}",
+        pointer.name,
+        BRANCH_NAME_PATH_SEPARATOR,
+        path_hash(dot_flox_path)
+    )
 }
 
 /// The original branch name of an environment that is used to sync an environment with the hub
@@ -1481,8 +1492,9 @@ impl ManagedEnvironment {
 
         // remove the environment branch
         // this can be recovered from the generation lock
-        let branch = branch_name(&self.pointer, &self.path);
-        self.floxmeta.git.delete_branch(&branch, true).unwrap();
+        self.floxmeta
+            .prune_branches(&self.pointer, &self.path)
+            .unwrap();
 
         fs::remove_file(self.path.join(GENERATION_LOCK_FILENAME))
             .map_err(ManagedEnvironmentError::WriteLock)?;
@@ -2606,6 +2618,72 @@ mod test {
         env.delete(&flox).unwrap();
         let reg = read_environment_registry(&reg_path).unwrap().unwrap();
         assert!(reg.entries.is_empty());
+    }
+
+    #[test]
+    fn prunes_branches_on_delete() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let env1_dir = flox.temp_dir.join("env1");
+        std::fs::create_dir_all(&env1_dir).unwrap();
+        let env1_dir = CanonicalPath::new(env1_dir).unwrap();
+
+        let env2_dir = flox.temp_dir.join("env2");
+        std::fs::create_dir_all(&env2_dir).unwrap();
+        let env2_dir = CanonicalPath::new(env2_dir).unwrap();
+
+        // dummy paths since we are not rendering the environment
+        let rendered_env_links =
+            RenderedEnvironmentLinks::new_unchecked(PathBuf::new(), PathBuf::new());
+
+        // create a mock remote
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
+
+        let remote_branch = remote_branch_name(&test_pointer);
+        remote.checkout(&remote_branch, true).unwrap();
+        commit_file(&remote, "file 1");
+
+        let env1_branch = branch_name(&test_pointer, &env1_dir);
+        let env2_branch = branch_name(&test_pointer, &env2_dir);
+
+        // Create a mock floxmeta
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &remote_branch);
+
+        // Create two environments that use the same pointer.
+        let env1 = ManagedEnvironment::open_with(
+            floxmeta.clone(),
+            &flox,
+            test_pointer.clone(),
+            env1_dir,
+            rendered_env_links.clone(),
+        )
+        .unwrap();
+        let env2 = ManagedEnvironment::open_with(
+            floxmeta.clone(),
+            &flox,
+            test_pointer.clone(),
+            env2_dir,
+            rendered_env_links.clone(),
+        )
+        .unwrap();
+
+        assert!(floxmeta.git.has_branch(&remote_branch).unwrap());
+        assert!(floxmeta.git.has_branch(&env1_branch).unwrap());
+        assert!(floxmeta.git.has_branch(&env2_branch).unwrap());
+
+        env2.delete(&flox).unwrap();
+
+        // Only env2 should be pruned.
+        assert!(floxmeta.git.has_branch(&remote_branch).unwrap());
+        assert!(floxmeta.git.has_branch(&env1_branch).unwrap());
+        assert!(!floxmeta.git.has_branch(&env2_branch).unwrap());
+
+        env1.delete(&flox).unwrap();
+
+        // All branches should be pruned.
+        assert!(!floxmeta.git.has_branch(&remote_branch).unwrap());
+        assert!(!floxmeta.git.has_branch(&env1_branch).unwrap());
+        assert!(!floxmeta.git.has_branch(&env2_branch).unwrap());
     }
 
     #[test]
