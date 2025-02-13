@@ -314,7 +314,8 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
     match err {
         // todo: communicate reasons for this error
         // git auth errors may be caught separately or reported
-        ManagedEnvironmentError::OpenFloxmeta(err) => formatdoc! {"
+        ManagedEnvironmentError::OpenFloxmeta(err)
+        | ManagedEnvironmentError::UpdateFloxmeta(err) => formatdoc! {"
             Failed to fetch environment: {err}
         "},
 

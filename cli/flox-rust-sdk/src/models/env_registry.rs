@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use super::environment::{path_hash, EnvironmentPointer};
+use super::floxmeta::{FloxMeta, FloxMetaError};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::utils::logging::traceable_path;
@@ -30,6 +31,8 @@ pub enum EnvRegistryError {
     WriteEnvironmentRegistry(#[source] SerializeError),
     #[error("no registry found")]
     NoEnvRegistry,
+    #[error(transparent)]
+    FloxMeta(#[from] FloxMetaError),
 }
 
 /// A local registry of environments on the system.
@@ -117,9 +120,32 @@ impl EnvRegistry {
         res
     }
 
-    /// Prunes environments from the registry that no longer exist on disk.
-    fn prune_nonexistent(&mut self) {
+    /// Prunes environments that no longer exist on disk from the Registry and FloxMeta.
+    fn prune_nonexistent(&mut self, flox: &Flox) -> Result<(), EnvRegistryError> {
+        self.entries
+            .iter()
+            .filter(|entry| !entry.exists())
+            .try_for_each(|entry| {
+                for env in entry.envs.iter() {
+                    // Prune floxmeta branches for managed environments
+                    if let EnvironmentPointer::Managed(ref pointer) = env.pointer {
+                        // Previously canonicalized path that we know no longer exists.
+                        let path = CanonicalPath::new_unchecked(&entry.path);
+                        let floxmeta = FloxMeta::open(flox, pointer)?;
+                        floxmeta.prune_branches(pointer, &path)?;
+                    }
+                }
+
+                Ok(())
+            })
+            .map_err(EnvRegistryError::FloxMeta)?;
+
+        // The environment registry is the only method we have of determining
+        // whether a branch in floxmeta should be garbage collected, so only
+        // remove entries after pruning floxmeta
         self.entries.retain(|entry| entry.exists());
+
+        Ok(())
     }
 }
 
@@ -311,7 +337,7 @@ pub fn garbage_collect(flox: &Flox) -> Result<EnvRegistry, EnvRegistryError> {
     let reg_path = env_registry_path(flox);
     let lock = acquire_env_registry_lock(&reg_path)?;
     let mut reg = read_environment_registry(&reg_path)?.ok_or(EnvRegistryError::NoEnvRegistry)?;
-    reg.prune_nonexistent();
+    reg.prune_nonexistent(flox)?;
     write_environment_registry(&reg, &reg_path, lock)?;
     Ok(reg)
 }
