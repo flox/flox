@@ -5,7 +5,7 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 
 use super::core_environment::UpgradeResult;
-use super::managed_environment::{remote_branch_name, ManagedEnvironment, ManagedEnvironmentError};
+use super::managed_environment::{ManagedEnvironment, ManagedEnvironmentError};
 use super::{
     gcroots_dir,
     CanonicalPath,
@@ -155,7 +155,7 @@ impl RemoteEnvironment {
 
             RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
                 &base_dir,
-                remote_branch_name(&pointer),
+                pointer.name.as_ref(),
                 &flox.system,
             )
         };
