@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::manifest::typed::ManifestServices;
+use flox_rust_sdk::models::manifest::typed::Services;
 use flox_rust_sdk::providers::services::{
     shutdown_process_compose_if_all_processes_stopped,
     start_service,
@@ -80,7 +80,7 @@ impl Start {
     /// Defaults to starting all services if no services are specified.
     fn start_with_existing_process_compose(
         socket: impl AsRef<Path>,
-        manifest_services: &ManifestServices,
+        manifest_services: &Services,
         system: impl Into<System>,
         names: &[String],
         err_stream: &mut impl std::io::Write,

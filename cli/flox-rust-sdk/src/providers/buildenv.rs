@@ -1083,7 +1083,7 @@ mod realise_flakes_tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::models::manifest::typed::ManifestPackageDescriptorFlake;
+    use crate::models::manifest::typed::PackageDescriptorFlake;
     use crate::providers::flake_installable_locker::{InstallableLocker, InstallableLockerImpl};
 
     // region: tools to configure mock flakes for testing
@@ -1150,17 +1150,14 @@ mod realise_flakes_tests {
             };
             fs::write(tempdir.path().join("flake.nix"), flake_contents).unwrap();
             let mut locked_installable = InstallableLockerImpl::default()
-                .lock_flake_installable(
-                    env!("NIX_TARGET_SYSTEM"),
-                    &ManifestPackageDescriptorFlake {
-                        flake: format!(
-                            "path:{}#package",
-                            tempdir.path().canonicalize().unwrap().display()
-                        ),
-                        systems: None,
-                        priority: None,
-                    },
-                )
+                .lock_flake_installable(env!("NIX_TARGET_SYSTEM"), &PackageDescriptorFlake {
+                    flake: format!(
+                        "path:{}#package",
+                        tempdir.path().canonicalize().unwrap().display()
+                    ),
+                    systems: None,
+                    priority: None,
+                })
                 .unwrap();
 
             // We cause an eval failure by not providing a valid flake.

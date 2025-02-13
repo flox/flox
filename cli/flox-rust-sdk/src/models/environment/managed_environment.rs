@@ -1669,7 +1669,7 @@ mod test {
     use crate::models::floxmeta::floxmeta_dir;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::Lockfile;
-    use crate::models::manifest::typed::{Inner, Manifest, ManifestPackageDescriptorCatalog};
+    use crate::models::manifest::typed::{Inner, Manifest, PackageDescriptorCatalog};
     use crate::providers::catalog::test_helpers::reset_mocks_from_file;
     use crate::providers::catalog::{MockClient, GENERATED_DATA};
     use crate::providers::git::tests::commit_file;
@@ -2453,7 +2453,7 @@ mod test {
         let mut new_manifest = Manifest::default();
         new_manifest.install.inner_mut().insert(
             "hello".to_string(),
-            ManifestPackageDescriptorCatalog {
+            PackageDescriptorCatalog {
                 pkg_path: "hello".to_string(),
                 pkg_group: None,
                 priority: None,

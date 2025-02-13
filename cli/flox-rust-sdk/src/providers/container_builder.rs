@@ -11,7 +11,7 @@ use tracing::{debug, info, instrument};
 
 use super::buildenv::BuiltStorePath;
 use crate::flox::Flox;
-use crate::models::manifest::typed::ManifestContainerizeConfig;
+use crate::models::manifest::typed::ContainerizeConfig;
 use crate::providers::build::BUILDTIME_NIXPKGS_URL;
 use crate::providers::nix::nix_base_command;
 use crate::utils::gomap::GoMap;
@@ -47,8 +47,8 @@ pub struct OCIConfig {
     stop_signal: Option<String>,
 }
 
-impl From<ManifestContainerizeConfig> for OCIConfig {
-    fn from(config: ManifestContainerizeConfig) -> Self {
+impl From<ContainerizeConfig> for OCIConfig {
+    fn from(config: ContainerizeConfig) -> Self {
         Self {
             user: config.user,
             exposed_ports: config.exposed_ports.map(GoMap::from),
@@ -270,7 +270,7 @@ mod container_source_tests {
 
     #[test]
     fn oci_config_from_manifest() {
-        let manifest_config = ManifestContainerizeConfig {
+        let manifest_config = ContainerizeConfig {
             user: Some("root".to_string()),
             exposed_ports: Some(BTreeSet::from(["80/tcp".to_string()])),
             volumes: Some(BTreeSet::from(["/app".to_string()])),

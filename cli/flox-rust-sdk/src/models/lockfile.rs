@@ -27,8 +27,8 @@ use super::manifest::typed::{
     Inner,
     Manifest,
     ManifestPackageDescriptor,
-    ManifestPackageDescriptorCatalog,
-    ManifestPackageDescriptorFlake,
+    PackageDescriptorCatalog,
+    PackageDescriptorFlake,
     DEFAULT_GROUP_NAME,
     DEFAULT_PRIORITY,
 };
@@ -218,7 +218,7 @@ impl LockedPackageCatalog {
     /// There may be more validation/parsing we could do here in the future.
     pub fn from_parts(
         package: catalog::PackageResolutionInfo,
-        descriptor: ManifestPackageDescriptorCatalog,
+        descriptor: PackageDescriptorCatalog,
     ) -> Self {
         // unpack package to avoid missing new fields
         let catalog::PackageResolutionInfo {
@@ -316,7 +316,7 @@ impl LockedPackageFlake {
 #[derive(Debug, Clone, PartialEq)]
 struct FlakeInstallableToLock {
     install_id: String,
-    descriptor: ManifestPackageDescriptorFlake,
+    descriptor: PackageDescriptorFlake,
     system: System,
 }
 
@@ -1250,8 +1250,8 @@ impl Lockfile {
 /// TODO: drop in favor of mapping to `(ManifestPackageDescriptor*, LockedPackage*)`
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackageToList {
-    Catalog(ManifestPackageDescriptorCatalog, LockedPackageCatalog),
-    Flake(ManifestPackageDescriptorFlake, LockedPackageFlake),
+    Catalog(PackageDescriptorCatalog, LockedPackageCatalog),
+    Flake(PackageDescriptorFlake, LockedPackageFlake),
     StorePath(LockedPackageStorePath),
 }
 
@@ -1321,7 +1321,7 @@ pub enum LockedManifestError {
 
 pub mod test_helpers {
     use super::*;
-    use crate::models::manifest::typed::ManifestPackageDescriptorStorePath;
+    use crate::models::manifest::typed::PackageDescriptorStorePath;
 
     pub fn fake_catalog_package_lock(
         name: &str,
@@ -1329,7 +1329,7 @@ pub mod test_helpers {
     ) -> (String, ManifestPackageDescriptor, LockedPackageCatalog) {
         let install_id = format!("{}_install_id", name);
 
-        let descriptor = ManifestPackageDescriptorCatalog {
+        let descriptor = PackageDescriptorCatalog {
             pkg_path: name.to_string(),
             pkg_group: group.map(|s| s.to_string()),
             systems: Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
@@ -1370,10 +1370,10 @@ pub mod test_helpers {
 
     pub fn fake_flake_installable_lock(
         name: &str,
-    ) -> (String, ManifestPackageDescriptorFlake, LockedPackageFlake) {
+    ) -> (String, PackageDescriptorFlake, LockedPackageFlake) {
         let install_id = format!("{}_install_id", name);
 
-        let descriptor = ManifestPackageDescriptorFlake {
+        let descriptor = PackageDescriptorFlake {
             flake: format!("github:nowhere/exciting#{name}"),
             priority: None,
             systems: None,
@@ -1409,14 +1409,10 @@ pub mod test_helpers {
 
     pub fn fake_store_path_lock(
         name: &str,
-    ) -> (
-        String,
-        ManifestPackageDescriptorStorePath,
-        LockedPackageStorePath,
-    ) {
+    ) -> (String, PackageDescriptorStorePath, LockedPackageStorePath) {
         let install_id = format!("{}_install_id", name);
 
-        let descriptor = ManifestPackageDescriptorStorePath {
+        let descriptor = PackageDescriptorStorePath {
             store_path: format!("/nix/store/{}", name),
             systems: Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
             priority: None,
@@ -1431,8 +1427,8 @@ pub mod test_helpers {
         (install_id, descriptor, locked)
     }
 
-    pub fn nix_eval_jobs_descriptor() -> ManifestPackageDescriptorFlake {
-        ManifestPackageDescriptorFlake {
+    pub fn nix_eval_jobs_descriptor() -> PackageDescriptorFlake {
+        PackageDescriptorFlake {
             flake: "github:nix-community/nix-eval-jobs".to_string(),
             priority: None,
             systems: None,
@@ -1575,7 +1571,7 @@ pub(crate) mod tests {
         fn lock_flake_installable(
             &self,
             _: impl AsRef<str>,
-            _: &ManifestPackageDescriptorFlake,
+            _: &PackageDescriptorFlake,
         ) -> Result<LockedInstallable, FlakeInstallableError> {
             panic!("this flake locker always panics")
         }
@@ -2004,7 +2000,7 @@ pub(crate) mod tests {
         // Add a package to the manifest that is not already locked
         manifest.install.inner_mut().insert(
             "unlocked".to_string(),
-            ManifestPackageDescriptorCatalog {
+            PackageDescriptorCatalog {
                 pkg_path: "unlocked".to_string(),
                 pkg_group: Some("group".to_string()),
                 systems: None,
