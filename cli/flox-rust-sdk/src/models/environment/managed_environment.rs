@@ -29,18 +29,10 @@ use super::{
     ENV_DIR_NAME,
     GCROOTS_DIR_NAME,
     LOG_DIR_NAME,
-    N_HASH_CHARS,
 };
 use crate::data::CanonicalPath;
 use crate::flox::{EnvironmentRef, Flox};
-use crate::models::env_registry::{
-    deregister,
-    ensure_registered,
-    env_registry_path,
-    read_environment_registry,
-    EnvRegistry,
-    EnvRegistryError,
-};
+use crate::models::env_registry::{deregister, ensure_registered, EnvRegistryError};
 use crate::models::environment::{copy_dir_recursive, LOCKFILE_FILENAME};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
@@ -527,36 +519,6 @@ impl ManagedEnvironment {
     /// Returns a unique identifier for the location of the environment.
     fn path_hash(&self) -> String {
         path_hash(&self.path)
-    }
-
-    /// Returns the path to an environment given the branch name in the floxmeta repository.
-    ///
-    /// Will only error if the symlink doesn't exist, the path the symlink points to doesn't
-    /// exist, or if the branch name is malformed.
-    #[allow(unused)]
-    fn decode(flox: &Flox, branch: &impl AsRef<str>) -> Result<PathBuf, ManagedEnvironmentError> {
-        let branch_name = branch.as_ref();
-        branch_name
-            .split('.')
-            .next_back()
-            .map(|hash| {
-                let reg_path = env_registry_path(flox);
-                let reg: EnvRegistry = read_environment_registry(reg_path)?
-                    .ok_or(EnvRegistryError::EnvNotRegistered)?;
-                let hash = match hash.len() {
-                    // Older branches probably still have the longer hashes
-                    n if n < N_HASH_CHARS => Err(ManagedEnvironmentError::BadBranchName(
-                        String::from(branch_name),
-                    )),
-                    n if n > N_HASH_CHARS => Ok(hash.split_at(N_HASH_CHARS).0),
-                    n => Ok(hash),
-                }?;
-                reg.path_for_hash(hash)
-                    .map_err(ManagedEnvironmentError::Registry)
-            })
-            .unwrap_or(Err(ManagedEnvironmentError::BadBranchName(String::from(
-                branch_name,
-            ))))
     }
 
     /// Open a managed environment by reading its lockfile and ensuring there is
@@ -1660,7 +1622,7 @@ mod test {
 
     use super::*;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
-    use crate::models::env_registry::read_environment_registry;
+    use crate::models::env_registry::{env_registry_path, read_environment_registry};
     use crate::models::environment::test_helpers::{
         new_core_environment,
         new_core_environment_with_lockfile,
@@ -2573,29 +2535,6 @@ mod test {
         let env_b_generations = init_generations_from_core_env(&flox.temp_dir, "env_b", &mut env_b);
 
         assert!(!ManagedEnvironment::validate_checkout(&env_a, &env_b_generations).unwrap());
-    }
-
-    #[test]
-    fn decode_branch_name_to_path() {
-        let (flox, tmp_dir) = flox_instance();
-        let path = tmp_dir.path().join("foo");
-        std::fs::File::create(&path).unwrap();
-        let path = CanonicalPath::new(path).unwrap();
-        // Decode the branch name and assert that it's the same path we created before
-        let pointer = ManagedPointer {
-            owner: EnvironmentOwner::from_str("owner").unwrap(),
-            name: EnvironmentName::from_str("name").unwrap(),
-            floxhub_url: Url::from_str("https://hub.flox.dev").unwrap(),
-            floxhub_git_url_override: None,
-            version: Version::<1>,
-        };
-        ensure_registered(&flox, &path, &EnvironmentPointer::Managed(pointer.clone())).unwrap();
-
-        let branch_name = branch_name(&pointer, &path);
-        let decoded_path = ManagedEnvironment::decode(&flox, &branch_name).unwrap();
-        let canonicalized_decoded_path = std::fs::canonicalize(decoded_path).unwrap();
-        let canonicalized_path = std::fs::canonicalize(&path).unwrap();
-        assert_eq!(canonicalized_path, canonicalized_decoded_path);
     }
 
     #[test]
