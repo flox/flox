@@ -9,7 +9,7 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 
 use super::nix::nix_base_command;
-use crate::models::manifest::typed::{ManifestPackageDescriptorFlake, DEFAULT_PRIORITY};
+use crate::models::manifest::typed::{PackageDescriptorFlake, DEFAULT_PRIORITY};
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::utils::CommandExt;
 
@@ -103,7 +103,7 @@ pub trait InstallableLocker {
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,
-        descriptor: &ManifestPackageDescriptorFlake,
+        descriptor: &PackageDescriptorFlake,
     ) -> Result<LockedInstallable, FlakeInstallableError>;
 }
 
@@ -126,7 +126,7 @@ impl Default for InstallableLockerImpl {
 /// - Priority set in the descriptor
 /// - `meta.priority` of the derivation
 /// - Default priority
-fn set_priority(locked: &mut LockedInstallable, descriptor: &ManifestPackageDescriptorFlake) {
+fn set_priority(locked: &mut LockedInstallable, descriptor: &PackageDescriptorFlake) {
     if let Some(priority) = descriptor.priority {
         locked.priority = priority;
     }
@@ -165,7 +165,7 @@ impl InstallableLocker for InstallableLockerMock {
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,
-        descriptor: &ManifestPackageDescriptorFlake,
+        descriptor: &PackageDescriptorFlake,
     ) -> Result<LockedInstallable, FlakeInstallableError> {
         let mut mocked_result = self
             .lock_flake_installable
@@ -203,7 +203,7 @@ impl InstallableLocker for Nix {
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,
-        descriptor: &ManifestPackageDescriptorFlake,
+        descriptor: &PackageDescriptorFlake,
     ) -> Result<LockedInstallable, FlakeInstallableError> {
         let mut command = nix_base_command();
         command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
@@ -273,7 +273,7 @@ mod tests {
         let installable = format!("{flake}#hello", flake = local_test_flake());
 
         // make sure the deserialization is not accidentally optimized away
-        Nix.lock_flake_installable(system, &ManifestPackageDescriptorFlake {
+        Nix.lock_flake_installable(system, &PackageDescriptorFlake {
             flake: installable,
             priority: None,
             systems: None,
@@ -286,7 +286,7 @@ mod tests {
         let system = env!("system");
         let installable = "github:flox/trust-this-wont-be-added#hello";
 
-        let result = Nix.lock_flake_installable(system, &ManifestPackageDescriptorFlake {
+        let result = Nix.lock_flake_installable(system, &PackageDescriptorFlake {
             flake: installable.to_string(),
             priority: None,
             systems: None,
@@ -302,7 +302,7 @@ mod tests {
         let system = env!("system");
         let installable = format!("{flake}#nonexistent", flake = local_test_flake());
 
-        let result = Nix.lock_flake_installable(system, &ManifestPackageDescriptorFlake {
+        let result = Nix.lock_flake_installable(system, &PackageDescriptorFlake {
             flake: installable,
             priority: None,
             systems: None,
@@ -377,7 +377,7 @@ mod tests {
         }
         "#;
         let mut locked: LockedInstallable = serde_json::from_str(locked_hello).unwrap();
-        let descriptor = ManifestPackageDescriptorFlake {
+        let descriptor = PackageDescriptorFlake {
             flake: "github:NixOS/nipxkgs#hello".to_string(),
             priority: Some(10),
             systems: None,
@@ -418,7 +418,7 @@ mod tests {
         }
         "#;
         let mut locked: LockedInstallable = serde_json::from_str(locked_hello).unwrap();
-        let descriptor = ManifestPackageDescriptorFlake {
+        let descriptor = PackageDescriptorFlake {
             flake: "github:NixOS/nipxkgs#hello".to_string(),
             priority: None,
             systems: None,

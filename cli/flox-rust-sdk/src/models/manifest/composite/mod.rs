@@ -9,16 +9,16 @@ use proptest::prelude::*;
 use thiserror::Error;
 
 use super::typed::{
+    Build,
+    Containerize,
+    ContainerizeConfig,
+    Hook,
+    Install,
     Manifest,
-    ManifestBuild,
-    ManifestContainerize,
-    ManifestContainerizeConfig,
-    ManifestHook,
-    ManifestInstall,
-    ManifestOptions,
-    ManifestProfile,
-    ManifestServices,
-    ManifestVariables,
+    Options,
+    Profile,
+    Services,
+    Vars,
 };
 
 #[derive(Error, Debug)]
@@ -61,37 +61,28 @@ trait ManifestMergeStrategy {
         high_priority: &Version<1>,
     ) -> Result<Version<1>, MergeError>;
     fn merge_install(
-        low_priority: &ManifestInstall,
-        high_priority: &ManifestInstall,
-    ) -> Result<ManifestInstall, MergeError>;
-    fn merge_vars(
-        low_priority: &ManifestVariables,
-        high_priority: &ManifestVariables,
-    ) -> Result<ManifestVariables, MergeError>;
-    fn merge_hook(
-        low_priority: &ManifestHook,
-        high_priority: &ManifestHook,
-    ) -> Result<ManifestHook, MergeError>;
+        low_priority: &Install,
+        high_priority: &Install,
+    ) -> Result<Install, MergeError>;
+    fn merge_vars(low_priority: &Vars, high_priority: &Vars) -> Result<Vars, MergeError>;
+    fn merge_hook(low_priority: &Hook, high_priority: &Hook) -> Result<Hook, MergeError>;
     fn merge_profile(
-        low_priority: &ManifestProfile,
-        high_priority: &ManifestProfile,
-    ) -> Result<ManifestProfile, MergeError>;
+        low_priority: &Profile,
+        high_priority: &Profile,
+    ) -> Result<Profile, MergeError>;
     fn merge_options(
-        low_priority: &ManifestOptions,
-        high_priority: &ManifestOptions,
-    ) -> Result<ManifestOptions, MergeError>;
+        low_priority: &Options,
+        high_priority: &Options,
+    ) -> Result<Options, MergeError>;
     fn merge_services(
-        low_priority: &ManifestServices,
-        high_priority: &ManifestServices,
-    ) -> Result<ManifestServices, MergeError>;
-    fn merge_build(
-        low_priority: &ManifestBuild,
-        high_priority: &ManifestBuild,
-    ) -> Result<ManifestBuild, MergeError>;
+        low_priority: &Services,
+        high_priority: &Services,
+    ) -> Result<Services, MergeError>;
+    fn merge_build(low_priority: &Build, high_priority: &Build) -> Result<Build, MergeError>;
     fn merge_containerize(
-        low_priority: Option<&ManifestContainerize>,
-        high_priority: Option<&ManifestContainerize>,
-    ) -> Result<Option<ManifestContainerize>, MergeError>;
+        low_priority: Option<&Containerize>,
+        high_priority: Option<&Containerize>,
+    ) -> Result<Option<Containerize>, MergeError>;
     fn merge(
         &self,
         low_priority: &Manifest,
@@ -182,15 +173,15 @@ fn shallow_merge_options<T: Clone>(
 }
 
 fn deep_merge_optional_containerize_config(
-    low_priority: Option<&ManifestContainerizeConfig>,
-    high_priority: Option<&ManifestContainerizeConfig>,
-) -> Option<ManifestContainerizeConfig> {
+    low_priority: Option<&ContainerizeConfig>,
+    high_priority: Option<&ContainerizeConfig>,
+) -> Option<ContainerizeConfig> {
     match (low_priority, high_priority) {
         (None, None) => None,
         (Some(cfg), None) => Some(cfg.clone()),
         (None, Some(cfg)) => Some(cfg.clone()),
         (Some(cfg_lp), Some(cfg_hp)) => {
-            let cfg = ManifestContainerizeConfig {
+            let cfg = ContainerizeConfig {
                 user: shallow_merge_options(cfg_lp.user.as_ref(), cfg_hp.user.as_ref()),
                 exposed_ports: optional_set_union(
                     cfg_lp.exposed_ports.as_ref(),

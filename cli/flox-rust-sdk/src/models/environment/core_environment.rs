@@ -1107,7 +1107,7 @@ mod tests {
     use crate::flox::test_helpers::flox_instance;
     use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
-    use crate::models::manifest::typed::{ManifestPackageDescriptorCatalog, DEFAULT_GROUP_NAME};
+    use crate::models::manifest::typed::{PackageDescriptorCatalog, DEFAULT_GROUP_NAME};
     use crate::providers::flake_installable_locker::InstallableLockerMock;
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
@@ -1433,7 +1433,7 @@ mod tests {
         for (test_iid, dotted_package) in entries {
             typed_manifest_mock.install.inner_mut().insert(
                 test_iid.to_string(),
-                ManifestPackageDescriptor::Catalog(ManifestPackageDescriptorCatalog {
+                ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
                     pkg_path: dotted_package.to_string(),
                     pkg_group: None,
                     priority: None,

@@ -75,33 +75,33 @@ pub struct Manifest {
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
-    #[serde(skip_serializing_if = "ManifestInstall::skip_serializing")]
-    pub install: ManifestInstall,
+    #[serde(skip_serializing_if = "Install::skip_serializing")]
+    pub install: Install,
     /// Variables that are exported to the shell environment upon activation.
     #[serde(default)]
-    #[serde(skip_serializing_if = "ManifestVariables::skip_serializing")]
-    pub vars: ManifestVariables,
+    #[serde(skip_serializing_if = "Vars::skip_serializing")]
+    pub vars: Vars,
     /// Hooks that are run at various times during the lifecycle of the manifest
     /// in a known shell environment.
     #[serde(default)]
-    pub hook: ManifestHook,
+    pub hook: Hook,
     /// Profile scripts that are run in the user's shell upon activation.
     #[serde(default)]
-    pub profile: ManifestProfile,
+    pub profile: Profile,
     /// Options that control the behavior of the manifest.
     #[serde(default)]
-    pub options: ManifestOptions,
+    pub options: Options,
     /// Service definitions
     #[serde(default)]
-    #[serde(skip_serializing_if = "ManifestServices::skip_serializing")]
-    pub services: ManifestServices,
+    #[serde(skip_serializing_if = "Services::skip_serializing")]
+    pub services: Services,
     /// Package build definitions
     #[serde(default)]
-    #[serde(skip_serializing_if = "ManifestBuild::skip_serializing")]
-    pub build: ManifestBuild,
+    #[serde(skip_serializing_if = "Build::skip_serializing")]
+    pub build: Build,
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub containerize: Option<ManifestContainerize>,
+    pub containerize: Option<Containerize>,
 }
 
 impl Manifest {
@@ -114,7 +114,7 @@ impl Manifest {
     pub fn catalog_pkg_descriptor_with_id(
         &self,
         id: impl AsRef<str>,
-    ) -> Option<ManifestPackageDescriptorCatalog> {
+    ) -> Option<PackageDescriptorCatalog> {
         self.install
             .0
             .get(id.as_ref())
@@ -173,10 +173,8 @@ pub(crate) fn pkg_descriptors_in_toplevel_group(
     descriptors
         .iter()
         .filter(|(_, desc)| {
-            let ManifestPackageDescriptor::Catalog(ManifestPackageDescriptorCatalog {
-                pkg_group,
-                ..
-            }) = desc
+            let ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog { pkg_group, .. }) =
+                desc
             else {
                 return false;
             };
@@ -194,10 +192,8 @@ pub(crate) fn pkg_descriptors_in_named_group(
     descriptors
         .iter()
         .filter(|(_, desc)| {
-            let ManifestPackageDescriptor::Catalog(ManifestPackageDescriptorCatalog {
-                pkg_group,
-                ..
-            }) = desc
+            let ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog { pkg_group, .. }) =
+                desc
             else {
                 return false;
             };
@@ -238,8 +234,7 @@ fn pkg_belongs_to_non_empty_named_group(
         .get(pkg)
         .ok_or(ManifestError::PkgOrGroupNotFound(pkg.to_string()))?;
 
-    let ManifestPackageDescriptor::Catalog(ManifestPackageDescriptorCatalog { pkg_group, .. }) =
-        descriptor
+    let ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog { pkg_group, .. }) = descriptor
     else {
         return Ok(None);
     };
@@ -272,7 +267,7 @@ fn pkg_belongs_to_non_empty_toplevel_group(
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestInstall(
+pub struct Install(
     #[cfg_attr(
         test,
         proptest(strategy = "btree_map_strategy::<ManifestPackageDescriptor>(10, 3)")
@@ -280,13 +275,13 @@ pub struct ManifestInstall(
     pub(crate) BTreeMap<String, ManifestPackageDescriptor>,
 );
 
-impl ManifestInstall {
+impl Install {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
 }
 
-impl_into_inner!(ManifestInstall, BTreeMap<String, ManifestPackageDescriptor>);
+impl_into_inner!(Install, BTreeMap<String, ManifestPackageDescriptor>);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -297,9 +292,9 @@ impl_into_inner!(ManifestInstall, BTreeMap<String, ManifestPackageDescriptor>);
 See https://flox.dev/docs/concepts/manifest/#package-descriptors for more information."
 )]
 pub enum ManifestPackageDescriptor {
-    Catalog(ManifestPackageDescriptorCatalog),
-    FlakeRef(ManifestPackageDescriptorFlake),
-    StorePath(ManifestPackageDescriptorStorePath),
+    Catalog(PackageDescriptorCatalog),
+    FlakeRef(PackageDescriptorFlake),
+    StorePath(PackageDescriptorStorePath),
 }
 
 impl ManifestPackageDescriptor {
@@ -321,7 +316,7 @@ impl ManifestPackageDescriptor {
     }
 
     #[must_use]
-    pub fn unwrap_catalog_descriptor(self) -> Option<ManifestPackageDescriptorCatalog> {
+    pub fn unwrap_catalog_descriptor(self) -> Option<PackageDescriptorCatalog> {
         match self {
             ManifestPackageDescriptor::Catalog(descriptor) => Some(descriptor),
             _ => None,
@@ -329,7 +324,7 @@ impl ManifestPackageDescriptor {
     }
 
     #[must_use]
-    pub fn as_catalog_descriptor_ref(&self) -> Option<&ManifestPackageDescriptorCatalog> {
+    pub fn as_catalog_descriptor_ref(&self) -> Option<&PackageDescriptorCatalog> {
         match self {
             ManifestPackageDescriptor::Catalog(descriptor) => Some(descriptor),
             _ => None,
@@ -337,7 +332,7 @@ impl ManifestPackageDescriptor {
     }
 
     #[must_use]
-    pub fn unwrap_flake_descriptor(self) -> Option<ManifestPackageDescriptorFlake> {
+    pub fn unwrap_flake_descriptor(self) -> Option<PackageDescriptorFlake> {
         match self {
             ManifestPackageDescriptor::FlakeRef(descriptor) => Some(descriptor),
             _ => None,
@@ -345,7 +340,7 @@ impl ManifestPackageDescriptor {
     }
 
     #[must_use]
-    pub fn as_flake_descriptor_ref(&self) -> Option<&ManifestPackageDescriptorFlake> {
+    pub fn as_flake_descriptor_ref(&self) -> Option<&PackageDescriptorFlake> {
         match self {
             ManifestPackageDescriptor::FlakeRef(descriptor) => Some(descriptor),
             _ => None,
@@ -353,7 +348,7 @@ impl ManifestPackageDescriptor {
     }
 
     #[must_use]
-    pub fn unwrap_store_path_descriptor(self) -> Option<ManifestPackageDescriptorStorePath> {
+    pub fn unwrap_store_path_descriptor(self) -> Option<PackageDescriptorStorePath> {
         match self {
             ManifestPackageDescriptor::StorePath(descriptor) => Some(descriptor),
             _ => None,
@@ -361,7 +356,7 @@ impl ManifestPackageDescriptor {
     }
 
     #[must_use]
-    pub fn as_store_path_descriptor_ref(&self) -> Option<&ManifestPackageDescriptorStorePath> {
+    pub fn as_store_path_descriptor_ref(&self) -> Option<&PackageDescriptorStorePath> {
         match self {
             ManifestPackageDescriptor::StorePath(descriptor) => Some(descriptor),
             _ => None,
@@ -369,38 +364,38 @@ impl ManifestPackageDescriptor {
     }
 }
 
-impl From<&ManifestPackageDescriptorCatalog> for ManifestPackageDescriptor {
-    fn from(val: &ManifestPackageDescriptorCatalog) -> Self {
+impl From<&PackageDescriptorCatalog> for ManifestPackageDescriptor {
+    fn from(val: &PackageDescriptorCatalog) -> Self {
         ManifestPackageDescriptor::Catalog(val.clone())
     }
 }
 
-impl From<ManifestPackageDescriptorCatalog> for ManifestPackageDescriptor {
-    fn from(val: ManifestPackageDescriptorCatalog) -> Self {
+impl From<PackageDescriptorCatalog> for ManifestPackageDescriptor {
+    fn from(val: PackageDescriptorCatalog) -> Self {
         ManifestPackageDescriptor::Catalog(val)
     }
 }
 
-impl From<&ManifestPackageDescriptorFlake> for ManifestPackageDescriptor {
-    fn from(val: &ManifestPackageDescriptorFlake) -> Self {
+impl From<&PackageDescriptorFlake> for ManifestPackageDescriptor {
+    fn from(val: &PackageDescriptorFlake) -> Self {
         ManifestPackageDescriptor::FlakeRef(val.clone())
     }
 }
 
-impl From<ManifestPackageDescriptorFlake> for ManifestPackageDescriptor {
-    fn from(val: ManifestPackageDescriptorFlake) -> Self {
+impl From<PackageDescriptorFlake> for ManifestPackageDescriptor {
+    fn from(val: PackageDescriptorFlake) -> Self {
         ManifestPackageDescriptor::FlakeRef(val)
     }
 }
 
-impl From<&ManifestPackageDescriptorStorePath> for ManifestPackageDescriptor {
-    fn from(val: &ManifestPackageDescriptorStorePath) -> Self {
+impl From<&PackageDescriptorStorePath> for ManifestPackageDescriptor {
+    fn from(val: &PackageDescriptorStorePath) -> Self {
         ManifestPackageDescriptor::StorePath(val.clone())
     }
 }
 
-impl From<ManifestPackageDescriptorStorePath> for ManifestPackageDescriptor {
-    fn from(val: ManifestPackageDescriptorStorePath) -> Self {
+impl From<PackageDescriptorStorePath> for ManifestPackageDescriptor {
+    fn from(val: PackageDescriptorStorePath) -> Self {
         ManifestPackageDescriptor::StorePath(val)
     }
 }
@@ -410,7 +405,7 @@ impl From<ManifestPackageDescriptorStorePath> for ManifestPackageDescriptor {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-pub struct ManifestPackageDescriptorCatalog {
+pub struct PackageDescriptorCatalog {
     #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub(crate) pkg_path: String,
     #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
@@ -423,7 +418,7 @@ pub struct ManifestPackageDescriptorCatalog {
     pub(crate) systems: Option<Vec<System>>,
 }
 
-impl ManifestPackageDescriptorCatalog {
+impl PackageDescriptorCatalog {
     /// Check if two package descriptors should have the same resolution.
     /// This is used to determine if a package needs to be re-resolved
     /// in the presence of an existing lock.
@@ -433,7 +428,7 @@ impl ManifestPackageDescriptorCatalog {
     /// * Priority is not used in resolution, so it is ignored.
     pub(super) fn invalidates_existing_resolution(&self, other: &Self) -> bool {
         // unpack to avoid forgetting to update this method when new fields are added
-        let ManifestPackageDescriptorCatalog {
+        let PackageDescriptorCatalog {
             pkg_path,
             pkg_group,
             version,
@@ -450,7 +445,7 @@ impl ManifestPackageDescriptorCatalog {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-pub struct ManifestPackageDescriptorFlake {
+pub struct PackageDescriptorFlake {
     #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub flake: String,
     #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
@@ -464,7 +459,7 @@ pub struct ManifestPackageDescriptorFlake {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-pub struct ManifestPackageDescriptorStorePath {
+pub struct PackageDescriptorStorePath {
     #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub(crate) store_path: String,
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
@@ -475,25 +470,25 @@ pub struct ManifestPackageDescriptorStorePath {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestVariables(
+pub struct Vars(
     #[cfg_attr(test, proptest(strategy = "btree_map_strategy::<String>(5, 3)"))]
     pub(crate)  BTreeMap<String, String>,
 );
 
-impl ManifestVariables {
+impl Vars {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
 }
 
-impl_into_inner!(ManifestVariables, BTreeMap<String, String>);
+impl_into_inner!(Vars, BTreeMap<String, String>);
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-pub struct ManifestHook {
+pub struct Hook {
     /// A script that is run at activation time,
     /// in a flox provided bash shell
     #[cfg_attr(
@@ -507,7 +502,7 @@ pub struct ManifestHook {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
-pub struct ManifestProfile {
+pub struct Profile {
     /// When defined, this hook is run by _all_ shells upon activation
     #[cfg_attr(
         test,
@@ -545,7 +540,7 @@ pub struct ManifestProfile {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-pub struct ManifestOptions {
+pub struct Options {
     /// A list of systems that each package is resolved for.
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub systems: Option<Vec<System>>,
@@ -587,21 +582,21 @@ pub struct SemverOptions {
 /// A map of service names to service definitions
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestServices(
+pub struct Services(
     #[cfg_attr(
         test,
-        proptest(strategy = "btree_map_strategy::<ManifestServiceDescriptor>(5, 3)")
+        proptest(strategy = "btree_map_strategy::<ServiceDescriptor>(5, 3)")
     )]
-    pub(crate) BTreeMap<String, ManifestServiceDescriptor>,
+    pub(crate) BTreeMap<String, ServiceDescriptor>,
 );
 
-impl ManifestServices {
+impl Services {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
 }
 
-impl_into_inner!(ManifestServices, BTreeMap<String, ManifestServiceDescriptor>);
+impl_into_inner!(Services, BTreeMap<String, ServiceDescriptor>);
 
 /// The definition of a service in a manifest
 #[skip_serializing_none]
@@ -609,24 +604,24 @@ impl_into_inner!(ManifestServices, BTreeMap<String, ManifestServiceDescriptor>);
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-pub struct ManifestServiceDescriptor {
+pub struct ServiceDescriptor {
     /// The command to run to start the service
     #[cfg_attr(test, proptest(strategy = "alphanum_string(3)"))]
     pub command: String,
     /// Service-specific environment variables
-    pub vars: Option<ManifestVariables>,
+    pub vars: Option<Vars>,
     /// Whether the service spawns a background process (daemon)
     // TODO: This option _requires_ the shutdown command, so we'll need to add
     //       that explanation to the manifest.toml docs and service mgmt guide
     pub is_daemon: Option<bool>,
     /// How to shut down the service
-    pub shutdown: Option<ManifestServiceShutdown>,
+    pub shutdown: Option<ServiceShutdown>,
     /// Systems to allow running the service on
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub systems: Option<Vec<System>>,
 }
 
-impl ManifestServices {
+impl Services {
     pub fn validate(&self) -> Result<(), ServiceError> {
         let mut bad_services = vec![];
         for (name, desc) in self.0.iter() {
@@ -669,7 +664,7 @@ impl ManifestServices {
                 services.insert(name.clone(), desc.clone());
             }
         }
-        ManifestServices(services)
+        Services(services)
     }
 }
 
@@ -677,7 +672,7 @@ impl ManifestServices {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-pub struct ManifestServiceShutdown {
+pub struct ServiceShutdown {
     /// What command to run to shut down the service
     #[cfg_attr(test, proptest(strategy = "alphanum_string(3)"))]
     pub command: String,
@@ -686,17 +681,17 @@ pub struct ManifestServiceShutdown {
 /// A map of package ids to package build descriptors
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestBuild(
+pub struct Build(
     #[cfg_attr(
         test,
-        proptest(strategy = "btree_map_strategy::<ManifestBuildDescriptor>(5, 3)")
+        proptest(strategy = "btree_map_strategy::<BuildDescriptor>(5, 3)")
     )]
-    pub(crate) BTreeMap<String, ManifestBuildDescriptor>,
+    pub(crate) BTreeMap<String, BuildDescriptor>,
 );
 
-impl_into_inner!(ManifestBuild, BTreeMap<String,ManifestBuildDescriptor>);
+impl_into_inner!(Build, BTreeMap<String,BuildDescriptor>);
 
-impl ManifestBuild {
+impl Build {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
@@ -708,7 +703,7 @@ impl ManifestBuild {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-pub struct ManifestBuildDescriptor {
+pub struct BuildDescriptor {
     /// The command to run to build a package.
     #[cfg_attr(test, proptest(strategy = "alphanum_string(3)"))]
     pub command: String,
@@ -722,7 +717,7 @@ pub struct ManifestBuildDescriptor {
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub systems: Option<Vec<System>>,
     /// Sandbox mode for the build.
-    pub sandbox: Option<ManifestBuildSandbox>,
+    pub sandbox: Option<BuildSandbox>,
     /// The version to assign the package.
     #[cfg_attr(test, proptest(strategy = "optional_string(3)"))]
     pub version: Option<String>,
@@ -739,7 +734,7 @@ pub struct ManifestBuildDescriptor {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
-pub enum ManifestBuildSandbox {
+pub enum BuildSandbox {
     Off,
     Pure,
 }
@@ -748,8 +743,8 @@ pub enum ManifestBuildSandbox {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestContainerize {
-    pub config: Option<ManifestContainerizeConfig>,
+pub struct Containerize {
+    pub config: Option<ContainerizeConfig>,
 }
 
 /// Container config derived from
@@ -762,7 +757,7 @@ pub struct ManifestContainerize {
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestContainerizeConfig {
+pub struct ContainerizeConfig {
     /// The username or UID which is a platform-specific structure that allows specific control over which user the process run as.
     /// This acts as a default value to use when the value is not specified when creating a container.
     /// For Linux based systems, all of the following are valid: `user`, `uid`, `user:group`, `uid:gid`, `uid:group`, `user:gid`.
@@ -908,8 +903,8 @@ pub(super) mod test {
 
         assert_eq!(
             parsed.build,
-            ManifestBuild(
-                [("test".to_string(), ManifestBuildDescriptor {
+            Build(
+                [("test".to_string(), BuildDescriptor {
                     command: "hello".to_string(),
                     runtime_packages: None,
                     files: None,

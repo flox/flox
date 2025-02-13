@@ -23,7 +23,7 @@ use tracing::debug;
 
 use crate::flox::Flox;
 use crate::models::lockfile::Lockfile;
-use crate::models::manifest::typed::{Inner, ManifestServiceShutdown, ManifestServices};
+use crate::models::manifest::typed::{Inner, ServiceShutdown, Services};
 use crate::utils::logging::traceable_path;
 use crate::utils::CommandExt;
 
@@ -147,8 +147,8 @@ pub struct ProcessShutdown {
     pub command: String,
 }
 
-impl From<ManifestServiceShutdown> for ProcessShutdown {
-    fn from(value: ManifestServiceShutdown) -> Self {
+impl From<ServiceShutdown> for ProcessShutdown {
+    fn from(value: ServiceShutdown) -> Self {
         Self {
             command: value.command,
         }
@@ -187,8 +187,8 @@ pub fn generate_never_exit_process() -> ProcessConfig {
     }
 }
 
-impl From<ManifestServices> for ProcessComposeConfig {
-    fn from(services: ManifestServices) -> Self {
+impl From<Services> for ProcessComposeConfig {
+    fn from(services: Services) -> Self {
         let processes = services
             .0
             .into_iter()

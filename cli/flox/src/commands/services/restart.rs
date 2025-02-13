@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::manifest::typed::ManifestServices;
+use flox_rust_sdk::models::manifest::typed::Services;
 use flox_rust_sdk::providers::services::{
     process_compose_down,
     restart_service,
@@ -111,7 +111,7 @@ impl Restart {
     // Defaults to restarting all services if no services are specified.
     fn restart_with_existing_process_compose(
         socket: impl AsRef<Path>,
-        manifest_services: &ManifestServices,
+        manifest_services: &Services,
         system: impl Into<System>,
         names: &[String],
         processes: ProcessStates,

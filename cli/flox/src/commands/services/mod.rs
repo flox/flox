@@ -5,7 +5,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
-use flox_rust_sdk::models::manifest::typed::{Inner, Manifest, ManifestServices};
+use flox_rust_sdk::models::manifest::typed::{Inner, Manifest, Services};
 use flox_rust_sdk::providers::services::{new_services_to_start, ProcessState, ProcessStates};
 use tracing::{debug, instrument};
 
@@ -238,7 +238,7 @@ pub fn warn_manifest_changes_for_services(flox: &Flox, env: &dyn Environment) {
 /// If an invalid name is provided, an error is returned.
 fn processes_by_name_or_default_to_all<'a>(
     processes: &'a ProcessStates,
-    manifest_services: &ManifestServices,
+    manifest_services: &Services,
     system: impl Into<System>,
     names: &[String],
 ) -> Result<Vec<&'a ProcessState>> {
@@ -371,7 +371,7 @@ fn defined_service_not_active_error(name: &str) -> ServicesCommandsError {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::models::manifest::typed::ManifestServiceDescriptor;
+    use flox_rust_sdk::models::manifest::typed::ServiceDescriptor;
     use flox_rust_sdk::providers::services::test_helpers::generate_process_state;
 
     use super::*;
@@ -386,7 +386,7 @@ mod tests {
 
         let all_processes = processes_by_name_or_default_to_all(
             &processes,
-            &ManifestServices::default(),
+            &Services::default(),
             "ignore-system",
             &["foo".to_string()],
         )
@@ -406,7 +406,7 @@ mod tests {
 
         let all_processes = processes_by_name_or_default_to_all(
             &processes,
-            &ManifestServices::default(),
+            &Services::default(),
             "ignore-system",
             &[],
         )
@@ -418,22 +418,19 @@ mod tests {
     #[test]
     fn processes_by_name_fails_for_invalid_names() {
         let processes = [generate_process_state("foo", "Running", 123, true)].into();
-        processes_by_name_or_default_to_all(
-            &processes,
-            &ManifestServices::default(),
-            "ignore-system",
-            &["bar".to_string()],
-        )
+        processes_by_name_or_default_to_all(&processes, &Services::default(), "ignore-system", &[
+            "bar".to_string(),
+        ])
         .expect_err("invalid process name should error");
     }
 
     #[test]
     fn processes_by_name_fails_if_service_not_available_on_current_system() {
         let processes = [].into();
-        let mut manifest_services = ManifestServices::default();
+        let mut manifest_services = Services::default();
         manifest_services
             .inner_mut()
-            .insert("foo".to_string(), ManifestServiceDescriptor {
+            .insert("foo".to_string(), ServiceDescriptor {
                 command: "".to_string(),
                 vars: None,
                 is_daemon: None,
@@ -466,10 +463,10 @@ mod tests {
     #[test]
     fn processes_by_name_fails_if_service_not_available_in_current_activation() {
         let processes = [].into();
-        let mut manifest_services = ManifestServices::default();
+        let mut manifest_services = Services::default();
         manifest_services
             .inner_mut()
-            .insert("foo".to_string(), ManifestServiceDescriptor {
+            .insert("foo".to_string(), ServiceDescriptor {
                 command: "".to_string(),
                 vars: None,
                 is_daemon: None,
