@@ -88,12 +88,14 @@ EOF
   assert_output "🗑️  'hello' uninstalled from environment 'test'"
 }
 
-@test "'flox uninstall' errors (without proceedign) for already uninstalled packages" {
+@test "'flox uninstall' errors (without proceeding) for already uninstalled packages" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
-  run "$FLOX_BIN" uninstall hello curl
+
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 run "$FLOX_BIN" uninstall hello curl
   assert_failure
   assert_output "❌ ERROR: couldn't uninstall 'curl', wasn't previously installed"
 }
@@ -320,6 +322,8 @@ EOF
 @test "resolution message: single package not found, without curation" {
   "$FLOX_BIN" init
 
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 \
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg.json" \
     run "$FLOX_BIN" install badpkg
 
@@ -335,6 +339,8 @@ EOF
 @test "resolution message: multiple packages not found, without curation" {
   "$FLOX_BIN" init
 
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 \
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg1_badpkg2.json" \
     run "$FLOX_BIN" install badpkg1 badpkg2
 
@@ -353,6 +359,8 @@ EOF
 @test "resolution message: single package not found, with curation" {
   "$FLOX_BIN" init
 
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 \
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/node_suggestions.json" \
     run "$FLOX_BIN" install node
 
@@ -407,6 +415,8 @@ EOF
 @test "resolution message: package not available on all systems with no fix when there is another error" {
   "$FLOX_BIN" init
 
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 \
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg_bpftrace.json" \
     run "$FLOX_BIN" install badpkg bpftrace
 
@@ -432,6 +442,8 @@ EOF
 @test "resolution message: constraints too tight" {
   "$FLOX_BIN" init
 
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 \
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_node.json" \
     run "$FLOX_BIN" install nodejs@14.16.1
 
@@ -449,6 +461,8 @@ EOF
 @test "resolution message: systems not on same page" {
   "$FLOX_BIN" init
 
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 \
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/torchvision-bin.json" \
     run "$FLOX_BIN" install python311Packages.torchvision-bin
 

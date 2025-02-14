@@ -1,3 +1,4 @@
+use std::backtrace::BacktraceStatus;
 use std::env;
 use std::fmt::{Debug, Display};
 use std::process::ExitCode;
@@ -157,7 +158,10 @@ fn main() -> ExitCode {
 
             if let Some(message) = message {
                 message::error(message);
-                debug!(target: "flox::backtrace", "{}", e.backtrace());
+
+                if matches!(e.backtrace().status(), BacktraceStatus::Captured) {
+                    eprintln!("{}", e.backtrace());
+                }
 
                 return ExitCode::from(1);
             }
@@ -170,7 +174,9 @@ fn main() -> ExitCode {
 
             message::error(err_str);
 
-            debug!(target: "flox::backtrace", "{}", e.backtrace());
+            if matches!(e.backtrace().status(), BacktraceStatus::Captured) {
+                eprintln!("{}", e.backtrace());
+            }
 
             ExitCode::from(1)
         },
