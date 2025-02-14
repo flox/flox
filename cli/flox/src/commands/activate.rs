@@ -17,11 +17,7 @@ use flox_rust_sdk::models::environment::{
     Environment,
     EnvironmentError,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
-    FLOX_ENV_CACHE_VAR,
-    FLOX_ENV_DESCRIPTION_VAR,
     FLOX_ENV_LOG_DIR_VAR,
-    FLOX_ENV_PROJECT_VAR,
-    FLOX_ENV_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
     FLOX_SERVICES_SOCKET_VAR,
 };
@@ -316,7 +312,6 @@ impl Activate {
             .unwrap_or(utils::colors::INDIGO_300.to_ansi256().to_string());
 
         let mut exports = HashMap::from([
-            (FLOX_ENV_VAR, mode_link_path.to_string_lossy().to_string()),
             (
                 FLOX_ACTIVE_ENVIRONMENTS_VAR,
                 flox_active_environments.to_string(),
@@ -325,29 +320,12 @@ impl Activate {
                 FLOX_ENV_LOG_DIR_VAR,
                 environment.log_path()?.to_string_lossy().to_string(),
             ),
-            (
-                FLOX_ENV_CACHE_VAR,
-                environment.cache_path()?.to_string_lossy().to_string(),
-            ),
-            (
-                FLOX_ENV_PROJECT_VAR,
-                environment.project_path()?.to_string_lossy().to_string(),
-            ),
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
             // Set `FLOX_PROMPT_ENVIRONMENTS` to the constructed prompt string,
             // which may be ""
             (FLOX_PROMPT_ENVIRONMENTS_VAR, flox_prompt_environments),
             ("_FLOX_SET_PROMPT", set_prompt.to_string()),
-            // Export FLOX_ENV_DESCRIPTION for this environment and let the
-            // activation script take care of tracking active environments
-            // and invoking the appropriate script to set the prompt.
-            (
-                FLOX_ENV_DESCRIPTION_VAR,
-                now_active
-                    .bare_description()
-                    .expect("`bare_description` is infallible"),
-            ),
             (
                 "_FLOX_ACTIVATE_STORE_PATH",
                 store_path.to_string_lossy().to_string(),
@@ -440,6 +418,17 @@ impl Activate {
         command
             .arg("--env")
             .arg(mode_link_path.to_string_lossy().to_string());
+        command
+            .arg("--env-project")
+            .arg(environment.project_path()?.to_string_lossy().to_string());
+        command
+            .arg("--env-cache")
+            .arg(environment.cache_path()?.to_string_lossy().to_string());
+        command.arg("--env-description").arg(
+            now_active
+                .bare_description()
+                .expect("`bare_description` is infallible"),
+        );
 
         // Pass down the activation mode
         command.arg("--mode").arg(mode.to_string());

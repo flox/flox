@@ -4666,3 +4666,104 @@ EOF
   assert_output --partial "zsh: the outer alias is defined"
   assert_output --partial "zsh: the current alias is inner"
 }
+
+in_place_doesnt_override_user_initiated() {
+  shell="${1?}"
+  shell_path="$(which "$shell")"
+  export _FLOX_SHELL_FORCE="$shell_path"
+
+  PROJECT_DIR_CANONICAL="$(realpath "$PROJECT_DIR")"
+  PROJECT_DEFAULT="default-rc"
+  PROJECT_USER="user-initiated"
+  MODE="dev"
+
+  run "$FLOX_BIN" init -d "$PROJECT_DEFAULT"
+  run "$FLOX_BIN" init -d "$PROJECT_USER"
+
+  # If any of these values appear in the assertion output then either:
+  # - activate is letting them leak into activations
+  # - this test is expanding them too early due to incorrect quoting
+  export \
+    FLOX_ENV=WRONG \
+    FLOX_ENV_CACHE=WRONG \
+    FLOX_ENV_PROJECT=WRONG \
+    FLOX_ENV_DESCRIPTION=WRONG
+
+  # Inspect the values within an activation. Syntax must be shell agnostic.
+  ECHO_COMMANDS='echo FLOX_ENV: $FLOX_ENV;
+echo FLOX_ENV_CACHE: $FLOX_ENV_CACHE;
+echo FLOX_ENV_PROJECT: $FLOX_ENV_PROJECT;
+echo FLOX_ENV_DESCRIPTION: $FLOX_ENV_DESCRIPTION;
+echo ---;'
+  IN_PLACE_COMMAND="${FLOX_BIN} activate -m ${MODE} -d ${PROJECT_DEFAULT}"
+
+  case "$shell" in
+    bash)
+      cat > "${HOME}/.bashrc" <<EOF
+eval "\$(${IN_PLACE_COMMAND})"
+${ECHO_COMMANDS}
+EOF
+      ;;
+    fish)
+      cat > "${HOME}/.config/fish/config.fish" <<EOF
+${IN_PLACE_COMMAND} | source
+${ECHO_COMMANDS}
+EOF
+      ;;
+    tcsh)
+      cat > "${HOME}/.tcshrc" <<EOF
+eval "\`${IN_PLACE_COMMAND}\`"
+${ECHO_COMMANDS}
+EOF
+      ;;
+    zsh)
+      cat > "${HOME}/.zshenv" <<EOF
+eval "\$(${IN_PLACE_COMMAND})"
+${ECHO_COMMANDS}
+EOF
+      ;;
+    *)
+      echo "Unsupported shell: ${shell}"
+      exit 1
+      ;;
+  esac
+
+  # Pass commands unquoted and without `$shell -c` because we don't want to
+  # start an extra shell which also sources the RC file.
+  run "$FLOX_BIN" activate -m "$MODE" -d "${PROJECT_USER}" -- ${ECHO_COMMANDS}
+  assert_success
+
+  # Assert on both activations to ensure that we really got an in-place activation first.
+  assert_output - << EOF
+FLOX_ENV: ${PROJECT_DIR_CANONICAL}/${PROJECT_DEFAULT}/.flox/run/${NIX_SYSTEM}.${PROJECT_DEFAULT}.${MODE}
+FLOX_ENV_CACHE: ${PROJECT_DIR_CANONICAL}/${PROJECT_DEFAULT}/.flox/cache
+FLOX_ENV_PROJECT: ${PROJECT_DIR_CANONICAL}/${PROJECT_DEFAULT}
+FLOX_ENV_DESCRIPTION: ${PROJECT_DEFAULT}
+---
+FLOX_ENV: ${PROJECT_DIR_CANONICAL}/${PROJECT_USER}/.flox/run/${NIX_SYSTEM}.${PROJECT_USER}.${MODE}
+FLOX_ENV_CACHE: ${PROJECT_DIR_CANONICAL}/${PROJECT_USER}/.flox/cache
+FLOX_ENV_PROJECT: ${PROJECT_DIR_CANONICAL}/${PROJECT_USER}
+FLOX_ENV_DESCRIPTION: ${PROJECT_USER}
+---
+EOF
+}
+
+@test "bash: FLOX_ENV_* should reflect most recent user-initiated activation" {
+  project_setup_common
+  in_place_doesnt_override_user_initiated bash
+}
+
+@test "fish: FLOX_ENV_* should reflect most recent user-initiated activation" {
+  project_setup_common
+  in_place_doesnt_override_user_initiated fish
+}
+
+@test "tcsh: FLOX_ENV_* should reflect most recent user-initiated activation" {
+  project_setup_common
+  in_place_doesnt_override_user_initiated tcsh
+}
+
+@test "zsh: FLOX_ENV_* should reflect most recent user-initiated activation" {
+  project_setup_common
+  in_place_doesnt_override_user_initiated zsh
+}

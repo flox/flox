@@ -147,10 +147,13 @@ let
         #   podman run -i [SIC]
         #     -> launches crippled interactive shell with no controlling
         #        terminal .. kinda useless
-        Entrypoint = [ "${environment}/activate" ];
+        Entrypoint = [
+          "${environment}/activate"
+          "--env"
+          environment
+        ];
 
         Env = mapAttrsToList (name: value: "${name}=${value}") {
-          "FLOX_ENV" = environment;
           "FLOX_PROMPT_ENVIRONMENTS" = "floxenv";
           "FLOX_PROMPT_COLOR_1" = "99";
           "FLOX_PROMPT_COLOR_2" = "141";

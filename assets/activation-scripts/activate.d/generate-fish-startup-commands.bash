@@ -18,6 +18,14 @@ generate_fish_startup_commands() {
   shift
   _FLOX_ACTIVATION_PROFILE_ONLY="${1?}"
   shift
+  _FLOX_ENV="${1?}"
+  shift
+  _FLOX_ENV_CACHE="${1?}"
+  shift
+  _FLOX_ENV_PROJECT="${1?}"
+  shift
+  _FLOX_ENV_DESCRIPTION="${1?}"
+  shift
 
   if [ "$_flox_activate_tracelevel" -ge 2 ]; then
     echo "set -gx fish_trace 1;"
@@ -32,6 +40,19 @@ generate_fish_startup_commands() {
     # Restore environment variables set in the previous bash initialization.
     $_sed -e 's/^/set -e /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
     $_sed -e 's/^/set -gx /' -e 's/=/ /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
+
+    # Propagate required variables that are documented as exposed.
+    echo "set -gx FLOX_ENV '$_FLOX_ENV';"
+
+    # Propagate optional variables that are documented as exposed.
+    for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
+      eval "var_val=\${_$var_key-}"
+      if [ -n "$var_val" ]; then
+        echo "set -gx $var_key '$var_val';"
+      else
+        echo "set -e $var_key;"
+      fi
+    done
   fi
 
   # Propagate $_activate_d to the environment.
@@ -47,7 +68,7 @@ generate_fish_startup_commands() {
   # We already customized the PATH and MANPATH, but the user and system
   # dotfiles may have changed them, so finish by doing this again.
 
-  echo "$_flox_activations set-env-dirs --shell fish --flox-env $FLOX_ENV --env-dirs ${FLOX_ENV_DIRS:-} | source;"
+  echo "$_flox_activations set-env-dirs --shell fish --flox-env $_FLOX_ENV --env-dirs ${FLOX_ENV_DIRS:-} | source;"
 
   # fish doesn't have {foo:-} syntax, so we need to provide a temporary variable
   # (manpath_with_default) that is either the runtime (not generation-time) MANPATH

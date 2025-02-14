@@ -270,10 +270,10 @@ pkgs.runCommandNoCC name
           # TODO: we shouldn't need to set FLOX_RUNTIME_DIR here
           makeShellWrapper "${build-wrapper-env-package}/activate" "$prog" \
             --inherit-argv0 \
-            --set FLOX_ENV "${build-wrapper-env-package}" \
             --set FLOX_MANIFEST_BUILD_OUT "$out" \
             --set FLOX_RUNTIME_DIR "/tmp" \
             --run 'export FLOX_SET_ARG0="$0"' \
+            --add-flags "--env ${build-wrapper-env-package}" \
             --add-flags --turbo \
             --add-flags -- \
             --add-flags "$hidden"

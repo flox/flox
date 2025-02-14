@@ -21,21 +21,55 @@ expiring_pid="$$"
 case "$_flox_shell" in
   *bash)
     echo "$_flox_activations  attach --runtime-dir \"$FLOX_RUNTIME_DIR\" --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
-    generate_bash_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$_activate_d" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}"
+    generate_bash_startup_commands \
+      "$_flox_activate_tracelevel" \
+      "$_FLOX_ACTIVATION_STATE_DIR" \
+      "$_activate_d" \
+      "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" \
+      "$FLOX_ENV" \
+      "${_FLOX_ENV_CACHE:-}" \
+      "${_FLOX_ENV_PROJECT:-}" \
+      "${_FLOX_ENV_DESCRIPTION:-}"
     ;;
   *fish)
     echo "$_flox_activations attach --runtime-dir \"$FLOX_RUNTIME_DIR\" --pid \$fish_pid --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
-    generate_fish_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$_activate_d" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}"
+    generate_fish_startup_commands \
+      "$_flox_activate_tracelevel" \
+      "$_FLOX_ACTIVATION_STATE_DIR" \
+      "$_activate_d" \
+      "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" \
+      "$FLOX_ENV" \
+      "${_FLOX_ENV_CACHE:-}" \
+      "${_FLOX_ENV_PROJECT:-}" \
+      "${_FLOX_ENV_DESCRIPTION:-}"
     ;;
   *tcsh)
     echo "$_flox_activations attach --runtime-dir \"$FLOX_RUNTIME_DIR\" --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
-    generate_tcsh_startup_commands "$_flox_activate_tracelevel" "$_FLOX_ACTIVATION_STATE_DIR" "$_activate_d" "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}"
+    generate_tcsh_startup_commands \
+      "$_flox_activate_tracelevel" \
+      "$_FLOX_ACTIVATION_STATE_DIR" \
+      "$_activate_d" \
+      "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" \
+      "$FLOX_ENV" \
+      "${_FLOX_ENV_CACHE:-}" \
+      "${_FLOX_ENV_PROJECT:-}" \
+      "${_FLOX_ENV_DESCRIPTION:-}"
     ;;
   # Any additions should probably be restored in zdotdir/* scripts
   *zsh)
     echo "$_flox_activations attach --runtime-dir \"$FLOX_RUNTIME_DIR\" --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
     echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
+    # Propagate required variables that are documented as exposed.
     echo "export FLOX_ENV=\"$FLOX_ENV\";"
+    # Propagate optional variables that are documented as exposed.
+    for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
+      eval "var_val=\${_$var_key-}"
+      if [ -n "$var_val" ]; then
+        echo "export $var_key='$var_val';"
+      else
+        echo "unset $var_key;"
+      fi
+    done
     if [ -n "${ZDOTDIR:-}" ]; then
       echo "export FLOX_ORIG_ZDOTDIR=\"$ZDOTDIR\";"
     fi
