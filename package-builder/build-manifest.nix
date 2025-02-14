@@ -165,7 +165,7 @@ pkgs.runCommandNoCC name
                 # strips color codes from output anyway.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --env ${flox-env-package} --mode run --turbo -- \
-                    ${build-wrapper-env-package}/activate --env ${build-wrapper-env-package} --mode dev --turbo -- \
+                    ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package}  -- \
                       ${t3-package}/bin/t3 --relative $log -- bash -e ${buildScript-contents}
               ''
             else
@@ -179,7 +179,7 @@ pkgs.runCommandNoCC name
                 # /private/tmp/nix-build-file-0.0.0.drv-0
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --env ${flox-env-package} --mode run --turbo -- \
-                    ${build-wrapper-env-package}/activate --env ${build-wrapper-env-package} --mode dev --turbo -- \
+                    ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} -- \
                       ${t3-package}/bin/t3 --relative $log -- bash -e ${buildScript-contents} || \
                 ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
@@ -260,7 +260,7 @@ pkgs.runCommandNoCC name
         # build wrapper environment over the "develop" environment.
         patchShebangs "$prog"
 
-        # Wrap contents of executables with ${build-wrapper-env-package}/activate
+        # Wrap contents of executables with ${build-wrapper-env-package}/wrapper
         if [ -L "$prog" ]; then
           : # You cannot wrap a symlink, so just leave it be?
         else
@@ -268,13 +268,12 @@ pkgs.runCommandNoCC name
           hidden="$(dirname "$prog")/.$(basename "$prog")"-wrapped
           mv "$prog" "$hidden"
           # TODO: we shouldn't need to set FLOX_RUNTIME_DIR here
-          makeShellWrapper "${build-wrapper-env-package}/activate" "$prog" \
+          makeShellWrapper "${build-wrapper-env-package}/wrapper" "$prog" \
             --inherit-argv0 \
             --set FLOX_MANIFEST_BUILD_OUT "$out" \
             --set FLOX_RUNTIME_DIR "/tmp" \
             --run 'export FLOX_SET_ARG0="$0"' \
             --add-flags "--env ${build-wrapper-env-package}" \
-            --add-flags --turbo \
             --add-flags -- \
             --add-flags "$hidden"
         fi

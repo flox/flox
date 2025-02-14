@@ -247,7 +247,7 @@ define BUILD_local_template =
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode dev --turbo -- \
 	    $(_env) -i out=$(_out) $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
-	      $(_build_wrapper_env)/activate --env $(_build_wrapper_env) --mode dev --turbo -- \
+	      $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) -- \
 	        $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $($(_pvarname)_buildScript)
 	$(_V_) $(_nix) build -L `$(_nix) store add-file "$(shell $(_realpath) "$($(_pvarname)_logfile)")"` \
 	  --out-link "result-$(_pname)-log"
