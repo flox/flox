@@ -100,6 +100,8 @@ setup_file() {
 
 @test "'flox search' error message when no results" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/surely_doesnt_exist.json"
+  # disable backtrace; we expect this to fail and assert output
+  export RUST_BACKTRACE=0
   run "$FLOX_BIN" search surely_doesnt_exist
   assert_equal "${#lines[@]}" 1
   assert_output --partial "No packages matched this search term: 'surely_doesnt_exist'"

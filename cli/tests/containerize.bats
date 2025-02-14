@@ -240,7 +240,8 @@ function skip_if_linux() {
 
   "$FLOX_BIN" init
 
-  run bash -c 'PATH= "$FLOX_BIN" containerize' 3>&-
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 run bash -c 'PATH= "$FLOX_BIN" containerize' 3>&-
   assert_failure
   assert_output "❌ ERROR: No container runtime found in PATH.
 
@@ -417,12 +418,12 @@ EOF
 
 @test "container with user:group set can run as specified user:group" {
   skip_if_not_linux # config is implemented in the Linux build of flox entirely
-  
+
   "$FLOX_BIN" init
 
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
-    
+
     [containerize.config]
     user = "foo:bar"
 EOF
