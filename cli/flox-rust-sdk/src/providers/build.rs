@@ -1090,17 +1090,17 @@ mod tests {
     }
 
     #[test]
-    fn build_uses_hook_from_manifest() {
+    fn build_does_not_use_hook_from_manifest() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
-        let file_content = String::from("some content");
+        let file_content = String::from("");
 
         let manifest = formatdoc! {r#"
             version = 1
 
             [hook]
             on-activate = '''
-              export FOO="{file_content}"
+              export FOO="will not be used"
             '''
 
             [build.{package_name}]
