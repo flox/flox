@@ -82,18 +82,9 @@ runCommandNoCC "flox-activation-scripts"
     chmod +x $out/activate.d/trace
     patchShebangs $out/activate.d/trace
 
-    # Next create the (lesser) "build_wrapper" output.
-    cp -R $out $build_wrapper
-
     # Replace __OUT__ with the output path for both outputs.
     substituteInPlace $out/activate --replace-fail "__OUT__" "$out"
-    substituteInPlace $build_wrapper/activate --replace-fail "__OUT__" "$build_wrapper"
 
-    # TODO: come up with neater way to master activate script for build_wrapper case.
-
-    # Remove start-services.bash.
-    rm $build_wrapper/activate.d/start-services.bash
-    sed -i 's/source ".*start-services.bash"/echo no services in build_wrapper script >\&2; false/' $build_wrapper/activate
 
     # That's the build done, now shellcheck the results.
     ${shellcheck}/bin/shellcheck --external-sources --check-sourced \
@@ -102,13 +93,8 @@ runCommandNoCC "flox-activation-scripts"
       $out/activate.d/generate-fish-startup-commands.bash \
       $out/activate.d/generate-tcsh-startup-commands.bash \
       $out/activate.d/set-prompt.bash \
-      $out/etc/profile.d/* \
-      $build_wrapper/activate \
-      $build_wrapper/activate.d/generate-bash-startup-commands.bash \
-      $build_wrapper/activate.d/generate-fish-startup-commands.bash \
-      $build_wrapper/activate.d/generate-tcsh-startup-commands.bash \
-      $build_wrapper/activate.d/set-prompt.bash \
-      $build_wrapper/etc/profile.d/*
+      $out/activate.d/source-profile-d.bash \
+      $out/etc/profile.d/*
 
     # Finally check the formatting of the scripts with shfmt. Only check
     # $out as the contents of $build_wrapper will be virtually identical.
@@ -116,4 +102,38 @@ runCommandNoCC "flox-activation-scripts"
     # This will only catch extensions and shebangs that `shfmt --find` knows about.
     ${shfmt}/bin/shfmt --diff $out
     rm $out/.editorconfig
+
+    # Remove the wrapper script from the output,
+    # we dont need that in environment interpreters.
+    rm $out/wrapper
+
+    # Next create the (lesser) "build_wrapper" output.
+    # TODO: come up with neater way to master activate script for build_wrapper case.
+
+    mkdir -p $build_wrapper
+    cp ${activation-scripts}/wrapper $build_wrapper/
+
+    # create activate.d directory and copy the required scripts
+    mkdir -p $build_wrapper/activate.d
+    cp ${activation-scripts}/activate.d/source-profile-d.bash $build_wrapper/activate.d/
+    cp ${activation-scripts}/activate.d/trace.bash $build_wrapper/activate.d/
+
+    # copy the etc/profile.d directory
+    cp -R ${activation-scripts}/etc $build_wrapper/
+
+    # make the wrapper and trace script executable
+    chmod +x $build_wrapper/wrapper
+    patchShebangs $build_wrapper/wrapper
+
+    mv $build_wrapper/activate.d/trace.bash $build_wrapper/activate.d/trace
+    chmod +x $build_wrapper/activate.d/trace
+    patchShebangs $build_wrapper/activate.d/trace
+
+    # Replace __OUT__ with the output path for both outputs.
+    substituteInPlace $build_wrapper/wrapper --replace-fail "__OUT__" "$build_wrapper"
+
+    ${shellcheck}/bin/shellcheck --external-sources --check-sourced \
+      $build_wrapper/wrapper \
+      $build_wrapper/activate.d/* \
+      $build_wrapper/etc/profile.d/*
   ''
