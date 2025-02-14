@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+
+# Trace levels supported by activation scripts:
+#   1. (-v) top-level activate script
+#   2. (-vv) language-specific profile scripts
+#   3. (-vvv) zsh `autoload -U compinit` (very verbose)
+export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
+[ "$_flox_activate_tracelevel" -eq 0 ] || set -x
+
+# Ensure that $_flox_activate_tracer is defined as an executable.
+if [ -z "${FLOX_ACTIVATE_TRACE-}" ]; then
+  # If FLOX_ACTIVATE_TRACE is empty or not set, set _flox_activate_tracer to
+  # `true` which can always be invoked with any arguments without error.
+  export _flox_activate_tracer=true
+else
+  # If FLOX_ACTIVATE_TRACE is set but does not refer to an executable, then
+  # set _flox_activate_tracer to the default trace script.
+  if [ -x "${FLOX_ACTIVATE_TRACE:-}" ]; then
+    export _flox_activate_tracer="$FLOX_ACTIVATE_TRACE"
+  else
+    export _flox_activate_tracer="__OUT__/activate.d/trace"
+  fi
+fi
+"$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" START
+
+_dirname="@coreutils@/bin/dirname"
+_getopt="@getopt@/bin/getopt"
+_readlink="@coreutils@/bin/readlink"
+
+set -euo pipefail
+
+# These all derive from the `flox-interpreter` package.
+# FIXME This is wrong; the profile.d scripts in particular should be
+#       sourced from the environment itself so that users can add pkgs
+#       which add additional scripts to the etc/profile.d directory.
+_activate_d="__OUT__/activate.d"
+_profile_d="__OUT__/etc/profile.d"
+# shellcheck source-path=SCRIPTDIR/activate.d
+source "${_activate_d}/source-profile-d.bash"
+
+# Top-level Flox environment activation script.
+
+# Parse command-line arguments.
+OPTIONS="c:e:"
+LONGOPTS="command:,env:"
+USAGE="Usage: $0 [-c \"<cmd> <args>\"] [(-e|--env) <env>]"
+
+PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@")
+# shellcheck disable=SC2181
+if [[ $? -ne 0 ]]; then
+  echo "Failed to parse options."
+  exit 1
+fi
+
+# Use eval to remove quotes and replace them with spaces.
+eval set -- "$PARSED"
+
+# Set default values for options.
+FLOX_CMD=""
+while true; do
+  case "$1" in
+    -c | --command)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option -c requires an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      FLOX_CMD="$1"
+      shift
+      ;;
+    -e | --env)
+      shift
+      if [ -z "${1:-}" ] || [ ! -d "$1" ]; then
+        echo "Option --env requires a valid environment path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      FLOX_ENV="$1"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "Invalid option: $1" >&2
+      echo "$USAGE" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Convert the provided command string into an array of arguments in "$@".
+# Henceforth in the script it is assumed that these are the arguments to be
+# invoked either by this shell (with FLOX_TURBO) or with the chosen userShell.
+if [ -n "$FLOX_CMD" ]; then
+  # Throw an error if passed additional arguments along with the -c arg.
+  if [ $# -gt 0 ]; then
+    echo "Unexpected arguments provided with -c argument: $*" >&2
+    echo "$USAGE" >&2
+    exit 1
+  fi
+
+  # Set $@ to reflect the command to be invoked.
+  set -- "$FLOX_CMD"
+fi
+
+if [ -z "${FLOX_ENV-}" ]; then
+  echo "No environment specified." >&2
+  echo "$USAGE" >&2
+  exit 1
+fi
+
+# prepend path
+export PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin/$PATH"
+
+# source profile.d scripts
+source_profile_d "$_profile_d"
+
+# Set static environment variables from the manifest.
+if [ -f "$FLOX_ENV/activate.d/envrc" ]; then
+  # shellcheck disable=SC1091 # from rendered environment
+  source "$FLOX_ENV/activate.d/envrc"
+fi
+
+"$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END
+
+# exec the command
+exec -a "${FLOX_SET_ARG0:-$0}" "$@"
