@@ -60,8 +60,24 @@ export FLOX_PROMPT_COLOR_2="${FLOX_PROMPT_COLOR_2:-141}"
 
 # Parse command-line arguments.
 OPTIONS="e:c:m:"
-LONGOPTS="command:,env:,mode:,watchdog:,noprofile,turbo"
-USAGE="Usage: $0 [-c \"<cmd> <args>\"] [(-e|--env) <env>] [--turbo] [--noprofile] [(-m|--mode) (dev|run)] [--watchdog <path>]"
+LONGOPTS="command:,\
+env:,\
+env-cache:,\
+env-project:,\
+env-description:,\
+mode:,\
+watchdog:,\
+noprofile,\
+turbo"
+USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
+[(-e|--env) <env>] \
+[--env-cache <path>] \
+[--env-project <path>] \
+[--env-description <name>] \
+[--turbo] \
+[--noprofile] \
+[(-m|--mode) (dev|run)] \
+[--watchdog <path>]"
 
 if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
   echo "Failed to parse options." >&2
@@ -76,6 +92,7 @@ eval set -- "$PARSED"
 FLOX_CMD=""
 FLOX_TURBO="${FLOX_TURBO:-}"
 FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
+_FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
 _FLOX_ENV_ACTIVATION_MODE="dev"
 _FLOX_WATCHDOG_BIN=""
 while true; do
@@ -97,7 +114,37 @@ while true; do
         echo "$USAGE" >&2
         exit 1
       fi
-      FLOX_ENV="$1"
+      _FLOX_ENV="$1"
+      shift
+      ;;
+    --env-cache)
+      shift
+      if [ -z "${1:-}" ] || [ ! -d "$1" ]; then
+        echo "Option --env-cache requires a valid path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ENV_CACHE="$1"
+      shift
+      ;;
+    --env-project)
+      shift
+      if [ -z "${1:-}" ] || [ ! -d "$1" ]; then
+        echo "Option --env-project requires a valid path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ENV_PROJECT="$1"
+      shift
+      ;;
+    --env-description)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --env-description requires a name as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ENV_DESCRIPTION="$1"
       shift
       ;;
     -m | --mode)
@@ -155,15 +202,19 @@ if [ -n "$FLOX_CMD" ]; then
   set -- "$FLOX_CMD"
 fi
 
-# Set FLOX_ENV as the path by which all flox scripts can make reference to
-# the environment to which they belong. Use this to define the path to the
-# activation scripts directory.
-# TODO: reconcile with CLI which should be setting this. We must override
-#       the value coming from the CLI for now because it won't be set for
-#       container invocations, and it would have the incorrect value for
-#       nested flox activations.
-_FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
-export FLOX_ENV="${FLOX_ENV:-$_FLOX_ENV}"
+# Propagate required variables that are documented as exposed.
+export FLOX_ENV="${_FLOX_ENV}"
+
+# Propagate optional variables that are documented as exposed.
+# NB: `generate_*_start_commands()` performs the same logic except for zsh.
+for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
+  eval "var_val=\${_$var_key-}"
+  if [ -n "$var_val" ]; then
+    export $var_key="${var_val}"
+  else
+    unset $var_key
+  fi
+done
 
 # shellcheck disable=SC1090
 source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
