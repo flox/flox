@@ -330,7 +330,8 @@ EOF
   assert_failure
   assert_output "$(
     cat << EOF
-❌ ERROR: resolution failed: Could not find package 'badpkg'.
+❌ ERROR: resolution failed: 
+Could not find package 'badpkg'.
 Try 'flox search' with a broader search term.
 EOF
   )"
@@ -367,7 +368,8 @@ EOF
   assert_failure
   assert_output --partial "$(
     cat << EOF
-❌ ERROR: resolution failed: Could not find package 'node'.
+❌ ERROR: resolution failed: 
+Could not find package 'node'.
 Try 'flox install nodejs' instead.
 
 Here are a few other similar options:
@@ -469,7 +471,8 @@ EOF
   assert_failure
   assert_output "$(
     cat << EOF
-❌ ERROR: resolution failed: The attr_path python311Packages.torchvision-bin is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,aarch64-linux,x86_64-linux), (aarch64-darwin,x86_64-darwin,x86_64-linux), (aarch64-darwin,x86_64-linux), (x86_64-linux).
+❌ ERROR: resolution failed:
+The attr_path python311Packages.torchvision-bin is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,aarch64-linux,x86_64-linux), (aarch64-darwin,x86_64-darwin,x86_64-linux), (aarch64-darwin,x86_64-linux), (x86_64-linux).
 EOF
   )"
 }

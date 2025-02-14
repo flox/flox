@@ -461,7 +461,7 @@ fn format_single_resolution_failure(failure: &ResolutionFailure, is_one_of_many:
             if is_one_of_many {
                 indent_by(2, msg.to_string())
             } else {
-                msg.to_string()
+                format!("\n{}", msg)
             }
         },
     }
@@ -2532,7 +2532,11 @@ pub(crate) mod tests {
                 Lockfile::lock_manifest(manifest, None, &client, &InstallableLockerMock::new())
                     .await;
             if let Err(LockedManifestError::ResolutionFailed(res_failures)) = locked_manifest {
-                assert_eq!(res_failures.to_string(), response_msg.msg());
+                // A newline is added for formatting when it's a single message
+                assert_eq!(
+                    res_failures.to_string(),
+                    format!("\n{}", response_msg.msg())
+                );
             } else {
                 panic!("expected resolution failure, got {:?}", locked_manifest);
             }
