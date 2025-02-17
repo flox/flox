@@ -157,39 +157,53 @@ impl<State> CoreEnvironment<State> {
 
     /// Lock the environment.
     ///
-    /// When a catalog client is provided, the catalog will be used to lock any
-    /// "V1" manifest.
-    /// If a "V1" manifest is locked without a catalog client, an error will be returned.
+    /// Use a catalog client to lock the environment,
+    /// and write the lockfile to disk if its contents have changed.
     ///
-    /// This re-writes the lock if it exists.
+    /// If the lock should happen conditionally, use [Self::ensure_locked],
+    /// or implement the condition in the caller.
     ///
     /// Technically this does write to disk as a side effect for now.
     /// It's included in the [ReadOnly] struct for ergonomic reasons
     /// and because it doesn't modify the manifest.
-    ///
-    /// The caller is responsible for skipping calls to lock when an environment
-    /// is already locked.
-    /// For that reason, this always writes the lockfile to disk.
     pub fn lock(&mut self, flox: &Flox) -> Result<Lockfile, CoreEnvironmentError> {
         let manifest = self.manifest()?;
+        let existing_lockfile_contents = self.existing_lockfile_contents()?;
 
         let lockfile = self.lock_with_catalog_client(
             &flox.catalog_client,
             &flox.installable_locker,
             manifest,
         )?;
+        let lockfile_contents =
+            serde_json::to_string_pretty(&lockfile).expect("lockfile structure is valid json");
+
         let environment_lockfile_path = self.lockfile_path();
+
+        if Some(&lockfile_contents) == existing_lockfile_contents.as_ref() {
+            debug!(
+                ?environment_lockfile_path,
+                "lockfile is up to date, skipping write"
+            );
+            return Ok(lockfile);
+        }
 
         // Write the lockfile to disk
         debug!(
-            "generated lockfile, writing to {}",
-            environment_lockfile_path.display()
+            ?environment_lockfile_path,
+            "generated lockfile, writing to disk",
         );
-        std::fs::write(
-            &environment_lockfile_path,
-            serde_json::to_string_pretty(&lockfile).unwrap(),
-        )
-        .map_err(CoreEnvironmentError::WriteLockfile)?;
+
+        let mut temp_lockfile = tempfile::NamedTempFile::new_in(&self.env_dir)
+            .map_err(CoreEnvironmentError::WriteLockfile)?;
+
+        temp_lockfile
+            .write_all(lockfile_contents.as_bytes())
+            .map_err(CoreEnvironmentError::WriteLockfile)?;
+
+        temp_lockfile
+            .persist(&environment_lockfile_path)
+            .map_err(|persist_error| CoreEnvironmentError::WriteLockfile(persist_error.error))?;
 
         Ok(lockfile)
     }
@@ -205,15 +219,7 @@ impl<State> CoreEnvironment<State> {
         installable_locker: &impl InstallableLocker,
         manifest: Manifest,
     ) -> Result<Lockfile, CoreEnvironmentError> {
-        let existing_lockfile = 'lockfile: {
-            let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
-                break 'lockfile None;
-            };
-            Some(
-                Lockfile::read_from_file(&lockfile_path)
-                    .map_err(CoreEnvironmentError::LockedManifest)?,
-            )
-        };
+        let existing_lockfile = self.existing_lockfile()?;
 
         Lockfile::lock_manifest(
             &manifest,
@@ -1088,6 +1094,7 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
 
     use catalog::test_helpers::reset_mocks_from_file;
@@ -1411,6 +1418,74 @@ mod tests {
         let environment =
             new_core_environment_with_lockfile(&flox, &manifest_contents, &lockfile_contents);
         assert!(environment.lockfile_if_up_to_date().unwrap().is_none());
+    }
+
+    #[test]
+    fn lock_does_not_write_lockfile_if_unchanged() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut environment =
+            new_core_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+
+        let mtime_original = environment
+            .lockfile_path()
+            .metadata()
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        let _ = environment.lock(&flox).unwrap();
+
+        let mtime_after = environment
+            .lockfile_path()
+            .metadata()
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        assert_eq!(mtime_after, mtime_original);
+    }
+
+    /// Locking an environment should write a lockfile
+    /// if the contents change compared to the existing lockfile,
+    /// even if the contents are semantically equivalent.
+    #[test]
+    fn lock_writes_if_contents_change() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut environment =
+            new_core_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+
+        // add some whitespace to the file, that simulates different original content
+        // we subsequently expect the file to be modified
+        {
+            let mut lockfile = OpenOptions::new()
+                .read(true)
+                .append(true)
+                .open(environment.lockfile_path())
+                .unwrap();
+
+            writeln!(lockfile, "\n\n\n",).unwrap();
+
+            // fsync metadata to ensure the mtime is updated
+            lockfile.sync_all().unwrap();
+        }
+
+        let mtime_original = environment
+            .lockfile_path()
+            .metadata()
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        let _ = environment.lock(&flox).unwrap();
+
+        let mtime_after = environment
+            .lockfile_path()
+            .metadata()
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        assert_ne!(mtime_after, mtime_original);
     }
 
     /// UNINSTALL TESTS
