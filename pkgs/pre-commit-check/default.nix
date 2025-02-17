@@ -64,7 +64,7 @@ pre-commit-hooks.lib.${system}.run {
       stages = [ "commit-msg" ];
       enable = true;
     };
-    # NB: `flox-activation-scripts` implements these at build time.
+    # NB: `flox-interpreter` implements these at build time.
     shfmt.enable = false;
     # shellcheck.enable = true; # disabled until we have time to fix all the warnings
   };

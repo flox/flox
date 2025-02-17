@@ -476,8 +476,8 @@ if ($manifest) {
         }
 
         # We can have nice names for things.
-        my $activationScripts_out = $nix_attrs->{"activationScripts_out"};
-        my $activationScripts_build_wrapper = $nix_attrs->{"activationScripts_build_wrapper"};
+        my $interpreter_out = $nix_attrs->{"interpreter_out"};
+        my $interpreter_wrapper = $nix_attrs->{"interpreter_wrapper"};
         my $manifestPackage = $nix_attrs->{"manifestPackage"};
         my $system = $nix_attrs->{"system"};
         my $packages = $manifestData->{"packages"};
@@ -487,19 +487,19 @@ if ($manifest) {
         my @buildNames = keys %{$builds};
 
         # Construct hashes for each of the flox-sourced packages.
-        my %activationScripts_out_PackageEntry = (
+        my %interpreter_out_PackageEntry = (
             "group" => "toplevel", # Want to appear in build closures.
             "outputs_to_install" => [ "out" ],
             "outputs" => {
-                "out" => $activationScripts_out
+                "out" => $interpreter_out
             },
             priority => 1
         );
-        my %activationScripts_build_wrapper_PackageEntry = (
+        my %interpreter_wrapper_PackageEntry = (
             "group" => "toplevel", # Want to appear in build closures.
             "outputs_to_install" => [ "out" ],
             "outputs" => {
-                "out" => $activationScripts_build_wrapper
+                "out" => $interpreter_wrapper
             },
             priority => 1
         );
@@ -518,7 +518,7 @@ if ($manifest) {
         # Define the "develop" output as all packages with activation scripts included.
         my @developPackages = (
             @outPackages,
-            \%activationScripts_out_PackageEntry,
+            \%interpreter_out_PackageEntry,
             \%manifestPackageEntry
         );
 
@@ -561,13 +561,13 @@ if ($manifest) {
                     # Represent the result as a hash keyed by the build name.
                     $buildPackagesHash{$build} = [
                         @buildPackages,
-                        \%activationScripts_build_wrapper_PackageEntry,
+                        \%interpreter_wrapper_PackageEntry,
                         \%manifestPackageEntry
                     ];
                 } else {
                     $buildPackagesHash{$build} = [
                         @toplevelPackages,
-                        \%activationScripts_build_wrapper_PackageEntry,
+                        \%interpreter_wrapper_PackageEntry,
                         \%manifestPackageEntry
                     ];
                 }

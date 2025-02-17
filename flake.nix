@@ -101,7 +101,7 @@
           # (Linux-only) LD_AUDIT library for using dynamic libraries in Flox envs.
           ld-floxlib = callPackage ./pkgs/ld-floxlib { };
           flox-src = callPackage ./pkgs/flox-src { };
-          flox-activation-scripts = callPackage ./pkgs/flox-activation-scripts { };
+          flox-interpreter = callPackage ./pkgs/flox-interpreter { };
           flox-package-builder = callPackage ./pkgs/flox-package-builder { };
 
           # Package Database Utilities: scrape, search, and resolve.
@@ -127,7 +127,7 @@
           };
 
           flox-cli = prev.flox-cli.override {
-            flox-activation-scripts = null;
+            flox-interpreter = null;
             flox-watchdog = null;
             rust-internal-deps = self.rust-internal-deps;
           };
@@ -135,12 +135,12 @@
             rust-internal-deps = self.rust-internal-deps;
           };
           flox-activations = prev.flox-activations.override { };
-          flox-activation-scripts = prev.flox-activation-scripts.override {
+          flox-interpreter = prev.flox-interpreter.override {
             flox-activations = null;
           };
           flox-package-builder = prev.flox-package-builder.override { };
           flox-buildenv = prev.flox-buildenv.override {
-            flox-activation-scripts = null;
+            flox-interpreter = null;
           };
           checksFor = checks.${prev.system};
 
@@ -151,7 +151,7 @@
             WATCHDOG_BIN = null;
             FLOX_ACTIVATIONS_BIN = null;
             BUILDENV_BIN = null;
-            flox-activation-scripts = null;
+            flox-interpreter = null;
           };
         });
       };
@@ -178,7 +178,7 @@
 
       packages = builtins.mapAttrs (system: pkgs: {
         inherit (pkgs)
-          flox-activation-scripts
+          flox-interpreter
           flox-nix-plugins
           flox-buildenv
           flox-package-builder
