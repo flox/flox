@@ -67,7 +67,7 @@ version:
 @build-activation-scripts: build-activations
     nix {{nix_options}} build \
         --option pure-eval false \
-        '.#floxDevelopmentPackages.flox-activation-scripts^*' \
+        '.#floxDevelopmentPackages.flox-interpreter^*' \
         -o $FLOX_INTERPRETER
 
 # Build the flox package builder
