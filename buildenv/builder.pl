@@ -399,6 +399,12 @@ if ($manifest) {
                     # next unless grep { $_ eq $output } @{$package->{"outputs_to_install"}};
                     # push @outputsToInstall, $package->{"outputs"}{$output};
 
+                    # Pure sandbox manifest builds also include a "log" output which is
+                    # a file, and therefore cannot / should not be installed to the env.
+                    # If we encounter this output and it's a file then we skip it.
+                    # XXX Remove once we properly support outputs_to_install.
+                    next if $output eq "log" and -f $package->{"outputs"}{$output};
+
                     # And for now we divide the outputs into two categories: those
                     # that should be installed by default and those that should not.
                     # XXX Remove once we properly support outputs_to_install.
