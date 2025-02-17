@@ -740,12 +740,14 @@ if ($manifest) {
         my $references = shift @_;
         my $pkg = shift @_;
         my @retarray = ( $pkg );
-        if (defined $references->{$pkg} and not defined $seen{$pkg}) {
-            foreach my $reference (@{$references->{$pkg}}) {
-                next if $reference eq $pkg;
-                push @retarray, walkReferences($references, $reference);
+        if (defined $references->{$pkg}) {
+            if (not defined $seen{$pkg}) {
+                foreach my $reference (@{$references->{$pkg}}) {
+                    next if $reference eq $pkg;
+                    push @retarray, walkReferences($references, $reference);
+                }
+                $seen{$pkg} = 1;
             }
-            $seen{$pkg} = 1;
         } else {
             warn "references for package $pkg not found\n";
         }
