@@ -1333,8 +1333,6 @@ mod buildenv_tests {
     use std::collections::HashSet;
     use std::os::unix::fs::PermissionsExt;
 
-    use regex::Regex;
-
     use super::*;
     use crate::providers::catalog::{MockClient, GENERATED_DATA, MANUALLY_GENERATED};
 
@@ -1466,13 +1464,14 @@ mod buildenv_tests {
             panic!("expected build to fail, got {}", err);
         };
 
-        let output_matches = Regex::new("error: collision between .*-vim-.* and .*-vim-.*")
-            .unwrap()
-            .is_match(&output);
+        let expected =
+            "> ❌ ERROR: 'vim' conflicts with 'vim-full'. Both packages provide the file 'bin/ex'";
 
         assert!(
-            output_matches,
-            "expected output to contain a conflict message: {output}"
+            output.contains(expected),
+            "expected output to contain a conflict message:\n\
+            actual: {output}\n\
+            expected: {expected}"
         );
     }
 
@@ -1578,7 +1577,14 @@ mod buildenv_tests {
             panic!("expected build to fail, got {}", err);
         };
 
-        assert!(output.contains("error: package 'vim' is not in 'toplevel' pkg-group"));
+        let expected = "❌ ERROR: package 'vim' is not in 'toplevel' pkg-group";
+
+        assert!(
+            output.contains(expected),
+            "expected output to contain an error message\n\
+            actual: {output}\n\
+            expected: {expected}"
+        );
     }
 
     #[test]
@@ -1593,7 +1599,13 @@ mod buildenv_tests {
             panic!("expected build to fail, got {}", err);
         };
 
-        assert!(output
-            .contains("error: package 'goodbye' not found in '[install]' section of manifest"));
+        let expected = "❌ ERROR: package 'goodbye' not found in '[install]' section of manifest";
+
+        assert!(
+            output.contains(expected),
+            "expected output to contain an error message\n\
+            actual: {output}\n\
+            expected: {expected}"
+        );
     }
 }
