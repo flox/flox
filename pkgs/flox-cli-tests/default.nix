@@ -20,7 +20,7 @@
   flox-nix-plugins,
   flox-watchdog,
   flox-cli,
-  flox-activation-scripts,
+  flox-interpreter,
   gawk,
   git,
   gnugrep,
@@ -199,10 +199,10 @@ writeShellScriptBin PROJECT_NAME ''
   ${if FLOX_BIN == null then "export FLOX_BIN='flox';" else "export FLOX_BIN='${FLOX_BIN}';"}
   export PROCESS_COMPOSE_BIN='${process-compose}/bin/process-compose';
   ${
-    if flox-activation-scripts == null then
-      ''export FLOX_INTERPRETER="$PROJECT_ROOT_DIR/build/flox-activation-scripts";''
+    if flox-interpreter == null then
+      ''export FLOX_INTERPRETER="$PROJECT_ROOT_DIR/build/flox-interpreter";''
     else
-      ''export FLOX_INTERPRETER='${flox-activation-scripts}';''
+      ''export FLOX_INTERPRETER='${flox-interpreter}';''
   }
 
   usage() {

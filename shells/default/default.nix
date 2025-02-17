@@ -130,7 +130,7 @@ mkShell (
         define_dev_env_var FLOX_MK_CONTAINER_NIX "''${REPO_ROOT}/mkContainer/mkContainer.nix";
 
         # Nix built subsystems
-        define_dev_env_var FLOX_INTERPRETER "''${REPO_ROOT}/build/flox-activation-scripts";
+        define_dev_env_var FLOX_INTERPRETER "''${REPO_ROOT}/build/flox-interpreter";
         define_dev_env_var FLOX_BUILDENV "''${REPO_ROOT}/build/flox-buildenv";
         define_dev_env_var FLOX_BUILDENV_NIX "''${FLOX_BUILDENV}/lib/buildenv.nix";
         define_dev_env_var FLOX_PACKAGE_BUILDER "''${REPO_ROOT}/build/flox-package-builder";
