@@ -1,9 +1,8 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::stdout;
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -432,56 +431,8 @@ impl Activate {
         exports.extend(default_nix_env_vars());
 
         let activate_path = interpreter_path.join("activate");
-        // when output is not a tty, and no command is provided
-        // we just print an activation script to stdout
-        //
-        // That script can then be `eval`ed in the current shell,
-        // e.g. in a .bashrc or .zshrc file:
-        //
-        //    eval "$(flox activate)"
-        if in_place {
-            let shell = Self::detect_shell_for_in_place()?;
-            Self::activate_in_place(&mode, mode_link_path, &shell, &exports, &activate_path);
-
-            return Ok(());
-        }
-
-        let shell = Self::detect_shell_for_subshell();
-        // These functions will only return if exec fails
-        if interactive {
-            Self::activate_interactive(&mode, mode_link_path, shell, exports, &activate_path)
-        } else {
-            Self::activate_command(
-                &mode,
-                mode_link_path,
-                self.run_args,
-                shell,
-                exports,
-                &activate_path,
-                is_ephemeral,
-            )
-        }
-    }
-
-    /// Used for `flox activate -- run_args`
-    fn activate_command(
-        mode: &Mode,
-        mode_link_path: &Path,
-        run_args: Vec<String>,
-        shell: Shell,
-        exports: HashMap<&str, String>,
-        activate_path: &Path,
-        is_ephemeral: bool,
-    ) -> Result<()> {
         let mut command = Command::new(activate_path);
-        command.env("FLOX_SHELL", shell.exe_path());
         command.envs(exports);
-
-        // The activation script works like a shell in that it accepts the "-c"
-        // flag which takes exactly one argument to be passed verbatim to the
-        // userShell invocation. Take this opportunity to combine these args
-        // safely, and *exactly* as the user provided them in argv.
-        command.arg("-c").arg(Self::quote_run_args(&run_args));
 
         // Don't rely on FLOX_ENV in the environment when we explicitly know
         // what it should be. This is necessary for nested activations where an
@@ -496,6 +447,43 @@ impl Activate {
         command
             .arg("--watchdog")
             .arg(WATCHDOG_BIN.to_string_lossy().to_string());
+
+        // when output is not a tty, and no command is provided
+        // we just print an activation script to stdout
+        //
+        // That script can then be `eval`ed in the current shell,
+        // e.g. in a .bashrc or .zshrc file:
+        //
+        //    eval "$(flox activate)"
+        if in_place {
+            let shell = Self::detect_shell_for_in_place()?;
+            command.env("FLOX_SHELL", shell.exe_path());
+            Self::activate_in_place(command, shell);
+
+            return Ok(());
+        }
+
+        let shell = Self::detect_shell_for_subshell();
+        command.env("FLOX_SHELL", shell.exe_path());
+        // These functions will only return if exec fails
+        if interactive {
+            Self::activate_interactive(command)
+        } else {
+            Self::activate_command(command, self.run_args, is_ephemeral)
+        }
+    }
+
+    /// Used for `flox activate -- run_args`
+    fn activate_command(
+        mut command: Command,
+        run_args: Vec<String>,
+        is_ephemeral: bool,
+    ) -> Result<()> {
+        // The activation script works like a shell in that it accepts the "-c"
+        // flag which takes exactly one argument to be passed verbatim to the
+        // userShell invocation. Take this opportunity to combine these args
+        // safely, and *exactly* as the user provided them in argv.
+        command.arg("-c").arg(Self::quote_run_args(&run_args));
 
         debug!("running activation command: {:?}", command);
 
@@ -521,31 +509,7 @@ impl Activate {
     /// and running the respective activation scripts.
     ///
     /// This function should never return as it replaces the current process
-    fn activate_interactive(
-        mode: &Mode,
-        mode_link_path: &Path,
-        shell: Shell,
-        exports: HashMap<&str, String>,
-        activate_path: &Path,
-    ) -> Result<()> {
-        let mut command = Command::new(activate_path);
-        command.env("FLOX_SHELL", shell.exe_path());
-        command.envs(exports);
-
-        // Don't rely on FLOX_ENV in the environment when we explicitly know
-        // what it should be. This is necessary for nested activations where an
-        // outer export of FLOX_ENV would be inherited by the inner activation.
-        command
-            .arg("--env")
-            .arg(mode_link_path.to_string_lossy().to_string());
-
-        // Pass down the activation mode
-        command.arg("--mode").arg(mode.to_string());
-
-        command
-            .arg("--watchdog")
-            .arg(WATCHDOG_BIN.to_string_lossy().to_string());
-
+    fn activate_interactive(mut command: Command) -> Result<()> {
         debug!("running activation command: {:?}", command);
 
         // exec should never return
@@ -553,40 +517,23 @@ impl Activate {
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(
-        mode: &Mode,
-        mode_link_path: &Path,
-        shell: &Shell,
-        exports: &HashMap<&str, String>,
-        activate_path: &Path,
-    ) {
-        let mut command = Command::new(activate_path);
-        command.env("FLOX_SHELL", shell.exe_path());
-        command.envs(exports);
-
-        // Don't rely on FLOX_ENV in the environment when we explicitly know
-        // what it should be. This is necessary for nested activations where an
-        // outer export of FLOX_ENV would be inherited by the inner activation.
-        command
-            .arg("--env")
-            .arg(mode_link_path.to_string_lossy().to_string());
-
-        // Pass down the activation mode
-        command.arg("--mode").arg(mode.to_string());
-
-        command
-            .arg("--watchdog")
-            .arg(WATCHDOG_BIN.to_string_lossy().to_string());
-
+    fn activate_in_place(mut command: Command, shell: Shell) {
         debug!("running activation command: {:?}", command);
 
         let output = command.output().expect("failed to run activation script");
         eprint!("{}", String::from_utf8_lossy(&output.stderr));
 
         // Render the exports in the correct shell dialect.
-        let exports_rendered = exports
-            .iter()
-            .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
+        let exports_rendered = command
+            .get_envs()
+            .filter_map(|(key, value)| {
+                value.map(|v| {
+                    (
+                        key.to_string_lossy(),
+                        shell_escape::escape(v.to_string_lossy()),
+                    )
+                })
+            })
             .map(|(key, value)| match shell {
                 Shell::Bash(_) => format!("export {key}={value};",),
                 Shell::Fish(_) => format!("set -gx {key} {value};",),
