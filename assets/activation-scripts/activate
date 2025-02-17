@@ -63,10 +63,9 @@ OPTIONS="e:c:m:"
 LONGOPTS="command:,env:,mode:,watchdog:,noprofile,turbo"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] [(-e|--env) <env>] [--turbo] [--noprofile] [(-m|--mode) (dev|run)] [--watchdog <path>]"
 
-PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@")
-# shellcheck disable=SC2181
-if [[ $? -ne 0 ]]; then
-  echo "Failed to parse options."
+if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
+  echo "Failed to parse options." >&2
+  echo "$USAGE" >&2
   exit 1
 fi
 
