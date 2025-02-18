@@ -26,34 +26,7 @@ pub enum BasicColor {
 }
 
 impl BasicColor {
-    /// Create crossterm compatible types
-    #[allow(dead_code)] // todo: discuss how/where to integrate colors
-    pub fn to_crossterm(&self) -> crossterm::style::Color {
-        match self {
-            BasicColor::Black => crossterm::style::Color::Black,
-            BasicColor::DarkRed => crossterm::style::Color::DarkRed,
-            BasicColor::DarkGreen => crossterm::style::Color::DarkGreen,
-            BasicColor::DarkYellow => crossterm::style::Color::DarkYellow,
-            BasicColor::DarkBlue => crossterm::style::Color::DarkBlue,
-            BasicColor::DarkMagenta => crossterm::style::Color::DarkMagenta,
-            BasicColor::DarkCyan => crossterm::style::Color::DarkCyan,
-            BasicColor::Grey => crossterm::style::Color::Grey,
-
-            BasicColor::DarkGrey => crossterm::style::Color::DarkGrey,
-
-            BasicColor::Red => crossterm::style::Color::Red,
-            BasicColor::Green => crossterm::style::Color::Green,
-            BasicColor::Yellow => crossterm::style::Color::Yellow,
-            BasicColor::Blue => crossterm::style::Color::Blue,
-            BasicColor::Magenta => crossterm::style::Color::Magenta,
-            BasicColor::Cyan => crossterm::style::Color::Cyan,
-            BasicColor::White => crossterm::style::Color::White,
-        }
-    }
-
     /// Create inquire compatible types
-    ///
-    /// Basically the same as `.to_crossterm()`, except that "light" colors are prefixed
     pub fn to_inquire(&self) -> inquire::ui::Color {
         match self {
             BasicColor::Black => inquire::ui::Color::Black,
@@ -85,26 +58,6 @@ pub struct FloxColor {
 }
 
 impl FloxColor {
-    #[allow(dead_code)] // todo: discuss how/where to integrate colors
-    pub fn to_crossterm(&self) -> Option<crossterm::style::Color> {
-        match supports_color::on(supports_color::Stream::Stderr) {
-            Some(supports_color::ColorLevel { has_16m: true, .. }) => {
-                Some(crossterm::style::Color::Rgb {
-                    r: self.rgb.0,
-                    g: self.rgb.1,
-                    b: self.rgb.2,
-                })
-            },
-            Some(supports_color::ColorLevel { has_256: true, .. }) => {
-                Some(crossterm::style::Color::AnsiValue(self.ansi256))
-            },
-            Some(supports_color::ColorLevel {
-                has_basic: true, ..
-            }) => Some(self.basic.to_crossterm()),
-            _ => None,
-        }
-    }
-
     pub fn to_inquire(&self) -> Option<inquire::ui::Color> {
         match supports_color::on(supports_color::Stream::Stderr) {
             Some(supports_color::ColorLevel { has_16m: true, .. }) => {
