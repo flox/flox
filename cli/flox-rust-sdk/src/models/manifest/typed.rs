@@ -261,8 +261,9 @@ fn pkg_belongs_to_non_empty_toplevel_group(
         .get(pkg)
         .ok_or(ManifestError::PkgOrGroupNotFound(pkg.to_string()))?;
     let pkgs = pkg_descriptors_in_toplevel_group(descriptors);
+    let self_in_toplevel_group = pkgs.iter().any(|(id, _)| id == pkg);
     let other_toplevel_packages_exist = pkgs.iter().any(|(id, _)| id != pkg);
-    Ok(other_toplevel_packages_exist)
+    Ok(self_in_toplevel_group && other_toplevel_packages_exist)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
