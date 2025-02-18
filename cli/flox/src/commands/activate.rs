@@ -48,7 +48,7 @@ use crate::commands::{ensure_environment_trust, EnvironmentSelectError};
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::openers::Shell;
 use crate::utils::{default_nix_env_vars, message};
-use crate::{environment_subcommand_metric, subcommand_metric, utils};
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(
@@ -311,11 +311,6 @@ impl Activate {
         let flox_prompt_environments =
             Self::make_prompt_environments(hide_default_prompt, &flox_active_environments);
 
-        let prompt_color_1 = env::var("FLOX_PROMPT_COLOR_1")
-            .unwrap_or(utils::colors::INDIGO_400.to_ansi256().to_string());
-        let prompt_color_2 = env::var("FLOX_PROMPT_COLOR_2")
-            .unwrap_or(utils::colors::INDIGO_300.to_ansi256().to_string());
-
         let mut exports = HashMap::from([
             (FLOX_ENV_VAR, mode_link_path.to_string_lossy().to_string()),
             (
@@ -334,8 +329,6 @@ impl Activate {
                 FLOX_ENV_PROJECT_VAR,
                 environment.project_path()?.to_string_lossy().to_string(),
             ),
-            ("FLOX_PROMPT_COLOR_1", prompt_color_1),
-            ("FLOX_PROMPT_COLOR_2", prompt_color_2),
             // Set `FLOX_PROMPT_ENVIRONMENTS` to the constructed prompt string,
             // which may be ""
             (FLOX_PROMPT_ENVIRONMENTS_VAR, flox_prompt_environments),

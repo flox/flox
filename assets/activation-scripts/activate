@@ -55,6 +55,7 @@ source "${_activate_d}/generate-tcsh-startup-commands.bash"
 # in particular does not tolerate references to undefined variables.
 export FLOX_PROMPT_ENVIRONMENTS="${FLOX_PROMPT_ENVIRONMENTS:-}"
 export _FLOX_SET_PROMPT="${_FLOX_SET_PROMPT:-true}"
+# https://upload.wikimedia.org/wikipedia/commons/1/15/Xterm_256color_chart.svg
 export FLOX_PROMPT_COLOR_1="${FLOX_PROMPT_COLOR_1:-99}"
 export FLOX_PROMPT_COLOR_2="${FLOX_PROMPT_COLOR_2:-141}"
 

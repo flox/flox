@@ -85,10 +85,6 @@ pub struct FloxColor {
 }
 
 impl FloxColor {
-    pub fn to_ansi256(&self) -> u8 {
-        self.ansi256
-    }
-
     #[allow(dead_code)] // todo: discuss how/where to integrate colors
     pub fn to_crossterm(&self) -> Option<crossterm::style::Color> {
         match supports_color::on(supports_color::Stream::Stderr) {
@@ -129,12 +125,14 @@ impl FloxColor {
     }
 }
 
+/// Should match the defaults in `activation-scripts`.
 pub const INDIGO_300: FloxColor = FloxColor {
     ansi256: 141,
     rgb: (175, 135, 255),
     basic: BasicColor::DarkYellow,
 };
 
+/// Should match the defaults in `activation-scripts`.
 pub const INDIGO_400: FloxColor = FloxColor {
     ansi256: 99,
     rgb: (135, 95, 255),
