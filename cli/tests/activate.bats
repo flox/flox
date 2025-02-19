@@ -2107,7 +2107,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:bash
-@test "bash: tolerates paths containing spaces" {
+@test "bash: tolerates env paths containing spaces" {
   project_setup # TODO: we need PROJECT_DIR, but not flox init
   bad_dir="contains space/project"
   mkdir -p "$PWD/$bad_dir"
@@ -2119,7 +2119,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:fish
-@test "fish: tolerates paths containing spaces" {
+@test "fish: tolerates env paths containing spaces" {
   project_setup # TODO: we need PROJECT_DIR, but not flox init
   bad_dir="contains space/project"
   mkdir -p "$PWD/$bad_dir"
@@ -2131,7 +2131,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:tcsh
-@test "tcsh: tolerates paths containing spaces" {
+@test "tcsh: tolerates env paths containing spaces" {
   project_setup # TODO: we need PROJECT_DIR, but not flox init
   bad_dir="contains space/project"
   mkdir -p "$PWD/$bad_dir"
@@ -2143,7 +2143,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:zsh
-@test "zsh: tolerates paths containing spaces" {
+@test "zsh: tolerates env paths containing spaces" {
   project_setup # TODO: we need PROJECT_DIR, but not flox init
   bad_dir="contains space/project"
   mkdir -p "$PWD/$bad_dir"
@@ -2152,6 +2152,68 @@ EOF
   run zsh -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
   refute_output --partial "no such file or directory"
+}
+
+# bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:bash
+@test "bash: tolerates PATH already containing spaces" {
+  project_setup
+  bad_dir="$PWD/contains space/project"
+  export bad_dir="$PWD/CONTAINS SPACE/project"
+  mkdir -p "$bad_dir"
+  activation_cmd="$(cat <<'EOF'
+    export PATH="$bad_dir:$PATH"
+    eval "$("$FLOX_BIN" activate)"  
+EOF
+)"
+  run bash -c "$activation_cmd"
+  assert_success
+  refute_output --partial "unexpected argument 'SPACE"
+}
+
+# bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:fish
+@test "fish: tolerates PATH already containing spaces" {
+  project_setup
+  export bad_dir="$PWD/CONTAINS SPACE/project"
+  mkdir -p "$bad_dir"
+  activation_cmd="$(cat <<'EOF'
+    fish_add_path "$bad_dir"
+    "$FLOX_BIN" activate | source
+EOF
+)"
+  run fish -c "$activation_cmd"
+  assert_success
+  refute_output --partial "unexpected argument 'SPACE"
+}
+
+# bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:tcsh
+@test "tcsh: tolerates PATH already containing spaces" {
+  project_setup
+  export bad_dir="$PWD/contains space/project"
+  mkdir -p "$bad_dir"
+  activation_cmd="$(cat <<'EOF'
+    setenv PATH "$bad_dir:$PATH"
+    eval "`"$FLOX_BIN" activate`"  
+EOF
+)"
+  run tcsh -c "$activation_cmd"
+  assert_success
+  refute_output --partial "unexpected argument 'SPACE"
+}
+
+# bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:zsh
+@test "zsh: tolerates PATH already containing spaces" {
+  project_setup
+  bad_dir="$PWD/contains space/project"
+  export bad_dir="$PWD/CONTAINS SPACE/project"
+  mkdir -p "$bad_dir"
+  activation_cmd="$(cat <<'EOF'
+    export PATH="$bad_dir:$PATH"
+    eval "$("$FLOX_BIN" activate)"  
+EOF
+)"
+  run zsh -c "$activation_cmd"
+  assert_success
+  refute_output --partial "unexpected argument 'SPACE"
 }
 
 # ---------------------------------------------------------------------------- #
