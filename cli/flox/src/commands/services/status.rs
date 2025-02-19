@@ -87,7 +87,7 @@ impl Status {
         }?;
 
         if self.json {
-            let json_array = serde_json::to_string(&process_states_display)?;
+            let json_array = serde_json::to_string_pretty(&process_states_display)?;
             println!("{json_array}");
         } else {
             println!("{process_states_display}");
@@ -305,10 +305,26 @@ mod tests {
             generate_completed_process_state("ccc", 789, 0),
         ]);
         let states_display: ProcessStatesDisplay = states.into();
-        let json_array = serde_json::to_string(&states_display).unwrap();
-        assert_eq!(
-            json_array,
-            r#"[{"name":"aaa","status":"Running","pid":123,"exit_code":null},{"name":"bbb","status":"Stopped","pid":456,"exit_code":null},{"name":"ccc","status":"Completed","pid":789,"exit_code":0}]"#
-        );
+        let json_array = serde_json::to_string_pretty(&states_display).unwrap();
+        assert_eq!(json_array, indoc! {r#"[
+              {
+                "name": "aaa",
+                "status": "Running",
+                "pid": 123,
+                "exit_code": null
+              },
+              {
+                "name": "bbb",
+                "status": "Stopped",
+                "pid": 456,
+                "exit_code": null
+              },
+              {
+                "name": "ccc",
+                "status": "Completed",
+                "pid": 789,
+                "exit_code": 0
+              }
+            ]"#});
     }
 }
