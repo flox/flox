@@ -1630,7 +1630,11 @@ mod test {
 
     use super::*;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
-    use crate::models::env_registry::{env_registry_path, read_environment_registry};
+    use crate::models::env_registry::{
+        env_registry_path,
+        garbage_collect,
+        read_environment_registry,
+    };
     use crate::models::environment::test_helpers::{
         new_core_environment,
         new_core_environment_with_lockfile,
@@ -2621,7 +2625,7 @@ mod test {
     }
 
     #[test]
-    fn prunes_branches_on_delete() {
+    fn gc_prunes_floxmeta_branches() {
         let (flox, _temp_dir_handle) = flox_instance();
 
         let env1_dir = flox.temp_dir.join("env1");
@@ -2667,20 +2671,25 @@ mod test {
         )
         .unwrap();
 
+        // All branches should exist.
         assert!(floxmeta.git.has_branch(&remote_branch).unwrap());
         assert!(floxmeta.git.has_branch(&env1_branch).unwrap());
         assert!(floxmeta.git.has_branch(&env2_branch).unwrap());
 
-        env2.delete(&flox).unwrap();
-
-        // Only env2 should be pruned.
+        // env2 is pruned when no longer on disk.
+        fs::remove_dir_all(&env2.path).unwrap();
+        garbage_collect(&flox).unwrap();
         assert!(floxmeta.git.has_branch(&remote_branch).unwrap());
         assert!(floxmeta.git.has_branch(&env1_branch).unwrap());
         assert!(!floxmeta.git.has_branch(&env2_branch).unwrap());
 
-        env1.delete(&flox).unwrap();
-
-        // All branches should be pruned.
+        // env1 is pruned when no longer on disk, remote is pruned when there
+        // are no local branches, and is resilient to the branch not existing,
+        // e.g. if the floxmeta repo has been manually deleted or the hashing
+        // algorithm has changed in the past.
+        fs::remove_dir_all(&env1.path).unwrap();
+        floxmeta.git.delete_branch(&env1_branch, true).unwrap();
+        garbage_collect(&flox).unwrap();
         assert!(!floxmeta.git.has_branch(&remote_branch).unwrap());
         assert!(!floxmeta.git.has_branch(&env1_branch).unwrap());
         assert!(!floxmeta.git.has_branch(&env2_branch).unwrap());
