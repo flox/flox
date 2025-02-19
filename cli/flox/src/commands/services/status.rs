@@ -87,10 +87,8 @@ impl Status {
         }?;
 
         if self.json {
-            for proc in process_states_display {
-                let line = serde_json::to_string(&proc)?;
-                println!("{line}");
-            }
+            let json_array = serde_json::to_string(&process_states_display)?;
+            println!("{json_array}");
         } else {
             println!("{process_states_display}");
         }
@@ -221,8 +219,6 @@ impl Display for ProcessStatesDisplay {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use flox_rust_sdk::providers::services::test_helpers::{
         generate_completed_process_state,
         generate_process_state,
@@ -302,23 +298,17 @@ mod tests {
     }
 
     #[test]
-    fn test_processstatedisplay_json_lines() {
+    fn test_processstatesdisplay_json_array() {
         let states = ProcessStates::from(vec![
             generate_process_state("aaa", "Running", 123, true),
             generate_stopped_process_state("bbb", 456),
             generate_completed_process_state("ccc", 789, 0),
         ]);
         let states_display: ProcessStatesDisplay = states.into();
-        let mut buffer = Vec::new();
-        for proc in states_display {
-            let line = serde_json::to_string(&proc).unwrap();
-            writeln!(buffer, "{line}").unwrap();
-        }
-        let buffer_str = String::from_utf8(buffer).unwrap();
-        assert_eq!(buffer_str, indoc! {r#"
-            {"name":"aaa","status":"Running","pid":123,"exit_code":null}
-            {"name":"bbb","status":"Stopped","pid":456,"exit_code":null}
-            {"name":"ccc","status":"Completed","pid":789,"exit_code":0}
-        "#});
+        let json_array = serde_json::to_string(&states_display).unwrap();
+        assert_eq!(
+            json_array,
+            r#"[{"name":"aaa","status":"Running","pid":123,"exit_code":null},{"name":"bbb","status":"Stopped","pid":456,"exit_code":null},{"name":"ccc","status":"Completed","pid":789,"exit_code":0}]"#
+        );
     }
 }
