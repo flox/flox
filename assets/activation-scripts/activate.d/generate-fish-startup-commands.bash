@@ -46,8 +46,14 @@ generate_fish_startup_commands() {
 
   # We already customized the PATH and MANPATH, but the user and system
   # dotfiles may have changed them, so finish by doing this again.
+
   echo "$_flox_activations set-env-dirs --shell fish --flox-env $FLOX_ENV --env-dirs ${FLOX_ENV_DIRS:-} | source;"
-  echo "$_flox_activations fix-paths --shell fish --env-dirs $FLOX_ENV_DIRS --path $PATH --manpath ${MANPATH:-} | source;"
+
+  # fish doesn't have {foo:-} syntax, so we need to provide a temporary variable
+  # (manpath_with_default) that is either the runtime (not generation-time) MANPATH
+  # or the empty string.
+  echo "set manpath_with_default (if set -q MANPATH; echo \"\$MANPATH\"; else; echo ""; end);"
+  echo "$_flox_activations fix-paths --shell fish --env-dirs $FLOX_ENV_DIRS --path \"\$PATH\" --manpath \"\$manpath_with_default\" | source;"
 
   # Iterate over $FLOX_ENV_DIRS in reverse order and
   # source user-specified profile scripts if they exist.
