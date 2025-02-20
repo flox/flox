@@ -257,10 +257,6 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
 # bats test_tags=containerize:default-to-file
 @test "container is written to a runtime by default" {
-  if ! is_linux; then
-    skip "FIXME: Temporarily disabled on macOS until https://github.com/flox/flox/pull/2746"
-  fi
-
   env_setup_catalog
 
   # Check that podman is installed
@@ -283,10 +279,6 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
 # bats test_tags=containerize:container-tag
 @test "container is tagged with specified tag" {
-  if ! is_linux; then
-    skip "FIXME: Temporarily disabled on macOS until https://github.com/flox/flox/pull/2746"
-  fi
-
   env_setup_catalog
 
   # Check that podman is installed
@@ -299,10 +291,6 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
 # bats test_tags=containerize:piped-to-runtime
 @test "container is written to runtime when '--runtime <runtime>' is passed" {
-  if ! is_linux; then
-    skip "FIXME: Temporarily disabled on macOS until https://github.com/flox/flox/pull/2746"
-  fi
-
   env_setup_catalog
 
   run bash -c '"$FLOX_BIN" containerize --tag "runtime" --runtime podman' 3>&-
@@ -350,10 +338,6 @@ function assert_container_output() {
 
 # bats test_tags=containerize:run-container-i
 @test "container can be run with 'podman run' with/without -i'" {
-  if ! is_linux; then
-    skip "FIXME: Temporarily disabled on macOS until https://github.com/flox/flox/pull/2746"
-  fi
-
   env_setup_catalog
 
   # Also tests writing to STDOUT with `-f -`
@@ -416,10 +400,6 @@ EOF
 }
 
 @test "cmd can run binary from activated environment" {
-  if ! is_linux; then
-    skip "FIXME: Temporarily disabled on macOS until https://github.com/flox/flox/pull/2746"
-  fi
-
   "$FLOX_BIN" init
 
   MANIFEST_CONTENTS="$(cat << "EOF"
