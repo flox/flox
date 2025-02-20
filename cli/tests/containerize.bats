@@ -192,6 +192,13 @@ EOF
 
   chmod +x "$FLOX_TEST_HOME/bin/podman"
   export PATH="$FLOX_TEST_HOME/bin:$PATH:/run/wrappers/bin"
+
+  # Check that podman is functioning
+  # and ensure it has created the necessary directories.
+  # Without this, starting multiple podman containers in parallel,
+  # may cause a race between the containers to create the directories,
+  # in particular `$HOME/.ssh`.
+  podman ps
 }
 
 teardown() {
