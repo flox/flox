@@ -40,7 +40,7 @@ httpmock = { version = "0.7.0", default-features = false }
 indent = "0.1.1"
 indexmap = { version = "2.7.1", features = ["serde"] }
 indoc = "2.0.1"
-inquire = "0.6.0"
+inquire = { version = "0.6.0", features = ["editor"]}
 indicatif = "0.17"
 itertools = "0.12.1"
 jsonwebtoken = "9.3"
@@ -57,7 +57,7 @@ regex = "1.10"
 regress = "0.9.1"
 reqwest = { version = "0.11", features = ["json", "blocking", "stream"] }
 semver = "1.0.25"
-sentry = { version = "0.32.3", features = [
+sentry = { path = "/Users/zmitchell/src/sentry-rust/sentry", features = [
     "test",
     "anyhow",
     "tracing",

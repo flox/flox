@@ -6,6 +6,7 @@ mod containerize;
 mod delete;
 mod edit;
 mod envs;
+mod feedback;
 mod gc;
 mod general;
 mod init;
@@ -937,6 +938,10 @@ enum AdditionalCommands {
     /// Garbage collect data for deleted environments
     #[bpaf(command, hide, footer("Run 'man flox-gc' for more details."))]
     Gc(#[bpaf(external(gc::gc))] gc::Gc),
+
+    /// Submit feedback
+    #[bpaf(command)]
+    Feedback(#[bpaf(external(feedback::feedback))] feedback::Feedback),
 }
 
 impl AdditionalCommands {
@@ -954,6 +959,7 @@ impl AdditionalCommands {
             AdditionalCommands::Update(args) => args.handle(flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
             AdditionalCommands::Gc(args) => args.handle(flox)?,
+            AdditionalCommands::Feedback(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
