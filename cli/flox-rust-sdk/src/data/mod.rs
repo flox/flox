@@ -56,3 +56,19 @@ impl PartialEq for AttrPath {
         }
     }
 }
+
+impl Eq for AttrPath {}
+
+impl Ord for AttrPath {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let self_joined = self.to_string();
+        let other_joined = other.to_string();
+        self_joined.cmp(&other_joined)
+    }
+}
+
+impl PartialOrd for AttrPath {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
