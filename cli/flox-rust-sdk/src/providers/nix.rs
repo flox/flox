@@ -7,6 +7,7 @@ static NIX_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
         .unwrap_or_else(|_| env!("NIX_BIN").to_string())
         .into()
 });
+pub static NIX_VERSION: LazyLock<String> = LazyLock::new(|| env!("NIX_VERSION").to_string());
 
 /// Returns a `Command` for `nix` with a default set of features enabled.
 pub fn nix_base_command() -> Command {
