@@ -151,6 +151,8 @@ let
           "${environment}/activate"
           "--env"
           environment
+          "--shell"
+          "${containerPkgs.bashInteractive}/bin/bash"
         ];
 
         Env = mapAttrsToList (name: value: "${name}=${value}") {
@@ -160,7 +162,6 @@ let
           "_FLOX_ACTIVE_ENVIRONMENTS" = "[]";
           "FLOX_SOURCED_FROM_SHELL_RC" = "1"; # don't source from shell rc (again)
           "_FLOX_FORCE_INTERACTIVE" = "1"; # Required when running podman without "-t"
-          "FLOX_SHELL" = "${containerPkgs.bashInteractive}/bin/bash";
           "FLOX_RUNTIME_DIR" = "/run/flox";
         };
       };

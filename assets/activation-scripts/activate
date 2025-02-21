@@ -61,6 +61,7 @@ export FLOX_PROMPT_COLOR_2="${FLOX_PROMPT_COLOR_2:-141}"
 # Parse command-line arguments.
 OPTIONS="e:c:m:"
 LONGOPTS="command:,\
+shell:,\
 env:,\
 env-cache:,\
 env-project:,\
@@ -70,6 +71,7 @@ watchdog:,\
 noprofile,\
 turbo"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
+[--shell <shell>] \
 [(-e|--env) <env>] \
 [--env-cache <path>] \
 [--env-project <path>] \
@@ -92,6 +94,11 @@ eval set -- "$PARSED"
 FLOX_CMD=""
 FLOX_TURBO="${FLOX_TURBO:-}"
 FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
+# The rust CLI contains sophisticated logic to detect the shell based on
+# $FLOX_SHELL or the process listening on STDOUT, but that won't happen when
+# activating from the top-level activation script, so fall back to $SHELL as a
+# default.
+_FLOX_SHELL="$SHELL"
 _FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
 _FLOX_ENV_ACTIVATION_MODE="dev"
 _FLOX_WATCHDOG_BIN=""
@@ -105,6 +112,16 @@ while true; do
         exit 1
       fi
       FLOX_CMD="$1"
+      shift
+      ;;
+    --shell)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --shell requires a command as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_SHELL="$1"
       shift
       ;;
     -e | --env)
@@ -227,11 +244,8 @@ if [ -z "${_FLOX_ACTIVATE_STORE_PATH:-}" ]; then
   _FLOX_ACTIVATE_STORE_PATH="$("$_readlink" -f "$FLOX_ENV")"
 fi
 
-# The rust CLI contains sophisticated logic to set $FLOX_SHELL based on the
-# process listening on STDOUT, but that won't happen when activating from
-# the top-level activation script, so fall back to $SHELL as a default.
 # Respect _FLOX_SHELL_FORCE if set.
-declare -r _flox_shell="${_FLOX_SHELL_FORCE:-${FLOX_SHELL:-$SHELL}}"
+declare -r _flox_shell="${_FLOX_SHELL_FORCE:-${_FLOX_SHELL}}"
 # Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
 unset FLOX_SHELL
 
