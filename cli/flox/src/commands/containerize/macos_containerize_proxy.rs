@@ -7,12 +7,13 @@ use std::sync::LazyLock;
 
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
+use flox_rust_sdk::providers::nix::NIX_VERSION;
 
 use super::Runtime;
 use crate::config::{FLOX_CONFIG_FILE, FLOX_DISABLE_METRICS_VAR};
 
+const NIX_PROXY_IMAGE: &str = "nixos/nix";
 const FLOX_FLAKE: &str = "github:flox/flox";
-const FLOX_PROXY_IMAGE: &str = "ghcr.io/flox/flox";
 const FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR: &str = "/root/.config/flox";
 static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
     LazyLock::new(|| env::var("FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
@@ -123,14 +124,13 @@ impl ContainerizeProxy {
             ]);
         }
 
-        // Use a released Flox container of the same semantic version as a base
-        // because it already has:
-        //
-        // - most of the dependency store paths
-        // - substitutors configured
-        // - correct version of nix
-        let flox_container = format!("{}:{}", FLOX_PROXY_IMAGE, flox_version_tag);
-        command.arg(flox_container);
+        // Use a Nix container that matches the version of Nix that this Flox
+        // has been built with because it's smaller and changes less frequently
+        // than a Flox container of the corresponding version, which result in less
+        // container image pulls. It also prevents the chicken-and-egg problem when
+        // we bump `VERSION` in Flox but haven't published the container image yet.
+        let nix_container = format!("{}:{}", NIX_PROXY_IMAGE, NIX_VERSION);
+        command.arg(nix_container);
     }
 
     /// Inception L2: Nix args.
