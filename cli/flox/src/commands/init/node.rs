@@ -1,13 +1,16 @@
 use std::fs;
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::raw::CatalogPackage;
+use flox_rust_sdk::providers::catalog::ClientTrait;
 use flox_rust_sdk::utils::logging::traceable_path;
 use indoc::{formatdoc, indoc};
+use regex::Regex;
 use semver::VersionReq;
+use tracing::debug;
 
 use super::{
     find_compatible_package,
@@ -17,6 +20,7 @@ use super::{
     ProvidedPackage,
     AUTO_SETUP_HINT,
 };
+use crate::commands::init::try_find_compatible_major_version_package;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 
@@ -137,6 +141,15 @@ impl Node {
         // satisfies all constraints,
         // but that seems unlikely to be as commonly needed.
         let versions = Self::get_package_json_versions(path)?;
+        if let Some(ref versions) = versions {
+            debug!(
+                node = versions.node.as_ref().unwrap_or(&"null".to_string()),
+                yarn = versions.yarn.as_ref().unwrap_or(&"null".to_string()),
+                "package.json versions"
+            );
+        } else {
+            debug!("package.json not found");
+        }
         let yarn_lock_path = path.join("yarn.lock");
         let yarn_lock_exists = yarn_lock_path.exists();
         let yarn_install = match versions {
@@ -159,8 +172,8 @@ impl Node {
         let package_json_and_package_lock =
             valid_package_json && path.join("package-lock.json").exists();
 
-        // If there's not both a package.json and a package-lock.json, return
-        // early with just yarn
+        // If there's yarn and not both a package.json and a package-lock.json,
+        // return early with just yarn.
         if let Some(yarn_install) = &yarn_install {
             if !package_json_and_package_lock {
                 return Ok(Some(Self {
@@ -258,19 +271,22 @@ impl Node {
         flox: &Flox,
         versions: &PackageJSONVersionsUnresolved,
     ) -> Result<Option<YarnInstall>> {
-        let PackageJSONVersionsUnresolved { yarn, node, .. } = versions;
+        let PackageJSONVersionsUnresolved { yarn, .. } = versions;
 
-        let found_node = match node {
-            Some(node_version) => {
-                match try_find_compatible_package(flox, "nodejs", Some(node_version)).await? {
-                    // If the corresponding node isn't compatible, don't install yarn
-                    None => return Ok(None),
-                    Some(found_node) => found_node,
+        let found_node = match Self::try_find_compatible_nodejs(flox, versions).await? {
+            // If the corresponding node isn't compatible, don't install yarn
+            None => return Ok(None),
+            Some(pkg_json_version) => {
+                if let PackageJSONVersion::Found(pkg) = pkg_json_version {
+                    pkg
+                } else if let PackageJSONVersion::Unspecified = pkg_json_version {
+                    try_find_compatible_package(flox, "nodejs", None)
+                        .await?
+                        .ok_or(anyhow!("Flox couldn't find nodejs in nixpkgs"))?
+                } else {
+                    return Ok(None);
                 }
             },
-            None => try_find_compatible_package(flox, "nodejs", None)
-                .await?
-                .ok_or(anyhow!("Flox couldn't find nodejs in nixpkgs"))?,
         };
 
         // We assume that yarn is built with found_node, which is currently true
@@ -291,17 +307,72 @@ impl Node {
     ) -> Result<Option<PackageJSONVersion>> {
         let PackageJSONVersionsUnresolved { node, .. } = versions;
 
+        debug!(
+            version = node.as_ref().unwrap_or(&"unspecified".to_string()),
+            "trying to find compatible node version"
+        );
+        let nodejs_packages = Self::get_available_node_packages(flox).await?;
         let found_node = match node {
             Some(node_version) => {
-                match try_find_compatible_package(flox, "nodejs", Some(node_version)).await? {
-                    None => Some(PackageJSONVersion::Unavailable),
-                    Some(result) => Some(PackageJSONVersion::Found(result)),
+                let resolved_groups = try_find_compatible_major_version_package(
+                    flox,
+                    "nodejs",
+                    &nodejs_packages,
+                    Some(node_version),
+                )
+                .await?;
+                if let Some(result) = resolved_groups.first() {
+                    Some(PackageJSONVersion::Found(result.clone()))
+                } else {
+                    Some(PackageJSONVersion::Unavailable)
                 }
             },
-            _ => Some(PackageJSONVersion::Unspecified),
+            _ => {
+                debug!("node version was unspecified");
+                Some(PackageJSONVersion::Unspecified)
+            },
         };
 
         Ok(found_node)
+    }
+
+    async fn get_available_node_packages(flox: &Flox) -> Result<Vec<String>> {
+        let res = flox
+            .catalog_client
+            .search("nodejs_", flox.system.clone(), None)
+            .await
+            .context("failed to query node versions")?;
+        // SAFETY: This expect/unwrap will catch an invalid regex at test time,
+        //         so if we really screw this up it will be caught before hitting
+        //         production.
+        let node_pkg_regex = Regex::new(r#"nodejs_\d\d"#).expect("invalid node package regex");
+        let matches = {
+            let mut matches = res
+                .results
+                .into_iter()
+                .filter_map(|search_result| {
+                    let name = search_result.attr_path;
+                    if node_pkg_regex.is_match(&name) {
+                        Some(name)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+            // This will sort lexically, but lexically sorting also sorts by
+            // version in this case e.g. nodejs_14 comes before nodejs_23 in
+            // both cases.
+            matches.sort();
+            // We want later versions towards the front so we can take the first
+            // one.
+            matches.reverse();
+            // The search term was specifically "nodejs_" to catch the major version
+            // packages.
+            matches.push("nodejs".to_string());
+            matches
+        };
+
+        Ok(matches)
     }
 
     /// Determine appropriate [NVMRCVersion] variant for a (possibly
@@ -681,8 +752,12 @@ impl InitHook for Node {
 mod tests {
     use flox_rust_sdk::data::System;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
-    use flox_rust_sdk::providers::catalog::Client;
+    use flox_rust_sdk::providers::catalog::test_helpers::{
+        constraints_too_tight_dummy_response,
+        read_search_response,
+        resolved_pkg_group_with_dummy_package,
+    };
+    use flox_rust_sdk::providers::catalog::{Client, Response};
     use pretty_assertions::assert_eq;
     use serde::Serialize;
     use serde_with::skip_serializing_none;
@@ -723,11 +798,11 @@ mod tests {
                 }
             }
         }
-        #[derive(Clone, Debug)]
+        #[derive(Debug)]
         struct TestCase {
             description: &'static str,
             files: Vec<File>,
-            catalog_responses: Vec<Option<Package>>,
+            catalog_responses: Vec<Response>,
             expected: Option<Node>,
         }
 
@@ -739,6 +814,17 @@ mod tests {
             name: "nodejs".to_string(),
             version: "2.2.2".to_string(),
         };
+
+        fn dummy_pkg_to_resolved_pkg_group_response(pkg: &Package) -> Response {
+            let pkg_group = resolved_pkg_group_with_dummy_package(
+                &pkg.name,
+                &"aarch64-darwin".to_string(),
+                &pkg.name,
+                &pkg.name,
+                &pkg.version,
+            );
+            Response::Resolve(vec![pkg_group])
+        }
 
         let test_cases = vec![
             // - Returns [NodeAction::InstallYarn] if
@@ -764,7 +850,11 @@ mod tests {
                         content: "".to_string(),
                     },
                 ],
-                catalog_responses: vec![Some(node_package.clone()), Some(yarn_package.clone())],
+                catalog_responses: vec![
+                    Response::Search(read_search_response("nodejs_all.json")),
+                    dummy_pkg_to_resolved_pkg_group_response(&node_package),
+                    dummy_pkg_to_resolved_pkg_group_response(&yarn_package),
+                ],
                 expected: Some(Node {
                     action: NodeInstallAction::Yarn(YarnInstall {
                         yarn: (&yarn_package).into(),
@@ -793,7 +883,10 @@ mod tests {
                     })
                     .unwrap(),
                 }],
-                catalog_responses: vec![Some(node_package.clone())],
+                catalog_responses: vec![
+                    Response::Search(read_search_response("nodejs_all.json")),
+                    dummy_pkg_to_resolved_pkg_group_response(&node_package),
+                ],
                 expected: Some(Node {
                     action: NodeInstallAction::Node(NodeInstall {
                         node: Some((&node_package).into()),
@@ -811,7 +904,8 @@ mod tests {
                     name: ".nvmrc".to_string(),
                     content: "v0.1.14".to_string(),
                 }],
-                catalog_responses: vec![Some(node_package.clone())],
+                // There's no node version search when we install nvm
+                catalog_responses: vec![dummy_pkg_to_resolved_pkg_group_response(&node_package)],
                 expected: Some(Node {
                     action: NodeInstallAction::Node(NodeInstall {
                         node: Some((&node_package).into()),
@@ -827,7 +921,11 @@ mod tests {
                     name: "package.json".to_string(),
                     content: serde_json::to_string(&PackageJSON { engines: None }).unwrap(),
                 }],
-                catalog_responses: vec![None],
+                catalog_responses: vec![
+                    Response::Search(read_search_response("nodejs_all.json")),
+                    dummy_pkg_to_resolved_pkg_group_response(&node_package),
+                    Response::Resolve(vec![constraints_too_tight_dummy_response("yarn")]),
+                ],
                 expected: Some(Node {
                     action: NodeInstallAction::Node(NodeInstall {
                         node: None,
@@ -863,9 +961,11 @@ mod tests {
                     },
                 ],
                 catalog_responses: vec![
-                    Some(node_package.clone()),
-                    Some(yarn_package.clone()),
-                    Some(node_package.clone()),
+                    Response::Search(read_search_response("nodejs_all.json")),
+                    dummy_pkg_to_resolved_pkg_group_response(&node_package),
+                    dummy_pkg_to_resolved_pkg_group_response(&yarn_package),
+                    Response::Search(read_search_response("nodejs_all.json")),
+                    dummy_pkg_to_resolved_pkg_group_response(&node_package),
                 ],
                 expected: Some(Node {
                     action: NodeInstallAction::YarnOrNode(
@@ -905,7 +1005,10 @@ mod tests {
                     })
                     .unwrap(),
                 }],
-                catalog_responses: vec![None],
+                catalog_responses: vec![
+                    Response::Search(read_search_response("nodejs_all.json")),
+                    Response::Resolve(vec![constraints_too_tight_dummy_response("nodejs_XX")]),
+                ],
                 expected: None,
             },
         ];
@@ -919,19 +1022,8 @@ mod tests {
             }
 
             if let Client::Mock(ref mut client) = flox.catalog_client {
-                for response in tc.catalog_responses {
-                    if let Some(package) = response {
-                        client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                            &package.name,
-                            &System::from("aarch64-darwin"),
-                            &package.name,
-                            &package.name,
-                            &package.version,
-                        )]);
-                    } else {
-                        // None == resolution failure == empty response.
-                        client.push_resolve_response(vec![]);
-                    }
+                for resp in tc.catalog_responses.into_iter() {
+                    client.push_response(resp);
                 }
             }
 
@@ -1126,6 +1218,8 @@ mod tests {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
+            // Response to query available node versions
+            client.push_search_response(read_search_response("nodejs_all.json"));
             // Response for unconstrained nodejs version
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "nodejs_group",
@@ -1161,14 +1255,29 @@ mod tests {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
+            // Response to query available node versions
+            client.push_search_response(read_search_response("nodejs_all.json"));
             // Response when nodejs 18 is requested
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "nodejs_group",
-                &System::from("aarch64-darwin"),
-                "nodejs",
-                "nodejs",
-                "18",
-            )]);
+            client.push_resolve_response(vec![
+                // Here rather than writing out all N node versions we support,
+                // I've listed at least one non-matching version, the correct
+                // version, and the catch-all "nodejs" package
+                constraints_too_tight_dummy_response("nodejs_20"),
+                resolved_pkg_group_with_dummy_package(
+                    "nodejs_group",
+                    &System::from("aarch64-darwin"),
+                    "nodejs_18",
+                    "nodejs_18",
+                    "18",
+                ),
+                resolved_pkg_group_with_dummy_package(
+                    "nodejs_group",
+                    &System::from("aarch64-darwin"),
+                    "nodejs",
+                    "nodejs",
+                    "18",
+                ),
+            ]);
             // Response for unconstrained yarn version
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "yarn_group",
@@ -1186,7 +1295,7 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.attr_path, "nodejs".into());
+        assert_eq!(yarn_install.node.attr_path, "nodejs_18".into());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
         assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
     }
@@ -1198,13 +1307,20 @@ mod tests {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
-            // The default version is something other than "20",
-            // so resolution fails and you get no groups back
-            client.push_resolve_response(vec![]);
+            // Response to query available node versions
+            client.push_search_response(read_search_response("nodejs_all.json"));
+            // No version of node satisfies this version requirement
+            // Again, this is just an arbitrary number of node versions
+            // since there's so many of them.
+            client.push_resolve_response(vec![
+                constraints_too_tight_dummy_response("nodejs_23"),
+                constraints_too_tight_dummy_response("nodejs_18"),
+                constraints_too_tight_dummy_response("nodejs"),
+            ]);
         }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: None,
-            node: Some("20".to_string()),
+            node: Some("25".to_string()),
         })
         .await
         .unwrap();
@@ -1218,6 +1334,8 @@ mod tests {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
+            // Response to query available node versions
+            client.push_search_response(read_search_response("nodejs_all.json"));
             // Response for unconstrained nodejs version
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "nodejs_group",
@@ -1255,6 +1373,8 @@ mod tests {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
+            // Response to query available node versions
+            client.push_search_response(read_search_response("nodejs_all.json"));
             // Response for unconstrained nodejs version
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "nodejs_group",
@@ -1283,14 +1403,21 @@ mod tests {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
+            // Response to query available node versions
+            client.push_search_response(read_search_response("nodejs_all.json"));
             // Response for nodejs version 18
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "nodejs_group",
-                &System::from("aarch64-darwin"),
-                "nodejs",
-                "nodejs",
-                "18",
-            )]);
+            client.push_resolve_response(vec![
+                constraints_too_tight_dummy_response("nodejs_23"),
+                constraints_too_tight_dummy_response("nodejs_21"),
+                constraints_too_tight_dummy_response("nodejs_20"),
+                resolved_pkg_group_with_dummy_package(
+                    "nodejs_group",
+                    &System::from("aarch64-darwin"),
+                    "nodejs_18",
+                    "nodejs_18",
+                    "18",
+                ),
+            ]);
             // Response for yarn version 1
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "yarn_group",
@@ -1308,7 +1435,7 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.attr_path, "nodejs".into());
+        assert_eq!(yarn_install.node.attr_path, "nodejs_18".into());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
         assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));

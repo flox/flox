@@ -299,6 +299,9 @@ post_cmd = '''
 [search.java_suggestions]
 cmd = "flox search java"
 
+[search.nodejs_all]
+cmd = "flox search nodejs_ --all"
+
 [show.hello]
 cmd = "flox show hello"
 
@@ -309,6 +312,20 @@ cmd = "flox show python310Packages.flask"
 files = ["init/go/common", "init/go/module"]
 pre_cmd = '''
     cp -r {common,module}/* .
+'''
+cmd = "flox init --auto-setup"
+
+[init.nodejs_20]
+files = ["init/node/nodejs_20"]
+pre_cmd = '''
+    cp -r nodejs_20/* .
+'''
+cmd = "flox init --auto-setup"
+
+[init.nodejs_gt_20]
+files = ["init/node/nodejs_gt_20"]
+pre_cmd = '''
+    cp -r nodejs_gt_20/* .
 '''
 cmd = "flox init --auto-setup"
 

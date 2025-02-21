@@ -79,6 +79,33 @@ teardown() {
   assert_output --partial "86400000"
 }
 
+# bats test_tags=catalog,init
+@test "auto init installs nodejs major version package" {
+  cp -r "$INPUT_DATA/init/node/nodejs_20/." .
+  chmod -R +w .
+  # This test ensures that when a package.json has a version requirement,
+  # in this case "20", we give them the corresponding nodejs_* package.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/nodejs_20.json" \
+    run "$FLOX_BIN" init --auto-setup
+  assert_output --partial "'nodejs' installed"
+  run "$FLOX_BIN" list
+  assert_regex "$output" "nodejs: nodejs_20.*"
+}
+
+# bats test_tags=catalog,init
+@test "auto init installs latest nodejs major version package" {
+  cp -r "$INPUT_DATA/init/node/nodejs_gt_20/." .
+  chmod -R +w .
+  # This test ensures that when a package.json has a version requirment,
+  # in this case ">=20", we give them the nodejs_* package corresponding
+  # to the latest version.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/nodejs_gt_20.json" \
+    run "$FLOX_BIN" init --auto-setup
+  assert_output --partial "'nodejs' installed"
+  run "$FLOX_BIN" list
+  assert_regex "$output" "nodejs: nodejs_23.*"
+}
+
 # bats test_tags=catalog
 @test "install krb5 with node" {
   "$FLOX_BIN" init

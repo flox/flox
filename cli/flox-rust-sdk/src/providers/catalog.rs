@@ -95,6 +95,8 @@ pub enum MockDataError {
     /// The data was parsed as JSON but it wasn't semantically valid
     #[error("invalid mocked data: {0}")]
     InvalidData(String),
+    #[error("couldn't find generated data")]
+    GeneratedDataVar,
 }
 
 /// Reads a list of mock responses from disk.
@@ -327,6 +329,14 @@ impl MockClient {
             .lock()
             .expect("couldn't acquire mock lock")
             .push_back(Response::Search(resp));
+    }
+
+    /// Push _any_ kind of response
+    pub fn push_response(&mut self, resp: Response) {
+        self.mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .push_back(resp);
     }
 
     /// Push a new response into the list of mock responses
@@ -1361,7 +1371,42 @@ pub mod test_helpers {
             msgs: vec![],
         }
     }
+
+    pub fn constraints_too_tight_dummy_response(attr_path: &str) -> ResolvedPackageGroup {
+        ResolvedPackageGroup {
+            name: attr_path.to_string(),
+            page: None,
+            msgs: vec![ResolutionMessage::ConstraintsTooTight(
+                MsgConstraintsTooTight {
+                    level: MessageLevel::Error,
+                    msg: "Resolution constraints are too tight".to_string(),
+                },
+            )],
+        }
+    }
+
+    /// Name = path under test_data/generated e.g. "resolve/hello.json"
+    pub fn read_named_mock_responses(name: &str) -> Result<VecDeque<Response>, MockDataError> {
+        let data_dir =
+            std::env::var("GENERATED_DATA").map_err(|_| MockDataError::GeneratedDataVar)?;
+        let response_path = PathBuf::from(data_dir).join(name);
+        read_mock_responses(response_path)
+    }
+
+    /// Name = filename under test_data/generated/search e.g. "ello_all.json"
+    pub fn read_search_response(name: &str) -> SearchResults {
+        let name = format!("search/{name}");
+        let mut responses = read_named_mock_responses(&name).unwrap();
+        if responses.len() > 1 {
+            panic!("search response had more than one response");
+        }
+        let Some(Response::Search(search_response)) = responses.pop_front() else {
+            panic!("expected search response, found something else");
+        };
+        search_response
+    }
 }
+
 #[cfg(test)]
 mod tests {
 
