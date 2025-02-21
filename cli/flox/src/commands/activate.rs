@@ -446,14 +446,14 @@ impl Activate {
         //    eval "$(flox activate)"
         if in_place {
             let shell = Self::detect_shell_for_in_place()?;
-            command.env("FLOX_SHELL", shell.exe_path());
+            command.arg("--shell").arg(shell.exe_path());
             Self::activate_in_place(command, shell);
 
             return Ok(());
         }
 
         let shell = Self::detect_shell_for_subshell();
-        command.env("FLOX_SHELL", shell.exe_path());
+        command.arg("--shell").arg(shell.exe_path());
         // These functions will only return if exec fails
         if interactive {
             Self::activate_interactive(command)
