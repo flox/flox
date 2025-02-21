@@ -145,6 +145,10 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
     directory.
     This variable can be used to find project files in environment hooks.
 
+`$FLOX_ENV_DESCRIPTION`
+:  `activate` sets this variable to the project name of the environment. It can
+    be used to identify or construct messages about the environment.
+
 `$_FLOX_ACTIVE_ENVIRONMENTS`
 :   A JSON array containing one object per active environment.
     This is currently an implementation detail
