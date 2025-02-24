@@ -13,6 +13,9 @@ use super::Runtime;
 use crate::config::{FLOX_CONFIG_FILE, FLOX_DISABLE_METRICS_VAR};
 
 const NIX_PROXY_IMAGE: &str = "nixos/nix";
+static NIX_PROXY_IMAGE_REF: LazyLock<Option<String>> =
+    LazyLock::new(|| env::var("_FLOX_CONTAINERIZE_PROXY_IMAGE_REF").ok());
+
 const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR: &str = "/root/.config/flox";
 static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
@@ -129,7 +132,13 @@ impl ContainerizeProxy {
         // than a Flox container of the corresponding version, which result in less
         // container image pulls. It also prevents the chicken-and-egg problem when
         // we bump `VERSION` in Flox but haven't published the container image yet.
-        let nix_container = format!("{}:{}", NIX_PROXY_IMAGE, NIX_VERSION);
+        let nix_container = format!(
+            "{}:{}",
+            NIX_PROXY_IMAGE,
+            NIX_PROXY_IMAGE_REF
+                .clone()
+                .unwrap_or(NIX_VERSION.to_string())
+        );
         command.arg(nix_container);
     }
 
