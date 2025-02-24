@@ -35,10 +35,10 @@ the container is written to `./<env name>-container.tar` instead.
 **Note**: Exporting a container from macOS requires a supported runtime to be
 found because a proxy container is used to build the environment and image. You
 may be prompted for permissions to share files into the proxy container.
-Files used in the proxy container are cached in `docker` or `podman` volumes
-which are named by the Flox version in use, e.g. `flox-nix-v1.2.3`.
-These can safely be removed any time a `flox containerize` command is not running
-using either `docker volume rm <name>` or `podman volume rm <name>`.
+Files used in the proxy container are cached using a `docker` or `podman`
+volume named `flox-nix`.
+It can safely be removed any time a `flox containerize` command is not running
+using either `docker volume rm flox-nix` or `podman volume rm flox-nix`.
 
 Running the container will behave like running `flox activate`.
 Running the container interactively with `docker run -it <container id>`,
