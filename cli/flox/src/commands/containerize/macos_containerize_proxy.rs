@@ -16,7 +16,7 @@ const NIX_PROXY_IMAGE: &str = "nixos/nix";
 const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR: &str = "/root/.config/flox";
 static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
-    LazyLock::new(|| env::var("FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
+    LazyLock::new(|| env::var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
 const CONTAINER_VOLUME_PREFIX: &str = "flox-nix-";
 
 const MOUNT_ENV: &str = "/flox_env";
