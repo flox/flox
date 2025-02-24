@@ -2,6 +2,7 @@ use std::convert::Infallible;
 use std::env;
 use std::ffi::OsString;
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::LazyLock;
 
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
@@ -34,26 +35,17 @@ impl ContainerizeProxy {
             container_runtime,
         }
     }
-}
 
-impl ContainerBuilder for ContainerizeProxy {
-    type Error = Infallible;
-
-    /// Create a [ContainerSource] for macOS that streams the output via:
-    /// 1. `<container> run`
-    /// 2. `nix run`
-    /// 3. `flox containerize`
-    fn create_container_source(
-        &self,
-        flox: &Flox,
-        // Inferred from `self.environment_path` by flox _inside_ the container.
-        _name: impl AsRef<str>,
-        tag: impl AsRef<str>,
-    ) -> Result<ContainerSource, Self::Error> {
-        // Inception L1: Container runtime args.
+    /// Base command for the container runtime.
+    fn runtime_base_command(&self) -> Command {
         let mut command = self.container_runtime.to_command();
         command.arg("run");
         command.arg("--rm");
+        command
+    }
+
+    /// Inception L1: Container runtime args.
+    fn add_runtime_args(&self, command: &mut Command, flox: &Flox) {
         // The `--userns` flag creates a mapping of users in the container,
         // which we need. However, in order to work we also need the user
         // in the container to be `root` otherwise you run into multi-user
@@ -139,14 +131,19 @@ impl ContainerBuilder for ContainerizeProxy {
         // - correct version of nix
         let flox_container = format!("{}:{}", FLOX_PROXY_IMAGE, flox_version_tag);
         command.arg(flox_container);
+    }
 
-        // Inception L2: Nix args.
+    /// Inception L2: Nix args.
+    fn add_nix_args(&self, command: &mut Command) {
         command.arg("nix");
         command.args([
             "--extra-experimental-features",
             "nix-command flakes",
             "--accept-flake-config",
         ]);
+
+        let flox_version = &*FLOX_VERSION;
+        let flox_version_tag = format!("v{}", flox_version.base_semver());
         let flox_flake = format!(
             "{}/{}",
             FLOX_FLAKE,
@@ -157,9 +154,10 @@ impl ContainerBuilder for ContainerizeProxy {
                 .unwrap_or(flox_version.commit_sha().unwrap_or(flox_version_tag))
         );
         command.args(["run", &flox_flake, "--"]);
+    }
 
-        // Inception L3: Flox args.
-
+    /// Inception L3: Flox args.
+    fn add_flox_args(&self, command: &mut Command, flox: &Flox, tag: impl AsRef<str>) {
         // TODO: this should probably be a method on Verbosity
         match flox.verbosity {
             -1 => {
@@ -177,6 +175,24 @@ impl ContainerBuilder for ContainerizeProxy {
         command.args(["--dir", MOUNT_ENV]);
         command.args(["--tag", tag.as_ref()]);
         command.args(["--file", "-"]);
+    }
+}
+
+impl ContainerBuilder for ContainerizeProxy {
+    type Error = Infallible;
+
+    /// Create a [ContainerSource] for macOS that streams the output via a proxy container.
+    fn create_container_source(
+        &self,
+        flox: &Flox,
+        // Inferred from `self.environment_path` by flox _inside_ the container.
+        _name: impl AsRef<str>,
+        tag: impl AsRef<str>,
+    ) -> Result<ContainerSource, Self::Error> {
+        let mut command = self.runtime_base_command();
+        self.add_runtime_args(&mut command, flox);
+        self.add_nix_args(&mut command);
+        self.add_flox_args(&mut command, flox, tag);
 
         let container_source = ContainerSource::new(command);
         Ok(container_source)
