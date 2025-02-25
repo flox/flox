@@ -226,7 +226,7 @@ impl ManifestMergeStrategy for ShallowMerger {
         &self,
         low_priority: &Manifest,
         high_priority: &Manifest,
-    ) -> Result<Manifest, MergeError> {
+    ) -> Result<(Manifest, Vec<Warning>), MergeError> {
         let version = Self::merge_version(&low_priority.version, &high_priority.version)?;
         let (install, install_warnings) =
             Self::merge_install(&low_priority.install, &high_priority.install)?;
@@ -258,7 +258,7 @@ impl ManifestMergeStrategy for ShallowMerger {
             include: Include::default(),
         };
 
-        let _warnings = [
+        let warnings = [
             install_warnings,
             vars_warnings,
             options_warnings,
@@ -270,7 +270,7 @@ impl ManifestMergeStrategy for ShallowMerger {
         .flatten()
         .collect::<Vec<_>>();
 
-        Ok(manifest)
+        Ok((manifest, warnings))
     }
 }
 
