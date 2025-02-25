@@ -4,8 +4,11 @@ use super::{
     append_optional_strings,
     deep_merge_optional_containerize_config,
     map_union,
+    shallow_merge_options,
+    KeyPath,
     ManifestMergeStrategy,
     MergeError,
+    Warning,
 };
 use crate::models::manifest::typed::{
     Allows,
@@ -44,13 +47,21 @@ impl ManifestMergeStrategy for ShallowMerger {
         low_priority: &Install,
         high_priority: &Install,
     ) -> Result<Install, MergeError> {
-        let merged = map_union(low_priority.inner(), high_priority.inner());
+        let (merged, _warnings) = map_union(
+            KeyPath::from_iter(["install"]),
+            low_priority.inner(),
+            high_priority.inner(),
+        );
         Ok(Install(merged))
     }
 
     /// Keys in `manifest2` overwrite keys in `manifest1`.
     fn merge_vars(low_priority: &Vars, high_priority: &Vars) -> Result<Vars, MergeError> {
-        let merged = map_union(low_priority.inner(), high_priority.inner());
+        let (merged, _warnings) = map_union(
+            KeyPath::from_iter(["vars"]),
+            low_priority.inner(),
+            high_priority.inner(),
+        );
         Ok(Vars(merged))
     }
 
@@ -87,22 +98,53 @@ impl ManifestMergeStrategy for ShallowMerger {
         low_priority: &Options,
         high_priority: &Options,
     ) -> Result<Options, MergeError> {
-        let merged_allow_unfree = high_priority.allow.unfree.or(low_priority.allow.unfree);
-        let merged_allow_broken = high_priority.allow.broken.or(low_priority.allow.broken);
-        let merged_allow_licenses = if high_priority.allow.licenses.is_empty() {
-            low_priority.allow.licenses.clone()
-        } else {
-            high_priority.allow.licenses.clone()
-        };
-        let merged_semver_allow_pre_releases = high_priority
-            .semver
-            .allow_pre_releases
-            .or(low_priority.semver.allow_pre_releases);
-        let merged_cuda_detection = high_priority.cuda_detection.or(low_priority.cuda_detection);
-        let merged_systems = high_priority
-            .systems
-            .clone()
-            .or(low_priority.systems.clone());
+        let mut warnings = vec![];
+        let root_key = KeyPath::from_iter(["options"]);
+        let allow_key = root_key.push("allow");
+
+        let (merged_allow_unfree, allow_unfree_warning) = shallow_merge_options(
+            allow_key.push("unfree"),
+            low_priority.allow.unfree,
+            high_priority.allow.unfree,
+        );
+
+        let (merged_allow_broken, allow_broken_warning) = shallow_merge_options(
+            allow_key.push("broken"),
+            low_priority.allow.broken,
+            high_priority.allow.broken,
+        );
+
+        let (merged_allow_licenses, allow_licenses_warning) =
+            if high_priority.allow.licenses.is_empty() {
+                (low_priority.allow.licenses.clone(), None)
+            } else {
+                let merged = high_priority.allow.licenses.clone();
+                if low_priority.allow.licenses.is_empty() {
+                    (merged, None)
+                } else {
+                    let warning = Warning::Overriding(allow_key.push("licenses"));
+                    (merged, Some(warning))
+                }
+            };
+
+        let (merged_semver_allow_pre_releases, allow_pre_releases_warning) = shallow_merge_options(
+            root_key.extend(["semver", "allow-pre-releases"]),
+            low_priority.semver.allow_pre_releases,
+            high_priority.semver.allow_pre_releases,
+        );
+
+        let (merged_cuda_detection, cuda_detection_warning) = shallow_merge_options(
+            root_key.push("cuda-detection"),
+            low_priority.cuda_detection,
+            high_priority.cuda_detection,
+        );
+
+        let (merged_systems, systems_warning) = shallow_merge_options(
+            root_key.push("systems"),
+            low_priority.systems.clone(),
+            high_priority.systems.clone(),
+        );
+
         let merged = Options {
             systems: merged_systems,
             allow: Allows {
@@ -115,6 +157,20 @@ impl ManifestMergeStrategy for ShallowMerger {
             },
             cuda_detection: merged_cuda_detection,
         };
+
+        warnings.extend(
+            [
+                allow_unfree_warning,
+                allow_broken_warning,
+                allow_licenses_warning,
+                allow_pre_releases_warning,
+                cuda_detection_warning,
+                systems_warning,
+            ]
+            .iter()
+            .flatten(),
+        );
+
         Ok(merged)
     }
 
@@ -122,12 +178,20 @@ impl ManifestMergeStrategy for ShallowMerger {
         low_priority: &Services,
         high_priority: &Services,
     ) -> Result<Services, MergeError> {
-        let merged = map_union(low_priority.inner(), high_priority.inner());
+        let (merged, _warnings) = map_union(
+            KeyPath::from_iter(["services"]),
+            low_priority.inner(),
+            high_priority.inner(),
+        );
         Ok(Services(merged))
     }
 
     fn merge_build(low_priority: &Build, high_priority: &Build) -> Result<Build, MergeError> {
-        let merged = map_union(low_priority.inner(), high_priority.inner());
+        let (merged, _warnings) = map_union(
+            KeyPath::from_iter(["build"]),
+            low_priority.inner(),
+            high_priority.inner(),
+        );
         Ok(Build(merged))
     }
 
@@ -140,9 +204,11 @@ impl ManifestMergeStrategy for ShallowMerger {
             (Some(containerize_lp), None) => Ok(Some(containerize_lp.clone())),
             (None, Some(containerize_hp)) => Ok(Some(containerize_hp.clone())),
             (Some(Containerize { config: cfg_lp }), Some(Containerize { config: cfg_hp })) => {
-                let merged =
+                let (merged_config, _warnings) =
                     deep_merge_optional_containerize_config(cfg_lp.as_ref(), cfg_hp.as_ref());
-                Ok(Some(Containerize { config: merged }))
+                Ok(Some(Containerize {
+                    config: merged_config,
+                }))
             },
         }
     }
@@ -311,11 +377,18 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let merged = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp)).unwrap();
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let merged = merged.unwrap();
             if cfg_hp.user.is_some() {
-                prop_assert_eq!(merged.user, cfg_hp.user);
+                prop_assert_eq!(&merged.user, &cfg_hp.user);
             } else {
-                prop_assert_eq!(merged.user, cfg_lp.user);
+                prop_assert_eq!(&merged.user, &cfg_lp.user);
+            }
+            if cfg_hp.user.is_some() && cfg_lp.user.is_some() {
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["containerize", "config", "user"]))),
+                    "Expected a warning about overriding the user in {warnings:?}"
+                );
             }
         }
 
@@ -325,7 +398,8 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let merged = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp)).unwrap();
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let merged = merged.unwrap();
             match (cfg_lp.exposed_ports, cfg_hp.exposed_ports) {
                 (None, None) => prop_assert!(merged.exposed_ports.is_none()),
                 (Some(lp), None) => {
@@ -340,6 +414,12 @@ mod tests {
                     for port in merged_ports.iter() {
                         prop_assert!(hp.contains(port) || lp.contains(port));
                     }
+
+                    // No warnings should be generated for extending the exposed ports.
+                    for warning in warnings.iter() {
+                        prop_assert_ne!(warning, &Warning::Overriding(KeyPath::from_iter(["containerize", "exposed-ports"])));
+                    }
+
                 }
             }
         }
@@ -351,11 +431,16 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let merged = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp)).unwrap();
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let merged = merged.unwrap();
             if cfg_hp.cmd.is_some() {
-                prop_assert_eq!(merged.cmd, cfg_hp.cmd);
+                prop_assert_eq!(&merged.cmd, &cfg_hp.cmd);
             } else {
-                prop_assert_eq!(merged.cmd, cfg_lp.cmd);
+                prop_assert_eq!(&merged.cmd, &cfg_lp.cmd);
+            }
+
+            if cfg_hp.cmd.is_some() && cfg_lp.cmd.is_some() {
+                prop_assert!(warnings.contains(&Warning::Overriding(KeyPath::from_iter(["containerize", "config", "cmd"]))), "Expected a warning about overriding the cmd in {warnings:?}");
             }
         }
 
@@ -365,7 +450,8 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let merged = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp)).unwrap();
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let merged = merged.unwrap();
             match (cfg_lp.volumes, cfg_hp.volumes) {
                 (None, None) => prop_assert!(merged.volumes.is_none()),
                 (Some(lp), None) => {
@@ -382,6 +468,11 @@ mod tests {
                     }
                 }
             }
+
+            // No warnings should be generated for extending the volumes set.
+            for warning in warnings.iter() {
+                prop_assert_ne!(warning, &Warning::Overriding(KeyPath::from_iter(["containerize", "volumes"])));
+            }
         }
 
         // Ensures that a merged config retains a single working directory, preferrably
@@ -391,11 +482,19 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let merged = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp)).unwrap();
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let merged = merged.unwrap();
             if cfg_hp.working_dir.is_some() {
-                prop_assert_eq!(merged.working_dir, cfg_hp.working_dir);
+                prop_assert_eq!(&merged.working_dir, &cfg_hp.working_dir);
             } else {
-                prop_assert_eq!(merged.working_dir, cfg_lp.working_dir);
+                prop_assert_eq!(&merged.working_dir, &cfg_lp.working_dir);
+            }
+
+            if cfg_hp.working_dir.is_some() && cfg_lp.working_dir.is_some() {
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["containerize", "config", "working-dir"]))),
+                    "Expected a warning about overriding the working dir in {warnings:?}"
+                );
             }
         }
 
@@ -405,7 +504,8 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let merged = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp)).unwrap();
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let merged = merged.unwrap();
             match (cfg_lp.labels, cfg_hp.labels) {
                 (None, None) => prop_assert!(merged.labels.is_none()),
                 (Some(lp), None) => {
@@ -423,6 +523,13 @@ mod tests {
                         } else {
                             prop_assert_eq!(merged_labels.get(key), lp.get(key));
                         }
+
+                        if hp.contains_key(key) && lp.contains_key(key) {
+                            prop_assert!(
+                                warnings.contains(&Warning::Overriding(KeyPath::from_iter(["containerize", "config", "labels", key]))),
+                                "Expected a warning about overriding the label {key} in {warnings:?}"
+                            );
+                        }
                     }
                 }
             }
@@ -434,11 +541,19 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let merged = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp)).unwrap();
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let merged = merged.unwrap();
             if cfg_hp.stop_signal.is_some() {
-                prop_assert_eq!(merged.stop_signal, cfg_hp.stop_signal);
+                prop_assert_eq!(&merged.stop_signal, &cfg_hp.stop_signal);
             } else {
-                prop_assert_eq!(merged.stop_signal, cfg_lp.stop_signal);
+                prop_assert_eq!(&merged.stop_signal, &cfg_lp.stop_signal);
+            }
+
+            if cfg_hp.stop_signal.is_some() && cfg_lp.stop_signal.is_some() {
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["containerize", "config", "stop-signal"]))),
+                    "Expected a warning about overriding the stop signal in {warnings:?}"
+                );
             }
         }
 
@@ -457,7 +572,8 @@ mod tests {
             let merged_cont = maybe_merged.unwrap();
             prop_assert!(merged_cont.config.is_some());
             let merged_cfg = merged_cont.config.unwrap();
-            let expected_cfg = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp)).unwrap();
+            let (expected_cfg, _) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let expected_cfg = expected_cfg.unwrap();
             prop_assert_eq!(merged_cfg, expected_cfg);
         }
     }

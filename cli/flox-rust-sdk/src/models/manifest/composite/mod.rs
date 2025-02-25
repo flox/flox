@@ -62,7 +62,7 @@ impl Display for KeyPath {
 
 impl<Key: Into<String>> FromIterator<Key> for KeyPath {
     fn from_iter<T: IntoIterator<Item = Key>>(iter: T) -> Self {
-        iter.into_iter().map(|k| k.into()).collect()
+        Self(iter.into_iter().map(|k| k.into()).collect())
     }
 }
 
@@ -146,14 +146,6 @@ trait ManifestMergeStrategy {
     ) -> Result<Manifest, MergeError>;
 }
 
-/// Takes the higher priority string if it's present, or the lower priority string.
-fn shallow_merge_optional_strings(
-    low_priority: Option<&String>,
-    high_priority: Option<&String>,
-) -> Option<String> {
-    high_priority.cloned().or(low_priority.cloned())
-}
-
 /// Given two optional strings, append them if they're present, return the present one or `None` if not.
 fn append_optional_strings(first: Option<&String>, second: Option<&String>) -> Option<String> {
     match (first, second) {
@@ -186,76 +178,121 @@ fn optional_set_union<T: Clone + Ord>(
 /// Takes the union of the key-value pairs from the two maps, with key-value pairs from the high
 /// priority map taking precedence.
 fn optional_map_union<T: Clone + Ord>(
+    base_key: KeyPath,
     low_priority: Option<&BTreeMap<String, T>>,
     high_priority: Option<&BTreeMap<String, T>>,
-) -> Option<BTreeMap<String, T>> {
+) -> (Option<BTreeMap<String, T>>, Vec<Warning>) {
     match (low_priority, high_priority) {
-        (None, None) => None,
-        (Some(map1), None) => Some(map1.clone()),
-        (None, Some(map2)) => Some(map2.clone()),
+        (None, None) => (None, Default::default()),
+        (Some(map1), None) => (Some(map1.clone()), Default::default()),
+        (None, Some(map2)) => (Some(map2.clone()), Default::default()),
         (Some(map1), Some(map2)) => {
-            let merged = map_union(map1, map2);
-            Some(merged)
+            let (merged, warnings) = map_union(base_key, map1, map2);
+            (Some(merged), warnings)
         },
     }
 }
 
 /// Takes the union of the key-value pairs from the two maps, with key-value pairs from the high
 /// priority map taking precedence.
-fn map_union<K: Clone + Ord, V: Clone>(
+fn map_union<K, V>(
+    base_key: KeyPath,
     low_priority: &BTreeMap<K, V>,
     high_priority: &BTreeMap<K, V>,
-) -> BTreeMap<K, V> {
+) -> (BTreeMap<K, V>, Vec<Warning>)
+where
+    K: Clone + Ord,
+    for<'a> &'a K: Into<String>,
+    V: Clone,
+{
+    let low_priority_keys: BTreeSet<_> = low_priority.keys().collect();
+    let high_priority_keys: BTreeSet<_> = high_priority.keys().collect();
+    let warnings = low_priority_keys
+        .intersection(&high_priority_keys)
+        .map(|key| Warning::Overriding(base_key.push(*key)))
+        .collect();
+
     let mut merged = low_priority.clone();
     merged.extend(high_priority.clone());
-    merged
-}
-
-/// Takes the entire contents of the high priority vector if it's present, otherwise the entire
-/// contents of the low priority vector.
-fn shallow_merge_optional_vecs<T: Clone>(
-    low_priority: Option<&Vec<T>>,
-    high_priority: Option<&Vec<T>>,
-) -> Option<Vec<T>> {
-    high_priority.cloned().or(low_priority.cloned())
+    (merged, warnings)
 }
 
 /// Takes the high priority `T` if it's present, otherwise the low priority `T`.
-fn shallow_merge_options<T: Clone>(
-    low_priority: Option<&T>,
-    high_priority: Option<&T>,
-) -> Option<T> {
-    high_priority.cloned().or(low_priority.cloned())
+#[must_use]
+fn shallow_merge_options<M, T: Into<M>>(
+    key: KeyPath,
+    low_priority: Option<T>,
+    high_priority: Option<T>,
+) -> (Option<M>, Option<Warning>) {
+    match (low_priority, high_priority) {
+        (None, None) => (None, None),
+        (Some(lp), None) => (Some(lp.into()), None),
+        (None, Some(hp)) => (Some(hp.into()), None),
+        (Some(_), Some(hp)) => (Some(hp.into()), Some(Warning::Overriding(key))),
+    }
 }
 
 fn deep_merge_optional_containerize_config(
     low_priority: Option<&ContainerizeConfig>,
     high_priority: Option<&ContainerizeConfig>,
-) -> Option<ContainerizeConfig> {
+) -> (Option<ContainerizeConfig>, Vec<Warning>) {
+    let mut warnings = Vec::new();
+
     match (low_priority, high_priority) {
-        (None, None) => None,
-        (Some(cfg), None) => Some(cfg.clone()),
-        (None, Some(cfg)) => Some(cfg.clone()),
+        (None, None) => (None, warnings),
+        (Some(cfg), None) => (Some(cfg.clone()), warnings),
+        (None, Some(cfg)) => (Some(cfg.clone()), warnings),
         (Some(cfg_lp), Some(cfg_hp)) => {
+            let root_key = KeyPath::from_iter(["containerize", "config"]);
+            let (user, user_warning) = shallow_merge_options(
+                root_key.push("user"),
+                cfg_lp.user.as_ref(),
+                cfg_hp.user.as_ref(),
+            );
+            warnings.extend(user_warning);
+
+            let (cmd, cmd_warning) = shallow_merge_options(
+                root_key.push("cmd"),
+                cfg_lp.cmd.as_deref(),
+                cfg_hp.cmd.as_deref(),
+            );
+            warnings.extend(cmd_warning);
+
+            let (working_dir, working_dir_warning) = shallow_merge_options(
+                root_key.push("working-dir"),
+                cfg_lp.working_dir.as_ref(),
+                cfg_hp.working_dir.as_ref(),
+            );
+            warnings.extend(working_dir_warning);
+
+            let (labels, labels_warnings) = optional_map_union(
+                root_key.push("labels"),
+                cfg_lp.labels.as_ref(),
+                cfg_hp.labels.as_ref(),
+            );
+            warnings.extend(labels_warnings);
+
+            let (stop_signal, stop_signal_warning) = shallow_merge_options(
+                root_key.push("stop-signal"),
+                cfg_lp.stop_signal.as_ref(),
+                cfg_hp.stop_signal.as_ref(),
+            );
+            warnings.extend(stop_signal_warning);
+
             let cfg = ContainerizeConfig {
-                user: shallow_merge_options(cfg_lp.user.as_ref(), cfg_hp.user.as_ref()),
+                user,
                 exposed_ports: optional_set_union(
                     cfg_lp.exposed_ports.as_ref(),
                     cfg_hp.exposed_ports.as_ref(),
                 ),
-                cmd: shallow_merge_options(cfg_lp.cmd.as_ref(), cfg_hp.cmd.as_ref()),
+                cmd,
                 volumes: optional_set_union(cfg_lp.volumes.as_ref(), cfg_hp.volumes.as_ref()),
-                working_dir: shallow_merge_options(
-                    cfg_lp.working_dir.as_ref(),
-                    cfg_hp.working_dir.as_ref(),
-                ),
-                labels: optional_map_union(cfg_lp.labels.as_ref(), cfg_hp.labels.as_ref()),
-                stop_signal: shallow_merge_options(
-                    cfg_lp.stop_signal.as_ref(),
-                    cfg_hp.stop_signal.as_ref(),
-                ),
+                working_dir,
+                labels,
+                stop_signal,
             };
-            Some(cfg)
+
+            (Some(cfg), warnings)
         },
     }
 }
