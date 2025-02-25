@@ -153,6 +153,10 @@ let
           "${environment}/activate"
           "--env"
           environment
+          "--env-cache"
+          "/tmp"
+          "--env-description"
+          containerName
           "--shell"
           "${containerPkgs.bashInteractive}/bin/bash"
         ];
