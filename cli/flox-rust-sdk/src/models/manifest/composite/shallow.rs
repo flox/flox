@@ -299,7 +299,7 @@ mod tests {
         fn merges_vars_section(maps in btree_maps_overlapping_keys::<String>(1, 3)) {
             let vars1 = Vars(maps.map1.clone());
             let vars2 = Vars(maps.map2.clone());
-            let (merged, _warnings) = ShallowMerger::merge_vars(&vars1, &vars2).unwrap();
+            let (merged, warnings) = ShallowMerger::merge_vars(&vars1, &vars2).unwrap();
             let merged = merged.inner();
             for key in maps.unique_keys_map1.iter() {
                 prop_assert_eq!(maps.map1.get(key), merged.get(key));
@@ -309,6 +309,10 @@ mod tests {
             }
             for key in maps.duplicate_keys.iter() {
                 prop_assert_eq!(maps.map2.get(key), merged.get(key));
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["vars", key]))),
+                    "Expected a warning about overriding the var {key} in {warnings:?}"
+                );
             }
         }
 
@@ -319,7 +323,7 @@ mod tests {
         fn merges_install_section(maps in btree_maps_overlapping_keys::<ManifestPackageDescriptor>(1, 3)) {
             let install1 = Install(maps.map1.clone());
             let install2 = Install(maps.map2.clone());
-            let (merged, _warnings) = ShallowMerger::merge_install(&install1, &install2).unwrap();
+            let (merged, warnings) = ShallowMerger::merge_install(&install1, &install2).unwrap();
             let merged = merged.inner();
             for key in maps.unique_keys_map1.iter() {
                 prop_assert_eq!(maps.map1.get(key), merged.get(key));
@@ -329,6 +333,10 @@ mod tests {
             }
             for key in maps.duplicate_keys.iter() {
                 prop_assert_eq!(maps.map2.get(key), merged.get(key));
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["install", key]))),
+                    "Expected a warning about overriding the package descriptor {key} in {warnings:?}"
+                );
             }
         }
 
@@ -339,7 +347,7 @@ mod tests {
         fn merges_services_section(maps in btree_maps_overlapping_keys::<ServiceDescriptor>(1, 3)) {
             let services1 = Services(maps.map1.clone());
             let services2 = Services(maps.map2.clone());
-            let (merged, _warnings) = ShallowMerger::merge_services(&services1, &services2).unwrap();
+            let (merged, warnings) = ShallowMerger::merge_services(&services1, &services2).unwrap();
             let merged = merged.inner();
             for key in maps.unique_keys_map1.iter() {
                 prop_assert_eq!(maps.map1.get(key), merged.get(key));
@@ -349,6 +357,10 @@ mod tests {
             }
             for key in maps.duplicate_keys.iter() {
                 prop_assert_eq!(maps.map2.get(key), merged.get(key));
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["services", key]))),
+                    "Expected a warning about overriding the service descriptor {key} in {warnings:?}"
+                );
             }
         }
 
@@ -359,7 +371,7 @@ mod tests {
         fn merges_build_section(maps in btree_maps_overlapping_keys::<BuildDescriptor>(1, 3)) {
             let build1 = Build(maps.map1.clone());
             let build2 = Build(maps.map2.clone());
-            let (merged, _warnings) = ShallowMerger::merge_build(&build1, &build2).unwrap();
+            let (merged, warnings) = ShallowMerger::merge_build(&build1, &build2).unwrap();
             let merged = merged.inner();
             for key in maps.unique_keys_map1.iter() {
                 prop_assert_eq!(maps.map1.get(key), merged.get(key));
@@ -369,6 +381,10 @@ mod tests {
             }
             for key in maps.duplicate_keys.iter() {
                 prop_assert_eq!(maps.map2.get(key), merged.get(key));
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["build", key]))),
+                    "Expected a warning about overriding the build descriptor {key} in {warnings:?}"
+                );
             }
         }
 
