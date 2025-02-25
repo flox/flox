@@ -423,6 +423,17 @@ EOF
   run podman run --rm "test:$TAG"
   assert_success
   assert_output --partial "Hello, world!"
+
+  # Verify that the `activate` entrypoint is still used when an ad-hoc command
+  # is used and that (since it's quicker than executing a separate test)
+  # `FLOX_ENV_*` are set correctly.
+  run podman run --rm "test:$TAG" -c 'echo $FLOX_ENV_CACHE'
+  assert_success
+  assert_output "/tmp"
+
+  run podman run --rm "test:$TAG" -c 'echo $FLOX_ENV_DESCRIPTION'
+  assert_success
+  assert_output "test"
 }
 
 @test "container with user:group set can run as specified user:group" {
