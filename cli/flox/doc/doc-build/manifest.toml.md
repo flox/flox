@@ -453,10 +453,12 @@ with the produced `hello.txt` file in it.
 The full set of options is shown below:
 ```
 BuildDescriptor ::= {
-  command    = STRING
-, sandbox    = null | ("off" | "pure")
-, files      = null | [PATH]
-, systems    = null | [STRING, ...]
+  command     = STRING
+, sandbox     = null | ("off" | "pure")
+, files       = null | [PATH]
+, systems     = null | [STRING, ...]
+, version     = STRING
+, description = null | STRING
 }
 
 ```
@@ -484,6 +486,13 @@ BuildDescriptor ::= {
 `systems`
 :   An optional list of systems on which to build this package.
     If omitted, the package can be built on any system.
+
+`version`
+:   The version string to attach to this build artifact.
+
+`description`
+:   The description string to attach to this build artifact.
+
 
 ## `[options]`
 
