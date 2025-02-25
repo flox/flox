@@ -157,6 +157,10 @@ let
           environment
           "--mode"
           activationMode
+          "--env-cache"
+          "/tmp"
+          "--env-description"
+          containerName
           "--shell"
           "${containerPkgs.bashInteractive}/bin/bash"
         ];
