@@ -99,7 +99,7 @@ pub struct FloxConfig {
     /// The notification message is:
     /// ```
     /// Upgrades are available for packages in 'environment-name'.
-    /// Use 'flox upgrade' to get the latest.
+    /// Use 'flox upgrade --dry-run' for details.
     /// ```
     ///
     /// (default: true)
