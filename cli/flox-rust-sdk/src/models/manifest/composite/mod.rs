@@ -177,14 +177,6 @@ trait ManifestMergeStrategy {
     ) -> Result<(Manifest, Vec<Warning>), MergeError>;
 }
 
-/// Takes the higher priority string if it's present, or the lower priority string.
-fn shallow_merge_optional_strings(
-    low_priority: Option<&String>,
-    high_priority: Option<&String>,
-) -> Option<String> {
-    high_priority.cloned().or(low_priority.cloned())
-}
-
 /// Given two optional strings, append them if they're present, return the present one or `None` if not.
 fn append_optional_strings(first: Option<&String>, second: Option<&String>) -> Option<String> {
     match (first, second) {
