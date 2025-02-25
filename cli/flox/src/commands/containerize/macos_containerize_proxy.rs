@@ -7,9 +7,10 @@ use std::sync::LazyLock;
 use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
 use flox_rust_sdk::providers::nix::NIX_VERSION;
+use flox_rust_sdk::utils::ReaderExt;
 use indoc::formatdoc;
 use thiserror::Error;
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument};
 
 use super::Runtime;
 use crate::config::{FLOX_CONFIG_FILE, FLOX_DISABLE_METRICS_VAR};
@@ -99,20 +100,32 @@ impl ContainerizeProxy {
             cp -R /nix/var/nix/profiles {cache_root}/nix/var/nix/
         "}]);
 
-        command.stdout(Stdio::piped());
-        command.stderr(Stdio::piped());
         debug!(?command, "running populate cache volume command");
-
-        let output = command
-            .output()
+        let mut child = command
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .map_err(ContainerizeProxyError::PopulateCacheVolume)?;
 
-        if !output.status.success() {
+        let stderr = child
+            .stderr
+            .take()
+            .expect("STDERR is piped")
+            .tap_lines(|line| info!("{line}"));
+
+        child
+            .stdout
+            .take()
+            .expect("STDOUT is piped")
+            .tap_lines(|line| info!("{line}"));
+
+        let status = child
+            .wait()
+            .map_err(ContainerizeProxyError::PopulateCacheVolume)?;
+
+        if !status.success() {
             return Err(ContainerizeProxyError::PopulateCacheVolume(
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    String::from_utf8_lossy(&output.stderr).to_string(),
-                ),
+                std::io::Error::new(std::io::ErrorKind::Other, stderr.wait().to_string()),
             ));
         }
 
