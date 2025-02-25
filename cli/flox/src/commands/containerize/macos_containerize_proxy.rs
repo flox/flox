@@ -75,7 +75,7 @@ impl ContainerizeProxy {
     fn add_cache_mount(&self, command: &mut Command, path: &str) {
         command.args([
             "--mount",
-            &format!("type=volume,src={},dst=/{}", CONTAINER_VOLUME, path),
+            &format!("type=volume,src={CONTAINER_VOLUME},dst={path}"),
         ]);
     }
 
