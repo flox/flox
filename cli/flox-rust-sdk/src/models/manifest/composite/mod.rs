@@ -25,17 +25,28 @@ use super::typed::{
 #[derive(Error, Debug)]
 pub enum MergeError {}
 
-#[derive(Debug, Clone, Default)]
+/// A key path to a value in a manifest.
+/// This is used to provide the location for warnings.
+///
+/// The `KeyPath` behaves like an immutable stack of keys,
+/// where [`KeyPath::push`] and [`KeyPath::extend`] return a new `KeyPath`
+/// with the new key(s) added to the top of the stack,
+/// leaving the original `KeyPath` unchanged.
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct KeyPath(Vec<String>);
 impl KeyPath {
+    /// Create a new empty `KeyPath`.
     pub const fn new() -> Self {
         Self(Vec::new())
     }
 
+    /// Create a new `KeyPath` from `self`
+    /// with the given key pushed onto the top of the stack.
     pub fn push(&self, key: impl Into<String>) -> Self {
         self.extend([key.into()])
     }
 
+    /// Create a new `KeyPath` from `self` with the given keys pushed onto the top of the stack.
     fn extend(&self, iter: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let mut new_path = self.0.clone();
         new_path.extend(iter.into_iter().map(|k| k.into()));
@@ -55,6 +66,15 @@ impl<Key: Into<String>> FromIterator<Key> for KeyPath {
     }
 }
 
+/// A warning that occurred during the merge of two manifests.
+/// This is used to provide feedback to the user about potential issues.
+///
+/// Warnings are not errors, but they may indicate
+/// that the user should review the merged manifest or its dependencies.
+///
+/// Currently, the only warning is that a value is being overridden,
+/// but more warnings may be added in the future.
+#[derive(Debug, Clone, PartialEq)]
 #[must_use]
 pub enum Warning {
     Overriding(KeyPath),
