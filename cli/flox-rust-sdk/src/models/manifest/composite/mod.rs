@@ -62,7 +62,7 @@ impl Display for KeyPath {
 
 impl<Key: Into<String>> FromIterator<Key> for KeyPath {
     fn from_iter<T: IntoIterator<Item = Key>>(iter: T) -> Self {
-        iter.into_iter().map(|k| k.into()).collect()
+        Self(iter.into_iter().map(|k| k.into()).collect())
     }
 }
 

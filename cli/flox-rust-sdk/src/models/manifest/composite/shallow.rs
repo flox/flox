@@ -377,12 +377,18 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let (merged, _warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
             let merged = merged.unwrap();
             if cfg_hp.user.is_some() {
-                prop_assert_eq!(merged.user, cfg_hp.user);
+                prop_assert_eq!(&merged.user, &cfg_hp.user);
             } else {
-                prop_assert_eq!(merged.user, cfg_lp.user);
+                prop_assert_eq!(&merged.user, &cfg_lp.user);
+            }
+            if cfg_hp.user.is_some() && cfg_lp.user.is_some() {
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["containerize", "config", "user"]))),
+                    "Expected a warning about overriding the user in {warnings:?}"
+                );
             }
         }
 
@@ -392,7 +398,7 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let (merged, _warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
             let merged = merged.unwrap();
             match (cfg_lp.exposed_ports, cfg_hp.exposed_ports) {
                 (None, None) => prop_assert!(merged.exposed_ports.is_none()),
@@ -408,6 +414,12 @@ mod tests {
                     for port in merged_ports.iter() {
                         prop_assert!(hp.contains(port) || lp.contains(port));
                     }
+
+                    // No warnings should be generated for extending the exposed ports.
+                    for warning in warnings.iter() {
+                        prop_assert_ne!(warning, &Warning::Overriding(KeyPath::from_iter(["containerize", "exposed-ports"])));
+                    }
+
                 }
             }
         }
@@ -419,12 +431,16 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let (merged, _warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
             let merged = merged.unwrap();
             if cfg_hp.cmd.is_some() {
-                prop_assert_eq!(merged.cmd, cfg_hp.cmd);
+                prop_assert_eq!(&merged.cmd, &cfg_hp.cmd);
             } else {
-                prop_assert_eq!(merged.cmd, cfg_lp.cmd);
+                prop_assert_eq!(&merged.cmd, &cfg_lp.cmd);
+            }
+
+            if cfg_hp.cmd.is_some() && cfg_lp.cmd.is_some() {
+                prop_assert!(warnings.contains(&Warning::Overriding(KeyPath::from_iter(["containerize", "config", "cmd"]))), "Expected a warning about overriding the cmd in {warnings:?}");
             }
         }
 
@@ -434,7 +450,7 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let (merged, _warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
             let merged = merged.unwrap();
             match (cfg_lp.volumes, cfg_hp.volumes) {
                 (None, None) => prop_assert!(merged.volumes.is_none()),
@@ -452,6 +468,11 @@ mod tests {
                     }
                 }
             }
+
+            // No warnings should be generated for extending the volumes set.
+            for warning in warnings.iter() {
+                prop_assert_ne!(warning, &Warning::Overriding(KeyPath::from_iter(["containerize", "volumes"])));
+            }
         }
 
         // Ensures that a merged config retains a single working directory, preferrably
@@ -461,12 +482,19 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let (merged, _warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
             let merged = merged.unwrap();
             if cfg_hp.working_dir.is_some() {
-                prop_assert_eq!(merged.working_dir, cfg_hp.working_dir);
+                prop_assert_eq!(&merged.working_dir, &cfg_hp.working_dir);
             } else {
-                prop_assert_eq!(merged.working_dir, cfg_lp.working_dir);
+                prop_assert_eq!(&merged.working_dir, &cfg_lp.working_dir);
+            }
+
+            if cfg_hp.working_dir.is_some() && cfg_lp.working_dir.is_some() {
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["containerize", "config", "working-dir"]))),
+                    "Expected a warning about overriding the working dir in {warnings:?}"
+                );
             }
         }
 
@@ -476,7 +504,7 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let (merged, _warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
             let merged = merged.unwrap();
             match (cfg_lp.labels, cfg_hp.labels) {
                 (None, None) => prop_assert!(merged.labels.is_none()),
@@ -495,6 +523,13 @@ mod tests {
                         } else {
                             prop_assert_eq!(merged_labels.get(key), lp.get(key));
                         }
+
+                        if hp.contains_key(key) && lp.contains_key(key) {
+                            prop_assert!(
+                                warnings.contains(&Warning::Overriding(KeyPath::from_iter(["containerize", "config", "labels", key]))),
+                                "Expected a warning about overriding the label {key} in {warnings:?}"
+                            );
+                        }
                     }
                 }
             }
@@ -506,12 +541,19 @@ mod tests {
             cfg_lp in any::<ContainerizeConfig>(),
             cfg_hp in any::<ContainerizeConfig>(),
         ) {
-            let (merged, _warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let (merged, warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
             let merged = merged.unwrap();
             if cfg_hp.stop_signal.is_some() {
-                prop_assert_eq!(merged.stop_signal, cfg_hp.stop_signal);
+                prop_assert_eq!(&merged.stop_signal, &cfg_hp.stop_signal);
             } else {
-                prop_assert_eq!(merged.stop_signal, cfg_lp.stop_signal);
+                prop_assert_eq!(&merged.stop_signal, &cfg_lp.stop_signal);
+            }
+
+            if cfg_hp.stop_signal.is_some() && cfg_lp.stop_signal.is_some() {
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["containerize", "config", "stop-signal"]))),
+                    "Expected a warning about overriding the stop signal in {warnings:?}"
+                );
             }
         }
 
@@ -530,7 +572,7 @@ mod tests {
             let merged_cont = maybe_merged.unwrap();
             prop_assert!(merged_cont.config.is_some());
             let merged_cfg = merged_cont.config.unwrap();
-            let (expected_cfg, _warnings) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
+            let (expected_cfg, _) = deep_merge_optional_containerize_config(Some(&cfg_lp), Some(&cfg_hp));
             let expected_cfg = expected_cfg.unwrap();
             prop_assert_eq!(merged_cfg, expected_cfg);
         }
