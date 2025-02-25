@@ -92,12 +92,12 @@ impl ContainerizeProxy {
         self.add_cache_mount(&mut command, &format!("{cache_root}/nix"));
 
         command.arg(self.container_image());
-        // Profiles have to be copied too because the mount will shadow the
-        // container's `/nix/var/nix/profiles` and break `PATH`.
+        // We have to additionally copy some parts of `/nix/var/nix` so that the
+        // container isn't broken when the cache volume shadows its `/nix`.
         command.args(["bash", "-c", &formatdoc! {"
             set -euo pipefail
             nix --extra-experimental-features nix-command copy --all --no-check-sigs --to {cache_root}
-            cp -R /nix/var/nix/profiles {cache_root}/nix/var/nix/
+            cp -R /nix/var/nix/profiles /nix/var/nix/gcroots {cache_root}/nix/var/nix/
         "}]);
 
         debug!(?command, "running populate cache volume command");
