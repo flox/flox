@@ -1,6 +1,7 @@
 #![allow(dead_code)] // TODO: Remove on first use.
                      // mod visit;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{self, Display, Formatter};
 use std::iter::once;
 mod shallow;
 use flox_core::Version;
@@ -23,6 +24,41 @@ use super::typed::{
 
 #[derive(Error, Debug)]
 pub enum MergeError {}
+
+#[derive(Debug, Clone, Default)]
+pub struct KeyPath(Vec<String>);
+impl KeyPath {
+    pub const fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn push(&self, key: impl Into<String>) -> Self {
+        self.extend([key.into()])
+    }
+
+    fn extend(&self, iter: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let mut new_path = self.0.clone();
+        new_path.extend(iter.into_iter().map(|k| k.into()));
+        Self(new_path)
+    }
+}
+
+impl Display for KeyPath {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.0.join("."))
+    }
+}
+
+impl<Key: Into<String>> FromIterator<Key> for KeyPath {
+    fn from_iter<T: IntoIterator<Item = Key>>(iter: T) -> Self {
+        iter.into_iter().map(|k| k.into()).collect()
+    }
+}
+
+#[must_use]
+pub enum Warning {
+    Overriding(KeyPath),
+}
 
 /// A collection of manifests to be merged with a `ManifestMergeStrategy`.
 #[derive(Debug, Clone, Default)]
