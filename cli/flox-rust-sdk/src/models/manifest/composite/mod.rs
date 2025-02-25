@@ -2,7 +2,6 @@
                      // mod visit;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display, Formatter};
-use std::iter::once;
 mod shallow;
 use flox_core::Version;
 #[cfg(test)]
@@ -80,6 +79,14 @@ pub enum Warning {
     Overriding(KeyPath),
 }
 
+/// A warning that occurred during the merge of two manifests,
+/// along with the names of the two manifests involved.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WarningWithContext {
+    warning: Warning,
+    higher_priority_name: String,
+}
+
 /// A collection of manifests to be merged with a `ManifestMergeStrategy`.
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -87,25 +94,43 @@ struct CompositeManifest {
     composer: Manifest,
     #[cfg_attr(
         test,
-        proptest(strategy = "proptest::collection::vec(any::<Manifest>(), 0..=2)")
+        proptest(strategy = "proptest::collection::vec(any::<(String, Manifest)>(), 0..=2)")
     )]
-    deps: Vec<Manifest>,
+    deps: Vec<(String, Manifest)>,
 }
 
 impl CompositeManifest {
-    fn merge_all(&self, merger: impl ManifestMergeStrategy) -> Result<Manifest, MergeError> {
-        let Some(first_dep) = self.deps.first() else {
-            // No deps, just composer.
-            return Ok(self.composer.clone());
-        };
+    fn merge_all(
+        &self,
+        merger: impl ManifestMergeStrategy,
+    ) -> Result<(Manifest, Vec<WarningWithContext>), MergeError> {
+        let current_manifest = &("Current manifest".to_string(), self.composer.clone());
 
-        self.deps
-            .iter()
-            .skip(1) // First dep is used as initializer.
-            .chain(once(&self.composer)) // Composer goes last.
-            .try_fold(first_dep.clone(), |merged, next| {
-                merger.merge(&merged, next)
-            })
+        let mut merges = self.deps.iter().chain([current_manifest]);
+        let (_, mut merged_manifest) = merges
+            .next()
+            .expect("including composer, there should be at least one manifest")
+            .clone();
+
+        let mut warnings = Vec::new();
+
+        for (manifest_id, manifest) in merges {
+            let (merged, merge_warnings) = merger.merge(&merged_manifest, manifest)?;
+            // Update the merged manifest with the new merged manifest
+            merged_manifest = merged;
+
+            // Wrap the warnings in a `WarningWithContext` with the name of the higher priority manifest
+            let merge_warnings = merge_warnings
+                .into_iter()
+                .map(|warnings| WarningWithContext {
+                    warning: warnings,
+                    higher_priority_name: manifest_id.clone(),
+                });
+
+            warnings.extend(merge_warnings);
+        }
+
+        Ok((merged_manifest, warnings))
     }
 }
 
@@ -120,7 +145,10 @@ trait ManifestMergeStrategy {
         low_priority: &Install,
         high_priority: &Install,
     ) -> Result<(Install, Vec<Warning>), MergeError>;
-    fn merge_vars(low_priority: &Vars, high_priority: &Vars) -> Result<(Vars,  Vec<Warning>), MergeError>;
+    fn merge_vars(
+        low_priority: &Vars,
+        high_priority: &Vars,
+    ) -> Result<(Vars, Vec<Warning>), MergeError>;
     fn merge_hook(low_priority: &Hook, high_priority: &Hook) -> Result<Hook, MergeError>;
     fn merge_profile(
         low_priority: &Profile,
@@ -129,21 +157,24 @@ trait ManifestMergeStrategy {
     fn merge_options(
         low_priority: &Options,
         high_priority: &Options,
-    ) -> Result<(Options,  Vec<Warning>), MergeError>;
+    ) -> Result<(Options, Vec<Warning>), MergeError>;
     fn merge_services(
         low_priority: &Services,
         high_priority: &Services,
-    ) -> Result<(Services,  Vec<Warning>), MergeError>;
-    fn merge_build(low_priority: &Build, high_priority: &Build) -> Result<(Build,  Vec<Warning>), MergeError>;
+    ) -> Result<(Services, Vec<Warning>), MergeError>;
+    fn merge_build(
+        low_priority: &Build,
+        high_priority: &Build,
+    ) -> Result<(Build, Vec<Warning>), MergeError>;
     fn merge_containerize(
         low_priority: Option<&Containerize>,
         high_priority: Option<&Containerize>,
-    ) -> Result<(Option<Containerize> ,Vec<Warning>), MergeError>;
+    ) -> Result<(Option<Containerize>, Vec<Warning>), MergeError>;
     fn merge(
         &self,
         low_priority: &Manifest,
         high_priority: &Manifest,
-    ) -> Result<Manifest, MergeError>;
+    ) -> Result<(Manifest, Vec<Warning>), MergeError>;
 }
 
 /// Given two optional strings, append them if they're present, return the present one or `None` if not.
@@ -329,9 +360,12 @@ mod tests {
         };
         let composite = CompositeManifest {
             composer,
-            deps: vec![manifest1, manifest2],
+            deps: vec![
+                ("dep1".to_string(), manifest1),
+                ("dep2".to_string(), manifest2),
+            ],
         };
-        let merged = composite.merge_all(ShallowMerger).unwrap();
+        let (merged, _warnings) = composite.merge_all(ShallowMerger).unwrap();
         assert_eq!(merged.vars.inner()["var1"], "manifest1");
         assert_eq!(merged.vars.inner()["var2"], "manifest2");
         assert_eq!(
