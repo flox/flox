@@ -67,7 +67,7 @@ impl ContainerizeProxy {
             NIX_PROXY_IMAGE,
             FLOX_CONTAINERIZE_PROXY_IMAGE_REF
                 .clone()
-                .unwrap_or(NIX_VERSION.clone())
+                .unwrap_or(NIX_VERSION.to_string())
         )
     }
 
