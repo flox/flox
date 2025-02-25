@@ -698,7 +698,7 @@ fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironmen
     // Update this message in flox-config.md if you change it here
     let message = formatdoc! {"
         ℹ️  Upgrades are available for packages in {description}.
-        Use 'flox upgrade' to get the latest.
+        Use 'flox upgrade --dry-run' for details.
     "};
 
     message::plain(message);
@@ -961,7 +961,7 @@ mod upgrade_notification_tests {
 
         assert_eq!(printed, formatdoc! {"
             ℹ️  Upgrades are available for packages in 'name'.
-            Use 'flox upgrade' to get the latest.
+            Use 'flox upgrade --dry-run' for details.
 
         "});
     }
