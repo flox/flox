@@ -46,23 +46,26 @@ impl ManifestMergeStrategy for ShallowMerger {
     fn merge_install(
         low_priority: &Install,
         high_priority: &Install,
-    ) -> Result<Install, MergeError> {
-        let (merged, _warnings) = map_union(
+    ) -> Result<(Install, Vec<Warning>), MergeError> {
+        let (merged, warnings) = map_union(
             KeyPath::from_iter(["install"]),
             low_priority.inner(),
             high_priority.inner(),
         );
-        Ok(Install(merged))
+        Ok((Install(merged), warnings))
     }
 
     /// Keys in `manifest2` overwrite keys in `manifest1`.
-    fn merge_vars(low_priority: &Vars, high_priority: &Vars) -> Result<Vars, MergeError> {
-        let (merged, _warnings) = map_union(
+    fn merge_vars(
+        low_priority: &Vars,
+        high_priority: &Vars,
+    ) -> Result<(Vars, Vec<Warning>), MergeError> {
+        let (merged, warnings) = map_union(
             KeyPath::from_iter(["vars"]),
             low_priority.inner(),
             high_priority.inner(),
         );
-        Ok(Vars(merged))
+        Ok((Vars(merged), warnings))
     }
 
     fn merge_hook(low_priority: &Hook, high_priority: &Hook) -> Result<Hook, MergeError> {
@@ -97,7 +100,7 @@ impl ManifestMergeStrategy for ShallowMerger {
     fn merge_options(
         low_priority: &Options,
         high_priority: &Options,
-    ) -> Result<Options, MergeError> {
+    ) -> Result<(Options, Vec<Warning>), MergeError> {
         let mut warnings = vec![];
         let root_key = KeyPath::from_iter(["options"]);
         let allow_key = root_key.push("allow");
@@ -167,48 +170,54 @@ impl ManifestMergeStrategy for ShallowMerger {
                 cuda_detection_warning,
                 systems_warning,
             ]
-            .iter()
+            .into_iter()
             .flatten(),
         );
 
-        Ok(merged)
+        Ok((merged, warnings))
     }
 
     fn merge_services(
         low_priority: &Services,
         high_priority: &Services,
-    ) -> Result<Services, MergeError> {
-        let (merged, _warnings) = map_union(
+    ) -> Result<(Services, Vec<Warning>), MergeError> {
+        let (merged, warnings) = map_union(
             KeyPath::from_iter(["services"]),
             low_priority.inner(),
             high_priority.inner(),
         );
-        Ok(Services(merged))
+        Ok((Services(merged), warnings))
     }
 
-    fn merge_build(low_priority: &Build, high_priority: &Build) -> Result<Build, MergeError> {
-        let (merged, _warnings) = map_union(
+    fn merge_build(
+        low_priority: &Build,
+        high_priority: &Build,
+    ) -> Result<(Build, Vec<Warning>), MergeError> {
+        let (merged, warnings) = map_union(
             KeyPath::from_iter(["build"]),
             low_priority.inner(),
             high_priority.inner(),
         );
-        Ok(Build(merged))
+        Ok((Build(merged), warnings))
     }
 
     fn merge_containerize(
         low_priority: Option<&Containerize>,
         high_priority: Option<&Containerize>,
-    ) -> Result<Option<Containerize>, MergeError> {
+    ) -> Result<(Option<Containerize>, Vec<Warning>), MergeError> {
         match (low_priority, high_priority) {
-            (None, None) => Ok(None),
-            (Some(containerize_lp), None) => Ok(Some(containerize_lp.clone())),
-            (None, Some(containerize_hp)) => Ok(Some(containerize_hp.clone())),
+            (None, None) => Ok((None, vec![])),
+            (Some(containerize_lp), None) => Ok((Some(containerize_lp.clone()), vec![])),
+            (None, Some(containerize_hp)) => Ok((Some(containerize_hp.clone()), vec![])),
             (Some(Containerize { config: cfg_lp }), Some(Containerize { config: cfg_hp })) => {
-                let (merged_config, _warnings) =
+                let (merged_config, warnings) =
                     deep_merge_optional_containerize_config(cfg_lp.as_ref(), cfg_hp.as_ref());
-                Ok(Some(Containerize {
-                    config: merged_config,
-                }))
+                Ok((
+                    Some(Containerize {
+                        config: merged_config,
+                    }),
+                    warnings,
+                ))
             },
         }
     }
@@ -218,23 +227,48 @@ impl ManifestMergeStrategy for ShallowMerger {
         low_priority: &Manifest,
         high_priority: &Manifest,
     ) -> Result<Manifest, MergeError> {
+        let version = Self::merge_version(&low_priority.version, &high_priority.version)?;
+        let (install, install_warnings) =
+            Self::merge_install(&low_priority.install, &high_priority.install)?;
+        let (vars, vars_warnings) = Self::merge_vars(&low_priority.vars, &high_priority.vars)?;
+        let hook = Self::merge_hook(&low_priority.hook, &high_priority.hook)?;
+        let profile = Self::merge_profile(&low_priority.profile, &high_priority.profile)?;
+        let (options, options_warnings) =
+            Self::merge_options(&low_priority.options, &high_priority.options)?;
+        let (services, services_warnings) =
+            Self::merge_services(&low_priority.services, &high_priority.services)?;
+        let (build, build_warnings) = Self::merge_build(&low_priority.build, &high_priority.build)?;
+        let (containerize, containerize_warnings) = Self::merge_containerize(
+            low_priority.containerize.as_ref(),
+            high_priority.containerize.as_ref(),
+        )?;
+
         let manifest = Manifest {
-            version: Self::merge_version(&low_priority.version, &high_priority.version)?,
-            install: Self::merge_install(&low_priority.install, &high_priority.install)?,
-            vars: Self::merge_vars(&low_priority.vars, &high_priority.vars)?,
-            hook: Self::merge_hook(&low_priority.hook, &high_priority.hook)?,
-            profile: Self::merge_profile(&low_priority.profile, &high_priority.profile)?,
-            options: Self::merge_options(&low_priority.options, &high_priority.options)?,
-            services: Self::merge_services(&low_priority.services, &high_priority.services)?,
-            build: Self::merge_build(&low_priority.build, &high_priority.build)?,
-            containerize: Self::merge_containerize(
-                low_priority.containerize.as_ref(),
-                high_priority.containerize.as_ref(),
-            )?,
+            version,
+            install,
+            vars,
+            hook,
+            profile,
+            options,
+            services,
+            build,
+            containerize,
             // Intentionally blank out the includes since the includes are
             // inputs to the merge operation.
             include: Include::default(),
         };
+
+        let _warnings = [
+            install_warnings,
+            vars_warnings,
+            options_warnings,
+            services_warnings,
+            build_warnings,
+            containerize_warnings,
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
 
         Ok(manifest)
     }
@@ -265,7 +299,7 @@ mod tests {
         fn merges_vars_section(maps in btree_maps_overlapping_keys::<String>(1, 3)) {
             let vars1 = Vars(maps.map1.clone());
             let vars2 = Vars(maps.map2.clone());
-            let merged = ShallowMerger::merge_vars(&vars1, &vars2).unwrap();
+            let (merged, warnings) = ShallowMerger::merge_vars(&vars1, &vars2).unwrap();
             let merged = merged.inner();
             for key in maps.unique_keys_map1.iter() {
                 prop_assert_eq!(maps.map1.get(key), merged.get(key));
@@ -275,6 +309,10 @@ mod tests {
             }
             for key in maps.duplicate_keys.iter() {
                 prop_assert_eq!(maps.map2.get(key), merged.get(key));
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["vars", key]))),
+                    "Expected a warning about overriding the var {key} in {warnings:?}"
+                );
             }
         }
 
@@ -285,7 +323,7 @@ mod tests {
         fn merges_install_section(maps in btree_maps_overlapping_keys::<ManifestPackageDescriptor>(1, 3)) {
             let install1 = Install(maps.map1.clone());
             let install2 = Install(maps.map2.clone());
-            let merged = ShallowMerger::merge_install(&install1, &install2).unwrap();
+            let (merged, warnings) = ShallowMerger::merge_install(&install1, &install2).unwrap();
             let merged = merged.inner();
             for key in maps.unique_keys_map1.iter() {
                 prop_assert_eq!(maps.map1.get(key), merged.get(key));
@@ -295,6 +333,10 @@ mod tests {
             }
             for key in maps.duplicate_keys.iter() {
                 prop_assert_eq!(maps.map2.get(key), merged.get(key));
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["install", key]))),
+                    "Expected a warning about overriding the package descriptor {key} in {warnings:?}"
+                );
             }
         }
 
@@ -305,7 +347,7 @@ mod tests {
         fn merges_services_section(maps in btree_maps_overlapping_keys::<ServiceDescriptor>(1, 3)) {
             let services1 = Services(maps.map1.clone());
             let services2 = Services(maps.map2.clone());
-            let merged = ShallowMerger::merge_services(&services1, &services2).unwrap();
+            let (merged, warnings) = ShallowMerger::merge_services(&services1, &services2).unwrap();
             let merged = merged.inner();
             for key in maps.unique_keys_map1.iter() {
                 prop_assert_eq!(maps.map1.get(key), merged.get(key));
@@ -315,6 +357,10 @@ mod tests {
             }
             for key in maps.duplicate_keys.iter() {
                 prop_assert_eq!(maps.map2.get(key), merged.get(key));
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["services", key]))),
+                    "Expected a warning about overriding the service descriptor {key} in {warnings:?}"
+                );
             }
         }
 
@@ -325,7 +371,7 @@ mod tests {
         fn merges_build_section(maps in btree_maps_overlapping_keys::<BuildDescriptor>(1, 3)) {
             let build1 = Build(maps.map1.clone());
             let build2 = Build(maps.map2.clone());
-            let merged = ShallowMerger::merge_build(&build1, &build2).unwrap();
+            let (merged, warnings) = ShallowMerger::merge_build(&build1, &build2).unwrap();
             let merged = merged.inner();
             for key in maps.unique_keys_map1.iter() {
                 prop_assert_eq!(maps.map1.get(key), merged.get(key));
@@ -335,6 +381,10 @@ mod tests {
             }
             for key in maps.duplicate_keys.iter() {
                 prop_assert_eq!(maps.map2.get(key), merged.get(key));
+                prop_assert!(
+                    warnings.contains(&Warning::Overriding(KeyPath::from_iter(["build", key]))),
+                    "Expected a warning about overriding the build descriptor {key} in {warnings:?}"
+                );
             }
         }
 
@@ -357,7 +407,7 @@ mod tests {
         // `options.systems` and `options.allow.licenses` which should be shallow merged.
         #[test]
         fn merges_options_section(options1 in any::<Options>(), options2 in any::<Options>()) {
-            let merged = ShallowMerger::merge_options(&options1, &options2).unwrap();
+            let (merged, _warnings) = ShallowMerger::merge_options(&options1, &options2).unwrap();
             let systems = options2.systems.or(options1.systems);
             let allow = Allows {
                 unfree: options2.allow.unfree.or(options1.allow.unfree),
@@ -567,7 +617,7 @@ mod tests {
         ) {
             let cont_lp = Containerize { config: Some(cfg_lp.clone())};
             let cont_hp = Containerize { config: Some(cfg_hp.clone())};
-            let maybe_merged = ShallowMerger::merge_containerize(Some(&cont_lp), Some(&cont_hp)).unwrap();
+            let (maybe_merged, _warnings) = ShallowMerger::merge_containerize(Some(&cont_lp), Some(&cont_hp)).unwrap();
             prop_assert!(maybe_merged.is_some()); // They were both Some(_) to start out
             let merged_cont = maybe_merged.unwrap();
             prop_assert!(merged_cont.config.is_some());
@@ -580,21 +630,22 @@ mod tests {
 
     #[test]
     fn containerize_does_trivial_merge() {
-        assert_eq!(None, ShallowMerger::merge_containerize(None, None).unwrap());
+        let (merged, _warnings) = ShallowMerger::merge_containerize(None, None).unwrap();
+        assert_eq!(None, merged);
+
         let low_priority = Some(Containerize::default());
         let high_priority = None;
-        assert_eq!(
-            low_priority,
+        let (merged, _warnings) =
             ShallowMerger::merge_containerize(low_priority.as_ref(), high_priority.as_ref())
-                .unwrap()
-        );
+                .unwrap();
+        assert_eq!(low_priority, merged);
+
         let low_priority = None;
         let high_priority = Some(Containerize::default());
-        assert_eq!(
-            high_priority,
+        let (merged, _warnings) =
             ShallowMerger::merge_containerize(low_priority.as_ref(), high_priority.as_ref())
-                .unwrap()
-        );
+                .unwrap();
+        assert_eq!(high_priority, merged);
     }
 
     #[test]
