@@ -15,7 +15,7 @@ use super::Runtime;
 use crate::config::{FLOX_CONFIG_FILE, FLOX_DISABLE_METRICS_VAR};
 
 const NIX_PROXY_IMAGE: &str = "nixos/nix";
-static FLOX_CONTAINERIZE_PROXY_IMAGE_REF: LazyLock<Option<String>> =
+static NIX_PROXY_IMAGE_REF: LazyLock<Option<String>> =
     LazyLock::new(|| env::var("_FLOX_CONTAINERIZE_PROXY_IMAGE_REF").ok());
 
 const FLOX_FLAKE: &str = "github:flox/flox";
@@ -65,7 +65,7 @@ impl ContainerizeProxy {
         format!(
             "{}:{}",
             NIX_PROXY_IMAGE,
-            FLOX_CONTAINERIZE_PROXY_IMAGE_REF
+            NIX_PROXY_IMAGE_REF
                 .clone()
                 .unwrap_or(NIX_VERSION.to_string())
         )
