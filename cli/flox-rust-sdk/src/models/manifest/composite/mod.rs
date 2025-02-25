@@ -119,8 +119,8 @@ trait ManifestMergeStrategy {
     fn merge_install(
         low_priority: &Install,
         high_priority: &Install,
-    ) -> Result<Install, MergeError>;
-    fn merge_vars(low_priority: &Vars, high_priority: &Vars) -> Result<Vars, MergeError>;
+    ) -> Result<(Install, Vec<Warning>), MergeError>;
+    fn merge_vars(low_priority: &Vars, high_priority: &Vars) -> Result<(Vars,  Vec<Warning>), MergeError>;
     fn merge_hook(low_priority: &Hook, high_priority: &Hook) -> Result<Hook, MergeError>;
     fn merge_profile(
         low_priority: &Profile,
@@ -129,16 +129,16 @@ trait ManifestMergeStrategy {
     fn merge_options(
         low_priority: &Options,
         high_priority: &Options,
-    ) -> Result<Options, MergeError>;
+    ) -> Result<(Options,  Vec<Warning>), MergeError>;
     fn merge_services(
         low_priority: &Services,
         high_priority: &Services,
-    ) -> Result<Services, MergeError>;
-    fn merge_build(low_priority: &Build, high_priority: &Build) -> Result<Build, MergeError>;
+    ) -> Result<(Services,  Vec<Warning>), MergeError>;
+    fn merge_build(low_priority: &Build, high_priority: &Build) -> Result<(Build,  Vec<Warning>), MergeError>;
     fn merge_containerize(
         low_priority: Option<&Containerize>,
         high_priority: Option<&Containerize>,
-    ) -> Result<Option<Containerize>, MergeError>;
+    ) -> Result<(Option<Containerize> ,Vec<Warning>), MergeError>;
     fn merge(
         &self,
         low_priority: &Manifest,
