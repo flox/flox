@@ -22,7 +22,7 @@ const FLOX_FLAKE: &str = "github:flox/flox";
 const FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR: &str = "/root/.config/flox";
 static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
     LazyLock::new(|| env::var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
-const CONTAINER_VOLUME: &str = "flox-nix";
+const CONTAINER_NIX_CACHE_VOLUME: &str = "flox-nix";
 
 const MOUNT_ENV: &str = "/flox_env";
 
@@ -75,7 +75,7 @@ impl ContainerizeProxy {
     fn add_cache_mount(&self, command: &mut Command, path: &str) {
         command.args([
             "--mount",
-            &format!("type=volume,src={CONTAINER_VOLUME},dst={path}"),
+            &format!("type=volume,src={CONTAINER_NIX_CACHE_VOLUME},dst={path}"),
         ]);
     }
 
