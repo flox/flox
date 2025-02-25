@@ -16,7 +16,7 @@ flox-publish - Publish local packages for Flox
 
 # SYNOPSIS
 
-```
+``` bash
 flox [<general-options>] publish
      [-d=<path>]
      [--store-url]
@@ -26,57 +26,137 @@ flox [<general-options>] publish
 
 # DESCRIPTION
 
-Build the specified `<package>` from the environment in `<path>`,
-and output build artifacts at `result-<package>` adjacent to the environment.
+Publish the specified `<package>` from the environment in `<path>`,
+and output build artifacts.
 
-## Manifest defined Packages
+## Publishing process
 
 Possible values for `<package>` are all keys under the `build` attribute
-in the `manifest.toml`.
-If no `<package>` is specified, flox will attempt to build all packages
-that are defined in the environment.
+in the `manifest.toml` and you must specify one.
 
-Packages are built by running the script defined in `build.<package>.command`
-within a `bash` subshell.
-The shell will behave as if `flox activate` was run
-immediately prior to running the build script.
+When publishing a package,
+Flox will send the package matadata to the catalog
+and optionally upload the package binaries to the store indicated.
+This allows re-use of the package in other environments.
 
-By default, builds are run in a sandbox.
-For a sandboxed build, the current project is _copied_ into a sandbox directory.
-To avoid copying excessive files, e.g. accumulating build artifacts from earlier
-manual builds, `.env` files containing secrets etc.,
-only files tracked by `git` are available.
-Untracked files, files outside of the repository and notably network access
-will be restricted to encourage "pure" and reproducible builds.
-Builds can opt out of the sandbox by setting `build.<package>.sandbox = "off"`.
-With the sandbox disabled, building is equivalent
-to running the build script manually within a shell created by `flox activate`.
-Any build can access the _results_ of other builds
-(including non-sandboxed ones) by referring to their name via `${<package>}`.
-In the example below, the `app` package depends on the `dep` package
-by using `${deps}/node_modules`.
+Flox makes some assertions before publishing, specifically
 
-`flox build` creates a temporary directory for the build script
-to output build artifacts to.
-The environment variable `out` is set to this directory,
-and the build script is expected to copy or move artifacts to `$out`.
+- The flox environment used to build the package is tracked as a git repo.
+- Tracked files in the repo are all clean.
+- The repo has an upstream origin.
+- The build environment must have at least one package to establish the page the package is being built against.
 
-Upon conclusion of the build, the build result
-will be symlinked to `result-<package>` adjacent to the `.flox` directory
-that defines the package.
+Flox will then perform a clone of the repository
+to a temporary location
+and perform a clean `flox build` operation.
+This ensures that all files
+required to build the package are included in the git repo.
 
+Upon completion,
+the package closure is signed with the key file provided in `--signing-key`
+and uploaded to the location specified in `--signing-key`.
+
+## After publishing
+
+After publishing,
+the package will be availble for `search`, `show`, and `install` operations
+like any other package.
+The package will be published
+to the catalog named as your github user handle.
+To distinguish these packages
+from base catalog pacakges,
+the name is prefixed with your catalog name.
+If your github name was `jsmith` for example,
+published packages would be prefixed with `jsmith/`.
+If you published a package called `foo`,
+you could _search_ and see `jsmith/foo` in the results.
+Likewise, you could install the package as
+`jsmith/foo`.
+The package will be downloaded from the location where it was uploaded.
+
+## Store Location and Authorization
+
+Currently Flox only supports S3 store locations,
+and defers authorization to the nix AWS provider.
+
+Flox uses nix's S3 provider to perform the uploads and downloads,
+so you need to be authenticated with AWS
+to allow for this.
+Using the `awscli2` package (as found in flox),
+you need to run `aws sso login`.
+If you are using non-default profiles (see `~/.aws/config`),
+you should set AWS_PROFILE in your shell
+so `aws` CLI and flox invocations
+use the same AWS profile.
+
+Instructions for setting up the AWS CLI
+can be found [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-quickstart.html).
+
+## Config options
+
+To simplify the command line during publish,
+you can set the `store_url` and `signing_key`
+in the flox config:
+
+``` bash
+flox config --set publish.store_url "s3://my-bucket-name"
+flox config --set publish.signing_key "/home/<name>/.config/my-flox-catalog.key"
+```
+
+## Signing key
+
+If you provide a signing key to Flox,
+it will pass this on to Nix
+and be used to sign the closure
+with that key.
+In order to install packages,
+nix must be configured to trust this key.
+
+To generate a key pair,
+you can use the following commands.
+You will use the secret key for publishing
+and install the public key on all hosts
+where you intend to install this packages
+signed by it.
+
+``` bash
+# This is the key file you pass to --signing-key
+nix key generate-secret --key-name mytest > mytest.key
+
+# Put this public key in `/etc/nix/nix.conf` as an `extra-trusted-public-keys` and restart the nix-daemon
+nix key convert-secret-to-public < mytest.key > mytest.pub
+```
+
+## Sharing published packages
+
+You are only able to publish packages to your own catalog.
+By default only you can see and use these packages.
+To allow others
+to search and install the packages in you catalog,
+you will need to add thier github handles
+to a whitelist of users allowed to read from your catalog.
+
+Currently this is managed by a CLI utility shared
+[here](https://github.com/flox/catalog-util).
+Only the owner of the catalog can manage this list.
+See the README of that repository
+for additional details.
 
 # OPTIONS
 
-`-L`, `--build-logs`
-:   Enable detailed logging emitted by the build scripts.
-    **not implemented yet**
-
 `<package>`
-:   The package(s) to build.
+:   The package to publish.
     Possible values are all keys under the `build` attribute
     in the environment's `manifest.toml`.
 
+`--store-url <url>`
+:   The store location to upload and download from.
+    Currently this must be an S3 bucket like
+    `s3://my-bucket`.
+
+`--signing-key <path>`
+:   The private key to use in signing the packge
+    during upload.  This is a local file path.
 
 ```{.include}
 ./include/environment-options.md
@@ -85,94 +165,13 @@ that defines the package.
 
 # EXAMPLES
 
-`flox build` is an experimental feature.
-To use it the `build` feature flag has to be enabled:
+`flox publish` is an experimental feature.
+To use it the `publish` feature flag has to be enabled:
 
 ```shell
-$ flox config --set-bool features.build true
+$ flox config --set-bool features.publish true
 # OR
-$ export FLOX_FEATURE_BUILD=true
-```
-
-## Building a simple pure package
-
-1. Add build instructions to the manifest:
-
-```toml
-# file: .flox/env/manifest.toml
-
-...
-[build]
-hello.command = '''
-# produce something and move it to $out
-mkdir -p $out
-echo "hello world" >> $out/hello.txt
-'''
-```
-
-2. Build the package and verify its contents:
-
-```
-$ flox build hello
-$ ls ./result-hello
-hello.txt
-$ cat ./result-hello/hello.txt
-hello, world
-```
-
-## Building a simple multi-stage app
-
-Assume a simple `nodejs` project
-
-```
-.
-├── .git/
-├── package-lock.json
-├── package.json
-├── public/
-├── README.md
-├── src/
-...
-```
-
-1. Initialize a Flox environment
-
-```shell
-$ flox init
-```
-
-2. Install dependencies and add build instructions
-
-```toml
-# file: .flox/env/manifest.toml
-version = 1
-
-[install]
-nodejs.pkg-path = "nodejs"
-rsync.pkg-path = "rsync"
-
-# install node dependencies using npm
-# disable the sandbox to allow access to the network
-[build]
-deps.command = '''
-npm ci
-mkdir -p $out
-mv node_modules $out/node_modules
-'''
-deps.sandbox = "off"
-
-# build the application using previously fetched dependencies
-app.command = '''
-rsync -lr ${deps}/node_modules ./
-npm run build
-mv dist $out/
-'''
-```
-
-3. Verify the result
-
-```shell
-$ npx serve result-app
+$ export FLOX_FEATURE_PUBLIsH=true
 ```
 
 # SEE ALSO
