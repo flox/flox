@@ -9,7 +9,7 @@ use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSou
 use flox_rust_sdk::providers::nix::NIX_VERSION;
 use indoc::formatdoc;
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use super::Runtime;
 use crate::config::{FLOX_CONFIG_FILE, FLOX_DISABLE_METRICS_VAR};
@@ -80,6 +80,7 @@ impl ContainerizeProxy {
     }
 
     /// Copy the Nix store from the container image to the cache volume.
+    #[instrument(skip_all, fields(progress = "Populating proxy container cache volume"))]
     fn populate_cache_volume(&self) -> Result<(), ContainerizeProxyError> {
         let mut command = self.runtime_base_command();
 
@@ -100,7 +101,7 @@ impl ContainerizeProxy {
 
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
-        debug!(?command, "Populating container cache volume");
+        debug!(?command, "running populate cache volume command");
 
         let output = command
             .output()
