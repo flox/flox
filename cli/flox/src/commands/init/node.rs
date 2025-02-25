@@ -333,7 +333,7 @@ impl Node {
                 let resolutions = join_all(resolution_futs)
                     .await
                     .into_iter()
-                    .filter_map(|res| res.unwrap_or_default())
+                    .filter_map(|res| res.unwrap_or(None))
                     .map(|pkg| (pkg.attr_path.to_string(), pkg))
                     .collect::<BTreeMap<String, _>>();
                 let resolutions_sorted = {
