@@ -1,6 +1,6 @@
 {
-  activationScripts_out_storePath ? "@activationScripts_out@",
-  activationScripts_build_wrapper_storePath ? "@activationScripts_build_wrapper@",
+  interpreter_out_storePath ? "@interpreter_out@",
+  interpreter_wrapper_storePath ? "@interpreter_wrapper@",
   defaultEnvrc_storePath ? "@defaultEnvrc@",
   coreutils_storePath ? "@coreutils@",
   floxBuildenv_storePath ? "@out@",
@@ -19,8 +19,8 @@ let
   # and returns a string with the path added to its string context[1].
   #
   # [1]: <https://nix.dev/manual/nix/2.24/language/string-context>
-  activationScripts_out = builtins.storePath activationScripts_out_storePath;
-  activationScripts_build_wrapper = builtins.storePath activationScripts_build_wrapper_storePath;
+  interpreter_out = builtins.storePath interpreter_out_storePath;
+  interpreter_wrapper = builtins.storePath interpreter_wrapper_storePath;
   defaultEnvrc = builtins.storePath defaultEnvrc_storePath;
   floxBuildEnv = builtins.storePath floxBuildenv_storePath;
   coreutils = builtins.storePath coreutils_storePath;
@@ -253,8 +253,8 @@ builtins.derivation {
 
   # Pull in external attributes and those calculated above.
   inherit
-    activationScripts_out
-    activationScripts_build_wrapper
+    interpreter_out
+    interpreter_wrapper
     inputSrcs
     manifestPackage
     system
@@ -321,8 +321,8 @@ builtins.derivation {
   # The `builder.pl` script is responsible for parsing this when computing
   # the contents of requisites.txt for each output.
   exportReferencesGraph.graph = inputSrcs ++ [
-    activationScripts_out
-    activationScripts_build_wrapper
+    interpreter_out
+    interpreter_wrapper
     manifestPackage
   ];
 }

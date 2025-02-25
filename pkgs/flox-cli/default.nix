@@ -2,7 +2,7 @@
   bashInteractive,
   cacert,
   darwin,
-  flox-activation-scripts,
+  flox-interpreter,
   flox-src,
   flox-watchdog,
   gitMinimal,
@@ -38,7 +38,7 @@ let
       GIT_PKG = gitMinimal;
 
       # todo: remove
-      # FLOX_ZDOTDIR = flox-activation-scripts + "/activate.d/zdotdir";
+      # FLOX_ZDOTDIR = flox-interpreter + "/activate.d/zdotdir";
 
       # [sic] nix handles `BASH_` variables specially,
       # so we need to use a different name.
@@ -73,8 +73,8 @@ let
     // lib.optionalAttrs (flox-watchdog != null) {
       WATCHDOG_BIN = flox-watchdog;
     }
-    // lib.optionalAttrs (flox-activation-scripts != null) {
-      FLOX_INTERPRETER = flox-activation-scripts;
+    // lib.optionalAttrs (flox-interpreter != null) {
+      FLOX_INTERPRETER = flox-interpreter;
     }
     // rust-internal-deps.passthru.envs;
 in
@@ -116,7 +116,7 @@ craneLib.buildPackage (
     propagatedBuildInputs = rust-internal-deps.propagatedBuildInputs ++ [
       bashInteractive
       nix
-      flox-activation-scripts
+      flox-interpreter
     ];
 
     # https://github.com/ipetkov/crane/issues/385
