@@ -905,22 +905,30 @@ impl UpgradeResult {
 
         let mut packages_with_upgrades: UpgradeDiff = BTreeMap::new();
 
+        // In some cases you may encounter a package that was in the old lockfile
+        // and isn't in the new lockfile (or isn't present for a certain system).
+        // We've encountered this in production, which most likely means that the
+        // manifest that was present when initiating the upgrade check was out of
+        // sync with its lockfile (i.e. someone edited the manifest through means
+        // other than `flox edit`). In those cases we silently ignore the packages
+        // (or packages for a certain system) that are no longer present.
         for (prev_install_id, prev_packages_by_system) in previous_packages.into_iter() {
-            // We must have the same packages before and after upgrading
-            let mut after_packages_by_system = pkgs_after_upgrade.remove(&prev_install_id).unwrap();
-            for (prev_system, prev_package) in prev_packages_by_system {
-                // We must have the same packages before and after upgrading
-                let after_package = after_packages_by_system.remove(&prev_system).unwrap();
-                // Store paths return None for the derivation,
-                // and we shouldn't say store paths have an upgrade.
-                if prev_package.derivation().is_some()
-                    && after_package.derivation().is_some()
-                    && prev_package.derivation() != after_package.derivation()
-                {
-                    let by_system = packages_with_upgrades
-                        .entry(prev_install_id.to_owned())
-                        .or_default();
-                    by_system.insert(prev_system.to_owned(), (prev_package, after_package));
+            if let Some(mut after_packages_by_system) = pkgs_after_upgrade.remove(&prev_install_id)
+            {
+                for (prev_system, prev_package) in prev_packages_by_system {
+                    if let Some(after_package) = after_packages_by_system.remove(&prev_system) {
+                        // Store paths return None for the derivation,
+                        // and we shouldn't say store paths have an upgrade.
+                        if prev_package.derivation().is_some()
+                            && after_package.derivation().is_some()
+                            && prev_package.derivation() != after_package.derivation()
+                        {
+                            let by_system = packages_with_upgrades
+                                .entry(prev_install_id.to_owned())
+                                .or_default();
+                            by_system.insert(prev_system.to_owned(), (prev_package, after_package));
+                        }
+                    }
                 }
             }
         }
