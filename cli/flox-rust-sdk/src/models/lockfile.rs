@@ -24,6 +24,7 @@ use tracing::debug;
 
 use super::manifest::typed::{
     Allows,
+    IncludeDescriptor,
     Inner,
     Manifest,
     ManifestPackageDescriptor,
@@ -79,10 +80,17 @@ pub struct Registry {
 pub struct Lockfile {
     #[serde(rename = "lockfile-version")]
     pub version: Version<1>,
-    /// original manifest that was locked
+    /// The manifest that was locked.
+    ///
+    /// For an environment that doesn't include any others, this is the `manifest.toml`
+    /// on disk at lock-time. For an environment that *does* include others, this is
+    /// the merged manifest that was locked.
     pub manifest: Manifest,
-    /// locked packages
+    /// Locked packages
     pub packages: Vec<LockedPackage>,
+    /// Composition information. This will be `None` when there are no includes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compose: Option<Compose>, // use `is_none()` to detect composition
 }
 
 impl Lockfile {
@@ -347,6 +355,25 @@ struct LockedGroup {
     page: CatalogPage,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct Compose {
+    /// The composing environment's manifest that was on disk at lock-time.
+    pub composer: Manifest,
+    /// Metadata and manifests for the included environments in the order
+    /// that they were specified in the composing environment's manifest.
+    pub include: Vec<LockedInclude>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct LockedInclude {
+    pub manifest: Manifest,
+    pub descriptor: IncludeDescriptor,
+    // TODO: once we consider remote environments, add this field
+    // pub remote: Option<RemoteSource>
+}
+
 /// All the resolution failures for a single resolution request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolutionFailures(pub Vec<ResolutionFailure>);
@@ -581,6 +608,7 @@ impl Lockfile {
                     already_locked_installables,
                 ]
                 .concat(),
+                compose: None,
             });
         }
 
@@ -628,6 +656,7 @@ impl Lockfile {
                 locked_installables,
             ]
             .concat(),
+            compose: None,
         };
 
         Ok(lockfile)
@@ -1737,6 +1766,7 @@ pub(crate) mod tests {
             priority: 5,
         }
         .into()],
+        compose: None,
     });
 
     #[test]
@@ -2068,6 +2098,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest_before.clone(),
             packages: vec![foo_before_locked.clone().into()],
+            compose: None,
         };
 
         // ---------------------------------------------------------------------
@@ -2100,6 +2131,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest_before.clone(),
             packages: vec![foo_before_locked.into()],
+            compose: None,
         };
 
         // ---------------------------------------------------------------------
@@ -2147,6 +2179,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest_before.clone(),
             packages: vec![foo_before_locked.clone().into()],
+            compose: None,
         };
 
         // ---------------------------------------------------------------------
@@ -2410,6 +2443,7 @@ pub(crate) mod tests {
                 baz_locked.into(),
                 qux_locked.clone().into(),
             ],
+            compose: None,
         };
 
         lockfile.unlock_packages_by_group_or_iid(&[&foo_iid, &baz_iid]);
@@ -2438,6 +2472,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.into(), bar_locked.into()],
+            compose: None,
         };
 
         lockfile.unlock_packages_by_group_or_iid(&["group"]);
@@ -2466,6 +2501,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.into(), bar_locked.into()],
+            compose: None,
         };
 
         lockfile.unlock_packages_by_group_or_iid(&[&foo_iid]);
@@ -2645,6 +2681,7 @@ pub(crate) mod tests {
             packages: [&foo_locked, &bar_locked, &baz_locked]
                 .map(|p| p.clone().into())
                 .to_vec(),
+            compose: None,
         };
 
         manifest
@@ -2742,6 +2779,7 @@ pub(crate) mod tests {
                 foo_locked.clone().into(),
                 foo_locked_second_system.clone().into(),
             ],
+            compose: None,
         };
 
         manifest
@@ -2798,6 +2836,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.into()],
+            compose: None,
         };
 
         manifest
@@ -2853,6 +2892,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![bar_locked.clone().into()],
+            compose: None,
         };
 
         let flake_installables = Lockfile::collect_flake_installables(&manifest);
@@ -2882,6 +2922,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![bar_locked.clone().into()],
+            compose: None,
         };
 
         let flake_installables = Lockfile::collect_flake_installables(&manifest);
@@ -2919,6 +2960,7 @@ pub(crate) mod tests {
                 foo_locked_system_1.clone().into(),
                 foo_locked_system_2.into(),
             ],
+            compose: None,
         };
 
         let flake_installables = Lockfile::collect_flake_installables(&manifest);
@@ -2948,6 +2990,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.clone().into()],
+            compose: None,
         };
 
         // system_2 is added to the manifest
@@ -2990,6 +3033,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.into(), bar_locked.into()],
+            compose: None,
         };
 
         let locked_manifest =
@@ -3022,6 +3066,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![bar_locked.into()],
+            compose: None,
         };
 
         let foo_catalog_descriptor = foo_descriptor.as_catalog_descriptor_ref().unwrap();
@@ -3094,6 +3139,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.into()],
+            compose: None,
         };
 
         let locker_mock = InstallableLockerMock::new();
@@ -3124,6 +3170,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.clone().into()],
+            compose: None,
         };
 
         let mut foo_descriptor_priority_after = foo_descriptor.unwrap_catalog_descriptor().unwrap();
@@ -3172,6 +3219,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.into()],
+            compose: None,
         };
 
         // Set `options.allow.unfree = false` in the manifest, but not the lockfile
@@ -3406,6 +3454,7 @@ pub(crate) mod tests {
                 bar_locked.clone().into(),
                 baz_locked.clone().into(),
             ],
+            compose: None,
         };
 
         let actual = locked
@@ -3447,6 +3496,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest,
             packages: vec![foo_locked.clone().into(), baz_locked.clone().into()],
+            compose: None,
         };
 
         let actual = locked
@@ -3480,6 +3530,7 @@ pub(crate) mod tests {
             version: Version::<1>,
             manifest,
             packages: vec![foo_locked.clone().into(), baz_locked.clone().into()],
+            compose: None,
         };
 
         let actual = locked
