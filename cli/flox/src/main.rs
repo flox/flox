@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use anyhow::{Context, Result};
 use bpaf::{Args, Parser};
 use commands::{EnvironmentSelectError, FloxArgs, FloxCli, Prefix, Version};
-use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_rust_sdk::flox::{FLOX_VERSION, FLOX_VERSION_STRING};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::EnvironmentError;
@@ -49,6 +49,15 @@ async fn run(args: FloxArgs) -> Result<()> {
 fn main() -> ExitCode {
     // Avoid SIGPIPE from killing the process
     reset_sigpipe();
+
+    // Eagerly evaluate version and prevent it from propagating to sub-processes.
+    let _ = *FLOX_VERSION_STRING;
+    // SAFETY: Writing to the environment is safe here since we can guarantee
+    // not to look up the env concurrently,
+    // because at this point the program is still single threaded.
+    unsafe {
+        env::remove_var("FLOX_VERSION");
+    }
 
     // Quit early if `--prefix` is present
     if Prefix::check() {
