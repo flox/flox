@@ -416,7 +416,7 @@ EOF
 
   TAG="cmd-runs-in-activation"
 
-  bash -c "$FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
+  bash -c "$FLOX_BIN -vvv containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
 
   run podman run --rm "test:$TAG"
   assert_success

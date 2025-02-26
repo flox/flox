@@ -59,6 +59,7 @@ fn main() -> ExitCode {
     // Quit early if `--version` is present
     if Version::check() {
         println!("{}", *FLOX_VERSION);
+        println!("commit_sha(): {:?}", FLOX_VERSION.commit_sha());
         return ExitCode::from(0);
     }
 
