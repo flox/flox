@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 5d62963a85a6e58af5814270c300697b69d52e7dd2670e653a7868c3ab7d7425 # shrinks to manifest = Manifest { version: Version { value: 1 }, install: Install({}), vars: Vars({}), hook: Hook { on_activate: None }, profile: Profile { common: None, bash: None, zsh: None, fish: None, tcsh: None }, options: Options { systems: None, allow: Allows { unfree: None, broken: None, licenses: [] }, semver: SemverOptions { allow_pre_releases: None }, cuda_detection: None }, services: Services({}), build: Build({}), containerize: None, include: Include { environments: [Local { dir: "", name: None }] } }

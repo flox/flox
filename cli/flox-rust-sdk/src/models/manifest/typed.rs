@@ -833,7 +833,9 @@ pub enum IncludeDescriptor {
         /// A name similar to an install ID that a user could use to specify
         /// the environment on the command line e.g. for upgrades, or in an
         /// error message.
-        name: String,
+        #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
     },
 }
 
@@ -999,6 +1001,6 @@ pub(super) mod test {
         let included = parsed.include.environments[0].clone();
         let IncludeDescriptor::Local { dir, name } = included;
         assert_eq!(dir, PathBuf::from("../foo"));
-        assert_eq!(name.as_str(), "bar");
+        assert_eq!(name.unwrap().as_str(), "bar");
     }
 }

@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use catalog_api_v1::types::{MessageLevel, SystemEnum};
 #[cfg(test)]
-use flox_test_utils::proptest::chrono_strat;
+use flox_test_utils::proptest::{alphanum_string, chrono_strat};
 use indent::{indent_all_by, indent_by};
 use indoc::formatdoc;
 use itertools::{Either, Itertools};
@@ -369,6 +369,8 @@ pub struct Compose {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedInclude {
     pub manifest: Manifest,
+    #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
+    pub name: String,
     pub descriptor: IncludeDescriptor,
     // TODO: once we consider remote environments, add this field
     // pub remote: Option<RemoteSource>
