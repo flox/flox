@@ -200,7 +200,6 @@ impl ContainerizeProxy {
             "{}/{}",
             FLOX_FLAKE,
             // Use a more specific commit if available, e.g. pushed to GitHub.
-            // TODO: Doesn't always work: https://github.com/flox/flox/issues/2502
             (*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV)
                 .clone()
                 .unwrap_or(flox_version.commit_sha().unwrap_or(flox_version_tag))

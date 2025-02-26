@@ -19,7 +19,7 @@
   flox-buildenv,
   flox-nix-plugins,
   flox-watchdog,
-  flox-cli,
+  flox,
   flox-interpreter,
   gawk,
   git,
@@ -198,7 +198,7 @@ writeShellScriptBin PROJECT_NAME ''
     export MANUALLY_GENERATED='${./../../test_data/manually_generated}'
     export INPUT_DATA='${./../../test_data/input_data}'
 
-    export FLOX_BIN="${flox-cli}/bin/flox"
+    export FLOX_BIN="${flox}/bin/flox"
     export NIX_BIN="${nix}/bin/nix"
     export BUILDENV_BIN="${flox-buildenv}/bin/buildenv"
     export NIX_PLUGINS="${flox-nix-plugins}/lib/nix-plugins"
