@@ -122,8 +122,10 @@ let
       # errors when users try to run a container on an incompatible architecture.
       architecture = containerPkgs.go.GOARCH;
 
+      # No /tmp by default: https://github.com/NixOS/nixpkgs/issues/257172
       # Activate script requires writable directory, /run feels like a logical place.
       extraCommands = ''
+        mkdir -m 1777 tmp
         mkdir -m 1770 run
         mkdir -p -m 1770 run/flox
       '';
