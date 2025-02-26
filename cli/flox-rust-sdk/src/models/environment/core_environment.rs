@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use itertools::Itertools;
 use pollster::FutureExt;
@@ -35,7 +36,7 @@ use crate::providers::buildenv::{
     BuildEnvOutputs,
     BuiltStorePath,
 };
-use crate::providers::catalog::{self, ClientTrait};
+use crate::providers::catalog::ClientTrait;
 use crate::providers::flake_installable_locker::InstallableLocker;
 use crate::providers::services::{maybe_make_service_config_file, ServiceError};
 
@@ -169,12 +170,22 @@ impl<State> CoreEnvironment<State> {
     pub fn lock(&mut self, flox: &Flox) -> Result<Lockfile, CoreEnvironmentError> {
         let manifest = self.manifest()?;
         let existing_lockfile_contents = self.existing_lockfile_contents()?;
+        let existing_lockfile = existing_lockfile_contents
+            .as_deref()
+            .map(Lockfile::from_str)
+            .transpose()
+            .map_err(CoreEnvironmentError::LockedManifest)?;
 
-        let lockfile = self.lock_with_catalog_client(
+        // If a lockfile exists, it is used as a base.
+        let lockfile = Lockfile::lock_manifest(
+            &manifest,
+            existing_lockfile.as_ref(),
             &flox.catalog_client,
             &flox.installable_locker,
-            manifest,
-        )?;
+        )
+        .block_on()
+        .map_err(CoreEnvironmentError::LockedManifest)?;
+
         let lockfile_contents =
             serde_json::to_string_pretty(&lockfile).expect("lockfile structure is valid json");
 
@@ -206,29 +217,6 @@ impl<State> CoreEnvironment<State> {
             .map_err(|persist_error| CoreEnvironmentError::WriteLockfile(persist_error.error))?;
 
         Ok(lockfile)
-    }
-
-    /// Lock the environment with the catalog client
-    ///
-    /// If a lockfile exists, it is used as a base.
-    /// If the manifest should be locked without a base,
-    /// remove the lockfile before calling this function or use [Self::upgrade].
-    fn lock_with_catalog_client(
-        &self,
-        client: &catalog::Client,
-        installable_locker: &impl InstallableLocker,
-        manifest: Manifest,
-    ) -> Result<Lockfile, CoreEnvironmentError> {
-        let existing_lockfile = self.existing_lockfile()?;
-
-        Lockfile::lock_manifest(
-            &manifest,
-            existing_lockfile.as_ref(),
-            client,
-            installable_locker,
-        )
-        .block_on()
-        .map_err(CoreEnvironmentError::LockedManifest)
     }
 
     /// Build the environment.
@@ -1123,6 +1111,7 @@ mod tests {
     use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::manifest::typed::{PackageDescriptorCatalog, DEFAULT_GROUP_NAME};
+    use crate::providers::catalog::{self};
     use crate::providers::flake_installable_locker::InstallableLockerMock;
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 

@@ -104,6 +104,14 @@ impl Lockfile {
     }
 }
 
+impl FromStr for Lockfile {
+    type Err = LockedManifestError;
+
+    fn from_str(contents: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(contents).map_err(LockedManifestError::ParseLockfile)
+    }
+}
+
 impl Display for Lockfile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", serde_json::json!(self))
