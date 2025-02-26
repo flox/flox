@@ -19,7 +19,7 @@
   flox-buildenv,
   flox-nix-plugins,
   flox-watchdog,
-  flox-cli,
+  flox,
   flox-activation-scripts,
   gawk,
   git,
@@ -50,7 +50,7 @@
   NIX_BIN ? "${nix}/bin/nix",
   BUILDENV_BIN ? "${flox-buildenv}/bin/buildenv",
   NIX_PLUGINS ? "${flox-nix-plugins}/lib/nix-plugins",
-  FLOX_BIN ? "${flox-cli}/bin/flox",
+  FLOX_BIN ? "${flox}/bin/flox",
   WATCHDOG_BIN ? "${flox-watchdog}/libexec/flox-watchdog",
   FLOX_ACTIVATIONS_BIN ? "${flox-activations}/bin/flox-activations",
 }:
