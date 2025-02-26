@@ -223,6 +223,16 @@ impl Activate {
             other => other?,
         };
 
+        // Noop, having already locked when rendering env links.
+        // Only use the locked manifest from here.
+        let lockfile = environment.lockfile(&flox)?;
+        let manifest = &lockfile.manifest;
+
+        // Must not be evaluated inline with the macro or we'll leak TRACE logs
+        // for reasons unknown.
+        let lockfile_version = lockfile.version();
+        subcommand_metric!("activate#version", lockfile_version = lockfile_version);
+
         let mode_link_path = match mode {
             Mode::Dev => &rendered_env_path.development.clone(),
             Mode::Run => &rendered_env_path.runtime.clone(),
@@ -252,9 +262,6 @@ impl Activate {
             path
         };
 
-        // Must come after getting an activation path to prevent premature
-        // locking or migration. It must also not be evaluated inline with the
-        // macro or we'll leak TRACE logs for reasons unknown.
         let lockfile_version = environment.lockfile(&flox)?.version();
         subcommand_metric!("activate#version", lockfile_version = lockfile_version);
 
@@ -353,7 +360,6 @@ impl Activate {
         }
 
         let socket_path = environment.services_socket_path(&flox)?;
-        let manifest = environment.manifest(&flox)?;
         exports.insert(
             "_FLOX_ENV_CUDA_DETECTION",
             match manifest.options.cuda_detection {
