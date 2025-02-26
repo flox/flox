@@ -562,7 +562,51 @@ impl Lockfile {
             .collect::<Result<Vec<_>, LockedManifestError>>()
     }
 
-    /// Produce a lockfile for a given manifest.
+    /// Merge included environments, resolve the merged manifest, and return the resulting lockfile
+    ///
+    /// Already resolved packages will not be re-resolved,
+    /// and already fetched includes will not be re-fetched.
+    pub async fn lock_manifest(
+        manifest: &Manifest,
+        seed_lockfile: Option<&Lockfile>,
+        client: &impl catalog::ClientTrait,
+        installable_locker: &impl InstallableLocker,
+    ) -> Result<Lockfile, LockedManifestError> {
+        let (merged, compose) = Self::merge_manifest(manifest, seed_lockfile)?;
+        let packages =
+            Self::resolve_manifest(&merged, seed_lockfile, client, installable_locker).await?;
+        let lockfile = Lockfile {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages,
+            compose,
+        };
+
+        Ok(lockfile)
+    }
+
+    /// Fetch included environments and merge them with the manifest, returning
+    /// the merged manifest and a Compose object with the contents of all fetched includes.
+    ///
+    /// If the manifest does not include any environments, None is returned
+    /// instead of a Compose object.
+    ///
+    /// Any included environments already in the seed lockfile will not be
+    /// re-fetched.
+    #[instrument(skip_all, fields(progress = "Merging environment includes"))]
+    fn merge_manifest(
+        manifest: &Manifest,
+        _seed_lockfile: Option<&Lockfile>,
+    ) -> Result<(Manifest, Option<Compose>), LockedManifestError> {
+        if manifest.include.environments.is_empty() {
+            return Ok((manifest.clone(), None));
+        }
+
+        todo!()
+    }
+
+    /// Resolve packages for a given manifest
+    ///
     /// Uses the catalog service to resolve [ManifestPackageDescriptorCatalog],
     /// and an [InstallableLocker] to lock [ManifestPackageDescriptorFlake] descriptors.
     ///
@@ -575,12 +619,12 @@ impl Lockfile {
     /// Keeping the locking of each kind separate keeps the existing methods simpler
     /// and allows for potential parallelization in the future.
     #[instrument(skip_all, fields(progress = "Locking environment"))]
-    pub async fn lock_manifest(
+    async fn resolve_manifest(
         manifest: &Manifest,
         seed_lockfile: Option<&Lockfile>,
         client: &impl catalog::ClientTrait,
         installable_locker: &impl InstallableLocker,
-    ) -> Result<Lockfile, LockedManifestError> {
+    ) -> Result<Vec<LockedPackage>, LockedManifestError> {
         let catalog_groups = Self::collect_package_groups(manifest, seed_lockfile)?;
         let (mut already_locked_packages, groups_to_lock) =
             Self::split_fully_locked_groups(catalog_groups, seed_lockfile);
@@ -609,17 +653,12 @@ impl Lockfile {
 
         if groups_to_lock.is_empty() && installables_to_lock.is_empty() {
             debug!("All packages are already locked, skipping resolution");
-            return Ok(Lockfile {
-                version: Version::<1>,
-                manifest: manifest.clone(),
-                packages: [
-                    locked_store_paths,
-                    already_locked_packages,
-                    already_locked_installables,
-                ]
-                .concat(),
-                compose: None,
-            });
+            return Ok([
+                locked_store_paths,
+                already_locked_packages,
+                already_locked_installables,
+            ]
+            .concat());
         }
 
         // lock packages
@@ -655,21 +694,14 @@ impl Lockfile {
             &manifest.options.allow,
         )?;
 
-        let lockfile = Lockfile {
-            version: Version::<1>,
-            manifest: manifest.clone(),
-            packages: [
-                locked_store_paths,
-                already_locked_packages,
-                locked_packages,
-                already_locked_installables,
-                locked_installables,
-            ]
-            .concat(),
-            compose: None,
-        };
-
-        Ok(lockfile)
+        Ok([
+            locked_store_paths,
+            already_locked_packages,
+            locked_packages,
+            already_locked_installables,
+            locked_installables,
+        ]
+        .concat())
     }
 
     /// Given locked packages and manifest options allows, verify that the
