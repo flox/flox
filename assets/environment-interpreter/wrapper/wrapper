@@ -119,12 +119,6 @@ export PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin/$PATH"
 # source profile.d scripts
 source_profile_d "$_profile_d"
 
-# Set static environment variables from the manifest.
-if [ -f "$FLOX_ENV/activate.d/envrc" ]; then
-  # shellcheck disable=SC1091 # from rendered environment
-  source "$FLOX_ENV/activate.d/envrc"
-fi
-
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END
 
 # exec the command
