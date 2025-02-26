@@ -1257,6 +1257,7 @@ mod tests {
             version: Version,
             packages: vec![foo_locked.into()],
             manifest: manifest.clone(),
+            compose: None,
         };
 
         let lockfile_str = serde_json::to_string_pretty(&lockfile).unwrap();
