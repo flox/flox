@@ -20,14 +20,25 @@ let
   fileVersion = lib.fileContents "${inputs.self}/VERSION";
   # flox version is in the git descrive format (not semver)
   version =
-    if (FLOX_VERSION != null) then
-      FLOX_VERSION
-    else if !(self ? revCount || self ? shortRev) then
-      "${fileVersion}-dirty"
-    else if !(self ? revCount) then
-      "${fileVersion}-g${self.shortRev}"
-    else
-      fileVersion;
+    builtins.trace
+      (
+        "shortRev: "
+        + self.shortRev or "null"
+        + "; revCount: "
+        + (builtins.toString self.revCount or 0)
+        + "; rev: "
+        + self.rev or "null"
+      )
+      (
+        if (FLOX_VERSION != null) then
+          FLOX_VERSION
+        else if !(self ? revCount || self ? shortRev) then
+          "${fileVersion}-dirty"
+        else if !(self ? revCount) then
+          "${fileVersion}-g${self.shortRev}"
+        else
+          fileVersion
+      );
 in
 symlinkJoin {
   name = "flox-${version}";
