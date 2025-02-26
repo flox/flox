@@ -165,7 +165,7 @@ pkgs.runCommandNoCC name
                 # strips color codes from output anyway.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --env ${flox-env-package} --mode run --turbo -- \
-                    ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package}  -- \
+                    ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
                       ${t3-package}/bin/t3 --relative $log -- bash -e ${buildScript-contents}
               ''
             else
@@ -179,7 +179,7 @@ pkgs.runCommandNoCC name
                 # /private/tmp/nix-build-file-0.0.0.drv-0
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --env ${flox-env-package} --mode run --turbo -- \
-                    ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} -- \
+                    ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
                       ${t3-package}/bin/t3 --relative $log -- bash -e ${buildScript-contents} || \
                 ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
