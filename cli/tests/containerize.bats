@@ -400,6 +400,7 @@ EOF
 }
 
 @test "cmd can run binary from activated environment" {
+  "$FLOX_BIN" --version
   "$FLOX_BIN" init
 
   MANIFEST_CONTENTS="$(cat << "EOF"
