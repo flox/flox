@@ -12,6 +12,7 @@ use tracing::{debug, trace};
 
 use super::typed::Manifest;
 use crate::data::System;
+use crate::flox::Features;
 use crate::models::environment::path_environment::InitCustomization;
 
 /// Represents the `[version]` number key in manifest.toml
@@ -30,6 +31,8 @@ pub const MANIFEST_SERVICES_KEY: &str = "services";
 pub const MANIFEST_OPTIONS_KEY: &str = "options";
 /// Represents the `systems = []` array key in manifest.toml
 pub const MANIFEST_SYSTEMS_KEY: &str = "systems";
+/// Represents the `[include]` table key in manifest.toml
+pub const MANIFEST_INCLUDE_KEY: &str = "include";
 
 /// A wrapper around a [`toml_edit::DocumentMut`]
 /// that allows modifications of the raw manifest document,
@@ -42,7 +45,11 @@ impl RawManifest {
     ///
     /// Additionally, this method prefixes each table with documentation on its usage, and
     /// and inserts commented configuration examples for tables left empty.
-    pub fn new_documented(systems: &[&System], customization: &InitCustomization) -> RawManifest {
+    pub fn new_documented(
+        features: Features,
+        systems: &[&System],
+        customization: &InitCustomization,
+    ) -> RawManifest {
         let mut manifest = DocumentMut::new();
 
         manifest.decor_mut().set_prefix(indoc! {r#"
@@ -228,6 +235,27 @@ impl RawManifest {
                 # myservice.command = "python3 -m http.server""#});
 
         manifest.insert(MANIFEST_SERVICES_KEY, Item::Table(services_table));
+
+        // `[include]` table (FEATURE FLAGGED)
+        if features.compose {
+            let mut include_table = Table::new();
+
+            include_table.decor_mut().set_prefix(indoc! {r#"
+
+                
+                 ## Include ----------------------------------------------------------
+                 ## ... environments to create a composed environment
+                 ## ------------------------------------------------------------------
+            "#});
+
+            include_table.decor_mut().set_suffix(indoc! {r#"
+
+                # environments = [
+                #     { dir = "../common" }
+                # ]"#});
+
+            manifest.insert(MANIFEST_INCLUDE_KEY, Item::Table(include_table));
+        }
 
         // `[options]` table
         let mut options_table = Table::new();
@@ -1055,7 +1083,7 @@ pub(super) mod test {
             # cuda-detection = false
         "#};
 
-        let manifest = RawManifest::new_documented(systems, &customization);
+        let manifest = RawManifest::new_documented(Features::default(), systems, &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
         manifest.to_typed().expect("should parse as typed");
     }
@@ -1154,7 +1182,7 @@ pub(super) mod test {
             # cuda-detection = false
         "#};
 
-        let manifest = RawManifest::new_documented(systems, &customization);
+        let manifest = RawManifest::new_documented(Features::default(), systems, &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
         manifest.to_typed().expect("should parse as typed");
     }
@@ -1254,7 +1282,8 @@ pub(super) mod test {
             # cuda-detection = false
         "#};
 
-        let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
+        let manifest =
+            RawManifest::new_documented(Features::default(), systems.as_slice(), &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
         manifest.to_typed().expect("should parse as typed");
     }
@@ -1344,7 +1373,8 @@ pub(super) mod test {
             # cuda-detection = false
         "#};
 
-        let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
+        let manifest =
+            RawManifest::new_documented(Features::default(), systems.as_slice(), &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
         manifest.to_typed().expect("should parse as typed");
     }
