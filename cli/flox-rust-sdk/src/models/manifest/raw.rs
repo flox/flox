@@ -26,6 +26,8 @@ pub const MANIFEST_HOOK_KEY: &str = "hook";
 pub const MANIFEST_PROFILE_KEY: &str = "profile";
 /// Represents the `[services]` table key in manifest.toml
 pub const MANIFEST_SERVICES_KEY: &str = "services";
+/// Represents the `[activate]` table key in manifest.toml
+pub const MANIFEST_ACTIVATE_KEY: &str = "activate";
 /// Represents the `[options]` table key in manifest.toml
 pub const MANIFEST_OPTIONS_KEY: &str = "options";
 /// Represents the `systems = []` array key in manifest.toml
@@ -228,6 +230,21 @@ impl RawManifest {
                 # myservice.command = "python3 -m http.server""#});
 
         manifest.insert(MANIFEST_SERVICES_KEY, Item::Table(services_table));
+
+        // `[activate]` table, only when customized.
+        if let Some(activate_mode) = &customization.activate_mode {
+            let mut activate_table = Table::new();
+
+            activate_table.decor_mut().set_prefix(indoc! {r#"
+
+
+                ## Activation Options ------------------------------------------------
+            "#});
+
+            let mode_key = Key::new("mode");
+            activate_table.insert(&mode_key, toml_edit::value(activate_mode.to_string()));
+            manifest.insert(MANIFEST_ACTIVATE_KEY, Item::Table(activate_table));
+        }
 
         // `[options]` table
         let mut options_table = Table::new();
@@ -927,6 +944,7 @@ pub(super) mod test {
 
     use super::*;
     use crate::models::lockfile::DEFAULT_SYSTEMS_STR;
+    use crate::models::manifest::typed::ActivateMode;
 
     const DUMMY_MANIFEST: &str = indoc! {r#"
         version = 1
@@ -1318,6 +1336,102 @@ pub(super) mod test {
             ## -------------------------------------------------------------------
             [services]
             # myservice.command = "python3 -m http.server"
+
+
+            ## Other Environment Options -----------------------------------------
+            [options]
+            # Systems that environment is compatible with
+            systems = [
+              "x86_64-linux",
+            ]
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
+        "#};
+
+        let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
+        assert_eq!(manifest.to_string(), expected_string.to_string());
+    }
+
+    #[test]
+    fn create_documented_manifest_with_activate_mode() {
+        let systems = [&"x86_64-linux".to_string()];
+        let customization = InitCustomization {
+            activate_mode: Some(ActivateMode::Run),
+            ..Default::default()
+        };
+
+        let expected_string = indoc! {r#"
+            ## Flox Environment Manifest -----------------------------------------
+            ##
+            ##   _Everything_ you need to know about the _manifest_ is here:
+            ##
+            ##               https://flox.dev/docs/concepts/manifest
+            ##
+            ## -------------------------------------------------------------------
+            # Flox manifest version managed by Flox CLI
+            version = 1
+
+
+            ## Install Packages --------------------------------------------------
+            ##  $ flox install gum  <- puts a package in [install] section below
+            ##  $ flox search gum   <- search for a package
+            ##  $ flox show gum     <- show all versions of a package
+            ## -------------------------------------------------------------------
+            [install]
+            # gum.pkg-path = "gum"
+            # gum.version = "^0.14.5"
+
+
+            ## Environment Variables ---------------------------------------------
+            ##  ... available for use in the activated environment
+            ##      as well as [hook], [profile] scripts and [services] below.
+            ## -------------------------------------------------------------------
+            [vars]
+            # INTRO_MESSAGE = "It's gettin' Flox in here"
+
+
+            ## Activation Hook ---------------------------------------------------
+            ##  ... run by _bash_ shell when you run 'flox activate'.
+            ## -------------------------------------------------------------------
+            [hook]
+            # on-activate = '''
+            #   # -> Set variables, create files and directories
+            #   # -> Perform initialization steps, e.g. create a python venv
+            #   # -> Useful environment variables:
+            #   #      - FLOX_ENV_PROJECT=/home/user/example
+            #   #      - FLOX_ENV=/home/user/example/.flox/run
+            #   #      - FLOX_ENV_CACHE=/home/user/example/.flox/cache
+            # '''
+
+
+            ## Profile script ----------------------------------------------------
+            ## ... sourced by _your shell_ when you run 'flox activate'.
+            ## -------------------------------------------------------------------
+            [profile]
+            # common = '''
+            #   gum style \
+            #   --foreground 212 --border-foreground 212 --border double \
+            #   --align center --width 50 --margin "1 2" --padding "2 4" \
+            #     $INTRO_MESSAGE
+            # '''
+            ## Shell specific profiles go here:
+            # bash = ...
+            # zsh  = ...
+            # fish = ...
+
+
+            ## Services ----------------------------------------------------------
+            ##  $ flox services start             <- Starts all services
+            ##  $ flox services status            <- Status of running services
+            ##  $ flox activate --start-services  <- Activates & starts all
+            ## -------------------------------------------------------------------
+            [services]
+            # myservice.command = "python3 -m http.server"
+
+
+            ## Activation Options ------------------------------------------------
+            [activate]
+            mode = "run"
 
 
             ## Other Environment Options -----------------------------------------
