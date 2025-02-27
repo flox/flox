@@ -9,6 +9,7 @@ use proptest::prelude::*;
 use thiserror::Error;
 
 use super::typed::{
+    Activate,
     Build,
     Containerize,
     ContainerizeConfig,
@@ -145,6 +146,10 @@ trait ManifestMergeStrategy {
         low_priority: &Install,
         high_priority: &Install,
     ) -> Result<(Install, Vec<Warning>), MergeError>;
+    fn merge_activate(
+        low_priority: &Activate,
+        high_priority: &Activate,
+    ) -> Result<(Activate, Vec<Warning>), MergeError>;
     fn merge_vars(
         low_priority: &Vars,
         high_priority: &Vars,

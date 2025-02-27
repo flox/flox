@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Display;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use flox_core::Version;
 #[cfg(test)]
@@ -89,6 +91,10 @@ pub struct Manifest {
     /// Profile scripts that are run in the user's shell upon activation.
     #[serde(default)]
     pub profile: Profile,
+    /// Options that control the behavior of activations.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Activate::skip_serializing")]
+    pub activate: Activate,
     /// Options that control the behavior of the manifest.
     #[serde(default)]
     pub options: Options,
@@ -545,6 +551,51 @@ pub struct Profile {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
+pub struct Activate {
+    pub mode: Option<ActivateMode>,
+}
+
+impl Activate {
+    fn skip_serializing(&self) -> bool {
+        self.mode.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Ord, PartialOrd, Default)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+pub enum ActivateMode {
+    #[default]
+    Dev,
+    Run,
+}
+
+impl Display for ActivateMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ActivateMode::Dev => write!(f, "dev"),
+            ActivateMode::Run => write!(f, "run"),
+        }
+    }
+}
+
+impl FromStr for ActivateMode {
+    type Err = ManifestError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "dev" => Ok(ActivateMode::Dev),
+            "run" => Ok(ActivateMode::Run),
+            _ => Err(ManifestError::ActivateModeInvalid),
+        }
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct Options {
     /// A list of systems that each package is resolved for.
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
@@ -804,6 +855,8 @@ pub struct ContainerizeConfig {
 pub enum ManifestError {
     #[error("no package or group named '{0}' in the manifest")]
     PkgOrGroupNotFound(String),
+    #[error("not a valid activation mode")]
+    ActivateModeInvalid,
 }
 
 /// The section where users can declare dependencies on other environments.
