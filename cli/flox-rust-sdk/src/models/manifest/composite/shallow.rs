@@ -11,6 +11,7 @@ use super::{
     Warning,
 };
 use crate::models::manifest::typed::{
+    ActivateOptions,
     Allows,
     Build,
     Containerize,
@@ -149,6 +150,12 @@ impl ShallowMerger {
             high_priority.systems.clone(),
         );
 
+        let (merged_activate_mode, activate_mode_warning) = shallow_merge_options(
+            root_key.extend(["activate", "mode"]),
+            low_priority.activate.mode.clone(),
+            high_priority.activate.mode.clone(),
+        );
+
         let merged = Options {
             systems: merged_systems,
             allow: Allows {
@@ -160,10 +167,14 @@ impl ShallowMerger {
                 allow_pre_releases: merged_semver_allow_pre_releases,
             },
             cuda_detection: merged_cuda_detection,
+            activate: ActivateOptions {
+                mode: merged_activate_mode,
+            },
         };
 
         warnings.extend(
             [
+                activate_mode_warning,
                 allow_unfree_warning,
                 allow_broken_warning,
                 allow_licenses_warning,
@@ -419,7 +430,10 @@ mod tests {
             };
             let semver = SemverOptions { allow_pre_releases: options2.semver.allow_pre_releases.or(options1.semver.allow_pre_releases) };
             let cuda_detection = options2.cuda_detection.or(options1.cuda_detection);
-            let expected = Options { systems, allow, semver, cuda_detection, };
+            let activate = ActivateOptions {
+                mode: options2.activate.mode.or(options1.activate.mode),
+            };
+            let expected = Options { systems, allow, semver, cuda_detection, activate };
             prop_assert_eq!(merged, expected);
         }
 
