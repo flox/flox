@@ -9,6 +9,7 @@ use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
 use flox_rust_sdk::models::manifest::raw::{insert_packages, CatalogPackage, PackageToInstall};
+use flox_rust_sdk::models::manifest::typed::ActivateMode;
 use flox_rust_sdk::providers::catalog::{
     ClientTrait,
     PackageDescriptor,
@@ -93,10 +94,11 @@ impl Init {
             .unwrap_or_else(|| std::env::current_dir().unwrap());
 
         let home_dir = dirs::home_dir().unwrap();
+        let default_environment = dir == home_dir;
 
         let env_name = if let Some(ref name) = self.env_name {
             EnvironmentName::from_str(name)?
-        } else if dir == home_dir {
+        } else if default_environment {
             EnvironmentName::from_str(DEFAULT_NAME)?
         } else {
             let name = dir
@@ -107,8 +109,8 @@ impl Init {
             EnvironmentName::from_str(&name)?
         };
 
-        // Don't run language hooks in home dir
-        let customization = if dir != home_dir || self.auto_setup {
+        // Don't run language hooks for "default" environment
+        let customization = if !default_environment || self.auto_setup {
             self.run_language_hooks(&flox, &dir)
                 .await
                 .unwrap_or_else(|e| {
@@ -117,7 +119,10 @@ impl Init {
                 })
         } else {
             debug!("Skipping language hooks in home directory");
-            InitCustomization::default()
+            InitCustomization {
+                activate_mode: Some(ActivateMode::Run),
+                ..Default::default()
+            }
         };
 
         let env = if customization.packages.is_some() {
@@ -284,6 +289,7 @@ impl Init {
             profile_tcsh: custom_profile_tcsh,
             profile_zsh: custom_profile_zsh,
             packages,
+            activate_mode: None, // Language hooks don't touch mode.
         }
     }
 }
@@ -674,6 +680,7 @@ mod tests {
                         systems: None,
                     },
                 ]),
+                activate_mode: None,
             },
             InitCustomization {
                 hook_on_activate: Some("hook_on_activate2".to_string()),
@@ -696,6 +703,7 @@ mod tests {
                         systems: None,
                     },
                 ]),
+                activate_mode: None,
             },
         ];
 
@@ -795,6 +803,7 @@ mod tests {
                     systems: None,
                 },
             ]),
+            activate_mode: None,
         });
     }
 }

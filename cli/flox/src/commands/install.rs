@@ -27,6 +27,7 @@ use flox_rust_sdk::models::manifest::raw::{
     CatalogPackage,
     PackageToInstall,
 };
+use flox_rust_sdk::models::manifest::typed::ActivateMode;
 use flox_rust_sdk::models::user_state::{
     lock_and_read_user_state_file,
     user_state_path,
@@ -553,7 +554,10 @@ fn package_list_for_prompt(packages: &[PackageToInstall]) -> Option<String> {
 /// customizations and skipping the normal `init` output.
 fn create_default_env(flox: &Flox) -> Result<PathEnvironment, anyhow::Error> {
     let home_dir = dirs::home_dir().context("user must have a home directory")?;
-    let customization = InitCustomization::default();
+    let customization = InitCustomization {
+        activate_mode: Some(ActivateMode::Run),
+        ..Default::default()
+    };
     PathEnvironment::init(
         PathPointer::new(
             EnvironmentName::from_str(DEFAULT_NAME)
