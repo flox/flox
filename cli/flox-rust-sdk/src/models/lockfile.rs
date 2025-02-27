@@ -4,7 +4,7 @@ use catalog_api_v1::types::{MessageLevel, SystemEnum};
 #[cfg(test)]
 use flox_test_utils::proptest::{alphanum_string, chrono_strat};
 use indent::{indent_all_by, indent_by};
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -22,7 +22,9 @@ use flox_core::Version;
 use thiserror::Error;
 use tracing::debug;
 
+use super::environment::fetcher::IncludeFetcher;
 use super::environment::{CoreEnvironmentError, EnvironmentError};
+use super::manifest::composite::{ManifestMerger, MergeError, ShallowMerger};
 use super::manifest::typed::{
     Allows,
     IncludeDescriptor,
@@ -35,6 +37,8 @@ use super::manifest::typed::{
     DEFAULT_PRIORITY,
 };
 use crate::data::{CanonicalPath, System};
+use crate::flox::Flox;
+use crate::models::manifest::composite::CompositeManifest;
 use crate::providers::catalog::{
     self,
     CatalogPage,
@@ -565,18 +569,30 @@ impl Lockfile {
     /// Already resolved packages will not be re-resolved,
     /// and already fetched includes will not be re-fetched.
     pub async fn lock_manifest(
+        flox: &Flox,
         manifest: &Manifest,
         seed_lockfile: Option<&Lockfile>,
-        client: &impl catalog::ClientTrait,
-        installable_locker: &impl InstallableLocker,
+        include_fetcher: &IncludeFetcher,
     ) -> Result<Lockfile, EnvironmentError> {
-        let (merged, compose) = Self::merge_manifest(manifest, seed_lockfile)?;
-        let packages = Self::resolve_manifest(&merged, seed_lockfile, client, installable_locker)
-            .await
-            .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
+        let (merged, compose) = Self::merge_manifest(
+            flox,
+            manifest,
+            seed_lockfile,
+            include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .map_err(EnvironmentError::Recoverable)?;
+        let packages = Self::resolve_manifest(
+            &merged,
+            seed_lockfile,
+            &flox.catalog_client,
+            &flox.installable_locker,
+        )
+        .await
+        .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
         let lockfile = Lockfile {
             version: Version::<1>,
-            manifest: manifest.clone(),
+            manifest: merged,
             packages,
             compose,
         };
@@ -594,14 +610,108 @@ impl Lockfile {
     /// re-fetched.
     #[instrument(skip_all, fields(progress = "Merging environment includes"))]
     fn merge_manifest(
+        flox: &Flox,
         manifest: &Manifest,
-        _seed_lockfile: Option<&Lockfile>,
-    ) -> Result<(Manifest, Option<Compose>), EnvironmentError> {
+        seed_lockfile: Option<&Lockfile>,
+        include_fetcher: &IncludeFetcher,
+        merger: ManifestMerger,
+    ) -> Result<(Manifest, Option<Compose>), RecoverableMergeError> {
         if manifest.include.environments.is_empty() {
             return Ok((manifest.clone(), None));
         }
 
-        todo!()
+        if !flox.features.compose {
+            return Err(RecoverableMergeError::Catchall(
+                indoc! {"Cannot handle [include] when compose feature flag is disabled.
+                Use 'flox config --set-bool features.compose true' to enable composition."}
+                .to_string(),
+            ));
+        }
+
+        debug!("Composing included environments");
+
+        // Fetch included manifests we don't already have in seed_lockfile.
+        // Note that we have to preserve the order of the includes in the
+        // manifest.
+        let mut locked_includes: Vec<LockedInclude> = vec![];
+        for include_environment in &manifest.include.environments {
+            let existing_locked_include = 'existing: {
+                // If there's a seed_lockfile
+                let Some(seed_lockfile) = seed_lockfile else {
+                    break 'existing None;
+                };
+                // And the seed lockfile was generated from a manifest with includes
+                let Some(compose) = &seed_lockfile.compose else {
+                    break 'existing None;
+                };
+                // And we can find an identical include descriptor in the seed lockfile
+                // Then use the existing locked include
+                compose
+                    .include
+                    .iter()
+                    .find(|locked_include| &locked_include.descriptor == include_environment)
+                    .cloned()
+            };
+            let locked_include = match existing_locked_include {
+                Some(locked_include) => {
+                    debug!(
+                        "using existing locked include from lockfile for {}",
+                        include_environment
+                    );
+
+                    locked_include
+                },
+                None => {
+                    debug!("fetching included environment {}", include_environment);
+
+                    include_fetcher
+                        .fetch(flox, include_environment)
+                        .map_err(|e| RecoverableMergeError::Fetch {
+                            include: include_environment.clone(),
+                            err: Box::new(e),
+                        })?
+                },
+            };
+            locked_includes.push(locked_include);
+        }
+
+        Self::check_locked_names_unique(&locked_includes)?;
+
+        // Call the merger with all the manifests
+        let composite = CompositeManifest {
+            composer: manifest.clone(),
+            deps: locked_includes
+                .iter()
+                .map(|include| (include.name.clone(), include.manifest.clone()))
+                .collect(),
+        };
+        // TODO: we should bubble up warnings
+        let (merged, _warnings) = composite
+            .merge_all(merger)
+            .map_err(RecoverableMergeError::Merge)?;
+
+        // Stitch everything together into a Compose object
+        let compose = Compose {
+            composer: manifest.clone(),
+            include: locked_includes,
+        };
+
+        Ok((merged, Some(compose)))
+    }
+
+    /// Check that all names in a list of locked includes are unique
+    fn check_locked_names_unique(
+        locked_includes: &[LockedInclude],
+    ) -> Result<(), RecoverableMergeError> {
+        let mut seen_names = HashSet::new();
+        for locked_include in locked_includes {
+            if !seen_names.insert(&locked_include.name) {
+                return Err(RecoverableMergeError::Catchall(formatdoc! {
+                "multiple environments in include.environments have the name '{}'
+                 A unique name can be provided with the 'name' field.", locked_include.name}));
+            }
+        }
+        Ok(())
     }
 
     /// Resolve packages for a given manifest
@@ -1374,6 +1484,24 @@ pub enum ResolveError {
     InstallIdNotInManifest(String),
 }
 
+/// Errors that occur during merging a manifest that flox edit can recover from
+#[derive(Debug, Error)]
+pub enum RecoverableMergeError {
+    #[error(transparent)]
+    Merge(MergeError),
+
+    #[error("failed to fetch environment '{include}'")]
+    Fetch {
+        include: IncludeDescriptor,
+        #[source]
+        err: Box<EnvironmentError>,
+    },
+
+    /// Use this error when we don't need an error type to reuse in multiple places
+    #[error("{0}")]
+    Catchall(String),
+}
+
 pub mod test_helpers {
     use super::*;
     use crate::models::manifest::typed::PackageDescriptorStorePath;
@@ -1552,9 +1680,11 @@ pub(crate) mod tests {
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
+    use crate::flox::test_helpers::flox_instance;
     use crate::models::manifest::raw::RawManifest;
     use crate::models::manifest::typed::Manifest;
     use crate::models::search::{PackageDetails, SearchLimit, SearchResults};
+    use crate::providers::catalog::Client;
     use crate::providers::flake_installable_locker::{
         FlakeInstallableError,
         InstallableLockerMock,
@@ -2566,11 +2696,9 @@ pub(crate) mod tests {
         client.push_resolve_response(response);
 
         let locked_manifest =
-            Lockfile::lock_manifest(manifest, None, &client, &InstallableLockerMock::new()).await;
-        if let Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
-            ResolveError::ResolutionFailed(res_failures),
-        ))) = locked_manifest
-        {
+            Lockfile::resolve_manifest(manifest, None, &client, &InstallableLockerMock::new())
+                .await;
+        if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
             if let [ResolutionFailure::UnknownServiceMessage(MsgUnknown { msg, .. })] =
                 res_failures.0.as_slice()
             {
@@ -2602,12 +2730,9 @@ pub(crate) mod tests {
             client.push_resolve_response(response);
 
             let locked_manifest =
-                Lockfile::lock_manifest(manifest, None, &client, &InstallableLockerMock::new())
+                Lockfile::resolve_manifest(manifest, None, &client, &InstallableLockerMock::new())
                     .await;
-            if let Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
-                ResolveError::ResolutionFailed(res_failures),
-            ))) = locked_manifest
-            {
+            if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
                 // A newline is added for formatting when it's a single message
                 assert_eq!(
                     res_failures.to_string(),
@@ -2621,15 +2746,18 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn test_locking_1() {
+        let (mut flox, _tempdir) = flox_instance();
         let manifest = &*TEST_TYPED_MANIFEST;
 
         let mut client = catalog::MockClient::new(None::<String>).unwrap();
         client.push_resolve_response(TEST_RESOLUTION_RESPONSE.clone());
+        flox.catalog_client = Client::Mock(client);
 
-        let locked_manifest =
-            Lockfile::lock_manifest(manifest, None, &client, &InstallableLockerMock::new())
-                .await
-                .unwrap();
+        let locked_manifest = Lockfile::lock_manifest(&flox, manifest, None, &IncludeFetcher {
+            base_directory: None,
+        })
+        .await
+        .unwrap();
         assert_eq!(&locked_manifest, &*TEST_LOCKED_MANIFEST);
     }
 
@@ -2649,12 +2777,12 @@ pub(crate) mod tests {
 
         let client = catalog::MockClient::new(None::<String>).unwrap();
 
-        let locked_manifest =
-            Lockfile::lock_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+        let resolved_packages =
+            Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
                 .await
                 .unwrap();
 
-        assert_eq!(&locked_manifest.packages, &[foo_locked.into()]);
+        assert_eq!(&resolved_packages, &[foo_locked.into()]);
     }
 
     /// If a manifest doesn't have `options.systems`, it defaults to locking for
@@ -3055,6 +3183,7 @@ pub(crate) mod tests {
     /// If all packages are already locked, return without locking/resolution
     #[tokio::test]
     async fn lock_manifest_noop_if_fully_locked() {
+        let (flox, _tempdir) = flox_instance();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
@@ -3077,9 +3206,11 @@ pub(crate) mod tests {
         };
 
         let locked_manifest =
-            Lockfile::lock_manifest(&manifest, Some(&locked), &PanickingClient, &PanickingLocker)
-                .await
-                .unwrap();
+            Lockfile::lock_manifest(&flox, &manifest, Some(&locked), &IncludeFetcher {
+                base_directory: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(locked_manifest, locked);
     }
@@ -3149,12 +3280,12 @@ pub(crate) mod tests {
             }),
         }]);
 
-        let locked_manifest =
-            Lockfile::lock_manifest(&manifest, Some(&locked), &client_mock, &PanickingLocker)
+        let resolved_packages =
+            Lockfile::resolve_manifest(&manifest, Some(&locked), &client_mock, &PanickingLocker)
                 .await
                 .unwrap();
 
-        assert_eq!(locked_manifest.packages.len(), 2, "{:#?}", locked_manifest);
+        assert_eq!(resolved_packages.len(), 2, "{:#?}", resolved_packages);
     }
 
     /// If catalog packages are already locked, no locking should occur.
@@ -3185,12 +3316,12 @@ pub(crate) mod tests {
         let locker_mock = InstallableLockerMock::new();
         locker_mock.push_lock_result(Ok(bar_locked.locked_installable));
 
-        let locked_manifest =
-            Lockfile::lock_manifest(&manifest, Some(&locked), &PanickingClient, &locker_mock)
+        let resolved_packages =
+            Lockfile::resolve_manifest(&manifest, Some(&locked), &PanickingClient, &locker_mock)
                 .await
                 .unwrap();
 
-        assert_eq!(locked_manifest.packages.len(), 2, "{:#?}", locked_manifest);
+        assert_eq!(resolved_packages.len(), 2, "{:#?}", resolved_packages);
     }
 
     /// If catalog packages are already locked, no locking should occur.
@@ -3226,7 +3357,7 @@ pub(crate) mod tests {
         );
 
         let locker_mock = InstallableLockerMock::new();
-        let locked_manifest = Lockfile::lock_manifest(
+        let resolved_packages = Lockfile::resolve_manifest(
             &manifest_pririty_after,
             Some(&locked),
             &PanickingClient,
@@ -3235,7 +3366,7 @@ pub(crate) mod tests {
         .await
         .unwrap();
 
-        assert_eq!(locked_manifest.packages.as_slice(), &[
+        assert_eq!(resolved_packages.as_slice(), &[
             foo_locked_priority_after.into()
         ]);
     }
@@ -3267,7 +3398,7 @@ pub(crate) mod tests {
 
         let client = catalog::MockClient::new(None::<String>).unwrap();
         assert!(matches!(
-            Lockfile::lock_manifest(
+            Lockfile::resolve_manifest(
                 &manifest,
                 Some(&locked),
                 &client,
@@ -3275,9 +3406,7 @@ pub(crate) mod tests {
             )
             .await
             .unwrap_err(),
-            EnvironmentError::Core(CoreEnvironmentError::Resolve(
-                ResolveError::UnfreeNotAllowed { .. }
-            ))
+            ResolveError::UnfreeNotAllowed { .. }
         ));
     }
 
@@ -3315,12 +3444,10 @@ pub(crate) mod tests {
             .unfree = Some(true);
         client.push_resolve_response(vec![resolved_group]);
         assert!(matches!(
-            Lockfile::lock_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+            Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
                 .await
                 .unwrap_err(),
-            EnvironmentError::Core(CoreEnvironmentError::Resolve(
-                ResolveError::UnfreeNotAllowed { .. }
-            ))
+            ResolveError::UnfreeNotAllowed { .. }
         ));
     }
 

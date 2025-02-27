@@ -32,7 +32,7 @@ use super::{
 };
 use crate::commands::{ensure_floxhub_token, EnvironmentSelectError};
 use crate::utils::dialog::{Confirm, Dialog};
-use crate::utils::errors::format_core_error;
+use crate::utils::errors::format_error;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
 
@@ -249,7 +249,7 @@ impl Edit {
 
                 // for recoverable errors, prompt the user to continue editing
                 Err(e) => {
-                    message::error(format_core_error(&e));
+                    message::error(format_error(&e));
 
                     if !Dialog::can_prompt() {
                         bail!("Can't prompt to continue editing in non-interactive context");
@@ -265,18 +265,21 @@ impl Edit {
     /// Returns `Ok` if the edit result is successful or recoverable, `Err` otherwise
     fn make_interactively_recoverable(
         result: Result<EditResult, EnvironmentError>,
-    ) -> Result<Result<EditResult, CoreEnvironmentError>, EnvironmentError> {
+    ) -> Result<Result<EditResult, EnvironmentError>, EnvironmentError> {
         match result {
-            Err(EnvironmentError::Core(e @ CoreEnvironmentError::Resolve(_)))
-            | Err(EnvironmentError::Core(e @ CoreEnvironmentError::DeserializeManifest(_)))
-            | Err(EnvironmentError::Core(
-                e @ CoreEnvironmentError::BuildEnv(
+            Err(e @ EnvironmentError::Core(CoreEnvironmentError::Resolve(_)))
+            | Err(e @ EnvironmentError::Core(CoreEnvironmentError::DeserializeManifest(_)))
+            | Err(
+                e @ EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
                     BuildEnvError::Realise2 { .. } | BuildEnvError::Build(_),
-                ),
-            ))
-            | Err(EnvironmentError::Core(
-                e @ CoreEnvironmentError::Services(ServiceError::InvalidConfig(_)),
-            )) => Ok(Err(e)),
+                )),
+            )
+            | Err(
+                e @ EnvironmentError::Core(CoreEnvironmentError::Services(
+                    ServiceError::InvalidConfig(_),
+                )),
+            )
+            | Err(e @ EnvironmentError::Recoverable(_)) => Ok(Err(e)),
             Err(e) => Err(e),
             Ok(result) => Ok(Ok(result)),
         }

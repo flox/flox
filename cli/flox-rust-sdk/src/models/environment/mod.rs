@@ -17,7 +17,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::{Lockfile, ResolveError};
+use super::lockfile::{Lockfile, RecoverableMergeError, ResolveError};
 use super::manifest::raw::PackageToInstall;
 use super::manifest::typed::{ActivateMode, Manifest, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
@@ -41,6 +41,7 @@ pub use core_environment::{
     UpgradeResult,
 };
 
+pub mod fetcher;
 pub mod generations;
 pub mod managed_environment;
 pub mod path_environment;
@@ -742,6 +743,10 @@ pub enum EnvironmentError {
 
     #[error("corrupt environment; environment does not have a lockfile")]
     MissingLockfile,
+
+    /// An error flox edit can recover from
+    #[error(transparent)]
+    Recoverable(RecoverableMergeError),
 }
 
 #[derive(Debug, thiserror::Error)]
