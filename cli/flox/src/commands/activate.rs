@@ -87,7 +87,7 @@ impl FromStr for Mode {
         match s {
             "dev" => Ok(Mode::Dev),
             "run" => Ok(Mode::Run),
-            _ => Err(anyhow!("'{s}' is not a valid activation mode")),
+            _ => Err(anyhow!("not a valid activation mode")),
         }
     }
 }
