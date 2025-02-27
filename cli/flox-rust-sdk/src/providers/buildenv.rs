@@ -548,20 +548,33 @@ impl BuildEnvNix {
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
-        let mut nix_build_command = self.base_command();
-        nix_build_command.args(["build", "--no-link", "--offline", "--json"]);
-        nix_build_command.arg("--file").arg(&*BUILDENV_NIX);
-        nix_build_command
-            .arg("--argstr")
-            .arg("manifestLock")
-            .arg(lockfile_path);
-        if let Some(service_config_path) = &service_config_path {
-            nix_build_command
+        fn make_build_command(
+            mut base_command: Command,
+            lockfile_path: &Path,
+            service_config_path: Option<&Path>,
+        ) -> Command {
+            base_command.args(["build", "--no-link", "--offline", "--json"]);
+            base_command.arg("--file").arg(&*BUILDENV_NIX);
+            base_command
                 .arg("--argstr")
-                .arg("serviceConfigYaml")
-                .arg(service_config_path);
+                .arg("manifestLock")
+                .arg(lockfile_path);
+            if let Some(service_config_path) = &service_config_path {
+                base_command
+                    .arg("--argstr")
+                    .arg("serviceConfigYaml")
+                    .arg(service_config_path);
+            }
+            base_command
         }
+
+        let mut nix_build_command = make_build_command(
+            self.base_command(),
+            lockfile_path,
+            service_config_path.as_deref(),
+        );
         debug!(cmd=%nix_build_command.display(), "building environment");
+
         let output = nix_build_command
             .output()
             .map_err(BuildEnvError::CallNixBuild)?;
@@ -574,7 +587,41 @@ impl BuildEnvNix {
         struct BuildEnvResultRaw {
             outputs: BuildEnvOutputs,
         }
+        let build_env_result: Result<[BuildEnvResultRaw; 1], _> =
+            serde_json::from_slice(&output.stdout).map_err(|err| BuildEnvError::ReadOutputs {
+                output: String::from_utf8_lossy(&output.stdout).to_string(),
+                err,
+            });
+
+        if let Ok([build_env_result]) = build_env_result {
+            return Ok(build_env_result.outputs);
+        }
+
+        // Preexisting store paths produced by the build may have-new been (partially) swept away.
+        // In that case the above `nix build` only documents the _new_ outputs.
+        // A second build with the same arguments will be fully substituted and contain all outputs.
+        //
+        // We only try this once because the weindow for paths to disappear between the last build
+        // and this one is particularly short, incorrect output is now reliably wrong
+        // and should be propagated up.
+        debug!(err=%build_env_result.unwrap_err(), "failed to deserialize output, retrying once");
+        let mut nix_build_command = make_build_command(
+            self.base_command(),
+            lockfile_path,
+            service_config_path.as_deref(),
+        );
+        debug!(cmd=%nix_build_command.display(), "building environment");
+
+        let output = nix_build_command
+            .output()
+            .map_err(BuildEnvError::CallNixBuild)?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(BuildEnvError::Build(stderr.to_string()));
+        }
+
         let [build_env_result]: [BuildEnvResultRaw; 1] = serde_json::from_slice(&output.stdout)
+            .inspect_err(|_| debug!("failed to deserialize output on second try"))
             .map_err(|err| BuildEnvError::ReadOutputs {
                 output: String::from_utf8_lossy(&output.stdout).to_string(),
                 err,
