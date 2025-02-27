@@ -959,13 +959,7 @@ pub(super) mod test {
     fn create_documented_manifest_not_customized() {
         let systems = &*DEFAULT_SYSTEMS_STR.iter().collect::<Vec<_>>();
         let customization = InitCustomization {
-            hook_on_activate: None,
-            profile_common: None,
-            profile_bash: None,
-            profile_fish: None,
-            profile_tcsh: None,
-            profile_zsh: None,
-            packages: None,
+            ..Default::default()
         };
 
         let expected_string = indoc! {r#"
@@ -1058,18 +1052,13 @@ pub(super) mod test {
     fn create_documented_manifest_with_packages() {
         let systems = &*DEFAULT_SYSTEMS_STR.iter().collect::<Vec<_>>();
         let customization = InitCustomization {
-            hook_on_activate: None,
-            profile_common: None,
-            profile_bash: None,
-            profile_fish: None,
-            profile_tcsh: None,
-            profile_zsh: None,
             packages: Some(vec![CatalogPackage {
                 id: "python3".to_string(),
                 pkg_path: "python3".to_string(),
                 version: Some("3.11.6".to_string()),
                 systems: None,
             }]),
+            ..Default::default()
         };
 
         let expected_string = indoc! {r#"
@@ -1171,12 +1160,7 @@ pub(super) mod test {
                 "#}
                 .to_string(),
             ),
-            profile_common: None,
-            profile_bash: None,
-            profile_fish: None,
-            profile_tcsh: None,
-            profile_zsh: None,
-            packages: None,
+            ..Default::default()
         };
 
         let expected_string = indoc! {r#"
@@ -1265,18 +1249,13 @@ pub(super) mod test {
     fn create_documented_profile_script() {
         let systems = [&"x86_64-linux".to_string()];
         let customization = InitCustomization {
-            hook_on_activate: None,
             profile_common: Some(
                 indoc! { r#"
                     echo "Hello from Flox"
                 "#}
                 .to_string(),
             ),
-            profile_bash: None,
-            profile_fish: None,
-            profile_tcsh: None,
-            profile_zsh: None,
-            packages: None,
+            ..Default::default()
         };
 
         let expected_string = indoc! {r#"
