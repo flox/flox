@@ -64,6 +64,7 @@ nixVersions."${nixVersion}".overrideAttrs (prev: {
     Libs: -L\''${libdir} -lnixfetchers
     Cflags: -isystem \''${includedir} -std=c++2a
     EOF
+
   '';
 })
 # ---------------------------------------------------------------------------- #
