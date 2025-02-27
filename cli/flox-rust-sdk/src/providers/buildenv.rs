@@ -23,6 +23,7 @@ use crate::models::lockfile::{
     LockedPackageStorePath,
     Lockfile,
 };
+use crate::models::manifest::typed::ActivateMode;
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::catalog::CatalogClientError;
 use crate::utils::CommandExt;
@@ -101,6 +102,16 @@ pub struct BuildEnvOutputs {
     // todo: nest additional built paths for manifest builds
     #[serde(flatten)]
     pub manifest_build_runtimes: HashMap<String, BuiltStorePath>,
+}
+
+impl BuildEnvOutputs {
+    /// Returns the built environment path for an activation mode.
+    pub fn for_mode(self, mode: &ActivateMode) -> BuiltStorePath {
+        match mode {
+            ActivateMode::Dev => self.develop,
+            ActivateMode::Run => self.runtime,
+        }
+    }
 }
 
 #[derive(
