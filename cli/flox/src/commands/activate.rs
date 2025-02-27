@@ -40,7 +40,11 @@ use super::{
 };
 use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
 use crate::commands::services::ServicesCommandsError;
-use crate::commands::{ensure_environment_trust, EnvironmentSelectError};
+use crate::commands::{
+    ensure_environment_trust,
+    uninitialized_environment_description,
+    EnvironmentSelectError,
+};
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::openers::Shell;
 use crate::utils::{default_nix_env_vars, message};
@@ -268,7 +272,7 @@ impl Activate {
             if interactive {
                 return Err(anyhow!(
                     "Environment {} is already active",
-                    now_active.message_description()?
+                    uninitialized_environment_description(&now_active)?
                 ));
             }
             !is_ephemeral

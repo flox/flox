@@ -1349,18 +1349,6 @@ impl UninitializedEnvironment {
         }
     }
 
-    /// Returns true if the environment is in the current directory
-    pub fn is_current_dir(&self) -> Result<bool> {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => {
-                let current_dir = std::env::current_dir()?;
-                let is_current = current_dir.canonicalize()? == path.canonicalize()?;
-                Ok(is_current)
-            },
-            UninitializedEnvironment::Remote(_) => Ok(false),
-        }
-    }
-
     /// Returns the path to the environment if it isn't remote
     #[allow(dead_code)]
     pub fn path(&self) -> Option<&Path> {
@@ -1411,24 +1399,6 @@ impl UninitializedEnvironment {
             format!("{}/{}", owner, self.name())
         } else {
             format!("{}", self.name())
-        }
-    }
-
-    /// The environment description when displayed in messages
-    // TODO: we use this for activate errors in Rust whereas we use
-    // bare_description for activate errors in Bash since it doesn't add quotes.
-    pub fn message_description(&self) -> Result<String> {
-        if let Some(owner) = self.owner_if_remote() {
-            Ok(format!("'{}/{}' (remote)", owner, self.name()))
-        } else if let Some(owner) = self.owner_if_managed() {
-            Ok(format!("'{}/{}'", owner, self.name()))
-        } else if self
-            .is_current_dir()
-            .context("couldn't read current directory")?
-        {
-            Ok(String::from("in current directory"))
-        } else {
-            Ok(format!("'{}'", self.name()))
         }
     }
 }
@@ -1698,7 +1668,37 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<&FloxhubToke
 }
 
 pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
-    UninitializedEnvironment::from_concrete_environment(environment).message_description()
+    uninitialized_environment_description(&UninitializedEnvironment::from_concrete_environment(
+        environment,
+    ))
+}
+
+/// The environment description when displayed in messages
+/// Use UninitializedEnvironment::bare_description for other cases
+pub fn uninitialized_environment_description(
+    environment: &UninitializedEnvironment,
+) -> Result<String> {
+    if let Some(owner) = environment.owner_if_remote() {
+        Ok(format!("'{}/{}' (remote)", owner, environment.name()))
+    } else if let Some(owner) = environment.owner_if_managed() {
+        Ok(format!("'{}/{}'", owner, environment.name()))
+    } else if is_current_dir(environment).context("couldn't read current directory")? {
+        Ok(String::from("in current directory"))
+    } else {
+        Ok(format!("'{}'", environment.name()))
+    }
+}
+
+/// Returns true if the environment is in the current directory
+fn is_current_dir(environment: &UninitializedEnvironment) -> Result<bool> {
+    match environment {
+        UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => {
+            let current_dir = std::env::current_dir()?;
+            let is_current = current_dir.canonicalize()? == path.canonicalize()?;
+            Ok(is_current)
+        },
+        UninitializedEnvironment::Remote(_) => Ok(false),
+    }
 }
 
 /// Check if the environment needs to be migrated to version 1.
