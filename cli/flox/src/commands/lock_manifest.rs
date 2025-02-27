@@ -53,6 +53,7 @@ impl LockManifest {
             input_lockfile.as_ref(),
             &flox.catalog_client,
             &flox.installable_locker,
+            flox.features.compose,
         )
         .await
         .context("Failed to lock the manifest")?;

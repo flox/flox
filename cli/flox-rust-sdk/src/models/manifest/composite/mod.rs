@@ -6,7 +6,7 @@ mod shallow;
 use enum_dispatch::enum_dispatch;
 #[cfg(test)]
 use proptest::prelude::*;
-use shallow::ShallowMerger;
+pub(crate) use shallow::ShallowMerger;
 use thiserror::Error;
 
 use super::typed::{ContainerizeConfig, Manifest};
@@ -80,13 +80,15 @@ pub struct WarningWithContext {
 /// A collection of manifests to be merged with a `ManifestMergeTrait`.
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-struct CompositeManifest {
-    composer: Manifest,
+pub(crate) struct CompositeManifest {
+    pub(crate) composer: Manifest,
     #[cfg_attr(
         test,
         proptest(strategy = "proptest::collection::vec(any::<(String, Manifest)>(), 0..=2)")
     )]
-    deps: Vec<(String, Manifest)>,
+    /// (name, manifest)
+    /// The order is significant; later manifests have higher priority.
+    pub(crate) deps: Vec<(String, Manifest)>,
 }
 
 #[derive(Clone, Debug)]
@@ -96,7 +98,7 @@ pub(crate) enum ManifestMerger {
 }
 
 impl CompositeManifest {
-    fn merge_all(
+    pub(crate) fn merge_all(
         &self,
         merger: ManifestMerger,
     ) -> Result<(Manifest, Vec<WarningWithContext>), MergeError> {
