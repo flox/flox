@@ -154,7 +154,7 @@ impl Display for DisplayEnvironments<'_> {
         let widest = self
             .envs
             .iter()
-            .map(|env| format_description(env).len())
+            .map(|env| env.bare_description().len())
             .max()
             .unwrap_or(0);
 
@@ -174,13 +174,6 @@ impl Display for DisplayEnvironments<'_> {
         }
 
         Ok(())
-    }
-}
-
-fn format_description(env: &UninitializedEnvironment) -> Cow<'_, str> {
-    match env.bare_description() {
-        Ok(desc) => desc.into(),
-        Err(_) => "(unknown)".into(),
     }
 }
 
