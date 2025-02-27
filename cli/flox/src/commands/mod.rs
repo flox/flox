@@ -32,10 +32,8 @@ use std::{env, fmt, fs, io, mem};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
-use flox_rust_sdk::data::{CanonicalPath, FloxVersion};
+use flox_rust_sdk::data::FloxVersion;
 use flox_rust_sdk::flox::{
-    EnvironmentName,
-    EnvironmentOwner,
     EnvironmentRef,
     Flox,
     Floxhub,
@@ -47,17 +45,16 @@ use flox_rust_sdk::flox::{
     FLOX_VERSION,
 };
 use flox_rust_sdk::models::env_registry::{EnvRegistry, ENV_REGISTRY_FILENAME};
-use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
-use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     find_dot_flox,
+    open_path,
     ConcreteEnvironment,
     DotFlox,
     Environment,
     EnvironmentError,
-    EnvironmentPointer,
     ManagedPointer,
+    UninitializedEnvironment,
     DOT_FLOX,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
@@ -1245,164 +1242,6 @@ fn query_which_environment(
     }
 }
 
-/// Open an environment defined in `{path}/.flox`
-fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError> {
-    DotFlox::open_in(path)
-        .map(UninitializedEnvironment::DotFlox)?
-        .into_concrete_environment(flox)
-}
-
-/// An environment descriptor of an environment that can be (re)opened,
-/// i.e. to install packages into it.
-///
-/// Unlike [ConcreteEnvironment], this type does not hold a concrete instance any environment,
-/// but rather fully qualified metadata to create an instance from.
-///
-/// * for [PathEnvironment] and [ManagedEnvironment] that's the path to their `.flox` and `.flox/pointer.json`
-/// * for [RemoteEnvironment] that's the [ManagedPointer] to the remote environment
-///
-/// Serialized as is into [FLOX_ACTIVE_ENVIRONMENTS_VAR] to be able to reopen environments.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-#[serde(tag = "type")]
-#[serde(rename_all = "kebab-case")]
-pub enum UninitializedEnvironment {
-    /// Container for "local" environments pointed to by [DotFlox]
-    DotFlox(DotFlox),
-    /// Container for [RemoteEnvironment]
-    Remote(ManagedPointer),
-}
-
-impl UninitializedEnvironment {
-    pub fn from_concrete_environment(env: &ConcreteEnvironment) -> Self {
-        match env {
-            ConcreteEnvironment::Path(path_env) => {
-                let pointer = path_env.pointer.clone().into();
-                Self::DotFlox(DotFlox {
-                    path: path_env.path.to_path_buf(),
-                    pointer,
-                })
-            },
-            ConcreteEnvironment::Managed(managed_env) => {
-                let pointer = managed_env.pointer().clone().into();
-                Self::DotFlox(DotFlox {
-                    path: managed_env.dot_flox_path().to_path_buf(),
-                    pointer,
-                })
-            },
-            ConcreteEnvironment::Remote(remote_env) => {
-                let env_ref = remote_env.pointer().clone();
-                Self::Remote(env_ref)
-            },
-        }
-    }
-
-    /// Open the contained environment and return a [ConcreteEnvironment]
-    ///
-    /// This function will fail if the contained environment is not available or invalid
-    pub fn into_concrete_environment(
-        self,
-        flox: &Flox,
-    ) -> Result<ConcreteEnvironment, EnvironmentError> {
-        match self {
-            UninitializedEnvironment::DotFlox(dot_flox) => {
-                let dot_flox_path = CanonicalPath::new(dot_flox.path)
-                    .map_err(|err| EnvironmentError::DotFloxNotFound(err.path))?;
-
-                let env = match dot_flox.pointer {
-                    EnvironmentPointer::Path(path_pointer) => {
-                        debug!("detected concrete environment type: path");
-                        ConcreteEnvironment::Path(PathEnvironment::open(
-                            flox,
-                            path_pointer,
-                            dot_flox_path,
-                        )?)
-                    },
-                    EnvironmentPointer::Managed(managed_pointer) => {
-                        debug!("detected concrete environment type: managed");
-                        let env = ManagedEnvironment::open(flox, managed_pointer, dot_flox_path)?;
-                        ConcreteEnvironment::Managed(env)
-                    },
-                };
-                Ok(env)
-            },
-            UninitializedEnvironment::Remote(pointer) => {
-                let env = RemoteEnvironment::new(flox, pointer)?;
-                Ok(ConcreteEnvironment::Remote(env))
-            },
-        }
-    }
-
-    fn pointer(&self) -> EnvironmentPointer {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.clone(),
-            UninitializedEnvironment::Remote(pointer) => {
-                EnvironmentPointer::Managed(pointer.clone())
-            },
-        }
-    }
-
-    /// The name of the environment
-    pub fn name(&self) -> &EnvironmentName {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.name(),
-            UninitializedEnvironment::Remote(pointer) => &pointer.name,
-        }
-    }
-
-    /// Returns the path to the environment if it isn't remote
-    #[allow(dead_code)]
-    pub fn path(&self) -> Option<&Path> {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => Some(path),
-            UninitializedEnvironment::Remote(_) => None,
-        }
-    }
-
-    /// If the environment is managed, returns its owner
-    pub fn owner_if_managed(&self) -> Option<&EnvironmentOwner> {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox {
-                path: _,
-                pointer: EnvironmentPointer::Managed(pointer),
-            }) => Some(&pointer.owner),
-            _ => None,
-        }
-    }
-
-    /// Returns true if the environment is a path environment
-    #[allow(dead_code)]
-    pub fn is_path_env(&self) -> bool {
-        matches!(
-            self,
-            UninitializedEnvironment::DotFlox(DotFlox {
-                path: _,
-                pointer: EnvironmentPointer::Path(_)
-            })
-        )
-    }
-
-    /// If the environment is remote, returns its owner
-    pub fn owner_if_remote(&self) -> Option<&EnvironmentOwner> {
-        match self {
-            UninitializedEnvironment::DotFlox(_) => None,
-            UninitializedEnvironment::Remote(pointer) => Some(&pointer.owner),
-        }
-    }
-
-    /// The environment description when displayed in a prompt
-    // TODO: we use this for activate errors in Bash since it doesn't have
-    // quotes whereas we use message_description for activate errors in Rust.
-    pub fn bare_description(&self) -> String {
-        if let Some(owner) = self.owner_if_remote() {
-            format!("{}/{} (remote)", owner, self.name())
-        } else if let Some(owner) = self.owner_if_managed() {
-            format!("{}/{}", owner, self.name())
-        } else {
-            format!("{}", self.name())
-        }
-    }
-}
-
 /// A list of environments that are currently active
 /// (i.e. have been activated with `flox activate`)
 ///
@@ -1706,7 +1545,7 @@ fn is_current_dir(environment: &UninitializedEnvironment) -> Result<bool> {
 mod tests {
 
     use flox_rust_sdk::flox::EnvironmentName;
-    use flox_rust_sdk::models::environment::PathPointer;
+    use flox_rust_sdk::models::environment::{EnvironmentPointer, PathPointer};
     use sentry::test::with_captured_events;
     use tempfile::tempdir;
 
