@@ -193,6 +193,7 @@
           rust-external-deps
           rust-internal-deps
           floxDevelopmentPackages
+          nix
           ;
 
         default = pkgs.flox;
