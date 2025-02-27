@@ -96,7 +96,7 @@ pub struct Flox {
 
 impl Flox {}
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, Default)]
 pub struct Features {
     #[serde(default)]
     pub build: bool,
