@@ -93,6 +93,8 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" "$FLOX_BIN" install -d "$top_layer_dir" hello
 
   run "$FLOX_BIN" activate -m run -d "$bottom_layer_dir" -- bash <(cat <<'EOF'
+    set -euo pipefail
+
     # This is where we *would* find `python3` if it was present
     python_path_bottom="$FLOX_ENV/bin/python3"
     if [ "$(command -v python3)" = "$python_path_bottom" ]; then
@@ -100,7 +102,8 @@ EOF
     fi
 
     # Layer another environment on top
-    source <("$FLOX_BIN" activate -d "$top_layer_dir")
+    to_eval=$("$FLOX_BIN" activate -d "$top_layer_dir")
+    eval "$to_eval"
 
     # Ensure that we don't find Python from the bottom environment
     if [ "$(command -v python3)" = "$python_path_bottom" ]; then
@@ -123,8 +126,11 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/almonds.json" "$FLOX_BIN" install -d "$top_layer_dir" almonds
 
   run "$FLOX_BIN" activate -d "$bottom_layer_dir" -m run  -- bash <(cat <<'EOF'
+    set -euo pipefail
+
     # Layer another environment on top
-    source <("$FLOX_BIN" activate -m run -d "$top_layer_dir")
+    to_eval=$("$FLOX_BIN" activate -m run -d "$top_layer_dir")
+    eval "$to_eval"
 
     # Ensure that we don't find Python from the bottom environment
     if [ "$(command -v python3)" = "$FLOX_ENV/bin/python3" ]; then
