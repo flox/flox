@@ -6,7 +6,7 @@ use super::{
     map_union,
     shallow_merge_options,
     KeyPath,
-    ManifestMergeStrategy,
+    ManifestMergeTrait,
     MergeError,
     Warning,
 };
@@ -29,9 +29,10 @@ use crate::models::manifest::typed::{
 /// Merges two manifests by applying `manifest2` on top of `manifest1` and
 /// overwriting any conflicts for keys within the top-level of each `Manifest`
 /// field, with the exception of `profile` and `hooks`.
+#[derive(Clone, Debug)]
 pub(crate) struct ShallowMerger;
 
-impl ManifestMergeStrategy for ShallowMerger {
+impl ShallowMerger {
     fn merge_version(
         low_priority: &Version<1>,
         high_priority: &Version<1>,
@@ -221,7 +222,9 @@ impl ManifestMergeStrategy for ShallowMerger {
             },
         }
     }
+}
 
+impl ManifestMergeTrait for ShallowMerger {
     fn merge(
         &self,
         low_priority: &Manifest,

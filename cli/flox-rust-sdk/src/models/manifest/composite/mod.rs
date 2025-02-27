@@ -3,23 +3,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display, Formatter};
 mod shallow;
-use flox_core::Version;
+use enum_dispatch::enum_dispatch;
 #[cfg(test)]
 use proptest::prelude::*;
+use shallow::ShallowMerger;
 use thiserror::Error;
 
-use super::typed::{
-    Build,
-    Containerize,
-    ContainerizeConfig,
-    Hook,
-    Install,
-    Manifest,
-    Options,
-    Profile,
-    Services,
-    Vars,
-};
+use super::typed::{ContainerizeConfig, Manifest};
 
 #[derive(Error, Debug)]
 pub enum MergeError {}
@@ -87,7 +77,7 @@ pub struct WarningWithContext {
     higher_priority_name: String,
 }
 
-/// A collection of manifests to be merged with a `ManifestMergeStrategy`.
+/// A collection of manifests to be merged with a `ManifestMergeTrait`.
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 struct CompositeManifest {
@@ -99,10 +89,16 @@ struct CompositeManifest {
     deps: Vec<(String, Manifest)>,
 }
 
+#[derive(Clone, Debug)]
+#[enum_dispatch(ManifestMergeTrait)]
+pub(crate) enum ManifestMerger {
+    Shallow(ShallowMerger),
+}
+
 impl CompositeManifest {
     fn merge_all(
         &self,
-        merger: impl ManifestMergeStrategy,
+        merger: ManifestMerger,
     ) -> Result<(Manifest, Vec<WarningWithContext>), MergeError> {
         let current_manifest = &("Current manifest".to_string(), self.composer.clone());
 
@@ -136,40 +132,8 @@ impl CompositeManifest {
 
 /// Strategy for merging two manifests which can then be applied iteratively for
 /// multiple manifests.
-trait ManifestMergeStrategy {
-    fn merge_version(
-        low_priority: &Version<1>,
-        high_priority: &Version<1>,
-    ) -> Result<Version<1>, MergeError>;
-    fn merge_install(
-        low_priority: &Install,
-        high_priority: &Install,
-    ) -> Result<(Install, Vec<Warning>), MergeError>;
-    fn merge_vars(
-        low_priority: &Vars,
-        high_priority: &Vars,
-    ) -> Result<(Vars, Vec<Warning>), MergeError>;
-    fn merge_hook(low_priority: &Hook, high_priority: &Hook) -> Result<Hook, MergeError>;
-    fn merge_profile(
-        low_priority: &Profile,
-        high_priority: &Profile,
-    ) -> Result<Profile, MergeError>;
-    fn merge_options(
-        low_priority: &Options,
-        high_priority: &Options,
-    ) -> Result<(Options, Vec<Warning>), MergeError>;
-    fn merge_services(
-        low_priority: &Services,
-        high_priority: &Services,
-    ) -> Result<(Services, Vec<Warning>), MergeError>;
-    fn merge_build(
-        low_priority: &Build,
-        high_priority: &Build,
-    ) -> Result<(Build, Vec<Warning>), MergeError>;
-    fn merge_containerize(
-        low_priority: Option<&Containerize>,
-        high_priority: Option<&Containerize>,
-    ) -> Result<(Option<Containerize>, Vec<Warning>), MergeError>;
+#[enum_dispatch]
+trait ManifestMergeTrait {
     fn merge(
         &self,
         low_priority: &Manifest,
@@ -365,7 +329,9 @@ mod tests {
                 ("dep2".to_string(), manifest2),
             ],
         };
-        let (merged, _warnings) = composite.merge_all(ShallowMerger).unwrap();
+        let (merged, _warnings) = composite
+            .merge_all(ManifestMerger::Shallow(ShallowMerger))
+            .unwrap();
         assert_eq!(merged.vars.inner()["var1"], "manifest1");
         assert_eq!(merged.vars.inner()["var2"], "manifest2");
         assert_eq!(
