@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Display;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use flox_core::Version;
 #[cfg(test)]
@@ -555,7 +557,13 @@ pub struct Options {
     /// Options that control how semver versions are resolved.
     #[serde(default)]
     pub semver: SemverOptions,
+    /// Whether to detect CUDA devices and libs during activation.
+    // TODO: Migrate to `ActivateOptions`.
     pub cuda_detection: Option<bool>,
+    /// Options that control the behavior of activations.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
+    pub activate: ActivateOptions,
 }
 
 #[skip_serializing_none]
@@ -582,6 +590,53 @@ pub struct SemverOptions {
     /// Whether to allow pre-release versions when resolving
     #[serde(default)]
     pub allow_pre_releases: Option<bool>,
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ActivateOptions {
+    pub mode: Option<ActivateMode>,
+}
+
+impl ActivateOptions {
+    /// Don't write a struct of None's into the lockfile but also don't
+    /// explicitly check fields which we might forget to update.
+    fn skip_serializing(&self) -> bool {
+        self == &ActivateOptions::default()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Default)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+pub enum ActivateMode {
+    #[default]
+    Dev,
+    Run,
+}
+
+impl Display for ActivateMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ActivateMode::Dev => write!(f, "dev"),
+            ActivateMode::Run => write!(f, "run"),
+        }
+    }
+}
+
+impl FromStr for ActivateMode {
+    type Err = ManifestError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "dev" => Ok(ActivateMode::Dev),
+            "run" => Ok(ActivateMode::Run),
+            _ => Err(ManifestError::ActivateModeInvalid),
+        }
+    }
 }
 
 /// A map of service names to service definitions
@@ -804,6 +859,8 @@ pub struct ContainerizeConfig {
 pub enum ManifestError {
     #[error("no package or group named '{0}' in the manifest")]
     PkgOrGroupNotFound(String),
+    #[error("not a valid activation mode")]
+    ActivateModeInvalid,
 }
 
 /// The section where users can declare dependencies on other environments.

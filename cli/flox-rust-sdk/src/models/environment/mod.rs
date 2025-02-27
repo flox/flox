@@ -19,7 +19,7 @@ use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::{Lockfile, ResolveError};
 use super::manifest::raw::PackageToInstall;
-use super::manifest::typed::{Manifest, ManifestError};
+use super::manifest::typed::{ActivateMode, Manifest, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -308,6 +308,14 @@ impl RenderedEnvironmentLinks {
         let runtime_name = format!("{system}.{name}.run", name = name.as_ref());
         let runtime_path = base_dir.join(runtime_name);
         Self::new_unchecked(development_path, runtime_path)
+    }
+
+    /// Returns the built environment path for an activation mode.
+    pub fn for_mode(self, mode: &ActivateMode) -> RenderedEnvironmentLink {
+        match mode {
+            ActivateMode::Dev => self.development,
+            ActivateMode::Run => self.runtime,
+        }
     }
 }
 

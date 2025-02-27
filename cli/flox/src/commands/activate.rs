@@ -1,10 +1,8 @@
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::io::stdout;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::str::FromStr;
 use std::sync::LazyLock;
 use std::{env, fs};
 
@@ -21,7 +19,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
     FLOX_SERVICES_SOCKET_VAR,
 };
-use flox_rust_sdk::models::manifest::typed::Inner;
+use flox_rust_sdk::models::manifest::typed::{ActivateMode, Inner};
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
@@ -64,34 +62,6 @@ pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
 });
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum Mode {
-    #[default]
-    Dev,
-    Run,
-}
-
-impl Display for Mode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Mode::Dev => write!(f, "dev"),
-            Mode::Run => write!(f, "run"),
-        }
-    }
-}
-
-impl FromStr for Mode {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "dev" => Ok(Mode::Dev),
-            "run" => Ok(Mode::Run),
-            _ => Err(anyhow!("not a valid activation mode")),
-        }
-    }
-}
-
 #[derive(Bpaf, Clone)]
 pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -114,11 +84,10 @@ pub struct Activate {
     #[bpaf(long, hide)]
     pub use_fallback_interpreter: bool,
 
-    /// Whether to activate in "dev" mode or "run" mode, the difference being
-    /// that "dev" mode will set environment variables necessary for
-    /// development, whereas "run" will simply put executables in PATH.
+    /// Activate the environment in either "dev" or "run" mode.
+    /// Overrides the "options.activate.mode" setting in the manifest.
     #[bpaf(short, long)]
-    pub mode: Option<Mode>,
+    pub mode: Option<ActivateMode>,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
@@ -198,7 +167,6 @@ impl Activate {
 
         let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         let interactive = !in_place && self.run_args.is_empty();
-        let mode = self.mode.clone().unwrap_or_default();
 
         // Don't spin in bashrcs and similar contexts
         let rendered_env_path_result = environment.rendered_env_links(&flox);
@@ -233,11 +201,12 @@ impl Activate {
         let lockfile_version = lockfile.version();
         subcommand_metric!("activate#version", lockfile_version = lockfile_version);
 
-        let mode_link_path = match mode {
-            Mode::Dev => &rendered_env_path.development.clone(),
-            Mode::Run => &rendered_env_path.runtime.clone(),
-        };
-        let store_path = fs::read_link(mode_link_path).with_context(|| {
+        let mode = self
+            .mode
+            .clone()
+            .unwrap_or(manifest.options.activate.mode.clone().unwrap_or_default());
+        let mode_link_path = rendered_env_path.clone().for_mode(&mode);
+        let store_path = fs::read_link(&mode_link_path).with_context(|| {
             format!(
                 "a symlink at {} was just created and should still exist",
                 mode_link_path.display()

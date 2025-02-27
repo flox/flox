@@ -101,13 +101,10 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
    regardless of how many times the environment is activated concurrently.
 
 `-m (dev|run)`, `--mode (dev|run)`
-:  Activate the environment in either "dev" mode or "run" mode. In "dev" mode
-   sets environment variables and runs certain hooks to make the packages in the
-   environment and their dependencies available as is necessary for development.
-   In "run" mode the packages in the environment are simply added to `PATH`.
-
-   The default mode is "dev".
-
+:  Activate the environment in either "dev" or "run" mode.
+   Overrides the `options.activate.mode` setting in the manifest.
+   See [`manifest.toml(5)`](./manifest.toml.md) for more details on activation
+   modes.
 
 ```{.include}
 ./include/environment-options.md

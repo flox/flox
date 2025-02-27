@@ -5,11 +5,10 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
-use flox_rust_sdk::models::manifest::typed::{Inner, Manifest, Services};
+use flox_rust_sdk::models::manifest::typed::{ActivateMode, Inner, Manifest, Services};
 use flox_rust_sdk::providers::services::{new_services_to_start, ProcessState, ProcessStates};
 use tracing::{debug, instrument};
 
-use super::activate::Mode;
 use super::{
     activated_environments,
     ConcreteEnvironment,
@@ -315,7 +314,8 @@ pub async fn start_services_with_new_process_compose(
         print_script: false,
         start_services: true,
         use_fallback_interpreter: false,
-        mode: Some(Mode::Dev),
+        // FIXME: This should match the current activation.
+        mode: Some(ActivateMode::Dev),
         run_args: vec!["true".to_string()],
     }
     .activate(

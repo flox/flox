@@ -53,20 +53,77 @@ teardown() {
   assert_output "❌ ERROR: couldn't parse \`invalid\`: not a valid activation mode"
 }
 
-@test "can activate in dev mode" {
+function set_manifest_mode() {
+  mode="${1?}"
+  tomlq --in-place -t ".options.activate.mode=\"$mode\"" .flox/env/manifest.toml
+}
+
+function assert_dev_mode() {
+  assert_output --partial "${NIX_SYSTEM}.${PROJECT_NAME}.dev"
+}
+
+function assert_run_mode() {
+  assert_output --partial "${NIX_SYSTEM}.${PROJECT_NAME}.run"
+}
+
+@test "activate defaults to dev mode" {
+  project_setup
+
+  run "$FLOX_BIN" activate -- printenv FLOX_ENV
+  assert_success
+  assert_dev_mode
+}
+
+@test "can activate in dev mode with flag" {
   project_setup
 
   run "$FLOX_BIN" activate -m dev -- printenv FLOX_ENV
   assert_success
-  assert_output --partial "${NIX_SYSTEM}.${PROJECT_NAME}.dev"
+  assert_dev_mode
 }
 
-@test "can activate in run mode" {
+@test "can activate in run mode with flag" {
   project_setup
 
   run "$FLOX_BIN" activate -m run -- printenv FLOX_ENV
   assert_success
-  assert_output --partial "${NIX_SYSTEM}.${PROJECT_NAME}.run"
+  assert_run_mode
+}
+
+@test "can activate in dev mode with manifest option" {
+  project_setup
+  set_manifest_mode dev
+
+  run "$FLOX_BIN" activate -- printenv FLOX_ENV
+  assert_success
+  assert_dev_mode
+}
+
+@test "can activate in run mode with manifest option" {
+  project_setup
+  set_manifest_mode run
+
+  run "$FLOX_BIN" activate -- printenv FLOX_ENV
+  assert_success
+  assert_run_mode
+}
+
+@test "can activate in dev mode with flag taking precedence over manifest option" {
+  project_setup
+  set_manifest_mode run
+
+  run "$FLOX_BIN" activate -m dev -- printenv FLOX_ENV
+  assert_success
+  assert_dev_mode
+}
+
+@test "can activate in run mode with flag taking precedence over manifest option" {
+  project_setup
+  set_manifest_mode dev
+
+  run "$FLOX_BIN" activate -m run -- printenv FLOX_ENV
+  assert_success
+  assert_run_mode
 }
 
 @test "runtime: dev dependencies aren't added to PATH" {
