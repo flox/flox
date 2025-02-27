@@ -204,7 +204,7 @@ pub fn guard_is_within_activation(
 
     if !activated_environments.is_active(&UninitializedEnvironment::from_concrete_environment(
         &services_environment.environment,
-    )?) {
+    )) {
         return Err(ServicesCommandsError::NotInActivation {
             action: action.to_string(),
         }

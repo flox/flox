@@ -267,8 +267,7 @@ mod tests {
 
         let serialized = UninitializedEnvironment::from_concrete_environment(
             &ConcreteEnvironment::Path(environment),
-        )
-        .unwrap();
+        );
 
         // Check for upgrades with a timeout of u64::MAX
         // to ensure that the fake upgrade information is always considered recent
@@ -298,8 +297,7 @@ mod tests {
 
         let serialized = UninitializedEnvironment::from_concrete_environment(
             &ConcreteEnvironment::Path(environment),
-        )
-        .unwrap();
+        );
 
         let command = CheckForUpgrades {
             check_timeout: 0,
@@ -323,8 +321,7 @@ mod tests {
 
         let serialized = UninitializedEnvironment::from_concrete_environment(
             &ConcreteEnvironment::Path(environment),
-        )
-        .unwrap();
+        );
 
         let command = CheckForUpgrades {
             check_timeout: 0,
