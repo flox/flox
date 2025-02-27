@@ -41,10 +41,10 @@ This allows re-use of the package in other environments.
 
 Flox makes some assertions before publishing, specifically
 
-- The flox environment used to build the package is tracked as a git repo.
-- Tracked files in the repo are all clean.
-- The repo has an upstream origin.
-- The build environment must have at least one package to establish the page the package is being built against.
+- The flox environment used to build the package is tracked as a git repository.
+- Tracked files in the repository are all clean.
+- The repository has a remote defined and the current revision has been pushed to it.
+- The build environment must have at least one package installed.
 
 Flox will then perform a clone of the repository
 to a temporary location
@@ -54,7 +54,7 @@ required to build the package are included in the git repo.
 
 Upon completion,
 the package closure is signed with the key file provided in `--signing-key`
-and uploaded to the location specified in `--signing-key`.
+and uploaded to the location specified in `--store_url`.
 
 ## After publishing
 
@@ -62,7 +62,7 @@ After publishing,
 the package will be availble for `search`, `show`, and `install` operations
 like any other package.
 The package will be published
-to the catalog named as your github user handle.
+to the catalog named as your FloxHub user handle.
 To distinguish these packages
 from base catalog pacakges,
 the name is prefixed with your catalog name.
@@ -76,7 +76,7 @@ The package will be downloaded from the location where it was uploaded.
 
 ## Store Location and Authorization
 
-Currently Flox only supports S3 store locations,
+Currently Flox only supports S3 compatibile store locations,
 and defers authorization to the nix AWS provider.
 
 Flox uses nix's S3 provider to perform the uploads and downloads,
@@ -134,7 +134,7 @@ By default only you can see and use these packages.
 To allow others
 to search and install the packages in you catalog,
 you will need to add thier github handles
-to a whitelist of users allowed to read from your catalog.
+to a allowlist of users allowed to read from your catalog.
 
 Currently this is managed by a CLI utility shared
 [here](https://github.com/flox/catalog-util).
