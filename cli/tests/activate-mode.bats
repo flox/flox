@@ -48,15 +48,17 @@ teardown() {
 @test "can activate in dev mode" {
   project_setup
 
-  run "$FLOX_BIN" activate -m dev -- true
+  run "$FLOX_BIN" activate -m dev -- printenv FLOX_ENV
   assert_success
+  assert_output --partial "${NIX_SYSTEM}.${PROJECT_NAME}.dev"
 }
 
 @test "can activate in run mode" {
   project_setup
 
-  run "$FLOX_BIN" activate -m run -- true
+  run "$FLOX_BIN" activate -m run -- printenv FLOX_ENV
   assert_success
+  assert_output --partial "${NIX_SYSTEM}.${PROJECT_NAME}.run"
 }
 
 @test "runtime: dev dependencies aren't added to PATH" {
