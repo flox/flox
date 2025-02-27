@@ -45,6 +45,14 @@ teardown() {
 
 # ---------------------------------------------------------------------------- #
 
+@test "rejects invalid activate mode" {
+  project_setup
+
+  run "$FLOX_BIN" activate -m invalid -- true
+  assert_failure
+  assert_output "❌ ERROR: couldn't parse \`invalid\`: 'invalid' is not a valid activation mode"
+}
+
 @test "can activate in dev mode" {
   project_setup
 
