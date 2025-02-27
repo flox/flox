@@ -1232,8 +1232,8 @@ fn query_which_environment(
         help_message: None,
         typed: Select {
             options: vec![
-                format!("{type_of_directory} [{}]", found.bare_description()?),
-                format!("currently active [{}]", activated_env.bare_description()?),
+                format!("{type_of_directory} [{}]", found.bare_description()),
+                format!("currently active [{}]", activated_env.bare_description()),
             ],
         },
     };
@@ -1273,25 +1273,25 @@ pub enum UninitializedEnvironment {
 }
 
 impl UninitializedEnvironment {
-    pub fn from_concrete_environment(env: &ConcreteEnvironment) -> Result<Self> {
+    pub fn from_concrete_environment(env: &ConcreteEnvironment) -> Self {
         match env {
             ConcreteEnvironment::Path(path_env) => {
                 let pointer = path_env.pointer.clone().into();
-                Ok(Self::DotFlox(DotFlox {
+                Self::DotFlox(DotFlox {
                     path: path_env.path.to_path_buf(),
                     pointer,
-                }))
+                })
             },
             ConcreteEnvironment::Managed(managed_env) => {
                 let pointer = managed_env.pointer().clone().into();
-                Ok(Self::DotFlox(DotFlox {
+                Self::DotFlox(DotFlox {
                     path: managed_env.dot_flox_path().to_path_buf(),
                     pointer,
-                }))
+                })
             },
             ConcreteEnvironment::Remote(remote_env) => {
                 let env_ref = remote_env.pointer().clone();
-                Ok(Self::Remote(env_ref))
+                Self::Remote(env_ref)
             },
         }
     }
@@ -1341,14 +1341,6 @@ impl UninitializedEnvironment {
         }
     }
 
-    /// If the environment is remote or managed, the name of the owner
-    pub fn owner(&self) -> Option<&EnvironmentOwner> {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.owner(),
-            UninitializedEnvironment::Remote(pointer) => Some(&pointer.owner),
-        }
-    }
-
     /// The name of the environment
     pub fn name(&self) -> &EnvironmentName {
         match self {
@@ -1378,15 +1370,15 @@ impl UninitializedEnvironment {
         }
     }
 
-    /// Returns true if the environment is a managed environment
-    pub fn is_managed(&self) -> bool {
-        matches!(
-            self,
+    /// If the environment is managed, returns its owner
+    pub fn owner_if_managed(&self) -> Option<&EnvironmentOwner> {
+        match self {
             UninitializedEnvironment::DotFlox(DotFlox {
                 path: _,
-                pointer: EnvironmentPointer::Managed(_)
-            })
-        )
+                pointer: EnvironmentPointer::Managed(pointer),
+            }) => Some(&pointer.owner),
+            _ => None,
+        }
     }
 
     /// Returns true if the environment is a path environment
@@ -1401,34 +1393,24 @@ impl UninitializedEnvironment {
         )
     }
 
-    /// Returns true if the environment is a remote environment
-    pub fn is_remote(&self) -> bool {
+    /// If the environment is remote, returns its owner
+    pub fn owner_if_remote(&self) -> Option<&EnvironmentOwner> {
         match self {
-            UninitializedEnvironment::DotFlox(_) => false,
-            UninitializedEnvironment::Remote(_) => true,
+            UninitializedEnvironment::DotFlox(_) => None,
+            UninitializedEnvironment::Remote(pointer) => Some(&pointer.owner),
         }
     }
 
     /// The environment description when displayed in a prompt
     // TODO: we use this for activate errors in Bash since it doesn't have
     // quotes whereas we use message_description for activate errors in Rust.
-    pub fn bare_description(&self) -> Result<String> {
-        if self.is_remote() {
-            Ok(format!(
-                "{}/{} (remote)",
-                self.owner()
-                    .context("remote environments should have an owner")?,
-                self.name()
-            ))
-        } else if self.is_managed() {
-            Ok(format!(
-                "{}/{}",
-                self.owner()
-                    .context("managed environments should have an owner")?,
-                self.name()
-            ))
+    pub fn bare_description(&self) -> String {
+        if let Some(owner) = self.owner_if_remote() {
+            format!("{}/{} (remote)", owner, self.name())
+        } else if let Some(owner) = self.owner_if_managed() {
+            format!("{}/{}", owner, self.name())
         } else {
-            Ok(format!("{}", self.name()))
+            format!("{}", self.name())
         }
     }
 
@@ -1436,20 +1418,10 @@ impl UninitializedEnvironment {
     // TODO: we use this for activate errors in Rust whereas we use
     // bare_description for activate errors in Bash since it doesn't add quotes.
     pub fn message_description(&self) -> Result<String> {
-        if self.is_remote() {
-            Ok(format!(
-                "'{}/{}' (remote)",
-                self.owner()
-                    .context("remote environments should have an owner")?,
-                self.name()
-            ))
-        } else if self.is_managed() {
-            Ok(format!(
-                "'{}/{}'",
-                self.owner()
-                    .context("managed environments should have an owner")?,
-                self.name()
-            ))
+        if let Some(owner) = self.owner_if_remote() {
+            Ok(format!("'{}/{}' (remote)", owner, self.name()))
+        } else if let Some(owner) = self.owner_if_managed() {
+            Ok(format!("'{}/{}'", owner, self.name()))
         } else if self
             .is_current_dir()
             .context("couldn't read current directory")?
@@ -1726,7 +1698,7 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<&FloxhubToke
 }
 
 pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
-    UninitializedEnvironment::from_concrete_environment(environment)?.message_description()
+    UninitializedEnvironment::from_concrete_environment(environment).message_description()
 }
 
 /// Check if the environment needs to be migrated to version 1.

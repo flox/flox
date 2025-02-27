@@ -33,6 +33,7 @@ use tracing::{debug, warn};
 use super::services::ServicesEnvironment;
 use super::{
     activated_environments,
+    environment_description,
     environment_select,
     EnvironmentSelect,
     UninitializedEnvironment,
@@ -157,7 +158,7 @@ impl Activate {
 
         // Spawn a detached process to check for upgrades in the background.
         let environment =
-            UninitializedEnvironment::from_concrete_environment(&concrete_environment)?;
+            UninitializedEnvironment::from_concrete_environment(&concrete_environment);
         spawn_detached_check_for_upgrades_process(
             &environment,
             None,
@@ -187,8 +188,7 @@ impl Activate {
         is_ephemeral: bool,
         services_to_start: &[String],
     ) -> Result<()> {
-        let now_active =
-            UninitializedEnvironment::from_concrete_environment(&concrete_environment)?;
+        let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
 
         let environment = concrete_environment.dyn_environment_ref_mut();
 
@@ -263,7 +263,7 @@ impl Activate {
         let profile_only = if flox_active_environments.is_active(&now_active) {
             debug!(
                 "Environment is already active: environment={}. Not adding to active environments",
-                now_active.bare_description()?
+                now_active.bare_description()
             );
             if interactive {
                 return Err(anyhow!(
@@ -424,11 +424,9 @@ impl Activate {
         command
             .arg("--env-cache")
             .arg(environment.cache_path()?.to_string_lossy().to_string());
-        command.arg("--env-description").arg(
-            now_active
-                .bare_description()
-                .expect("`bare_description` is infallible"),
-        );
+        command
+            .arg("--env-description")
+            .arg(now_active.bare_description());
 
         // Pass down the activation mode
         command.arg("--mode").arg(mode.to_string());
@@ -630,10 +628,7 @@ impl Activate {
                 if hide_default_prompt && env.name().as_ref() == DEFAULT_NAME {
                     return None;
                 }
-                Some(
-                    env.bare_description()
-                        .expect("`bare_description` is infallible"),
-                )
+                Some(env.bare_description())
             })
             .collect();
 
@@ -664,7 +659,7 @@ impl Activate {
 /// so they are not wondering whether upgrades may have been applied automatically.
 /// To make this less annoying, we tried to make the message as unobtrusive as possible.
 fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironment) -> Result<()> {
-    let current_environment = UninitializedEnvironment::from_concrete_environment(environment)?;
+    let current_environment = UninitializedEnvironment::from_concrete_environment(environment);
     let active_environments = activated_environments();
     if active_environments.is_active(&current_environment) {
         debug!("Not notifying user of upgrade, environment is already active");
@@ -692,8 +687,7 @@ fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironmen
         return Ok(());
     }
 
-    let description =
-        UninitializedEnvironment::from_concrete_environment(environment)?.message_description()?;
+    let description = environment_description(environment)?;
 
     // Update this message in flox-config.md if you change it here
     let message = formatdoc! {"
@@ -921,9 +915,9 @@ mod upgrade_notification_tests {
         let mut environment = ConcreteEnvironment::Path(environment);
 
         let mut active = ActiveEnvironments::default();
-        active.set_last_active(
-            UninitializedEnvironment::from_concrete_environment(&environment).unwrap(),
-        );
+        active.set_last_active(UninitializedEnvironment::from_concrete_environment(
+            &environment,
+        ));
 
         write_upgrade_available(&flox, &mut environment);
 
