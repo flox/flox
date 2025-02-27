@@ -5,6 +5,8 @@
   nixpkgsFlakeRef,
   # the path to the environment that was built previously
   environmentOutPath,
+  # what mode it should be activation with
+  activationMode,
   # the system to build for
   system,
   containerSystem,
@@ -151,6 +153,8 @@ let
           "${environment}/activate"
           "--env"
           environment
+          "--mode"
+          activationMode
           "--shell"
           "${containerPkgs.bashInteractive}/bin/bash"
         ];

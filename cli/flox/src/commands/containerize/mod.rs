@@ -64,17 +64,18 @@ impl Containerize {
 
         let built_environment = env.build(&flox)?;
         let env_name = env.name();
+        let manifest = env.lockfile(&flox)?.manifest;
+        let mode = manifest.options.activate.mode.unwrap_or_default();
 
         let source = if std::env::consts::OS == "linux" {
-            let container_config = env
-                .lockfile(&flox)?
-                .manifest
+            let container_config = manifest
                 .containerize
                 .and_then(|c| c.config)
                 .map(|c| c.into());
             // this method is only executed on linux
             #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
-            let builder = MkContainerNix::new(built_environment.develop, container_config);
+            let builder =
+                MkContainerNix::new(built_environment.for_mode(&mode), mode, container_config);
 
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         } else {

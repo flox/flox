@@ -11,7 +11,7 @@ use tracing::{debug, info, instrument};
 
 use super::buildenv::BuiltStorePath;
 use crate::flox::Flox;
-use crate::models::manifest::typed::ContainerizeConfig;
+use crate::models::manifest::typed::{ActivateMode, ContainerizeConfig};
 use crate::providers::build::BUILDTIME_NIXPKGS_URL;
 use crate::providers::nix::nix_base_command;
 use crate::utils::gomap::GoMap;
@@ -79,6 +79,7 @@ impl From<ContainerizeConfig> for OCIConfig {
 #[derive(Debug)]
 pub struct MkContainerNix {
     store_path: BuiltStorePath,
+    activation_mode: ActivateMode,
     container_config: Option<OCIConfig>,
 }
 
@@ -108,9 +109,14 @@ impl MkContainerNix {
         not(target_os = "linux"),
         deprecated(note = "MkContainerNix is not supported on this platform")
     )]
-    pub fn new(store_path: BuiltStorePath, container_config: Option<OCIConfig>) -> Self {
+    pub fn new(
+        store_path: BuiltStorePath,
+        activation_mode: ActivateMode,
+        container_config: Option<OCIConfig>,
+    ) -> Self {
         Self {
             store_path,
+            activation_mode,
             container_config,
         }
     }
@@ -146,6 +152,11 @@ impl ContainerBuilder for MkContainerNix {
             "--argstr",
             "environmentOutPath",
             self.store_path.to_string_lossy().as_ref(),
+        ]);
+        command.args([
+            "--argstr",
+            "activationMode",
+            &self.activation_mode.to_string(),
         ]);
         command.args(["--argstr", "containerName", name.as_ref()]);
         command.args(["--argstr", "containerTag", tag.as_ref()]);
