@@ -176,6 +176,7 @@ impl<State> CoreEnvironment<State> {
             existing_lockfile.as_ref(),
             &flox.catalog_client,
             &flox.installable_locker,
+            flox.features.compose,
         )
         .block_on()?;
 
@@ -486,6 +487,7 @@ impl CoreEnvironment<ReadOnly> {
             &flox.installable_locker,
             groups_or_iids,
             &manifest,
+            flox.features.compose,
         )?;
 
         // SAFETY: serde_json::to_string_pretty is only documented to fail if
@@ -598,9 +600,14 @@ impl CoreEnvironment<ReadOnly> {
             })
         };
 
-        let upgraded_lockfile =
-            Lockfile::lock_manifest(manifest, seed_lockfile.as_ref(), client, flake_locking)
-                .block_on()?;
+        let upgraded_lockfile = Lockfile::lock_manifest(
+            manifest,
+            seed_lockfile.as_ref(),
+            client,
+            flake_locking,
+            features_compose,
+        )
+        .block_on()?;
 
         let result = UpgradeResult {
             old_lockfile: existing_lockfile,
@@ -1241,7 +1248,7 @@ mod tests {
     // TODO: add fixtures for resolve mocks if we add more of these tests
     #[test]
     fn upgrade_with_empty_list_upgrades_all() {
-        let (mut env_view, _flox, _temp_dir_handle) = empty_core_environment();
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
 
         let mut manifest = Manifest::default();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
@@ -1304,6 +1311,7 @@ mod tests {
                 &InstallableLockerMock::new(),
                 &[],
                 &manifest,
+                flox.features.compose,
             )
             .unwrap()
             .diff();

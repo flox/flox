@@ -896,6 +896,16 @@ pub enum IncludeDescriptor {
     },
 }
 
+impl Display for IncludeDescriptor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IncludeDescriptor::Local { dir, name } => {
+                write!(f, "{}", name.as_deref().unwrap_or(&dir.to_string_lossy()))
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 pub(super) mod test {
     use indoc::indoc;
