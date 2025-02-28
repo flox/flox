@@ -21,7 +21,7 @@ use super::{
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::lockfile::{LockedManifestError, LockedPackage, Lockfile, ResolutionFailure};
+use crate::models::lockfile::{LockedPackage, Lockfile, ResolutionFailure, ResolveError};
 use crate::models::manifest::raw::{
     insert_packages,
     remove_packages,
@@ -86,9 +86,7 @@ impl<State> CoreEnvironment<State> {
         let lockfile_path = self.lockfile_path();
         if let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) {
             Ok(Some(
-                fs::read_to_string(lockfile_path)
-                    .map_err(LockedManifestError::ReadLockfile)
-                    .map_err(CoreEnvironmentError::LockedManifest)?,
+                fs::read_to_string(lockfile_path).map_err(CoreEnvironmentError::ReadLockfile)?,
             ))
         } else {
             Ok(None)
@@ -100,10 +98,7 @@ impl<State> CoreEnvironment<State> {
     pub fn existing_lockfile(&self) -> Result<Option<Lockfile>, CoreEnvironmentError> {
         let lockfile_path = self.lockfile_path();
         if let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) {
-            Ok(Some(
-                Lockfile::read_from_file(&lockfile_path)
-                    .map_err(CoreEnvironmentError::LockedManifest)?,
-            ))
+            Ok(Some(Lockfile::read_from_file(&lockfile_path)?))
         } else {
             Ok(None)
         }
@@ -125,8 +120,7 @@ impl<State> CoreEnvironment<State> {
 
         let manifest: Manifest = toml::from_str(&self.manifest_contents()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
-        let lockfile = Lockfile::read_from_file(&lockfile_path)
-            .map_err(CoreEnvironmentError::LockedManifest)?;
+        let lockfile = Lockfile::read_from_file(&lockfile_path)?;
 
         // Check if the manifest embedded in the lockfile and the manifest
         // itself have the same contents
@@ -173,8 +167,7 @@ impl<State> CoreEnvironment<State> {
         let existing_lockfile = existing_lockfile_contents
             .as_deref()
             .map(Lockfile::from_str)
-            .transpose()
-            .map_err(CoreEnvironmentError::LockedManifest)?;
+            .transpose()?;
 
         // If a lockfile exists, it is used as a base.
         let lockfile = Lockfile::lock_manifest(
@@ -184,7 +177,7 @@ impl<State> CoreEnvironment<State> {
             &flox.installable_locker,
         )
         .block_on()
-        .map_err(CoreEnvironmentError::LockedManifest)?;
+        .map_err(CoreEnvironmentError::Resolve)?;
 
         let lockfile_contents =
             serde_json::to_string_pretty(&lockfile).expect("lockfile structure is valid json");
@@ -245,8 +238,7 @@ impl<State> CoreEnvironment<State> {
     pub fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
         let lockfile_path = CanonicalPath::new(self.lockfile_path())
             .map_err(CoreEnvironmentError::BadLockfilePath)?;
-        let lockfile = Lockfile::read_from_file(&lockfile_path)
-            .map_err(CoreEnvironmentError::LockedManifest)?;
+        let lockfile = Lockfile::read_from_file(&lockfile_path)?;
 
         let service_config_path = maybe_make_service_config_file(flox, &lockfile)?;
 
@@ -591,10 +583,7 @@ impl CoreEnvironment<ReadOnly> {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
                 break 'lockfile None;
             };
-            Some(
-                Lockfile::read_from_file(&lockfile_path)
-                    .map_err(CoreEnvironmentError::LockedManifest)?,
-            )
+            Some(Lockfile::read_from_file(&lockfile_path)?)
         };
 
         // Create a seed lockfile by "unlocking" (i.e. removing the locked entries of)
@@ -613,7 +602,7 @@ impl CoreEnvironment<ReadOnly> {
         let upgraded_lockfile =
             Lockfile::lock_manifest(manifest, seed_lockfile.as_ref(), client, flake_locking)
                 .block_on()
-                .map_err(CoreEnvironmentError::LockedManifest)?;
+                .map_err(CoreEnvironmentError::Resolve)?;
 
         let result = UpgradeResult {
             old_lockfile: existing_lockfile,
@@ -985,7 +974,7 @@ pub enum CoreEnvironmentError {
     MultiplePackagesMatch(String, Vec<String>),
     // endregion
     #[error(transparent)]
-    LockedManifest(LockedManifestError),
+    Resolve(ResolveError),
 
     #[error(transparent)]
     BadLockfilePath(CanonicalizeError),
@@ -1005,6 +994,15 @@ pub enum CoreEnvironmentError {
 
     #[error(transparent)]
     BuildEnv(#[from] BuildEnvError),
+
+    // region: lockfile errors
+    #[error("could not open lockfile")]
+    ReadLockfile(#[source] std::io::Error),
+
+    /// when parsing the contents of a lockfile into a [LockedManifest]
+    #[error("could not parse lockfile")]
+    ParseLockfile(#[source] serde_json::Error),
+    // endregion
 }
 
 impl CoreEnvironmentError {
@@ -1012,7 +1010,7 @@ impl CoreEnvironmentError {
         // incomaptible system errors during resolution
         let is_lock_incompatible_system_error = matches!(
             self,
-            CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(failures))
+            CoreEnvironmentError::Resolve(ResolveError::ResolutionFailed(failures))
              if failures.0.iter().any(|f| matches!(f, ResolutionFailure::PackageUnavailableOnSomeSystems { .. })));
 
         // Incomaptible system errors during build

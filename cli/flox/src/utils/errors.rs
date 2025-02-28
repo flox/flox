@@ -11,7 +11,7 @@ use flox_rust_sdk::models::environment::{
     ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::floxmeta::FloxMetaError;
-use flox_rust_sdk::models::lockfile::LockedManifestError;
+use flox_rust_sdk::models::lockfile::ResolveError;
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use flox_rust_sdk::providers::services::{LoggedError, ServiceError};
 use indoc::{formatdoc, indoc};
@@ -289,8 +289,8 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             {err}
         ", err = display_chain(err)},
 
-        CoreEnvironmentError::LockedManifest(locked_manifest_error) => {
-            format_locked_manifest_error(locked_manifest_error)
+        CoreEnvironmentError::Resolve(locked_manifest_error) => {
+            format_resolve_error(locked_manifest_error)
         },
 
         CoreEnvironmentError::UpgradeFailedCatalog(err) => match err {
@@ -305,6 +305,14 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         },
         // User facing
         CoreEnvironmentError::Services(err) => display_chain(err),
+
+        // this is a bug, but likely needs some formatting
+        CoreEnvironmentError::ReadLockfile(_) => display_chain(err),
+        CoreEnvironmentError::ParseLockfile(serde_error) => formatdoc! {"
+            Failed to parse lockfile as JSON: {serde_error}
+
+            This is likely due to a corrupt environment.
+        "},
     }
 }
 
@@ -597,43 +605,34 @@ pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
     }
 }
 
-pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
+pub fn format_resolve_error(err: &ResolveError) -> String {
     trace!("formatting locked_manifest_error: {err:?}");
     match err {
         // region: errors from the catalog locking
-        LockedManifestError::CatalogResolve(err) => formatdoc! {"
+        ResolveError::CatalogResolve(err) => formatdoc! {"
             Failed to lock the manifest.
 
             {err}
         "},
         // endregion
-
-        // this is a bug, but likely needs some formatting
-        LockedManifestError::ReadLockfile(_) => display_chain(err),
-        LockedManifestError::ParseLockfile(serde_error) => formatdoc! {"
-            Failed to parse lockfile as JSON: {serde_error}
-
-            This is likely due to a corrupt environment.
-        "},
-
-        LockedManifestError::UnrecognizedSystem(system) => formatdoc! {"
+        ResolveError::UnrecognizedSystem(system) => formatdoc! {"
             Unrecognized system in manifest: {system}
 
             Supported systems are: aarch64-linux, x86_64-linux, aarch64-darwin, x86_64-darwin
         "},
 
-        LockedManifestError::SystemUnavailableInManifest { .. } => display_chain(err),
+        ResolveError::SystemUnavailableInManifest { .. } => display_chain(err),
 
-        LockedManifestError::ResolutionFailed(_) => display_chain(err),
+        ResolveError::ResolutionFailed(_) => display_chain(err),
         // User facing
-        LockedManifestError::LicenseNotAllowed(..) => display_chain(err),
+        ResolveError::LicenseNotAllowed(..) => display_chain(err),
         // User facing
-        LockedManifestError::BrokenNotAllowed(_) => display_chain(err),
+        ResolveError::BrokenNotAllowed(_) => display_chain(err),
         // User facing
-        LockedManifestError::UnfreeNotAllowed(_) => display_chain(err),
-        LockedManifestError::MissingPackageDescriptor(_) => display_chain(err),
-        LockedManifestError::LockFlakeNixError(_) => display_chain(err),
-        LockedManifestError::InstallIdNotInManifest(_) => display_chain(err),
+        ResolveError::UnfreeNotAllowed(_) => display_chain(err),
+        ResolveError::MissingPackageDescriptor(_) => display_chain(err),
+        ResolveError::LockFlakeNixError(_) => display_chain(err),
+        ResolveError::InstallIdNotInManifest(_) => display_chain(err),
     }
 }
 
