@@ -356,7 +356,7 @@ impl FloxArgs {
             catalog_client,
             installable_locker: Default::default(),
             #[allow(deprecated, reason = "This should be the only internal use")]
-            features: config.features.clone().unwrap_or_default(),
+            features: config.features.unwrap_or_default(),
             verbosity: self.verbosity.to_i32(),
         };
         debug!(
