@@ -30,6 +30,11 @@ nixVersions."${nixVersion}".overrideAttrs (prev: {
   # Apply patch files.
   patches = prev.patches ++ [
     (builtins.path { path = ./patches/multiple-github-tokens.2.24.9.patch; })
+    # Backport of upstream PR targeting nix >= 2.27
+    # <https://github.com/NixOS/nix/pull/12580>
+    (builtins.path {
+      path = ./patches/host-in-locked-github-url.2.24.11.patch;
+    })
   ];
 
   postFixup = ''
@@ -64,7 +69,6 @@ nixVersions."${nixVersion}".overrideAttrs (prev: {
     Libs: -L\''${libdir} -lnixfetchers
     Cflags: -isystem \''${includedir} -std=c++2a
     EOF
-
   '';
 })
 # ---------------------------------------------------------------------------- #
