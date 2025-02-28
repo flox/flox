@@ -548,31 +548,19 @@ impl BuildEnvNix {
         lockfile_path: &Path,
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
-        fn make_build_command(
-            mut base_command: Command,
-            lockfile_path: &Path,
-            service_config_path: Option<&Path>,
-        ) -> Command {
-            base_command.args(["build", "--no-link", "--offline", "--json"]);
-            base_command.arg("--file").arg(&*BUILDENV_NIX);
-            base_command
+        let mut nix_build_command = self.base_command();
+        nix_build_command.args(["build", "--no-link", "--offline", "--json"]);
+        nix_build_command.arg("--file").arg(&*BUILDENV_NIX);
+        nix_build_command
+            .arg("--argstr")
+            .arg("manifestLock")
+            .arg(lockfile_path);
+        if let Some(service_config_path) = &service_config_path {
+            nix_build_command
                 .arg("--argstr")
-                .arg("manifestLock")
-                .arg(lockfile_path);
-            if let Some(service_config_path) = &service_config_path {
-                base_command
-                    .arg("--argstr")
-                    .arg("serviceConfigYaml")
-                    .arg(service_config_path);
-            }
-            base_command
+                .arg("serviceConfigYaml")
+                .arg(service_config_path);
         }
-
-        let mut nix_build_command = make_build_command(
-            self.base_command(),
-            lockfile_path,
-            service_config_path.as_deref(),
-        );
         debug!(cmd=%nix_build_command.display(), "building environment");
 
         let output = nix_build_command
@@ -605,11 +593,6 @@ impl BuildEnvNix {
         // and this one is particularly short, incorrect output is now reliably wrong
         // and should be propagated up.
         debug!(err=%build_env_result.unwrap_err(), "failed to deserialize output, retrying once");
-        let mut nix_build_command = make_build_command(
-            self.base_command(),
-            lockfile_path,
-            service_config_path.as_deref(),
-        );
         debug!(cmd=%nix_build_command.display(), "building environment");
 
         let output = nix_build_command
