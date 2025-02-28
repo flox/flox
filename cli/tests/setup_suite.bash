@@ -15,9 +15,10 @@ bats_require_minimum_version '1.5.0'
 
 # Unset all FLOX_ENV related vars to prevent an outer activation from leaking
 # back into test activations.
+# Some of this will be unnecessary after https://github.com/flox/flox/issues/2629
 unset_flox_env_setup() {
   for var in $(env | awk -F= '{print $1}'); do
-    if [[ $var == FLOX_ENV* || $var == _FLOX_ENV* || $var == LD_FLOXLIB_* ]];
+    if [[ $var == FLOX_ENV* || $var == _FLOX_ENV* || $var == LD_FLOXLIB_* || $var == FLOX_SAVE_* ]];
     then
       unset "$var"
     fi
