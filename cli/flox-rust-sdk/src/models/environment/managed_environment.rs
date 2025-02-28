@@ -159,9 +159,6 @@ pub enum ManagedEnvironmentError {
     #[error("could not commit generation")]
     CommitGeneration(#[source] GenerationsError),
 
-    #[error("could not lock environment")]
-    Lock(#[source] CoreEnvironmentError),
-
     #[error("could not build environment")]
     Build(#[source] CoreEnvironmentError),
 
@@ -828,7 +825,7 @@ impl ManagedEnvironment {
         &mut self,
         flox: &Flox,
         contents: String,
-    ) -> Result<Result<EditResult, CoreEnvironmentError>, EnvironmentError> {
+    ) -> Result<Result<EditResult, EnvironmentError>, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
             .writable(flox.temp_dir.clone())
@@ -873,7 +870,7 @@ impl ManagedEnvironment {
     pub fn create_generation_from_local_env(
         &mut self,
         flox: &Flox,
-    ) -> Result<SyncToGenerationResult, ManagedEnvironmentError> {
+    ) -> Result<SyncToGenerationResult, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
         if Self::validate_checkout(&local_checkout, &self.generations())? {
@@ -887,9 +884,7 @@ impl ManagedEnvironment {
         // Call lock rather than ensure_locked because the primary purpose of
         // ensure_locked is avoiding locking of v0 manifests,
         // but we don't need to support pushing old manifests.
-        local_checkout
-            .lock(flox)
-            .map_err(ManagedEnvironmentError::Lock)?;
+        local_checkout.lock(flox)?;
 
         // Ensure the created generation is valid
         let store_paths = local_checkout
@@ -1213,7 +1208,7 @@ impl ManagedEnvironment {
         path_environment: PathEnvironment,
         owner: EnvironmentOwner,
         force: bool,
-    ) -> Result<Self, ManagedEnvironmentError> {
+    ) -> Result<Self, EnvironmentError> {
         // path of the original .flox directory
         let dot_flox_path = path_environment.path.clone();
         let name = path_environment.name();
@@ -1225,9 +1220,7 @@ impl ManagedEnvironment {
         // if the environment was modified primarily through editing the manifest manually.
         // Call `ensure_locked` to avoid locking of v0 manifests,
         // but permit pushing old manifests that are already locked.
-        core_environment
-            .ensure_locked(flox)
-            .map_err(ManagedEnvironmentError::Lock)?;
+        core_environment.ensure_locked(flox)?;
 
         // Ensure the environment builds before we push it
         core_environment
@@ -1235,6 +1228,7 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::Build)?;
 
         Self::push_new_without_building(flox, owner, name, force, dot_flox_path, core_environment)
+            .map_err(EnvironmentError::ManagedEnvironment)
     }
 
     /// Push an environment and open the resulting [ManagedEnvironment],

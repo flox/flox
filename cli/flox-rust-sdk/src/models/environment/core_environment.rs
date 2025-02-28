@@ -13,6 +13,7 @@ use tracing::debug;
 use super::{
     copy_dir_recursive,
     CanonicalizeError,
+    EnvironmentError,
     InstallationAttempt,
     UninstallationAttempt,
     UpgradeError,
@@ -143,7 +144,7 @@ impl<State> CoreEnvironment<State> {
     /// since pkgdb manifests can no longer be locked.
     ///
     /// TODO: consider removing this
-    pub fn ensure_locked(&mut self, flox: &Flox) -> Result<Lockfile, CoreEnvironmentError> {
+    pub fn ensure_locked(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
         match self.lockfile_if_up_to_date()? {
             Some(lock) => Ok(lock),
             None => self.lock(flox),
@@ -161,7 +162,7 @@ impl<State> CoreEnvironment<State> {
     /// Technically this does write to disk as a side effect for now.
     /// It's included in the [ReadOnly] struct for ergonomic reasons
     /// and because it doesn't modify the manifest.
-    pub fn lock(&mut self, flox: &Flox) -> Result<Lockfile, CoreEnvironmentError> {
+    pub fn lock(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
         let manifest = self.manifest()?;
         let existing_lockfile_contents = self.existing_lockfile_contents()?;
         let existing_lockfile = existing_lockfile_contents
@@ -176,8 +177,7 @@ impl<State> CoreEnvironment<State> {
             &flox.catalog_client,
             &flox.installable_locker,
         )
-        .block_on()
-        .map_err(CoreEnvironmentError::Resolve)?;
+        .block_on()?;
 
         let lockfile_contents =
             serde_json::to_string_pretty(&lockfile).expect("lockfile structure is valid json");
@@ -289,7 +289,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
-    ) -> Result<InstallationAttempt, CoreEnvironmentError> {
+    ) -> Result<InstallationAttempt, EnvironmentError> {
         let current_manifest_contents = self.manifest_contents()?;
         let mut installation = insert_packages(&current_manifest_contents, packages)
             .map(|insertion| InstallationAttempt {
@@ -314,7 +314,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<UninstallationAttempt, CoreEnvironmentError> {
+    ) -> Result<UninstallationAttempt, EnvironmentError> {
         let current_manifest_contents = self.manifest_contents()?;
 
         let install_ids = Self::get_install_ids_to_uninstall(&self.manifest()?, packages)?;
@@ -392,11 +392,7 @@ impl CoreEnvironment<ReadOnly> {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    pub fn edit(
-        &mut self,
-        flox: &Flox,
-        contents: String,
-    ) -> Result<EditResult, CoreEnvironmentError> {
+    pub fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
         let old_contents = self.manifest_contents()?;
 
         // skip the edit if the contents are unchanged
@@ -408,7 +404,7 @@ impl CoreEnvironment<ReadOnly> {
 
         let store_path = self.transact_with_manifest_contents(&contents, flox)?;
 
-        EditResult::new(&old_contents, &contents, Some(store_path))
+        EditResult::new(&old_contents, &contents, Some(store_path)).map_err(EnvironmentError::Core)
     }
 
     /// Atomically edit this environment, without checking that it still builds
@@ -420,7 +416,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         flox: &Flox,
         contents: String,
-    ) -> Result<Result<EditResult, CoreEnvironmentError>, CoreEnvironmentError> {
+    ) -> Result<Result<EditResult, EnvironmentError>, CoreEnvironmentError> {
         let old_contents = self.manifest_contents()?;
 
         // skip the edit if the contents are unchanged
@@ -458,8 +454,9 @@ impl CoreEnvironment<ReadOnly> {
         self.replace_with(temp_env)?;
 
         match build_attempt {
-            Ok(store_path) => Ok(EditResult::new(&old_contents, &contents, Some(store_path))),
-            Err(err) => Ok(Err(err)),
+            Ok(store_path) => Ok(EditResult::new(&old_contents, &contents, Some(store_path))
+                .map_err(EnvironmentError::Core)),
+            Err(err) => Ok(Err(EnvironmentError::Core(err))),
         }
     }
 
@@ -477,7 +474,7 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         groups_or_iids: &[&str],
         write_lockfile: bool,
-    ) -> Result<UpgradeResult, CoreEnvironmentError> {
+    ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let manifest = self.manifest()?;
 
@@ -511,7 +508,9 @@ impl CoreEnvironment<ReadOnly> {
 
             // We are not interested in the store path here, so we ignore the result
             // Neither do we depend on services, so we pass `None`
-            let _ = BuildEnvNix.build(&flox.catalog_client, tmp_lockfile.path(), None)?;
+            let _ = BuildEnvNix
+                .build(&flox.catalog_client, tmp_lockfile.path(), None)
+                .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::BuildEnv(e)))?;
         }
 
         Ok(result)
@@ -577,7 +576,7 @@ impl CoreEnvironment<ReadOnly> {
         flake_locking: &impl InstallableLocker,
         groups_or_iids: &[&str],
         manifest: &Manifest,
-    ) -> Result<UpgradeResult, CoreEnvironmentError> {
+    ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let existing_lockfile = 'lockfile: {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
@@ -601,8 +600,7 @@ impl CoreEnvironment<ReadOnly> {
 
         let upgraded_lockfile =
             Lockfile::lock_manifest(manifest, seed_lockfile.as_ref(), client, flake_locking)
-                .block_on()
-                .map_err(CoreEnvironmentError::Resolve)?;
+                .block_on()?;
 
         let result = UpgradeResult {
             old_lockfile: existing_lockfile,
@@ -681,10 +679,13 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         manifest_contents: impl AsRef<str>,
         flox: &Flox,
-    ) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
+    ) -> Result<BuildEnvOutputs, EnvironmentError> {
         let manifest: Manifest = toml::from_str(manifest_contents.as_ref())
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
-        manifest.services.validate()?;
+        manifest
+            .services
+            .validate()
+            .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Services(e)))?;
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
@@ -1624,8 +1625,8 @@ mod tests {
         eprintln!("{res:?}");
         assert!(matches!(
             res,
-            Err(CoreEnvironmentError::Services(ServiceError::InvalidConfig(
-                _
+            Err(EnvironmentError::Core(CoreEnvironmentError::Services(
+                ServiceError::InvalidConfig(_)
             )))
         ));
     }
