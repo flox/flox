@@ -17,7 +17,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::{LockedManifestError, Lockfile};
+use super::lockfile::{Lockfile, ResolveError};
 use super::manifest::raw::PackageToInstall;
 use super::manifest::typed::{Manifest, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
@@ -721,7 +721,7 @@ pub enum EnvironmentError {
     Registry(#[from] EnvRegistryError),
 
     #[error(transparent)]
-    LockedManifest(LockedManifestError),
+    LockedManifest(ResolveError),
 
     #[error(transparent)]
     Canonicalize(CanonicalizeError),

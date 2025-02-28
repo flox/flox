@@ -267,7 +267,7 @@ impl Edit {
         result: Result<EditResult, EnvironmentError>,
     ) -> Result<Result<EditResult, CoreEnvironmentError>, EnvironmentError> {
         match result {
-            Err(EnvironmentError::Core(e @ CoreEnvironmentError::LockedManifest(_)))
+            Err(EnvironmentError::Core(e @ CoreEnvironmentError::Resolve(_)))
             | Err(EnvironmentError::Core(e @ CoreEnvironmentError::DeserializeManifest(_)))
             | Err(EnvironmentError::Core(
                 e @ CoreEnvironmentError::BuildEnv(
@@ -375,7 +375,7 @@ mod tests {
 
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment;
-    use flox_rust_sdk::models::lockfile::{LockedManifestError, ResolutionFailures};
+    use flox_rust_sdk::models::lockfile::{ResolutionFailures, ResolveError};
     use indoc::indoc;
     use serde::de::Error;
     use tempfile::tempdir;
@@ -407,11 +407,9 @@ mod tests {
     /// errors locking the manifest are recoverable
     #[test]
     fn test_recover_edit_loop_result_locking() {
-        let result = Err(EnvironmentError::Core(
-            CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(
-                ResolutionFailures(vec![]),
-            )),
-        ));
+        let result = Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
+            ResolveError::ResolutionFailed(ResolutionFailures(vec![])),
+        )));
 
         Edit::make_interactively_recoverable(result)
             .expect("should be recoverable")
