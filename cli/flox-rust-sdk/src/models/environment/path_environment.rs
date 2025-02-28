@@ -175,7 +175,7 @@ impl Environment for PathEnvironment {
     /// This will lock the environment if it is not already locked.
     fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
-        Ok(env_view.ensure_locked(flox)?)
+        env_view.ensure_locked(flox)
     }
 
     /// Install packages to the environment atomically

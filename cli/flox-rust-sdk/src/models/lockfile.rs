@@ -22,7 +22,7 @@ use flox_core::Version;
 use thiserror::Error;
 use tracing::debug;
 
-use super::environment::CoreEnvironmentError;
+use super::environment::{CoreEnvironmentError, EnvironmentError};
 use super::manifest::typed::{
     Allows,
     IncludeDescriptor,
@@ -569,10 +569,11 @@ impl Lockfile {
         seed_lockfile: Option<&Lockfile>,
         client: &impl catalog::ClientTrait,
         installable_locker: &impl InstallableLocker,
-    ) -> Result<Lockfile, ResolveError> {
+    ) -> Result<Lockfile, EnvironmentError> {
         let (merged, compose) = Self::merge_manifest(manifest, seed_lockfile)?;
-        let packages =
-            Self::resolve_manifest(&merged, seed_lockfile, client, installable_locker).await?;
+        let packages = Self::resolve_manifest(&merged, seed_lockfile, client, installable_locker)
+            .await
+            .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
         let lockfile = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
@@ -595,7 +596,7 @@ impl Lockfile {
     fn merge_manifest(
         manifest: &Manifest,
         _seed_lockfile: Option<&Lockfile>,
-    ) -> Result<(Manifest, Option<Compose>), ResolveError> {
+    ) -> Result<(Manifest, Option<Compose>), EnvironmentError> {
         if manifest.include.environments.is_empty() {
             return Ok((manifest.clone(), None));
         }
@@ -2549,7 +2550,10 @@ pub(crate) mod tests {
 
         let locked_manifest =
             Lockfile::lock_manifest(manifest, None, &client, &InstallableLockerMock::new()).await;
-        if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
+        if let Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
+            ResolveError::ResolutionFailed(res_failures),
+        ))) = locked_manifest
+        {
             if let [ResolutionFailure::UnknownServiceMessage(MsgUnknown { msg, .. })] =
                 res_failures.0.as_slice()
             {
@@ -2583,7 +2587,10 @@ pub(crate) mod tests {
             let locked_manifest =
                 Lockfile::lock_manifest(manifest, None, &client, &InstallableLockerMock::new())
                     .await;
-            if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
+            if let Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                ResolveError::ResolutionFailed(res_failures),
+            ))) = locked_manifest
+            {
                 // A newline is added for formatting when it's a single message
                 assert_eq!(
                     res_failures.to_string(),
@@ -3251,7 +3258,9 @@ pub(crate) mod tests {
             )
             .await
             .unwrap_err(),
-            ResolveError::UnfreeNotAllowed { .. }
+            EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                ResolveError::UnfreeNotAllowed { .. }
+            ))
         ));
     }
 
@@ -3292,7 +3301,9 @@ pub(crate) mod tests {
             Lockfile::lock_manifest(&manifest, None, &client, &InstallableLockerMock::new())
                 .await
                 .unwrap_err(),
-            ResolveError::UnfreeNotAllowed { .. }
+            EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                ResolveError::UnfreeNotAllowed { .. }
+            ))
         ));
     }
 
