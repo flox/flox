@@ -600,19 +600,6 @@ pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
 pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
     trace!("formatting locked_manifest_error: {err:?}");
     match err {
-        // this is likely a BUG, since we ensure that the lockfile exists in all cases
-        LockedManifestError::BadLockfilePath(canonicalize_error) => formatdoc! {"
-            Bad lockfile path: {canonicalize_error}
-
-            Please ensure that the path exists and that you have read permissions.
-        "},
-
-        LockedManifestError::BadManifestPath(canonicalize_error) => formatdoc! {"
-            Corrupt environment: {canonicalize_error}
-
-            Please ensure that the path exists and that you have read permissions.
-        "},
-
         // region: errors from the catalog locking
         LockedManifestError::CatalogResolve(err) => formatdoc! {"
             Failed to lock the manifest.
@@ -629,15 +616,6 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
             This is likely due to a corrupt environment.
         "},
 
-        LockedManifestError::ParseLockedManifest(serde_error) => formatdoc! {"
-            Failed to parse lockfile structure: {serde_error}
-
-            This is likely due to a corrupt environment.
-        "},
-
-        LockedManifestError::ParseCheckWarnings(_) => display_chain(err),
-        LockedManifestError::UnsupportedLockfileForUpdate => display_chain(err),
-        LockedManifestError::NoPackagesOnFirstPage(_, _) => display_chain(err),
         LockedManifestError::UnrecognizedSystem(system) => formatdoc! {"
             Unrecognized system in manifest: {system}
 
@@ -647,7 +625,6 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         LockedManifestError::SystemUnavailableInManifest { .. } => display_chain(err),
 
         LockedManifestError::ResolutionFailed(_) => display_chain(err),
-        LockedManifestError::EmptyPage => display_chain(err),
         // User facing
         LockedManifestError::LicenseNotAllowed(..) => display_chain(err),
         // User facing
