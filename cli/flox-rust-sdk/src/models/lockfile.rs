@@ -33,7 +33,7 @@ use super::manifest::typed::{
     DEFAULT_GROUP_NAME,
     DEFAULT_PRIORITY,
 };
-use crate::data::{CanonicalPath, CanonicalizeError, System};
+use crate::data::{CanonicalPath, System};
 use crate::providers::catalog::{
     self,
     CatalogPage,
@@ -1330,22 +1330,12 @@ pub enum PackageToList {
 pub enum LockedManifestError {
     #[error("failed to resolve packages")]
     CatalogResolve(#[from] catalog::ResolveError),
-    #[error("didn't find packages on the first page of the group {0} for system {1}")]
-    NoPackagesOnFirstPage(String, String),
-    #[error("failed to parse check warnings")]
-    ParseCheckWarnings(#[source] serde_json::Error),
-    #[error(transparent)]
-    BadManifestPath(CanonicalizeError),
-    #[error(transparent)]
-    BadLockfilePath(CanonicalizeError),
+
     #[error("could not open lockfile")]
     ReadLockfile(#[source] std::io::Error),
     /// when parsing the contents of a lockfile into a [LockedManifest]
     #[error("could not parse lockfile")]
     ParseLockfile(#[source] serde_json::Error),
-    /// when parsing a [LockedManifest] into a [TypedLockedManifest]
-    #[error("failed to parse contents of locked manifest")]
-    ParseLockedManifest(#[source] serde_json::Error),
 
     // todo: this should probably part of some validation logic of the manifest file
     //       rather than occurring during the locking process creation
@@ -1354,8 +1344,6 @@ pub enum LockedManifestError {
 
     #[error("resolution failed: {0}")]
     ResolutionFailed(ResolutionFailures),
-    #[error("catalog page was empty")]
-    EmptyPage,
 
     // todo: this should probably part of some validation logic of the manifest file
     //       rather than occurring during the locking process creation
@@ -1368,9 +1356,6 @@ pub enum LockedManifestError {
         system: String,
         enabled_systems: Vec<String>,
     },
-
-    #[error("Catalog lockfile does not support update")]
-    UnsupportedLockfileForUpdate,
 
     #[error("The package '{0}' has license '{1}' which is not in the list of allowed licenses.\n\nAllow this license by adding it to 'options.allow.licenses' in manifest.toml")]
     LicenseNotAllowed(String, String),

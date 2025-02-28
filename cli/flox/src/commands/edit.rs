@@ -375,7 +375,7 @@ mod tests {
 
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment;
-    use flox_rust_sdk::models::lockfile::LockedManifestError;
+    use flox_rust_sdk::models::lockfile::{LockedManifestError, ResolutionFailures};
     use indoc::indoc;
     use serde::de::Error;
     use tempfile::tempdir;
@@ -408,7 +408,9 @@ mod tests {
     #[test]
     fn test_recover_edit_loop_result_locking() {
         let result = Err(EnvironmentError::Core(
-            CoreEnvironmentError::LockedManifest(LockedManifestError::EmptyPage),
+            CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(
+                ResolutionFailures(vec![]),
+            )),
         ));
 
         Edit::make_interactively_recoverable(result)
