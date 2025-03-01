@@ -16,11 +16,11 @@ use flox_rust_sdk::models::environment::{
     PathPointer,
 };
 use flox_rust_sdk::models::lockfile::{
-    LockedManifestError,
     LockedPackage,
     Lockfile,
     ResolutionFailure,
     ResolutionFailures,
+    ResolveError,
 };
 use flox_rust_sdk::models::manifest::raw::{
     catalog_packages_to_install,
@@ -338,8 +338,8 @@ impl Install {
         requested_packages: &[PackageToInstall],
     ) -> Option<(ResolutionFailures, Vec<PackageToInstallRetry>)> {
         match err {
-            EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
-                LockedManifestError::ResolutionFailed(failures),
+            EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                ResolveError::ResolutionFailed(failures),
             )) if failures.0.iter().all(|f| {
                 matches!(f, ResolutionFailure::PackageUnavailableOnSomeSystems { .. })
             }) =>
@@ -427,11 +427,9 @@ impl Install {
                     ", err = format_error(&err).trim()
                 };
                 failures.0.push(ResolutionFailure::FallbackMessage { msg });
-                Err(EnvironmentError::Core(
-                    CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(
-                        failures,
-                    )),
-                ))
+                Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                    ResolveError::ResolutionFailed(failures),
+                )))
             },
         }
     }
@@ -452,8 +450,8 @@ impl Install {
 
         match err {
             // Try to make suggestions when a package isn't found
-            EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
-                LockedManifestError::ResolutionFailed(failures),
+            EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                ResolveError::ResolutionFailed(failures),
             )) => {
                 let (need_didyoumean, mut other_failures): (Vec<_>, Vec<_>) = failures
                     .0
@@ -489,8 +487,8 @@ impl Install {
                     };
                     other_failures.push(ResolutionFailure::FallbackMessage { msg });
                 }
-                Err(EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
-                    LockedManifestError::ResolutionFailed(ResolutionFailures(other_failures)),
+                Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                    ResolveError::ResolutionFailed(ResolutionFailures(other_failures)),
                 ))
                 .into())
             },

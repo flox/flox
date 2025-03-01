@@ -22,6 +22,7 @@ use flox_core::Version;
 use thiserror::Error;
 use tracing::debug;
 
+use super::environment::{CoreEnvironmentError, EnvironmentError};
 use super::manifest::typed::{
     Allows,
     IncludeDescriptor,
@@ -33,7 +34,7 @@ use super::manifest::typed::{
     DEFAULT_GROUP_NAME,
     DEFAULT_PRIORITY,
 };
-use crate::data::{CanonicalPath, CanonicalizeError, System};
+use crate::data::{CanonicalPath, System};
 use crate::providers::catalog::{
     self,
     CatalogPage,
@@ -94,9 +95,9 @@ pub struct Lockfile {
 }
 
 impl Lockfile {
-    pub fn read_from_file(path: &CanonicalPath) -> Result<Self, LockedManifestError> {
-        let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
-        serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
+    pub fn read_from_file(path: &CanonicalPath) -> Result<Self, CoreEnvironmentError> {
+        let contents = fs::read(path).map_err(CoreEnvironmentError::ReadLockfile)?;
+        serde_json::from_slice(&contents).map_err(CoreEnvironmentError::ParseLockfile)
     }
 
     pub fn version(&self) -> u8 {
@@ -105,10 +106,10 @@ impl Lockfile {
 }
 
 impl FromStr for Lockfile {
-    type Err = LockedManifestError;
+    type Err = CoreEnvironmentError;
 
     fn from_str(contents: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(contents).map_err(LockedManifestError::ParseLockfile)
+        serde_json::from_str(contents).map_err(CoreEnvironmentError::ParseLockfile)
     }
 }
 
@@ -516,10 +517,7 @@ fn format_multiple_resolution_failures(failures: &[ResolutionFailure]) -> String
 
 impl Lockfile {
     /// Convert a locked manifest to a list of installed packages for a given system.
-    pub fn list_packages(
-        &self,
-        system: &System,
-    ) -> Result<Vec<PackageToList>, LockedManifestError> {
+    pub fn list_packages(&self, system: &System) -> Result<Vec<PackageToList>, ResolveError> {
         self.packages
             .iter()
             .filter(|package| package.system() == system)
@@ -529,12 +527,12 @@ impl Lockfile {
                     let descriptor = self
                         .manifest
                         .pkg_descriptor_with_id(&pkg.install_id)
-                        .ok_or(LockedManifestError::MissingPackageDescriptor(
+                        .ok_or(ResolveError::MissingPackageDescriptor(
                             pkg.install_id.clone(),
                         ))?;
 
                     let Some(descriptor) = descriptor.unwrap_catalog_descriptor() else {
-                        Err(LockedManifestError::MissingPackageDescriptor(
+                        Err(ResolveError::MissingPackageDescriptor(
                             pkg.install_id.clone(),
                         ))?
                     };
@@ -545,12 +543,12 @@ impl Lockfile {
                     let descriptor = self
                         .manifest
                         .pkg_descriptor_with_id(&locked_package.install_id)
-                        .ok_or(LockedManifestError::MissingPackageDescriptor(
+                        .ok_or(ResolveError::MissingPackageDescriptor(
                             locked_package.install_id.clone(),
                         ))?;
 
                     let Some(descriptor) = descriptor.unwrap_flake_descriptor() else {
-                        Err(LockedManifestError::MissingPackageDescriptor(
+                        Err(ResolveError::MissingPackageDescriptor(
                             locked_package.install_id.clone(),
                         ))?
                     };
@@ -559,7 +557,7 @@ impl Lockfile {
                 },
                 LockedPackage::StorePath(locked) => Ok(PackageToList::StorePath(locked)),
             })
-            .collect::<Result<Vec<_>, LockedManifestError>>()
+            .collect::<Result<Vec<_>, ResolveError>>()
     }
 
     /// Merge included environments, resolve the merged manifest, and return the resulting lockfile
@@ -571,10 +569,11 @@ impl Lockfile {
         seed_lockfile: Option<&Lockfile>,
         client: &impl catalog::ClientTrait,
         installable_locker: &impl InstallableLocker,
-    ) -> Result<Lockfile, LockedManifestError> {
+    ) -> Result<Lockfile, EnvironmentError> {
         let (merged, compose) = Self::merge_manifest(manifest, seed_lockfile)?;
-        let packages =
-            Self::resolve_manifest(&merged, seed_lockfile, client, installable_locker).await?;
+        let packages = Self::resolve_manifest(&merged, seed_lockfile, client, installable_locker)
+            .await
+            .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
         let lockfile = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
@@ -597,7 +596,7 @@ impl Lockfile {
     fn merge_manifest(
         manifest: &Manifest,
         _seed_lockfile: Option<&Lockfile>,
-    ) -> Result<(Manifest, Option<Compose>), LockedManifestError> {
+    ) -> Result<(Manifest, Option<Compose>), EnvironmentError> {
         if manifest.include.environments.is_empty() {
             return Ok((manifest.clone(), None));
         }
@@ -624,7 +623,7 @@ impl Lockfile {
         seed_lockfile: Option<&Lockfile>,
         client: &impl catalog::ClientTrait,
         installable_locker: &impl InstallableLocker,
-    ) -> Result<Vec<LockedPackage>, LockedManifestError> {
+    ) -> Result<Vec<LockedPackage>, ResolveError> {
         let catalog_groups = Self::collect_package_groups(manifest, seed_lockfile)?;
         let (mut already_locked_packages, groups_to_lock) =
             Self::split_fully_locked_groups(catalog_groups, seed_lockfile);
@@ -666,7 +665,7 @@ impl Lockfile {
             client
                 .resolve(groups_to_lock)
                 .await
-                .map_err(LockedManifestError::CatalogResolve)?
+                .map_err(ResolveError::CatalogResolve)?
         } else {
             vec![]
         };
@@ -709,7 +708,7 @@ impl Lockfile {
     fn check_packages_are_allowed<'a>(
         locked_packages: impl IntoIterator<Item = &'a LockedPackageCatalog>,
         allow: &Allows,
-    ) -> Result<(), LockedManifestError> {
+    ) -> Result<(), ResolveError> {
         for package in locked_packages {
             if !allow.licenses.is_empty() {
                 let Some(ref license) = package.license else {
@@ -717,7 +716,7 @@ impl Lockfile {
                 };
 
                 if !allow.licenses.iter().any(|allowed| allowed == license) {
-                    return Err(LockedManifestError::LicenseNotAllowed(
+                    return Err(ResolveError::LicenseNotAllowed(
                         package.install_id.to_string(),
                         license.to_string(),
                     ));
@@ -728,7 +727,7 @@ impl Lockfile {
             if !allow.broken.unwrap_or(false) {
                 // Assume a package isn't broken
                 if package.broken.unwrap_or(false) {
-                    return Err(LockedManifestError::BrokenNotAllowed(
+                    return Err(ResolveError::BrokenNotAllowed(
                         package.install_id.to_owned(),
                     ));
                 }
@@ -738,7 +737,7 @@ impl Lockfile {
             if !allow.unfree.unwrap_or(true) {
                 // Assume a package isn't unfree
                 if package.unfree.unwrap_or(false) {
-                    return Err(LockedManifestError::UnfreeNotAllowed(
+                    return Err(ResolveError::UnfreeNotAllowed(
                         package.install_id.to_owned(),
                     ));
                 }
@@ -825,7 +824,7 @@ impl Lockfile {
     fn collect_package_groups(
         manifest: &Manifest,
         seed_lockfile: Option<&Lockfile>,
-    ) -> Result<impl Iterator<Item = PackageGroup>, LockedManifestError> {
+    ) -> Result<impl Iterator<Item = PackageGroup>, ResolveError> {
         let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
 
         // Using a btree map to ensure consistent ordering
@@ -879,7 +878,7 @@ impl Lockfile {
 
                 for system in package_systems.into_iter().flatten() {
                     if !available_systems.contains(system) {
-                        return Err(LockedManifestError::SystemUnavailableInManifest {
+                        return Err(ResolveError::SystemUnavailableInManifest {
                             install_id: install_id.clone(),
                             system: system.to_string(),
                             enabled_systems: available_systems
@@ -896,7 +895,7 @@ impl Lockfile {
                     .iter()
                     .map(|s| {
                         SystemEnum::from_str(s)
-                            .map_err(|_| LockedManifestError::UnrecognizedSystem(s.to_string()))
+                            .map_err(|_| ResolveError::UnrecognizedSystem(s.to_string()))
                     })
                     .collect::<Result<Vec<_>, _>>()?
             };
@@ -978,7 +977,7 @@ impl Lockfile {
     fn locked_packages_from_resolution<'manifest>(
         manifest: &'manifest Manifest,
         groups: impl IntoIterator<Item = ResolvedPackageGroup> + 'manifest,
-    ) -> Result<impl Iterator<Item = LockedPackageCatalog> + 'manifest, LockedManifestError> {
+    ) -> Result<impl Iterator<Item = LockedPackageCatalog> + 'manifest, ResolveError> {
         let groups = groups.into_iter().collect::<Vec<_>>();
         let failed_group_indices = Self::detect_failed_resolutions(&groups);
         let failures = if failed_group_indices.is_empty() {
@@ -996,9 +995,7 @@ impl Lockfile {
         if let Some(failures) = failures {
             if !failures.is_empty() {
                 tracing::debug!(n = failures.len(), "returning resolution failures");
-                return Err(LockedManifestError::ResolutionFailed(ResolutionFailures(
-                    failures,
-                )));
+                return Err(ResolveError::ResolutionFailed(ResolutionFailures(failures)));
             }
         }
         let locked_pkg_iter = groups
@@ -1008,7 +1005,7 @@ impl Lockfile {
                     .page
                     .and_then(|p| p.packages.clone())
                     .map(|pkgs| pkgs.into_iter())
-                    .ok_or(LockedManifestError::ResolutionFailed(
+                    .ok_or(ResolveError::ResolutionFailed(
                         // This should be unreachable, otherwise we would have detected
                         // it as a failure
                         ResolutionFailure::FallbackMessage {
@@ -1030,7 +1027,7 @@ impl Lockfile {
     fn collect_failures(
         failed_groups: &[ResolvedPackageGroup],
         manifest: &Manifest,
-    ) -> Result<Vec<ResolutionFailure>, LockedManifestError> {
+    ) -> Result<Vec<ResolutionFailure>, ResolveError> {
         let mut failures = Vec::new();
         for group in failed_groups {
             tracing::debug!(
@@ -1097,7 +1094,7 @@ impl Lockfile {
     fn determine_invalid_systems(
         r_msg: &MsgAttrPathNotFoundNotFoundForAllSystems,
         manifest: &Manifest,
-    ) -> Result<Vec<System>, LockedManifestError> {
+    ) -> Result<Vec<System>, ResolveError> {
         let default_systems = HashSet::<_>::from_iter(DEFAULT_SYSTEMS_STR.iter());
         let valid_systems = HashSet::<_>::from_iter(&r_msg.valid_systems);
         let manifest_systems = manifest
@@ -1108,7 +1105,7 @@ impl Lockfile {
             .unwrap_or(default_systems);
         let pkg_descriptor = manifest
             .catalog_pkg_descriptor_with_id(&r_msg.install_id)
-            .ok_or(LockedManifestError::InstallIdNotInManifest(
+            .ok_or(ResolveError::InstallIdNotInManifest(
                 r_msg.install_id.clone(),
             ))?;
         let pkg_systems = pkg_descriptor.systems.as_ref().map(HashSet::from_iter);
@@ -1237,7 +1234,7 @@ impl Lockfile {
     fn lock_flake_installables<'locking>(
         locking: &'locking impl InstallableLocker,
         installables: impl IntoIterator<Item = FlakeInstallableToLock> + 'locking,
-    ) -> Result<impl Iterator<Item = LockedPackageFlake> + 'locking, LockedManifestError> {
+    ) -> Result<impl Iterator<Item = LockedPackageFlake> + 'locking, ResolveError> {
         let mut ok = Vec::new();
         for installable in installables.into_iter() {
             match locking
@@ -1248,12 +1245,12 @@ impl Lockfile {
                 Ok(locked) => ok.push(locked),
                 Err(e) => {
                     if let FlakeInstallableError::NixError(_) = e {
-                        return Err(LockedManifestError::LockFlakeNixError(e));
+                        return Err(ResolveError::LockFlakeNixError(e));
                     }
                     let failure = ResolutionFailure::FallbackMessage { msg: e.to_string() };
-                    return Err(LockedManifestError::ResolutionFailed(ResolutionFailures(
-                        vec![failure],
-                    )));
+                    return Err(ResolveError::ResolutionFailed(ResolutionFailures(vec![
+                        failure,
+                    ])));
                 },
             }
         }
@@ -1327,25 +1324,9 @@ pub enum PackageToList {
 }
 
 #[derive(Debug, Error)]
-pub enum LockedManifestError {
+pub enum ResolveError {
     #[error("failed to resolve packages")]
     CatalogResolve(#[from] catalog::ResolveError),
-    #[error("didn't find packages on the first page of the group {0} for system {1}")]
-    NoPackagesOnFirstPage(String, String),
-    #[error("failed to parse check warnings")]
-    ParseCheckWarnings(#[source] serde_json::Error),
-    #[error(transparent)]
-    BadManifestPath(CanonicalizeError),
-    #[error(transparent)]
-    BadLockfilePath(CanonicalizeError),
-    #[error("could not open lockfile")]
-    ReadLockfile(#[source] std::io::Error),
-    /// when parsing the contents of a lockfile into a [LockedManifest]
-    #[error("could not parse lockfile")]
-    ParseLockfile(#[source] serde_json::Error),
-    /// when parsing a [LockedManifest] into a [TypedLockedManifest]
-    #[error("failed to parse contents of locked manifest")]
-    ParseLockedManifest(#[source] serde_json::Error),
 
     // todo: this should probably part of some validation logic of the manifest file
     //       rather than occurring during the locking process creation
@@ -1354,8 +1335,6 @@ pub enum LockedManifestError {
 
     #[error("resolution failed: {0}")]
     ResolutionFailed(ResolutionFailures),
-    #[error("catalog page was empty")]
-    EmptyPage,
 
     // todo: this should probably part of some validation logic of the manifest file
     //       rather than occurring during the locking process creation
@@ -1368,9 +1347,6 @@ pub enum LockedManifestError {
         system: String,
         enabled_systems: Vec<String>,
     },
-
-    #[error("Catalog lockfile does not support update")]
-    UnsupportedLockfileForUpdate,
 
     #[error("The package '{0}' has license '{1}' which is not in the list of allowed licenses.\n\nAllow this license by adding it to 'options.allow.licenses' in manifest.toml")]
     LicenseNotAllowed(String, String),
@@ -1553,7 +1529,6 @@ pub(crate) mod tests {
         MsgGeneral,
         MsgUnknown,
         ResolutionMessage,
-        ResolveError,
         SearchError,
         UserBuildInfo,
         VersionsError,
@@ -1583,7 +1558,7 @@ pub(crate) mod tests {
         async fn resolve(
             &self,
             _: Vec<PackageGroup>,
-        ) -> Result<Vec<ResolvedPackageGroup>, ResolveError> {
+        ) -> Result<Vec<ResolvedPackageGroup>, catalog::ResolveError> {
             unreachable!("resolve should not be called");
         }
 
@@ -1994,7 +1969,7 @@ pub(crate) mod tests {
         let actual_result = Lockfile::collect_package_groups(&manifest, None);
 
         assert!(
-            matches!(actual_result, Err(LockedManifestError::SystemUnavailableInManifest {
+            matches!(actual_result, Err(ResolveError::SystemUnavailableInManifest {
                 install_id,
                 system,
                 enabled_systems
@@ -2575,7 +2550,10 @@ pub(crate) mod tests {
 
         let locked_manifest =
             Lockfile::lock_manifest(manifest, None, &client, &InstallableLockerMock::new()).await;
-        if let Err(LockedManifestError::ResolutionFailed(res_failures)) = locked_manifest {
+        if let Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
+            ResolveError::ResolutionFailed(res_failures),
+        ))) = locked_manifest
+        {
             if let [ResolutionFailure::UnknownServiceMessage(MsgUnknown { msg, .. })] =
                 res_failures.0.as_slice()
             {
@@ -2609,7 +2587,10 @@ pub(crate) mod tests {
             let locked_manifest =
                 Lockfile::lock_manifest(manifest, None, &client, &InstallableLockerMock::new())
                     .await;
-            if let Err(LockedManifestError::ResolutionFailed(res_failures)) = locked_manifest {
+            if let Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                ResolveError::ResolutionFailed(res_failures),
+            ))) = locked_manifest
+            {
                 // A newline is added for formatting when it's a single message
                 assert_eq!(
                     res_failures.to_string(),
@@ -3277,7 +3258,9 @@ pub(crate) mod tests {
             )
             .await
             .unwrap_err(),
-            LockedManifestError::UnfreeNotAllowed { .. }
+            EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                ResolveError::UnfreeNotAllowed { .. }
+            ))
         ));
     }
 
@@ -3318,7 +3301,9 @@ pub(crate) mod tests {
             Lockfile::lock_manifest(&manifest, None, &client, &InstallableLockerMock::new())
                 .await
                 .unwrap_err(),
-            LockedManifestError::UnfreeNotAllowed { .. }
+            EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                ResolveError::UnfreeNotAllowed { .. }
+            ))
         ));
     }
 
@@ -3335,7 +3320,7 @@ pub(crate) mod tests {
                 broken: None,
                 licenses: vec!["allowed".to_string()]
             }),
-            Err(LockedManifestError::LicenseNotAllowed { .. })
+            Err(ResolveError::LicenseNotAllowed { .. })
         ));
     }
 
@@ -3369,7 +3354,7 @@ pub(crate) mod tests {
                 broken: None,
                 licenses: vec![]
             }),
-            Err(LockedManifestError::BrokenNotAllowed { .. })
+            Err(ResolveError::BrokenNotAllowed { .. })
         ));
     }
 
@@ -3403,7 +3388,7 @@ pub(crate) mod tests {
                 broken: Some(false),
                 licenses: vec![]
             }),
-            Err(LockedManifestError::BrokenNotAllowed { .. })
+            Err(ResolveError::BrokenNotAllowed { .. })
         ));
     }
 
@@ -3454,7 +3439,7 @@ pub(crate) mod tests {
                 broken: None,
                 licenses: vec![]
             }),
-            Err(LockedManifestError::UnfreeNotAllowed { .. })
+            Err(ResolveError::UnfreeNotAllowed { .. })
         ));
     }
 
