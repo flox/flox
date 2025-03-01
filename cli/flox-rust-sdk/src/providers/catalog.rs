@@ -389,8 +389,9 @@ pub trait ClientTrait {
         package_groups: Vec<PackageGroup>,
     ) -> Result<Vec<ResolvedPackageGroup>, ResolveError>;
 
-    /// Search for packages in the catalog that match a given search_term.
-    async fn search(
+    /// Search for packages in the catalog that match a given search_term,
+    /// showing a spinner during the operation.
+    async fn search_with_spinner(
         &self,
         search_term: impl AsRef<str> + Send + Sync,
         system: System,
@@ -481,7 +482,7 @@ impl ClientTrait for CatalogClient {
         search_term = %search_term.as_ref(),
         system = %system,
         progress = format!("Searching for packages matching '{}' in catalog", search_term.as_ref())))]
-    async fn search(
+    async fn search_with_spinner(
         &self,
         search_term: impl AsRef<str> + Send + Sync,
         system: System,
@@ -793,7 +794,7 @@ impl ClientTrait for MockClient {
         }
     }
 
-    async fn search(
+    async fn search_with_spinner(
         &self,
         _search_term: impl AsRef<str> + Send + Sync,
         _system: System,

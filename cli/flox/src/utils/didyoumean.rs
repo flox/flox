@@ -67,7 +67,7 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
         system: String,
     ) -> Result<SearchResults> {
         let results = client
-            .search(
+            .search_with_spinner(
                 term,
                 system.to_string(),
                 NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
@@ -165,7 +165,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         system: String,
     ) -> Result<SearchResults> {
         let results = client
-            .search(
+            .search_with_spinner(
                 term,
                 system.to_string(),
                 NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),

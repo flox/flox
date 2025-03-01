@@ -67,7 +67,7 @@ impl Search {
             };
 
             flox.catalog_client
-                .search(parsed_search, flox.system.clone(), limit)
+                .search_with_spinner(parsed_search, flox.system.clone(), limit)
                 .await?
         };
 
