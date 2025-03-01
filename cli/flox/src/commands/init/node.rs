@@ -339,7 +339,7 @@ impl Node {
     async fn get_available_node_packages(flox: &Flox) -> Result<Vec<String>> {
         let res = flox
             .catalog_client
-            .search_with_spinner("nodejs_", flox.system.clone(), None)
+            .search("nodejs_", flox.system.clone(), None)
             .await
             .context("failed to query node versions")?;
         // SAFETY: This expect/unwrap will catch an invalid regex at test time,
