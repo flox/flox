@@ -1596,6 +1596,15 @@ pub(crate) mod tests {
             unreachable!("search should not be called");
         }
 
+        async fn search(
+            &self,
+            _: impl AsRef<str> + Send + Sync,
+            _: System,
+            _: SearchLimit,
+        ) -> Result<SearchResults, SearchError> {
+            unreachable!("search should not be called");
+        }
+
         async fn package_versions(
             &self,
             _: impl AsRef<str> + Send + Sync,
