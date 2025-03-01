@@ -1562,7 +1562,7 @@ pub(crate) mod tests {
             unreachable!("resolve should not be called");
         }
 
-        async fn search(
+        async fn search_with_spinner(
             &self,
             _: impl AsRef<str> + Send + Sync,
             _: System,
