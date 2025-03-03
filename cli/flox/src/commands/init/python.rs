@@ -419,7 +419,6 @@ impl Provider for PoetryPyProject {
                 )"#}
                 .to_string(),
             ),
-            profile_common: None,
             profile_bash: Some(
                 indoc! {r#"
                 echo "Activating poetry virtual environment" >&2
@@ -458,6 +457,7 @@ impl Provider for PoetryPyProject {
                     systems: None,
                 },
             ]),
+            ..Default::default()
         }
     }
 }
@@ -617,7 +617,6 @@ impl Provider for PyProject {
                 )"#}
                 .to_string(),
             ),
-            profile_common: None,
             profile_bash: Some(
                 indoc! {r#"
                 echo "Activating python virtual environment" >&2
@@ -648,6 +647,7 @@ impl Provider for PyProject {
                 version: python_version,
                 systems: None,
             }]),
+            ..Default::default()
         }
     }
 }
@@ -769,7 +769,6 @@ impl Provider for Requirements {
                 )"#}
                 .to_string(),
             ),
-            profile_common: None,
             profile_bash: Some(
                 indoc! {r#"
                 echo "Activating python virtual environment" >&2
@@ -800,6 +799,7 @@ impl Provider for Requirements {
                 version: None,
                 systems: None,
             }]),
+            ..Default::default()
         }
     }
 }

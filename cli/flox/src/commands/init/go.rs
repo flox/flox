@@ -141,17 +141,13 @@ impl InitHook for Go {
 
         InitCustomization {
             hook_on_activate: Some(GO_HOOK.to_string()),
-            profile_common: None,
-            profile_bash: None,
-            profile_fish: None,
-            profile_tcsh: None,
-            profile_zsh: None,
             packages: Some(vec![CatalogPackage {
                 id: "go".to_string(),
                 pkg_path: "go".to_string(),
                 version: go_version,
                 systems: None,
             }]),
+            ..Default::default()
         }
     }
 }

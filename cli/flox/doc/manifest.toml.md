@@ -471,9 +471,14 @@ The full set of options are listed below:
 ```
 Options ::= {
   systems                   = null | [<STRING>, ...]
+, activate                  = null | Activate
 , allow                     = null | Allows
 , semver                    = null | Semver
 , cuda-detection            = null | <BOOL>
+}
+
+Activate ::= {
+  mode = null | 'dev' | 'run'
 }
 
 Allows ::= {
@@ -498,6 +503,19 @@ Semver ::= {
     system to this list.
     See [`flox-pull(1)`](./flox-pull.md) for more details.
 
+`activate.mode`
+:   Whether to activate in "dev" (default) or "run" mode. This value can be
+    overridden with `flox activate --mode`.
+
+    In "dev" mode a package, all of its development dependencies, and language
+    specific environment variables are made available. As the name implies, this
+    is useful at development time. However, this may causes unexpected failures
+    when layering environments or when activating an environment system-wide.
+
+    In "run" mode only the requested packages are made available in `PATH` (and
+    their man pages made available).  This behavior is more in line with what
+    you would expect from a system-wide package manager like `apt`, `yum`, or
+    `brew`.
 
 `allow.unfree`
 :   Allows packages with unfree licenses to be installed and appear in search

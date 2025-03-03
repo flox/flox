@@ -559,13 +559,12 @@ manifest, but things can be overridden or added by higher priority manifests.
   overwritten by a higher priority manifest, as is `options.allow.licenses`,
   etc.
 
-`[activate]`
-: Activate options are entirely overwritten by higher priority manifests. This
-  has implications for the activation mode of a composed environment. Since the
-  default activation mode is `dev`, it is not present in the manifest by
-  default. This means that if one included environment sets `activate.mode` to
-  `run`, the merged manifest will also have `activate.mode = run` unless a
-  higher priority manifest explicitly sets `activate.mode = dev`.
+  This has implications for the activation mode of a composed environment. Since
+  the default activation mode is `dev`, it is not present in the manifest by
+  default. This means that if one included environment sets
+  `options.activate.mode` to `run`, the merged manifest will also have
+  `options.activate.mode = run` unless a higher priority manifest explicitly
+  sets `options.activate.mode = dev`.
 
 ## `[options]`
 
@@ -576,9 +575,14 @@ The full set of options are listed below:
 ```
 Options ::= {
   systems                   = null | [<STRING>, ...]
+, activate                  = null | Activate
 , allow                     = null | Allows
 , semver                    = null | Semver
 , cuda-detection            = null | <BOOL>
+}
+
+Activate ::= {
+  mode = null | 'dev' | 'run'
 }
 
 Allows ::= {
@@ -603,6 +607,19 @@ Semver ::= {
     system to this list.
     See [`flox-pull(1)`](./flox-pull.md) for more details.
 
+`activate.mode`
+:   Whether to activate in "dev" (default) or "run" mode. This value can be
+    overridden with `flox activate --mode`.
+
+    In "dev" mode a package, all of its development dependencies, and language
+    specific environment variables are made available. As the name implies, this
+    is useful at development time. However, this may causes unexpected failures
+    when layering environments or when activating an environment system-wide.
+
+    In "run" mode only the requested packages are made available in `PATH` (and
+    their man pages made available).  This behavior is more in line with what
+    you would expect from a system-wide package manager like `apt`, `yum`, or
+    `brew`.
 
 `allow.unfree`
 :   Allows packages with unfree licenses to be installed and appear in search
