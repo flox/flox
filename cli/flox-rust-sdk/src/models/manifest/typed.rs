@@ -91,10 +91,6 @@ pub struct Manifest {
     /// Profile scripts that are run in the user's shell upon activation.
     #[serde(default)]
     pub profile: Profile,
-    /// Options that control the behavior of activations.
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Activate::skip_serializing")]
-    pub activate: Activate,
     /// Options that control the behavior of the manifest.
     #[serde(default)]
     pub options: Options,
@@ -551,13 +547,65 @@ pub struct Profile {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
-pub struct Activate {
+pub struct Options {
+    /// A list of systems that each package is resolved for.
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
+    pub systems: Option<Vec<System>>,
+    /// Options that control what types of packages are allowed.
+    #[serde(default)]
+    pub allow: Allows,
+    /// Options that control how semver versions are resolved.
+    #[serde(default)]
+    pub semver: SemverOptions,
+    /// Whether to detect CUDA devices and libs during activation.
+    // TODO: Migrate to `ActivateOptions`.
+    pub cuda_detection: Option<bool>,
+    /// Options that control the behavior of activations.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
+    pub activate: ActivateOptions,
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
+pub struct Allows {
+    /// Whether to allow packages that are marked as `unfree`
+    pub unfree: Option<bool>,
+    /// Whether to allow packages that are marked as `broken`
+    pub broken: Option<bool>,
+    /// A list of license descriptors that are allowed
+    #[serde(default)]
+    #[cfg_attr(test, proptest(strategy = "vec_of_strings(3, 4)"))]
+    pub licenses: Vec<String>,
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct SemverOptions {
+    /// Whether to allow pre-release versions when resolving
+    #[serde(default)]
+    pub allow_pre_releases: Option<bool>,
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ActivateOptions {
     pub mode: Option<ActivateMode>,
 }
 
-impl Activate {
+impl ActivateOptions {
+    /// Don't write a struct of None's into the lockfile but also don't
+    /// explicitly check fields which we might forget to update.
     fn skip_serializing(&self) -> bool {
-        self.mode.is_none()
+        self == &ActivateOptions::default()
     }
 }
 
@@ -589,50 +637,6 @@ impl FromStr for ActivateMode {
             _ => Err(ManifestError::ActivateModeInvalid),
         }
     }
-}
-
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[serde(rename_all = "kebab-case")]
-#[serde(deny_unknown_fields)]
-pub struct Options {
-    /// A list of systems that each package is resolved for.
-    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
-    pub systems: Option<Vec<System>>,
-    /// Options that control what types of packages are allowed.
-    #[serde(default)]
-    pub allow: Allows,
-    /// Options that control how semver versions are resolved.
-    #[serde(default)]
-    pub semver: SemverOptions,
-    pub cuda_detection: Option<bool>,
-}
-
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[serde(deny_unknown_fields)]
-pub struct Allows {
-    /// Whether to allow packages that are marked as `unfree`
-    pub unfree: Option<bool>,
-    /// Whether to allow packages that are marked as `broken`
-    pub broken: Option<bool>,
-    /// A list of license descriptors that are allowed
-    #[serde(default)]
-    #[cfg_attr(test, proptest(strategy = "vec_of_strings(3, 4)"))]
-    pub licenses: Vec<String>,
-}
-
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[serde(rename_all = "kebab-case")]
-#[serde(deny_unknown_fields)]
-pub struct SemverOptions {
-    /// Whether to allow pre-release versions when resolving
-    #[serde(default)]
-    pub allow_pre_releases: Option<bool>,
 }
 
 /// A map of service names to service definitions

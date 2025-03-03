@@ -11,7 +11,7 @@ use super::{
     Warning,
 };
 use crate::models::manifest::typed::{
-    Activate,
+    ActivateOptions,
     Allows,
     Build,
     Containerize,
@@ -55,23 +55,6 @@ impl ShallowMerger {
             high_priority.inner(),
         );
         Ok((Install(merged), warnings))
-    }
-
-    fn merge_activate(
-        low_priority: &Activate,
-        high_priority: &Activate,
-    ) -> Result<(Activate, Vec<Warning>), MergeError> {
-        let root_key = KeyPath::from_iter(["activate"]);
-
-        let (merged_mode, mode_warning) = shallow_merge_options(
-            root_key.push("mode"),
-            low_priority.mode.clone(),
-            high_priority.mode.clone(),
-        );
-
-        let merged = Activate { mode: merged_mode };
-        let warnings = vec![mode_warning].into_iter().flatten().collect();
-        Ok((merged, warnings))
     }
 
     /// Keys in `manifest2` overwrite keys in `manifest1`.
@@ -167,6 +150,12 @@ impl ShallowMerger {
             high_priority.systems.clone(),
         );
 
+        let (merged_activate_mode, activate_mode_warning) = shallow_merge_options(
+            root_key.extend(["activate", "mode"]),
+            low_priority.activate.mode.clone(),
+            high_priority.activate.mode.clone(),
+        );
+
         let merged = Options {
             systems: merged_systems,
             allow: Allows {
@@ -178,10 +167,14 @@ impl ShallowMerger {
                 allow_pre_releases: merged_semver_allow_pre_releases,
             },
             cuda_detection: merged_cuda_detection,
+            activate: ActivateOptions {
+                mode: merged_activate_mode,
+            },
         };
 
         warnings.extend(
             [
+                activate_mode_warning,
                 allow_unfree_warning,
                 allow_broken_warning,
                 allow_licenses_warning,
@@ -254,8 +247,6 @@ impl ManifestMergeTrait for ShallowMerger {
         let (vars, vars_warnings) = Self::merge_vars(&low_priority.vars, &high_priority.vars)?;
         let hook = Self::merge_hook(&low_priority.hook, &high_priority.hook)?;
         let profile = Self::merge_profile(&low_priority.profile, &high_priority.profile)?;
-        let (activate, activate_warnings) =
-            Self::merge_activate(&low_priority.activate, &high_priority.activate)?;
         let (options, options_warnings) =
             Self::merge_options(&low_priority.options, &high_priority.options)?;
         let (services, services_warnings) =
@@ -272,7 +263,6 @@ impl ManifestMergeTrait for ShallowMerger {
             vars,
             hook,
             profile,
-            activate,
             options,
             services,
             build,
@@ -285,7 +275,6 @@ impl ManifestMergeTrait for ShallowMerger {
         let warnings = [
             install_warnings,
             vars_warnings,
-            activate_warnings,
             options_warnings,
             services_warnings,
             build_warnings,
@@ -428,15 +417,6 @@ mod tests {
             prop_assert_eq!(merged.on_activate, expected);
         }
 
-        // Ensures that two arbitrary activate sections are shallow merged.
-        #[test]
-        fn merges_activate_section(activate1 in any::<Activate>(), activate2 in any::<Activate>()) {
-            let (merged, _warnings) = ShallowMerger::merge_activate(&activate1, &activate2).unwrap();
-            let mode = activate2.mode.or(activate1.mode);
-            let expected = Activate { mode };
-            prop_assert_eq!(merged, expected);
-        }
-
         // Ensures that two arbitrary options sections are deep merged with the exception of
         // `options.systems` and `options.allow.licenses` which should be shallow merged.
         #[test]
@@ -450,7 +430,10 @@ mod tests {
             };
             let semver = SemverOptions { allow_pre_releases: options2.semver.allow_pre_releases.or(options1.semver.allow_pre_releases) };
             let cuda_detection = options2.cuda_detection.or(options1.cuda_detection);
-            let expected = Options { systems, allow, semver, cuda_detection, };
+            let activate = ActivateOptions {
+                mode: options2.activate.mode.or(options1.activate.mode),
+            };
+            let expected = Options { systems, allow, semver, cuda_detection, activate };
             prop_assert_eq!(merged, expected);
         }
 

@@ -102,7 +102,7 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 
 `-m (dev|run)`, `--mode (dev|run)`
 :  Activate the environment in either "dev" or "run" mode.
-   Overrides the `activate.mode` setting in the manifest.
+   Overrides the `options.activate.mode` setting in the manifest.
    See [`manifest.toml(5)`](./manifest.toml.md) for more details on activation
    modes.
 

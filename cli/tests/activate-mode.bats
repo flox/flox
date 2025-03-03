@@ -55,7 +55,7 @@ teardown() {
 
 function set_manifest_mode() {
   mode="${1?}"
-  tomlq --in-place -t ".activate.mode=\"$mode\"" .flox/env/manifest.toml
+  tomlq --in-place -t ".options.activate.mode=\"$mode\"" .flox/env/manifest.toml
 }
 
 function assert_dev_mode() {

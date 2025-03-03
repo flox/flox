@@ -85,7 +85,7 @@ pub struct Activate {
     pub use_fallback_interpreter: bool,
 
     /// Activate the environment in either "dev" or "run" mode.
-    /// Overrides the "activate.mode" setting in the manifest.
+    /// Overrides the "options.activate.mode" setting in the manifest.
     #[bpaf(short, long)]
     pub mode: Option<ActivateMode>,
 
@@ -204,7 +204,7 @@ impl Activate {
         let mode = self
             .mode
             .clone()
-            .unwrap_or(manifest.activate.mode.clone().unwrap_or_default());
+            .unwrap_or(manifest.options.activate.mode.clone().unwrap_or_default());
         let mode_link_path = rendered_env_path.clone().for_mode(&mode);
         let store_path = fs::read_link(&mode_link_path).with_context(|| {
             format!(
