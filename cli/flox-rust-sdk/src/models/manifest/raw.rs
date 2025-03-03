@@ -26,8 +26,6 @@ pub const MANIFEST_HOOK_KEY: &str = "hook";
 pub const MANIFEST_PROFILE_KEY: &str = "profile";
 /// Represents the `[services]` table key in manifest.toml
 pub const MANIFEST_SERVICES_KEY: &str = "services";
-/// Represents the `[activate]` table key in manifest.toml
-pub const MANIFEST_ACTIVATE_KEY: &str = "activate";
 /// Represents the `[options]` table key in manifest.toml
 pub const MANIFEST_OPTIONS_KEY: &str = "options";
 /// Represents the `systems = []` array key in manifest.toml
@@ -231,21 +229,6 @@ impl RawManifest {
 
         manifest.insert(MANIFEST_SERVICES_KEY, Item::Table(services_table));
 
-        // `[activate]` table, only when customized.
-        if let Some(activate_mode) = &customization.activate_mode {
-            let mut activate_table = Table::new();
-
-            activate_table.decor_mut().set_prefix(indoc! {r#"
-
-
-                ## Activation Options ------------------------------------------------
-            "#});
-
-            let mode_key = Key::new("mode");
-            activate_table.insert(&mode_key, toml_edit::value(activate_mode.to_string()));
-            manifest.insert(MANIFEST_ACTIVATE_KEY, Item::Table(activate_table));
-        }
-
         // `[options]` table
         let mut options_table = Table::new();
 
@@ -280,6 +263,16 @@ impl RawManifest {
             key.leaf_decor_mut().set_prefix(indoc! {r#"
             # Uncomment to disable CUDA detection.
             # "#});
+        }
+
+        // `options.activate.mode`, only when customized.
+        if let Some(activate_mode) = &customization.activate_mode {
+            let activate_key = Key::new("activate");
+            let mut activate_table = Table::new();
+
+            let mode_key = Key::new("mode");
+            activate_table.insert(&mode_key, toml_edit::value(activate_mode.to_string()));
+            options_table.insert(&activate_key, Item::Table(activate_table));
         }
 
         manifest.insert(MANIFEST_OPTIONS_KEY, Item::Table(options_table));
@@ -1429,11 +1422,6 @@ pub(super) mod test {
             # myservice.command = "python3 -m http.server"
 
 
-            ## Activation Options ------------------------------------------------
-            [activate]
-            mode = "run"
-
-
             ## Other Environment Options -----------------------------------------
             [options]
             # Systems that environment is compatible with
@@ -1442,6 +1430,9 @@ pub(super) mod test {
             ]
             # Uncomment to disable CUDA detection.
             # cuda-detection = false
+
+            [options.activate]
+            mode = "run"
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
