@@ -65,7 +65,7 @@ impl Containerize {
         let built_environment = env.build(&flox)?;
         let env_name = env.name();
         let manifest = env.lockfile(&flox)?.manifest;
-        let mode = manifest.activate.mode.unwrap_or_default();
+        let mode = manifest.options.activate.mode.unwrap_or_default();
 
         let source = if std::env::consts::OS == "linux" {
             let container_config = manifest
