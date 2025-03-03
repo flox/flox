@@ -141,15 +141,6 @@ impl Node {
         // satisfies all constraints,
         // but that seems unlikely to be as commonly needed.
         let versions = Self::get_package_json_versions(path)?;
-        if let Some(ref versions) = versions {
-            debug!(
-                node = versions.node.as_ref().unwrap_or(&"null".to_string()),
-                yarn = versions.yarn.as_ref().unwrap_or(&"null".to_string()),
-                "package.json versions"
-            );
-        } else {
-            debug!("package.json not found");
-        }
         let yarn_lock_path = path.join("yarn.lock");
         let yarn_lock_exists = yarn_lock_path.exists();
         let yarn_install = match versions {
@@ -252,7 +243,10 @@ impl Node {
         let package_json_contents = fs::read_to_string(package_json)?;
         match serde_json::from_str::<serde_json::Value>(&package_json_contents) {
             // Treat a package.json that can't be parsed as JSON the same as it not existing
-            Err(_) => Ok(None),
+            Err(_) => {
+                debug!("package.json not found or failed to parse");
+                Ok(None)
+            },
             Ok(package_json_json) => {
                 let node = package_json_json["engines"]["node"]
                     .as_str()
@@ -260,6 +254,11 @@ impl Node {
                 let yarn = package_json_json["engines"]["yarn"]
                     .as_str()
                     .map(|s| s.to_string());
+                debug!(
+                    node = node.as_ref().unwrap_or(&"null".to_string()),
+                    yarn = yarn.as_ref().unwrap_or(&"null".to_string()),
+                    "detected package.json versions"
+                );
                 Ok(Some(PackageJSONVersionsUnresolved { node, yarn }))
             },
         }
@@ -291,11 +290,17 @@ impl Node {
 
         // We assume that yarn is built with found_node, which is currently true
         // in nixpkgs
-        let found_yarn: Option<ProvidedPackage> =
-            try_find_compatible_package(flox, "yarn", yarn.as_deref()).await?;
+        let resolved_pkg_groups = try_find_compatible_major_version_package(
+            flox,
+            "yarn",
+            &["yarn-berry", "yarn"],
+            yarn.as_deref(),
+        )
+        .await?;
+        let found_yarn = resolved_pkg_groups.first();
 
         Ok(found_yarn.map(|found_yarn| YarnInstall {
-            yarn: found_yarn,
+            yarn: found_yarn.clone(),
             node: found_node,
         }))
     }
