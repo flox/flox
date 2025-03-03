@@ -1057,6 +1057,7 @@ pub(super) mod test {
 
         let manifest = RawManifest::new_documented(systems, &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
+        manifest.to_typed().expect("should parse as typed");
     }
 
     #[test]
@@ -1155,6 +1156,7 @@ pub(super) mod test {
 
         let manifest = RawManifest::new_documented(systems, &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
+        manifest.to_typed().expect("should parse as typed");
     }
 
     #[test]
@@ -1254,6 +1256,7 @@ pub(super) mod test {
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
+        manifest.to_typed().expect("should parse as typed");
     }
 
     #[test]
@@ -1343,6 +1346,7 @@ pub(super) mod test {
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
+        manifest.to_typed().expect("should parse as typed");
     }
 
     #[test]
@@ -1437,6 +1441,7 @@ pub(super) mod test {
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
+        manifest.to_typed().expect("should parse as typed");
     }
 
     #[test]
