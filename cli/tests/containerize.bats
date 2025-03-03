@@ -132,6 +132,8 @@ setup() {
 }
 
 setup_file() {
+  export _FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=main
+
   echo "FLOX_CI_RUNNER: '${FLOX_CI_RUNNER}'" >&3
   common_file_setup
   # The individual tests run faster this way because podman doesn't need to
@@ -416,7 +418,7 @@ EOF
 
   TAG="cmd-runs-in-activation"
 
-  bash -c "_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=main $FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
+  bash -c "$FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
 
   run podman run --rm "test:$TAG"
   assert_success
@@ -440,7 +442,7 @@ EOF
 
   TAG="whoami-in-container"
 
-  bash -c "_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=main $FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
+  bash -c "$FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
 
   run podman run --rm "test:$TAG" 'whoami'
   assert_success
