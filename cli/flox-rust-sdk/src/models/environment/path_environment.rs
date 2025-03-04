@@ -410,6 +410,7 @@ impl PathEnvironment {
         let manifest = {
             tracing::debug!("creating raw catalog manifest");
             RawManifest::new_documented(
+                flox.features,
                 &DEFAULT_SYSTEMS_STR.iter().collect::<Vec<_>>(),
                 customization,
             )

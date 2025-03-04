@@ -12,6 +12,7 @@ use tracing::{debug, trace};
 
 use super::typed::Manifest;
 use crate::data::System;
+use crate::flox::Features;
 use crate::models::environment::path_environment::InitCustomization;
 
 /// Represents the `[version]` number key in manifest.toml
@@ -30,6 +31,8 @@ pub const MANIFEST_SERVICES_KEY: &str = "services";
 pub const MANIFEST_OPTIONS_KEY: &str = "options";
 /// Represents the `systems = []` array key in manifest.toml
 pub const MANIFEST_SYSTEMS_KEY: &str = "systems";
+/// Represents the `[include]` table key in manifest.toml
+pub const MANIFEST_INCLUDE_KEY: &str = "include";
 
 /// A wrapper around a [`toml_edit::DocumentMut`]
 /// that allows modifications of the raw manifest document,
@@ -42,9 +45,64 @@ impl RawManifest {
     ///
     /// Additionally, this method prefixes each table with documentation on its usage, and
     /// and inserts commented configuration examples for tables left empty.
-    pub fn new_documented(systems: &[&System], customization: &InitCustomization) -> RawManifest {
+    pub fn new_documented(
+        features: Features,
+        systems: &[&System],
+        customization: &InitCustomization,
+    ) -> RawManifest {
         let mut manifest = DocumentMut::new();
 
+        Self::add_header(&mut manifest);
+        Self::add_version(&mut manifest);
+        Self::add_install_section(&mut manifest, customization);
+        Self::add_vars_section(&mut manifest);
+        Self::add_hook_section(&mut manifest, customization);
+        Self::add_profile_section(&mut manifest, customization);
+        Self::add_services_section(&mut manifest);
+
+        if features.compose {
+            Self::add_include_section(&mut manifest);
+        }
+
+        Self::add_options_section(&mut manifest, systems);
+
+        RawManifest(manifest)
+    }
+
+    /// Get the version of the manifest.
+    fn get_version(&self) -> Option<i64> {
+        self.0.get("version").and_then(Item::as_integer)
+    }
+
+    /// Serde's error messages for _untagged_ enums are rather bad
+    /// and don't appear to become better any time soon:
+    /// - <https://github.com/serde-rs/serde/pull/1544>
+    /// - <https://github.com/serde-rs/serde/pull/2376>
+    ///
+    /// This function aims to provide the intermediate version matching on
+    /// the `version` field, and then deserializes the correct version
+    /// of the Manifest explicitly.
+    ///
+    /// <https://github.com/serde-rs/serde/pull/2525> will allow the use of integers
+    /// (i.e. versions) as enum tags, which will allow us to use `#[serde(tag = "version")]`
+    /// and avoid the [Version] field entirely, where the version field is not optional.
+    ///
+    /// Discussion: using a string field as the version tag `version: "1"` vs `version: 1`
+    /// could work today, but is still limited by the lack of an optional tag.
+    pub fn to_typed(&self) -> Result<Manifest, toml_edit::de::Error> {
+        match self.get_version() {
+            Some(1) => Ok(toml_edit::de::from_document(self.0.clone())?),
+            Some(v) => {
+                let msg = format!("unsupported manifest version: {v}");
+                Err(toml_edit::de::Error::custom(msg))
+            },
+            None => Err(toml_edit::de::Error::custom("unsupported manifest version")),
+        }
+    }
+
+    /// Populates a header at the top of the manifest with a link to
+    /// the documentation.
+    fn add_header(manifest: &mut DocumentMut) {
         manifest.decor_mut().set_prefix(indoc! {r#"
             ## Flox Environment Manifest -----------------------------------------
             ##
@@ -55,11 +113,17 @@ impl RawManifest {
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
         "#});
+    }
 
+    /// Populates the manifest schema version.
+    fn add_version(manifest: &mut DocumentMut) {
         // `version` number
         manifest.insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
+    }
 
-        // `[install]` table
+    /// Populates an example install section with any packages necessary for
+    /// init customizations.
+    fn add_install_section(manifest: &mut DocumentMut, customization: &InitCustomization) {
         let packages_vec = vec![];
         let packages = customization.packages.as_ref().unwrap_or(&packages_vec);
 
@@ -89,8 +153,10 @@ impl RawManifest {
         "#});
 
         manifest.insert(MANIFEST_INSTALL_KEY, Item::Table(install_table));
+    }
 
-        // `[vars]` table
+    /// Populates an example vars section.
+    fn add_vars_section(manifest: &mut DocumentMut) {
         let mut vars_table = Table::new();
 
         vars_table.decor_mut().set_prefix(indoc! {r#"
@@ -108,8 +174,11 @@ impl RawManifest {
             # INTRO_MESSAGE = "It's gettin' Flox in here""#});
 
         manifest.insert(MANIFEST_VARS_KEY, Item::Table(vars_table));
+    }
 
-        // `[hook]` table
+    /// Populates an example hook section with any automatic setup added by
+    /// init customizations.
+    fn add_hook_section(manifest: &mut DocumentMut, customization: &InitCustomization) {
         let mut hook_table = Table::new();
 
         hook_table.decor_mut().set_prefix(indoc! {r#"
@@ -139,8 +208,11 @@ impl RawManifest {
         };
 
         manifest.insert(MANIFEST_HOOK_KEY, Item::Table(hook_table));
+    }
 
-        // `[profile]` table
+    /// Populates an example profile section with any automatic setup added by
+    /// init customizations.
+    fn add_profile_section(manifest: &mut DocumentMut, customization: &InitCustomization) {
         let mut profile_table = Table::new();
 
         profile_table.decor_mut().set_prefix(indoc! {r#"
@@ -209,8 +281,10 @@ impl RawManifest {
         };
 
         manifest.insert(MANIFEST_PROFILE_KEY, Item::Table(profile_table));
+    }
 
-        // `[services]` table
+    /// Populates an example services section.
+    fn add_services_section(manifest: &mut DocumentMut) {
         let mut services_table = Table::new();
 
         services_table.decor_mut().set_prefix(indoc! {r#"
@@ -228,8 +302,31 @@ impl RawManifest {
                 # myservice.command = "python3 -m http.server""#});
 
         manifest.insert(MANIFEST_SERVICES_KEY, Item::Table(services_table));
+    }
 
-        // `[options]` table
+    /// Populates an example include section.
+    fn add_include_section(manifest: &mut DocumentMut) {
+        let mut include_table = Table::new();
+
+        include_table.decor_mut().set_prefix(indoc! {r#"
+
+                
+                 ## Include ----------------------------------------------------------
+                 ## ... include other environments to merge with this one
+                 ## ------------------------------------------------------------------
+            "#});
+
+        include_table.decor_mut().set_suffix(indoc! {r#"
+
+                # environments = [
+                #     { dir = "../common" }
+                # ]"#});
+
+        manifest.insert(MANIFEST_INCLUDE_KEY, Item::Table(include_table));
+    }
+
+    /// Populates an example options section.
+    fn add_options_section(manifest: &mut DocumentMut, systems: &[&System]) {
         let mut options_table = Table::new();
 
         options_table.decor_mut().set_prefix(indoc! {r#"
@@ -276,39 +373,6 @@ impl RawManifest {
         }
 
         manifest.insert(MANIFEST_OPTIONS_KEY, Item::Table(options_table));
-
-        RawManifest(manifest)
-    }
-
-    /// Get the version of the manifest.
-    fn get_version(&self) -> Option<i64> {
-        self.0.get("version").and_then(Item::as_integer)
-    }
-
-    /// Serde's error messages for _untagged_ enums are rather bad
-    /// and don't appear to become better any time soon:
-    /// - <https://github.com/serde-rs/serde/pull/1544>
-    /// - <https://github.com/serde-rs/serde/pull/2376>
-    ///
-    /// This function aims to provide the intermediate version matching on
-    /// the `version` field, and then deserializes the correct version
-    /// of the Manifest explicitly.
-    ///
-    /// <https://github.com/serde-rs/serde/pull/2525> will allow the use of integers
-    /// (i.e. versions) as enum tags, which will allow us to use `#[serde(tag = "version")]`
-    /// and avoid the [Version] field entirely, where the version field is not optional.
-    ///
-    /// Discussion: using a string field as the version tag `version: "1"` vs `version: 1`
-    /// could work today, but is still limited by the lack of an optional tag.
-    pub fn to_typed(&self) -> Result<Manifest, toml_edit::de::Error> {
-        match self.get_version() {
-            Some(1) => Ok(toml_edit::de::from_document(self.0.clone())?),
-            Some(v) => {
-                let msg = format!("unsupported manifest version: {v}");
-                Err(toml_edit::de::Error::custom(msg))
-            },
-            None => Err(toml_edit::de::Error::custom("unsupported manifest version")),
-        }
     }
 }
 
@@ -1055,7 +1119,7 @@ pub(super) mod test {
             # cuda-detection = false
         "#};
 
-        let manifest = RawManifest::new_documented(systems, &customization);
+        let manifest = RawManifest::new_documented(Features::default(), systems, &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
         manifest.to_typed().expect("should parse as typed");
     }
@@ -1154,7 +1218,7 @@ pub(super) mod test {
             # cuda-detection = false
         "#};
 
-        let manifest = RawManifest::new_documented(systems, &customization);
+        let manifest = RawManifest::new_documented(Features::default(), systems, &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
         manifest.to_typed().expect("should parse as typed");
     }
@@ -1254,7 +1318,8 @@ pub(super) mod test {
             # cuda-detection = false
         "#};
 
-        let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
+        let manifest =
+            RawManifest::new_documented(Features::default(), systems.as_slice(), &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
         manifest.to_typed().expect("should parse as typed");
     }
@@ -1344,7 +1409,8 @@ pub(super) mod test {
             # cuda-detection = false
         "#};
 
-        let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
+        let manifest =
+            RawManifest::new_documented(Features::default(), systems.as_slice(), &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
         manifest.to_typed().expect("should parse as typed");
     }
