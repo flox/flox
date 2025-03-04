@@ -140,11 +140,6 @@ writeShellScriptBin PROJECT_NAME ''
   FLOX_LATEST_VERSION=${builtins.readFile ../../VERSION}
   export FLOX_LATEST_VERSION
 
-  # if FLOX_VERSION is not set, use the latest released version
-  # otherwise use the provided version
-  # when running tests with just, just will set FLOX_VERSION.
-  export FLOX_VERSION="''${FLOX_VERSION:-$FLOX_LATEST_VERSION}"
-
   # TODO: we shouldn't do this but rather use absolute paths
   # Look if we can use https://github.com/abathur/resholve
   export PATH="$PROJECT_PATH:${lib.makeBinPath paths}"
