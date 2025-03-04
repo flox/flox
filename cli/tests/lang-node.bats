@@ -106,6 +106,20 @@ teardown() {
   assert_regex "$output" "nodejs: nodejs_23.*"
 }
 
+# bats test_tags=catalog,init
+@test "auto init matches yarn version to yarn-berry" {
+  cp -r "$INPUT_DATA/init/node/yarn_berry/." .
+  chmod -R +w .
+  # This test ensures that when a package.json has a version requirment,
+  # in this case ">=20", we give them the nodejs_* package corresponding
+  # to the latest version.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/yarn_berry.json" \
+    run "$FLOX_BIN" init --auto-setup
+  assert_output --partial "'yarn' installed"
+  run "$FLOX_BIN" list
+  assert_regex "$output" "yarn: yarn-berry.*"
+}
+
 # bats test_tags=catalog
 @test "install krb5 with node" {
   "$FLOX_BIN" init

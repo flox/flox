@@ -343,6 +343,13 @@ pre_cmd = '''
 '''
 cmd = "flox init --auto-setup"
 
+[init.yarn_berry]
+files = ["init/node/common", "init/node/yarn"]
+pre_cmd = '''
+    cp -r {common,yarn}/* .
+'''
+cmd = "flox init --auto-setup"
+
 [init.python_poetry]
 files = ["init/python/common", "init/python/poetry"]
 pre_cmd = '''
