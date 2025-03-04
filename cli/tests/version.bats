@@ -44,6 +44,22 @@ teardown() {
   common_test_teardown
 }
 
+function is_local_dev() {
+  [[ "${_FLOX_LOCAL_DEV}" == "1" ]]
+}
+
+function skip_if_local_dev() {
+  if is_local_dev; then
+    skip "Skipping test in local development mode"
+  fi
+}
+
+function skip_if_not_local_dev() {
+  if ! is_local_dev; then
+    skip "Skipping test not in local development mode"
+  fi
+}
+
 # We can't easily or safely predict the buildtime version so assert that the two
 # different formats never appear at the same time. When running in CI remote
 # builders it will fallback to "0.0.0-dirty".
@@ -60,32 +76,23 @@ function assert_buildtime_version() {
   refute_output --partial "$MOCK_RUNTIME_VERSION"
 }
 
-@test "version: accepts runtime version from wrapper derivation" {
+@test "version: binary accepts runtime version from wrapper derivation" {
+  skip_if_not_local_dev
   FLOX_VERSION="$MOCK_RUNTIME_VERSION" run "$FLOX_BIN" --version
   assert_success
   assert_runtime_version
 }
 
-@test "version: doesn't propagate runtime version into activations" {
-  run bash <(
-    cat << EOF
-export FLOX_VERSION="$MOCK_RUNTIME_VERSION"
-$FLOX_BIN activate -- $FLOX_BIN --version
-EOF
-  )
+@test "version: wrapper derivation ignores runtime FLOX_VERSION" {
+  skip_if_local_dev
+  FLOX_VERSION="$MOCK_RUNTIME_VERSION" run "$FLOX_BIN" --version
   assert_success
   assert_buildtime_version
 }
 
-@test "version: uses buildtime version in absence of wrapper derivation" {
+@test "version: doesn't leak FLOX_VERSION into activation" {
   project_setup
-
-  run bash <(
-    cat << EOF
-unset FLOX_VERSION
-$FLOX_BIN --version
-EOF
-  )
-  assert_success
-  assert_buildtime_version
+  FLOX_VERSION="$MOCK_RUNTIME_VERSION" run "$FLOX_BIN" activate -- printenv FLOX_VERSION
+  assert_failure
+  assert_output ""
 }

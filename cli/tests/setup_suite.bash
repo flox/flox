@@ -92,6 +92,7 @@ reals_setup() {
   xdg_reals_setup
   git_reals_setup
   {
+    print_var _FLOX_LOCAL_DEV
     print_var FLOX_BIN
     print_var BUILDENV_BIN
     print_var WATCHDOG_BIN
