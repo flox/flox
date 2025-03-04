@@ -139,17 +139,14 @@ version:
 @test-nix-plugins: build-nix-plugins
     meson test -C nix-plugins/builddir
 
-# Run the CLI integration test suite
+# Run the CLI integration test suite using locally built binaries
+# This is equivalent to the "local" jobs in CI.
 @integ-tests +bats_args="": build
     flox-cli-tests \
-        --nix-plugins "$NIX_PLUGINS" \
-        --flox "$FLOX_BIN" \
-        --watchdog "$WATCHDOG_BIN" \
-        --input-data "{{INPUT_DATA}}" \
-        --generated-data "$GENERATED_DATA" \
         {{bats_args}}
 
 # Run the CLI integration test suite using Nix-built binaries
+# This is equivalent to the "remote" jobs in CI.
 @nix-integ-tests +bats_args="":
     nix run \
         --accept-flake-config \
