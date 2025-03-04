@@ -296,16 +296,7 @@ writeShellScriptBin PROJECT_NAME ''
 
   {
     echo "''${0##*/}: Running test suite with:";
-    echo "  FLOX_BIN:                 $FLOX_BIN";
-    echo "  WATCHDOG_BIN:             $WATCHDOG_BIN";
-    echo "  BUILDENV_BIN:             $BUILDENV_BIN";
-    echo "  FLOX_ACTIVATIONS_BIN:     $FLOX_ACTIVATIONS_BIN";
-    echo "  NIX_PLUGINS:                $NIX_PLUGINS";
-    echo "  NIX_BIN:                  $NIX_BIN";
-    echo "  FLOX_INTERPRETER:         $FLOX_INTERPRETER";
     echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
-    echo "  INPUT_DATA:               $INPUT_DATA";
-    echo "  GENERATED_DATA:           $GENERATED_DATA";
     echo "  bats                      ${batsWith}/bin/bats";
     echo "  bats options              ''${_BATS_ARGS[*]}";
     echo "  bats tests                ''${_FLOX_TESTS[*]}";
