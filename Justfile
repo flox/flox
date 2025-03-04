@@ -150,11 +150,12 @@ version:
         {{bats_args}}
 
 # Run the CLI integration test suite using Nix-built binaries
-@nix-integ-tests:
+@nix-integ-tests +bats_args="":
     nix run \
         --accept-flake-config \
         --extra-experimental-features 'nix-command flakes' \
-        .#flox-cli-tests
+        .#flox-cli-tests \
+        {{bats_args}}
 
 # Run the CLI unit tests
 @unit-tests regex="": build
