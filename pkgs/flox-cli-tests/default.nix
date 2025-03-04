@@ -187,6 +187,7 @@ writeShellScriptBin PROJECT_NAME ''
     shift;
   done
 
+  export _FLOX_LOCAL_DEV="${builtins.toString localDev}"
   ${lib.optionalString (!localDev) ''
     # Override any local mutable paths set by the devShell.
     export GENERATED_DATA='${./../../test_data/generated}'
