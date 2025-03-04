@@ -93,6 +93,11 @@ reals_setup() {
   git_reals_setup
   {
     print_var FLOX_BIN
+    print_var BUILDENV_BIN
+    print_var WATCHDOG_BIN
+    print_var FLOX_ACTIVATIONS_BIN
+    print_var FLOX_INTERPRETER
+    print_var NIX_PLUGINS
     print_var NIX_BIN
     print_var NIX_STORE
     print_var REAL_GIT_CONFIG_GLOBAL
@@ -103,7 +108,9 @@ reals_setup() {
     print_var REAL_XDG_DATA_HOME
     print_var REAL_XDG_STATE_HOME
     print_var TESTS_DIR
+    print_var INPUT_DATA
     print_var GENERATED_DATA
+    print_var MANUALLY_GENERATED
   } >&3
 }
 
