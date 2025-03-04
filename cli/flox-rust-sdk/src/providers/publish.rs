@@ -566,6 +566,7 @@ pub mod tests {
             flox,
             GENERATED_DATA.join(EXAMPLE_MANIFEST),
             repo_subdir,
+            None,
         );
 
         let git = GitCommandProvider::init(repo_root, false).unwrap();

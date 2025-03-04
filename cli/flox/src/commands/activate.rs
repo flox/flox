@@ -813,7 +813,10 @@ mod tests {
 #[cfg(test)]
 mod upgrade_notification_tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_named_path_environment_from_env_files,
+        new_path_environment_from_env_files,
+    };
     use flox_rust_sdk::models::environment::UpgradeResult;
     use flox_rust_sdk::models::lockfile::LockedPackage;
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
@@ -920,8 +923,11 @@ mod upgrade_notification_tests {
         let (flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber();
 
-        let environment =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let environment = new_named_path_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            "name",
+        );
         let mut environment = ConcreteEnvironment::Path(environment);
 
         write_upgrade_available(&flox, &mut environment);

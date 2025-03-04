@@ -565,7 +565,25 @@ pub mod test_helpers {
         contents: &str,
         path: impl AsRef<Path>,
     ) -> PathEnvironment {
-        let pointer = PathPointer::new("name".parse().unwrap());
+        let pointer = PathPointer::new(
+            path.as_ref()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .parse()
+                .unwrap(),
+        );
+        PathEnvironment::write_new_unchecked(flox, pointer, path, contents).unwrap()
+    }
+
+    pub fn new_named_path_environment_in(
+        flox: &Flox,
+        contents: &str,
+        path: impl AsRef<Path>,
+        name: &str,
+    ) -> PathEnvironment {
+        let pointer = PathPointer::new(name.parse().unwrap());
         PathEnvironment::write_new_unchecked(flox, pointer, path, contents).unwrap()
     }
 
@@ -577,23 +595,58 @@ pub mod test_helpers {
         )
     }
 
+    pub fn new_named_path_environment(flox: &Flox, contents: &str, name: &str) -> PathEnvironment {
+        new_named_path_environment_in(
+            flox,
+            contents,
+            tempdir_in(&flox.temp_dir).unwrap().into_path(),
+            name,
+        )
+    }
+
     pub fn new_path_environment_from_env_files(
         flox: &Flox,
         env_files_dir: impl AsRef<Path>,
     ) -> PathEnvironment {
         let dot_flox_parent_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
-        new_path_environment_from_env_files_in(flox, env_files_dir, dot_flox_parent_path)
+        new_path_environment_from_env_files_in(flox, env_files_dir, dot_flox_parent_path, None)
+    }
+
+    pub fn new_named_path_environment_from_env_files(
+        flox: &Flox,
+        env_files_dir: impl AsRef<Path>,
+        name: &str,
+    ) -> PathEnvironment {
+        let dot_flox_parent_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+        new_path_environment_from_env_files_in(
+            flox,
+            env_files_dir,
+            dot_flox_parent_path,
+            Some(name),
+        )
     }
 
     pub fn new_path_environment_from_env_files_in(
         flox: &Flox,
         env_files_dir: impl AsRef<Path>,
         dot_flox_parent_path: impl AsRef<Path>,
+        name: Option<&str>,
     ) -> PathEnvironment {
         let env_files_dir = env_files_dir.as_ref();
         let manifest_contents = fs::read_to_string(env_files_dir.join(MANIFEST_FILENAME)).unwrap();
         let lockfile_contents = fs::read_to_string(env_files_dir.join(LOCKFILE_FILENAME)).unwrap();
-        let pointer = PathPointer::new("name".parse().unwrap());
+        let pointer = PathPointer::new(
+            name.unwrap_or_else(|| {
+                dot_flox_parent_path
+                    .as_ref()
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+            })
+            .parse()
+            .unwrap(),
+        );
         PathEnvironment::write_new_unchecked(
             flox,
             pointer.clone(),
