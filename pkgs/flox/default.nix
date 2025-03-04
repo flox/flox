@@ -22,10 +22,10 @@ let
   version =
     if (FLOX_VERSION != null) then
       FLOX_VERSION
-    else if !(self ? revCount || self ? shortRev) then
-      "${fileVersion}-dirty"
-    else if !(self ? revCount) then
+    else if (self ? shortRev) then
       "${fileVersion}-g${self.shortRev}"
+    else if (self ? dirtyShortRev) then
+      "${fileVersion}-g${self.dirtyShortRev}"
     else
       fileVersion;
 in
