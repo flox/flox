@@ -1312,6 +1312,14 @@ impl Lockfile {
             .collect();
         self
     }
+
+    /// The manifest the user edits (i.e. not merged)
+    pub fn user_manifest(&self) -> &Manifest {
+        match &self.compose {
+            Some(compose) => &compose.composer,
+            None => &self.manifest,
+        }
+    }
 }
 
 /// Distinct types of packages that can be listed
