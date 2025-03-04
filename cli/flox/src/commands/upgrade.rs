@@ -161,8 +161,8 @@ fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
 mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
-        new_path_environment,
-        new_path_environment_from_env_files,
+        new_named_path_environment,
+        new_named_path_environment_from_env_files,
     };
     use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::manifest::raw::PackageToInstall;
@@ -192,8 +192,11 @@ mod tests {
         let (mut flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber();
 
-        let environment =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let environment = new_named_path_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            "name",
+        );
 
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         Upgrade {
@@ -216,7 +219,7 @@ mod tests {
         let (mut flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber();
 
-        let mut environment = new_path_environment(&flox, "version = 1");
+        let mut environment = new_named_path_environment(&flox, "version = 1", "name");
 
         #[cfg(target_os = "macos")]
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/old_linux_hello.json");
