@@ -125,7 +125,7 @@ impl<State> CoreEnvironment<State> {
 
         // Check if the manifest embedded in the lockfile and the manifest
         // itself have the same contents
-        let already_locked = manifest == lockfile.manifest;
+        let already_locked = &manifest == lockfile.user_manifest();
 
         if already_locked {
             Ok(Some(lockfile))
