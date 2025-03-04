@@ -146,12 +146,7 @@
 
           flox-cli-tests = prev.flox-cli-tests.override {
             PROJECT_TESTS_DIR = "/cli/tests";
-            NIX_PLUGINS = null;
-            FLOX_BIN = null;
-            WATCHDOG_BIN = null;
-            FLOX_ACTIVATIONS_BIN = null;
-            BUILDENV_BIN = null;
-            flox-interpreter = null;
+            localDev = true;
           };
         });
       };

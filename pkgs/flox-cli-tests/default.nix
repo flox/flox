@@ -42,17 +42,9 @@
   which,
   writeShellScriptBin,
   process-compose,
-  GENERATED_DATA ? ./../../test_data/generated,
-  MANUALLY_GENERATED ? ./../../test_data/manually_generated,
-  INPUT_DATA ? ./../../test_data/input_data,
   PROJECT_NAME ? "flox-cli-tests",
   PROJECT_TESTS_DIR ? ./../../cli/tests,
-  NIX_BIN ? "${nix}/bin/nix",
-  BUILDENV_BIN ? "${flox-buildenv}/bin/buildenv",
-  NIX_PLUGINS ? "${flox-nix-plugins}/lib/nix-plugins",
-  FLOX_BIN ? "${flox-cli}/bin/flox",
-  WATCHDOG_BIN ? "${flox-watchdog}/libexec/flox-watchdog",
-  FLOX_ACTIVATIONS_BIN ? "${flox-activations}/bin/flox-activations",
+  localDev ? false,
 }:
 let
   batsWith = bats.withLibraries (p: [
@@ -123,11 +115,6 @@ writeShellScriptBin PROJECT_NAME ''
   set -eu;
   set -o pipefail;
 
-  # Set the test data location
-  export GENERATED_DATA='${GENERATED_DATA}'
-  export MANUALLY_GENERATED='${MANUALLY_GENERATED}'
-  export INPUT_DATA='${INPUT_DATA}'
-
   # Find root of the subproject if not specified
   PROJECT_TESTS_DIR='${PROJECT_TESTS_DIR}';
   # Find top level of the project
@@ -167,65 +154,13 @@ writeShellScriptBin PROJECT_NAME ''
   cp -RL "$PROJECT_TESTS_DIR/"* "$WORKDIR";
   cd "$WORKDIR"||exit;
 
-  # Declare project specific dependencies
-  ${if NIX_BIN == null then "export NIX_BIN='nix';" else "export NIX_BIN='${NIX_BIN}';"}
-  ${
-    if BUILDENV_BIN == null then
-      ''export BUILDENV_BIN="$PROJECT_ROOT_DIR/build/flox-buildenv/bin/buildenv";''
-    else
-      "export BUILDENV_BIN='${BUILDENV_BIN}';"
-  }
-  ${
-    if NIX_PLUGINS == null then
-      ''export NIX_PLUGINS="$PROJECT_ROOT_DIR/build/nix-plugins/lib/nix-plugins";''
-    else
-      "export NIX_PLUGINS='${NIX_PLUGINS}';"
-  }
-  ${
-    if WATCHDOG_BIN == null then
-      # We pass this to daemonize which requires an absolute path
-      "export WATCHDOG_BIN=\"$(command -v flox-watchdog)\";"
-    else
-      "export WATCHDOG_BIN='${WATCHDOG_BIN}';"
-  }
-  ${
-    if FLOX_ACTIVATIONS_BIN == null then
-      ''export FLOX_ACTIVATIONS_BIN="$(command -v flox-activations)";''
-    else
-      "export FLOX_ACTIVATIONS_BIN='${FLOX_ACTIVATIONS_BIN}';"
-  }
-  # TODO: we should probably make this an absolute path to avoid having to call
-  # which "$FLOX_BIN" in user_dotfiles_setup
-  ${if FLOX_BIN == null then "export FLOX_BIN='flox';" else "export FLOX_BIN='${FLOX_BIN}';"}
-  export PROCESS_COMPOSE_BIN='${process-compose}/bin/process-compose';
-  ${
-    if flox-interpreter == null then
-      ''export FLOX_INTERPRETER="$PROJECT_ROOT_DIR/build/flox-interpreter";''
-    else
-      ''export FLOX_INTERPRETER='${flox-interpreter}';''
-  }
-
   usage() {
         cat << EOF
-  Usage: $0 [--flox <FLOX BINARY>| -F <FLOX BINARY>] \
-            [--watchdog <WATCHDOG BINARY | -K <WATCHDOG BINARY>] \
-            [--flox-activations <FLOX ACTIVATIONS BINARY>] \
-            [--nix-plugins <PLUGINS DIR>| -P <PLUGINS DIR>] \
-            [--nix <NIX BINARY>| -N <NIX BINARY>] \
-            [--input-data <INPUT DATA> | -I <INPUT DATA>] \
-            [--generated-data <GENERATED DATA> | -G <GENERATED DATA>] \
-            [--tests <TESTS_DIR>| -T <TESTS_DIR>] \
+  Usage: $0 [--tests <TESTS_DIR>| -T <TESTS_DIR>] \
             [--watch | -W] \
             [--help | -h] -- [BATS ARGUMENTS]
 
   Available options:
-      -F, --flox           Path to flox binary (Default: $FLOX_BIN)
-      -K, --watchdog       Path to the watchdog binary (Default: $WATCHDOG_BIN)
-      -B, --buildenv       Path to buildenv binary (Default: $BUILDENV_BIN)
-      -P, --nix-plugins    Path to dir with flox nix-plugins (Default: $NIX_PLUGINS)
-      -N, --nix            Path to nix binary (Default: $NIX_BIN)
-      -I, --input-data     Path to the input data directory (Default: $INPUT_DATA)
-      -G, --generated-data Path to the generated data directory (Default: $GENERATED_DATA)
       -T, --tests          Path to folder of tests (Default: $PROJECT_TESTS_DIR)
       -c, --ci-runner      Which runner this job is on, if any
       -W, --watch          Run tests in a continuous watch mode
@@ -239,14 +174,6 @@ writeShellScriptBin PROJECT_NAME ''
   _FLOX_TESTS=();
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
-      -[fF]|--flox)           export FLOX_BIN="''${2?}"; shift; ;;
-      -[kK]|--watchdog)       export WATCHDOG_BIN="''${2?}"; shift; ;;
-      -[bB]|--buildenv)       export BUILDENV_BIN="''${2?}"; shift; ;;
-      --flox-activations)     export FLOX_ACTIVATIONS_BIN="''${2?}"; shift; ;;
-      -[pP]|--nix-plugins)    export NIX_PLUGINS="''${2?}"; shift; ;;
-      -[nN]|--nix)            export NIX_BIN="''${2?}"; shift; ;;
-      -[iI]|--input-data)     export INPUT_DATA="''${2?}"; shift; ;;
-      -[gG]|--generated-data) export GENERATED_DATA="''${2?}"; shift; ;;
       -[tT]|--tests)          export TESTS_DIR="''${2?}"; shift; ;;
       -[cC]|--ci-runner)      export FLOX_CI_RUNNER="''${2?}"; shift; ;;
       -[wW]|--watch)          WATCH=:; ;;
@@ -265,9 +192,21 @@ writeShellScriptBin PROJECT_NAME ''
     shift;
   done
 
-  # Set the test data location
-  export GENERATED_DATA=''${GENERATED_DATA:-'${GENERATED_DATA}'}
-  export INPUT_DATA=''${INPUT_DATA:-'${INPUT_DATA}'}
+  ${lib.optionalString (!localDev) ''
+    # Override any local mutable paths set by the devShell.
+    export GENERATED_DATA='${./../../test_data/generated}'
+    export MANUALLY_GENERATED='${./../../test_data/manually_generated}'
+    export INPUT_DATA='${./../../test_data/input_data}'
+
+    export FLOX_BIN="${flox-cli}/bin/flox"
+    export NIX_BIN="${nix}/bin/nix"
+    export BUILDENV_BIN="${flox-buildenv}/bin/buildenv"
+    export NIX_PLUGINS="${flox-nix-plugins}/lib/nix-plugins"
+    export WATCHDOG_BIN="${flox-watchdog}/libexec/flox-watchdog"
+    export FLOX_ACTIVATIONS_BIN="${flox-activations}/bin/flox-activations"
+    export PROCESS_COMPOSE_BIN='${process-compose}/bin/process-compose'
+    export FLOX_INTERPRETER='${flox-interpreter}'
+  ''}
 
   # Default flag values
   : "''${TESTS_DIR:=$WORKDIR}";
