@@ -8,6 +8,7 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
+use super::fetcher::IncludeFetcher;
 use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
@@ -61,6 +62,7 @@ pub struct ManagedEnvironment {
     rendered_env_links: RenderedEnvironmentLinks,
     pointer: ManagedPointer,
     floxmeta: FloxMeta,
+    include_fetcher: IncludeFetcher,
 }
 
 #[derive(Debug, Error)]
@@ -561,7 +563,7 @@ impl ManagedEnvironment {
         flox: &Flox,
         pointer: ManagedPointer,
         dot_flox_path: impl AsRef<Path>,
-    ) -> Result<Self, ManagedEnvironmentError> {
+    ) -> Result<Self, EnvironmentError> {
         let floxmeta = match FloxMeta::open(flox, &pointer) {
             Ok(floxmeta) => floxmeta,
             Err(FloxMetaError::NotFound(_)) => {
@@ -570,15 +572,19 @@ impl ManagedEnvironment {
             },
             Err(FloxMetaError::CloneBranch(GitRemoteCommandError::AccessDenied))
             | Err(FloxMetaError::FetchBranch(GitRemoteCommandError::AccessDenied)) => {
-                return Err(ManagedEnvironmentError::AccessDenied)
+                return Err(EnvironmentError::ManagedEnvironment(
+                    ManagedEnvironmentError::AccessDenied,
+                ))
             },
             Err(FloxMetaError::CloneBranch(GitRemoteCommandError::RefNotFound(_)))
             | Err(FloxMetaError::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
-                return Err(ManagedEnvironmentError::UpstreamNotFound {
-                    env_ref: pointer.into(),
-                    upstream: flox.floxhub.base_url().to_string(),
-                    user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
-                })
+                return Err(EnvironmentError::ManagedEnvironment(
+                    ManagedEnvironmentError::UpstreamNotFound {
+                        env_ref: pointer.into(),
+                        upstream: flox.floxhub.base_url().to_string(),
+                        user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
+                    },
+                ))
             },
             Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
         };
@@ -602,7 +608,21 @@ impl ManagedEnvironment {
             )
         };
 
-        Self::open_with(floxmeta, flox, pointer, dot_flox_path, rendered_env_links)
+        let parent_directory = dot_flox_path
+            .parent()
+            .ok_or(EnvironmentError::InvalidPath(dot_flox_path.to_path_buf()))?;
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(parent_directory.to_path_buf()),
+        };
+        Self::open_with(
+            floxmeta,
+            flox,
+            pointer,
+            dot_flox_path,
+            rendered_env_links,
+            include_fetcher,
+        )
+        .map_err(EnvironmentError::ManagedEnvironment)
     }
 
     /// Open a managed environment backed by a provided floxmeta clone.
@@ -617,6 +637,7 @@ impl ManagedEnvironment {
         pointer: ManagedPointer,
         dot_flox_path: CanonicalPath,
         rendered_env_links: RenderedEnvironmentLinks,
+        include_fetcher: IncludeFetcher,
     ) -> Result<Self, ManagedEnvironmentError> {
         let lock = Self::ensure_generation_locked(&pointer, &dot_flox_path, &floxmeta)?;
 
@@ -633,6 +654,7 @@ impl ManagedEnvironment {
             rendered_env_links,
             pointer,
             floxmeta,
+            include_fetcher,
         };
 
         Ok(env)
@@ -949,7 +971,7 @@ impl ManagedEnvironment {
         )
         .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
 
-        let local_checkout = CoreEnvironment::new(env_dir);
+        let local_checkout = CoreEnvironment::new(env_dir, self.include_fetcher.clone());
 
         Ok(local_checkout)
     }
@@ -976,7 +998,8 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
         }
 
-        let local = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let local =
+            CoreEnvironment::new(self.path.join(ENV_DIR_NAME), self.include_fetcher.clone());
         Ok(local)
     }
 
@@ -1068,7 +1091,7 @@ impl ManagedEnvironment {
         self.generations()
             .writable(tempdir)
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
-            .get_current_generation()
+            .get_current_generation(self.include_fetcher.clone())
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)
     }
 }
@@ -1213,7 +1236,7 @@ impl ManagedEnvironment {
         let dot_flox_path = path_environment.path.clone();
         let name = path_environment.name();
 
-        let mut core_environment = path_environment.into_core_environment();
+        let mut core_environment = path_environment.into_core_environment()?;
 
         // Ensure the environment is locked
         // PathEnvironment may not have a lockfile or an outdated lockfile
@@ -1228,7 +1251,6 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::Build)?;
 
         Self::push_new_without_building(flox, owner, name, force, dot_flox_path, core_environment)
-            .map_err(EnvironmentError::ManagedEnvironment)
     }
 
     /// Push an environment and open the resulting [ManagedEnvironment],
@@ -1243,7 +1265,7 @@ impl ManagedEnvironment {
         force: bool,
         dot_flox_path: CanonicalPath,
         mut core_environment: CoreEnvironment,
-    ) -> Result<Self, ManagedEnvironmentError> {
+    ) -> Result<Self, EnvironmentError> {
         let pointer = ManagedPointer::new(owner, name.clone(), &flox.floxhub);
 
         let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
@@ -1536,6 +1558,7 @@ pub mod test_helpers {
     use super::*;
     use crate::flox::{Floxhub, DEFAULT_FLOXHUB_URL};
     use crate::models::environment::core_environment::test_helpers::new_core_environment;
+    use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
     use crate::models::environment::test_helpers::new_core_environment_from_env_files;
     use crate::models::environment::DOT_FLOX;
     use crate::models::floxmeta::test_helpers::unusable_mock_floxmeta;
@@ -1559,6 +1582,7 @@ pub mod test_helpers {
                 &floxhub,
             ),
             floxmeta: unusable_mock_floxmeta(),
+            include_fetcher: mock_include_fetcher(),
         }
     }
 
@@ -2576,8 +2600,11 @@ mod test {
             floxmeta,
             &flox,
             test_pointer,
-            CanonicalPath::new(dot_flox_path).unwrap(),
+            CanonicalPath::new(&dot_flox_path).unwrap(),
             rendered_env_links,
+            IncludeFetcher {
+                base_directory: Some(dot_flox_path.parent().unwrap().to_path_buf()),
+            },
         )
         .unwrap();
         let reg_path = env_registry_path(&flox);
@@ -2614,8 +2641,11 @@ mod test {
             floxmeta,
             &flox,
             test_pointer,
-            CanonicalPath::new(dot_flox_path).unwrap(),
+            CanonicalPath::new(&dot_flox_path).unwrap(),
             rendered_env_links,
+            IncludeFetcher {
+                base_directory: Some(dot_flox_path.parent().unwrap().to_path_buf()),
+            },
         )
         .unwrap();
         let reg_path = env_registry_path(&flox);
@@ -2661,16 +2691,22 @@ mod test {
             floxmeta.clone(),
             &flox,
             test_pointer.clone(),
-            env1_dir,
+            env1_dir.clone(),
             rendered_env_links.clone(),
+            IncludeFetcher {
+                base_directory: Some(env1_dir.parent().unwrap().to_path_buf()),
+            },
         )
         .unwrap();
         let env2 = ManagedEnvironment::open_with(
             floxmeta.clone(),
             &flox,
             test_pointer.clone(),
-            env2_dir,
+            env2_dir.clone(),
             rendered_env_links.clone(),
+            IncludeFetcher {
+                base_directory: Some(env2_dir.parent().unwrap().to_path_buf()),
+            },
         )
         .unwrap();
 

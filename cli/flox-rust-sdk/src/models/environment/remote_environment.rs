@@ -5,6 +5,7 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 
 use super::core_environment::UpgradeResult;
+use super::fetcher::IncludeFetcher;
 use super::managed_environment::{ManagedEnvironment, ManagedEnvironmentError};
 use super::{
     gcroots_dir,
@@ -135,6 +136,11 @@ impl RemoteEnvironment {
             pointer.clone(),
             dot_flox_path,
             inner_rendered_env_links,
+            // remote environments shouldn't be able to fetch dir includes,
+            // so set base_directory to None
+            IncludeFetcher {
+                base_directory: None,
+            },
         )
         .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
 
