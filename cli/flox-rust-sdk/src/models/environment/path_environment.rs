@@ -665,11 +665,49 @@ pub mod test_helpers {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
+
+    use flox_test_utils::proptest::alphanum_string;
+    use itertools::izip;
+    use proptest::collection::{hash_set as prop_hash_set, vec as prop_vec};
+    use proptest::prelude::*;
+    use tempfile::TempDir;
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
+    use crate::models::manifest::typed::test::manifest_without_install;
+
+    /// Returns (flox, tempdir, Vec<(dir relative to tempdir, PathEnvironment)>)
+    /// This is a list of relative paths to environments that can be included in
+    /// another environment.
+    /// The environment names and directories are unique.
+    pub fn generate_path_environments_without_install(
+        max_size: usize,
+    ) -> impl Strategy<Value = (Flox, TempDir, Vec<(PathBuf, PathEnvironment)>)> {
+        (
+            prop_vec(manifest_without_install(), 1..=max_size),
+            prop_hash_set(alphanum_string(2), 1..=max_size),
+            prop_hash_set(alphanum_string(2), 1..=max_size),
+        )
+            .prop_map(|(manifests, names, dirs)| {
+                let (flox, tempdir) = flox_instance();
+                let mut environments = vec![];
+                for (manifest, name, dir) in izip!(&manifests, &names, &dirs) {
+                    let relative_path = PathBuf::from(dir);
+                    let absolute_path = tempdir.path().join(&relative_path);
+                    fs::create_dir(&absolute_path).unwrap();
+                    let environment = test_helpers::new_named_path_environment_in(
+                        &flox,
+                        &toml_edit::ser::to_string_pretty(&manifest).unwrap(),
+                        absolute_path,
+                        name,
+                    );
+                    environments.push((relative_path, environment));
+                }
+                (flox, tempdir, environments)
+            })
+    }
 
     #[test]
     fn create_env() {

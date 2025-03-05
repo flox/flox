@@ -1671,7 +1671,9 @@ pub(crate) mod tests {
     };
     use catalog_api_v1::types::{Output, ResolvedPackageDescriptor};
     use indoc::indoc;
+    use pollster::FutureExt;
     use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
     use test_helpers::{
         fake_catalog_package_lock,
         fake_flake_installable_lock,
@@ -1681,10 +1683,15 @@ pub(crate) mod tests {
     use self::catalog::PackageResolutionInfo;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
-    use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
+    use crate::models::environment::path_environment::test_helpers::{
+        new_named_path_environment_in,
+        new_path_environment_in,
+    };
+    use crate::models::environment::path_environment::tests::generate_path_environments_without_install;
     use crate::models::environment::Environment;
     use crate::models::manifest::raw::RawManifest;
-    use crate::models::manifest::typed::{Manifest, Vars};
+    use crate::models::manifest::typed::{Include, Manifest, Vars};
     use crate::models::search::{PackageDetails, SearchLimit, SearchResults};
     use crate::providers::catalog::Client;
     use crate::providers::flake_installable_locker::{
@@ -3215,6 +3222,50 @@ pub(crate) mod tests {
             .unwrap();
 
         assert_eq!(locked_manifest, locked);
+    }
+
+    proptest! {
+        // This probably isn't the best suited for proptest as there are lots of
+        // writes to disk.
+        // 8 cases takes about 1-1.5 seconds for me
+        #![proptest_config(ProptestConfig::with_cases(8))]
+        /// If we lock twice, the second lockfile should be the same as the first
+        /// Use manifests without [install] sections so we don't have to
+        /// generate resolution responses
+        #[test]
+        fn lock_manifest_noop_if_locked_without_install_section((mut flox, tempdir, environments_to_include) in generate_path_environments_without_install(2)) {
+
+            flox.features.compose = true;
+
+            let manifest = Manifest {
+                version: Version,
+                include: Include {
+                    environments: environments_to_include
+                        .into_iter()
+                        .map(|(dir, _)| IncludeDescriptor::Local {
+                            dir,
+                            name: None,
+                        })
+                        .collect(),
+                },
+                ..Default::default()
+            };
+
+            // Lock
+            let lockfile = Lockfile::lock_manifest(&flox, &manifest, None, &IncludeFetcher {
+                base_directory: Some(tempdir.path().to_path_buf()),
+            })
+            .block_on()
+            .unwrap();
+
+            // Lock again with a mock_include_fetcher
+            let lockfile_2 =
+                Lockfile::lock_manifest(&flox, &manifest, Some(&lockfile), &mock_include_fetcher())
+                    .block_on()
+                    .unwrap();
+
+            prop_assert_eq!(lockfile, lockfile_2);
+        }
     }
 
     /// If flake installables are already locked, no locking should occur.
