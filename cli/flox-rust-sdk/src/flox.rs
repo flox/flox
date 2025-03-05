@@ -263,6 +263,10 @@ pub mod test_helpers {
 
     use self::catalog::MockClient;
     use super::*;
+    use crate::providers::flake_installable_locker::{
+        InstallableLockerImpl,
+        InstallableLockerMock,
+    };
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
     pub fn create_test_token(handle: &str) -> FloxhubToken {
@@ -335,7 +339,7 @@ pub mod test_helpers {
             .unwrap(),
             floxhub_token: None,
             catalog_client: MockClient::default().into(),
-            installable_locker: Default::default(),
+            installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
             features: Default::default(),
             verbosity: 0,
         };

@@ -48,15 +48,9 @@ impl LockManifest {
             None
         };
 
-        let lockfile = Lockfile::lock_manifest(
-            &input_manifest,
-            input_lockfile.as_ref(),
-            &flox.catalog_client,
-            &flox.installable_locker,
-            flox.features.compose,
-        )
-        .await
-        .context("Failed to lock the manifest")?;
+        let lockfile = Lockfile::lock_manifest(&flox, &input_manifest, input_lockfile.as_ref())
+            .await
+            .context("Failed to lock the manifest")?;
 
         serde_json::to_writer_pretty(std::io::stdout(), &lockfile)
             .context("failed to write lockfile to stdout")?;
