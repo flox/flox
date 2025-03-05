@@ -896,8 +896,18 @@ pub enum IncludeDescriptor {
     },
 }
 
+impl Display for IncludeDescriptor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IncludeDescriptor::Local { dir, name } => {
+                write!(f, "{}", name.as_deref().unwrap_or(&dir.to_string_lossy()))
+            },
+        }
+    }
+}
+
 #[cfg(test)]
-pub(super) mod test {
+pub mod test {
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
@@ -907,6 +917,13 @@ pub(super) mod test {
     const CATALOG_MANIFEST: &str = indoc! {r#"
         version = 1
     "#};
+
+    // Generate a Manifest that has an empty install section
+    pub fn manifest_without_install() -> impl Strategy<Value = Manifest> {
+        any::<Manifest>().prop_filter("require an empty install section", |seed_manifest| {
+            seed_manifest.install.0.is_empty()
+        })
+    }
 
     #[test]
     fn catalog_manifest_rejects_unknown_fields() {

@@ -316,7 +316,8 @@ mod tests {
 
     #[test]
     fn catches_nix_eval_errors() {
-        let (flox, _temp_dir) = flox_instance();
+        let (mut flox, _temp_dir) = flox_instance();
+        flox.installable_locker = InstallableLockerImpl::Nix(Nix);
         let manifest = formatdoc! {r#"
         version =  1
         "#};

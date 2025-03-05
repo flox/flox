@@ -4,7 +4,7 @@ use catalog_api_v1::types::{MessageLevel, SystemEnum};
 #[cfg(test)]
 use flox_test_utils::proptest::{alphanum_string, chrono_strat};
 use indent::{indent_all_by, indent_by};
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -22,7 +22,9 @@ use flox_core::Version;
 use thiserror::Error;
 use tracing::debug;
 
+use super::environment::fetcher::IncludeFetcher;
 use super::environment::{CoreEnvironmentError, EnvironmentError};
+use super::manifest::composite::{ManifestMerger, MergeError, ShallowMerger};
 use super::manifest::typed::{
     Allows,
     IncludeDescriptor,
@@ -35,6 +37,8 @@ use super::manifest::typed::{
     DEFAULT_PRIORITY,
 };
 use crate::data::{CanonicalPath, System};
+use crate::flox::Flox;
+use crate::models::manifest::composite::CompositeManifest;
 use crate::providers::catalog::{
     self,
     CatalogPage,
@@ -565,18 +569,30 @@ impl Lockfile {
     /// Already resolved packages will not be re-resolved,
     /// and already fetched includes will not be re-fetched.
     pub async fn lock_manifest(
+        flox: &Flox,
         manifest: &Manifest,
         seed_lockfile: Option<&Lockfile>,
-        client: &impl catalog::ClientTrait,
-        installable_locker: &impl InstallableLocker,
+        include_fetcher: &IncludeFetcher,
     ) -> Result<Lockfile, EnvironmentError> {
-        let (merged, compose) = Self::merge_manifest(manifest, seed_lockfile)?;
-        let packages = Self::resolve_manifest(&merged, seed_lockfile, client, installable_locker)
-            .await
-            .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
+        let (merged, compose) = Self::merge_manifest(
+            flox,
+            manifest,
+            seed_lockfile,
+            include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .map_err(EnvironmentError::Recoverable)?;
+        let packages = Self::resolve_manifest(
+            &merged,
+            seed_lockfile,
+            &flox.catalog_client,
+            &flox.installable_locker,
+        )
+        .await
+        .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::Resolve(e)))?;
         let lockfile = Lockfile {
             version: Version::<1>,
-            manifest: manifest.clone(),
+            manifest: merged,
             packages,
             compose,
         };
@@ -594,14 +610,93 @@ impl Lockfile {
     /// re-fetched.
     #[instrument(skip_all, fields(progress = "Merging environment includes"))]
     fn merge_manifest(
+        flox: &Flox,
         manifest: &Manifest,
-        _seed_lockfile: Option<&Lockfile>,
-    ) -> Result<(Manifest, Option<Compose>), EnvironmentError> {
+        seed_lockfile: Option<&Lockfile>,
+        include_fetcher: &IncludeFetcher,
+        merger: ManifestMerger,
+    ) -> Result<(Manifest, Option<Compose>), RecoverableMergeError> {
         if manifest.include.environments.is_empty() {
             return Ok((manifest.clone(), None));
         }
 
-        todo!()
+        if !flox.features.compose {
+            return Err(RecoverableMergeError::Catchall(
+                indoc! {"Cannot handle [include] when compose feature flag is disabled.
+                Use 'flox config --set-bool features.build true' to enable composition."}
+                .to_string(),
+            ));
+        }
+
+        debug!("Composing included environments");
+
+        // Fetch included manifests we don't already have in seed_lockfile.
+        // Note that we have to preserve the order of the includes in the
+        // manifest.
+        let mut locked_includes: Vec<LockedInclude> = vec![];
+        for include_environment in &manifest.include.environments {
+            // If there's a seed_lockfile
+            let existing_locked_include = seed_lockfile.and_then(|seed_lockfile| {
+                // And the seed lockfile was generated from a manifest with includes
+                seed_lockfile.compose.as_ref().and_then(|compose| {
+                    // And we can find an identical include descriptor in the seed lockfile
+                    // Then use the existing locked include
+                    compose
+                        .include
+                        .iter()
+                        .find(|locked_include| &locked_include.descriptor == include_environment)
+                        .cloned()
+                })
+            });
+            let locked_include = match existing_locked_include {
+                Some(locked_include) => locked_include,
+                None => include_fetcher
+                    .fetch(flox, include_environment)
+                    .map_err(|e| RecoverableMergeError::Fetch {
+                        include: include_environment.clone(),
+                        err: Box::new(e),
+                    })?,
+            };
+            locked_includes.push(locked_include);
+        }
+
+        Self::check_locked_names_unique(&locked_includes)?;
+
+        // Call the merger with all the manifests
+        let composite = CompositeManifest {
+            composer: manifest.clone(),
+            deps: locked_includes
+                .iter()
+                .map(|include| (include.name.clone(), include.manifest.clone()))
+                .collect(),
+        };
+        // TODO: we should bubble up warnings
+        let (merged, _warnings) = composite
+            .merge_all(merger)
+            .map_err(RecoverableMergeError::Merge)?;
+
+        // Stitch everything together into a Compose object
+        let compose = Compose {
+            composer: manifest.clone(),
+            include: locked_includes,
+        };
+
+        Ok((merged, Some(compose)))
+    }
+
+    /// Check that all names in a list of locked includes are unique
+    fn check_locked_names_unique(
+        locked_includes: &[LockedInclude],
+    ) -> Result<(), RecoverableMergeError> {
+        let mut seen_names = HashSet::new();
+        for locked_include in locked_includes {
+            if !seen_names.insert(&locked_include.name) {
+                return Err(RecoverableMergeError::Catchall(formatdoc! {
+                "multiple environments in include.environments have the name '{}'
+                 A unique name can be provided with the 'name' field.", locked_include.name}));
+            }
+        }
+        Ok(())
     }
 
     /// Resolve packages for a given manifest
@@ -1312,6 +1407,14 @@ impl Lockfile {
             .collect();
         self
     }
+
+    /// The manifest the user edits (i.e. not merged)
+    pub fn user_manifest(&self) -> &Manifest {
+        match &self.compose {
+            Some(compose) => &compose.composer,
+            None => &self.manifest,
+        }
+    }
 }
 
 /// Distinct types of packages that can be listed
@@ -1364,6 +1467,24 @@ pub enum ResolveError {
     LockFlakeNixError(FlakeInstallableError),
     #[error("catalog returned install id not in manifest: {0}")]
     InstallIdNotInManifest(String),
+}
+
+/// Errors that occur during merging a manifest that flox edit can recover from
+#[derive(Debug, Error)]
+pub enum RecoverableMergeError {
+    #[error(transparent)]
+    Merge(MergeError),
+
+    #[error("failed to fetch environment '{include}'")]
+    Fetch {
+        include: IncludeDescriptor,
+        #[source]
+        err: Box<EnvironmentError>,
+    },
+
+    /// Use this error when we don't need an error type to reuse in multiple places
+    #[error("{0}")]
+    Catchall(String),
 }
 
 pub mod test_helpers {
@@ -1535,7 +1656,9 @@ pub(crate) mod tests {
     };
     use catalog_api_v1::types::{Output, ResolvedPackageDescriptor};
     use indoc::indoc;
+    use pollster::FutureExt;
     use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
     use test_helpers::{
         fake_catalog_package_lock,
         fake_flake_installable_lock,
@@ -1544,9 +1667,18 @@ pub(crate) mod tests {
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
+    use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
+    use crate::models::environment::path_environment::test_helpers::{
+        new_named_path_environment_in,
+        new_path_environment_in,
+    };
+    use crate::models::environment::path_environment::tests::generate_path_environments_without_install;
+    use crate::models::environment::Environment;
     use crate::models::manifest::raw::RawManifest;
-    use crate::models::manifest::typed::Manifest;
+    use crate::models::manifest::typed::{Include, Manifest, Vars};
     use crate::models::search::{PackageDetails, SearchLimit, SearchResults};
+    use crate::providers::catalog::Client;
     use crate::providers::flake_installable_locker::{
         FlakeInstallableError,
         InstallableLockerMock,
@@ -2558,11 +2690,9 @@ pub(crate) mod tests {
         client.push_resolve_response(response);
 
         let locked_manifest =
-            Lockfile::lock_manifest(manifest, None, &client, &InstallableLockerMock::new()).await;
-        if let Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
-            ResolveError::ResolutionFailed(res_failures),
-        ))) = locked_manifest
-        {
+            Lockfile::resolve_manifest(manifest, None, &client, &InstallableLockerMock::new())
+                .await;
+        if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
             if let [ResolutionFailure::UnknownServiceMessage(MsgUnknown { msg, .. })] =
                 res_failures.0.as_slice()
             {
@@ -2594,12 +2724,9 @@ pub(crate) mod tests {
             client.push_resolve_response(response);
 
             let locked_manifest =
-                Lockfile::lock_manifest(manifest, None, &client, &InstallableLockerMock::new())
+                Lockfile::resolve_manifest(manifest, None, &client, &InstallableLockerMock::new())
                     .await;
-            if let Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
-                ResolveError::ResolutionFailed(res_failures),
-            ))) = locked_manifest
-            {
+            if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
                 // A newline is added for formatting when it's a single message
                 assert_eq!(
                     res_failures.to_string(),
@@ -2613,15 +2740,18 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn test_locking_1() {
+        let (mut flox, _tempdir) = flox_instance();
         let manifest = &*TEST_TYPED_MANIFEST;
 
         let mut client = catalog::MockClient::new(None::<String>).unwrap();
         client.push_resolve_response(TEST_RESOLUTION_RESPONSE.clone());
+        flox.catalog_client = Client::Mock(client);
 
-        let locked_manifest =
-            Lockfile::lock_manifest(manifest, None, &client, &InstallableLockerMock::new())
-                .await
-                .unwrap();
+        let locked_manifest = Lockfile::lock_manifest(&flox, manifest, None, &IncludeFetcher {
+            base_directory: None,
+        })
+        .await
+        .unwrap();
         assert_eq!(&locked_manifest, &*TEST_LOCKED_MANIFEST);
     }
 
@@ -2641,12 +2771,12 @@ pub(crate) mod tests {
 
         let client = catalog::MockClient::new(None::<String>).unwrap();
 
-        let locked_manifest =
-            Lockfile::lock_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+        let resolved_packages =
+            Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
                 .await
                 .unwrap();
 
-        assert_eq!(&locked_manifest.packages, &[foo_locked.into()]);
+        assert_eq!(&resolved_packages, &[foo_locked.into()]);
     }
 
     /// If a manifest doesn't have `options.systems`, it defaults to locking for
@@ -3047,6 +3177,7 @@ pub(crate) mod tests {
     /// If all packages are already locked, return without locking/resolution
     #[tokio::test]
     async fn lock_manifest_noop_if_fully_locked() {
+        let (flox, _tempdir) = flox_instance();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
@@ -3069,11 +3200,57 @@ pub(crate) mod tests {
         };
 
         let locked_manifest =
-            Lockfile::lock_manifest(&manifest, Some(&locked), &PanickingClient, &PanickingLocker)
-                .await
-                .unwrap();
+            Lockfile::lock_manifest(&flox, &manifest, Some(&locked), &IncludeFetcher {
+                base_directory: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(locked_manifest, locked);
+    }
+
+    proptest! {
+        // This probably isn't the best suited for proptest as there are lots of
+        // writes to disk.
+        // 8 cases takes about 1-1.5 seconds for me
+        #![proptest_config(ProptestConfig::with_cases(8))]
+        /// If we lock twice, the second lockfile should be the same as the first
+        /// Use manifests without [install] sections so we don't have to
+        /// generate resolution responses
+        #[test]
+        fn lock_manifest_noop_if_locked_without_install_section((mut flox, tempdir, environments_to_include) in generate_path_environments_without_install(2)) {
+
+            flox.features.compose = true;
+
+            let manifest = Manifest {
+                version: Version,
+                include: Include {
+                    environments: environments_to_include
+                        .into_iter()
+                        .map(|(dir, _)| IncludeDescriptor::Local {
+                            dir,
+                            name: None,
+                        })
+                        .collect(),
+                },
+                ..Default::default()
+            };
+
+            // Lock
+            let lockfile = Lockfile::lock_manifest(&flox, &manifest, None, &IncludeFetcher {
+                base_directory: Some(tempdir.path().to_path_buf()),
+            })
+            .block_on()
+            .unwrap();
+
+            // Lock again with a mock_include_fetcher
+            let lockfile_2 =
+                Lockfile::lock_manifest(&flox, &manifest, Some(&lockfile), &mock_include_fetcher())
+                    .block_on()
+                    .unwrap();
+
+            prop_assert_eq!(lockfile, lockfile_2);
+        }
     }
 
     /// If flake installables are already locked, no locking should occur.
@@ -3141,12 +3318,12 @@ pub(crate) mod tests {
             }),
         }]);
 
-        let locked_manifest =
-            Lockfile::lock_manifest(&manifest, Some(&locked), &client_mock, &PanickingLocker)
+        let resolved_packages =
+            Lockfile::resolve_manifest(&manifest, Some(&locked), &client_mock, &PanickingLocker)
                 .await
                 .unwrap();
 
-        assert_eq!(locked_manifest.packages.len(), 2, "{:#?}", locked_manifest);
+        assert_eq!(resolved_packages.len(), 2, "{:#?}", resolved_packages);
     }
 
     /// If catalog packages are already locked, no locking should occur.
@@ -3177,12 +3354,12 @@ pub(crate) mod tests {
         let locker_mock = InstallableLockerMock::new();
         locker_mock.push_lock_result(Ok(bar_locked.locked_installable));
 
-        let locked_manifest =
-            Lockfile::lock_manifest(&manifest, Some(&locked), &PanickingClient, &locker_mock)
+        let resolved_packages =
+            Lockfile::resolve_manifest(&manifest, Some(&locked), &PanickingClient, &locker_mock)
                 .await
                 .unwrap();
 
-        assert_eq!(locked_manifest.packages.len(), 2, "{:#?}", locked_manifest);
+        assert_eq!(resolved_packages.len(), 2, "{:#?}", resolved_packages);
     }
 
     /// If catalog packages are already locked, no locking should occur.
@@ -3218,7 +3395,7 @@ pub(crate) mod tests {
         );
 
         let locker_mock = InstallableLockerMock::new();
-        let locked_manifest = Lockfile::lock_manifest(
+        let resolved_packages = Lockfile::resolve_manifest(
             &manifest_pririty_after,
             Some(&locked),
             &PanickingClient,
@@ -3227,7 +3404,7 @@ pub(crate) mod tests {
         .await
         .unwrap();
 
-        assert_eq!(locked_manifest.packages.as_slice(), &[
+        assert_eq!(resolved_packages.as_slice(), &[
             foo_locked_priority_after.into()
         ]);
     }
@@ -3259,7 +3436,7 @@ pub(crate) mod tests {
 
         let client = catalog::MockClient::new(None::<String>).unwrap();
         assert!(matches!(
-            Lockfile::lock_manifest(
+            Lockfile::resolve_manifest(
                 &manifest,
                 Some(&locked),
                 &client,
@@ -3267,9 +3444,7 @@ pub(crate) mod tests {
             )
             .await
             .unwrap_err(),
-            EnvironmentError::Core(CoreEnvironmentError::Resolve(
-                ResolveError::UnfreeNotAllowed { .. }
-            ))
+            ResolveError::UnfreeNotAllowed { .. }
         ));
     }
 
@@ -3307,12 +3482,10 @@ pub(crate) mod tests {
             .unfree = Some(true);
         client.push_resolve_response(vec![resolved_group]);
         assert!(matches!(
-            Lockfile::lock_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+            Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
                 .await
                 .unwrap_err(),
-            EnvironmentError::Core(CoreEnvironmentError::Resolve(
-                ResolveError::UnfreeNotAllowed { .. }
-            ))
+            ResolveError::UnfreeNotAllowed { .. }
         ));
     }
 
@@ -3595,5 +3768,517 @@ pub(crate) mod tests {
         let installables = Lockfile::collect_flake_installables(&manifest).collect::<Vec<_>>();
         assert_eq!(installables.len(), 1);
         assert_eq!(installables[0].system.as_str(), "x86_64-linux");
+    }
+
+    /// [Lockfile::merge_manifest] fetches an included environment when it is
+    /// not already locked
+    #[test]
+    fn merge_manifest_fetches_included_environment() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+        let manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep1" }
+        ]
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create dep1 environment
+        let dep1_path = tempdir.path().join("dep1");
+        let dep1_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "dep1"
+        "#};
+
+        fs::create_dir(&dep1_path).unwrap();
+        let mut dep1 = new_path_environment_in(&flox, dep1_manifest_contents, &dep1_path);
+        dep1.lockfile(&flox).unwrap();
+
+        // Merge
+        let (merged, compose) = Lockfile::merge_manifest(
+            &flox,
+            &manifest,
+            None,
+            &IncludeFetcher {
+                base_directory: Some(tempdir.path().to_path_buf()),
+            },
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .unwrap();
+
+        assert_eq!(merged, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
+            ..Default::default()
+        });
+        assert_eq!(
+            compose.unwrap().include[0].manifest,
+            toml_edit::de::from_str(dep1_manifest_contents).unwrap()
+        )
+    }
+
+    /// [Lockfile::merge_manifest] preserves precedence of includes
+    #[test]
+    fn merge_manifest_preserves_include_order() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+        let manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "lowest_precedence" },
+          { dir = "higher_precedence" }
+        ]
+
+        [vars]
+        foo = "highest_precedence"
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create lowest_precedence environment
+        let lowest_precedence_path = tempdir.path().join("lowest_precedence");
+        let lowest_precedence_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "lowest_precedence"
+        bar = "lowest_precedence"
+        "#};
+        fs::create_dir(&lowest_precedence_path).unwrap();
+        let mut lowest_precedence = new_path_environment_in(
+            &flox,
+            lowest_precedence_manifest_contents,
+            &lowest_precedence_path,
+        );
+        lowest_precedence.lockfile(&flox).unwrap();
+
+        // Create higher precedence environment
+        let higher_precedence_path = tempdir.path().join("higher_precedence");
+        let higher_precedence_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "higher_precedence"
+        bar = "higher_precedence"
+        "#};
+        fs::create_dir(&higher_precedence_path).unwrap();
+        let mut higher_precedence = new_path_environment_in(
+            &flox,
+            higher_precedence_manifest_contents,
+            &higher_precedence_path,
+        );
+        higher_precedence.lockfile(&flox).unwrap();
+
+        // Merge
+        let (merged, compose) = Lockfile::merge_manifest(
+            &flox,
+            &manifest,
+            None,
+            &IncludeFetcher {
+                base_directory: Some(tempdir.path().to_path_buf()),
+            },
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .unwrap();
+
+        assert_eq!(merged, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([
+                ("foo".to_string(), "highest_precedence".to_string()),
+                ("bar".to_string(), "higher_precedence".to_string())
+            ])),
+            ..Default::default()
+        });
+        assert_eq!(
+            compose.as_ref().unwrap().include[0].manifest,
+            toml_edit::de::from_str(lowest_precedence_manifest_contents).unwrap()
+        );
+        assert_eq!(
+            compose.unwrap().include[1].manifest,
+            toml_edit::de::from_str(higher_precedence_manifest_contents).unwrap()
+        );
+    }
+
+    /// Skipping fetching an already fetched environment shouldn't break
+    /// precedence.
+    ///
+    /// Suppose an environment starts out with a single included environment,
+    /// middle_precedence,
+    /// and the environment is merged.
+    /// Then suppose two other environments lowest_precedence and
+    /// highest_precedence are added.
+    /// Precedence should still reflect the order of included environments.
+    #[tokio::test]
+    async fn merge_manifest_respects_precedence_when_skipping_fetch() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        let manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "middle_precedence" }
+        ]
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create middle_precedence environment
+        let middle_precedence_path = tempdir.path().join("middle_precedence");
+        let middle_precedence_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "middle_precedence"
+        "#};
+        fs::create_dir(&middle_precedence_path).unwrap();
+        let mut middle_precedence = new_path_environment_in(
+            &flox,
+            middle_precedence_manifest_contents,
+            &middle_precedence_path,
+        );
+        middle_precedence.lockfile(&flox).unwrap();
+
+        // Lock
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+
+        let lockfile = Lockfile::lock_manifest(&flox, &manifest, None, &include_fetcher)
+            .await
+            .unwrap();
+
+        // Edit manifest to include two more includes
+        let manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "lowest_precedence" },
+          { dir = "middle_precedence" },
+          { dir = "highest_precedence" },
+        ]
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create lowest_precedence environment
+        let lowest_precedence_path = tempdir.path().join("lowest_precedence");
+        let lowest_precedence_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "lowest_precedence"
+        "#};
+        fs::create_dir(&lowest_precedence_path).unwrap();
+        let mut lowest_precedence = new_path_environment_in(
+            &flox,
+            lowest_precedence_manifest_contents,
+            &lowest_precedence_path,
+        );
+        lowest_precedence.lockfile(&flox).unwrap();
+
+        // Create highest_precedence environment
+        let highest_precedence_path = tempdir.path().join("highest_precedence");
+        let highest_precedence_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "highest_precedence"
+        "#};
+        fs::create_dir(&highest_precedence_path).unwrap();
+        let mut highest_precedence = new_path_environment_in(
+            &flox,
+            highest_precedence_manifest_contents,
+            &highest_precedence_path,
+        );
+        highest_precedence.lockfile(&flox).unwrap();
+
+        // Merge
+        let (merged, compose) = Lockfile::merge_manifest(
+            &flox,
+            &manifest,
+            Some(&lockfile),
+            &include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .unwrap();
+
+        assert_eq!(merged, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([(
+                "foo".to_string(),
+                "highest_precedence".to_string()
+            ),])),
+            ..Default::default()
+        });
+        assert_eq!(
+            compose.as_ref().unwrap().include[0].manifest,
+            toml_edit::de::from_str(lowest_precedence_manifest_contents).unwrap()
+        );
+        assert_eq!(
+            compose.as_ref().unwrap().include[1].manifest,
+            toml_edit::de::from_str(middle_precedence_manifest_contents).unwrap()
+        );
+        assert_eq!(
+            compose.as_ref().unwrap().include[2].manifest,
+            toml_edit::de::from_str(highest_precedence_manifest_contents).unwrap()
+        );
+    }
+
+    /// Re-merge after editing an included environment
+    /// If modify_include_descriptor is true, modify the include descriptor
+    /// which should trigger a re-fetch.
+    /// Otherwise, re-merging should not re-fetch.
+    async fn re_merge_after_editing_dep(modify_include_descriptor: bool) {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        let mut manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep1" }
+        ]
+        "#};
+        let mut manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create dep1 environment
+        let dep1_path = tempdir.path().join("dep1");
+        let dep1_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "dep1"
+        "#};
+        let dep1_manifest = toml_edit::de::from_str(dep1_manifest_contents).unwrap();
+
+        fs::create_dir(&dep1_path).unwrap();
+        let mut dep1 = new_path_environment_in(&flox, dep1_manifest_contents, &dep1_path);
+        dep1.lockfile(&flox).unwrap();
+
+        // Lock
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+
+        let lockfile = Lockfile::lock_manifest(&flox, &manifest, None, &include_fetcher)
+            .await
+            .unwrap();
+
+        assert_eq!(lockfile.manifest, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
+            ..Default::default()
+        });
+        assert_eq!(
+            lockfile.compose.as_ref().unwrap().include[0].manifest,
+            toml_edit::de::from_str(dep1_manifest_contents).unwrap()
+        );
+
+        // Edit dep1 and then change its name in the include descriptor and re-merge
+        let dep1_edited_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "dep1 edited"
+        "#};
+        let dep1_edited_manifest = toml_edit::de::from_str(dep1_edited_manifest_contents).unwrap();
+
+        dep1.edit(&flox, dep1_edited_manifest_contents.to_string())
+            .unwrap();
+
+        if modify_include_descriptor {
+            manifest_contents = indoc! {r#"
+            version = 1
+
+            [include]
+            environments = [
+              { dir = "dep1", name = "dep1 edited" }
+            ]
+            "#};
+            manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        }
+
+        // Merge
+        let (merged, compose) = Lockfile::merge_manifest(
+            &flox,
+            &manifest,
+            Some(&lockfile),
+            &include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .unwrap();
+
+        assert_eq!(merged, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([(
+                "foo".to_string(),
+                if modify_include_descriptor {
+                    "dep1 edited".to_string()
+                } else {
+                    "dep1".to_string()
+                }
+            )])),
+            ..Default::default()
+        });
+        assert_eq!(
+            compose.unwrap().include[0].manifest,
+            if modify_include_descriptor {
+                dep1_edited_manifest
+            } else {
+                dep1_manifest
+            }
+        );
+    }
+
+    /// If included environments have already been locked, the existing locked include should be used
+    #[tokio::test]
+    async fn merge_manifest_does_not_refetch_if_include_descriptor_unchanged() {
+        re_merge_after_editing_dep(false).await;
+    }
+
+    /// [Lockfile::merge_manifest] re-fetches if any part of an include
+    /// descriptor has changed
+    #[tokio::test]
+    async fn merge_manifest_refetches_if_include_descriptor_changed() {
+        re_merge_after_editing_dep(true).await;
+    }
+
+    /// [Lockfile::merge_manifest] doesn't leave stale locked includes
+    #[tokio::test]
+    async fn merge_manifest_removes_stale_locked_includes() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        let mut manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep1" }
+        ]
+        "#};
+        let mut manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create dep1 environment
+        let dep1_path = tempdir.path().join("dep1");
+        let dep1_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "dep1"
+        "#};
+        let dep1_manifest = toml_edit::de::from_str(dep1_manifest_contents).unwrap();
+
+        fs::create_dir(&dep1_path).unwrap();
+        let mut dep1 = new_path_environment_in(&flox, dep1_manifest_contents, &dep1_path);
+        dep1.lockfile(&flox).unwrap();
+
+        // Lock
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+
+        let lockfile = Lockfile::lock_manifest(&flox, &manifest, None, &include_fetcher)
+            .await
+            .unwrap();
+
+        assert_eq!(lockfile.manifest, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
+            ..Default::default()
+        });
+        assert_eq!(
+            lockfile.compose.as_ref().unwrap().include[0].manifest,
+            dep1_manifest,
+        );
+
+        // Remove the include of dep1
+        manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+        manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Merge
+        let (merged, compose) = Lockfile::merge_manifest(
+            &flox,
+            &manifest,
+            Some(&lockfile),
+            &include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .unwrap();
+
+        assert_eq!(merged, manifest);
+
+        assert!(compose.is_none());
+    }
+
+    /// [Lockfile::merge_manifest] errors if locked include names are not unique
+    #[test]
+    fn merge_manifest_errors_for_non_unique_include_names() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        let manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep1" },
+          { dir = "dep2" }
+        ]
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create dep1 named dep
+        let dep1_path = tempdir.path().join("dep1");
+        let dep1_manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+        fs::create_dir(&dep1_path).unwrap();
+        let mut dep1 =
+            new_named_path_environment_in(&flox, dep1_manifest_contents, &dep1_path, "dep");
+        dep1.lockfile(&flox).unwrap();
+
+        // Create dep2 named dep
+        let dep2_path = tempdir.path().join("dep2");
+        let dep2_manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+        fs::create_dir(&dep2_path).unwrap();
+        let mut dep2 =
+            new_named_path_environment_in(&flox, dep2_manifest_contents, &dep2_path, "dep");
+        dep2.lockfile(&flox).unwrap();
+
+        // Merge
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+
+        let err = Lockfile::merge_manifest(
+            &flox,
+            &manifest,
+            None,
+            &include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .unwrap_err();
+
+        let RecoverableMergeError::Catchall(message) = err else {
+            panic!();
+        };
+        assert_eq!(
+            message,
+            indoc! {"multiple environments in include.environments have the name 'dep'
+            A unique name can be provided with the 'name' field."}
+        );
     }
 }

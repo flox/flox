@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
 
+use super::fetcher::IncludeFetcher;
 use super::{
     copy_dir_recursive,
     CanonicalizeError,
@@ -37,8 +38,6 @@ use crate::providers::buildenv::{
     BuildEnvOutputs,
     BuiltStorePath,
 };
-use crate::providers::catalog::ClientTrait;
-use crate::providers::flake_installable_locker::InstallableLocker;
 use crate::providers::services::{maybe_make_service_config_file, ServiceError};
 
 pub struct ReadOnly {}
@@ -56,6 +55,7 @@ pub struct CoreEnvironment<State = ReadOnly> {
     ///
     /// Commonly /.../.flox/env/
     env_dir: PathBuf,
+    include_fetcher: IncludeFetcher,
     _state: State,
 }
 
@@ -125,7 +125,7 @@ impl<State> CoreEnvironment<State> {
 
         // Check if the manifest embedded in the lockfile and the manifest
         // itself have the same contents
-        let already_locked = manifest == lockfile.manifest;
+        let already_locked = &manifest == lockfile.user_manifest();
 
         if already_locked {
             Ok(Some(lockfile))
@@ -172,10 +172,10 @@ impl<State> CoreEnvironment<State> {
 
         // If a lockfile exists, it is used as a base.
         let lockfile = Lockfile::lock_manifest(
+            flox,
             &manifest,
             existing_lockfile.as_ref(),
-            &flox.catalog_client,
-            &flox.installable_locker,
+            &self.include_fetcher,
         )
         .block_on()?;
 
@@ -272,9 +272,10 @@ impl CoreEnvironment<ReadOnly> {
     /// Create a new environment view for the given directory
     ///
     /// This assumes that the directory contains a valid manifest.
-    pub fn new(env_dir: impl AsRef<Path>) -> Self {
+    pub fn new(env_dir: impl AsRef<Path>, include_fetcher: IncludeFetcher) -> Self {
         CoreEnvironment {
             env_dir: env_dir.as_ref().to_path_buf(),
+            include_fetcher,
             _state: ReadOnly {},
         }
     }
@@ -481,12 +482,7 @@ impl CoreEnvironment<ReadOnly> {
         Self::ensure_valid_upgrade(groups_or_iids, &manifest)?;
         tracing::debug!("using catalog client to upgrade");
 
-        let mut result = self.upgrade_with_catalog_client(
-            &flox.catalog_client,
-            &flox.installable_locker,
-            groups_or_iids,
-            &manifest,
-        )?;
+        let mut result = self.upgrade_with_catalog_client(flox, groups_or_iids, &manifest)?;
 
         // SAFETY: serde_json::to_string_pretty is only documented to fail if
         // the "Serialize decides to fail, or if T contains a map with non-string keys",
@@ -572,8 +568,7 @@ impl CoreEnvironment<ReadOnly> {
     /// where the upgraded packages have been filtered out causing them to be re-resolved.
     fn upgrade_with_catalog_client(
         &mut self,
-        client: &impl ClientTrait,
-        flake_locking: &impl InstallableLocker,
+        flox: &Flox,
         groups_or_iids: &[&str],
         manifest: &Manifest,
     ) -> Result<UpgradeResult, EnvironmentError> {
@@ -598,9 +593,13 @@ impl CoreEnvironment<ReadOnly> {
             })
         };
 
-        let upgraded_lockfile =
-            Lockfile::lock_manifest(manifest, seed_lockfile.as_ref(), client, flake_locking)
-                .block_on()?;
+        let upgraded_lockfile = Lockfile::lock_manifest(
+            flox,
+            manifest,
+            seed_lockfile.as_ref(),
+            &self.include_fetcher,
+        )
+        .block_on()?;
 
         let result = UpgradeResult {
             old_lockfile: existing_lockfile,
@@ -622,6 +621,7 @@ impl CoreEnvironment<ReadOnly> {
 
         Ok(CoreEnvironment {
             env_dir: tempdir.as_ref().to_path_buf(),
+            include_fetcher: self.include_fetcher.clone(),
             _state: ReadWrite {},
         })
     }
@@ -1031,6 +1031,7 @@ pub mod test_helpers {
 
     use super::*;
     use crate::flox::Flox;
+    use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
 
     #[cfg(target_os = "macos")]
     pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
@@ -1061,7 +1062,7 @@ pub mod test_helpers {
         let env_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
         fs::write(env_path.join(MANIFEST_FILENAME), contents).unwrap();
 
-        CoreEnvironment::new(&env_path)
+        CoreEnvironment::new(&env_path, mock_include_fetcher())
     }
 
     pub fn new_core_environment_with_lockfile(
@@ -1073,7 +1074,7 @@ pub mod test_helpers {
         fs::write(env_path.join(MANIFEST_FILENAME), manifest_contents).unwrap();
         fs::write(env_path.join(LOCKFILE_FILENAME), lockfile_contents).unwrap();
 
-        CoreEnvironment::new(&env_path)
+        CoreEnvironment::new(&env_path, mock_include_fetcher())
     }
 
     pub fn new_core_environment_from_env_files(
@@ -1110,8 +1111,7 @@ mod tests {
     use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::manifest::typed::{PackageDescriptorCatalog, DEFAULT_GROUP_NAME};
-    use crate::providers::catalog::{self};
-    use crate::providers::flake_installable_locker::InstallableLockerMock;
+    use crate::providers::catalog::{self, Client};
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
     /// Create a CoreEnvironment with an empty manifest (with version = 1)
@@ -1130,7 +1130,9 @@ mod tests {
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
         fs::write(env_path.path().join(MANIFEST_FILENAME), "version = 1").unwrap();
 
-        let mut env_view = CoreEnvironment::new(&env_path);
+        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
+            base_directory: None,
+        });
 
         let new_env_str = r#"
         version = 1
@@ -1241,7 +1243,7 @@ mod tests {
     // TODO: add fixtures for resolve mocks if we add more of these tests
     #[test]
     fn upgrade_with_empty_list_upgrades_all() {
-        let (mut env_view, _flox, _temp_dir_handle) = empty_core_environment();
+        let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
 
         let mut manifest = Manifest::default();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
@@ -1297,14 +1299,10 @@ mod tests {
             }),
             msgs: vec![],
         }]);
+        flox.catalog_client = Client::Mock(mock_client);
 
         let upgraded_packages = env_view
-            .upgrade_with_catalog_client(
-                &mock_client,
-                &InstallableLockerMock::new(),
-                &[],
-                &manifest,
-            )
+            .upgrade_with_catalog_client(&flox, &[], &manifest)
             .unwrap()
             .diff();
 
@@ -1320,7 +1318,9 @@ mod tests {
         let sandbox_path = tempfile::tempdir_in(&tempdir).unwrap();
         fs::create_dir(env_path.path().with_extension("tmp")).unwrap();
 
-        let mut env_view = CoreEnvironment::new(&env_path);
+        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
+            base_directory: None,
+        });
         let temp_env = env_view.writable(&sandbox_path).unwrap();
 
         let err = env_view
@@ -1346,7 +1346,9 @@ mod tests {
         // force fail by setting dir readonly
         fs::set_permissions(&env_path, env_path_permissions.clone()).unwrap();
 
-        let mut env_view = CoreEnvironment::new(&env_path);
+        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
+            base_directory: None,
+        });
         let temp_env = env_view.writable(&sandbox_path).unwrap();
 
         let err = env_view.replace_with(temp_env).expect_err(&format!(
@@ -1377,7 +1379,9 @@ mod tests {
         )
         .unwrap();
 
-        let mut env_view = CoreEnvironment::new(&env_path);
+        let mut env_view = CoreEnvironment::new(&env_path, IncludeFetcher {
+            base_directory: None,
+        });
 
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         env_view.lock(&flox).expect("locking should succeed");
