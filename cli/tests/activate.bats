@@ -2174,7 +2174,7 @@ EOF
   mkdir -p "$bad_dir"
   activation_cmd="$(cat <<'EOF'
     export PATH="$bad_dir:$PATH"
-    eval "$("$FLOX_BIN" activate)"  
+    eval "$("$FLOX_BIN" activate)"
 EOF
 )"
   run bash -c "$activation_cmd"
@@ -2204,7 +2204,7 @@ EOF
   mkdir -p "$bad_dir"
   activation_cmd="$(cat <<'EOF'
     setenv PATH "$bad_dir:$PATH"
-    eval "`"$FLOX_BIN" activate`"  
+    eval "`"$FLOX_BIN" activate`"
 EOF
 )"
   run tcsh -c "$activation_cmd"
@@ -2220,7 +2220,7 @@ EOF
   mkdir -p "$bad_dir"
   activation_cmd="$(cat <<'EOF'
     export PATH="$bad_dir:$PATH"
-    eval "$("$FLOX_BIN" activate)"  
+    eval "$("$FLOX_BIN" activate)"
 EOF
 )"
   run zsh -c "$activation_cmd"
@@ -4686,4 +4686,49 @@ EOF
 @test "zsh: FLOX_ENV_* should reflect most recent user-initiated activation" {
   project_setup_common
   in_place_doesnt_override_user_initiated zsh
+}
+
+@test "can activate an environment that includes environments" {
+  project_setup
+
+  "$FLOX_BIN" init -d lowest_precedence
+  MANIFEST_CONTENTS_LOWEST_PRECEDENCE="$(cat << "EOF"
+    version = 1
+    [vars]
+    foo = "lowest precedence"
+    bar = "lowest precedence"
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_LOWEST_PRECEDENCE" | "$FLOX_BIN" edit -d lowest_precedence -f -
+
+  "$FLOX_BIN" init -d higher_precedence
+  MANIFEST_CONTENTS_HIGHER_PRECEDENCE="$(cat << "EOF"
+    version = 1
+    [vars]
+    foo = "higher precedence"
+    bar = "higher precedence"
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_HIGHER_PRECEDENCE" | "$FLOX_BIN" edit -d higher_precedence -f -
+
+  MANIFEST_CONTENTS_HIGHEST_PRECEDENCE="$(cat << "EOF"
+    version = 1
+    [include]
+    environments = [
+      { dir = "lowest_precedence" },
+      { dir = "higher_precedence" }
+    ]
+    [vars]
+    foo = "highest precedence"
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS_HIGHEST_PRECEDENCE" | FLOX_FEATURES_COMPOSE=true "$FLOX_BIN" edit -f -
+
+  run "$FLOX_BIN" activate -- echo 'foo: $foo; bar: $bar'
+  assert_success
+  assert_output - <<EOF
+Sourcing .bashrc
+Setting PATH from .bashrc
+foo: highest precedence; bar: higher precedence
+EOF
 }

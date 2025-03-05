@@ -61,9 +61,72 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod test {
+    use std::fs;
+
+    use indoc::indoc;
+
+    use super::*;
+    use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
     #[test]
-    fn fetch_relative_path() {}
+    fn fetch_relative_path() {
+        let (flox, tempdir) = flox_instance();
+
+        let environment_path = tempdir.path().join("environment");
+        let manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        fs::create_dir(&environment_path).unwrap();
+        new_path_environment_in(&flox, manifest_contents, &environment_path);
+
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+
+        let include_descriptor = IncludeDescriptor::Local {
+            dir: environment_path.file_name().unwrap().into(),
+            name: None,
+        };
+
+        let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
+
+        assert_eq!(fetched, LockedInclude {
+            manifest,
+            name: "environment".to_string(),
+            descriptor: include_descriptor,
+        })
+    }
 
     #[test]
-    fn fetch_absolute_path() {}
+    fn fetch_absolute_path() {
+        let (flox, tempdir) = flox_instance();
+
+        let environment_path = tempdir.path().join("environment");
+        let manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        fs::create_dir(&environment_path).unwrap();
+        new_path_environment_in(&flox, manifest_contents, &environment_path);
+
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+
+        let include_descriptor = IncludeDescriptor::Local {
+            dir: environment_path,
+            name: None,
+        };
+
+        let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
+
+        assert_eq!(fetched, LockedInclude {
+            manifest,
+            name: "environment".to_string(),
+            descriptor: include_descriptor,
+        })
+    }
 }
