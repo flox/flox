@@ -55,6 +55,11 @@ pub struct CoreEnvironment<State = ReadOnly> {
     ///
     /// Commonly /.../.flox/env/
     env_dir: PathBuf,
+    /// Includes may be relative to a directory completely unrelated to this
+    /// CoreEnvironment's env_dir,
+    /// or relative directories may not be allowed as is the case for remote
+    /// environments.
+    /// The fetcher keeps track of this information.
     include_fetcher: IncludeFetcher,
     _state: State,
 }

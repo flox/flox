@@ -509,27 +509,28 @@ impl Pull {
         Ok(choice == 1)
     }
 
-    fn handle_error(err: ManagedEnvironmentError) -> anyhow::Error {
-        match err {
-            ManagedEnvironmentError::AccessDenied => {
-                let message = "You do not have permission to pull this environment";
-                anyhow::Error::msg(message)
-            },
-            ManagedEnvironmentError::Diverged => {
-                let message = "The environment has diverged from the remote version";
-                anyhow::Error::msg(message)
-            },
-            ManagedEnvironmentError::UpstreamNotFound {
-                env_ref,
-                upstream: _,
-                user,
-            } => {
-                let by_current_user = user
-                    .map(|u| u == env_ref.owner().as_str())
-                    .unwrap_or_default();
-                let message = format!("The environment {env_ref} does not exist.");
-                if by_current_user {
-                    anyhow!(formatdoc! {"
+    fn handle_error(err: EnvironmentError) -> anyhow::Error {
+        if let EnvironmentError::ManagedEnvironment(err) = err {
+            match err {
+                ManagedEnvironmentError::AccessDenied => {
+                    let message = "You do not have permission to pull this environment";
+                    anyhow::Error::msg(message)
+                },
+                ManagedEnvironmentError::Diverged => {
+                    let message = "The environment has diverged from the remote version";
+                    anyhow::Error::msg(message)
+                },
+                ManagedEnvironmentError::UpstreamNotFound {
+                    env_ref,
+                    upstream: _,
+                    user,
+                } => {
+                    let by_current_user = user
+                        .map(|u| u == env_ref.owner().as_str())
+                        .unwrap_or_default();
+                    let message = format!("The environment {env_ref} does not exist.");
+                    if by_current_user {
+                        anyhow!(formatdoc! {"
                         {message}
 
                         Double check the name or create it with:
@@ -537,11 +538,14 @@ impl Pull {
                             $ flox init --name {name}
                             $ flox push
                     ", name = env_ref.name()})
-                } else {
-                    anyhow!(message)
-                }
-            },
-            _ => err.into(),
+                    } else {
+                        anyhow!(message)
+                    }
+                },
+                _ => err.into(),
+            }
+        } else {
+            err.into()
         }
     }
 }
