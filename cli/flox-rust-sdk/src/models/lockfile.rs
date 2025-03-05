@@ -1681,8 +1681,10 @@ pub(crate) mod tests {
     use self::catalog::PackageResolutionInfo;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use crate::models::environment::Environment;
     use crate::models::manifest::raw::RawManifest;
-    use crate::models::manifest::typed::Manifest;
+    use crate::models::manifest::typed::{Manifest, Vars};
     use crate::models::search::{PackageDetails, SearchLimit, SearchResults};
     use crate::providers::catalog::Client;
     use crate::providers::flake_installable_locker::{
@@ -3730,5 +3732,517 @@ pub(crate) mod tests {
         let installables = Lockfile::collect_flake_installables(&manifest).collect::<Vec<_>>();
         assert_eq!(installables.len(), 1);
         assert_eq!(installables[0].system.as_str(), "x86_64-linux");
+    }
+
+    /// [Lockfile::merge_manifest] fetches an included environment when it is
+    /// not already locked
+    #[test]
+    fn merge_manifest_fetches_included_environment() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+        let manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep1" }
+        ]
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create dep1 environment
+        let dep1_path = tempdir.path().join("dep1");
+        let dep1_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "dep1"
+        "#};
+
+        fs::create_dir(&dep1_path).unwrap();
+        let mut dep1 = new_path_environment_in(&flox, dep1_manifest_contents, &dep1_path);
+        dep1.lockfile(&flox).unwrap();
+
+        // Merge
+        let (merged, compose) = Lockfile::merge_manifest(
+            &flox,
+            &manifest,
+            None,
+            &IncludeFetcher {
+                base_directory: Some(tempdir.path().to_path_buf()),
+            },
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .unwrap();
+
+        assert_eq!(merged, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
+            ..Default::default()
+        });
+        assert_eq!(
+            compose.unwrap().include[0].manifest,
+            toml_edit::de::from_str(dep1_manifest_contents).unwrap()
+        )
+    }
+
+    /// [Lockfile::merge_manifest] preserves precedence of includes
+    #[test]
+    fn merge_manifest_preserves_include_order() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+        let manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "lowest_precedence" },
+          { dir = "higher_precedence" }
+        ]
+
+        [vars]
+        foo = "highest_precedence"
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create lowest_precedence environment
+        let lowest_precedence_path = tempdir.path().join("lowest_precedence");
+        let lowest_precedence_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "lowest_precedence"
+        bar = "lowest_precedence"
+        "#};
+        fs::create_dir(&lowest_precedence_path).unwrap();
+        let mut lowest_precedence = new_path_environment_in(
+            &flox,
+            lowest_precedence_manifest_contents,
+            &lowest_precedence_path,
+        );
+        lowest_precedence.lockfile(&flox).unwrap();
+
+        // Create higher precedence environment
+        let higher_precedence_path = tempdir.path().join("higher_precedence");
+        let higher_precedence_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "higher_precedence"
+        bar = "higher_precedence"
+        "#};
+        fs::create_dir(&higher_precedence_path).unwrap();
+        let mut higher_precedence = new_path_environment_in(
+            &flox,
+            higher_precedence_manifest_contents,
+            &higher_precedence_path,
+        );
+        higher_precedence.lockfile(&flox).unwrap();
+
+        // Merge
+        let (merged, compose) = Lockfile::merge_manifest(
+            &flox,
+            &manifest,
+            None,
+            &IncludeFetcher {
+                base_directory: Some(tempdir.path().to_path_buf()),
+            },
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .unwrap();
+
+        assert_eq!(merged, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([
+                ("foo".to_string(), "highest_precedence".to_string()),
+                ("bar".to_string(), "higher_precedence".to_string())
+            ])),
+            ..Default::default()
+        });
+        assert_eq!(
+            compose.as_ref().unwrap().include[0].manifest,
+            toml_edit::de::from_str(lowest_precedence_manifest_contents).unwrap()
+        );
+        assert_eq!(
+            compose.unwrap().include[1].manifest,
+            toml_edit::de::from_str(higher_precedence_manifest_contents).unwrap()
+        );
+    }
+
+    /// Skipping fetching an already fetched environment shouldn't break
+    /// precedence.
+    ///
+    /// Suppose an environment starts out with a single included environment,
+    /// middle_precedence,
+    /// and the environment is merged.
+    /// Then suppose two other environments lowest_precedence and
+    /// highest_precedence are added.
+    /// Precedence should still reflect the order of included environments.
+    #[tokio::test]
+    async fn merge_manifest_respects_precedence_when_skipping_fetch() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        let manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "middle_precedence" }
+        ]
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create middle_precedence environment
+        let middle_precedence_path = tempdir.path().join("middle_precedence");
+        let middle_precedence_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "middle_precedence"
+        "#};
+        fs::create_dir(&middle_precedence_path).unwrap();
+        let mut middle_precedence = new_path_environment_in(
+            &flox,
+            middle_precedence_manifest_contents,
+            &middle_precedence_path,
+        );
+        middle_precedence.lockfile(&flox).unwrap();
+
+        // Lock
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+
+        let lockfile = Lockfile::lock_manifest(&flox, &manifest, None, &include_fetcher)
+            .await
+            .unwrap();
+
+        // Edit manifest to include two more includes
+        let manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "lowest_precedence" },
+          { dir = "middle_precedence" },
+          { dir = "highest_precedence" },
+        ]
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create lowest_precedence environment
+        let lowest_precedence_path = tempdir.path().join("lowest_precedence");
+        let lowest_precedence_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "lowest_precedence"
+        "#};
+        fs::create_dir(&lowest_precedence_path).unwrap();
+        let mut lowest_precedence = new_path_environment_in(
+            &flox,
+            lowest_precedence_manifest_contents,
+            &lowest_precedence_path,
+        );
+        lowest_precedence.lockfile(&flox).unwrap();
+
+        // Create highest_precedence environment
+        let highest_precedence_path = tempdir.path().join("highest_precedence");
+        let highest_precedence_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "highest_precedence"
+        "#};
+        fs::create_dir(&highest_precedence_path).unwrap();
+        let mut highest_precedence = new_path_environment_in(
+            &flox,
+            highest_precedence_manifest_contents,
+            &highest_precedence_path,
+        );
+        highest_precedence.lockfile(&flox).unwrap();
+
+        // Merge
+        let (merged, compose) = Lockfile::merge_manifest(
+            &flox,
+            &manifest,
+            Some(&lockfile),
+            &include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .unwrap();
+
+        assert_eq!(merged, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([(
+                "foo".to_string(),
+                "highest_precedence".to_string()
+            ),])),
+            ..Default::default()
+        });
+        assert_eq!(
+            compose.as_ref().unwrap().include[0].manifest,
+            toml_edit::de::from_str(lowest_precedence_manifest_contents).unwrap()
+        );
+        assert_eq!(
+            compose.as_ref().unwrap().include[1].manifest,
+            toml_edit::de::from_str(middle_precedence_manifest_contents).unwrap()
+        );
+        assert_eq!(
+            compose.as_ref().unwrap().include[2].manifest,
+            toml_edit::de::from_str(highest_precedence_manifest_contents).unwrap()
+        );
+    }
+
+    /// Re-merge after editing an included environment
+    /// If modify_include_descriptor is true, modify the include descriptor
+    /// which should trigger a re-fetch.
+    /// Otherwise, re-merging should not re-fetch.
+    async fn re_merge_after_editing_dep(modify_include_descriptor: bool) {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        let mut manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep1" }
+        ]
+        "#};
+        let mut manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create dep1 environment
+        let dep1_path = tempdir.path().join("dep1");
+        let dep1_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "dep1"
+        "#};
+        let dep1_manifest = toml_edit::de::from_str(dep1_manifest_contents).unwrap();
+
+        fs::create_dir(&dep1_path).unwrap();
+        let mut dep1 = new_path_environment_in(&flox, dep1_manifest_contents, &dep1_path);
+        dep1.lockfile(&flox).unwrap();
+
+        // Lock
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+
+        let lockfile = Lockfile::lock_manifest(&flox, &manifest, None, &include_fetcher)
+            .await
+            .unwrap();
+
+        assert_eq!(lockfile.manifest, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
+            ..Default::default()
+        });
+        assert_eq!(
+            lockfile.compose.as_ref().unwrap().include[0].manifest,
+            toml_edit::de::from_str(dep1_manifest_contents).unwrap()
+        );
+
+        // Edit dep1 and then change its name in the include descriptor and re-merge
+        let dep1_edited_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "dep1 edited"
+        "#};
+        let dep1_edited_manifest = toml_edit::de::from_str(dep1_edited_manifest_contents).unwrap();
+
+        dep1.edit(&flox, dep1_edited_manifest_contents.to_string())
+            .unwrap();
+
+        if modify_include_descriptor {
+            manifest_contents = indoc! {r#"
+            version = 1
+
+            [include]
+            environments = [
+              { dir = "dep1", name = "dep1 edited" }
+            ]
+            "#};
+            manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        }
+
+        // Merge
+        let (merged, compose) = Lockfile::merge_manifest(
+            &flox,
+            &manifest,
+            Some(&lockfile),
+            &include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .unwrap();
+
+        assert_eq!(merged, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([(
+                "foo".to_string(),
+                if modify_include_descriptor {
+                    "dep1 edited".to_string()
+                } else {
+                    "dep1".to_string()
+                }
+            )])),
+            ..Default::default()
+        });
+        assert_eq!(
+            compose.unwrap().include[0].manifest,
+            if modify_include_descriptor {
+                dep1_edited_manifest
+            } else {
+                dep1_manifest
+            }
+        );
+    }
+
+    /// If included environments have already been locked, the existing locked include should be used
+    #[tokio::test]
+    async fn merge_manifest_does_not_refetch_if_include_descriptor_unchanged() {
+        re_merge_after_editing_dep(false).await;
+    }
+
+    /// [Lockfile::merge_manifest] re-fetches if any part of an include
+    /// descriptor has changed
+    #[tokio::test]
+    async fn merge_manifest_refetches_if_include_descriptor_changed() {
+        re_merge_after_editing_dep(true).await;
+    }
+
+    /// [Lockfile::merge_manifest] doesn't leave stale locked includes
+    #[tokio::test]
+    async fn merge_manifest_removes_stale_locked_includes() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        let mut manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep1" }
+        ]
+        "#};
+        let mut manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create dep1 environment
+        let dep1_path = tempdir.path().join("dep1");
+        let dep1_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "dep1"
+        "#};
+        let dep1_manifest = toml_edit::de::from_str(dep1_manifest_contents).unwrap();
+
+        fs::create_dir(&dep1_path).unwrap();
+        let mut dep1 = new_path_environment_in(&flox, dep1_manifest_contents, &dep1_path);
+        dep1.lockfile(&flox).unwrap();
+
+        // Lock
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+
+        let lockfile = Lockfile::lock_manifest(&flox, &manifest, None, &include_fetcher)
+            .await
+            .unwrap();
+
+        assert_eq!(lockfile.manifest, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([("foo".to_string(), "dep1".to_string())])),
+            ..Default::default()
+        });
+        assert_eq!(
+            lockfile.compose.as_ref().unwrap().include[0].manifest,
+            dep1_manifest,
+        );
+
+        // Remove the include of dep1
+        manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+        manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Merge
+        let (merged, compose) = Lockfile::merge_manifest(
+            &flox,
+            &manifest,
+            Some(&lockfile),
+            &include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .unwrap();
+
+        assert_eq!(merged, manifest);
+
+        assert!(compose.is_none());
+    }
+
+    /// [Lockfile::merge_manifest] errors if locked include names are not unique
+    #[test]
+    fn merge_manifest_errors_for_non_unique_include_names() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        let manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep1" },
+          { dir = "dep2" }
+        ]
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+
+        // Create dep1 named dep
+        let dep1_path = tempdir.path().join("dep1");
+        let dep1_manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+        fs::create_dir(&dep1_path).unwrap();
+        let mut dep1 =
+            new_named_path_environment_in(&flox, dep1_manifest_contents, &dep1_path, "dep");
+        dep1.lockfile(&flox).unwrap();
+
+        // Create dep2 named dep
+        let dep2_path = tempdir.path().join("dep2");
+        let dep2_manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+        fs::create_dir(&dep2_path).unwrap();
+        let mut dep2 =
+            new_named_path_environment_in(&flox, dep2_manifest_contents, &dep2_path, "dep");
+        dep2.lockfile(&flox).unwrap();
+
+        // Merge
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+
+        let err = Lockfile::merge_manifest(
+            &flox,
+            &manifest,
+            None,
+            &include_fetcher,
+            ManifestMerger::Shallow(ShallowMerger),
+        )
+        .unwrap_err();
+
+        let RecoverableMergeError::Catchall(message) = err else {
+            panic!();
+        };
+        assert_eq!(
+            message,
+            indoc! {"multiple environments in include.environments have the name 'dep'
+            A unique name can be provided with the 'name' field."}
+        );
     }
 }
