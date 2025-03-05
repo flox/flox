@@ -1557,10 +1557,12 @@ pub mod test_helpers {
 
     use super::*;
     use crate::flox::{Floxhub, DEFAULT_FLOXHUB_URL};
-    use crate::models::environment::core_environment::test_helpers::new_core_environment;
     use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
-    use crate::models::environment::test_helpers::new_core_environment_from_env_files;
-    use crate::models::environment::DOT_FLOX;
+    use crate::models::environment::path_environment::test_helpers::{
+        new_named_path_environment_from_env_files,
+        new_named_path_environment_in,
+    };
+    use crate::models::environment::test_helpers::new_core_environment;
     use crate::models::floxmeta::test_helpers::unusable_mock_floxmeta;
 
     /// Get a [ManagedEnvironment] that is invalid but can be used in tests
@@ -1595,9 +1597,10 @@ pub mod test_helpers {
     /// If a [ManagedEnvironment] will be unused in tests, use
     /// [unusable_mock_managed_environment] instead.
     ///
-    /// TODO: currently this doesn't lock the environment, which puts us in what
-    /// should be an unreachable state compared to normal use.
-    pub fn mock_managed_environment(
+    /// This doesn't lock the environment, which puts us in what should be an
+    /// unreachable state compared to normal use.
+    /// Not locking is depended on by some tests.
+    pub fn mock_managed_environment_unlocked(
         flox: &Flox,
         contents: &str,
         owner: EnvironmentOwner,
@@ -1621,40 +1624,52 @@ pub mod test_helpers {
     ///
     /// If a [ManagedEnvironment] will be unused in tests, use
     /// [unusable_mock_managed_environment] instead.
+    pub fn mock_managed_environment_in(
+        flox: &Flox,
+        contents: &str,
+        owner: EnvironmentOwner,
+        path: impl AsRef<Path>,
+        name: Option<&str>,
+    ) -> ManagedEnvironment {
+        let path_environment =
+            new_named_path_environment_in(flox, contents, path, name.unwrap_or("name"));
+
+        ManagedEnvironment::push_new(flox, path_environment, owner, false).unwrap()
+    }
+
+    /// Get a [ManagedEnvironment] that has been pushed to (a mock) FloxHub and
+    /// can be built.
+    ///
+    /// This should be passed a [Flox] instance created with a mock FloxHub
+    /// setup.
+    ///
+    /// If a [ManagedEnvironment] will be unused in tests, use
+    /// [unusable_mock_managed_environment] instead.
     pub fn mock_managed_environment_from_env_files(
         flox: &Flox,
         env_files_dir: impl AsRef<Path>,
         owner: EnvironmentOwner,
     ) -> ManagedEnvironment {
-        // TODO: `RemoteEnvironment::new_in` still expects a .flox directory
-        // We create a temporary .flox directory here,
-        // but it would be better if we wouldn't depend on the existence of a literal `.flox` directory.
-        let dot_flox_path = tempdir_in(&flox.temp_dir)
-            .unwrap()
-            .into_path()
-            .join(DOT_FLOX);
-        fs::create_dir(&dot_flox_path).unwrap();
+        let path_environment =
+            new_named_path_environment_from_env_files(flox, env_files_dir, "name");
 
-        ManagedEnvironment::push_new_without_building(
-            flox,
-            owner,
-            "name".parse().unwrap(),
-            false,
-            CanonicalPath::new(dot_flox_path).unwrap(),
-            new_core_environment_from_env_files(flox, env_files_dir),
-        )
-        .unwrap()
+        ManagedEnvironment::push_new(flox, path_environment, owner, false).unwrap()
     }
 }
 
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeMap;
     use std::str::FromStr;
 
     use indoc::indoc;
-    use test_helpers::{mock_managed_environment, mock_managed_environment_from_env_files};
+    use test_helpers::{
+        mock_managed_environment_from_env_files,
+        mock_managed_environment_unlocked,
+    };
     use url::Url;
 
+    use super::test_helpers::mock_managed_environment_in;
     use super::*;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use crate::models::env_registry::{
@@ -1670,7 +1685,7 @@ mod test {
     use crate::models::floxmeta::floxmeta_dir;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::Lockfile;
-    use crate::models::manifest::typed::{Inner, Manifest, PackageDescriptorCatalog};
+    use crate::models::manifest::typed::{Inner, Manifest, PackageDescriptorCatalog, Vars};
     use crate::providers::catalog::test_helpers::reset_mocks_from_file;
     use crate::providers::catalog::{MockClient, GENERATED_DATA};
     use crate::providers::git::tests::commit_file;
@@ -2260,7 +2275,8 @@ mod test {
 
         let original_manifest = toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap();
 
-        let managed_env = test_helpers::mock_managed_environment(&flox, &original_manifest, owner);
+        let managed_env =
+            test_helpers::mock_managed_environment_unlocked(&flox, &original_manifest, owner);
 
         let _ = managed_env
             .local_env_or_copy_current_generation(&flox)
@@ -2302,7 +2318,7 @@ mod test {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        let managed_env = test_helpers::mock_managed_environment(
+        let managed_env = test_helpers::mock_managed_environment_unlocked(
             &flox,
             &toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap(),
             owner,
@@ -2345,7 +2361,7 @@ mod test {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        let managed_env = test_helpers::mock_managed_environment(
+        let managed_env = test_helpers::mock_managed_environment_unlocked(
             &flox,
             &toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap(),
             owner,
@@ -2382,7 +2398,7 @@ mod test {
         let client = MockClient::new(None::<&str>).unwrap();
         flox.catalog_client = client.into();
 
-        let mut managed_env = test_helpers::mock_managed_environment(
+        let mut managed_env = test_helpers::mock_managed_environment_unlocked(
             &flox,
             &toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap(),
             owner,
@@ -2439,7 +2455,7 @@ mod test {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
         let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        let mut managed_env = test_helpers::mock_managed_environment(
+        let mut managed_env = test_helpers::mock_managed_environment_unlocked(
             &flox,
             &toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap(),
             owner,
@@ -2809,8 +2825,65 @@ mod test {
         let owner = "owner".parse().unwrap();
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        let mut environment = mock_managed_environment(&flox, "version = 1", owner);
+        let mut environment = mock_managed_environment_unlocked(&flox, "version = 1", owner);
 
         assert_eq!(environment.pull(&flox, true).unwrap(), PullResult::UpToDate);
+    }
+
+    /// Managed environment can include a managed environment
+    #[test]
+    fn managed_can_include_managed() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        flox.features.compose = true;
+
+        // Create dep
+        let dep_path = tempdir.path().join("dep");
+        let dep_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "dep"
+        "#};
+        fs::create_dir(&dep_path).unwrap();
+        mock_managed_environment_in(
+            &flox,
+            dep_manifest_contents,
+            owner.clone(),
+            dep_path,
+            Some("dep"),
+        );
+
+        // Create composer, which locks implicitly
+        let composer_manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep" },
+        ]
+        "#};
+
+        let mut composer = mock_managed_environment_in(
+            &flox,
+            composer_manifest_contents,
+            owner,
+            tempdir.path(),
+            Some("composer"),
+        );
+
+        // Check lockfile
+        let lockfile = composer.lockfile(&flox).unwrap();
+
+        assert_eq!(lockfile.manifest, Manifest {
+            version: Version,
+            vars: Vars(BTreeMap::from([("foo".to_string(), "dep".to_string()),])),
+            ..Default::default()
+        });
+
+        assert_eq!(
+            lockfile.compose.unwrap().include[0].manifest,
+            toml_edit::de::from_str(dep_manifest_contents).unwrap()
+        );
     }
 }
