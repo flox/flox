@@ -395,10 +395,38 @@ impl Environment for RemoteEnvironment {
 mod tests {
     use std::os::unix::fs::symlink;
 
+    use indoc::indoc;
+    use tempfile::tempdir_in;
+
     use super::*;
     use crate::flox::test_helpers::flox_instance_with_optional_floxhub;
-    use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_from_env_files;
+    use crate::models::environment::managed_environment::test_helpers::{
+        mock_managed_environment_from_env_files,
+        mock_managed_environment_in,
+    };
+    use crate::models::lockfile::RecoverableMergeError;
     use crate::providers::catalog::GENERATED_DATA;
+
+    fn mock_remote_environment(
+        flox: &Flox,
+        contents: &str,
+        owner: EnvironmentOwner,
+        name: Option<&str>,
+    ) -> RemoteEnvironment {
+        let managed_environment = mock_managed_environment_in(
+            flox,
+            contents,
+            owner,
+            tempdir_in(&flox.temp_dir).unwrap().into_path(),
+            name,
+        );
+        RemoteEnvironment::new_in(
+            flox,
+            managed_environment.parent_path().unwrap(),
+            managed_environment.pointer().clone(),
+        )
+        .unwrap()
+    }
 
     #[test]
     fn migrate_remote_gcroot_link_to_dir() {
@@ -435,5 +463,44 @@ mod tests {
 
         // Once created, the symlink should be replaced with a directory
         assert!(environment.dot_flox_path().join(GCROOTS_DIR_NAME).is_dir())
+    }
+
+    /// Remote environment cannot include local environment
+    #[test]
+    fn remote_cannot_include_local() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        flox.features.compose = true;
+
+        let manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+
+        let mut environment =
+            mock_remote_environment(&flox, manifest_contents, owner, Some("name"));
+
+        let manifest_edited_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep" }
+        ]
+        "#};
+        let err = environment
+            .edit(&flox, manifest_edited_contents.to_string())
+            .unwrap_err();
+
+        let EnvironmentError::Recoverable(RecoverableMergeError::Fetch { err, .. }) = err else {
+            panic!("expected Fetch error, got: {err:?}");
+        };
+        let EnvironmentError::Recoverable(RecoverableMergeError::Catchall(message)) = *err else {
+            panic!("expected Catchall error, got: {err:?}");
+        };
+
+        assert_eq!(
+            message,
+            "cannot include environments in remote environments"
+        );
     }
 }

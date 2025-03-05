@@ -377,7 +377,7 @@ mod tests {
     use std::fs;
 
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
-    use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment;
+    use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment_unlocked;
     use flox_rust_sdk::models::lockfile::{ResolutionFailures, ResolveError};
     use indoc::indoc;
     use serde::de::Error;
@@ -735,7 +735,7 @@ mod tests {
             foo = "bar"
         "#};
 
-        let environment = mock_managed_environment(&flox, old_contents, owner);
+        let environment = mock_managed_environment_unlocked(&flox, old_contents, owner);
 
         // edit the local manifest
         fs::write(environment.manifest_path(&flox).unwrap(), new_contents).unwrap();
@@ -767,7 +767,7 @@ mod tests {
             foo = "bar"
         "#};
 
-        let environment = mock_managed_environment(&flox, old_contents, owner);
+        let environment = mock_managed_environment_unlocked(&flox, old_contents, owner);
 
         // edit the local manifest
         fs::write(environment.manifest_path(&flox).unwrap(), new_contents).unwrap();

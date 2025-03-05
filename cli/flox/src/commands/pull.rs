@@ -572,7 +572,7 @@ enum PullResultResolutionContext {
 mod tests {
     use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::{
-        mock_managed_environment,
+        mock_managed_environment_unlocked,
         unusable_mock_managed_environment,
     };
     use flox_rust_sdk::models::environment::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
@@ -642,7 +642,7 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             true,
-            &mut mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            &mut mock_managed_environment_unlocked(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
             None,
         )
         .unwrap();
@@ -665,7 +665,7 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             false,
-            &mut mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            &mut mock_managed_environment_unlocked(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
             Some(QueryFunctions {
                 query_add_system: |_| Ok(false),
                 query_ignore_build_errors: || panic!(),
@@ -694,7 +694,7 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             false,
-            &mut mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            &mut mock_managed_environment_unlocked(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
             Some(QueryFunctions {
                 query_add_system: |_| Ok(true),
                 query_ignore_build_errors: || panic!(),
