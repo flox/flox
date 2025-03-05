@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::fetcher::IncludeFetcher;
 use flox_rust_sdk::models::lockfile::Lockfile;
 use tracing::instrument;
 
@@ -13,6 +14,7 @@ use crate::subcommand_metric;
 /// If provided, uses the lockfile from the path specified by `--lockfile`
 /// as the base lockfile.
 /// Returns the lockfile as JSON to stdout.
+/// Manifests with includes cannot be locked.
 #[derive(Bpaf, Clone)]
 pub struct LockManifest {
     /// The previous lockfile to use as a base.
@@ -48,9 +50,17 @@ impl LockManifest {
             None
         };
 
-        let lockfile = Lockfile::lock_manifest(&flox, &input_manifest, input_lockfile.as_ref())
-            .await
-            .context("Failed to lock the manifest")?;
+        let lockfile = Lockfile::lock_manifest(
+            &flox,
+            &input_manifest,
+            input_lockfile.as_ref(),
+            // For now this will just cause an error if the manifest has includes
+            &IncludeFetcher {
+                base_directory: None,
+            },
+        )
+        .await
+        .context("Failed to lock the manifest")?;
 
         serde_json::to_writer_pretty(std::io::stdout(), &lockfile)
             .context("failed to write lockfile to stdout")?;
