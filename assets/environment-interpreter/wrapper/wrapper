@@ -114,7 +114,7 @@ if [ -z "${FLOX_ENV-}" ]; then
 fi
 
 # prepend path
-export PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin/$PATH"
+export PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin:$PATH"
 
 # source profile.d scripts
 source_profile_d "$_profile_d"
