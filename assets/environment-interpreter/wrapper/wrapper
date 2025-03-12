@@ -42,9 +42,9 @@ source "${_activate_d}/source-profile-d.bash"
 # Top-level Flox environment activation script.
 
 # Parse command-line arguments.
-OPTIONS="c:e:"
-LONGOPTS="command:,env:"
-USAGE="Usage: $0 [-c \"<cmd> <args>\"] [(-e|--env) <env>]"
+OPTIONS="e:c:"
+LONGOPTS="set-vars,env:,command:"
+USAGE="Usage: $0 [--set-vars] [(-e|--env) <env>] [-c \"<cmd> <args>\"] "
 
 PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@")
 # shellcheck disable=SC2181
@@ -79,6 +79,10 @@ while true; do
       fi
       FLOX_ENV="$1"
       shift
+      ;;
+    --set-vars)
+      shift
+      SET_VARS="1"
       ;;
     --)
       shift
@@ -116,14 +120,16 @@ fi
 # prepend path
 export PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin:$PATH"
 
+if [ "${SET_VARS-}" = "1" ]; then
+ # Set static environment variables from the manifest.
+ if [ -f "$FLOX_ENV/activate.d/envrc" ]; then
+   # shellcheck disable=SC1091 # from rendered environment
+   source "$FLOX_ENV/activate.d/envrc"
+ fi
+fi
+
 # source profile.d scripts
 source_profile_d "$_profile_d"
-
-# Set static environment variables from the manifest.
-if [ -f "$FLOX_ENV/activate.d/envrc" ]; then
-  # shellcheck disable=SC1091 # from rendered environment
-  source "$FLOX_ENV/activate.d/envrc"
-fi
 
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END
 
