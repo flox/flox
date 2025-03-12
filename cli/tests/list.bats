@@ -140,12 +140,17 @@ EOF
   "$FLOX_BIN" init
   MANIFEST_CONTENTS="$(
     cat <<-EOF
-    version = 1
+version = 1
 
-    [install]
+[hook]
+on-activate = "something suspicious"
 
-    [hook]
-    on-activate = "something suspicious"
+[profile]
+
+[options.allow]
+licenses = []
+
+[options.semver]
 EOF
   )"
 
