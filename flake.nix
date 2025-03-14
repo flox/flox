@@ -195,10 +195,20 @@
       }) pkgsContext;
 
       # ------------------------------------------------------------------------ #
+
       devShells = builtins.mapAttrs (system: pkgsBase: {
         default = pkgsBase.floxDevelopmentPackages.callPackage ./shells/default { };
       }) pkgsContext;
-    }; # End `outputs'
+
+      # ------------------------------------------------------------------------ #
+
+      # NixOS/Darwin/HomeManager module
+      nixosModules.flox = import ./modules/nixos.nix pkgsContext;
+      darwinModules.flox = import ./modules/darwin.nix pkgsContext;
+      homeModules.flox = import ./modules/home.nix pkgsContext;
+
+      # ------------------------------------------------------------------------ #
+    };
 
   # -------------------------------------------------------------------------- #
 }
