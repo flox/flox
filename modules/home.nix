@@ -9,22 +9,25 @@ floxOverlay:
 let
   cfg = config.programs.flox;
   # "Extract" _only_ flox package from floxOverlay.
-  flox = (import pkgs.path { overlays = floxOverlay; }).flox;
+  flox = (import pkgs.path { inherit (pkgs) system; overlays = [floxOverlay]; }).flox;
 in
 {
 
   options = {
     programs.flox = {
       enable = lib.mkEnableOption "Flox CLI - Harness the power of Nix";
-      package = lib.mkPackageOption pkgs "Flox CLI package" {
-        default = [ "flox" ];
+      package = lib.mkOption {
+        type = lib.types.package;
+        description = "Flox CLI package";
+        default = flox;
+        defaultText = lib.literalExpression "pkgs.flox";
+        example = lib.literalExpression "pkgs.flox";
       };
     };
   };
 
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
-    nixpkgs.overlays = [ (f: p: { inherit flox; }) ];
     nix.settings = {
       trusted-public-keys = lib.mkAfter [
         "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
