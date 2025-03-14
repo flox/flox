@@ -1,4 +1,4 @@
-floxOverlay:
+floxOverlay: nixpkgs:
 {
   config,
   pkgs,
@@ -9,7 +9,7 @@ floxOverlay:
 let
   cfg = config.programs.flox;
   # "Extract" _only_ flox package from floxOverlay.
-  flox = (import pkgs.path { inherit (pkgs) system; overlays = [floxOverlay]; }).flox;
+  flox = (import nixpkgs { inherit (pkgs) system; overlays = [floxOverlay]; }).flox;
 in
 {
 

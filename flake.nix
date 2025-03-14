@@ -208,9 +208,9 @@
       # ------------------------------------------------------------------------ #
 
       # NixOS/Darwin/HomeManager module
-      nixosModules.flox = import ./modules/nixos.nix overlays.default;
-      darwinModules.flox = import ./modules/darwin.nix overlays.default;
-      homeModules.flox = import ./modules/home.nix overlays.default;
+      nixosModules.flox = import ./modules/nixos.nix overlays.default inputs.nixpkgs;
+      darwinModules.flox = import ./modules/darwin.nix overlays.default inputs.nixpkgs;
+      homeModules.flox = import ./modules/home.nix overlays.default inputs.nixpkgs;
 
       # ------------------------------------------------------------------------ #
     };
