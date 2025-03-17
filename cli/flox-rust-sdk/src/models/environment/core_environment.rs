@@ -117,7 +117,9 @@ impl<State> CoreEnvironment<State> {
 
     /// Return a [LockedManifest] if the environment is already locked and has
     /// the same manifest contents as the manifest, otherwise return None.
-    fn lockfile_if_up_to_date(&self) -> Result<Option<Lockfile>, CoreEnvironmentError> {
+    /// Note that the manifest could have whitespace or comment differences from
+    /// the lockfile.
+    pub fn lockfile_if_up_to_date(&self) -> Result<Option<Lockfile>, CoreEnvironmentError> {
         let lockfile_path = self.lockfile_path();
 
         let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) else {

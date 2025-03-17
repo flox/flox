@@ -1040,6 +1040,9 @@ impl ManagedEnvironment {
     /// if the environment is in sync with its current generation
     /// outside of the context of a specific operation.
     /// E.g. `flox edit`.
+    ///
+    /// Not having local changes means the environment has a lockfile, since we
+    /// only create generations with lockfiles
     pub fn has_local_changes(&self, flox: &Flox) -> Result<bool, ManagedEnvironmentError> {
         let mut generations = self.generations();
         let generations = generations
