@@ -918,11 +918,14 @@ pub mod test {
         version = 1
     "#};
 
-    // Generate a Manifest that has an empty install section
-    pub fn manifest_without_install() -> impl Strategy<Value = Manifest> {
-        any::<Manifest>().prop_filter("require an empty install section", |seed_manifest| {
-            seed_manifest.install.0.is_empty()
-        })
+    // Generate a Manifest that has empty install and include sections
+    pub fn manifest_without_install_or_include() -> impl Strategy<Value = Manifest> {
+        any::<Manifest>().prop_filter(
+            "require empty install and include sections",
+            |seed_manifest| {
+                seed_manifest.install.skip_serializing() && seed_manifest.include.skip_serializing()
+            },
+        )
     }
 
     #[test]

@@ -1688,7 +1688,7 @@ pub(crate) mod tests {
         new_named_path_environment_in,
         new_path_environment_in,
     };
-    use crate::models::environment::path_environment::tests::generate_path_environments_without_install;
+    use crate::models::environment::path_environment::tests::generate_path_environments_without_install_or_include;
     use crate::models::environment::Environment;
     use crate::models::manifest::raw::RawManifest;
     use crate::models::manifest::typed::{Include, Manifest, Vars};
@@ -3233,9 +3233,7 @@ pub(crate) mod tests {
         /// Use manifests without [install] sections so we don't have to
         /// generate resolution responses
         #[test]
-        fn lock_manifest_noop_if_locked_without_install_section((mut flox, tempdir, environments_to_include) in generate_path_environments_without_install(2)) {
-
-            flox.features.compose = true;
+        fn lock_manifest_noop_if_locked_without_install_section((flox, tempdir, environments_to_include) in generate_path_environments_without_install_or_include(2)) {
 
             let manifest = Manifest {
                 version: Version,

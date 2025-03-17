@@ -180,6 +180,10 @@ environments = [
 ]
 EOF
 
+  # Trigger a lock of included
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" list -d included
+
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run --separate-stderr "$FLOX_BIN" list -c -d composer
   assert_success
