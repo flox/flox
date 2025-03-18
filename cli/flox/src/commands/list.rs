@@ -66,7 +66,7 @@ impl List {
         }
 
         let system = &flox.system;
-        let lockfile = Self::get_lockfile(&flox, &mut env)?;
+        let lockfile = env.lockfile(&flox)?;
         let packages = lockfile.list_packages(system)?;
 
         if packages.is_empty() {
@@ -289,22 +289,6 @@ impl List {
             }
         }
         Ok(())
-    }
-
-    /// Read existing lockfile or lock to create a new [LockedManifest].
-    ///
-    /// This may write the lockfile depending on the type of environment;
-    /// path and managed environments with local checkouts will lock if there
-    /// isn't a lockfile or it has different manifest contents than the
-    /// manifest.
-    ///
-    /// Check the implementation docs of [Environment::lockfile] for more
-    /// information.
-    fn get_lockfile(flox: &Flox, env: &mut ConcreteEnvironment) -> Result<Lockfile> {
-        // TODO: it would be better if we knew when a lock was actually happening
-        let lockfile = env.lockfile(flox)?;
-
-        Ok(lockfile)
     }
 
     fn get_cached_upgrades_for_current_system(
