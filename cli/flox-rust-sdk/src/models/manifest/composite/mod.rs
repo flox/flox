@@ -298,14 +298,16 @@ fn deep_merge_optional_containerize_config(
 mod tests {
     use super::shallow::ShallowMerger;
     use super::*;
-    use crate::models::manifest::typed::Inner;
+    use crate::models::manifest::typed::{Inner, Profile, Vars};
 
     #[test]
     fn composite_manifest_runs_merger() {
-        let composer = {
-            let mut manifest = Manifest::default();
-            manifest.profile.common = Some("composer".to_string());
-            manifest
+        let composer = Manifest {
+            profile: Some(Profile {
+                common: Some("composer".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
         };
         let manifest1 = {
             let mut manifest = Manifest::default();
@@ -315,14 +317,16 @@ mod tests {
                 .insert("var1".to_string(), "manifest1".to_string());
             manifest
         };
-        let manifest2 = {
-            let mut manifest = Manifest::default();
-            manifest
-                .vars
-                .inner_mut()
-                .insert("var2".to_string(), "manifest2".to_string());
-            manifest.profile.common = Some("manifest2".to_string());
-            manifest
+        let manifest2 = Manifest {
+            vars: Vars(BTreeMap::from([(
+                "var2".to_string(),
+                "manifest2".to_string(),
+            )])),
+            profile: Some(Profile {
+                common: Some("manifest2".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
         };
         let composite = CompositeManifest {
             composer,
@@ -337,8 +341,11 @@ mod tests {
         assert_eq!(merged.vars.inner()["var1"], "manifest1");
         assert_eq!(merged.vars.inner()["var2"], "manifest2");
         assert_eq!(
-            merged.profile.common,
-            Some("manifest2\ncomposer".to_string())
+            merged.profile,
+            Some(Profile {
+                common: Some("manifest2\ncomposer".to_string()),
+                ..Default::default()
+            })
         );
     }
 }

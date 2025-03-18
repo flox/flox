@@ -57,19 +57,16 @@ macro_rules! impl_into_inner {
 }
 
 /// Not meant for writing manifest files, only for reading them.
-/// Modifications should be made using the the raw functions in this module.
+/// Modifications should be made using `manifest::raw`.
 
-// We use skip_serializing_if throughout to reduce the size of the lockfile and
-// improve backwards compatibility when we introduce fields.
-// We don't use Option and skip_serializing_none because an empty table gets
-// treated as Some,
-// but we don't care about distinguishing between a table not being present and
-// a table being present but empty.
-// In both cases, we can just skip serializing.
+// We use `skip_serializing_none` and `skip_serializing_if` throughout to reduce
+// the size of the lockfile and improve backwards compatibility when we
+// introduce fields.
+//
 // It would be better if we could deny_unknown_fields when we're deserializing
 // the user provided manifest but allow unknown fields when deserializing the
-// lockfile,
-// but that doesn't seem worth the effort at the moment.
+// lockfile, but that doesn't seem worth the effort at the moment.
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
@@ -87,10 +84,10 @@ pub struct Manifest {
     /// Hooks that are run at various times during the lifecycle of the manifest
     /// in a known shell environment.
     #[serde(default)]
-    pub hook: Hook,
+    pub hook: Option<Hook>,
     /// Profile scripts that are run in the user's shell upon activation.
     #[serde(default)]
-    pub profile: Profile,
+    pub profile: Option<Profile>,
     /// Options that control the behavior of the manifest.
     #[serde(default)]
     pub options: Options,
@@ -103,7 +100,6 @@ pub struct Manifest {
     #[serde(skip_serializing_if = "Build::skip_serializing")]
     pub build: Build,
     #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub containerize: Option<Containerize>,
     #[serde(default)]
     #[serde(skip_serializing_if = "Include::skip_serializing")]
@@ -1003,6 +999,54 @@ pub mod test {
             let json_str = serde_json::to_string_pretty(&manifest).unwrap();
             prop_assert!(!has_null_fields(&json_str), "json: {}", &json_str);
         }
+    }
+
+    // A serialized manifest shouldn't contain any tables that aren't specified
+    // or required. This makes the lockfile and presentation of merged manifests
+    // (which have to come from `Manifest` rather than `RawManifest`) tidier.
+    #[test]
+    fn serialize_omits_unspecified_fields() {
+        let manifest = Manifest::default();
+        // TODO: omit `options` in https://github.com/flox/flox/issues/2812
+        let expected = indoc! {r#"
+            version = 1
+
+            [options.allow]
+            licenses = []
+
+            [options.semver]
+        "#};
+
+        let actual = toml_edit::ser::to_string_pretty(&manifest).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    // If a user specifies an uncommented `[hook]` or `[profile]` table without
+    // any contents, like the manifest template does, then we preserve that in
+    // the serialized output.
+    #[test]
+    fn serialize_preserves_explicitly_empty_tables() {
+        let manifest = Manifest {
+            hook: Some(Hook::default()),
+            profile: Some(Profile::default()),
+            ..Default::default()
+        };
+        // TODO: omit `options` in https://github.com/flox/flox/issues/2812
+        let expected = indoc! {r#"
+            version = 1
+
+            [hook]
+
+            [profile]
+
+            [options.allow]
+            licenses = []
+
+            [options.semver]
+        "#};
+
+        let actual = toml_edit::ser::to_string_pretty(&manifest).unwrap();
+        assert_eq!(actual, expected);
     }
 
     #[test]
