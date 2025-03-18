@@ -121,10 +121,7 @@ EOF
   assert_output "influxdb2: influxdb2 (influxdb2)"
 }
 
-# ------------------------------ Catalog Tests ------------------------------- #
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=list,list:catalog
+# bats test_tags=list
 @test "'flox list' lists packages of environment in the current dir; One package from nixpkgs" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
@@ -135,7 +132,7 @@ EOF
   assert_output --regexp 'hello: hello \([0-9]+\.[0-9]+(\.[0-9]+)?\)'
 }
 
-# bats test_tags=list,list:catalog,list:config
+# bats test_tags=list,list:config
 @test "'flox list --config' shows manifest content" {
   "$FLOX_BIN" init
   MANIFEST_CONTENTS="$(
@@ -160,5 +157,3 @@ EOF
   assert_success
   assert_output "$MANIFEST_CONTENTS"
 }
-
-# ---------------------------------------------------------------------------- #
