@@ -38,6 +38,9 @@ pub(crate) fn deleted(v: impl Display) {
 pub(crate) fn updated(v: impl Display) {
     print_message(std::format_args!("✅ {v}"));
 }
+pub(crate) fn info(v: impl Display) {
+    print_message(std::format_args!("ℹ️ {v}"));
+}
 /// double width character, add an additional space for alignment
 pub(crate) fn warning(v: impl Display) {
     print_message(std::format_args!("⚠️  {v}"));

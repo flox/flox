@@ -157,3 +157,45 @@ EOF
   assert_success
   assert_output "$MANIFEST_CONTENTS"
 }
+
+# bats test_tags=list,list:config
+@test "'flox list --config' shows manifest content for composed environments" {
+  export FLOX_FEATURES_COMPOSE=true
+
+  "$FLOX_BIN" init -d included
+  cat > included/.flox/env/manifest.toml <<-EOF
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+EOF
+
+  "$FLOX_BIN" init -d composer
+  cat > composer/.flox/env/manifest.toml <<-EOF
+version = 1
+
+[include]
+environments = [
+  { dir = "../included" },
+]
+EOF
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run --separate-stderr "$FLOX_BIN" list -c -d composer
+  assert_success
+  # TODO: Unspecified tables and empty vecs should be omitted.
+  assert_equal "$output" 'version = 1
+
+[install.hello]
+pkg-path = "hello"
+
+[hook]
+
+[profile]
+
+[options.allow]
+licenses = []
+
+[options.semver]'
+  assert_equal "$stderr" 'ℹ️ Displaying merged manifest.'
+}
