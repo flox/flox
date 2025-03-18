@@ -70,33 +70,59 @@ impl ShallowMerger {
         Ok((Vars(merged), warnings))
     }
 
-    fn merge_hook(low_priority: &Hook, high_priority: &Hook) -> Result<Hook, MergeError> {
-        Ok(Hook {
-            on_activate: append_optional_strings(
-                low_priority.on_activate.as_ref(),
-                high_priority.on_activate.as_ref(),
-            ),
-        })
+    fn merge_hook(
+        low_priority: Option<&Hook>,
+        high_priority: Option<&Hook>,
+    ) -> Result<Option<Hook>, MergeError> {
+        match (low_priority, high_priority) {
+            (None, None) => Ok(None),
+            (Some(low_priority), None) => Ok(Some(low_priority.clone())),
+            (None, Some(high_priority)) => Ok(Some(high_priority.clone())),
+            (Some(low_priority), Some(high_priority)) => Ok(Some(Hook {
+                on_activate: append_optional_strings(
+                    low_priority.on_activate.as_ref(),
+                    high_priority.on_activate.as_ref(),
+                ),
+            })),
+        }
     }
 
     fn merge_profile(
-        low_priority: &Profile,
-        high_priority: &Profile,
-    ) -> Result<Profile, MergeError> {
-        let common =
-            append_optional_strings(low_priority.common.as_ref(), high_priority.common.as_ref());
-        let bash = append_optional_strings(low_priority.bash.as_ref(), high_priority.bash.as_ref());
-        let zsh = append_optional_strings(low_priority.zsh.as_ref(), high_priority.zsh.as_ref());
-        let tcsh = append_optional_strings(low_priority.tcsh.as_ref(), high_priority.tcsh.as_ref());
-        let fish = append_optional_strings(low_priority.fish.as_ref(), high_priority.fish.as_ref());
-        let merged = Profile {
-            common,
-            bash,
-            zsh,
-            fish,
-            tcsh,
-        };
-        Ok(merged)
+        low_priority: Option<&Profile>,
+        high_priority: Option<&Profile>,
+    ) -> Result<Option<Profile>, MergeError> {
+        match (low_priority, high_priority) {
+            (None, None) => Ok(None),
+            (Some(low_priority), None) => Ok(Some(low_priority.clone())),
+            (None, Some(high_priority)) => Ok(Some(high_priority.clone())),
+            (Some(low_priority), Some(high_priority)) => {
+                let common = append_optional_strings(
+                    low_priority.common.as_ref(),
+                    high_priority.common.as_ref(),
+                );
+                let bash = append_optional_strings(
+                    low_priority.bash.as_ref(),
+                    high_priority.bash.as_ref(),
+                );
+                let zsh =
+                    append_optional_strings(low_priority.zsh.as_ref(), high_priority.zsh.as_ref());
+                let tcsh = append_optional_strings(
+                    low_priority.tcsh.as_ref(),
+                    high_priority.tcsh.as_ref(),
+                );
+                let fish = append_optional_strings(
+                    low_priority.fish.as_ref(),
+                    high_priority.fish.as_ref(),
+                );
+                Ok(Some(Profile {
+                    common,
+                    bash,
+                    zsh,
+                    fish,
+                    tcsh,
+                }))
+            },
+        }
     }
 
     fn merge_options(
@@ -245,8 +271,11 @@ impl ManifestMergeTrait for ShallowMerger {
         let (install, install_warnings) =
             Self::merge_install(&low_priority.install, &high_priority.install)?;
         let (vars, vars_warnings) = Self::merge_vars(&low_priority.vars, &high_priority.vars)?;
-        let hook = Self::merge_hook(&low_priority.hook, &high_priority.hook)?;
-        let profile = Self::merge_profile(&low_priority.profile, &high_priority.profile)?;
+        let hook = Self::merge_hook(low_priority.hook.as_ref(), high_priority.hook.as_ref())?;
+        let profile = Self::merge_profile(
+            low_priority.profile.as_ref(),
+            high_priority.profile.as_ref(),
+        )?;
         let (options, options_warnings) =
             Self::merge_options(&low_priority.options, &high_priority.options)?;
         let (services, services_warnings) =
@@ -406,15 +435,15 @@ mod tests {
         // When one manifest has a hook and the other doesn't the hook that's present should be passed
         // straight through.
         #[test]
-        fn merges_hook_section(hook1 in any::<Hook>(), hook2 in any::<Hook>()) {
-            let merged = ShallowMerger::merge_hook(&hook1, &hook2).unwrap();
-            let expected = match (hook1.on_activate, hook2.on_activate) {
+        fn merges_hook_section(hook1 in any::<Option<Hook>>(), hook2 in any::<Option<Hook>>()) {
+            let merged = ShallowMerger::merge_hook(hook1.as_ref(), hook2.as_ref()).unwrap();
+            let expected = match (hook1.unwrap_or_default().on_activate, hook2.unwrap_or_default().on_activate) {
                 (Some(h1), Some(h2)) => Some(format!("{h1}\n{h2}")),
                 (Some(h1), None) => Some(h1.clone()),
                 (None, Some(h2)) => Some(h2.clone()),
                 (None, None) => None,
             };
-            prop_assert_eq!(merged.on_activate, expected);
+            prop_assert_eq!(merged.unwrap_or_default().on_activate, expected);
         }
 
         // Ensures that two arbitrary options sections are deep merged with the exception of
@@ -667,64 +696,88 @@ mod tests {
 
     #[test]
     fn merges_profile_sections_both_some() {
-        let low_priority = Profile {
+        let low_priority = Some(Profile {
             common: Some("common1".to_string()),
             bash: Some("bash1".to_string()),
             zsh: Some("zsh1".to_string()),
             fish: Some("fish1".to_string()),
             tcsh: Some("tcsh1".to_string()),
-        };
-        let high_priority = Profile {
+        });
+        let high_priority = Some(Profile {
             common: Some("common2".to_string()),
             bash: Some("bash2".to_string()),
             zsh: Some("zsh2".to_string()),
             fish: Some("fish2".to_string()),
             tcsh: Some("tcsh2".to_string()),
-        };
-        let expected = Profile {
+        });
+        let expected = Some(Profile {
             common: Some("common1\ncommon2".to_string()),
             bash: Some("bash1\nbash2".to_string()),
             zsh: Some("zsh1\nzsh2".to_string()),
             fish: Some("fish1\nfish2".to_string()),
             tcsh: Some("tcsh1\ntcsh2".to_string()),
-        };
-        let merged = ShallowMerger::merge_profile(&low_priority, &high_priority).unwrap();
+        });
+        let merged =
+            ShallowMerger::merge_profile(low_priority.as_ref(), high_priority.as_ref()).unwrap();
         assert_eq!(merged, expected);
     }
 
     #[test]
     fn merges_profile_sections_only_low_priority() {
-        let low_priority = Profile {
+        let low_priority = Some(Profile {
             common: Some("common1".to_string()),
             bash: Some("bash1".to_string()),
             zsh: Some("zsh1".to_string()),
             fish: Some("fish1".to_string()),
             tcsh: Some("tcsh1".to_string()),
-        };
-        let high_priority = Profile::default();
-        let merged = ShallowMerger::merge_profile(&low_priority, &high_priority).unwrap();
-        assert_eq!(merged, low_priority);
+        });
+        let high_priority = Some(Profile::default());
+
+        assert_eq!(
+            ShallowMerger::merge_profile(low_priority.as_ref(), high_priority.as_ref()).unwrap(),
+            low_priority
+        );
+        assert_eq!(
+            ShallowMerger::merge_profile(low_priority.as_ref(), None).unwrap(),
+            low_priority
+        );
     }
 
     #[test]
     fn merges_profile_sections_only_high_priority() {
-        let low_priority = Profile::default();
-        let high_priority = Profile {
+        let low_priority = Some(Profile::default());
+        let high_priority = Some(Profile {
             common: Some("common2".to_string()),
             bash: Some("bash2".to_string()),
             zsh: Some("zsh2".to_string()),
             fish: Some("fish2".to_string()),
             tcsh: Some("tcsh2".to_string()),
-        };
-        let merged = ShallowMerger::merge_profile(&low_priority, &high_priority).unwrap();
-        assert_eq!(merged, high_priority);
+        });
+
+        assert_eq!(
+            ShallowMerger::merge_profile(low_priority.as_ref(), high_priority.as_ref()).unwrap(),
+            high_priority,
+        );
+        assert_eq!(
+            ShallowMerger::merge_profile(None, high_priority.as_ref()).unwrap(),
+            high_priority,
+        );
     }
 
     #[test]
-    fn merges_profile_sections_both_none() {
+    fn merges_profile_sections_both_inner_none() {
         assert_eq!(
-            Profile::default(),
-            ShallowMerger::merge_profile(&Profile::default(), &Profile::default()).unwrap()
+            ShallowMerger::merge_profile(
+                Some(Profile::default()).as_ref(),
+                Some(Profile::default()).as_ref()
+            )
+            .unwrap(),
+            Some(Profile::default()),
         );
+    }
+
+    #[test]
+    fn merges_profile_sections_both_outer_none() {
+        assert_eq!(ShallowMerger::merge_profile(None, None).unwrap(), None);
     }
 }

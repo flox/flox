@@ -193,10 +193,6 @@ EOF
 [install.hello]
 pkg-path = "hello"
 
-[hook]
-
-[profile]
-
 [options.allow]
 licenses = []
 
