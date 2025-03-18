@@ -307,7 +307,7 @@ impl CoreEnvironment<ReadOnly> {
             })
             .map_err(CoreEnvironmentError::ModifyToml)?;
         if let Some(ref new_manifest) = installation.new_manifest {
-            let store_path = self.transact_with_manifest_contents(new_manifest, flox)?;
+            let (store_path, _) = self.transact_with_manifest_contents(new_manifest, flox)?;
             installation.built_environments = Some(store_path);
         }
         Ok(installation)
@@ -329,7 +329,7 @@ impl CoreEnvironment<ReadOnly> {
 
         let toml = remove_packages(&current_manifest_contents, &install_ids)
             .map_err(CoreEnvironmentError::ModifyToml)?;
-        let store_path = self.transact_with_manifest_contents(toml.to_string(), flox)?;
+        let (store_path, _) = self.transact_with_manifest_contents(toml.to_string(), flox)?;
         Ok(UninstallationAttempt {
             new_manifest: Some(toml.to_string()),
             built_environment_store_paths: Some(store_path),
@@ -410,9 +410,14 @@ impl CoreEnvironment<ReadOnly> {
             return Ok(EditResult::Unchanged);
         }
 
-        let store_path = self.transact_with_manifest_contents(&contents, flox)?;
+        let old_lockfile = self.existing_lockfile()?;
+        let (store_path, new_lockfile) = self.transact_with_manifest_contents(&contents, flox)?;
 
-        EditResult::new(&old_contents, &contents, Some(store_path)).map_err(EnvironmentError::Core)
+        Ok(EditResult::Changed {
+            old_lockfile,
+            new_lockfile,
+            built_environment_store_paths: store_path,
+        })
     }
 
     /// Atomically edit this environment, without checking that it still builds
@@ -434,6 +439,8 @@ impl CoreEnvironment<ReadOnly> {
             return Ok(Ok(EditResult::Unchanged));
         }
 
+        let old_lockfile = self.existing_lockfile()?;
+
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
             .into_path();
@@ -449,11 +456,14 @@ impl CoreEnvironment<ReadOnly> {
 
         debug!("transaction: building environment, ignoring errors (unsafe)");
 
-        if let Err(lock_err) = temp_env.lock(flox) {
-            debug!("transaction: lock failed: {:?}", lock_err);
-            debug!("transaction: replacing environment");
-            self.replace_with(temp_env)?;
-            return Ok(Err(lock_err));
+        let new_lockfile = match temp_env.lock(flox) {
+            Ok(lockfile) => lockfile,
+            Err(lock_err) => {
+                debug!("transaction: lock failed: {:?}", lock_err);
+                debug!("transaction: replacing environment");
+                self.replace_with(temp_env)?;
+                return Ok(Err(lock_err));
+            },
         };
 
         let build_attempt = temp_env.build(flox);
@@ -462,8 +472,11 @@ impl CoreEnvironment<ReadOnly> {
         self.replace_with(temp_env)?;
 
         match build_attempt {
-            Ok(store_path) => Ok(EditResult::new(&old_contents, &contents, Some(store_path))
-                .map_err(EnvironmentError::Core)),
+            Ok(store_path) => Ok(Ok(EditResult::Changed {
+                old_lockfile,
+                new_lockfile,
+                built_environment_store_paths: store_path,
+            })),
             Err(err) => Ok(Err(EnvironmentError::Core(err))),
         }
     }
@@ -686,7 +699,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         manifest_contents: impl AsRef<str>,
         flox: &Flox,
-    ) -> Result<BuildEnvOutputs, EnvironmentError> {
+    ) -> Result<(BuildEnvOutputs, Lockfile), EnvironmentError> {
         let manifest: Manifest = toml::from_str(manifest_contents.as_ref())
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
         manifest
@@ -708,14 +721,14 @@ impl CoreEnvironment<ReadOnly> {
         temp_env.update_manifest(&manifest_contents)?;
 
         debug!("transaction: locking environment");
-        temp_env.lock(flox)?;
+        let lockfile = temp_env.lock(flox)?;
 
         debug!("transaction: building environment");
         let store_path = temp_env.build(flox)?;
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
-        Ok(store_path)
+        Ok((store_path, lockfile))
     }
 
     /// Attempt to transactionally replace the lockfile contents
@@ -779,61 +792,48 @@ impl CoreEnvironment<ReadWrite> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum EditResult {
     /// The manifest was not modified.
     Unchanged,
-    /// The manifest was modified, and the user needs to re-activate it.
-    ReActivateRequired {
-        built_environment_store_paths: Option<BuildEnvOutputs>,
-    },
-    /// The manifest was modified, but the user does not need to re-activate it.
-    Success {
-        built_environment_store_paths: Option<BuildEnvOutputs>,
+    /// The manifest was modified, although the change could be as minimal as
+    /// whitespace
+    Changed {
+        old_lockfile: Option<Lockfile>,
+        new_lockfile: Lockfile,
+        built_environment_store_paths: BuildEnvOutputs,
     },
 }
 
 impl EditResult {
-    pub fn new(
-        old_manifest_contents: &str,
-        new_manifest_contents: &str,
-        built_environment_store_paths: Option<BuildEnvOutputs>,
-    ) -> Result<Self, CoreEnvironmentError> {
-        if old_manifest_contents == new_manifest_contents {
-            Ok(Self::Unchanged)
-        } else {
-            // TODO: use a single toml crate (toml_edit already implements serde traits)
-            // TODO: use different error variants, users _can_ fix errors in the _new_ manifest
-            //       but they _can't_ fix errors in the _old_ manifest
-            let old_manifest: Manifest = toml::from_str(old_manifest_contents)
-                .map_err(CoreEnvironmentError::DeserializeManifest)?;
-            let new_manifest: Manifest = toml::from_str(new_manifest_contents)
-                .map_err(CoreEnvironmentError::DeserializeManifest)?;
-
-            if old_manifest.hook != new_manifest.hook
-                || old_manifest.vars != new_manifest.vars
-                || old_manifest.profile != new_manifest.profile
-            {
-                Ok(Self::ReActivateRequired {
-                    built_environment_store_paths,
-                })
-            } else {
-                Ok(Self::Success {
-                    built_environment_store_paths,
-                })
-            }
-        }
-    }
-
-    pub fn built_environment_store_paths(&self) -> Option<BuildEnvOutputs> {
+    /// The user needs to re-activate to have changes made to the environment
+    /// take effect
+    pub fn reactivate_required(&self) -> bool {
         match self {
-            EditResult::Unchanged => None,
-            EditResult::ReActivateRequired {
-                built_environment_store_paths,
-            } => built_environment_store_paths.clone(),
-            EditResult::Success {
-                built_environment_store_paths,
-            } => built_environment_store_paths.clone(),
+            Self::Unchanged => false,
+            Self::Changed {
+                old_lockfile,
+                new_lockfile,
+                ..
+            } => {
+                let hook_changed = old_lockfile
+                    .as_ref()
+                    .and_then(|lockfile| lockfile.manifest.hook.as_ref())
+                    != new_lockfile.manifest.hook.as_ref();
+
+                let vars_changed = old_lockfile
+                    .as_ref()
+                    .map(|lockfile| lockfile.manifest.vars.clone())
+                    .unwrap_or_default()
+                    != new_lockfile.manifest.vars;
+
+                let profile_changed = old_lockfile
+                    .as_ref()
+                    .and_then(|lockfile| lockfile.manifest.profile.as_ref())
+                    != new_lockfile.manifest.profile.as_ref();
+
+                hook_changed || vars_changed || profile_changed
+            },
         }
     }
 }
@@ -1207,9 +1207,10 @@ mod tests {
         assert!(config_path.exists());
     }
 
-    /// Installing hello with edit returns EditResult::Success
+    /// Installing hello with edit returns EditResult::Changed and
+    /// reactivate_required() returns false
     #[test]
-    fn edit_adding_package_returns_success() {
+    fn edit_adding_package_returns_changed() {
         let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
 
         let new_env_str = r#"
@@ -1222,14 +1223,13 @@ mod tests {
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
-        assert!(matches!(result, EditResult::Success {
-            built_environment_store_paths: _
-        }));
+        assert!(matches!(result, EditResult::Changed { .. }));
+        assert!(!result.reactivate_required());
     }
 
-    /// Adding a hook with edit returns EditResult::ReActivateRequired
+    /// After adding a hook with edit, reactivate_required returns true
     #[test]
-    fn edit_adding_hook_returns_re_activate_required() {
+    fn edit_adding_hook_returns_reactivate_required() {
         let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
 
         let new_env_str = r#"
@@ -1241,9 +1241,7 @@ mod tests {
 
         let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
-        assert!(matches!(result, EditResult::ReActivateRequired {
-            built_environment_store_paths: _
-        }));
+        assert!(result.reactivate_required());
     }
 
     /// Check that with an empty list of packages to upgrade, all packages are upgraded
