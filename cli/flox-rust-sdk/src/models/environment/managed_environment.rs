@@ -298,14 +298,18 @@ impl Environment for ManagedEnvironment {
 
         let result = local_checkout.edit(flox, contents)?;
 
-        if result != EditResult::Unchanged {
-            generations
-                .add_generation(&mut local_checkout, "manually edited".to_string())
-                .map_err(ManagedEnvironmentError::CommitGeneration)?;
-            self.lock_pointer()?;
-            if let Some(ref store_paths) = result.built_environment_store_paths() {
-                self.link(store_paths)?;
-            }
+        match &result {
+            EditResult::Changed {
+                built_environment_store_paths,
+                ..
+            } => {
+                generations
+                    .add_generation(&mut local_checkout, "manually edited".to_string())
+                    .map_err(ManagedEnvironmentError::CommitGeneration)?;
+                self.lock_pointer()?;
+                self.link(built_environment_store_paths)?;
+            },
+            EditResult::Unchanged => {},
         }
 
         Ok(result)

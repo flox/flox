@@ -242,10 +242,14 @@ impl Environment for PathEnvironment {
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
         let result = env_view.edit(flox, contents)?;
-        if result != EditResult::Unchanged {
-            if let Some(ref store_paths) = result.built_environment_store_paths() {
-                self.link(flox, store_paths)?;
-            };
+        match &result {
+            EditResult::Changed {
+                built_environment_store_paths,
+                ..
+            } => {
+                self.link(flox, built_environment_store_paths)?;
+            },
+            EditResult::Unchanged => {},
         }
         Ok(result)
     }

@@ -192,19 +192,16 @@ impl Edit {
             EditResult::Unchanged => {
                 message::warning("No changes made to environment.");
             },
-            EditResult::ReActivateRequired { .. }
-                if activated_environments().is_active(&active_environment) =>
-            {
-                message::warning(reactivate_required_note)
+            EditResult::Changed { .. } => {
+                if result.reactivate_required()
+                    && activated_environments().is_active(&active_environment)
+                {
+                    message::warning(reactivate_required_note);
+                } else {
+                    message::updated("Environment successfully updated.")
+                }
+                warn_manifest_changes_for_services(flox, environment);
             },
-            EditResult::ReActivateRequired { .. } => {
-                message::updated("Environment successfully updated.")
-            },
-            EditResult::Success { .. } => message::updated("Environment successfully updated."),
-        }
-
-        if result != EditResult::Unchanged {
-            warn_manifest_changes_for_services(flox, environment);
         }
 
         Ok(())
