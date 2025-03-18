@@ -474,6 +474,8 @@ priority that should be used when merging the manifests. Descriptors later in
 the array take higher priority than those earlier in the array, and manifest
 fields in the composing manifest take the highest priority.
 
+The merged manifest can be viewed with `flox list --config`.
+
 ### Syntax
 
 An example `[include]` section is shown below:

@@ -59,14 +59,13 @@ impl List {
             .environment
             .detect_concrete_environment(&flox, "List using")?;
 
-        let manifest_contents = env.manifest_contents(&flox)?;
+        let lockfile = env.lockfile(&flox)?;
         if self.list_mode == ListMode::Config {
-            println!("{manifest_contents}");
+            Self::print_config(&flox, &mut env, &lockfile)?;
             return Ok(());
         }
 
         let system = &flox.system;
-        let lockfile = env.lockfile(&flox)?;
         let packages = lockfile.list_packages(system)?;
 
         if packages.is_empty() {
@@ -98,6 +97,23 @@ impl List {
                 )?;
             },
             ListMode::Config => unreachable!(),
+        }
+
+        Ok(())
+    }
+
+    /// print the manifest contents
+    fn print_config(flox: &Flox, env: &mut ConcreteEnvironment, lockfile: &Lockfile) -> Result<()> {
+        let is_composed = lockfile.compose.is_some();
+        let manifest_contents = if is_composed {
+            toml_edit::ser::to_string_pretty(&lockfile.manifest)?
+        } else {
+            env.manifest_contents(flox)?
+        };
+
+        println!("{manifest_contents}");
+        if is_composed {
+            message::info("Displaying merged manifest.");
         }
 
         Ok(())

@@ -32,6 +32,8 @@ the output.
 
 `-c`, `--config`
 :   Show the raw contents of the manifest.
+    When using composition, the merged manifest will be shown without any
+    commented lines.
 
 `-n`, `--name`
 :   Show only the install ID of each package.
