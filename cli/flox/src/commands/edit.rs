@@ -373,12 +373,15 @@ impl Edit {
 mod tests {
     use std::fs;
 
-    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
+    use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment_unlocked;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
     use flox_rust_sdk::models::lockfile::{ResolutionFailures, ResolveError};
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use serde::de::Error;
     use tempfile::tempdir;
+    use tracing::instrument::WithSubscriber;
 
     use super::*;
 

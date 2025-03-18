@@ -821,27 +821,16 @@ mod upgrade_notification_tests {
     use flox_rust_sdk::models::lockfile::LockedPackage;
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
     use flox_rust_sdk::providers::upgrade_checks::UpgradeInformation;
-    use flox_rust_sdk::utils::logging::test_helpers::CollectingWriter;
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use time::OffsetDateTime;
-    use tracing::Subscriber;
-    use tracing_subscriber::filter::FilterFn;
-    use tracing_subscriber::layer::SubscriberExt;
 
     use super::*;
     use crate::commands::ActiveEnvironments;
 
-    fn test_subscriber() -> (impl Subscriber, CollectingWriter) {
-        let (subscriber, writer) = flox_rust_sdk::utils::logging::test_helpers::test_subscriber();
-        let subscriber = subscriber.with(FilterFn::new(|metadata| {
-            metadata.target() == "flox::utils::message"
-        }));
-        (subscriber, writer)
-    }
-
     #[test]
     fn no_notification_printed_if_absent() {
         let (flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber();
+        let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
@@ -890,7 +879,7 @@ mod upgrade_notification_tests {
     #[test]
     fn no_notification_printed_if_already_active() {
         let (flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber();
+        let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
@@ -921,7 +910,7 @@ mod upgrade_notification_tests {
     #[test]
     fn notification_printed_if_present() {
         let (flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber();
+        let (subscriber, writer) = test_subscriber_message_only();
 
         let environment = new_named_path_environment_from_env_files(
             &flox,
@@ -948,7 +937,7 @@ mod upgrade_notification_tests {
     #[test]
     fn no_notification_printed_if_outdated() {
         let (flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber();
+        let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
@@ -987,7 +976,7 @@ mod upgrade_notification_tests {
     #[test]
     fn no_notification_printed_if_no_diff() {
         let (flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber();
+        let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));

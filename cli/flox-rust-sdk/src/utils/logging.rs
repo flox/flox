@@ -65,4 +65,15 @@ pub mod test_helpers {
 
         (subscriber, writer)
     }
+
+    #[cfg(any(test, feature = "tests"))]
+    pub fn test_subscriber_message_only() -> (impl tracing::Subscriber, CollectingWriter) {
+        use tracing_subscriber::layer::SubscriberExt;
+
+        let (subscriber, writer) = test_subscriber();
+        let subscriber = subscriber.with(tracing_subscriber::filter::FilterFn::new(|metadata| {
+            metadata.target() == "flox::utils::message"
+        }));
+        (subscriber, writer)
+    }
 }
