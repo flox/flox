@@ -201,6 +201,9 @@ impl Edit {
                     message::updated("Environment successfully updated.")
                 }
                 warn_manifest_changes_for_services(flox, environment);
+                if result.include_modified() {
+                    message::info("Run 'flox list -c' to see merged manifest.");
+                }
             },
         }
 
@@ -779,5 +782,61 @@ mod tests {
         )
         .await
         .expect("edit should succeed");
+    }
+
+    /// When the [include] section is modified, a warning is printed
+    #[tokio::test]
+    async fn edit_warns_when_include_changed() {
+        let (mut flox, tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        flox.features.compose = true;
+
+        // Create composer environment
+        let composer_path = tempdir.path().join("composer");
+        let mut composer_manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+        fs::create_dir(&composer_path).unwrap();
+        let composer = new_path_environment_in(&flox, composer_manifest_contents, &composer_path);
+
+        // Create dep environment
+        let dep_path = tempdir.path().join("dep");
+        let dep_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "dep"
+        "#};
+
+        fs::create_dir(&dep_path).unwrap();
+        let mut dep = new_path_environment_in(&flox, dep_manifest_contents, &dep_path);
+        dep.lockfile(&flox).unwrap();
+
+        composer_manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "../dep" }
+        ]
+        "#};
+        let composer_new_manifest_path = tempdir.path().join("temporary-manifest.toml");
+        fs::write(&composer_new_manifest_path, composer_manifest_contents).unwrap();
+
+        Edit {
+            environment: EnvironmentSelect::Dir(composer.parent_path().unwrap()),
+            action: EditAction::EditManifest {
+                file: Some(composer_new_manifest_path),
+            },
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ✅ Environment successfully updated.
+            ℹ️ Run 'flox list -c' to see merged manifest.
+            "});
     }
 }
