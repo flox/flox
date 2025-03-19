@@ -175,6 +175,22 @@ pkgs.runCommandNoCC name
                 # flox-activations needs runtime dir for activation state dir
                 # TMP will be set to something like
                 # /private/tmp/nix-build-file-0.0.0.drv-0
+
+                # See flox-build.mk for more explanation of why we use a nested
+                # activation.
+                # Just like for impure builds, we want to prefer the build
+                # wrapper environment for tools and libraries.
+                # Unlike for impure builds, we use run mode since we're leaning
+                # on Nix to setup languages.
+                # This may be happening because flox-env-package is in
+                # buildInputs,
+                # but we would need to confirm.
+                # Because we use run mode instead of dev mode, we don't need to
+                # filter out anything set by dev mode, so we don't use env -i
+                # Strictly speaking we don't need --set-vars, since the outer
+                # activation will set those,
+                # and we're not using env -i like we are in the impure build
+
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --env ${flox-env-package} --mode run --turbo -- \
                     ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
