@@ -22,12 +22,12 @@
         "attr_path": "nodejs",
         "catalog": null,
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
-        "name": "nodejs-22.13.1",
+        "name": "nodejs-22.14.0",
         "pkg_path": "nodejs",
         "pname": "nodejs",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "22.13.1"
+        "version": "22.14.0"
       },
       {
         "attr_path": "nodejs_14",
@@ -38,7 +38,7 @@
         "pname": "nodejs_14",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "nodejs-14.21.3"
+        "version": "14.21.3"
       },
       {
         "attr_path": "nodejs_16",
@@ -49,7 +49,7 @@
         "pname": "nodejs_16",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "nodejs-16.20.2"
+        "version": "16.20.2"
       }
     ]
   }

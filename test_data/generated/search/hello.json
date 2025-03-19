@@ -55,7 +55,7 @@
         "pname": "hello-unfree",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "example-unfree-package-1.0"
+        "version": "1.0"
       },
       {
         "attr_path": "hello-wayland",
@@ -66,7 +66,7 @@
         "pname": "hello-wayland",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "0-unstable-2024-03-04"
+        "version": "2024-03-04"
       },
       {
         "attr_path": "sbclPackages.hello-clog",
@@ -77,7 +77,7 @@
         "pname": "hello-clog",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "sbcl-hello-clog-20241012-git"
+        "version": "20241012-git"
       },
       {
         "attr_path": "texlivePackages.othello",
@@ -99,7 +99,7 @@
         "pname": "hello-builder",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "sbcl-hello-builder-20241012-git"
+        "version": "20241012-git"
       },
       {
         "attr_path": "javaPackages.mavenHello_1_0",
@@ -110,7 +110,7 @@
         "pname": "mavenHello_1_0",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "maven-hello-1.0"
+        "version": "1.0"
       }
     ]
   }

@@ -11,26 +11,26 @@
             "attr_path": "darwin.ps",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/fdqznlzrivim12gq7yxhrybfg47xfwq3-adv_cmds-231.drv",
+            "derivation": "/nix/store/nwj8nl7dykbggv6628g3c7ky43d7118d-adv_cmds-231.drv",
             "description": "Advanced commands package for Darwin",
             "insecure": false,
             "install_id": "ps",
             "license": "[ APSL-1.0, APSL-2.0 ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
             "missing_builds": false,
             "name": "adv_cmds-231",
             "outputs": [
               {
                 "name": "ps",
-                "store_path": "/nix/store/s9l3cadkr7yqa58y3i7qjxp9mxzy605q-adv_cmds-231-ps"
+                "store_path": "/nix/store/bw09plsky83ylka5w1gvapc1mkdr417h-adv_cmds-231-ps"
               },
               {
                 "name": "man",
-                "store_path": "/nix/store/x2i9w7nq4y3yw5i708h5s1warq6m0k1r-adv_cmds-231-man"
+                "store_path": "/nix/store/zfmhv959mw541365nzg4nf4q5pdpc5va-adv_cmds-231-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/rn3ypwqx4m4z9pj32apkr57iffa6r9l7-adv_cmds-231"
+                "store_path": "/nix/store/wrmj927rcxgjz0hiq5n7wbs74clv7xrb-adv_cmds-231"
               }
             ],
             "outputs_to_install": [
@@ -39,19 +39,19 @@
             ],
             "pkg_path": "darwin.ps",
             "pname": "ps",
-            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-            "rev_count": 750629,
-            "rev_date": "2025-02-08T13:21:17Z",
-            "scrape_date": "2025-02-09T04:06:52Z",
+            "rev": "c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
+            "rev_count": 768633,
+            "rev_date": "2025-03-15T20:13:08Z",
+            "scrape_date": "2025-03-17T00:32:15Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "adv_cmds-231"
+            "version": "231"
           }
         ],
-        "page": 750629,
+        "page": 768633,
         "url": ""
       }
     }

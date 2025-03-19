@@ -1306,7 +1306,7 @@ mod tests {
                     rev: "rev".to_string(),
                     rev_count: 42,
                     rev_date: DateTime::<Utc>::MIN_UTC,
-                    scrape_date: DateTime::<Utc>::MIN_UTC,
+                    scrape_date: Some(DateTime::<Utc>::MIN_UTC),
                     stabilities: None,
                     unfree: None,
                     version: "1.0".to_string(),
