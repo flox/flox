@@ -41,7 +41,7 @@ This allows re-use of the package in other environments.
 
 Flox makes some assertions before publishing, specifically
 
-- The flox environment used to build the package is tracked as a git repository.
+- The Flox environment used to build the package is tracked as a git repository.
 - Tracked files in the repository are all clean.
 - The repository has a remote defined and the current revision has been pushed to it.
 - The build environment must have at least one package installed.
@@ -82,11 +82,11 @@ and defers authorization to the nix AWS provider.
 Flox uses nix's S3 provider to perform the uploads and downloads,
 so you need to be authenticated with AWS
 to allow for this.
-Using the `awscli2` package (as found in flox),
+Using the `awscli2` package (as found in Flox),
 you need to run `aws sso login`.
 If you are using non-default profiles (see `~/.aws/config`),
 you should set AWS_PROFILE in your shell
-so `aws` CLI and flox invocations
+so `aws` CLI and Flox invocations
 use the same AWS profile.
 
 Instructions for setting up the AWS CLI
@@ -96,7 +96,7 @@ can be found [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-sta
 
 To simplify the command line during publish,
 you can set the `store_url` and `signing_key`
-in the flox config:
+in the Flox config:
 
 ``` bash
 flox config --set publish.store_url "s3://my-bucket-name"
