@@ -32,7 +32,7 @@ and output build artifacts at `result-<package>` adjacent to the environment.
 
 Possible values for `<package>` are all keys under the `build` attribute
 in the `manifest.toml`.
-If no `<package>` is specified, flox will attempt to build all packages
+If no `<package>` is specified, Flox will attempt to build all packages
 that are defined in the environment.
 
 Packages are built by running the script defined in `build.<package>.command`

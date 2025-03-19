@@ -23,7 +23,7 @@ flox [<general-options>] update
 Update an environment's base catalog,
 or update the global base catalog if `--global` is specified.
 
-The base catalog is a collection of packages used by various flox subcommands.
+The base catalog is a collection of packages used by various Flox subcommands.
 
 The global base catalog provides packages for
 [`flox-search(1)`](./flox-search.md) and [`flox-show(1)`](./flox-show.md) when

@@ -134,7 +134,7 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
     and they will not persist when using a remote environment with `-r`.
 
 `$FLOX_ENV_PROJECT`
-:   `activate` sets this variable to the directory of the project using the flox
+:   `activate` sets this variable to the directory of the project using the Flox
     environment.
     For environments stored locally, this is the directory containing the
     environment.

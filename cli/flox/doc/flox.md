@@ -20,7 +20,7 @@ flox [<general options>] <command>
 
 Flox is a virtual environment and package manager all in one.
 
-With flox you create environments that layer and provide dependencies just
+With Flox you create environments that layer and provide dependencies just
 where it matters,
 making them portable across the full software lifecycle.
 
@@ -35,7 +35,7 @@ These completions are installed alongside Flox.
 ./include/general-options.md
 ```
 
-## flox Options
+## Flox Options
 
 `--version`
 :   Print `flox` version.
@@ -107,7 +107,7 @@ sharing environments, and administration.
 :   Override the default editor used for editing environment manifests and commit messages.
 
 `$SSL_CERT_FILE`, `$NIX_SSL_CERT_FILE`
-:   If set, overrides the path to the default flox-provided SSL certificate bundle.
+:   If set, overrides the path to the default Flox provided SSL certificate bundle.
     Set `NIX_SSL_CERT_FILE` to only override packages built with Nix,
     and otherwise set `SSL_CERT_FILE` to override the value for all packages.
 
