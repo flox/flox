@@ -390,7 +390,7 @@
     "/api/v1/catalog/catalogs/": {
       "post": {
         "tags": [
-          "user_catalogs"
+          "catalogs"
         ],
         "summary": "Create a new user catalog",
         "description": "Create a new user catalog\n\nRequired Query Parameters:\n- **name**: The name of the new catalog\n\n\nReturns:\n- **UserCatalog**: The new user catalog",
@@ -449,7 +449,7 @@
     "/api/v1/catalog/catalogs/{catalog_name}": {
       "get": {
         "tags": [
-          "user_catalogs"
+          "catalogs"
         ],
         "summary": "Get user catalog metadata",
         "description": "Get user catalog metadata\n\nRequired Query Parameters:\n- **catalog_name**: The name of the catalog\n\n\nReturns:\n- **UserCatalog**: The user catalog",
@@ -506,7 +506,7 @@
       },
       "delete": {
         "tags": [
-          "user_catalogs"
+          "catalogs"
         ],
         "summary": "Delete a user catalog",
         "description": "Delete a user catalog\n\nRequired Query Parameters:\n- **catalog_name**: The name of catalog to delete\n\n\nReturns:\n- **None**",
@@ -563,7 +563,7 @@
     "/api/v1/catalog/catalogs/{catalog_name}/packages": {
       "post": {
         "tags": [
-          "user_catalogs"
+          "catalogs"
         ],
         "summary": "Create a new package in a user catalog",
         "description": "Creates a catalog package\n\nPath Parameters:\n- **catalog_name**: The name of catalog to place the package into\n\nRequired Query Parameters:\n- **name**: The name of package (attr_path) to create\n\nReturns:\n- **UserPackage**",
@@ -660,7 +660,7 @@
       },
       "get": {
         "tags": [
-          "user_catalogs"
+          "catalogs"
         ],
         "summary": "List packages available in a catalog",
         "description": "Lists available packages in a catalog\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nReturns:\n- **UserPackageList**",
@@ -719,7 +719,7 @@
     "/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}": {
       "get": {
         "tags": [
-          "user_catalogs"
+          "catalogs"
         ],
         "summary": "Get package info",
         "description": "Get package info\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nReturns:\n- **UserPackage**",
@@ -788,7 +788,7 @@
     "/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/builds": {
       "post": {
         "tags": [
-          "user_catalogs"
+          "catalogs"
         ],
         "summary": "Submit a build of a particular package",
         "description": "Create a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **UserBuild**: The build info to submit\n\nReturns:\n- **UserBuildCreationResponse**",
@@ -885,7 +885,7 @@
       },
       "get": {
         "tags": [
-          "user_catalogs"
+          "catalogs"
         ],
         "summary": "Get a list of builds for a given package",
         "description": "Get the list of builds for a given package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nReturns:\n- **UserBuildList**",
@@ -954,7 +954,7 @@
     "/api/v1/catalog/catalogs/{catalog_name}/sharing": {
       "get": {
         "tags": [
-          "user_catalogs"
+          "catalogs"
         ],
         "summary": "Get usernames that have read access to a catalog",
         "description": "Get the list of usernames with read access to a catalog\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nReturns:\n- **CatalogShareInfo**: The users with read access to the catalog",
@@ -1013,7 +1013,7 @@
     "/api/v1/catalog/catalogs/{catalog_name}/sharing/add-read-users": {
       "post": {
         "tags": [
-          "user_catalogs"
+          "catalogs"
         ],
         "summary": "Add usernames to the read access list for a catalog",
         "description": "Add usernames to the read access list for a catalog\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nBody Content:\n- **CatalogShareInfo**: The users to add to the read access list\n\nReturns:\n- **CatalogShareInfo**: The users with read access to the catalog",
@@ -1082,7 +1082,7 @@
     "/api/v1/catalog/catalogs/{catalog_name}/sharing/remove-read-users": {
       "post": {
         "tags": [
-          "user_catalogs"
+          "catalogs"
         ],
         "summary": "Remove usernames from the read access list for a catalog",
         "description": "Remove usernames from the read access list for a catalog\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nBody Content:\n- **CatalogShareInfo**: The users to remove from the read access list\n\nReturns:\n- **CatalogShareInfo**: The users with read access to the catalog",
@@ -1121,6 +1121,132 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CatalogShareInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog with the given name was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The catalog name is invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/catalogs/{catalog_name}/store/config": {
+      "get": {
+        "tags": [
+          "catalogs"
+        ],
+        "summary": "Get store config",
+        "description": "Get store configuration",
+        "operationId": "get_catalog_store_config_api_v1_catalog_catalogs__catalog_name__store_config_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The store configuration was found and returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog with the given name was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The catalog name is invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "catalogs"
+        ],
+        "summary": "Set store config",
+        "description": "Update store configuration",
+        "operationId": "set_catalog_store_config_api_v1_catalog_catalogs__catalog_name__store_config_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The store configuration was updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__"
                 }
               }
             }
@@ -1386,9 +1512,10 @@
             "title": "Latest Rev"
           },
           "latest_scrape": {
+            "title": "Latest Scrape",
+            "nullable": true,
             "type": "string",
-            "format": "date-time",
-            "title": "Latest Scrape"
+            "format": "date-time"
           },
           "attribute_path_ct": {
             "type": "integer",
@@ -1433,7 +1560,6 @@
           "systems",
           "pages_ct",
           "latest_rev",
-          "latest_scrape",
           "attribute_path_ct",
           "search_index_ct",
           "derivations_ct",
@@ -1441,6 +1567,51 @@
           "tags"
         ],
         "title": "CatalogStatus"
+      },
+      "CatalogStoreConfigNixCopy": {
+        "properties": {
+          "store_type": {
+            "const": "nix-copy",
+            "title": "Store Type",
+            "default": "nix-copy"
+          },
+          "ingress_uri": {
+            "type": "string",
+            "title": "Ingress Uri"
+          },
+          "egress_uri": {
+            "type": "string",
+            "title": "Egress Uri"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ingress_uri",
+          "egress_uri"
+        ],
+        "title": "CatalogStoreConfigNixCopy"
+      },
+      "CatalogStoreConfigNull": {
+        "properties": {
+          "store_type": {
+            "const": "null",
+            "title": "Store Type",
+            "default": "null"
+          }
+        },
+        "type": "object",
+        "title": "CatalogStoreConfigNull"
+      },
+      "CatalogStoreConfigPublisher": {
+        "properties": {
+          "store_type": {
+            "const": "publisher",
+            "title": "Store Type",
+            "default": "publisher"
+          }
+        },
+        "type": "object",
+        "title": "CatalogStoreConfigPublisher"
       },
       "ErrorResponse": {
         "properties": {
@@ -1584,7 +1755,8 @@
           "attr_path_not_found.systems_not_on_same_page",
           "attr_path_not_found.not_found_for_all_systems",
           "missing_builds",
-          "unacceptable_licenses"
+          "unacceptable_licenses",
+          "change_in_version_format"
         ],
         "title": "MessageType"
       },
@@ -1817,6 +1989,7 @@
           },
           "version": {
             "title": "Version",
+            "description": "While version should always be present, (and is required in the PackageResolutionInfo model), there are cases where it has been historically optional and thus is carried forward here.  Published derivations have an Optional version and this same model is used for both published derivations and base catalog derivations.  For this reason we cannot make it required here until/if we unify those models and ensure every derivation does in fact have a version.",
             "nullable": true,
             "type": "string"
           },
@@ -1967,9 +2140,10 @@
             "type": "array"
           },
           "scrape_date": {
+            "title": "Scrape Date",
+            "nullable": true,
             "type": "string",
-            "format": "date-time",
-            "title": "Scrape Date"
+            "format": "date-time"
           },
           "cache_uri": {
             "title": "Cache Uri",
@@ -2249,9 +2423,10 @@
             "type": "array"
           },
           "scrape_date": {
+            "title": "Scrape Date",
+            "nullable": true,
             "type": "string",
-            "format": "date-time",
-            "title": "Scrape Date"
+            "format": "date-time"
           },
           "cache_uri": {
             "title": "Cache Uri",
@@ -2411,6 +2586,20 @@
           "items"
         ],
         "title": "ResolvedPackageGroups"
+      },
+      "RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/CatalogStoreConfigNull"
+          },
+          {
+            "$ref": "#/components/schemas/CatalogStoreConfigNixCopy"
+          },
+          {
+            "$ref": "#/components/schemas/CatalogStoreConfigPublisher"
+          }
+        ],
+        "title": "CatalogStoreConfig"
       },
       "ServiceStatus-Input": {
         "properties": {
@@ -2582,7 +2771,6 @@
         ],
         "title": "UserBuild",
         "example": {
-          "cache_uri": "https://example-s3-bucket.com",
           "derivation": {
             "description": "A very nice derivation",
             "drv_path": "foo.bar.curl",
@@ -2602,7 +2790,7 @@
           "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
           "rev_count": 12345,
           "rev_date": "2021-09-01T00:00:00Z",
-          "url": "http://example.com"
+          "url": "https://github.com/org/example"
         }
       },
       "UserBuild-Output": {
@@ -2648,7 +2836,6 @@
         ],
         "title": "UserBuild",
         "example": {
-          "cache_uri": "https://example-s3-bucket.com",
           "derivation": {
             "description": "A very nice derivation",
             "drv_path": "foo.bar.curl",
@@ -2668,7 +2855,7 @@
           "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
           "rev_count": 12345,
           "rev_date": "2021-09-01T00:00:00Z",
-          "url": "http://example.com"
+          "url": "https://github.com/org/example"
         }
       },
       "UserBuildCreationResponse": {
@@ -2911,29 +3098,27 @@
             "title": "Name"
           },
           "original_url": {
-            "type": "string",
-            "title": "Original Url"
+            "title": "Original Url",
+            "nullable": true,
+            "type": "string"
           }
         },
         "type": "object",
         "required": [
           "catalog",
-          "name",
-          "original_url"
+          "name"
         ],
         "title": "UserPackage"
       },
       "UserPackageCreate": {
         "properties": {
           "original_url": {
-            "type": "string",
-            "title": "Original Url"
+            "title": "Original Url",
+            "nullable": true,
+            "type": "string"
           }
         },
         "type": "object",
-        "required": [
-          "original_url"
-        ],
         "title": "UserPackageCreate"
       },
       "UserPackageList": {
