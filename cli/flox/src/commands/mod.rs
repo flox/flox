@@ -76,6 +76,7 @@ use crate::commands::general::update_config;
 use crate::config::{
     Config,
     EnvironmentTrust,
+    InstallerChannel,
     FLOX_CONFIG_FILE,
     FLOX_DIR_NAME,
     FLOX_DISABLE_METRICS_VAR,
@@ -503,7 +504,7 @@ enum UpdateCheckResult {
 impl UpdateNotification {
     pub async fn check_for_and_print_update_notification(
         cache_dir: impl AsRef<Path>,
-        release_channel: &Option<String>,
+        release_channel: &Option<InstallerChannel>,
     ) {
         Self::handle_update_result(
             Self::check_for_update(cache_dir, release_channel).await,
@@ -515,7 +516,7 @@ impl UpdateNotification {
     /// UPDATE_NOTIFICATION_EXPIRY time has passed, check for an update.
     pub async fn check_for_update(
         cache_dir: impl AsRef<Path>,
-        release_channel: &Option<String>,
+        release_channel: &Option<InstallerChannel>,
     ) -> Result<UpdateCheckResult, UpdateNotificationError> {
         let notification_file = cache_dir.as_ref().join(UPDATE_NOTIFICATION_FILE_NAME);
         // Release channel won't be set for development builds.
@@ -588,7 +589,7 @@ impl UpdateNotification {
     /// or handle an error
     pub fn handle_update_result(
         update_notification: Result<UpdateCheckResult, UpdateNotificationError>,
-        release_env: &Option<String>,
+        release_env: &Option<InstallerChannel>,
     ) {
         match update_notification {
             Ok(UpdateCheckResult::Skipped) => {},
@@ -616,7 +617,7 @@ impl UpdateNotification {
     // and is created by an installer
     fn update_instructions(
         update_instructions_relative_file_path: &str,
-        release_env: &Option<String>,
+        release_env: &Option<InstallerChannel>,
     ) -> String {
         let instructions: Cow<str> = 'inst: {
             let Ok(exe) = env::current_exe() else {
@@ -645,16 +646,18 @@ impl UpdateNotification {
                 .clone()
                 .unwrap_or("stable".to_string())
                 .as_str(),
-            release_env.clone().unwrap_or("stable".to_string()).as_str(),
+            &release_env.clone().unwrap_or_default().to_string(),
         )
     }
 
     /// If a new version is available, print a message to the user.
     ///
     /// Write the notification_file with the current time.
-    fn print_new_version_available(self, release_env: &Option<String>) {
-        let release_env_unwrapped = release_env.clone().unwrap_or("stable".to_string());
-        if release_env_unwrapped == *FLOX_SENTRY_ENV.clone().unwrap_or("stable".to_string()) {
+    fn print_new_version_available(self, release_env: &Option<InstallerChannel>) {
+        let release_env_unwrapped = release_env.clone().unwrap_or_default();
+        if release_env_unwrapped.to_string()
+            == *FLOX_SENTRY_ENV.clone().unwrap_or("stable".to_string())
+        {
             message::plain(formatdoc! {"
 
                 🚀  Flox has a new version available. {} -> {}
@@ -705,7 +708,9 @@ impl UpdateNotification {
     /// Get latest version from downloads.flox.dev
     ///
     /// Timeout after TRAILING_NETWORK_CALL_TIMEOUT
-    async fn get_latest_version(release_env: &str) -> Result<String, UpdateNotificationError> {
+    async fn get_latest_version(
+        release_env: &InstallerChannel,
+    ) -> Result<String, UpdateNotificationError> {
         let client = reqwest::Client::new();
 
         let request = client
@@ -1640,7 +1645,7 @@ mod tests {
                 new_version: "new_version".to_string(),
                 notification_file: notification_file.clone(),
             })),
-            &Some("stable".to_string()),
+            &Some(InstallerChannel::Stable),
         );
 
         serde_json::from_str::<LastUpdateCheck>(&fs::read_to_string(notification_file).unwrap())
@@ -1658,7 +1663,7 @@ mod tests {
             Ok(UpdateCheckResult::RefreshNotificationFile(
                 notification_file.clone(),
             )),
-            &Some("stable".to_string()),
+            &Some(InstallerChannel::Stable),
         );
 
         serde_json::from_str::<LastUpdateCheck>(&fs::read_to_string(notification_file).unwrap())
@@ -1860,7 +1865,7 @@ mod tests {
 
         let message = UpdateNotification::update_instructions(
             update_instructions_file.to_str().unwrap(),
-            &Some("stable".to_string()),
+            &Some(InstallerChannel::Stable),
         );
         assert!(message.contains(custom_message));
     }
