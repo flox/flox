@@ -394,6 +394,8 @@ home_setup() {
 # `{setup,teardown}_suite' functions must be defined in `setup_suite.bash'
 # files, AND keep in mind that `SET_TESTS_DIR' will likely differ.
 common_suite_setup() {
+  export FLOX_FEATURES_COMPOSE='true'
+
   unset_flox_env_setup
   # Backup real env vars.
   reals_setup

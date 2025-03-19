@@ -4722,7 +4722,7 @@ EOF
     foo = "highest precedence"
 EOF
   )"
-  echo "$MANIFEST_CONTENTS_HIGHEST_PRECEDENCE" | FLOX_FEATURES_COMPOSE=true "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS_HIGHEST_PRECEDENCE" | "$FLOX_BIN" edit -f -
 
   run "$FLOX_BIN" activate -- echo 'foo: $foo; bar: $bar'
   assert_success
