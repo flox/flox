@@ -1032,6 +1032,8 @@ dependencies = [
  "path-dedot",
  "pollster",
  "pretty_assertions",
+ "proptest",
+ "proptest-derive",
  "regex",
  "reqwest 0.11.27",
  "semver",

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -108,7 +109,8 @@ pub struct FloxConfig {
     /// Configuration for 'flox publish'.
     pub publish: Option<PublishConfig>,
 
-    pub installer_channel: Option<String>,
+    /// Release channel to use when checking for updates to Flox.
+    pub installer_channel: Option<InstallerChannel>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -137,6 +139,27 @@ pub struct PublishConfig {
 
     /// Default path of the signing key used by 'flox publish'
     pub signing_key: Option<PathBuf>,
+}
+
+/// Channels must match: https://downloads.flox.dev/?prefix=by-env/
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "lowercase")]
+pub enum InstallerChannel {
+    #[default]
+    Stable,
+    Nightly,
+    Qa,
+}
+
+impl Display for InstallerChannel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InstallerChannel::Stable => write!(f, "stable"),
+            InstallerChannel::Nightly => write!(f, "nightly"),
+            InstallerChannel::Qa => write!(f, "qa"),
+        }
+    }
 }
 
 /// Error returned by [`Config::get()`]
@@ -431,6 +454,7 @@ fn mk_environment(envs: &mut Vec<(String, String)>, prefix: &str) -> Environment
 mod tests {
 
     use indoc::indoc;
+    use proptest::prelude::*;
 
     use super::*;
 
@@ -613,5 +637,14 @@ mod tests {
         assert_eq!(config_content, indoc! {"
         [trusted_environments]
         "});
+    }
+
+    proptest! {
+        #[test]
+        fn installer_channel_display_matches_serialized(channel in any::<InstallerChannel>()) {
+            let display_quoted = format!("\"{}\"", channel);
+            let serialized = serde_json::to_string(&channel).unwrap();
+            prop_assert_eq!(display_quoted, serialized);
+        }
     }
 }
