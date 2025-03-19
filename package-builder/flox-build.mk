@@ -233,11 +233,39 @@ define BUILD_local_template =
   # Prepare temporary log file for capturing build output for inspection.
   $(eval $(_pvarname)_logfile := $(shell $(_mktemp) --dry-run --suffix=-build-$(_pname).log))
 
-  # Make sure to invoke the build script in a nested activation of both the
-  # "develop" and "build wrapper" environments, and that the build wrapper
-  # environment is the "inner" activation preferred for sourcing commands,
-  # libraries, etc.  Also blat all env variables set by the outer activation
-  # to avoid including the "develop" environment in the build closure.
+  # Our aim in performing a manifest build is to replicate as closely as possible
+  # the experience of running those same build script commands from within an
+  # interactive `flox activate -m dev` shell (i.e. using the "develop" environment).
+
+  # But unlike the interactive case, the manifest build seeks to use dependencies
+  # as found in the target package's "wrapper" environment in preference to those
+  # found in the "develop" environment. It does this for the express purpose of
+  # preventing the resulting closure from depending on the "develop" environment,
+  # which can contain compilers, libraries and tools not required at runtime.
+
+  # The way it does this is by performing the build within a nested activation of
+  # each of the "develop" and "wrapper" environments:
+  # * the [outer] "develop" environment is activated first, providing access to
+  #    runtime dependencies and compilers/tools required only at build time
+  # * then the [inner] "wrapper" environment is activated, providing access
+  #    to only those runtime dependencies
+
+  # The only issue with the above approach is that references to the "develop"
+  # environment can leak into the resulting build. For example, each of these
+  # activations can prepend to a PYTHONPATH that gets embedded in the
+  # build, which has the effect of pulling both environments into the closure.
+  
+  # We can use `env -i` to prevent that leakage of the "develop" environment
+  # path into the inner activation, but then that causes problems for compilers
+  # that rely on NIX_CC* environment variables set in the outer activation. To
+  # address this problem we maintain a list of ALLOW_OUTER_ENV_VARS allowed
+  # to be propagated from the outer to the inner activation, and again use the
+  # `env` command to let those through.
+  
+  # The final result is approximately the following:
+  #   $(FLOX_INTERPRETER)/activate ... -- \
+  #     env -i $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
+  #       $(_build_wrapper_env)/wrapper ... -- bash -e buildScript
   .INTERMEDIATE: $(_pvarname)_local_build
   $(_pvarname)_local_build: $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
