@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
@@ -88,12 +88,15 @@ impl Init {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("init");
 
-        let dir = self
-            .dir
-            .clone()
-            .unwrap_or_else(|| std::env::current_dir().unwrap());
+        let dir = match &self.dir {
+            Some(dir) => dir.clone(),
+            None => std::env::current_dir().context("Couldn't determine current directory")?,
+        };
 
-        let home_dir = dirs::home_dir().unwrap();
+        let Some(home_dir) = dirs::home_dir() else {
+            bail!("Couldn't determine home directory");
+        };
+
         let default_environment = dir == home_dir;
 
         let env_name = if let Some(ref name) = self.env_name {
