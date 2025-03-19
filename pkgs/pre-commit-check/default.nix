@@ -96,7 +96,8 @@ pre-commit-hooks.lib.${system}.run {
                 ALLOWED_PREFIXES_FLAG=""
                 ALLOWED_PREFIXES=("Revert")
                 if [ "$IS_MERGE_QUEUE" = "1" ]; then
-                  ALLOWED_PREFIXES_FLAG="--allowed-prefixes \"''${ALLOWED_PREFIXES[@]}\""
+                  ALLOWED_PREFIXES_ESCAPED=$(printf "%q " "''${ALLOWED_PREFIXES[@]}")
+                  ALLOWED_PREFIXES_FLAG="--allowed-prefixes $ALLOWED_PREFIXES_ESCAPED"
                 fi
 
                 ${config.hooks.commitizen.package}/bin/cz check \
