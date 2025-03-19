@@ -863,6 +863,7 @@ pub enum ManifestError {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Include {
+    #[serde(default)]
     pub environments: Vec<IncludeDescriptor>,
 }
 
