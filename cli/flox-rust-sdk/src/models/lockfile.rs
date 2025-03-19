@@ -3227,13 +3227,14 @@ pub(crate) mod tests {
     proptest! {
         // This probably isn't the best suited for proptest as there are lots of
         // writes to disk.
-        // 8 cases takes about 1-1.5 seconds for me
-        #![proptest_config(ProptestConfig::with_cases(8))]
+        // 32 cases takes .1-.2 seconds for me
+        #![proptest_config(ProptestConfig::with_cases(32))]
         /// If we lock twice, the second lockfile should be the same as the first
         /// Use manifests without [install] sections so we don't have to
         /// generate resolution responses
         #[test]
-        fn lock_manifest_noop_if_locked_without_install_section((flox, tempdir, environments_to_include) in generate_path_environments_without_install_or_include(2)) {
+        fn lock_manifest_noop_if_locked_without_install_section((mut flox, tempdir, environments_to_include) in generate_path_environments_without_install_or_include(3)) {
+            flox.features.compose = true;
 
             let manifest = Manifest {
                 version: Version,
