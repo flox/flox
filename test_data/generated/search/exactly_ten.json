@@ -33,18 +33,18 @@
         "pname": "python2",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python-2.7.18.8"
+        "version": "2.7.18.8"
       },
       {
         "attr_path": "python3",
         "catalog": null,
         "description": "High-level dynamically-typed programming language",
-        "name": "python3-3.12.8",
+        "name": "python3-3.12.9",
         "pkg_path": "python3",
         "pname": "python3",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "3.12.8"
+        "version": "3.12.9"
       },
       {
         "attr_path": "python27",
@@ -55,7 +55,7 @@
         "pname": "python27",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python-2.7.18.8"
+        "version": "2.7.18.8"
       },
       {
         "attr_path": "python36",
@@ -105,12 +105,12 @@
         "attr_path": "python-qt",
         "catalog": null,
         "description": "PythonQt is a dynamic Python binding for the Qt framework. It offers an easy way to embed the Python scripting language into your C++ Qt applications",
-        "name": "python-qt-3.5.7",
+        "name": "python-qt-3.6.0",
         "pkg_path": "python-qt",
         "pname": "python-qt",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "3.5.7"
+        "version": "3.6.0"
       }
     ]
   }

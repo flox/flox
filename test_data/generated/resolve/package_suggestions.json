@@ -16,7 +16,7 @@
     }
   ],
   {
-    "count": 3528,
+    "count": 3554,
     "results": [
       {
         "attr_path": "packagekit",
@@ -38,7 +38,7 @@
         "pname": "psc-package",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "simple-0.6.2"
+        "version": "0.6.2"
       },
       {
         "attr_path": "patch-package",

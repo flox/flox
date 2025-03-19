@@ -297,7 +297,10 @@ impl LockedPackageCatalog {
             rev,
             rev_count,
             rev_date,
-            scrape_date,
+            // This field is deprecated and should be removed in the future,
+            // currently it should always be populated, but if it's not, we can
+            // default since it's not relied upon for anything downstream.
+            scrape_date: scrape_date.unwrap_or(chrono::Utc::now()),
             stabilities,
             unfree,
             version,
@@ -1888,9 +1891,11 @@ pub(crate) mod tests {
                     rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
                         .unwrap()
                         .with_timezone(&chrono::offset::Utc),
-                    scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
-                        .unwrap()
-                        .with_timezone(&chrono::offset::Utc),
+                    scrape_date: Some(
+                        chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                            .unwrap()
+                            .with_timezone(&chrono::offset::Utc),
+                    ),
                     system: SystemEnum::Aarch64Darwin,
                     stabilities: Some(vec!["stability".to_string()]),
                     unfree: Some(false),
@@ -2542,9 +2547,11 @@ pub(crate) mod tests {
                     rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
                         .unwrap()
                         .with_timezone(&chrono::offset::Utc),
-                    scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
-                        .unwrap()
-                        .with_timezone(&chrono::offset::Utc),
+                    scrape_date: Some(
+                        chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                            .unwrap()
+                            .with_timezone(&chrono::offset::Utc),
+                    ),
                     stabilities: Some(vec!["stability".to_string()]),
                     unfree: Some(false),
                     version: "version".to_string(),

@@ -88,7 +88,7 @@
         "pname": "hello-unfree",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "example-unfree-package-1.0"
+        "version": "1.0"
       },
       {
         "attr_path": "mellowplayer",
@@ -99,7 +99,7 @@
         "pname": "mellowplayer",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "MellowPlayer-3.6.8"
+        "version": "3.6.8"
       },
       {
         "attr_path": "hello-wayland",
@@ -110,7 +110,7 @@
         "pname": "hello-wayland",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "0-unstable-2024-03-04"
+        "version": "2024-03-04"
       },
       {
         "attr_path": "marwaita-yellow",
@@ -143,18 +143,18 @@
         "pname": "fcitx5-mellow-themes",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "0-unstable-2024-11-11"
+        "version": "2024-11-11"
       },
       {
         "attr_path": "kdePackages.umbrello",
         "catalog": null,
         "description": "GUI for diagramming Unified Modelling Language (UML)",
-        "name": "umbrello-24.12.2",
+        "name": "umbrello-24.12.3",
         "pkg_path": "kdePackages.umbrello",
         "pname": "umbrello",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "24.12.2"
+        "version": "24.12.3"
       },
       {
         "attr_path": "libsForQt512.umbrello",
@@ -198,7 +198,7 @@
         "pname": "ellocate",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "emacs-ellocate-20200112.1931"
+        "version": "20200112.1931"
       },
       {
         "attr_path": "python310Packages.jello",
@@ -209,7 +209,7 @@
         "pname": "jello",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.10-jello-1.6.0"
+        "version": "1.6.0"
       },
       {
         "attr_path": "python311Packages.jello",
@@ -220,7 +220,7 @@
         "pname": "jello",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.11-jello-1.6.0"
+        "version": "1.6.0"
       },
       {
         "attr_path": "python312Packages.jello",
@@ -242,7 +242,7 @@
         "pname": "jello",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.13-jello-1.6.0"
+        "version": "1.6.0"
       },
       {
         "attr_path": "sbclPackages.hello-clog",
@@ -253,7 +253,7 @@
         "pname": "hello-clog",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "sbcl-hello-clog-20241012-git"
+        "version": "20241012-git"
       },
       {
         "attr_path": "texlivePackages.othello",
@@ -275,7 +275,7 @@
         "pname": "org-trello",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "emacs-org-trello-20210314.1901"
+        "version": "20210314.1901"
       },
       {
         "attr_path": "plasma5Packages.umbrello",
@@ -297,7 +297,7 @@
         "pname": "bellows",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.7-bellows-0.21.0"
+        "version": "0.21.0"
       },
       {
         "attr_path": "python38Packages.bellows",
@@ -308,7 +308,7 @@
         "pname": "bellows",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.8-bellows-0.29.0"
+        "version": "0.29.0"
       },
       {
         "attr_path": "python38Packages.pynello",
@@ -319,7 +319,7 @@
         "pname": "pynello",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.8-pynello-2.0.3"
+        "version": "2.0.3"
       },
       {
         "attr_path": "python39Packages.bellows",
@@ -330,7 +330,7 @@
         "pname": "bellows",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.9-bellows-0.34.5"
+        "version": "0.34.5"
       },
       {
         "attr_path": "python39Packages.pynello",
@@ -341,7 +341,7 @@
         "pname": "pynello",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.9-pynello-2.0.3"
+        "version": "2.0.3"
       },
       {
         "attr_path": "python310Packages.bellows",
@@ -352,7 +352,7 @@
         "pname": "bellows",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.10-bellows-0.37.6"
+        "version": "0.37.6"
       },
       {
         "attr_path": "python310Packages.pynello",
@@ -363,7 +363,7 @@
         "pname": "pynello",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.10-pynello-2.0.3"
+        "version": "2.0.3"
       },
       {
         "attr_path": "python311Packages.bellows",
@@ -374,7 +374,7 @@
         "pname": "bellows",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.11-bellows-0.42.0"
+        "version": "0.42.0"
       },
       {
         "attr_path": "python311Packages.pynello",
@@ -385,7 +385,7 @@
         "pname": "pynello",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.11-pynello-2.0.3"
+        "version": "2.0.3"
       },
       {
         "attr_path": "python312Packages.bellows",
@@ -396,7 +396,7 @@
         "pname": "bellows",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.12-bellows-0.43.0"
+        "version": "0.43.0"
       },
       {
         "attr_path": "python312Packages.pynello",
@@ -407,7 +407,7 @@
         "pname": "pynello",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.12-pynello-2.0.3"
+        "version": "2.0.3"
       },
       {
         "attr_path": "python313Packages.bellows",
@@ -418,7 +418,7 @@
         "pname": "bellows",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.13-bellows-0.43.0"
+        "version": "0.43.0"
       },
       {
         "attr_path": "python313Packages.pynello",
@@ -429,7 +429,7 @@
         "pname": "pynello",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.13-pynello-2.0.3"
+        "version": "2.0.3"
       },
       {
         "attr_path": "emacsPackages.mellow-theme",
@@ -440,7 +440,7 @@
         "pname": "mellow-theme",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "emacs-mellow-theme-20170808.1317"
+        "version": "20170808.1317"
       },
       {
         "attr_path": "perlPackages.ParallelLoops",
@@ -451,7 +451,7 @@
         "pname": "ParallelLoops",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "perl5.40.0-Parallel-Loops-0.12"
+        "version": "0.12"
       },
       {
         "attr_path": "sbclPackages.hello-builder",
@@ -462,7 +462,7 @@
         "pname": "hello-builder",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "sbcl-hello-builder-20241012-git"
+        "version": "20241012-git"
       },
       {
         "attr_path": "javaPackages.mavenHello_1_0",
@@ -473,7 +473,7 @@
         "pname": "mavenHello_1_0",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "maven-hello-1.0"
+        "version": "1.0"
       },
       {
         "attr_path": "javaPackages.mavenHello_1_1",
@@ -484,7 +484,7 @@
         "pname": "mavenHello_1_1",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "maven-hello-1.1"
+        "version": "1.1"
       },
       {
         "attr_path": "texlivePackages.othelloboard",
@@ -506,7 +506,7 @@
         "pname": "sly-hello-world",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "emacs-sly-hello-world-20200225.1755"
+        "version": "20200225.1755"
       },
       {
         "attr_path": "perl536Packages.ParallelLoops",
@@ -517,7 +517,7 @@
         "pname": "ParallelLoops",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "perl5.36.3-Parallel-Loops-0.12"
+        "version": "0.12"
       },
       {
         "attr_path": "perl538Packages.ParallelLoops",
@@ -528,7 +528,7 @@
         "pname": "ParallelLoops",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "perl5.38.2-Parallel-Loops-0.12"
+        "version": "0.12"
       },
       {
         "attr_path": "perl540Packages.ParallelLoops",
@@ -539,7 +539,7 @@
         "pname": "ParallelLoops",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "perl5.40.0-Parallel-Loops-0.12"
+        "version": "0.12"
       },
       {
         "attr_path": "sbclPackages.qtools-helloworld",
@@ -550,7 +550,7 @@
         "pname": "qtools-helloworld",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "sbcl-qtools-helloworld-20230214-git"
+        "version": "20230214-git"
       },
       {
         "attr_path": "libsForQt5_openssl_1_1.umbrello",
@@ -627,18 +627,18 @@
         "pname": "cl-mw_dot_examples_dot_hello-world",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "sbcl-cl-mw.examples.hello-world-20150407-git"
+        "version": "20150407-git"
       },
       {
         "attr_path": "home-assistant-component-tests.homeassistant_yellow",
         "catalog": null,
         "description": "Open source home automation that puts local control and privacy first",
-        "name": "homeassistant-test-homeassistant_yellow-2025.2.1",
+        "name": "homeassistant-test-homeassistant_yellow-2025.3.3",
         "pkg_path": "home-assistant-component-tests.homeassistant_yellow",
         "pname": "homeassistant_yellow",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "homeassistant-test-homeassistant_yellow-2025.2.1"
+        "version": "2025.3.3"
       },
       {
         "attr_path": "lispPackages_new.sbclPackages.cl-mw_dot_examples_dot_hello-world",
@@ -649,7 +649,7 @@
         "pname": "cl-mw_dot_examples_dot_hello-world",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "cl-mw.examples.hello-world-20150407-git"
+        "version": "20150407-git"
       },
       {
         "attr_path": "_3llo",
@@ -660,7 +660,7 @@
         "pname": "_3llo",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "3llo-1.3.1"
+        "version": "1.3.1"
       },
       {
         "attr_path": "iagno",
@@ -726,7 +726,7 @@
         "pname": "gerbonara",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.11-gerbonara-1.4.0"
+        "version": "1.4.0"
       },
       {
         "attr_path": "python312Packages.gerbonara",
@@ -737,7 +737,7 @@
         "pname": "gerbonara",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.12-gerbonara-1.4.0"
+        "version": "1.4.0"
       },
       {
         "attr_path": "python313Packages.gerbonara",
@@ -748,7 +748,7 @@
         "pname": "gerbonara",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "python3.13-gerbonara-1.4.0"
+        "version": "1.4.0"
       }
     ]
   }

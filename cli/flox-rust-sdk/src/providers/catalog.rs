@@ -609,7 +609,7 @@ impl ClientTrait for CatalogClient {
         original_url: impl AsRef<str> + Send + Sync,
     ) -> Result<(), CatalogClientError> {
         let body = api_types::UserPackageCreate {
-            original_url: original_url.as_ref().to_string(),
+            original_url: Some(original_url.as_ref().to_string()),
         };
         let catalog = api_types::CatalogName::from_str(catalog_name.as_ref()).map_err(|_e| {
             CatalogClientError::UnexpectedError(APIError::InvalidRequest(
@@ -1379,7 +1379,7 @@ pub mod test_helpers {
             rev: String::new(),
             rev_count: 0,
             rev_date: chrono::offset::Utc::now(),
-            scrape_date: chrono::offset::Utc::now(),
+            scrape_date: Some(chrono::offset::Utc::now()),
             stabilities: None,
             unfree: None,
             version: version.to_string(),
