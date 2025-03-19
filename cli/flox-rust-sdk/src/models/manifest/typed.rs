@@ -916,12 +916,30 @@ pub mod test {
 
     // Generate a Manifest that has empty install and include sections
     pub fn manifest_without_install_or_include() -> impl Strategy<Value = Manifest> {
-        any::<Manifest>().prop_filter(
-            "require empty install and include sections",
-            |seed_manifest| {
-                seed_manifest.install.skip_serializing() && seed_manifest.include.skip_serializing()
-            },
+        (
+            any::<Version<1>>(),
+            any::<Vars>(),
+            any::<Option<Hook>>(),
+            any::<Option<Profile>>(),
+            any::<Options>(),
+            any::<Services>(),
+            any::<Build>(),
+            any::<Option<Containerize>>(),
         )
+            .prop_map(
+                |(version, vars, hook, profile, options, services, build, containerize)| Manifest {
+                    version,
+                    install: Install::default(),
+                    vars,
+                    hook,
+                    profile,
+                    options,
+                    services,
+                    build,
+                    containerize,
+                    include: Include::default(),
+                },
+            )
     }
 
     #[test]
