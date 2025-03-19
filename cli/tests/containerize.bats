@@ -132,8 +132,6 @@ setup() {
 }
 
 setup_file() {
-  export _FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=main
-
   echo "FLOX_CI_RUNNER: '${FLOX_CI_RUNNER}'" >&3
   common_file_setup
   # The individual tests run faster this way because podman doesn't need to
