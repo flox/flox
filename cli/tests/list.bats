@@ -160,8 +160,6 @@ EOF
 
 # bats test_tags=list,list:config
 @test "'flox list --config' shows manifest content for composed environments" {
-  export FLOX_FEATURES_COMPOSE=true
-
   "$FLOX_BIN" init -d included
   cat > included/.flox/env/manifest.toml <<-EOF
 version = 1

@@ -76,4 +76,6 @@ project_teardown() {
   project_setup
   RUST_LOG=debug FLOX_FEATURES_COMPOSE=true run "$FLOX_BIN" activate -- true
   assert_output --partial "compose=true"
+  RUST_LOG=debug FLOX_FEATURES_COMPOSE=false run "$FLOX_BIN" activate -- true
+  assert_output --partial "compose=false"
 }
