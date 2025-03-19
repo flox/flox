@@ -330,7 +330,6 @@ pub mod types {
     ///    "catalogs",
     ///    "derivations_ct",
     ///    "latest_rev",
-    ///    "latest_scrape",
     ///    "pages_ct",
     ///    "schema_version",
     ///    "search_index_ct",
@@ -360,7 +359,10 @@ pub mod types {
     ///    },
     ///    "latest_scrape": {
     ///      "title": "Latest Scrape",
-    ///      "type": "string",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ],
     ///      "format": "date-time"
     ///    },
     ///    "narinfos_ct": {
@@ -416,7 +418,8 @@ pub mod types {
         pub catalogs: Vec<String>,
         pub derivations_ct: i64,
         pub latest_rev: chrono::DateTime<chrono::offset::Utc>,
-        pub latest_scrape: chrono::DateTime<chrono::offset::Utc>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub latest_scrape: Option<chrono::DateTime<chrono::offset::Utc>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub narinfos_ct: Option<i64>,
         pub pages_ct: i64,
@@ -429,6 +432,101 @@ pub mod types {
     }
     impl From<&CatalogStatus> for CatalogStatus {
         fn from(value: &CatalogStatus) -> Self {
+            value.clone()
+        }
+    }
+    ///CatalogStoreConfigNixCopy
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CatalogStoreConfigNixCopy",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "egress_uri",
+    ///    "ingress_uri"
+    ///  ],
+    ///  "properties": {
+    ///    "egress_uri": {
+    ///      "title": "Egress Uri",
+    ///      "type": "string"
+    ///    },
+    ///    "ingress_uri": {
+    ///      "title": "Ingress Uri",
+    ///      "type": "string"
+    ///    },
+    ///    "store_type": {
+    ///      "title": "Store Type",
+    ///      "default": "nix-copy"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct CatalogStoreConfigNixCopy {
+        pub egress_uri: String,
+        pub ingress_uri: String,
+        #[serde(default = "defaults::catalog_store_config_nix_copy_store_type")]
+        pub store_type: serde_json::Value,
+    }
+    impl From<&CatalogStoreConfigNixCopy> for CatalogStoreConfigNixCopy {
+        fn from(value: &CatalogStoreConfigNixCopy) -> Self {
+            value.clone()
+        }
+    }
+    ///CatalogStoreConfigNull
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CatalogStoreConfigNull",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "store_type": {
+    ///      "title": "Store Type",
+    ///      "default": "null"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct CatalogStoreConfigNull {
+        #[serde(default = "defaults::catalog_store_config_null_store_type")]
+        pub store_type: serde_json::Value,
+    }
+    impl From<&CatalogStoreConfigNull> for CatalogStoreConfigNull {
+        fn from(value: &CatalogStoreConfigNull) -> Self {
+            value.clone()
+        }
+    }
+    ///CatalogStoreConfigPublisher
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CatalogStoreConfigPublisher",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "store_type": {
+    ///      "title": "Store Type",
+    ///      "default": "publisher"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct CatalogStoreConfigPublisher {
+        #[serde(default = "defaults::catalog_store_config_publisher_store_type")]
+        pub store_type: serde_json::Value,
+    }
+    impl From<&CatalogStoreConfigPublisher> for CatalogStoreConfigPublisher {
+        fn from(value: &CatalogStoreConfigPublisher) -> Self {
             value.clone()
         }
     }
@@ -1192,6 +1290,7 @@ pub mod types {
     ///    },
     ///    "version": {
     ///      "title": "Version",
+    ///      "description": "While version should always be present, (and is required in the PackageResolutionInfo model), there are cases where it has been historically optional and thus is carried forward here.  Published derivations have an Optional version and this same model is used for both published derivations and base catalog derivations.  For this reason we cannot make it required here until/if we unify those models and ensure every derivation does in fact have a version.",
     ///      "type": [
     ///        "string",
     ///        "null"
@@ -1211,6 +1310,7 @@ pub mod types {
         pub pname: String,
         pub stabilities: Vec<String>,
         pub system: SystemEnum,
+        ///While version should always be present, (and is required in the PackageResolutionInfo model), there are cases where it has been historically optional and thus is carried forward here.  Published derivations have an Optional version and this same model is used for both published derivations and base catalog derivations.  For this reason we cannot make it required here until/if we unify those models and ensure every derivation does in fact have a version.
         pub version: Option<String>,
     }
     impl From<&PackageInfoSearch> for PackageInfoSearch {
@@ -1428,7 +1528,10 @@ pub mod types {
     ///    },
     ///    "scrape_date": {
     ///      "title": "Scrape Date",
-    ///      "type": "string",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ],
     ///      "format": "date-time"
     ///    },
     ///    "stabilities": {
@@ -1481,7 +1584,7 @@ pub mod types {
         pub rev: String,
         pub rev_count: i64,
         pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-        pub scrape_date: chrono::DateTime<chrono::offset::Utc>,
+        pub scrape_date: Option<chrono::DateTime<chrono::offset::Utc>>,
         pub stabilities: Option<Vec<String>>,
         pub system: SystemEnum,
         pub unfree: Option<bool>,
@@ -1931,7 +2034,10 @@ pub mod types {
     ///    },
     ///    "scrape_date": {
     ///      "title": "Scrape Date",
-    ///      "type": "string",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ],
     ///      "format": "date-time"
     ///    },
     ///    "stabilities": {
@@ -1985,7 +2091,7 @@ pub mod types {
         pub rev: String,
         pub rev_count: i64,
         pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-        pub scrape_date: chrono::DateTime<chrono::offset::Utc>,
+        pub scrape_date: Option<chrono::DateTime<chrono::offset::Utc>>,
         pub stabilities: Option<Vec<String>>,
         pub system: SystemEnum,
         pub unfree: Option<bool>,
@@ -2187,6 +2293,46 @@ pub mod types {
     }
     impl From<&ResolvedPackageGroupsOutput> for ResolvedPackageGroupsOutput {
         fn from(value: &ResolvedPackageGroupsOutput) -> Self {
+            value.clone()
+        }
+    }
+    ///RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CatalogStoreConfig",
+    ///  "anyOf": [
+    ///    {
+    ///      "$ref": "#/components/schemas/CatalogStoreConfigNull"
+    ///    },
+    ///    {
+    ///      "$ref": "#/components/schemas/CatalogStoreConfigNixCopy"
+    ///    },
+    ///    {
+    ///      "$ref": "#/components/schemas/CatalogStoreConfigPublisher"
+    ///    }
+    ///  ]
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
+        #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
+        pub subtype_0: Option<CatalogStoreConfigNull>,
+        #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
+        pub subtype_1: Option<CatalogStoreConfigNixCopy>,
+        #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
+        pub subtype_2: Option<CatalogStoreConfigPublisher>,
+    }
+    impl From<
+        &RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
+    >
+    for RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
+        fn from(
+            value: &RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
+        ) -> Self {
             value.clone()
         }
     }
@@ -2606,7 +2752,6 @@ pub mod types {
     ///  "title": "UserBuild",
     ///  "examples": [
     ///    {
-    ///      "cache_uri": "https://example-s3-bucket.com",
     ///      "derivation": {
     ///        "description": "A very nice derivation",
     ///        "drv_path": "foo.bar.curl",
@@ -2626,7 +2771,7 @@ pub mod types {
     ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
     ///      "rev_count": 12345,
     ///      "rev_date": "2021-09-01T00:00:00Z",
-    ///      "url": "http://example.com"
+    ///      "url": "https://github.com/org/example"
     ///    }
     ///  ],
     ///  "type": "object",
@@ -2766,7 +2911,6 @@ pub mod types {
     ///  "title": "UserBuild",
     ///  "examples": [
     ///    {
-    ///      "cache_uri": "https://example-s3-bucket.com",
     ///      "derivation": {
     ///        "description": "A very nice derivation",
     ///        "drv_path": "foo.bar.curl",
@@ -2786,7 +2930,7 @@ pub mod types {
     ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
     ///      "rev_count": 12345,
     ///      "rev_date": "2021-09-01T00:00:00Z",
-    ///      "url": "http://example.com"
+    ///      "url": "https://github.com/org/example"
     ///    }
     ///  ],
     ///  "type": "object",
@@ -3164,8 +3308,7 @@ pub mod types {
     ///  "type": "object",
     ///  "required": [
     ///    "catalog",
-    ///    "name",
-    ///    "original_url"
+    ///    "name"
     ///  ],
     ///  "properties": {
     ///    "catalog": {
@@ -3178,7 +3321,10 @@ pub mod types {
     ///    },
     ///    "original_url": {
     ///      "title": "Original Url",
-    ///      "type": "string"
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    }
     ///  }
     ///}
@@ -3188,7 +3334,8 @@ pub mod types {
     pub struct UserPackage {
         pub catalog: String,
         pub name: String,
-        pub original_url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub original_url: Option<String>,
     }
     impl From<&UserPackage> for UserPackage {
         fn from(value: &UserPackage) -> Self {
@@ -3203,13 +3350,13 @@ pub mod types {
     ///{
     ///  "title": "UserPackageCreate",
     ///  "type": "object",
-    ///  "required": [
-    ///    "original_url"
-    ///  ],
     ///  "properties": {
     ///    "original_url": {
     ///      "title": "Original Url",
-    ///      "type": "string"
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    }
     ///  }
     ///}
@@ -3217,7 +3364,8 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct UserPackageCreate {
-        pub original_url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub original_url: Option<String>,
     }
     impl From<&UserPackageCreate> for UserPackageCreate {
         fn from(value: &UserPackageCreate) -> Self {
@@ -3260,6 +3408,15 @@ pub mod types {
     pub mod defaults {
         pub(super) fn catalog_share_info_allow_read_users() -> Option<Vec<String>> {
             Some(vec![])
+        }
+        pub(super) fn catalog_store_config_nix_copy_store_type() -> serde_json::Value {
+            serde_json::from_str::<serde_json::Value>("\"nix-copy\"").unwrap()
+        }
+        pub(super) fn catalog_store_config_null_store_type() -> serde_json::Value {
+            serde_json::from_str::<serde_json::Value>("\"null\"").unwrap()
+        }
+        pub(super) fn catalog_store_config_publisher_store_type() -> serde_json::Value {
+            serde_json::from_str::<serde_json::Value>("\"publisher\"").unwrap()
         }
         pub(super) fn health_check_input_check_parameters() -> super::Params {
             super::Params {
@@ -4252,6 +4409,96 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/remov
         let mut request = self
             .client
             .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get store config
+
+Get store configuration
+
+Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
+
+*/
+    pub async fn get_catalog_store_config_api_v1_catalog_catalogs_catalog_name_store_config_get<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+    ) -> Result<
+        ResponseValue<
+            types::RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
+        >,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/store/config", self.baseurl, encode_path(&
+            catalog_name.to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Set store config
+
+Update store configuration
+
+Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
+
+*/
+    pub async fn set_catalog_store_config_api_v1_catalog_catalogs_catalog_name_store_config_put<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        body: &'a types::RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
+    ) -> Result<
+        ResponseValue<
+            types::RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
+        >,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/store/config", self.baseurl, encode_path(&
+            catalog_name.to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .put(url)
             .header(
                 reqwest::header::ACCEPT,
                 reqwest::header::HeaderValue::from_static("application/json"),
