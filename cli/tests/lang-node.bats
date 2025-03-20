@@ -65,16 +65,17 @@ teardown() {
 }
 
 # bats test_tags=catalog
-@test "flox activate works with yarn" {
-  cp -r "$INPUT_DATA/init/node/common/." .
-  cp -r "$INPUT_DATA/init/node/yarn/." .
+@test "auto init matches yarn version to yarn 1.x" {
+  cp -r "$INPUT_DATA/init/node/yarn_1x/." .
   # Files copied from the store are read-only
   chmod -R +w .
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/node_yarn.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/yarn_1x.json" \
     run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'yarn' installed"
   refute_output "nodejs"
+  run "$FLOX_BIN" list
+  assert_regex "$output" "yarn: yarn \(.+\)"
   run "$FLOX_BIN" activate -- yarn run start
   assert_output --partial "86400000"
 }
