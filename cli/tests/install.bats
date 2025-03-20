@@ -472,7 +472,7 @@ EOF
   assert_output "$(
     cat << EOF
 ❌ ERROR: resolution failed: 
-The attr_path python311Packages.torchvision-bin is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,aarch64-linux,x86_64-linux), (aarch64-darwin,x86_64-darwin,x86_64-linux), (aarch64-darwin,x86_64-linux), (x86_64-linux).
+The attr_path python311Packages.torchvision-bin is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,aarch64-linux,x86_64-linux), (aarch64-darwin,aarch64-linux), (aarch64-linux,x86_64-linux), (aarch64-darwin,x86_64-darwin,x86_64-linux), (aarch64-darwin,x86_64-linux), (x86_64-linux).
 EOF
   )"
 }
