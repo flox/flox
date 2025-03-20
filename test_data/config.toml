@@ -330,9 +330,9 @@ pre_cmd = '''
 cmd = "flox init --auto-setup"
 
 [init.node_npm]
-files = ["init/node/common", "init/node/npm"]
+files = ["init/node/npm"]
 pre_cmd = '''
-    cp -r {common,npm}/* .
+    cp -r npm/* .
 '''
 cmd = "flox init --auto-setup"
 
