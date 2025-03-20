@@ -336,10 +336,10 @@ pre_cmd = '''
 '''
 cmd = "flox init --auto-setup"
 
-[init.node_yarn]
-files = ["init/node/common", "init/node/yarn"]
+[init.yarn_1x]
+files = ["init/node/yarn_1x"]
 pre_cmd = '''
-    cp -r {common,yarn}/* .
+    cp -r yarn_1x/* .
 '''
 cmd = "flox init --auto-setup"
 
