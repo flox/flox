@@ -52,7 +52,6 @@ teardown() {
 
 # bats test_tags=catalog
 @test "flox activate works with npm" {
-  cp -r "$INPUT_DATA/init/node/common/." .
   cp -r "$INPUT_DATA/init/node/npm/." .
   # Files copied from the store are read-only
   chmod -R +w .
