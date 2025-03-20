@@ -225,50 +225,16 @@
       }
     },
     {
-      "msgs": [],
-      "name": "yarn",
-      "page": {
-        "complete": true,
-        "msgs": [],
-        "packages": [
-          {
-            "attr_path": "yarn",
-            "broken": false,
-            "catalog": "nixpkgs",
-            "derivation": "/nix/store/rrc52i2qibpgc7xy5f0720v4miwnm209-yarn-1.22.22.drv",
-            "description": "Fast, reliable, and secure dependency management for javascript",
-            "insecure": false,
-            "install_id": "yarn",
-            "license": "BSD-2-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
-            "missing_builds": false,
-            "name": "yarn-1.22.22",
-            "outputs": [
-              {
-                "name": "out",
-                "store_path": "/nix/store/wsw5shzh91x7vzqm9lbivd3rm64xa1ps-yarn-1.22.22"
-              }
-            ],
-            "outputs_to_install": [
-              "out"
-            ],
-            "pkg_path": "yarn",
-            "pname": "yarn",
-            "rev": "c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
-            "rev_count": 768633,
-            "rev_date": "2025-03-15T20:13:08Z",
-            "scrape_date": "2025-03-17T00:32:15Z",
-            "stabilities": [
-              "unstable"
-            ],
-            "system": "x86_64-linux",
-            "unfree": false,
-            "version": "1.22.22"
+      "msgs": [
+        {
+          "ConstraintsTooTight": {
+            "level": "error",
+            "msg": "Resolution constraints are too tight."
           }
-        ],
-        "page": 768633,
-        "url": ""
-      }
+        }
+      ],
+      "name": "yarn",
+      "page": null
     }
   ],
   [
