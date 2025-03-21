@@ -17,7 +17,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::{Lockfile, RecoverableMergeError, ResolveError};
+use super::lockfile::{IncludeToZebra, Lockfile, RecoverableMergeError, ResolveError};
 use super::manifest::raw::PackageToInstall;
 use super::manifest::typed::{ActivateMode, Manifest, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
@@ -131,6 +131,13 @@ pub trait Environment: Send {
         &mut self,
         flox: &Flox,
         groups_or_iids: &[&str],
+    ) -> Result<UpgradeResult, EnvironmentError>;
+
+    // Zebra includes in the environment
+    fn zebra(
+        &mut self,
+        flox: &Flox,
+        to_zebra: Vec<IncludeToZebra>,
     ) -> Result<UpgradeResult, EnvironmentError>;
 
     /// Return the lockfile.

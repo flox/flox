@@ -26,7 +26,7 @@ use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment::RenderedEnvironmentLink;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
-use crate::models::lockfile::Lockfile;
+use crate::models::lockfile::{IncludeToZebra, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::Manifest;
 
@@ -316,6 +316,21 @@ impl Environment for RemoteEnvironment {
         Ok(result)
     }
 
+    // Zebra includes in the environment
+    fn zebra(
+        &mut self,
+        flox: &Flox,
+        to_zebra: Vec<IncludeToZebra>,
+    ) -> Result<UpgradeResult, EnvironmentError> {
+        let result = self.inner.zebra(flox, to_zebra)?;
+        self.inner
+            .push(flox, false)
+            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
+            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+
+        Ok(result)
+    }
+
     /// Extract the current content of the manifest
     fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
         self.inner.manifest_contents(flox)
@@ -494,13 +509,9 @@ mod tests {
         let EnvironmentError::Recoverable(RecoverableMergeError::Fetch { err, .. }) = err else {
             panic!("expected Fetch error, got: {err:?}");
         };
-        let EnvironmentError::Recoverable(RecoverableMergeError::Catchall(message)) = *err else {
-            panic!("expected Catchall error, got: {err:?}");
+        let EnvironmentError::Recoverable(RecoverableMergeError::CannotIncludeInRemote) = *err
+        else {
+            panic!("expected CannotIncludeInRemote error, got: {err:?}");
         };
-
-        assert_eq!(
-            message,
-            "cannot include environments in remote environments"
-        );
     }
 }

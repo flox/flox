@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::LazyLock;
 
 use catalog_api_v1::types::{MessageLevel, SystemEnum};
@@ -14,7 +15,7 @@ use tracing::instrument;
 pub type FlakeRef = Value;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fmt::Display;
+use std::fmt::{self, Display};
 use std::fs;
 use std::str::FromStr;
 
@@ -371,6 +372,85 @@ struct LockedGroup {
     page: CatalogPage,
 }
 
+/// An include to zebra can either be specified with a directory or the name of
+/// the included environment.
+pub enum IncludeToZebra {
+    Dir(PathBuf),
+    Name(String),
+}
+
+impl IncludeToZebra {
+    /// Check if a specified IncludeToZebra refers to a LockedInclude
+    pub fn matches_locked_include(
+        &self,
+        locked_include: &LockedInclude,
+        include_fetcher: &IncludeFetcher,
+    ) -> Result<bool, RecoverableMergeError> {
+        match (self, locked_include) {
+            (
+                Self::Dir(dir),
+                LockedInclude {
+                    descriptor:
+                        IncludeDescriptor::Local {
+                            dir: locked_dir, ..
+                        },
+                    ..
+                },
+            ) => {
+                let expanded = include_fetcher.expand_include_dir(dir)?;
+                let canonicalized = expanded.canonicalize().map_err(|_| {
+                    RecoverableMergeError::Catchall(format!(
+                        "can't zebra include: directory '{}' does not exist",
+                        expanded.to_string_lossy()
+                    ))
+                })?;
+                let matches = if let Ok(locked_canonicalized) = include_fetcher
+                    .expand_include_dir(locked_dir)?
+                    .canonicalize()
+                {
+                    canonicalized == locked_canonicalized
+                } else {
+                    false
+                };
+
+                Ok(matches)
+            },
+            (
+                Self::Name(name),
+                LockedInclude {
+                    name: locked_name, ..
+                },
+            ) => Ok(name == locked_name),
+        }
+    }
+
+    /// Helper method that removes the first IncludeToZebra that matches a given
+    /// LockedInclude.
+    /// Used to keep track of what includes have been zebraed.
+    pub fn remove_matching_include(
+        to_zebra: &mut Vec<IncludeToZebra>,
+        locked_include: &LockedInclude,
+        include_fetcher: &IncludeFetcher,
+    ) -> Result<Option<IncludeToZebra>, RecoverableMergeError> {
+        // Can't use iter().position() because it's infallible
+        for (i, include_to_zebra) in to_zebra.iter().enumerate() {
+            if include_to_zebra.matches_locked_include(locked_include, include_fetcher)? {
+                return Ok(Some(to_zebra.swap_remove(i)));
+            }
+        }
+        Ok(None)
+    }
+}
+
+impl Display for IncludeToZebra {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Dir(dir) => write!(f, "{}", dir.to_string_lossy()),
+            Self::Name(name) => write!(f, "{}", name),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Compose {
@@ -577,12 +657,29 @@ impl Lockfile {
         seed_lockfile: Option<&Lockfile>,
         include_fetcher: &IncludeFetcher,
     ) -> Result<Lockfile, EnvironmentError> {
+        Self::lock_manifest_with_zebra(flox, manifest, seed_lockfile, include_fetcher, None).await
+    }
+
+    /// Lock, zebraing if to_zebra is Some
+    ///
+    /// If to_zebra is an empty vector, all included environments are
+    /// re-fetched.
+    /// If to_zebra is None, only included environments not in the seed lockfile
+    /// are fetched.
+    pub async fn lock_manifest_with_zebra(
+        flox: &Flox,
+        manifest: &Manifest,
+        seed_lockfile: Option<&Lockfile>,
+        include_fetcher: &IncludeFetcher,
+        to_zebra: Option<Vec<IncludeToZebra>>,
+    ) -> Result<Lockfile, EnvironmentError> {
         let (merged, compose) = Self::merge_manifest(
             flox,
             manifest,
             seed_lockfile,
             include_fetcher,
             ManifestMerger::Shallow(ShallowMerger),
+            to_zebra,
         )
         .map_err(EnvironmentError::Recoverable)?;
         let packages = Self::resolve_manifest(
@@ -610,7 +707,15 @@ impl Lockfile {
     /// instead of a Compose object.
     ///
     /// Any included environments already in the seed lockfile will not be
+    /// re-fetched, unless they are in to_zebra.
+    ///
+    /// All environments in to_zebra will be re-fetched, and an error is
+    /// returned if any environments in to_zebra do not refer to an actual include.
+    ///
+    /// If to_zebra is an empty vector, all included environments are
     /// re-fetched.
+    /// If to_zebra is None, only included environments not in the seed lockfile
+    /// are fetched.
     #[instrument(skip_all, fields(progress = "Merging environment includes"))]
     fn merge_manifest(
         flox: &Flox,
@@ -618,8 +723,14 @@ impl Lockfile {
         seed_lockfile: Option<&Lockfile>,
         include_fetcher: &IncludeFetcher,
         merger: ManifestMerger,
+        mut to_zebra: Option<Vec<IncludeToZebra>>,
     ) -> Result<(Manifest, Option<Compose>), RecoverableMergeError> {
         if manifest.include.environments.is_empty() {
+            if to_zebra.is_some() {
+                return Err(RecoverableMergeError::Catchall(
+                    "cannot zebra environment without any included environments".to_string(),
+                ));
+            }
             return Ok((manifest.clone(), None));
         }
 
@@ -639,6 +750,13 @@ impl Lockfile {
         let mut locked_includes: Vec<LockedInclude> = vec![];
         for include_environment in &manifest.include.environments {
             let existing_locked_include = 'existing: {
+                // Don't use existing locked includes if we're zebraing all
+                // includes
+                if let Some(to_zebra) = &to_zebra {
+                    if to_zebra.is_empty() {
+                        break 'existing None;
+                    }
+                }
                 // If there's a seed_lockfile
                 let Some(seed_lockfile) = seed_lockfile else {
                     break 'existing None;
@@ -655,30 +773,85 @@ impl Lockfile {
                     .find(|locked_include| &locked_include.descriptor == include_environment)
                     .cloned()
             };
+
             let locked_include = match existing_locked_include {
                 Some(locked_include) => {
-                    debug!(
-                        "using existing locked include from lockfile for {}",
-                        include_environment
-                    );
+                    // The following is a weird edge case,
+                    // but I don't think it's too much of a problem:
+                    // Suppose composer includes ./dir1 which has name A in
+                    // env.json
+                    // ./dir1 gets renamed A -> B
+                    // A manual edit includes ./dir2 which has name A in
+                    // env.json
+                    // If we zebra name A, if we loop over ./dir1 first, we'll
+                    // fetch both ./dir1 and ./dir2.
+                    // If we loop over ./dir2 first, we'll only fetch ./dir2.
 
-                    locked_include
+                    // Check if the existing locked include needs to be zebraed
+                    // If it does, remove it from to_zebra to keep track of
+                    // which includes have been zebraed.
+                    let should_refetch = if let Some(to_zebra) = &mut to_zebra {
+                        IncludeToZebra::remove_matching_include(
+                            to_zebra,
+                            &locked_include,
+                            include_fetcher,
+                        )?
+                        .is_some()
+                    } else {
+                        false
+                    };
+
+                    if should_refetch {
+                        include_fetcher
+                            .fetch(flox, include_environment)
+                            .map_err(|e| RecoverableMergeError::Fetch {
+                                include: include_environment.clone(),
+                                err: Box::new(e),
+                            })?
+                    } else {
+                        debug!(
+                            "using existing locked include from lockfile for {}",
+                            include_environment
+                        );
+
+                        locked_include
+                    }
                 },
                 None => {
                     debug!("fetching included environment {}", include_environment);
 
-                    include_fetcher
-                        .fetch(flox, include_environment)
-                        .map_err(|e| RecoverableMergeError::Fetch {
-                            include: include_environment.clone(),
-                            err: Box::new(e),
-                        })?
+                    let locked_include =
+                        include_fetcher
+                            .fetch(flox, include_environment)
+                            .map_err(|e| RecoverableMergeError::Fetch {
+                                include: include_environment.clone(),
+                                err: Box::new(e),
+                            })?;
+                    // If this include needed to be zebraed, remove from
+                    // to_zebra to keep track that it was
+                    if let Some(to_zebra) = &mut to_zebra {
+                        IncludeToZebra::remove_matching_include(
+                            to_zebra,
+                            &locked_include,
+                            include_fetcher,
+                        )?;
+                    }
+                    locked_include
                 },
             };
             locked_includes.push(locked_include);
         }
 
         Self::check_locked_names_unique(&locked_includes)?;
+
+        if let Some(to_zebra) = &to_zebra {
+            if let Some(unused_include_to_zebra) = to_zebra.first() {
+                return Err(RecoverableMergeError::Catchall(format!(
+                    "unknown include to zebra '{}'",
+                    unused_include_to_zebra
+                )));
+            }
+        }
 
         // Call the merger with all the manifests
         let composite = CompositeManifest {
@@ -1508,6 +1681,9 @@ pub enum RecoverableMergeError {
     /// Use this error when we don't need an error type to reuse in multiple places
     #[error("{0}")]
     Catchall(String),
+
+    #[error("cannot include environments in remote environments")]
+    CannotIncludeInRemote,
 }
 
 pub mod test_helpers {
@@ -3834,6 +4010,7 @@ pub(crate) mod tests {
                 base_directory: Some(tempdir.path().to_path_buf()),
             },
             ManifestMerger::Shallow(ShallowMerger),
+            None,
         )
         .unwrap();
 
@@ -3910,6 +4087,7 @@ pub(crate) mod tests {
                 base_directory: Some(tempdir.path().to_path_buf()),
             },
             ManifestMerger::Shallow(ShallowMerger),
+            None,
         )
         .unwrap();
 
@@ -4032,6 +4210,7 @@ pub(crate) mod tests {
             Some(&lockfile),
             &include_fetcher,
             ManifestMerger::Shallow(ShallowMerger),
+            None,
         )
         .unwrap();
 
@@ -4139,6 +4318,7 @@ pub(crate) mod tests {
             Some(&lockfile),
             &include_fetcher,
             ManifestMerger::Shallow(ShallowMerger),
+            None,
         )
         .unwrap();
 
@@ -4239,6 +4419,7 @@ pub(crate) mod tests {
             Some(&lockfile),
             &include_fetcher,
             ManifestMerger::Shallow(ShallowMerger),
+            None,
         )
         .unwrap();
 
@@ -4295,6 +4476,7 @@ pub(crate) mod tests {
             None,
             &include_fetcher,
             ManifestMerger::Shallow(ShallowMerger),
+            None,
         )
         .unwrap_err();
 
