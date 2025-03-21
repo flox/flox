@@ -233,11 +233,24 @@ define BUILD_local_template =
   # Prepare temporary log file for capturing build output for inspection.
   $(eval $(_pvarname)_logfile := $(shell $(_mktemp) --dry-run --suffix=-build-$(_pname).log))
 
-  # Make sure to invoke the build script in a nested activation of both the
-  # "develop" and "build wrapper" environments, and that the build wrapper
-  # environment is the "inner" activation preferred for sourcing commands,
-  # libraries, etc.  Also blat all env variables set by the outer activation
-  # to avoid including the "develop" environment in the build closure.
+	# We have to satisfy the following:
+	# - The build is similar to what would happen if build commands were run
+	#   outside `flox build`, so we use a dev activation
+	# - Packages in the environment but not runtime-packages can be used at build time
+	# - If a package is in both the full environment and runtime-packages, the
+	#   runtime-packages store path is used.
+	#   We want to prefer runtime-packages for sourcing commands, libraries, etc.
+	# - We don't want unneeded dependencies from the full environment to leak into
+	#   the build closure.
+	#   This could happen via something like PYTHONPATH.
+	# - There are certain Nix set variables that we do want to let through, such as
+	#   NIX_CC, since we don't attempt to manage C ourselves.
+	#   I don't currently have a concrete example of when that would get set.
+	#   If these variables pull in the development closure, the build will fail.
+	#
+	# To accomplish all of these, we nest an outer activation in dev mode, env -i
+	# which only lets allowed variables through, and an "inner" activation of the
+	# "build wrapper" environment.
   .INTERMEDIATE: $(_pvarname)_local_build
   $(_pvarname)_local_build: $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
