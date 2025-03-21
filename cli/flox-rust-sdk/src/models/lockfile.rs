@@ -24,7 +24,7 @@ use tracing::debug;
 
 use super::environment::fetcher::IncludeFetcher;
 use super::environment::{CoreEnvironmentError, EnvironmentError};
-use super::manifest::composite::{ManifestMerger, MergeError, ShallowMerger};
+use super::manifest::composite::{ManifestMerger, MergeError, ShallowMerger, WarningWithContext};
 use super::manifest::typed::{
     Allows,
     IncludeDescriptor,
@@ -379,6 +379,8 @@ pub struct Compose {
     /// Metadata and manifests for the included environments in the order
     /// that they were specified in the composing environment's manifest.
     pub include: Vec<LockedInclude>,
+    /// Warnings generated during composition + locking.
+    pub warnings: Vec<WarningWithContext>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -688,8 +690,8 @@ impl Lockfile {
                 .map(|include| (include.name.clone(), include.manifest.clone()))
                 .collect(),
         };
-        // TODO: we should bubble up warnings
-        let (merged, _warnings) = composite
+
+        let (merged, warnings) = composite
             .merge_all(merger)
             .map_err(RecoverableMergeError::Merge)?;
 
@@ -697,6 +699,7 @@ impl Lockfile {
         let compose = Compose {
             composer: manifest.clone(),
             include: locked_includes,
+            warnings,
         };
 
         Ok((merged, Some(compose)))

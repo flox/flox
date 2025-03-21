@@ -6,6 +6,7 @@ mod shallow;
 use enum_dispatch::enum_dispatch;
 #[cfg(test)]
 use proptest::prelude::*;
+use serde::{Deserialize, Serialize};
 pub(crate) use shallow::ShallowMerger;
 use thiserror::Error;
 
@@ -21,7 +22,8 @@ pub enum MergeError {}
 /// where [`KeyPath::push`] and [`KeyPath::extend`] return a new `KeyPath`
 /// with the new key(s) added to the top of the stack,
 /// leaving the original `KeyPath` unchanged.
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct KeyPath(Vec<String>);
 impl KeyPath {
     /// Create a new empty `KeyPath`.
@@ -63,7 +65,8 @@ impl<Key: Into<String>> FromIterator<Key> for KeyPath {
 ///
 /// Currently, the only warning is that a value is being overridden,
 /// but more warnings may be added in the future.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[must_use]
 pub enum Warning {
     Overriding(KeyPath),
@@ -71,7 +74,8 @@ pub enum Warning {
 
 /// A warning that occurred during the merge of two manifests,
 /// along with the names of the two manifests involved.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct WarningWithContext {
     warning: Warning,
     higher_priority_name: String,
