@@ -1405,24 +1405,29 @@ impl Lockfile {
     }
 
     /// Filter out packages from the locked manifest by install_id or group
+    /// If groups_or_iids is empty, all packages are unlocked.
     ///
     /// This is used to create a seed lockfile to upgrade a subset of packages,
     /// as packages that are not in the seed lockfile will be re-resolved unconstrained.
     pub(crate) fn unlock_packages_by_group_or_iid(&mut self, groups_or_iids: &[&str]) -> &mut Self {
-        self.packages = std::mem::take(&mut self.packages)
-            .into_iter()
-            .filter(|package| {
-                if groups_or_iids.contains(&package.install_id()) {
-                    return false;
-                }
+        if groups_or_iids.is_empty() {
+            self.packages = Vec::new();
+        } else {
+            self.packages = std::mem::take(&mut self.packages)
+                .into_iter()
+                .filter(|package| {
+                    if groups_or_iids.contains(&package.install_id()) {
+                        return false;
+                    }
 
-                if let Some(catalog_package) = package.as_catalog_package_ref() {
-                    return !groups_or_iids.contains(&catalog_package.group.as_str());
-                }
+                    if let Some(catalog_package) = package.as_catalog_package_ref() {
+                        return !groups_or_iids.contains(&catalog_package.group.as_str());
+                    }
 
-                true
-            })
-            .collect();
+                    true
+                })
+                .collect();
+        }
         self
     }
 
