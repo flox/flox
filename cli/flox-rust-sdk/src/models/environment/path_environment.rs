@@ -19,6 +19,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use indoc::formatdoc;
+use itertools::Itertools;
 use tracing::debug;
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
@@ -48,7 +49,7 @@ use crate::flox::Flox;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::lockfile::{Lockfile, DEFAULT_SYSTEMS_STR};
+use crate::models::lockfile::{IncludeToZebra, Lockfile, DEFAULT_SYSTEMS_STR};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
 use crate::models::manifest::typed::{ActivateMode, Manifest};
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -274,6 +275,22 @@ impl Environment for PathEnvironment {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let mut env_view = self.as_core_environment_mut()?;
         let result = env_view.upgrade(flox, groups_or_iids, true)?;
+        if let Some(ref store_paths) = result.store_path {
+            self.link(flox, store_paths)?;
+        }
+
+        Ok(result)
+    }
+
+    // Zebra includes in the environment
+    fn zebra(
+        &mut self,
+        flox: &Flox,
+        to_zebra: Vec<IncludeToZebra>,
+    ) -> Result<UpgradeResult, EnvironmentError> {
+        tracing::debug!(to_upgrade = to_zebra.iter().join(","), "zebraing");
+        let mut env_view = self.as_core_environment_mut()?;
+        let result = env_view.zebra(flox, to_zebra)?;
         if let Some(ref store_paths) = result.store_path {
             self.link(flox, store_paths)?;
         }
@@ -681,14 +698,18 @@ pub mod test_helpers {
 pub mod tests {
 
     use flox_test_utils::proptest::alphanum_string;
+    use indoc::indoc;
     use itertools::izip;
     use proptest::collection::{hash_set as prop_hash_set, vec as prop_vec};
     use proptest::prelude::*;
     use tempfile::TempDir;
 
+    use super::test_helpers::new_path_environment_in;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
+    use crate::models::environment::path_environment::test_helpers::new_path_environment;
+    use crate::models::lockfile::RecoverableMergeError;
     use crate::models::manifest::typed::test::manifest_without_install_or_include;
 
     /// Returns (flox, tempdir, Vec<(dir relative to tempdir, PathEnvironment)>)
@@ -856,5 +877,171 @@ pub mod tests {
         assert!(reg_path.exists());
         let reg = read_environment_registry(&reg_path).unwrap().unwrap();
         assert!(reg.entries.is_empty());
+    }
+
+    /// Setup a composer environment that includes a dep environment with
+    /// variable foo = "v1"
+    /// Edit dep to have foo = "v2" (but that change is not yet pulled in by
+    /// composer)
+    fn setup_zebra_test(flox: &Flox, tempdir: &TempDir) -> (PathEnvironment, PathBuf) {
+        // Create dep
+        let dep_path = tempdir.path().join("dep");
+        let dep_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "v1"
+        "#};
+        fs::create_dir(&dep_path).unwrap();
+        let mut dep = new_path_environment_in(flox, dep_manifest_contents, &dep_path);
+        dep.lockfile(flox).unwrap();
+
+        // Create composer
+        let composer_manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep" },
+        ]
+        "#};
+        let composer_path = tempdir.path();
+        let mut composer = new_path_environment_in(flox, composer_manifest_contents, composer_path);
+        let lockfile = composer.lockfile(flox).unwrap();
+
+        assert_eq!(lockfile.manifest.vars.0["foo"], "v1");
+
+        // Modify dep
+        let dep_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "v2"
+        "#};
+        dep.edit(flox, dep_manifest_contents.to_string()).unwrap();
+        (composer, dep_path)
+    }
+
+    // Zebra works when an absolute path is zebraed
+    #[test]
+    fn can_zebra_absolute_paths() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        let (mut composer, dep_path) = setup_zebra_test(&flox, &tempdir);
+
+        // Zebra dep
+        composer
+            .zebra(&flox, vec![IncludeToZebra::Dir(
+                dep_path.canonicalize().unwrap(),
+            )])
+            .unwrap();
+
+        let lockfile = composer.lockfile(&flox).unwrap();
+        assert_eq!(lockfile.manifest.vars.0["foo"], "v2");
+    }
+
+    /// Can zebra an included environment specified with the odd relative path
+    /// dep/../dep/../dep
+    #[test]
+    fn can_zebra_paths_with_dot_dot() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        let (mut composer, _) = setup_zebra_test(&flox, &tempdir);
+        // Zebra dep
+        composer
+            .zebra(&flox, vec![IncludeToZebra::Dir(PathBuf::from(
+                "dep/../dep/../dep",
+            ))])
+            .unwrap();
+
+        let lockfile = composer.lockfile(&flox).unwrap();
+        assert_eq!(lockfile.manifest.vars.0["foo"], "v2");
+    }
+
+    /// Zebra errors for what would be a valid zebra if the target directory
+    /// does not exist
+    #[test]
+    fn zebra_errors_for_nonexistent_dir() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        let (mut composer, dep_path) = setup_zebra_test(&flox, &tempdir);
+
+        fs::remove_dir_all(&dep_path).unwrap();
+
+        // Zebra dep
+        let err = composer
+            .zebra(&flox, vec![IncludeToZebra::Dir(dep_path.clone())])
+            .unwrap_err();
+
+        let EnvironmentError::Recoverable(RecoverableMergeError::Catchall(message)) = err else {
+            panic!("expected Catchall error, got: {:?}", err)
+        };
+
+        assert_eq!(
+            message,
+            format!(
+                "can't zebra include: directory '{}' does not exist",
+                dep_path.to_str().unwrap()
+            )
+        );
+    }
+
+    /// Trying to zebra a dir that exists but is not included should error
+    /// Note this is a different error than when the dir does not exist at all.
+    #[test]
+    fn zebra_errors_for_existent_dir_not_included() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        let (mut composer, _) = setup_zebra_test(&flox, &tempdir);
+
+        // Zebra dep
+        let err = composer
+            .zebra(&flox, vec![IncludeToZebra::Dir(
+                tempdir.path().to_path_buf(),
+            )])
+            .unwrap_err();
+
+        let EnvironmentError::Recoverable(RecoverableMergeError::Catchall(message)) = err else {
+            panic!("expected Catchall error, got: {:?}", err)
+        };
+
+        assert_eq!(
+            message,
+            format!(
+                "unknown include to zebra '{}'",
+                tempdir.path().to_str().unwrap()
+            )
+        );
+    }
+
+    /// If an environment doesn't hae any included environments, calling zebra()
+    /// should error
+    #[test]
+    fn zebra_errors_for_without_includes() {
+        let (mut flox, _tempdir) = flox_instance();
+        flox.features.compose = true;
+
+        // Create environment
+        let manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+        let mut composer = new_path_environment(&flox, manifest_contents);
+        composer.lockfile(&flox).unwrap();
+
+        // Try to zebra
+        let err = composer.zebra(&flox, vec![]).unwrap_err();
+
+        let EnvironmentError::Recoverable(RecoverableMergeError::Catchall(message)) = err else {
+            panic!("expected Catchall error, got: {:?}", err)
+        };
+
+        assert_eq!(
+            message,
+            "cannot zebra environment without any included environments"
+        );
     }
 }
