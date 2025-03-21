@@ -42,7 +42,7 @@ use crate::models::floxmeta::{
     FloxMetaError,
     BRANCH_NAME_PATH_SEPARATOR,
 };
-use crate::models::lockfile::Lockfile;
+use crate::models::lockfile::{IncludeToZebra, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::Manifest;
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -349,6 +349,46 @@ impl Environment for ManagedEnvironment {
         let result = local_checkout.upgrade(flox, groups_or_iids, true)?;
 
         let metadata = format!("upgraded packages: {}", result.packages().join(", "));
+
+        generations
+            .add_generation(&mut local_checkout, metadata)
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
+
+        write_pointer_lockfile(
+            self.path.join(GENERATION_LOCK_FILENAME),
+            &self.floxmeta,
+            remote_branch_name(&self.pointer),
+            branch_name(&self.pointer, &self.path).into(),
+        )?;
+        Ok(result)
+    }
+
+    // Zebra includes in the environment
+    fn zebra(
+        &mut self,
+        flox: &Flox,
+        to_zebra: Vec<IncludeToZebra>,
+    ) -> Result<UpgradeResult, EnvironmentError> {
+        let mut generations = self.generations();
+        let mut generations = generations
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
+
+        if !Self::validate_checkout(&local_checkout, &generations)? {
+            Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::CheckoutOutOfSync,
+            ))?
+        }
+
+        let metadata = if to_zebra.is_empty() {
+            "zebraed all includes".to_string()
+        } else {
+            format!("zebraed includes: {}", to_zebra.iter().join(", "))
+        };
+
+        let result = local_checkout.zebra(flox, to_zebra)?;
 
         generations
             .add_generation(&mut local_checkout, metadata)
