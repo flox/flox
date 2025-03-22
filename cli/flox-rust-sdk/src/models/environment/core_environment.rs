@@ -23,7 +23,13 @@ use super::{
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::lockfile::{LockedPackage, Lockfile, ResolutionFailure, ResolveError};
+use crate::models::lockfile::{
+    IncludeToZebra,
+    LockedPackage,
+    Lockfile,
+    ResolutionFailure,
+    ResolveError,
+};
 use crate::models::manifest::raw::{
     insert_packages,
     remove_packages,
@@ -603,15 +609,10 @@ impl CoreEnvironment<ReadOnly> {
         // Create a seed lockfile by "unlocking" (i.e. removing the locked entries of)
         // all packages matching the given groups or iids.
         // If no groups or iids are provided, all packages are unlocked.
-        let seed_lockfile = if groups_or_iids.is_empty() {
-            debug!("no groups or iids provided, unlocking all packages");
-            None
-        } else {
-            existing_lockfile.clone().map(|mut lockfile| {
-                lockfile.unlock_packages_by_group_or_iid(groups_or_iids);
-                lockfile
-            })
-        };
+        let seed_lockfile = existing_lockfile.clone().map(|mut lockfile| {
+            lockfile.unlock_packages_by_group_or_iid(groups_or_iids);
+            lockfile
+        });
 
         let upgraded_lockfile = Lockfile::lock_manifest(
             flox,
@@ -626,6 +627,69 @@ impl CoreEnvironment<ReadOnly> {
             new_lockfile: upgraded_lockfile,
             store_path: None,
         };
+
+        Ok(result)
+    }
+
+    /// Zebra includes in an environment.
+    ///
+    /// This just delegates to Lockfile::lock_manifest_with_zebra and runs
+    /// locking boilerplate.
+    /// The approach here is not symmetric to the implementation of upgrade().
+    /// upgrade() modifies the seed lockfile and then locks normally.
+    /// We can't take that approach here because the name of an included
+    /// environment may not exist until after it has been fetched.
+    /// So we can't verify if a requested zebra can be performed until
+    /// after we've fetched all included environments.
+    // TODO: this mostly duplicates logic in lock() and upgrade()
+    // We could probably factor some of it out.
+    pub fn zebra(
+        &mut self,
+        flox: &Flox,
+        to_zebra: Vec<IncludeToZebra>,
+    ) -> Result<UpgradeResult, EnvironmentError> {
+        tracing::debug!(includes = to_zebra.iter().join(","), "zebraing");
+
+        let manifest = self.manifest()?;
+
+        let existing_lockfile_contents = self.existing_lockfile_contents()?;
+        let existing_lockfile = existing_lockfile_contents
+            .as_deref()
+            .map(Lockfile::from_str)
+            .transpose()?;
+
+        let new_lockfile = Lockfile::lock_manifest_with_zebra(
+            flox,
+            &manifest,
+            existing_lockfile.as_ref(),
+            &self.include_fetcher,
+            Some(to_zebra),
+        )
+        .block_on()?;
+
+        let mut result = UpgradeResult {
+            old_lockfile: existing_lockfile,
+            new_lockfile,
+            store_path: None,
+        };
+
+        // SAFETY: serde_json::to_string_pretty is only documented to fail if
+        // the "Serialize decides to fail, or if T contains a map with non-string keys",
+        // neither of which should happen here.
+        let lockfile_contents = serde_json::to_string_pretty(&result.new_lockfile).unwrap();
+
+        let environment_lockfile_path = self.lockfile_path();
+
+        if Some(&lockfile_contents) == existing_lockfile_contents.as_ref() {
+            debug!(
+                ?environment_lockfile_path,
+                "lockfile is up to date, skipping write"
+            );
+            return Ok(result);
+        }
+
+        let store_path = self.transact_with_lockfile_contents(lockfile_contents, flox)?;
+        result.store_path = Some(store_path);
 
         Ok(result)
     }

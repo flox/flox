@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use indoc::formatdoc;
 
@@ -20,22 +20,17 @@ impl IncludeFetcher {
         flox: &Flox,
         include_environment: &IncludeDescriptor,
     ) -> Result<LockedInclude, EnvironmentError> {
-        let Some(base_directory) = &self.base_directory else {
+        if self.base_directory.is_none() {
             return Err(EnvironmentError::Recoverable(
-                RecoverableMergeError::Catchall(
-                    "cannot include environments in remote environments".to_string(),
-                ),
+                RecoverableMergeError::CannotIncludeInRemote,
             ));
         };
         let (name, path) = match include_environment {
-            IncludeDescriptor::Local { dir, name } => {
-                let path = if dir.is_absolute() {
-                    dir.clone()
-                } else {
-                    base_directory.join(dir)
-                };
-                (name, path)
-            },
+            IncludeDescriptor::Local { dir, name } => (
+                name,
+                self.expand_include_dir(dir)
+                    .map_err(EnvironmentError::Recoverable)?,
+            ),
         };
         let environment = open_path(flox, &path)?;
 
@@ -72,6 +67,25 @@ impl IncludeFetcher {
                 .clone()
                 .unwrap_or_else(|| environment.name().to_string()),
             descriptor: include_environment.clone(),
+        })
+    }
+
+    /// For directories that aren't absolute, join them to the base_directory
+    /// for this IncludeFetcher
+    pub fn expand_include_dir(
+        &self,
+        dir: impl AsRef<Path>,
+    ) -> Result<PathBuf, RecoverableMergeError> {
+        let Some(base_directory) = &self.base_directory else {
+            return Err(RecoverableMergeError::CannotIncludeInRemote);
+        };
+
+        let dir = dir.as_ref();
+
+        Ok(if dir.is_absolute() {
+            dir.to_path_buf()
+        } else {
+            base_directory.join(dir)
         })
     }
 }
