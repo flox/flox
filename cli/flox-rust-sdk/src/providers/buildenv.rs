@@ -750,6 +750,35 @@ impl BuildEnv for BuildEnvNix {
             return Err(BuildEnvError::Link(stderr.to_string()));
         }
 
+        // When using a remote store the --out-link option is silently ignored:
+        //
+        // $ /nix/store/yj1iakcj37rli5713cv5yaamm41gghrn-nix-2.24.8/bin/nix --option extra-experimental-features 'nix-command flakes' --option pure-eval false --option store 'ssh-ng://storehouse.foobar.com' --print-build-logs build /nix/store/b5zh7g4an1vxfzc1v5h2y72mklwxwpk7-environment-runtime --out-link /tmp/tmp.yQQjb6ikm5/.flox/run/x86_64-linux.tmp.yQQjb6ikm5.run --offline
+        // $ echo $?
+        // 0
+        // $ ls -ld /tmp/tmp.yQQjb6ikm5/.flox/run/x86_64-linux.tmp.yQQjb6ikm5.run
+        // ls: cannot access '/tmp/tmp.yQQjb6ikm5/.flox/run/x86_64-linux.tmp.yQQjb6ikm5.run':
+        // No such file or directory
+        //
+        // To address this problem we verify the target of the symlink following
+        // a "successful" build, replacing it if necessary.
+        if let Ok(metadata) = std::fs::symlink_metadata(destination.as_ref()) {
+            if metadata.file_type().is_symlink() {
+                if let Ok(target) = std::fs::read_link(destination.as_ref()) {
+                    if target != *store_path.as_ref() {
+                        // Link exists with wrong value, delete it.
+                        let _ = std::fs::remove_file(destination.as_ref());
+                    }
+                }
+            }
+        }
+        if !destination.as_ref().exists() {
+            // Explicitly create link.
+            // TODO: figure out GCRoot solution for remote stores.
+            if let Err(e) = std::os::unix::fs::symlink(store_path.as_ref(), destination.as_ref()) {
+                return Err(BuildEnvError::Link(e.to_string()));
+            }
+        }
+
         Ok(())
     }
 }
