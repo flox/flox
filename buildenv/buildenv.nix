@@ -76,8 +76,8 @@ let
       ''
         export PATH="${coreutils}/bin''${PATH:+:}''${PATH}"
         mkdir -p $out/activate.d
-        cp --no-preserve=mode ${manifestLockFile} $out/manifest.lock
-        cp --no-preserve=mode ${defaultEnvrc} $out/activate.d/envrc
+        "${coreutils}/bin/cp" --no-preserve=mode ${manifestLockFile} $out/manifest.lock
+        "${coreutils}/bin/cp" --no-preserve=mode ${defaultEnvrc} $out/activate.d/envrc
       ''
       # [vars] section
       (
