@@ -1,8 +1,13 @@
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::io::Write;
 
+use flox_rust_sdk::models::lockfile::Lockfile;
+use flox_rust_sdk::models::manifest::composite::Warning;
 use flox_rust_sdk::models::manifest::raw::PackageToInstall;
+use indoc::formatdoc;
 use tracing::info;
+
 /// Write a message to stderr.
 ///
 /// This is a wrapper around `eprintln!` that can be further extended
@@ -109,6 +114,128 @@ pub(crate) fn packages_already_installed(pkgs: &[PackageToInstall], environment_
     };
     if let Some(msg) = already_installed_msg {
         warning(msg)
+    }
+}
+
+/// Print notices for any environments that have overridden fields during composition.
+pub(crate) fn print_overridden_manifest_fields(lockfile: &Lockfile) {
+    let Some(ref compose) = lockfile.compose else {
+        return;
+    };
+
+    type Field = String;
+    type Environment = String;
+
+    // De-duplicate fields by the last "winning" environment.
+    let winning_env_by_field: BTreeMap<Field, Environment> = compose
+        .warnings
+        .iter()
+        .filter_map(|warning_context| match &warning_context.warning {
+            Warning::Overriding(field) => Some((
+                field.to_string(),
+                warning_context.higher_priority_name.clone(),
+            )),
+        })
+        .collect();
+
+    // Invert the de-duplicated map.
+    let mut fields_by_env: BTreeMap<Environment, Vec<Field>> = BTreeMap::new();
+    for (field, env) in winning_env_by_field {
+        fields_by_env.entry(env).or_default().push(field);
+    }
+
+    let message_by_env = fields_by_env
+        .iter()
+        .map(|(env, fields)| {
+            format!(
+                "- Environment '{}' set:\n{}",
+                env,
+                fields
+                    .iter()
+                    .map(|key| format!("  - {}", key))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if !message_by_env.is_empty() {
+        let message = formatdoc! {"
+                The following manifest fields were overridden during merging:
+                {message_by_env}",
+        };
+        info(message);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use flox_rust_sdk::models::lockfile::Compose;
+    use flox_rust_sdk::models::manifest::composite::{KeyPath, WarningWithContext};
+    use flox_rust_sdk::models::manifest::typed::Manifest;
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+    use tracing::instrument::WithSubscriber;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_print_compose_overridden_fields() {
+        let vars_root = KeyPath::new().push("vars");
+        let overridden_by_all = vars_root.clone().push("overridden_by_all");
+        let overridden_by_dep2 = vars_root.clone().push("overridden_by_dep2");
+        let overridden_by_dep3 = vars_root.clone().push("overridden_by_dep3");
+
+        let lockfile = Lockfile {
+            compose: Some(Compose {
+                warnings: vec![
+                    WarningWithContext {
+                        higher_priority_name: "dep_one".to_string(),
+                        warning: Warning::Overriding(overridden_by_all.clone()),
+                    },
+                    WarningWithContext {
+                        higher_priority_name: "dep_two".to_string(),
+                        warning: Warning::Overriding(overridden_by_all.clone()),
+                    },
+                    WarningWithContext {
+                        higher_priority_name: "dep_two".to_string(),
+                        warning: Warning::Overriding(overridden_by_dep2.clone()),
+                    },
+                    WarningWithContext {
+                        higher_priority_name: "dep_three".to_string(),
+                        warning: Warning::Overriding(overridden_by_all.clone()),
+                    },
+                    WarningWithContext {
+                        higher_priority_name: "dep_three".to_string(),
+                        warning: Warning::Overriding(overridden_by_dep3.clone()),
+                    },
+                ],
+                // Not used
+                composer: Manifest::default(),
+                include: vec![],
+            }),
+            ..Default::default()
+        };
+
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            print_overridden_manifest_fields(&lockfile);
+        }
+        .with_subscriber(subscriber)
+        .await;
+
+        // - envronments are ordered by name rather than merge order
+        // - environment `dep_one` doesn't appear because its fields are overridden later
+        assert_eq!(writer.to_string(), indoc! {"
+            ℹ️ The following manifest fields were overridden during merging:
+            - Environment 'dep_three' set:
+              - vars.overridden_by_all
+              - vars.overridden_by_dep3
+            - Environment 'dep_two' set:
+              - vars.overridden_by_dep2
+            "});
     }
 }
 

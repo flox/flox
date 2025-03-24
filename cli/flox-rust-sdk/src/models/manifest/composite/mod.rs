@@ -77,8 +77,8 @@ pub enum Warning {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct WarningWithContext {
-    warning: Warning,
-    higher_priority_name: String,
+    pub warning: Warning,
+    pub higher_priority_name: String,
 }
 
 /// A collection of manifests to be merged with a `ManifestMergeTrait`.
