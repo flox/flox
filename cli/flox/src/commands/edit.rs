@@ -204,9 +204,8 @@ impl Edit {
                 warn_manifest_changes_for_services(flox, environment);
 
                 let lockfile = environment.lockfile(flox)?;
-                message::print_overridden_manifest_fields(&lockfile);
-
-                if result.include_modified() {
+                if lockfile.compose.is_some() {
+                    message::print_overridden_manifest_fields(&lockfile);
                     message::info("Run 'flox list -c' to see merged manifest.");
                 }
             },
@@ -904,6 +903,7 @@ mod tests {
             ℹ️ The following manifest fields were overridden during merging:
             - Environment 'Current manifest' set:
               - vars.foo
+            ℹ️ Run 'flox list -c' to see merged manifest.
             "});
     }
 }
