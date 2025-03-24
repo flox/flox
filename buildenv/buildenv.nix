@@ -75,7 +75,7 @@ let
       # static chunks
       ''
         export PATH="${coreutils}/bin''${PATH:+:}''${PATH}"
-        mkdir -p $out/activate.d
+        "${coreutils}/bin/mkdir" -p $out/activate.d
         "${coreutils}/bin/cp" --no-preserve=mode ${manifestLockFile} $out/manifest.lock
         "${coreutils}/bin/cp" --no-preserve=mode ${defaultEnvrc} $out/activate.d/envrc
       ''
@@ -85,7 +85,7 @@ let
           ""
         else
           ''
-            cat ${vars} >> $out/activate.d/envrc
+            "${coreutils}/bin/cat" ${vars} >> $out/activate.d/envrc
           ''
       )
       # [hook] section
@@ -96,7 +96,7 @@ let
           in
           if (v != null) then
             ''
-              cp ${builtins.toFile "hook-on-activate" v} $out/activate.d/hook-on-activate
+              "${coreutils}/bin/cp" ${builtins.toFile "hook-on-activate" v} $out/activate.d/hook-on-activate
             ''
           else
             ""
@@ -115,7 +115,7 @@ let
             };
           in
           ''
-            cp ${serviceConfigYamlStorePath} $out/service-config.yaml
+            "${coreutils}/bin/cp" ${serviceConfigYamlStorePath} $out/service-config.yaml
           ''
       )
     ]
@@ -132,7 +132,9 @@ let
               let
                 f = builtins.toFile "profile-${i}" v;
               in
-              "cp ${f} $out/activate.d/profile-${i}\n"
+              ''
+                "${coreutils}/bin/cp" ${f} $out/activate.d/profile-${i}
+              ''
             else
               ""
           else
@@ -164,8 +166,8 @@ let
                   f = builtins.toFile "build-${i}" v;
                 in
                 ''
-                  mkdir -p $out/package-builds.d
-                  cp ${f} $out/package-builds.d/${i}
+                  "${coreutils}/bin/mkdir" -p $out/package-builds.d
+                  "${coreutils}/bin/cp" ${f} $out/package-builds.d/${i}
                 ''
               )
             else
