@@ -208,6 +208,16 @@ impl InstallableLocker for Nix {
         let mut command = nix_base_command();
         command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
 
+        match std::env::var("_FLOX_NIX_STORE_URL").ok().as_deref() {
+            None | Some("") => {
+                debug!("using 'auto' store");
+            },
+            Some(store_url) => {
+                debug!(%store_url, "overriding Nix store URL");
+                command.args(["--option", "store", store_url]);
+            },
+        }
+
         command.args(["--option", "pure-eval", "false"]);
         command.arg("eval");
         command.arg("--no-update-lock-file");
