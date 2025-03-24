@@ -793,6 +793,17 @@ fn check_store_paths(
     command.stdin(Stdio::piped());
     command.stderr(Stdio::null());
     command.stdout(Stdio::piped());
+
+    match std::env::var("_FLOX_NIX_STORE_URL").ok().as_deref() {
+        None | Some("") => {
+            debug!("using 'auto' store");
+        },
+        Some(store_url) => {
+            debug!(%store_url, "overriding Nix store URL");
+            command.args(["--option", "store", store_url]);
+        },
+    }
+
     command.args(["path-info", "--offline", "--stdin"]);
 
     let mut child = command.spawn().map_err(BuildEnvError::CallNixBuild)?;
