@@ -519,6 +519,15 @@ impl Environment for ManagedEnvironment {
         Ok(path)
     }
 
+    /// The environment is locked,
+    /// and the manifest in the lockfile matches that in the manifest.
+    /// Note that the manifest could have whitespace or comment differences from
+    /// the lockfile.
+    fn lockfile_up_to_date(&self, flox: &Flox) -> Result<bool, EnvironmentError> {
+        let local_checkout = self.local_env_or_copy_current_generation(flox)?;
+        Ok(local_checkout.lockfile_if_up_to_date()?.is_some())
+    }
+
     /// Returns the environment name
     fn name(&self) -> EnvironmentName {
         self.pointer.name.clone()

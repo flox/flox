@@ -4732,3 +4732,39 @@ Setting PATH from .bashrc
 foo: highest precedence; bar: higher precedence
 EOF
 }
+
+@test "shows notice about composition overrides when not locked" {
+  "$FLOX_BIN" init -d included
+  "$FLOX_BIN" edit -d included -f - <<- EOF
+version = 1
+
+[vars]
+foo = "included"
+EOF
+
+  "$FLOX_BIN" init -d composer
+  cat > composer/.flox/env/manifest.toml <<- EOF
+version = 1
+
+[vars]
+foo = "composer"
+
+[include]
+environments = [
+  { dir = "../included" },
+]
+EOF
+
+  run --separate-stderr "$FLOX_BIN" activate -d composer -- echo "locking"
+  assert_success
+  assert_equal "$stderr" "ℹ️ The following manifest fields were overridden during merging:
+- Environment 'Current manifest' set:
+  - vars.foo
+Sourcing .bashrc
+Setting PATH from .bashrc"
+
+  run --separate-stderr "$FLOX_BIN" activate -d composer -- echo "already locked"
+  assert_success
+  assert_equal "$stderr" "Sourcing .bashrc
+Setting PATH from .bashrc"
+}

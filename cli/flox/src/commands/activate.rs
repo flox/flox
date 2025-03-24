@@ -164,6 +164,12 @@ impl Activate {
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
 
         let environment = concrete_environment.dyn_environment_ref_mut();
+        let is_locked = environment.lockfile_up_to_date(&flox)?;
+        let lockfile = environment.lockfile(&flox)?;
+        let manifest = &lockfile.manifest;
+        if !is_locked {
+            message::print_overridden_manifest_fields(&lockfile);
+        }
 
         let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         let interactive = !in_place && self.run_args.is_empty();
@@ -190,11 +196,6 @@ impl Activate {
             },
             other => other?,
         };
-
-        // Noop, having already locked when rendering env links.
-        // Only use the locked manifest from here.
-        let lockfile = environment.lockfile(&flox)?;
-        let manifest = &lockfile.manifest;
 
         // Must not be evaluated inline with the macro or we'll leak TRACE logs
         // for reasons unknown.

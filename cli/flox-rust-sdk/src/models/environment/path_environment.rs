@@ -398,6 +398,15 @@ impl Environment for PathEnvironment {
         Ok(self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME))
     }
 
+    /// The environment is locked,
+    /// and the manifest in the lockfile matches that in the manifest.
+    /// Note that the manifest could have whitespace or comment differences from
+    /// the lockfile.
+    fn lockfile_up_to_date(&self, _flox: &Flox) -> Result<bool, EnvironmentError> {
+        let env_view = self.as_core_environment()?;
+        Ok(env_view.lockfile_if_up_to_date()?.is_some())
+    }
+
     /// Return the path where the process compose socket for an environment
     /// should be created
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
@@ -562,15 +571,6 @@ impl PathEnvironment {
         }
 
         Ok(false)
-    }
-
-    /// The environment is locked,
-    /// and the manifest in the lockfile matches that in the manifest.
-    /// Note that the manifest could have whitespace or comment differences from
-    /// the lockfile.
-    pub fn lockfile_up_to_date(&self) -> Result<bool, EnvironmentError> {
-        let env_view = self.as_core_environment()?;
-        Ok(env_view.lockfile_if_up_to_date()?.is_some())
     }
 
     fn link(
