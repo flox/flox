@@ -114,6 +114,7 @@ impl List {
         println!("{manifest_contents}");
         if is_composed {
             message::info("Displaying merged manifest.");
+            message::print_overridden_manifest_fields(lockfile);
         }
 
         Ok(())

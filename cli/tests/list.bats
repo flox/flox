@@ -197,3 +197,34 @@ licenses = []
 [options.semver]'
   assert_equal "$stderr" 'ℹ️ Displaying merged manifest.'
 }
+
+# bats test_tags=list,list:config
+@test "'flox list --config' shows notices about overrides" {
+  "$FLOX_BIN" init -d included
+  "$FLOX_BIN" edit -d included -f - <<- EOF
+version = 1
+
+[vars]
+foo = "included"
+EOF
+
+  "$FLOX_BIN" init -d composer
+  "$FLOX_BIN" edit -d composer -f - <<- EOF
+version = 1
+
+[vars]
+foo = "composer"
+
+[include]
+environments = [
+  { dir = "../included" },
+]
+EOF
+
+  run --separate-stderr "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_equal "$stderr" "ℹ️ Displaying merged manifest.
+ℹ️ The following manifest fields were overridden during merging:
+- Environment 'Current manifest' set:
+  - vars.foo"
+}
