@@ -27,6 +27,8 @@ use crate::providers::services::ServiceError;
 pub(crate) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub const DEFAULT_PRIORITY: u64 = 5;
 
+/// An interface codifying how to access types that are just semantic wrappers
+/// around inner types. This impl may be generated with a macro.
 pub trait Inner {
     type Inner;
 
@@ -35,6 +37,7 @@ pub trait Inner {
     fn into_inner(self) -> Self::Inner;
 }
 
+/// A macro that generates a `Inner` impl.
 macro_rules! impl_into_inner {
     ($wrapper:ty, $inner_type:ty) => {
         impl Inner for $wrapper {
@@ -53,6 +56,12 @@ macro_rules! impl_into_inner {
             }
         }
     };
+}
+
+/// An interface for the type of function that serde's skip_serializing_if
+/// method takes.
+pub(crate) trait SkipSerializing {
+    fn skip_serializing(&self) -> bool;
 }
 
 /// Not meant for writing manifest files, only for reading them.
@@ -277,7 +286,7 @@ pub struct Install(
     pub(crate) BTreeMap<String, ManifestPackageDescriptor>,
 );
 
-impl Install {
+impl SkipSerializing for Install {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
@@ -477,7 +486,7 @@ pub struct Vars(
     pub(crate)  BTreeMap<String, String>,
 );
 
-impl Vars {
+impl SkipSerializing for Vars {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
@@ -596,7 +605,7 @@ pub struct ActivateOptions {
     pub mode: Option<ActivateMode>,
 }
 
-impl ActivateOptions {
+impl SkipSerializing for ActivateOptions {
     /// Don't write a struct of None's into the lockfile but also don't
     /// explicitly check fields which we might forget to update.
     fn skip_serializing(&self) -> bool {
@@ -645,7 +654,7 @@ pub struct Services(
     pub(crate) BTreeMap<String, ServiceDescriptor>,
 );
 
-impl Services {
+impl SkipSerializing for Services {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
@@ -746,7 +755,7 @@ pub struct Build(
 
 impl_into_inner!(Build, BTreeMap<String,BuildDescriptor>);
 
-impl Build {
+impl SkipSerializing for Build {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
@@ -866,7 +875,7 @@ pub struct Include {
     pub environments: Vec<IncludeDescriptor>,
 }
 
-impl Include {
+impl SkipSerializing for Include {
     pub(crate) fn skip_serializing(&self) -> bool {
         self.environments.is_empty()
     }
