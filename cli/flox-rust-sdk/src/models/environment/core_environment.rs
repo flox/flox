@@ -836,23 +836,6 @@ impl EditResult {
             },
         }
     }
-
-    pub fn include_modified(&self) -> bool {
-        match self {
-            Self::Unchanged => false,
-            Self::Changed {
-                old_lockfile,
-                new_lockfile,
-                ..
-            } => {
-                old_lockfile
-                    .as_ref()
-                    .map(|lockfile| lockfile.user_manifest().include.clone())
-                    .unwrap_or_default()
-                    != new_lockfile.user_manifest().include
-            },
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
