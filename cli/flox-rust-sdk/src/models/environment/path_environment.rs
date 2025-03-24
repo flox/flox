@@ -724,31 +724,33 @@ pub mod tests {
     pub fn generate_path_environments_without_install_or_include(
         max_size: usize,
     ) -> impl Strategy<Value = (Flox, TempDir, Vec<(PathBuf, PathEnvironment)>)> {
-        (
-            prop_vec(manifest_without_install_or_include(), 1..=max_size),
-            prop_hash_set(alphanum_string(2), 1..=max_size),
-            prop_hash_set(alphanum_string(2), 1..=max_size),
-        )
-            .prop_map(|(manifests, names, dirs)| {
-                let (mut flox, tempdir) = flox_instance();
-                flox.features.set_compose(true);
+        (1..=max_size).prop_flat_map(|size| {
+            (
+                prop_vec(manifest_without_install_or_include(), size..=size),
+                prop_hash_set(alphanum_string(2), size..=size),
+                prop_hash_set(alphanum_string(2), size..=size),
+            )
+                .prop_map(|(manifests, names, dirs)| {
+                    let (mut flox, tempdir) = flox_instance();
+                    flox.features.set_compose(true);
 
-                let mut environments = vec![];
-                for (manifest, name, dir) in izip!(&manifests, &names, &dirs) {
-                    let relative_path = PathBuf::from(dir);
-                    let absolute_path = tempdir.path().join(&relative_path);
-                    fs::create_dir(&absolute_path).unwrap();
-                    let mut environment = test_helpers::new_named_path_environment_in(
-                        &flox,
-                        &toml_edit::ser::to_string_pretty(&manifest).unwrap(),
-                        absolute_path,
-                        name,
-                    );
-                    environment.lockfile(&flox).unwrap();
-                    environments.push((relative_path, environment));
-                }
-                (flox, tempdir, environments)
-            })
+                    let mut environments = vec![];
+                    for (manifest, name, dir) in izip!(&manifests, &names, &dirs) {
+                        let relative_path = PathBuf::from(dir);
+                        let absolute_path = tempdir.path().join(&relative_path);
+                        fs::create_dir(&absolute_path).unwrap();
+                        let mut environment = test_helpers::new_named_path_environment_in(
+                            &flox,
+                            &toml_edit::ser::to_string_pretty(&manifest).unwrap(),
+                            absolute_path,
+                            name,
+                        );
+                        environment.lockfile(&flox).unwrap();
+                        environments.push((relative_path, environment));
+                    }
+                    (flox, tempdir, environments)
+                })
+        })
     }
 
     #[test]
