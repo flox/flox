@@ -372,6 +372,14 @@ impl Environment for RemoteEnvironment {
         self.inner.lockfile_path(flox)
     }
 
+    /// The environment is locked,
+    /// and the manifest in the lockfile matches that in the manifest.
+    /// Note that the manifest could have whitespace or comment differences from
+    /// the lockfile.
+    fn lockfile_up_to_date(&self, flox: &Flox) -> Result<bool, EnvironmentError> {
+        self.inner.lockfile_up_to_date(flox)
+    }
+
     /// Returns the environment name
     fn name(&self) -> EnvironmentName {
         self.inner.name()

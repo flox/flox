@@ -211,6 +211,12 @@ pub trait Environment: Send {
     /// may be located in different directories.
     fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
 
+    /// The environment is locked,
+    /// and the manifest in the lockfile matches that in the manifest.
+    /// Note that the manifest could have whitespace or comment differences from
+    /// the lockfile.
+    fn lockfile_up_to_date(&self, flox: &Flox) -> Result<bool, EnvironmentError>;
+
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;
 
