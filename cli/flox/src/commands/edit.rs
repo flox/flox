@@ -200,7 +200,12 @@ impl Edit {
                 } else {
                     message::updated("Environment successfully updated.")
                 }
+
                 warn_manifest_changes_for_services(flox, environment);
+
+                let lockfile = environment.lockfile(flox)?;
+                message::print_overridden_manifest_fields(&lockfile);
+
                 if result.include_modified() {
                     message::info("Run 'flox list -c' to see merged manifest.");
                 }
@@ -378,10 +383,14 @@ mod tests {
 
     use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment_unlocked;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_in,
+    };
     use flox_rust_sdk::models::lockfile::{ResolutionFailures, ResolveError};
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
-    use indoc::indoc;
+    use indoc::{formatdoc, indoc};
+    use pretty_assertions::assert_eq;
     use serde::de::Error;
     use tempfile::tempdir;
     use tracing::instrument::WithSubscriber;
@@ -837,6 +846,64 @@ mod tests {
         assert_eq!(writer.to_string(), indoc! {"
             ✅ Environment successfully updated.
             ℹ️ Run 'flox list -c' to see merged manifest.
+            "});
+    }
+
+    #[tokio::test]
+    async fn edit_warns_when_fields_overridden() {
+        let (mut flox, tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        flox.features.compose = true;
+
+        let mut dep = new_path_environment(&flox, indoc! {r#"
+            version = 1
+
+            [vars]
+            foo = "dep1"
+        "#});
+        dep.lockfile(&flox).unwrap();
+
+        // Lock with includes but no top-level overrides yet.
+        let composer_original_manifest = formatdoc! {r#"
+            version = 1
+
+            [include]
+            environments = [
+                {{ dir = "{dir}", name = "dep" }},
+            ]"#,
+            dir = dep.parent_path().unwrap().to_string_lossy(),
+        };
+        let mut composer = new_path_environment(&flox, &composer_original_manifest);
+        composer.lockfile(&flox).unwrap();
+
+        // Edit with top-level overrides.
+        let composer_new_manifest = formatdoc! {r#"
+            {composer_original_manifest}
+
+            [vars]
+            foo = "composer"
+        "#};
+        let composer_new_manifest_path = tempdir.path().join("temporary-manifest.toml");
+        fs::write(&composer_new_manifest_path, composer_new_manifest).unwrap();
+
+        Edit {
+            environment: EnvironmentSelect::Dir(composer.parent_path().unwrap()),
+            action: EditAction::EditManifest {
+                file: Some(composer_new_manifest_path),
+            },
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        // - overrides are shown even if `includes` didn't change.
+        // - hint to see the merged manifest is shown.
+        assert_eq!(writer.to_string(), indoc! {"
+            ✅ Environment successfully updated.
+            ℹ️ The following manifest fields were overridden during merging:
+            - Environment 'Current manifest' set:
+              - vars.foo
             "});
     }
 }

@@ -106,6 +106,7 @@ impl CompositeManifest {
         &self,
         merger: ManifestMerger,
     ) -> Result<(Manifest, Vec<WarningWithContext>), MergeError> {
+        // TODO: Surface the name of the current environment.
         let current_manifest = &("Current manifest".to_string(), self.composer.clone());
 
         let mut merges = self.deps.iter().chain([current_manifest]);
