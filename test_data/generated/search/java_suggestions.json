@@ -1,6 +1,6 @@
 [
   {
-    "count": 868,
+    "count": 881,
     "results": [
       {
         "attr_path": "javacc",
@@ -115,29 +115,29 @@
     ]
   },
   {
-    "count": 136,
+    "count": 135,
     "results": [
       {
         "attr_path": "jdk",
         "catalog": null,
-        "description": "Certified builds of OpenJDK",
-        "name": "zulu-ca-jdk-21.0.4",
+        "description": "Open-source Java Development Kit",
+        "name": "openjdk-21.0.5+11",
         "pkg_path": "jdk",
         "pname": "jdk",
         "stabilities": [],
         "system": "aarch64-darwin",
-        "version": "21.0.4"
+        "version": "21.0.5+11"
       },
       {
         "attr_path": "jdk8",
         "catalog": null,
-        "description": "Certified builds of OpenJDK",
-        "name": "zulu-ca-jdk-8.0.422",
+        "description": "Open-source Java Development Kit",
+        "name": "openjdk-8u432-b06",
         "pkg_path": "jdk8",
         "pname": "jdk8",
         "stabilities": [],
         "system": "aarch64-darwin",
-        "version": "8.0.422"
+        "version": "8u432-b06"
       },
       {
         "attr_path": "jdk11",
