@@ -557,9 +557,11 @@ pub struct Options {
     pub systems: Option<Vec<System>>,
     /// Options that control what types of packages are allowed.
     #[serde(default)]
+    #[serde(skip_serializing_if = "Allows::skip_serializing")]
     pub allow: Allows,
     /// Options that control how semver versions are resolved.
     #[serde(default)]
+    #[serde(skip_serializing_if = "SemverOptions::skip_serializing")]
     pub semver: SemverOptions,
     /// Whether to detect CUDA devices and libs during activation.
     // TODO: Migrate to `ActivateOptions`.
@@ -585,6 +587,19 @@ pub struct Allows {
     pub licenses: Option<Vec<String>>,
 }
 
+impl SkipSerializing for Allows {
+    fn skip_serializing(&self) -> bool {
+        // Destructuring here prevents us from missing new fields if they're
+        // added in the future.
+        let Allows {
+            unfree,
+            broken,
+            licenses,
+        } = self;
+        unfree.is_none() && broken.is_none() && licenses.is_none()
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -594,6 +609,15 @@ pub struct SemverOptions {
     /// Whether to allow pre-release versions when resolving
     #[serde(default)]
     pub allow_pre_releases: Option<bool>,
+}
+
+impl SkipSerializing for SemverOptions {
+    fn skip_serializing(&self) -> bool {
+        // Destructuring here prevents us from missing new fields if they're
+        // added in the future.
+        let SemverOptions { allow_pre_releases } = self;
+        allow_pre_releases.is_none()
+    }
 }
 
 #[skip_serializing_none]
@@ -876,7 +900,7 @@ pub struct Include {
 }
 
 impl SkipSerializing for Include {
-    pub(crate) fn skip_serializing(&self) -> bool {
+    fn skip_serializing(&self) -> bool {
         self.environments.is_empty()
     }
 }
@@ -1038,9 +1062,7 @@ pub mod test {
         let expected = indoc! {r#"
             version = 1
 
-            [options.allow]
-
-            [options.semver]
+            [options]
         "#};
 
         let actual = toml_edit::ser::to_string_pretty(&manifest).unwrap();
@@ -1065,9 +1087,7 @@ pub mod test {
 
             [profile]
 
-            [options.allow]
-
-            [options.semver]
+            [options]
         "#};
 
         let actual = toml_edit::ser::to_string_pretty(&manifest).unwrap();

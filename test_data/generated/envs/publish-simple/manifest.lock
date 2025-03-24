@@ -7,10 +7,7 @@
         "pkg-path": "hello"
       }
     },
-    "options": {
-      "allow": {},
-      "semver": {}
-    },
+    "options": {},
     "build": {
       "mypkg": {
         "command": "    mkdir -p $out/bin\n    echo -n \"!#/bin/sh\" > $out/bin/mypkg\n    echo -n \"echo Happy Floxing!\" > $out/bin/mypkg\n    chmod +x $out/bin/mypkg\n",

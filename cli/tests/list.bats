@@ -189,10 +189,7 @@ EOF
   assert_equal "$output" 'version = 1
 
 [install]
-hello.pkg-path = "hello"
-
-[options]
-allow.licenses = []'
+hello.pkg-path = "hello"'
   assert_equal "$stderr" 'ℹ️ Displaying merged manifest.'
 }
 

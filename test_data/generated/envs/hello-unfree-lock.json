@@ -7,10 +7,7 @@
         "pkg-path": "hello-unfree"
       }
     },
-    "options": {
-      "allow": {},
-      "semver": {}
-    }
+    "options": {}
   },
   "packages": [
     {

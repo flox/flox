@@ -14,10 +14,7 @@
         "pkg-path": "go"
       }
     },
-    "options": {
-      "allow": {},
-      "semver": {}
-    }
+    "options": {}
   },
   "packages": [
     {
