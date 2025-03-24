@@ -10,10 +10,7 @@
         "pkg-path": "vim-full"
       }
     },
-    "options": {
-      "allow": {},
-      "semver": {}
-    }
+    "options": {}
   },
   "packages": [
     {

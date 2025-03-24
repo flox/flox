@@ -20,10 +20,7 @@
       "fish": "    alias profile_alias=\"echo fish\"\n    set -gx PROFILE_SECTION_VAR profile-fish\n",
       "tcsh": "    alias profile_alias \"echo tcsh\"\n    export PROFILE_SECTION_VAR=\"profile-tcsh\"\n"
     },
-    "options": {
-      "allow": {},
-      "semver": {}
-    }
+    "options": {}
   },
   "packages": [
     {

@@ -10,8 +10,7 @@
     "options": {
       "allow": {
         "broken": true
-      },
-      "semver": {}
+      }
     }
   },
   "packages": [

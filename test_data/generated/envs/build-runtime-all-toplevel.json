@@ -14,10 +14,7 @@
         "pkg-group": "not-toplevel"
       }
     },
-    "options": {
-      "allow": {},
-      "semver": {}
-    },
+    "options": {},
     "build": {
       "myhello": {
         "command": "    mkdir -p $out/bin\n    echo echo hello foo > $out/bin/hello\n    echo exec hello >> $out/bin/hello\n    chmod +x $out/bin/hello\n"
