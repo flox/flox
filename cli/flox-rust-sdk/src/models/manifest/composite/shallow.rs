@@ -145,18 +145,11 @@ impl ShallowMerger {
             high_priority.allow.broken,
         );
 
-        let (merged_allow_licenses, allow_licenses_warning) =
-            if high_priority.allow.licenses.is_empty() {
-                (low_priority.allow.licenses.clone(), None)
-            } else {
-                let merged = high_priority.allow.licenses.clone();
-                if low_priority.allow.licenses.is_empty() {
-                    (merged, None)
-                } else {
-                    let warning = Warning::Overriding(allow_key.push("licenses"));
-                    (merged, Some(warning))
-                }
-            };
+        let (merged_allow_licenses, allow_licenses_warning) = shallow_merge_options(
+            allow_key.push("licenses"),
+            low_priority.allow.licenses.as_deref(),
+            high_priority.allow.licenses.as_deref(),
+        );
 
         let (merged_semver_allow_pre_releases, allow_pre_releases_warning) = shallow_merge_options(
             root_key.extend(["semver", "allow-pre-releases"]),
@@ -452,10 +445,15 @@ mod tests {
         fn merges_options_section(options1 in any::<Options>(), options2 in any::<Options>()) {
             let (merged, _warnings) = ShallowMerger::merge_options(&options1, &options2).unwrap();
             let systems = options2.systems.or(options1.systems);
+            let licenses = if options2.allow.licenses.is_some() {
+                options2.allow.licenses.clone()
+            } else {
+                options1.allow.licenses.clone()
+            };
             let allow = Allows {
                 unfree: options2.allow.unfree.or(options1.allow.unfree),
                 broken: options2.allow.broken.or(options1.allow.broken),
-                licenses: if options2.allow.licenses.is_empty() { options1.allow.licenses.clone()} else { options2.allow.licenses.clone() }
+                licenses
             };
             let semver = SemverOptions { allow_pre_releases: options2.semver.allow_pre_releases.or(options1.semver.allow_pre_releases) };
             let cuda_detection = options2.cuda_detection.or(options1.cuda_detection);

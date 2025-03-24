@@ -18,9 +18,7 @@
         "aarch64-linux",
         "x86_64-linux"
       ],
-      "allow": {
-        "licenses": []
-      },
+      "allow": {},
       "semver": {}
     }
   },

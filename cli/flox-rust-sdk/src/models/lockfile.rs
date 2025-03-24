@@ -943,16 +943,18 @@ impl Lockfile {
         allow: &Allows,
     ) -> Result<(), ResolveError> {
         for package in locked_packages {
-            if !allow.licenses.is_empty() {
-                let Some(ref license) = package.license else {
-                    continue;
-                };
+            if let Some(ref licenses) = allow.licenses {
+                if !licenses.is_empty() {
+                    let Some(ref license) = package.license else {
+                        continue;
+                    };
 
-                if !allow.licenses.iter().any(|allowed| allowed == license) {
-                    return Err(ResolveError::LicenseNotAllowed(
-                        package.install_id.to_string(),
-                        license.to_string(),
-                    ));
+                    if !licenses.iter().any(|allowed| allowed == license) {
+                        return Err(ResolveError::LicenseNotAllowed(
+                            package.install_id.to_string(),
+                            license.to_string(),
+                        ));
+                    }
                 }
             }
 
@@ -1065,11 +1067,18 @@ impl Lockfile {
 
         let manifest_systems = manifest.options.systems.as_deref();
 
-        let maybe_licenses = if manifest.options.allow.licenses.is_empty() {
-            None
-        } else {
-            Some(manifest.options.allow.licenses.clone())
-        };
+        let maybe_licenses = manifest
+            .options
+            .allow
+            .licenses
+            .clone()
+            .and_then(|licenses| {
+                if licenses.is_empty() {
+                    None
+                } else {
+                    Some(licenses)
+                }
+            });
 
         for (install_id, manifest_descriptor) in manifest.install.inner().iter() {
             // package groups are only relevant to catalog descriptors
@@ -3655,7 +3664,7 @@ pub(crate) mod tests {
             Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
-                licenses: vec!["allowed".to_string()]
+                licenses: Some(vec!["allowed".to_string()])
             }),
             Err(ResolveError::LicenseNotAllowed { .. })
         ));
@@ -3672,7 +3681,7 @@ pub(crate) mod tests {
             Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
-                licenses: vec!["allowed".to_string()]
+                licenses: Some(vec!["allowed".to_string()])
             })
             .is_ok()
         );
@@ -3689,7 +3698,7 @@ pub(crate) mod tests {
             Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
-                licenses: vec![]
+                licenses: None
             }),
             Err(ResolveError::BrokenNotAllowed { .. })
         ));
@@ -3706,7 +3715,7 @@ pub(crate) mod tests {
             Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: Some(true),
-                licenses: vec![]
+                licenses: None
             })
             .is_ok()
         );
@@ -3723,7 +3732,7 @@ pub(crate) mod tests {
             Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: Some(false),
-                licenses: vec![]
+                licenses: None
             }),
             Err(ResolveError::BrokenNotAllowed { .. })
         ));
@@ -3740,7 +3749,7 @@ pub(crate) mod tests {
             Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
-                licenses: vec![]
+                licenses: None
             })
             .is_ok()
         );
@@ -3757,7 +3766,7 @@ pub(crate) mod tests {
             Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: Some(true),
                 broken: None,
-                licenses: vec![]
+                licenses: None
             })
             .is_ok()
         );
@@ -3774,7 +3783,7 @@ pub(crate) mod tests {
             Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: Some(false),
                 broken: None,
-                licenses: vec![]
+                licenses: None
             }),
             Err(ResolveError::UnfreeNotAllowed { .. })
         ));

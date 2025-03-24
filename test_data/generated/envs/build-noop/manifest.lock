@@ -3,9 +3,7 @@
   "manifest": {
     "version": 1,
     "options": {
-      "allow": {
-        "licenses": []
-      },
+      "allow": {},
       "semver": {}
     },
     "build": {

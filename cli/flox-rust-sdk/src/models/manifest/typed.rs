@@ -13,7 +13,6 @@ use flox_test_utils::proptest::{
     optional_btree_set,
     optional_string,
     optional_vec_of_strings,
-    vec_of_strings,
 };
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -573,8 +572,8 @@ pub struct Allows {
     pub broken: Option<bool>,
     /// A list of license descriptors that are allowed
     #[serde(default)]
-    #[cfg_attr(test, proptest(strategy = "vec_of_strings(3, 4)"))]
-    pub licenses: Vec<String>,
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
+    pub licenses: Option<Vec<String>>,
 }
 
 #[skip_serializing_none]
@@ -1031,7 +1030,6 @@ pub mod test {
             version = 1
 
             [options.allow]
-            licenses = []
 
             [options.semver]
         "#};
@@ -1059,7 +1057,6 @@ pub mod test {
             [profile]
 
             [options.allow]
-            licenses = []
 
             [options.semver]
         "#};

@@ -15,9 +15,7 @@
       }
     },
     "options": {
-      "allow": {
-        "licenses": []
-      },
+      "allow": {},
       "semver": {}
     },
     "build": {

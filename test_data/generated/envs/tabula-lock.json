@@ -9,8 +9,7 @@
     },
     "options": {
       "allow": {
-        "broken": true,
-        "licenses": []
+        "broken": true
       },
       "semver": {}
     }
