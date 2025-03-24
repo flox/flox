@@ -135,6 +135,7 @@ pub(crate) fn print_overridden_manifest_fields(lockfile: &Lockfile) {
                 field.to_string(),
                 warning_context.higher_priority_name.clone(),
             )),
+            _ => None,
         })
         .collect();
 

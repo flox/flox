@@ -62,14 +62,15 @@ impl<Key: Into<String>> FromIterator<Key> for KeyPath {
 ///
 /// Warnings are not errors, but they may indicate
 /// that the user should review the merged manifest or its dependencies.
-///
-/// Currently, the only warning is that a value is being overridden,
-/// but more warnings may be added in the future.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[must_use]
 pub enum Warning {
     Overriding(KeyPath),
+    /// Currently, the only warning is that a value is being overridden,
+    /// but more warnings may be added in the future. This placeholer prevents
+    /// linting from complaining about irrefutable matches and let statements.
+    Placeholder(),
 }
 
 /// A warning that occurred during the merge of two manifests,
