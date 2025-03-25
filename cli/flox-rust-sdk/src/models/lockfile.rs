@@ -690,7 +690,7 @@ impl Lockfile {
             ));
         }
 
-        debug!("Composing included environments");
+        debug!("composing included environments");
 
         // Fetch included manifests we don't already have in seed_lockfile.
         // Note that we have to preserve the order of the includes in the
@@ -701,6 +701,10 @@ impl Lockfile {
             .map(|to_upgrade| to_upgrade.is_empty())
             .unwrap_or(false);
         for include_environment in &manifest.include.environments {
+            debug!(
+                name = include_environment.to_string(),
+                "inspecting included environment"
+            );
             let existing_locked_include = 'existing: {
                 // Don't use existing locked includes if we're upgradeing all
                 // includes
@@ -750,7 +754,10 @@ impl Lockfile {
                         .unwrap_or(false);
 
                     if should_refetch {
-                        debug!("upgrading included environment {include_environment}");
+                        debug!(
+                            name = include_environment.to_string(),
+                            "upgrading included environment"
+                        );
                         include_fetcher
                             .fetch(flox, include_environment)
                             .map_err(|e| RecoverableMergeError::Fetch {
@@ -759,15 +766,18 @@ impl Lockfile {
                             })?
                     } else {
                         debug!(
-                            "using existing locked include from lockfile for {}",
-                            include_environment
+                            name = include_environment.to_string(),
+                            "using existing locked include from lockfile"
                         );
 
                         locked_include
                     }
                 },
                 None => {
-                    debug!("fetching included environment {include_environment}");
+                    debug!(
+                        name = include_environment.to_string(),
+                        "fetching included environment"
+                    );
 
                     let locked_include =
                         include_fetcher
