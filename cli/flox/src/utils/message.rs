@@ -187,8 +187,11 @@ mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
     use flox_rust_sdk::models::environment::Environment;
+    use flox_rust_sdk::providers::catalog::{Client, MockClient};
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
+    use flox_test_utils::manifests::HELLO;
     use indoc::indoc;
+    use pollster::FutureExt;
     use pretty_assertions::assert_eq;
     use tracing::instrument::WithSubscriber;
 
@@ -254,6 +257,64 @@ mod tests {
               - vars.overridden_by_all
               - vars.overridden_by_composer
             "});
+    }
+
+    #[test]
+    fn warns_on_install_of_included_package() {
+        let (mut flox, _tmpdir) = flox_instance();
+        // Enable the feature flag
+        flox.features.compose = true;
+
+        // Populate responses for installing "hello"
+        let mut client = MockClient::default();
+        // Once for the dependency, once for the composing environment
+        client.push_named_resolve_response("hello.json");
+        client.push_named_resolve_response("hello.json");
+        flox.catalog_client = Client::Mock(client);
+
+        // Create the included environment
+        let mut dep = new_path_environment(&flox, HELLO);
+        // The fetcher pulls manifests from the lockfile, so make sure it exists.
+        dep.lockfile(&flox).unwrap();
+
+        // Create the composing environment
+        let composer_manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+
+            [include]
+            environments = [
+                {{ dir = "{}", name = "dep" }}   
+            ]
+            
+            [options]
+            systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
+        "#,
+        dep.parent_path().unwrap().display()
+        };
+        let mut composer = new_path_environment(&flox, &composer_manifest);
+        let lockfile = composer.lockfile(&flox).unwrap();
+
+        // Print the override warnings while collecting messages run through
+        // the tracing framework. These aren't normally printed in tests, so
+        // we have a little bit of boilerplate to ensure that they're shown.
+        let (subscriber, writer) = test_subscriber_message_only();
+        async {
+            print_overridden_manifest_fields(&lockfile);
+        }
+        .with_subscriber(subscriber)
+        .block_on();
+
+        // The `options.systems` override isn't intentional, it's just a byproduct
+        // of how we currently merge this field.
+        assert_eq!(writer.to_string(), indoc! {"
+            ℹ️ The following manifest fields were overridden during merging:
+            - Environment 'Current manifest' set:
+              - install.hello
+              - options.systems
+        "});
     }
 }
 
