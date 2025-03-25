@@ -930,13 +930,13 @@ EOF
 @test "activate services: shows warning when services already running" {
   setup_sleeping_services
 
-  mkfifo activate_finished
+  mkfifo activate_started_fifo
   TEARDOWN_FIFO="$PROJECT_DIR/finished"
   mkfifo "$TEARDOWN_FIFO"
-  "$FLOX_BIN" activate -s -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" &
+  "$FLOX_BIN" activate -s -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
 
   # Make sure the first `process-compose` gets up and running
-  cat activate_finished
+  cat activate_started_fifo
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
 
   run "$FLOX_BIN" activate -s -- true
