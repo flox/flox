@@ -9,6 +9,7 @@ use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
 pub(crate) use shallow::ShallowMerger;
 use thiserror::Error;
+use tracing::{debug, instrument};
 
 use super::typed::{ContainerizeConfig, Manifest};
 
@@ -105,6 +106,7 @@ pub(crate) enum ManifestMerger {
 }
 
 impl CompositeManifest {
+    #[instrument(skip_all)]
     pub(crate) fn merge_all(
         &self,
         merger: ManifestMerger,
@@ -120,9 +122,17 @@ impl CompositeManifest {
         let mut warnings = Vec::new();
 
         for (manifest_id, manifest) in merges {
+            debug!(name = manifest_id, "merging new manifest");
             let (merged, merge_warnings) = merger.merge(&merged_manifest, manifest)?;
             // Update the merged manifest with the new merged manifest
             merged_manifest = merged;
+
+            if !merge_warnings.is_empty() {
+                debug!(
+                    n_warnings = merge_warnings.len(),
+                    "merging produced warnings"
+                );
+            }
 
             // Wrap the warnings in a `WarningWithContext` with the name of the higher priority manifest
             let merge_warnings = merge_warnings
@@ -135,6 +145,7 @@ impl CompositeManifest {
             warnings.extend(merge_warnings);
         }
 
+        debug!(n_warnings = warnings.len(), "finished merging manifests");
         Ok((merged_manifest, warnings))
     }
 }
