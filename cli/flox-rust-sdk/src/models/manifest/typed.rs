@@ -59,6 +59,8 @@ macro_rules! impl_into_inner {
     };
 }
 
+pub(crate) use impl_into_inner;
+
 /// An interface for the type of function that serde's skip_serializing_if
 /// method takes.
 pub(crate) trait SkipSerializing {

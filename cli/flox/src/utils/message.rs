@@ -119,6 +119,27 @@ pub(crate) fn packages_already_installed(pkgs: &[PackageToInstall], environment_
     }
 }
 
+/// Display a message for packages that are newly overridden by the composing manifest
+pub(crate) fn packages_newly_overridden_by_composer(pkgs: &[String]) {
+    let already_installed_msg = match pkgs {
+        [] => None,
+        [pkg] => Some(format!(
+            "This environment now overrides package with id '{}'",
+            pkg
+        )),
+        pkgs => {
+            let joined = pkgs.iter().map(|p| format!("'{}'", p)).collect::<Vec<_>>();
+            let joined = joined.join(", ");
+            Some(format!(
+                "This environment now overrides packages with ids {joined}"
+            ))
+        },
+    };
+    if let Some(msg) = already_installed_msg {
+        info(msg)
+    }
+}
+
 /// Format a list of overridden fields for an environment.
 fn format_overridden_fields(fields: &[String]) -> String {
     fields

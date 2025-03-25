@@ -534,3 +534,41 @@ EOF
   assert_success
   assert_output "$vim_store_path/bin/vim"
 }
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox install' info message when overriding included package" {
+  # This will be an included environment
+  "$FLOX_BIN" init -d included
+
+  # Install a package that will be overridden by the composer later
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" install -d included hello
+
+  # Create the composing environment
+  "$FLOX_BIN" init -n "composer"
+
+  # Add the include to the manifest
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  "$FLOX_BIN" edit -f - <<- EOF
+version = 1
+
+[include]
+environments = [
+  { dir = "included" }
+]
+
+[options]
+systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
+EOF
+
+  # Install the overriding package to the composer
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" install hello
+
+  assert_output --partial "This environment now overrides package with id 'hello'"
+
+  # Ensure that the package actually ended up in the manifest
+  hello_pkg_path="$(tomlq -r -c '.install.hello."pkg-path"' < .flox/env/manifest.toml)"
+  assert_equal "$hello_pkg_path" "hello"
+}

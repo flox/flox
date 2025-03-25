@@ -1,6 +1,6 @@
 #![allow(dead_code)] // TODO: Remove on first use.
 // mod visit;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::{self, Display, Formatter};
 mod shallow;
 use enum_dispatch::enum_dispatch;
@@ -11,7 +11,7 @@ pub(crate) use shallow::ShallowMerger;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
-use super::typed::{ContainerizeConfig, Manifest};
+use super::typed::{ContainerizeConfig, Inner, Manifest, impl_into_inner};
 
 // TODO: Pass the actual name in.
 pub static COMPOSER_MANIFEST_ID: &str = "Current manifest";
@@ -61,6 +61,8 @@ impl<Key: Into<String>> FromIterator<Key> for KeyPath {
     }
 }
 
+impl_into_inner!(KeyPath, Vec<String>);
+
 /// A warning that occurred during the merge of two manifests.
 /// This is used to provide feedback to the user about potential issues.
 ///
@@ -77,11 +79,12 @@ pub enum Warning {
 }
 
 /// A warning that occurred during the merge of two manifests,
-/// along with the names of the two manifests involved.
+/// along with the names of the overriding manifest.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct WarningWithContext {
     pub warning: Warning,
+    /// The name of the manifest that did the overriding.
     pub higher_priority_name: String,
 }
 
@@ -312,6 +315,50 @@ fn deep_merge_optional_containerize_config(
     }
 }
 
+/// For warnings that are from packages being overridden, extract the install IDs
+/// of packages overridden by the provided manifest ID.
+///
+/// Note that this doesn't mean the warning this install ID was extracted from
+/// was the *highest priority*, just that the warning existed.
+pub fn package_overrides_for_manifest_id(
+    warnings: &[WarningWithContext],
+    manifest_id: &str,
+) -> Vec<String> {
+    let mut filtered = warnings
+        .iter()
+        .filter(|w| w.higher_priority_name == manifest_id)
+        .filter_map(|w| match w.warning {
+            Warning::Overriding(ref keypath) => {
+                let mut keypath_components = keypath.inner().iter();
+                if let Some(section) = keypath_components.next() {
+                    if section == "install" {
+                        keypath_components.next().cloned()
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            },
+        })
+        .collect::<Vec<_>>();
+    // Make sure we emit the install IDs in a stable order
+    filtered.sort();
+    filtered
+}
+
+/// Returns sorted install IDs that are new overrides
+pub fn new_package_overrides(old_ids: &[String], new_ids: &[String]) -> Vec<String> {
+    let old_ids_set = old_ids.iter().cloned().collect::<HashSet<_>>();
+    let new_ids_set = new_ids.iter().cloned().collect::<HashSet<_>>();
+    let mut new_overrides = new_ids_set
+        .difference(&old_ids_set)
+        .cloned()
+        .collect::<Vec<_>>();
+    new_overrides.sort();
+    new_overrides
+}
+
 #[cfg(test)]
 mod tests {
     use super::shallow::ShallowMerger;
@@ -365,5 +412,70 @@ mod tests {
                 ..Default::default()
             })
         );
+    }
+
+    #[test]
+    fn identifies_new_overrides() {
+        let old_ids = ["hello".to_string(), "ripgrep".to_string()];
+        let new_ids = [
+            "hello".to_string(),
+            "ripgrep".to_string(),
+            "curl".to_string(),
+        ];
+        assert_eq!(
+            new_package_overrides(&old_ids, &new_ids)[0],
+            "curl".to_string()
+        );
+
+        let old_ids = [];
+        let new_ids = ["curl".to_string()];
+        assert_eq!(
+            new_package_overrides(&old_ids, &new_ids)[0],
+            "curl".to_string()
+        );
+
+        let old_ids = [];
+        let new_ids = [];
+        assert!(new_package_overrides(&old_ids, &new_ids).is_empty());
+    }
+
+    #[test]
+    fn extracts_package_override_warnings_for_manifest() {
+        let warnings = vec![
+            // Want to extract this one
+            WarningWithContext {
+                warning: Warning::Overriding(KeyPath(vec![
+                    "install".to_string(),
+                    "ripgrep".to_string(),
+                    "pkg-path".to_string(),
+                ])),
+                higher_priority_name: "foo".to_string(),
+            },
+            // Want to extract this one
+            WarningWithContext {
+                warning: Warning::Overriding(KeyPath(vec![
+                    "install".to_string(),
+                    "hello".to_string(),
+                    "pkg-path".to_string(),
+                ])),
+                higher_priority_name: "foo".to_string(),
+            },
+            // Don't want to extract this one, wrong manifest
+            WarningWithContext {
+                warning: Warning::Overriding(KeyPath(vec![
+                    "install".to_string(),
+                    "hello".to_string(),
+                    "pkg-path".to_string(),
+                ])),
+                higher_priority_name: "bar".to_string(),
+            },
+        ];
+        let extracted_ids = package_overrides_for_manifest_id(&warnings, "foo");
+        assert_eq!(extracted_ids, vec![
+            // Note that install IDs are sorted alphabetically, which is not
+            // the same order that they're specified in the warnings.
+            "hello".to_string(),
+            "ripgrep".to_string()
+        ]);
     }
 }
