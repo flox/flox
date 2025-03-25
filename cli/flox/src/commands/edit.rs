@@ -901,7 +901,7 @@ mod tests {
         assert_eq!(writer.to_string(), indoc! {"
             ✅ Environment successfully updated.
             ℹ️ The following manifest fields were overridden during merging:
-            - Environment 'Current manifest' set:
+            - This environment set:
               - vars.foo
             ℹ️ Run 'flox list -c' to see merged manifest.
             "});

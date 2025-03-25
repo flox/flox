@@ -225,6 +225,6 @@ EOF
   assert_success
   assert_equal "$stderr" "ℹ️ Displaying merged manifest.
 ℹ️ The following manifest fields were overridden during merging:
-- Environment 'Current manifest' set:
+- This environment set:
   - vars.foo"
 }

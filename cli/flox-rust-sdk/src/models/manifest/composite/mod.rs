@@ -12,6 +12,9 @@ use thiserror::Error;
 
 use super::typed::{ContainerizeConfig, Manifest};
 
+// TODO: Pass the actual name in.
+pub static COMPOSER_MANIFEST_ID: &str = "Current manifest";
+
 #[derive(Error, Debug)]
 pub enum MergeError {}
 
@@ -107,8 +110,7 @@ impl CompositeManifest {
         &self,
         merger: ManifestMerger,
     ) -> Result<(Manifest, Vec<WarningWithContext>), MergeError> {
-        // TODO: Surface the name of the current environment.
-        let current_manifest = &("Current manifest".to_string(), self.composer.clone());
+        let current_manifest = &(COMPOSER_MANIFEST_ID.to_string(), self.composer.clone());
 
         let mut merges = self.deps.iter().chain([current_manifest]);
         let (_, mut merged_manifest) = merges
