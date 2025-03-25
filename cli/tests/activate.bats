@@ -122,7 +122,7 @@ wait_for_background_activation() {
   background_pid="${1?}"
   shift
   timeout="${1:-2s}"
-  fifo_file="activate_finished"
+  fifo_file="activate_started_fifo"
   output_file="output"
 
   timeout "$timeout" cat "$fifo_file" || (
@@ -2884,14 +2884,14 @@ attach_runs_hooks_once() {
 
   echo "$HOOK_ONLY_ONCE" | "$FLOX_BIN" edit -f -
 
-  mkfifo activate_finished
+  mkfifo activate_started_fifo
   # Will get cat'ed in teardown
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
 
-  "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" 2> output &
+  "$FLOX_BIN" activate -- bash -c "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 2> output &
 
-  cat activate_finished
+  cat activate_started_fifo
   run cat output
   assert_output --partial "sourcing hook.on-activate for first time"
   assert_output --partial "hook.on-activate"
@@ -2944,15 +2944,15 @@ attach_runs_profile_twice() {
 
   "$FLOX_BIN" edit -f "$TESTS_DIR/activate/attach_runs_profile_twice.toml"
 
-  mkfifo activate_finished
+  mkfifo activate_started_fifo
   # Will get cat'ed in teardown
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
 
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" >> output 2>&1 &
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" >> output 2>&1 &
 
-  cat activate_finished
+  cat activate_started_fifo
   run cat output
   assert_output --partial "sourcing profile.common"
   assert_output --partial "sourcing profile.$shell"
@@ -3072,15 +3072,15 @@ EOF
   )"
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
-  mkfifo activate_finished
+  mkfifo activate_started_fifo
   # Will get cat'ed in teardown
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
 
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" >> output 2>&1 &
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" >> output 2>&1 &
 
-  cat activate_finished
+  cat activate_started_fifo
 
   case "$mode" in
     interactive)
@@ -3188,15 +3188,15 @@ attach_sets_profile_vars() {
 
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
-  mkfifo activate_finished
+  mkfifo activate_started_fifo
   # Will get cat'ed in teardown
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
 
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" &
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
 
-  cat activate_finished
+  cat activate_started_fifo
 
   case "$mode" in
     interactive)
@@ -3373,7 +3373,7 @@ EOF
 
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
-  mkfifo activate_finished
+  mkfifo activate_started_fifo
   # Will get cat'ed in teardown
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
@@ -3381,14 +3381,14 @@ EOF
   # Start a first_activation which sets FOO=first_activation
   case "$mode" in
     command)
-      injected="first_activation" _FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate -- bash -c "echo \$FOO > output && echo > activate_finished && echo > $TEARDOWN_FIFO" &
+      injected="first_activation" _FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate -- bash -c "echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
       ;;
     in-place)
-      TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$(_FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_finished && echo > "$TEARDOWN_FIFO"' &
+      TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$(_FLOX_WATCHDOG_LOG_LEVEL=trace "$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_started_fifo && echo > "$TEARDOWN_FIFO"' &
       ;;
   esac
 
-  cat activate_finished
+  cat activate_started_fifo
 
   run cat output
   assert_success
@@ -3637,7 +3637,7 @@ EOF
   "$FLOX_BIN" init -d emacs
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.json" "$FLOX_BIN" install -d emacs emacs
 
-  mkfifo activate_finished
+  mkfifo activate_started_fifo
   # Will get cat'ed in teardown
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
@@ -3659,8 +3659,8 @@ EOF
       refute_output "$EMACS_MAN"
 
       # vim gets added to MANPATH
-      _man=$_man "$FLOX_BIN" activate -d vim -- bash -c "$_man --path vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
-      cat activate_finished
+      _man=$_man "$FLOX_BIN" activate -d vim -- bash -c "$_man --path vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+      cat activate_started_fifo
       run cat output
       assert_success
       assert_output "$VIM_MAN"
@@ -3684,8 +3684,8 @@ EOF
       refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
 
       # vim gets added to MANPATH
-      "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output && echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
-      cat activate_finished
+      "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output && echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+      cat activate_started_fifo
       run cat output
       assert_success
       assert_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
@@ -3720,7 +3720,7 @@ EOF
   "$FLOX_BIN" init -d emacs
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.json" "$FLOX_BIN" install -d emacs emacs
 
-  mkfifo activate_finished
+  mkfifo activate_started_fifo
   # Will get cat'ed in teardown
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
@@ -3731,8 +3731,8 @@ EOF
   run command -v emacs
   refute_output "$(realpath "$PROJECT_DIR")/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/bin/emacs"
 
-  "$FLOX_BIN" activate -d vim -- bash -c "command -v vim > output; echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" &
-  cat activate_finished
+  "$FLOX_BIN" activate -d vim -- bash -c "command -v vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+  cat activate_started_fifo
 
   run cat output
   assert_success
@@ -4189,7 +4189,7 @@ attach_previous_release() {
   expected_content="Sourcing ${rc_file}
 Setting PATH from ${rc_file}"
 
-  mkfifo activate_finished
+  mkfifo activate_started_fifo
   # Will get cat'ed in teardown
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
@@ -4210,7 +4210,7 @@ Setting PATH from ${rc_file}"
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
   # Use setsid so that wait_for_background_activation can kill the process group
   setsid ./result/bin/flox activate -- \
-    "$shell_path" -c "echo > activate_finished && echo > $TEARDOWN_FIFO" > output 2>&1 &
+    "$shell_path" -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" > output 2>&1 &
 
   # Longer timeout to allow for `nix run` locking.
   background_pid="$!"
