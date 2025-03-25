@@ -27,6 +27,15 @@ pub fn alphanum_string(max_size: usize) -> impl Strategy<Value = String> {
     .prop_map(|v| v.into_iter().collect())
 }
 
+pub fn lowercase_alphanum_string(max_size: usize) -> impl Strategy<Value = String> {
+    let ranges = vec!['a'..='z', '0'..='9'];
+    prop::collection::vec(
+        proptest::char::ranges(std::borrow::Cow::Owned(ranges)),
+        1..=max_size,
+    )
+    .prop_map(|v| v.into_iter().collect())
+}
+
 /// Produces strings that only contain alphanumeric characters.
 ///
 /// This is handy when you want to generate valid TOML keys without worrying about quoting
