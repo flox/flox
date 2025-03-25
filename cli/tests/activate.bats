@@ -4758,7 +4758,7 @@ EOF
   run --separate-stderr "$FLOX_BIN" activate -d composer -- echo "locking"
   assert_success
   assert_equal "$stderr" "ℹ️ The following manifest fields were overridden during merging:
-- Environment 'Current manifest' set:
+- This environment set:
   - vars.foo
 Sourcing .bashrc
 Setting PATH from .bashrc"

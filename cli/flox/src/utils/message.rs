@@ -3,7 +3,7 @@ use std::fmt::Display;
 use std::io::Write;
 
 use flox_rust_sdk::models::lockfile::Lockfile;
-use flox_rust_sdk::models::manifest::composite::Warning;
+use flox_rust_sdk::models::manifest::composite::{Warning, COMPOSER_MANIFEST_ID};
 use flox_rust_sdk::models::manifest::raw::PackageToInstall;
 use indoc::formatdoc;
 use tracing::info;
@@ -117,6 +117,15 @@ pub(crate) fn packages_already_installed(pkgs: &[PackageToInstall], environment_
     }
 }
 
+/// Format a list of overridden fields for an environment.
+fn format_overridden_fields(fields: &[String]) -> String {
+    fields
+        .iter()
+        .map(|key| format!("  - {}", key))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Print notices for any environments that have overridden fields during composition.
 pub(crate) fn print_overridden_manifest_fields(lockfile: &Lockfile) {
     let Some(ref compose) = lockfile.compose else {
@@ -145,26 +154,29 @@ pub(crate) fn print_overridden_manifest_fields(lockfile: &Lockfile) {
         fields_by_env.entry(env).or_default().push(field);
     }
 
-    let message_by_env = fields_by_env
-        .iter()
-        .map(|(env, fields)| {
-            format!(
+    // Sort the notices by the order that the environments were included and
+    // then the current composer environment (if present) last.
+    let mut messages_by_env: Vec<String> = Vec::new();
+    let ordered_envs = compose.include.iter().map(|include| include.name.clone());
+    for env in ordered_envs {
+        if let Some(fields) = fields_by_env.get(&env) {
+            messages_by_env.push(format!(
                 "- Environment '{}' set:\n{}",
                 env,
-                fields
-                    .iter()
-                    .map(|key| format!("  - {}", key))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    if !message_by_env.is_empty() {
+                format_overridden_fields(fields),
+            ));
+        }
+    }
+    if let Some(fields) = fields_by_env.get(COMPOSER_MANIFEST_ID) {
+        messages_by_env.push(format!(
+            "- This environment set:\n{}",
+            format_overridden_fields(fields),
+        ));
+    }
+    if !messages_by_env.is_empty() {
         let message = formatdoc! {"
                 The following manifest fields were overridden during merging:
-                {message_by_env}",
+                {}", messages_by_env.join("\n")
         };
         info(message);
     }
@@ -172,9 +184,9 @@ pub(crate) fn print_overridden_manifest_fields(lockfile: &Lockfile) {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::models::lockfile::Compose;
-    use flox_rust_sdk::models::manifest::composite::{KeyPath, WarningWithContext};
-    use flox_rust_sdk::models::manifest::typed::Manifest;
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
+    use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -183,42 +195,46 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_print_compose_overridden_fields() {
-        let vars_root = KeyPath::new().push("vars");
-        let overridden_by_all = vars_root.clone().push("overridden_by_all");
-        let overridden_by_dep2 = vars_root.clone().push("overridden_by_dep2");
-        let overridden_by_dep3 = vars_root.clone().push("overridden_by_dep3");
+    async fn test_print_overridden_manifest_fields() {
+        let (mut flox, _tempdir) = flox_instance();
+        flox.features.compose = true;
 
-        let lockfile = Lockfile {
-            compose: Some(Compose {
-                warnings: vec![
-                    WarningWithContext {
-                        higher_priority_name: "dep_one".to_string(),
-                        warning: Warning::Overriding(overridden_by_all.clone()),
-                    },
-                    WarningWithContext {
-                        higher_priority_name: "dep_two".to_string(),
-                        warning: Warning::Overriding(overridden_by_all.clone()),
-                    },
-                    WarningWithContext {
-                        higher_priority_name: "dep_two".to_string(),
-                        warning: Warning::Overriding(overridden_by_dep2.clone()),
-                    },
-                    WarningWithContext {
-                        higher_priority_name: "dep_three".to_string(),
-                        warning: Warning::Overriding(overridden_by_all.clone()),
-                    },
-                    WarningWithContext {
-                        higher_priority_name: "dep_three".to_string(),
-                        warning: Warning::Overriding(overridden_by_dep3.clone()),
-                    },
-                ],
-                // Not used
-                composer: Manifest::default(),
-                include: vec![],
-            }),
-            ..Default::default()
+        let mut dep1 = new_path_environment(&flox, indoc! {r#"
+            version = 1
+
+            [vars]
+            overridden_by_all = "set by dep1"
+            overridden_by_dep2 = "set by dep1"
+            overridden_by_composer = "set by dep1"
+        "#});
+        dep1.lockfile(&flox).unwrap();
+
+        let mut dep2 = new_path_environment(&flox, indoc! {r#"
+            version = 1
+
+            [vars]
+            overridden_by_all = "updated by dep2"
+            overridden_by_dep2 = "updated by dep2"
+        "#});
+        dep2.lockfile(&flox).unwrap();
+
+        let composer_original_manifest = formatdoc! {r#"
+            version = 1
+
+            [vars]
+            overridden_by_all = "updated by composer"
+            overridden_by_composer = "updated by composer"
+
+            [include]
+            environments = [
+                {{ dir = "{dep1_dir}", name = "dep_one" }},
+                {{ dir = "{dep2_dir}", name = "dep_two" }},
+            ]"#,
+            dep1_dir = dep1.parent_path().unwrap().to_string_lossy(),
+            dep2_dir = dep2.parent_path().unwrap().to_string_lossy(),
         };
+        let mut composer = new_path_environment(&flox, &composer_original_manifest);
+        let lockfile = composer.lockfile(&flox).unwrap();
 
         let (subscriber, writer) = test_subscriber_message_only();
         async {
@@ -227,15 +243,16 @@ mod tests {
         .with_subscriber(subscriber)
         .await;
 
-        // - envronments are ordered by name rather than merge order
+        // - environmemnts are listed by the order they were included
+        // - composer environment is listed last
         // - environment `dep_one` doesn't appear because its fields are overridden later
         assert_eq!(writer.to_string(), indoc! {"
             ℹ️ The following manifest fields were overridden during merging:
-            - Environment 'dep_three' set:
-              - vars.overridden_by_all
-              - vars.overridden_by_dep3
             - Environment 'dep_two' set:
               - vars.overridden_by_dep2
+            - This environment set:
+              - vars.overridden_by_all
+              - vars.overridden_by_composer
             "});
     }
 }
