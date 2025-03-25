@@ -700,7 +700,7 @@ pub mod test_helpers {
 #[cfg(test)]
 pub mod tests {
 
-    use flox_test_utils::proptest::alphanum_string;
+    use flox_test_utils::proptest::{alphanum_string, lowercase_alphanum_string};
     use indoc::indoc;
     use itertools::izip;
     use proptest::collection::{hash_set as prop_hash_set, vec as prop_vec};
@@ -728,7 +728,10 @@ pub mod tests {
             (
                 prop_vec(manifest_without_install_or_include(), size..=size),
                 prop_hash_set(alphanum_string(2), size..=size),
-                prop_hash_set(alphanum_string(2), size..=size),
+                // macOS is case-insensitive,
+                // so only use lowercase directories so there isn't a collision
+                // between e.g. dir and DIR
+                prop_hash_set(lowercase_alphanum_string(2), size..=size),
             )
                 .prop_map(|(manifests, names, dirs)| {
                     let (mut flox, tempdir) = flox_instance();
