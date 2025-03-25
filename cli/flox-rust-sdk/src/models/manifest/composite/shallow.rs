@@ -1,4 +1,5 @@
 use flox_core::Version;
+use tracing::{debug, instrument, trace};
 
 use super::{
     KeyPath,
@@ -34,6 +35,7 @@ use crate::models::manifest::typed::{
 pub(crate) struct ShallowMerger;
 
 impl ShallowMerger {
+    #[instrument(skip_all)]
     fn merge_version(
         low_priority: &Version<1>,
         high_priority: &Version<1>,
@@ -45,6 +47,7 @@ impl ShallowMerger {
         Ok(high_priority.clone())
     }
 
+    #[instrument(skip_all)]
     fn merge_install(
         low_priority: &Install,
         high_priority: &Install,
@@ -58,6 +61,7 @@ impl ShallowMerger {
     }
 
     /// Keys in `manifest2` overwrite keys in `manifest1`.
+    #[instrument(skip_all)]
     fn merge_vars(
         low_priority: &Vars,
         high_priority: &Vars,
@@ -70,6 +74,7 @@ impl ShallowMerger {
         Ok((Vars(merged), warnings))
     }
 
+    #[instrument(skip_all)]
     fn merge_hook(
         low_priority: Option<&Hook>,
         high_priority: Option<&Hook>,
@@ -87,6 +92,7 @@ impl ShallowMerger {
         }
     }
 
+    #[instrument(skip_all)]
     fn merge_profile(
         low_priority: Option<&Profile>,
         high_priority: Option<&Profile>,
@@ -125,6 +131,7 @@ impl ShallowMerger {
         }
     }
 
+    #[instrument(skip_all)]
     fn merge_options(
         low_priority: &Options,
         high_priority: &Options,
@@ -208,6 +215,7 @@ impl ShallowMerger {
         Ok((merged, warnings))
     }
 
+    #[instrument(skip_all)]
     fn merge_services(
         low_priority: &Services,
         high_priority: &Services,
@@ -220,6 +228,7 @@ impl ShallowMerger {
         Ok((Services(merged), warnings))
     }
 
+    #[instrument(skip_all)]
     fn merge_build(
         low_priority: &Build,
         high_priority: &Build,
@@ -232,6 +241,7 @@ impl ShallowMerger {
         Ok((Build(merged), warnings))
     }
 
+    #[instrument(skip_all)]
     fn merge_containerize(
         low_priority: Option<&Containerize>,
         high_priority: Option<&Containerize>,
@@ -260,24 +270,34 @@ impl ManifestMergeTrait for ShallowMerger {
         low_priority: &Manifest,
         high_priority: &Manifest,
     ) -> Result<(Manifest, Vec<Warning>), MergeError> {
+        trace!(section = "versions", "merging manifest section");
         let version = Self::merge_version(&low_priority.version, &high_priority.version)?;
+        trace!(section = "install", "merging manifest section");
         let (install, install_warnings) =
             Self::merge_install(&low_priority.install, &high_priority.install)?;
+        trace!(section = "vars", "merging manifest section");
         let (vars, vars_warnings) = Self::merge_vars(&low_priority.vars, &high_priority.vars)?;
+        trace!(section = "hook", "merging manifest section");
         let hook = Self::merge_hook(low_priority.hook.as_ref(), high_priority.hook.as_ref())?;
+        trace!(section = "profile", "merging manifest section");
         let profile = Self::merge_profile(
             low_priority.profile.as_ref(),
             high_priority.profile.as_ref(),
         )?;
+        trace!(section = "options", "merging manifest section");
         let (options, options_warnings) =
             Self::merge_options(&low_priority.options, &high_priority.options)?;
+        trace!(section = "services", "merging manifest section");
         let (services, services_warnings) =
             Self::merge_services(&low_priority.services, &high_priority.services)?;
+        trace!(section = "build", "merging manifest section");
         let (build, build_warnings) = Self::merge_build(&low_priority.build, &high_priority.build)?;
+        trace!(section = "containerize", "merging manifest section");
         let (containerize, containerize_warnings) = Self::merge_containerize(
             low_priority.containerize.as_ref(),
             high_priority.containerize.as_ref(),
         )?;
+        debug!("manifest pair merged successfully");
 
         let manifest = Manifest {
             version,
