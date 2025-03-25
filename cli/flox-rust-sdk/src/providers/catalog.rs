@@ -324,6 +324,17 @@ impl MockClient {
             .push_back(Response::Resolve(resp));
     }
 
+    /// Push a new response into the list of mock responses given a name under
+    /// the `test_data/generated/resolve` directory.
+    pub fn push_named_resolve_response(&mut self, name: &str) {
+        let msg = format!("couldn't read resolve response named '{name}'");
+        let resp = read_mock_responses((*GENERATED_DATA).join("resolve").join(name)).expect(&msg);
+        self.mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .extend(resp);
+    }
+
     /// Push a new response into the list of mock responses
     pub fn push_search_response(&mut self, resp: SearchResults) {
         self.mock_responses
