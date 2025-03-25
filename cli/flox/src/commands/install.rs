@@ -22,6 +22,11 @@ use flox_rust_sdk::models::lockfile::{
     ResolutionFailures,
     ResolveError,
 };
+use flox_rust_sdk::models::manifest::composite::{
+    COMPOSER_MANIFEST_ID,
+    new_package_overrides,
+    package_overrides_for_manifest_id,
+};
 use flox_rust_sdk::models::manifest::raw::{
     CatalogPackage,
     PackageToInstall,
@@ -222,6 +227,25 @@ impl Install {
 
         let mut environment = concrete_environment.into_dyn_environment();
 
+        // Get a list of the packages that this environment is already overriding via composition.
+        let lockfile_path = environment.lockfile_path(&flox)?;
+        let canonicalized_lockfile_path_res = CanonicalPath::new(lockfile_path);
+        let existing_composer_package_overrides = if let Ok(path) = canonicalized_lockfile_path_res
+        {
+            let lockfile_content =
+                std::fs::read_to_string(&path).context("Failed to read lockfile")?;
+            let lockfile =
+                Lockfile::from_str(&lockfile_content).context("Failed to parse lockfile")?;
+            let existing_composer_overrides = lockfile
+                .compose
+                .map(|c| c.warnings)
+                .map(|warnings| package_overrides_for_manifest_id(&warnings, COMPOSER_MANIFEST_ID))
+                .unwrap_or_default();
+            Ok::<_, anyhow::Error>(existing_composer_overrides)
+        } else {
+            Ok(vec![])
+        }?;
+
         // We don't know the contents of the packages field when the span is created
         sentry_set_tag(
             "packages",
@@ -262,12 +286,22 @@ impl Install {
         let lockfile_path = environment.lockfile_path(&flox)?;
         let lockfile_path = CanonicalPath::new(lockfile_path)?;
         let lockfile_content = std::fs::read_to_string(&lockfile_path)?;
-
-        // Check for warnings in the lockfile
         let lockfile: Lockfile = serde_json::from_str(&lockfile_content)?;
+
+        // Get the new set of composer overrides
+        let new_composer_package_overrides = lockfile
+            .compose
+            .map(|c| c.warnings)
+            .map(|warnings| package_overrides_for_manifest_id(&warnings, COMPOSER_MANIFEST_ID))
+            .unwrap_or_default();
+        let new_package_overrides = new_package_overrides(
+            &existing_composer_package_overrides,
+            &new_composer_package_overrides,
+        );
+
         // TODO: move this behind the `installation.new_manifest.is_some()`
         // check below so we don't warn when we don't even install anything
-        for warning in Self::generate_warnings(
+        for warning in Self::generate_unfree_and_broken_warnings(
             &lockfile.packages,
             &catalog_packages_to_install(&packages_to_install),
         ) {
@@ -292,6 +326,7 @@ impl Install {
         message::packages_successfully_installed(&partitioned.successes, &description);
         message::packages_installed_with_system_subsets(&partitioned.system_subsets);
         message::packages_already_installed(&partitioned.already_installed, &description);
+        message::packages_newly_overridden_by_composer(&new_package_overrides);
 
         if installation.new_manifest.is_some() {
             warn_manifest_changes_for_services(&flox, environment.as_ref());
@@ -503,7 +538,7 @@ impl Install {
     }
 
     /// Generate warnings to print to the user about unfree and broken packages.
-    fn generate_warnings(
+    fn generate_unfree_and_broken_warnings(
         locked_packages: &[LockedPackage],
         packages_to_install: &[CatalogPackage],
     ) -> Vec<String> {
@@ -703,7 +738,7 @@ mod tests {
         let locked_packages = vec![];
         let packages_to_install = vec![];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, &packages_to_install),
+            Install::generate_unfree_and_broken_warnings(&locked_packages, &packages_to_install),
             Vec::<String>::new()
         );
     }
@@ -721,7 +756,10 @@ mod tests {
             systems: None,
         }];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, packages_to_install.as_slice()),
+            Install::generate_unfree_and_broken_warnings(
+                &locked_packages,
+                packages_to_install.as_slice()
+            ),
             vec![format!(
                 "The package '{foo_iid}' has an unfree license, please verify the licensing terms of use"
             )]
@@ -749,7 +787,10 @@ mod tests {
             systems: None,
         }];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, packages_to_install.as_slice()),
+            Install::generate_unfree_and_broken_warnings(
+                &locked_packages,
+                packages_to_install.as_slice()
+            ),
             vec![format!(
                 "The package '{foo_iid}' has an unfree license, please verify the licensing terms of use"
             )]
@@ -769,7 +810,10 @@ mod tests {
             systems: None,
         }];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, packages_to_install.as_slice()),
+            Install::generate_unfree_and_broken_warnings(
+                &locked_packages,
+                packages_to_install.as_slice()
+            ),
             vec![format!(
                 "The package '{foo_iid}' is marked as broken, it may not behave as expected during runtime."
             )]
@@ -797,7 +841,10 @@ mod tests {
             systems: None,
         }];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, packages_to_install.as_slice()),
+            Install::generate_unfree_and_broken_warnings(
+                &locked_packages,
+                packages_to_install.as_slice()
+            ),
             vec![format!(
                 "The package '{foo_iid}' is marked as broken, it may not behave as expected during runtime."
             )]
