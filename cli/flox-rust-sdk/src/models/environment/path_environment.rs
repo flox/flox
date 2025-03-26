@@ -49,7 +49,7 @@ use crate::flox::Flox;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, IncludeToZebra, Lockfile};
+use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, IncludeToUpgrade, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
 use crate::models::manifest::typed::{ActivateMode, Manifest};
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -282,15 +282,18 @@ impl Environment for PathEnvironment {
         Ok(result)
     }
 
-    // Zebra includes in the environment
-    fn zebra(
+    /// Upgrade environments included in the environment
+    fn include_upgrade(
         &mut self,
         flox: &Flox,
-        to_zebra: Vec<IncludeToZebra>,
+        to_upgrade: Vec<IncludeToUpgrade>,
     ) -> Result<UpgradeResult, EnvironmentError> {
-        tracing::debug!(to_upgrade = to_zebra.iter().join(","), "zebraing");
+        tracing::debug!(
+            includes = to_upgrade.iter().join(","),
+            "upgrading included environments"
+        );
         let mut env_view = self.as_core_environment_mut()?;
-        let result = env_view.zebra(flox, to_zebra)?;
+        let result = env_view.include_upgrade(flox, to_upgrade)?;
         if let Some(ref store_paths) = result.store_path {
             self.link(flox, store_paths)?;
         }
@@ -883,7 +886,7 @@ pub mod tests {
     /// variable foo = "v1"
     /// Edit dep to have foo = "v2" (but that change is not yet pulled in by
     /// composer)
-    fn setup_zebra_test(flox: &Flox, tempdir: &TempDir) -> (PathEnvironment, PathBuf) {
+    fn setup_include_upgrade_test(flox: &Flox, tempdir: &TempDir) -> (PathEnvironment, PathBuf) {
         // Create dep
         let dep_path = tempdir.path().join("dep");
         let dep_manifest_contents = indoc! {r#"
@@ -922,17 +925,17 @@ pub mod tests {
         (composer, dep_path)
     }
 
-    // Zebra works when an absolute path is zebraed
+    // Upgrade works when an absolute path is upgraded
     #[test]
-    fn can_zebra_absolute_paths() {
+    fn can_include_upgrade_absolute_paths() {
         let (mut flox, tempdir) = flox_instance();
         flox.features.compose = true;
 
-        let (mut composer, dep_path) = setup_zebra_test(&flox, &tempdir);
+        let (mut composer, dep_path) = setup_include_upgrade_test(&flox, &tempdir);
 
-        // Zebra dep
+        // Upgrade dep
         composer
-            .zebra(&flox, vec![IncludeToZebra::Dir(
+            .include_upgrade(&flox, vec![IncludeToUpgrade::Dir(
                 dep_path.canonicalize().unwrap(),
             )])
             .unwrap();
@@ -941,17 +944,17 @@ pub mod tests {
         assert_eq!(lockfile.manifest.vars.0["foo"], "v2");
     }
 
-    /// Can zebra an included environment specified with the odd relative path
+    /// Can upgrade an included environment specified with the odd relative path
     /// dep/../dep/../dep
     #[test]
-    fn can_zebra_paths_with_dot_dot() {
+    fn can_include_upgrade_paths_with_dot_dot() {
         let (mut flox, tempdir) = flox_instance();
         flox.features.compose = true;
 
-        let (mut composer, _) = setup_zebra_test(&flox, &tempdir);
-        // Zebra dep
+        let (mut composer, _) = setup_include_upgrade_test(&flox, &tempdir);
+        // Upgrade dep
         composer
-            .zebra(&flox, vec![IncludeToZebra::Dir(PathBuf::from(
+            .include_upgrade(&flox, vec![IncludeToUpgrade::Dir(PathBuf::from(
                 "dep/../dep/../dep",
             ))])
             .unwrap();
@@ -960,20 +963,20 @@ pub mod tests {
         assert_eq!(lockfile.manifest.vars.0["foo"], "v2");
     }
 
-    /// Zebra errors for what would be a valid zebra if the target directory
-    /// does not exist
+    /// Include upgrade errors for what would be a valid upgrade if the target
+    /// directory does not exist
     #[test]
-    fn zebra_errors_for_nonexistent_dir() {
+    fn include_upgrade_errors_for_nonexistent_dir() {
         let (mut flox, tempdir) = flox_instance();
         flox.features.compose = true;
 
-        let (mut composer, dep_path) = setup_zebra_test(&flox, &tempdir);
+        let (mut composer, dep_path) = setup_include_upgrade_test(&flox, &tempdir);
 
         fs::remove_dir_all(&dep_path).unwrap();
 
-        // Zebra dep
+        // Upgrade dep
         let err = composer
-            .zebra(&flox, vec![IncludeToZebra::Dir(dep_path.clone())])
+            .include_upgrade(&flox, vec![IncludeToUpgrade::Dir(dep_path.clone())])
             .unwrap_err();
 
         let EnvironmentError::Recoverable(RecoverableMergeError::Catchall(message)) = err else {
@@ -983,24 +986,24 @@ pub mod tests {
         assert_eq!(
             message,
             format!(
-                "can't zebra include: directory '{}' does not exist",
+                "can't upgrade include: directory '{}' does not exist",
                 dep_path.to_str().unwrap()
             )
         );
     }
 
-    /// Trying to zebra a dir that exists but is not included should error
+    /// Trying to upgrade a dir that exists but is not included should error
     /// Note this is a different error than when the dir does not exist at all.
     #[test]
-    fn zebra_errors_for_existent_dir_not_included() {
+    fn upgrade_errors_for_existent_dir_not_included() {
         let (mut flox, tempdir) = flox_instance();
         flox.features.compose = true;
 
-        let (mut composer, _) = setup_zebra_test(&flox, &tempdir);
+        let (mut composer, _) = setup_include_upgrade_test(&flox, &tempdir);
 
-        // Zebra dep
+        // Upgrade dep
         let err = composer
-            .zebra(&flox, vec![IncludeToZebra::Dir(
+            .include_upgrade(&flox, vec![IncludeToUpgrade::Dir(
                 tempdir.path().to_path_buf(),
             )])
             .unwrap_err();
@@ -1012,16 +1015,16 @@ pub mod tests {
         assert_eq!(
             message,
             format!(
-                "unknown include to zebra '{}'",
+                "unknown included environment to upgrade '{}'",
                 tempdir.path().to_str().unwrap()
             )
         );
     }
 
-    /// If an environment doesn't hae any included environments, calling zebra()
+    /// If an environment doesn't have any included environments, calling include_upgrade()
     /// should error
     #[test]
-    fn zebra_errors_for_without_includes() {
+    fn include_upgrade_errors_without_includes() {
         let (mut flox, _tempdir) = flox_instance();
         flox.features.compose = true;
 
@@ -1032,8 +1035,8 @@ pub mod tests {
         let mut composer = new_path_environment(&flox, manifest_contents);
         composer.lockfile(&flox).unwrap();
 
-        // Try to zebra
-        let err = composer.zebra(&flox, vec![]).unwrap_err();
+        // Try to upgrade
+        let err = composer.include_upgrade(&flox, vec![]).unwrap_err();
 
         let EnvironmentError::Recoverable(RecoverableMergeError::Catchall(message)) = err else {
             panic!("expected Catchall error, got: {:?}", err)
@@ -1041,7 +1044,7 @@ pub mod tests {
 
         assert_eq!(
             message,
-            "cannot zebra environment without any included environments"
+            "cannot upgrade included environments in an environment without any included environments",
         );
     }
 }

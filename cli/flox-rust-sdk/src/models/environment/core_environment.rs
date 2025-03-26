@@ -24,7 +24,7 @@ use super::{
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::lockfile::{
-    IncludeToZebra,
+    IncludeToUpgrade,
     LockedPackage,
     Lockfile,
     ResolutionFailure,
@@ -631,24 +631,27 @@ impl CoreEnvironment<ReadOnly> {
         Ok(result)
     }
 
-    /// Zebra includes in an environment.
+    /// Upgrade included environments in an environment.
     ///
-    /// This just delegates to Lockfile::lock_manifest_with_zebra and runs
-    /// locking boilerplate.
+    /// This just delegates to Lockfile::lock_manifest_with_include_upgrades and
+    /// runs locking boilerplate.
     /// The approach here is not symmetric to the implementation of upgrade().
     /// upgrade() modifies the seed lockfile and then locks normally.
     /// We can't take that approach here because the name of an included
     /// environment may not exist until after it has been fetched.
-    /// So we can't verify if a requested zebra can be performed until
+    /// So we can't verify if a requested upgrade can be performed until
     /// after we've fetched all included environments.
     // TODO: this mostly duplicates logic in lock() and upgrade()
     // We could probably factor some of it out.
-    pub fn zebra(
+    pub fn include_upgrade(
         &mut self,
         flox: &Flox,
-        to_zebra: Vec<IncludeToZebra>,
+        to_upgrade: Vec<IncludeToUpgrade>,
     ) -> Result<UpgradeResult, EnvironmentError> {
-        tracing::debug!(includes = to_zebra.iter().join(","), "zebraing");
+        tracing::debug!(
+            includes = to_upgrade.iter().join(","),
+            "upgrading included environments"
+        );
 
         let manifest = self.manifest()?;
 
@@ -658,12 +661,12 @@ impl CoreEnvironment<ReadOnly> {
             .map(Lockfile::from_str)
             .transpose()?;
 
-        let new_lockfile = Lockfile::lock_manifest_with_zebra(
+        let new_lockfile = Lockfile::lock_manifest_with_include_upgrades(
             flox,
             &manifest,
             existing_lockfile.as_ref(),
             &self.include_fetcher,
-            Some(to_zebra),
+            Some(to_upgrade),
         )
         .block_on()?;
 

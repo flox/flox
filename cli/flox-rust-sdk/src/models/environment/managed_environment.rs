@@ -42,7 +42,7 @@ use crate::models::floxmeta::{
     FloxMetaError,
     floxmeta_git_options,
 };
-use crate::models::lockfile::{IncludeToZebra, Lockfile};
+use crate::models::lockfile::{IncludeToUpgrade, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::Manifest;
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -367,11 +367,11 @@ impl Environment for ManagedEnvironment {
         Ok(result)
     }
 
-    // Zebra includes in the environment
-    fn zebra(
+    /// Upgrade environments included in the environment
+    fn include_upgrade(
         &mut self,
         flox: &Flox,
-        to_zebra: Vec<IncludeToZebra>,
+        to_upgrade: Vec<IncludeToUpgrade>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
@@ -386,13 +386,16 @@ impl Environment for ManagedEnvironment {
             ))?
         }
 
-        let metadata = if to_zebra.is_empty() {
-            "zebraed all includes".to_string()
+        let metadata = if to_upgrade.is_empty() {
+            "upgraded all included environments".to_string()
         } else {
-            format!("zebraed includes: {}", to_zebra.iter().join(", "))
+            format!(
+                "upgraded included environments: {}",
+                to_upgrade.iter().join(", ")
+            )
         };
 
-        let result = local_checkout.zebra(flox, to_zebra)?;
+        let result = local_checkout.include_upgrade(flox, to_upgrade)?;
 
         generations
             .add_generation(&mut local_checkout, metadata)
