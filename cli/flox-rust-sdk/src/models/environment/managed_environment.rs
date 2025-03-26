@@ -42,7 +42,7 @@ use crate::models::floxmeta::{
     FloxMetaError,
     floxmeta_git_options,
 };
-use crate::models::lockfile::{IncludeToUpgrade, Lockfile};
+use crate::models::lockfile::Lockfile;
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::Manifest;
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -371,7 +371,7 @@ impl Environment for ManagedEnvironment {
     fn include_upgrade(
         &mut self,
         flox: &Flox,
-        to_upgrade: Vec<IncludeToUpgrade>,
+        to_upgrade: Vec<String>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations

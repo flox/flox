@@ -23,13 +23,7 @@ use super::{
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::lockfile::{
-    IncludeToUpgrade,
-    LockedPackage,
-    Lockfile,
-    ResolutionFailure,
-    ResolveError,
-};
+use crate::models::lockfile::{LockedPackage, Lockfile, ResolutionFailure, ResolveError};
 use crate::models::manifest::raw::{
     PackageToInstall,
     TomlEditError,
@@ -646,7 +640,7 @@ impl CoreEnvironment<ReadOnly> {
     pub fn include_upgrade(
         &mut self,
         flox: &Flox,
-        to_upgrade: Vec<IncludeToUpgrade>,
+        to_upgrade: Vec<String>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(
             includes = to_upgrade.iter().join(","),
