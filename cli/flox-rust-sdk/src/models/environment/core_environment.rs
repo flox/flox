@@ -12,14 +12,14 @@ use tracing::debug;
 
 use super::fetcher::IncludeFetcher;
 use super::{
-    copy_dir_recursive,
     CanonicalizeError,
     EnvironmentError,
     InstallationAttempt,
-    UninstallationAttempt,
-    UpgradeError,
     LOCKFILE_FILENAME,
     MANIFEST_FILENAME,
+    UninstallationAttempt,
+    UpgradeError,
+    copy_dir_recursive,
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
@@ -31,10 +31,10 @@ use crate::models::lockfile::{
     ResolveError,
 };
 use crate::models::manifest::raw::{
-    insert_packages,
-    remove_packages,
     PackageToInstall,
     TomlEditError,
+    insert_packages,
+    remove_packages,
 };
 use crate::models::manifest::typed::{Inner, Manifest, ManifestError, ManifestPackageDescriptor};
 use crate::providers::buildenv::{
@@ -44,7 +44,7 @@ use crate::providers::buildenv::{
     BuildEnvOutputs,
     BuiltStorePath,
 };
-use crate::providers::services::{maybe_make_service_config_file, ServiceError};
+use crate::providers::services::{ServiceError, maybe_make_service_config_file};
 
 pub struct ReadOnly {}
 struct ReadWrite {}
@@ -398,7 +398,7 @@ impl CoreEnvironment<ReadOnly> {
                     return Err(CoreEnvironmentError::MultiplePackagesMatch(
                         pkg,
                         matching_iids_by_pkg_path,
-                    ))
+                    ));
                 },
             }
         }
@@ -1171,7 +1171,7 @@ mod tests {
     use flox_core::Version;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
-    use tempfile::{tempdir_in, TempDir};
+    use tempfile::{TempDir, tempdir_in};
     use test_helpers::{new_core_environment_from_env_files, new_core_environment_with_lockfile};
     use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
 
@@ -1181,7 +1181,7 @@ mod tests {
     use crate::flox::test_helpers::flox_instance;
     use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
-    use crate::models::manifest::typed::{PackageDescriptorCatalog, DEFAULT_GROUP_NAME};
+    use crate::models::manifest::typed::{DEFAULT_GROUP_NAME, PackageDescriptorCatalog};
     use crate::providers::catalog::{self, Client};
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
@@ -1463,11 +1463,13 @@ mod tests {
 
         // very rudimentary check that the environment manifest built correctly
         // and linked to the out-link.
-        assert!(env_path
-            .path()
-            .with_extension("out-link")
-            .join("bin/hello")
-            .exists());
+        assert!(
+            env_path
+                .path()
+                .with_extension("out-link")
+                .join("bin/hello")
+                .exists()
+        );
     }
 
     #[test]

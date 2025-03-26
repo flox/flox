@@ -241,7 +241,7 @@ fn pkg_belongs_to_non_empty_named_group(
         return Ok(None);
     };
 
-    let Some(ref group) = pkg_group else {
+    let Some(group) = pkg_group else {
         return Ok(None);
     };
     let pkgs = pkg_descriptors_in_named_group(group, descriptors);
@@ -715,7 +715,7 @@ impl Services {
             if desc
                 .systems
                 .as_ref()
-                .map_or(true, |systems| systems.contains(system))
+                .is_none_or(|systems| systems.contains(system))
             {
                 services.insert(name.clone(), desc.clone());
             }

@@ -509,11 +509,11 @@ pub mod tests {
     use super::*;
     use crate::data::CanonicalPath;
     use crate::flox::test_helpers::{create_test_token, flox_instance};
-    use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::environment::path_environment::PathEnvironment;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::lockfile::Lockfile;
     use crate::providers::build::FloxBuildMk;
-    use crate::providers::catalog::{MockClient, GENERATED_DATA};
+    use crate::providers::catalog::{GENERATED_DATA, MockClient};
 
     fn example_remote() -> (tempfile::TempDir, GitCommandProvider, String) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -647,9 +647,11 @@ pub mod tests {
 
         let build_repo_meta = meta.build_repo_ref;
         assert!(build_repo_meta.url.contains(&remote_uri));
-        assert!(build_repo
-            .contains_commit(build_repo_meta.rev.as_str())
-            .is_ok());
+        assert!(
+            build_repo
+                .contains_commit(build_repo_meta.rev.as_str())
+                .is_ok()
+        );
         assert_eq!(build_repo_meta.rev_count, 1);
 
         let lockfile_path = CanonicalPath::new(env.lockfile_path(&flox).unwrap());

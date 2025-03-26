@@ -1,5 +1,5 @@
 #![allow(dead_code)] // TODO: Remove on first use.
-                     // mod visit;
+// mod visit;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display, Formatter};
 mod shallow;

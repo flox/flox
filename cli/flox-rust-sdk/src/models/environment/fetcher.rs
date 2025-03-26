@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use indoc::formatdoc;
 
-use super::{open_path, ConcreteEnvironment, EnvironmentError};
+use super::{ConcreteEnvironment, EnvironmentError, open_path};
 use crate::flox::Flox;
 use crate::models::environment::Environment;
 use crate::models::lockfile::{LockedInclude, RecoverableMergeError};

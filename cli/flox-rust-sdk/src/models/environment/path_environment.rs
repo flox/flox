@@ -25,31 +25,31 @@ use tracing::debug;
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::fetcher::IncludeFetcher;
 use super::{
-    path_hash,
-    services_socket_path,
+    CACHE_DIR_NAME,
+    DOT_FLOX,
     DotFlox,
+    ENVIRONMENT_POINTER_FILENAME,
     EditResult,
     Environment,
     EnvironmentError,
     EnvironmentPointer,
-    InstallationAttempt,
-    PathPointer,
-    RenderedEnvironmentLinks,
-    UninstallationAttempt,
-    CACHE_DIR_NAME,
-    DOT_FLOX,
-    ENVIRONMENT_POINTER_FILENAME,
     GCROOTS_DIR_NAME,
+    InstallationAttempt,
     LIB_DIR_NAME,
     LOCKFILE_FILENAME,
     LOG_DIR_NAME,
+    PathPointer,
+    RenderedEnvironmentLinks,
+    UninstallationAttempt,
+    path_hash,
+    services_socket_path,
 };
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::lockfile::{IncludeToZebra, Lockfile, DEFAULT_SYSTEMS_STR};
+use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, IncludeToZebra, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
 use crate::models::manifest::typed::{ActivateMode, Manifest};
 use crate::providers::buildenv::BuildEnvOutputs;
