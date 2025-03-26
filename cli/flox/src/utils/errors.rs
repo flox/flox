@@ -468,6 +468,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         },
         // access denied is caught early as ManagedEnvironmentError::AccessDenied
         ManagedEnvironmentError::Push(_) => display_chain(err),
+        ManagedEnvironmentError::PushWithLocalIncludes => display_chain(err),
         ManagedEnvironmentError::DeleteBranch(_) => display_chain(err),
         ManagedEnvironmentError::DeleteEnvironment(path, err) => formatdoc! {"
             Failed to delete remote environment at {path:?}: {err}

@@ -188,3 +188,49 @@ function update_dummy_env() {
   assert_line "emacs"
   popd >/dev/null || return
 }
+
+# bats test_tags=push:composed:local-include
+@test "push composed environment: fail if includes local env" {
+
+  mkdir -p composer included
+  "$FLOX_BIN" init --dir composer
+
+  # create and lock included env
+  "$FLOX_BIN" init --dir included
+  "$FLOX_BIN" list --dir included -c  | "$FLOX_BIN" edit --dir included -f -
+
+  # include local env
+  "$FLOX_BIN" edit -d composer -f - <<EOF
+  version = 1
+  include.environments = [{ dir = "../included" }]
+EOF
+
+  run "$FLOX_BIN" push --dir composer --owner owner
+  assert_failure
+  assert_line "❌ ERROR: cannot push environment that includes local environments"
+}
+
+
+# bats test_tags=push:composed:local-include
+@test "push composed environment (managed): fail if includes local env" {
+  export FLOX_FEATURES_COMPOSE=true
+
+  mkdir -p composer included
+  "$FLOX_BIN" init --dir composer
+  # make composer managed
+  "$FLOX_BIN" push --dir composer --owner owner
+
+  # create and lock included env
+  "$FLOX_BIN" init --dir included
+  "$FLOX_BIN" list --dir included -c  | "$FLOX_BIN" edit --dir included -f -
+
+  # include local env
+  "$FLOX_BIN" edit -d composer -f - <<EOF
+  version = 1
+  include.environments = [{ dir = "../included" }]
+EOF
+
+  run "$FLOX_BIN" push --dir composer --owner owner
+  assert_failure
+  assert_line "❌ ERROR: cannot push environment that includes local environments"
+}
