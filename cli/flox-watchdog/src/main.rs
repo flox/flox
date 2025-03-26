@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use flox_core::activations::{
     activation_state_dir_path,
