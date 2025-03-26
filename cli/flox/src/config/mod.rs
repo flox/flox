@@ -224,7 +224,13 @@ impl Config {
                     let config_dir = config_dir
                         .canonicalize()
                         .context("Could not canonicalize config directory '{config_dir:?}'")?;
-                    env::set_var(FLOX_CONFIG_DIR_VAR, &config_dir);
+
+                    // Allow subshells to find the same config dir.
+                    // TODO: decide if its worth modifying the env for this.
+                    // SAFTEY: config initially read when there is no concurrent access to env variables.
+                    unsafe {
+                        env::set_var(FLOX_CONFIG_DIR_VAR, &config_dir);
+                    }
                     config_dir
                 },
             };
@@ -480,13 +486,16 @@ mod tests {
                 ("FLOX_FLOXHUB_URL", Some("https://example.com")),
             ],
             || {
-                env::set_var("FLOX_FLOXHUB_URL", "https://example.com");
+                // SAFETY: env already isolated from concurrent access via `temp_env`
+                unsafe {
+                    env::set_var("FLOX_FLOXHUB_URL", "https://example.com");
+                }
                 let config = Config::parse().unwrap();
                 assert_eq!(
                     config.get(&Key::parse("floxhub_url").unwrap()).unwrap(),
                     "\"https://example.com/\"".to_string()
                 );
-                env::remove_var(FLOX_CONFIG_DIR_VAR);
+                unsafe { env::remove_var(FLOX_CONFIG_DIR_VAR) };
             },
         );
     }

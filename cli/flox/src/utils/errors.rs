@@ -1,14 +1,14 @@
 use flox_rust_sdk::data::CanonicalizeError;
 use flox_rust_sdk::models::environment::managed_environment::{
-    ManagedEnvironmentError,
     GENERATION_LOCK_FILENAME,
+    ManagedEnvironmentError,
 };
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
+    ENVIRONMENT_POINTER_FILENAME,
     EnvironmentError,
     UpgradeError,
-    ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::floxmeta::FloxMetaError;
 use flox_rust_sdk::models::lockfile::ResolveError;

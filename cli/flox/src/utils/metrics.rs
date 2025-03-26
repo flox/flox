@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration as TimeoutDuration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use fslock::LockFile;
 use indoc::indoc;

@@ -7,7 +7,7 @@ use itertools::Itertools;
 use tracing::{info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
-use super::{environment_select, EnvironmentSelect};
+use super::{EnvironmentSelect, environment_select};
 use crate::commands::{ensure_floxhub_token, environment_description};
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
@@ -160,14 +160,14 @@ fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
 #[cfg(test)]
 mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_named_path_environment,
         new_named_path_environment_from_env_files,
     };
-    use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::manifest::raw::PackageToInstall;
-    use flox_rust_sdk::providers::catalog::test_helpers::reset_mocks_from_file;
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
+    use flox_rust_sdk::providers::catalog::test_helpers::reset_mocks_from_file;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use tracing::instrument::WithSubscriber;

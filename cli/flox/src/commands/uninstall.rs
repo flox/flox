@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::EnvironmentError;
@@ -7,8 +7,8 @@ use itertools::Itertools;
 use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
-use super::{environment_select, EnvironmentSelect};
-use crate::commands::{ensure_floxhub_token, environment_description, EnvironmentSelectError};
+use super::{EnvironmentSelect, environment_select};
+use crate::commands::{EnvironmentSelectError, ensure_floxhub_token, environment_description};
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
 use crate::{environment_subcommand_metric, subcommand_metric};

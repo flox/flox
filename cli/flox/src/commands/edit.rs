@@ -4,7 +4,7 @@ use std::io::stdin;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
@@ -25,12 +25,12 @@ use tracing::{debug, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{
-    activated_environments,
-    environment_select,
     EnvironmentSelect,
     UninitializedEnvironment,
+    activated_environments,
+    environment_select,
 };
-use crate::commands::{ensure_floxhub_token, EnvironmentSelectError};
+use crate::commands::{EnvironmentSelectError, ensure_floxhub_token};
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
 use crate::utils::message;
@@ -163,7 +163,7 @@ impl Edit {
         environment: &mut ConcreteEnvironment,
         contents: Option<String>,
     ) -> Result<()> {
-        if let ConcreteEnvironment::Managed(ref environment) = environment {
+        if let ConcreteEnvironment::Managed(environment) = environment {
             if environment.has_local_changes(flox)? && contents.is_none() {
                 bail!(ManagedEnvironmentError::CheckoutOutOfSync)
             }

@@ -1,7 +1,7 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
@@ -151,7 +151,9 @@ pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credent
         Err(RequestTokenError::ServerResponse(r))
             if r.error() == &DeviceCodeErrorResponseType::ExpiredToken =>
         {
-            bail!("failed to authenticate before the device code expired. Please retry to get a new code.");
+            bail!(
+                "failed to authenticate before the device code expired. Please retry to get a new code."
+            );
         },
         _ => token_result?,
     };

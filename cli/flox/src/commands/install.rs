@@ -3,10 +3,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
-use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
+use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
@@ -23,9 +23,9 @@ use flox_rust_sdk::models::lockfile::{
     ResolveError,
 };
 use flox_rust_sdk::models::manifest::raw::{
-    catalog_packages_to_install,
     CatalogPackage,
     PackageToInstall,
+    catalog_packages_to_install,
 };
 use flox_rust_sdk::models::manifest::typed::ActivateMode;
 use flox_rust_sdk::models::user_state::{
@@ -42,13 +42,13 @@ use itertools::Itertools;
 use tracing::{debug, info_span, instrument, span, warn};
 
 use super::services::warn_manifest_changes_for_services;
-use super::{environment_select, EnvironmentSelect};
+use super::{EnvironmentSelect, environment_select};
 use crate::commands::activate::Activate;
 use crate::commands::{
-    ensure_floxhub_token,
-    environment_description,
     ConcreteEnvironment,
     EnvironmentSelectError,
+    ensure_floxhub_token,
+    environment_description,
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
@@ -56,7 +56,7 @@ use crate::utils::errors::format_error;
 use crate::utils::message;
 use crate::utils::openers::Shell;
 use crate::utils::tracing::sentry_set_tag;
-use crate::{environment_subcommand_metric, subcommand_metric, Exit};
+use crate::{Exit, environment_subcommand_metric, subcommand_metric};
 
 // Install a package into an environment
 #[derive(Bpaf, Clone)]
@@ -201,7 +201,10 @@ impl Install {
                     user_state.confirmed_create_default_env = Some(false);
                     write_user_state_file(&user_state, &user_state_path, lock)
                         .context("failed to save default environment choice")?;
-                    let msg = format!("Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'", self.packages.join(" "));
+                    let msg = format!(
+                        "Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
+                        self.packages.join(" ")
+                    );
                     message::plain(msg);
                     return Err(Exit(1.into()).into());
                 }
@@ -367,7 +370,9 @@ impl Install {
                         invalid_systems: _,
                     } = failure
                     else {
-                        unreachable!("already checked that these failures are 'package unavailable on some systems'")
+                        unreachable!(
+                            "already checked that these failures are 'package unavailable on some systems'"
+                        )
                     };
 
                     let Some(pkg_retry) = packages.get_mut(install_id) else {
@@ -681,15 +686,15 @@ fn add_activation_to_rc_file(
 mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
-    use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
+    use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall};
-    use flox_rust_sdk::providers::catalog::{Client, MockClient, SystemEnum, GENERATED_DATA};
+    use flox_rust_sdk::providers::catalog::{Client, GENERATED_DATA, MockClient, SystemEnum};
     use flox_test_utils::manifests::EMPTY_ALL_SYSTEMS;
 
     use super::{add_activation_to_rc_file, ensure_rc_file_exists};
-    use crate::commands::install::{package_list_for_prompt, Install};
     use crate::commands::EnvironmentSelect;
+    use crate::commands::install::{Install, package_list_for_prompt};
     use crate::utils::message::history::History;
 
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
@@ -874,7 +879,9 @@ mod tests {
         };
         install_cmd.handle(flox).await.expect("installation failed");
         let msgs = &History::global().messages();
-        let expected = format!("⚠\u{fe0f}  '{install_id}' installed only for the following systems: {installed_systems}");
+        let expected = format!(
+            "⚠\u{fe0f}  '{install_id}' installed only for the following systems: {installed_systems}"
+        );
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0], expected);
     }

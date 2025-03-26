@@ -6,10 +6,10 @@ use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 use std::{env, fs};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
+use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     Environment,
@@ -30,18 +30,18 @@ use tracing::{debug, warn};
 
 use super::services::ServicesEnvironment;
 use super::{
+    EnvironmentSelect,
+    UninitializedEnvironment,
     activated_environments,
     environment_description,
     environment_select,
-    EnvironmentSelect,
-    UninitializedEnvironment,
 };
 use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
 use crate::commands::services::ServicesCommandsError;
 use crate::commands::{
+    EnvironmentSelectError,
     ensure_environment_trust,
     uninitialized_environment_description,
-    EnvironmentSelectError,
 };
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::openers::Shell;
@@ -814,11 +814,11 @@ mod tests {
 #[cfg(test)]
 mod upgrade_notification_tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::UpgradeResult;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_named_path_environment_from_env_files,
         new_path_environment_from_env_files,
     };
-    use flox_rust_sdk::models::environment::UpgradeResult;
     use flox_rust_sdk::models::lockfile::LockedPackage;
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
     use flox_rust_sdk::providers::upgrade_checks::UpgradeInformation;

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
-use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
+use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
 use flox_rust_sdk::providers::nix::NIX_VERSION;
 use flox_rust_sdk::utils::ReaderExt;

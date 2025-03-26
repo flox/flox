@@ -6,14 +6,14 @@ use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::manifest::typed::{ActivateMode, Inner, Manifest, Services};
-use flox_rust_sdk::providers::services::{new_services_to_start, ProcessState, ProcessStates};
+use flox_rust_sdk::providers::services::{ProcessState, ProcessStates, new_services_to_start};
 use tracing::{debug, instrument};
 
 use super::{
-    activated_environments,
     ConcreteEnvironment,
     EnvironmentSelect,
     UninitializedEnvironment,
+    activated_environments,
 };
 use crate::commands::activate::Activate;
 use crate::commands::display_help;

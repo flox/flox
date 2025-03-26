@@ -10,13 +10,13 @@ use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironmentError,
 };
 use flox_rust_sdk::models::environment::{
-    path_environment,
     DotFlox,
     Environment,
     EnvironmentError,
     EnvironmentPointer,
     ManagedPointer,
     PathPointer,
+    path_environment,
 };
 use indoc::formatdoc;
 use tracing::{debug, instrument};

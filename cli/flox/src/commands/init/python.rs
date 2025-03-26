@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{anyhow, Context, Error, Result};
+use anyhow::{Context, Error, Result, anyhow};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::raw::CatalogPackage;
@@ -13,11 +13,11 @@ use regex::Regex;
 use tracing::debug;
 
 use super::{
-    format_customization,
-    try_find_compatible_package,
+    AUTO_SETUP_HINT,
     InitHook,
     ProvidedVersion,
-    AUTO_SETUP_HINT,
+    format_customization,
+    try_find_compatible_package,
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
@@ -337,7 +337,9 @@ impl PoetryPyProject {
                 };
             }
 
-            debug!("poetry config requires python version {required_python_version}, but no compatible version found in the catalogs");
+            debug!(
+                "poetry config requires python version {required_python_version}, but no compatible version found in the catalogs"
+            );
 
             let substitute = try_find_compatible_package(flox, "python3", None)
                 .await?
@@ -544,7 +546,9 @@ impl PyProject {
                 };
             }
 
-            debug!("pyproject.toml requires python version {required_python_version}, but no compatible version found in the catalogs");
+            debug!(
+                "pyproject.toml requires python version {required_python_version}, but no compatible version found in the catalogs"
+            );
 
             ProvidedVersion::Incompatible {
                 substitute: search_default().await?,
@@ -810,8 +814,8 @@ mod tests {
 
     use flox_rust_sdk::data::System;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use flox_rust_sdk::providers::catalog::Client;
+    use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -867,9 +871,11 @@ mod tests {
         let matches = Requirements::get_matches(&temp_dir).unwrap();
         assert!(matches.len() == 2);
         // std::fs::read_dir does not guarantee order
-        assert!(matches
-            .iter()
-            .any(|s| s == "requirements_versioned_dev.txt"));
+        assert!(
+            matches
+                .iter()
+                .any(|s| s == "requirements_versioned_dev.txt")
+        );
         assert!(matches.iter().any(|s| s == "requirements_versioned.txt"));
     }
 

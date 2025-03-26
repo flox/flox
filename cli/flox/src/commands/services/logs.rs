@@ -1,17 +1,17 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::{
+    DEFAULT_TAIL,
     ProcessComposeLogLine,
     ProcessComposeLogStream,
     ProcessComposeLogTail,
     ProcessStates,
-    DEFAULT_TAIL,
 };
 use tracing::instrument;
 
-use crate::commands::services::{guard_service_commands_available, ServicesEnvironment};
-use crate::commands::{environment_select, EnvironmentSelect};
+use crate::commands::services::{ServicesEnvironment, guard_service_commands_available};
+use crate::commands::{EnvironmentSelect, environment_select};
 use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Bpaf, Debug, Clone)]
@@ -58,7 +58,7 @@ impl Logs {
                 println!("{process:<max_name_length$}: {message}",);
             }
         } else {
-            let [ref name] = self.names.as_slice() else {
+            let [name] = self.names.as_slice() else {
                 bail!("A single service name is required when the --follow flag is not specified");
             };
 

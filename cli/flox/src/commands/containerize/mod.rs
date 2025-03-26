@@ -6,7 +6,7 @@ use std::process::{Child, Command, Stdio};
 use std::str::FromStr;
 use std::{fs, io};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
@@ -16,7 +16,7 @@ use indoc::indoc;
 use macos_containerize_proxy::ContainerizeProxy;
 use tracing::{debug, info, instrument};
 
-use super::{environment_select, EnvironmentSelect};
+use super::{EnvironmentSelect, environment_select};
 use crate::utils::message;
 use crate::utils::openers::first_in_path;
 use crate::{environment_subcommand_metric, subcommand_metric};
@@ -154,7 +154,7 @@ impl OutputTarget {
         OutputTarget::Runtime(runtime)
     }
 
-    fn to_writer(&self) -> Result<Box<dyn ContainerSink>> {
+    fn to_writer(&self) -> Result<Box<dyn ContainerSink + '_>> {
         let writer: Box<dyn ContainerSink> = match self {
             OutputTarget::File(FileOrStdout::File(path)) => {
                 let file = fs::OpenOptions::new()

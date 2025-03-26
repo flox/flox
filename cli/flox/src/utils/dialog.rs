@@ -3,7 +3,7 @@ use std::io::IsTerminal;
 
 use inquire::ui::{Attributes, RenderConfig, StyleSheet, Styled};
 
-use super::{colors, TERMINAL_STDERR};
+use super::{TERMINAL_STDERR, colors};
 
 #[allow(unused)]
 #[derive(Debug, Clone)]
