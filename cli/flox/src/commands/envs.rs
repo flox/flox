@@ -7,7 +7,7 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::env_registry::{garbage_collect, EnvRegistry};
+use flox_rust_sdk::models::env_registry::{EnvRegistry, garbage_collect};
 use flox_rust_sdk::models::environment::DotFlox;
 use serde_json::json;
 use tracing::instrument;

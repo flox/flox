@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::SystemTime;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use bpaf::{Bpaf, Parser};
 use flox_core::log_file_format_upgrade_check;
 use flox_rust_sdk::flox::Flox;
@@ -238,7 +238,7 @@ mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
     use flox_rust_sdk::models::environment::{ConcreteEnvironment, UpgradeResult};
-    use flox_rust_sdk::providers::catalog::{Client, MockClient, GENERATED_DATA};
+    use flox_rust_sdk::providers::catalog::{Client, GENERATED_DATA, MockClient};
 
     use super::*;
 

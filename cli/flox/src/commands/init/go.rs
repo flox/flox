@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::raw::CatalogPackage;
@@ -10,12 +10,12 @@ use indoc::{formatdoc, indoc};
 use tracing::debug;
 
 use super::{
-    format_customization,
-    try_find_compatible_package,
+    AUTO_SETUP_HINT,
     InitHook,
     ProvidedPackage,
     ProvidedVersion,
-    AUTO_SETUP_HINT,
+    format_customization,
+    try_find_compatible_package,
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
@@ -329,8 +329,8 @@ impl GoVersion {
 mod tests {
     use flox_rust_sdk::data::System;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use flox_rust_sdk::providers::catalog::Client;
+    use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
 
     use super::*;
     use crate::commands::init::ProvidedPackage;

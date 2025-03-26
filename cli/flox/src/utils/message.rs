@@ -3,7 +3,7 @@ use std::fmt::Display;
 use std::io::Write;
 
 use flox_rust_sdk::models::lockfile::Lockfile;
-use flox_rust_sdk::models::manifest::composite::{Warning, COMPOSER_MANIFEST_ID};
+use flox_rust_sdk::models::manifest::composite::{COMPOSER_MANIFEST_ID, Warning};
 use flox_rust_sdk::models::manifest::raw::PackageToInstall;
 use indoc::formatdoc;
 use tracing::info;
@@ -109,7 +109,9 @@ pub(crate) fn packages_already_installed(pkgs: &[PackageToInstall], environment_
                 .map(|p| format!("'{}'", p.id()))
                 .collect::<Vec<_>>();
             let joined = joined.join(", ");
-            Some(format!("Packages with ids {joined} already installed to environment {environment_description}"))
+            Some(format!(
+                "Packages with ids {joined} already installed to environment {environment_description}"
+            ))
         },
     };
     if let Some(msg) = already_installed_msg {
@@ -185,8 +187,8 @@ pub(crate) fn print_overridden_manifest_fields(lockfile: &Lockfile) {
 #[cfg(test)]
 mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
     use flox_rust_sdk::models::environment::Environment;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;

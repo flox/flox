@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -8,17 +8,17 @@ use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::Inner;
 use flox_rust_sdk::providers::build::FloxBuildMk;
 use flox_rust_sdk::providers::publish::{
-    check_build_metadata,
-    check_environment_metadata,
     NixCopyCache,
     PublishProvider,
     Publisher,
+    check_build_metadata,
+    check_environment_metadata,
 };
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
 use url::Url;
 
-use super::{environment_select, EnvironmentSelect};
+use super::{EnvironmentSelect, environment_select};
 use crate::commands::ensure_floxhub_token;
 use crate::config::{Config, PublishConfig};
 use crate::utils::message;

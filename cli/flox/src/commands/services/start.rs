@@ -1,25 +1,25 @@
 use std::io::stderr;
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::manifest::typed::Services;
 use flox_rust_sdk::providers::services::{
+    ProcessStates,
     shutdown_process_compose_if_all_processes_stopped,
     start_service,
-    ProcessStates,
 };
 use tracing::{debug, instrument};
 
 use crate::commands::services::{
+    ServicesEnvironment,
     guard_is_within_activation,
     guard_service_commands_available,
     start_services_with_new_process_compose,
-    ServicesEnvironment,
 };
-use crate::commands::{environment_select, EnvironmentSelect};
+use crate::commands::{EnvironmentSelect, environment_select};
 use crate::config::Config;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
@@ -127,7 +127,7 @@ mod tests {
     use std::io;
 
     use flox_rust_sdk::providers::services::test_helpers::TestProcessComposeInstance;
-    use flox_rust_sdk::providers::services::{generate_never_exit_process, ProcessComposeConfig};
+    use flox_rust_sdk::providers::services::{ProcessComposeConfig, generate_never_exit_process};
 
     use super::*;
 

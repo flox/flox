@@ -1,17 +1,17 @@
 use std::env;
 use std::path::Path;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::Inner;
-use flox_rust_sdk::providers::build::{build_symlink_path, FloxBuildMk, ManifestBuilder, Output};
+use flox_rust_sdk::providers::build::{FloxBuildMk, ManifestBuilder, Output, build_symlink_path};
 use indoc::{formatdoc, indoc};
 use tracing::instrument;
 
-use super::{environment_select, EnvironmentSelect};
+use super::{EnvironmentSelect, environment_select};
 use crate::commands::activate::FLOX_INTERPRETER;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};

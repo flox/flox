@@ -1,7 +1,7 @@
 use std::cmp::max;
 use std::fmt::Display;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::manifest::typed::Inner;
@@ -10,8 +10,8 @@ use itertools::Itertools;
 use serde::Serialize;
 use tracing::instrument;
 
-use crate::commands::services::{guard_service_commands_available, ServicesEnvironment};
-use crate::commands::{environment_select, EnvironmentSelect};
+use crate::commands::services::{ServicesEnvironment, guard_service_commands_available};
+use crate::commands::{EnvironmentSelect, environment_select};
 use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Bpaf, Debug, Clone)]

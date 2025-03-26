@@ -1,4 +1,4 @@
-use std::io::{stdout, Write};
+use std::io::{Write, stdout};
 
 use anyhow::Result;
 use bpaf::Bpaf;
@@ -15,7 +15,7 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, instrument};
 
-use super::{environment_select, EnvironmentSelect};
+use super::{EnvironmentSelect, environment_select};
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
 use crate::{environment_subcommand_metric, subcommand_metric};
@@ -332,12 +332,12 @@ impl List {
 
 #[cfg(test)]
 mod tests {
+    use flox_rust_sdk::models::lockfile::LockedPackage;
     use flox_rust_sdk::models::lockfile::test_helpers::{
+        LOCKED_NIX_EVAL_JOBS,
         fake_catalog_package_lock,
         nix_eval_jobs_descriptor,
-        LOCKED_NIX_EVAL_JOBS,
     };
-    use flox_rust_sdk::models::lockfile::LockedPackage;
     use flox_rust_sdk::models::manifest::typed::DEFAULT_PRIORITY;
     use indoc::indoc;
     use pretty_assertions::assert_eq;

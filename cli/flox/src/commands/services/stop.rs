@@ -1,11 +1,11 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::services::{stop_services, ProcessStates};
+use flox_rust_sdk::providers::services::{ProcessStates, stop_services};
 use tracing::instrument;
 
-use crate::commands::services::{guard_service_commands_available, ServicesEnvironment};
-use crate::commands::{environment_select, EnvironmentSelect};
+use crate::commands::services::{ServicesEnvironment, guard_service_commands_available};
+use crate::commands::{EnvironmentSelect, environment_select};
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
 

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::raw::CatalogPackage;
@@ -13,12 +13,12 @@ use semver::VersionReq;
 use tracing::debug;
 
 use super::{
+    AUTO_SETUP_HINT,
+    InitHook,
+    ProvidedPackage,
     find_compatible_package,
     format_customization,
     try_find_compatible_package,
-    InitHook,
-    ProvidedPackage,
-    AUTO_SETUP_HINT,
 };
 use crate::commands::init::try_find_compatible_major_version_package;
 use crate::utils::dialog::{Dialog, Select};
@@ -517,14 +517,26 @@ impl Node {
             },
             (_, Some(NVMRCVersion::Unsure)) => {
                 let result = find_compatible_package(flox, "nodejs", None).await?;
-                let message = format!("Flox detected an .nvmrc with a version specifier not understood by Flox, but Flox can provide {}",
-                       result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
+                let message = format!(
+                    "Flox detected an .nvmrc with a version specifier not understood by Flox, but Flox can provide {}",
+                    result
+                        .version
+                        .as_ref()
+                        .map(|version| format!("version {version}"))
+                        .unwrap_or("another version".to_string())
+                );
                 (message, result.version)
             },
             (_, Some(NVMRCVersion::Unavailable)) => {
                 let result = find_compatible_package(flox, "nodejs", None).await?;
-                let message = format!("Flox detected an .nvmrc with a version of nodejs not provided by Flox, but Flox can provide {}",
-                result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
+                let message = format!(
+                    "Flox detected an .nvmrc with a version of nodejs not provided by Flox, but Flox can provide {}",
+                    result
+                        .version
+                        .as_ref()
+                        .map(|version| format!("version {version}"))
+                        .unwrap_or("another version".to_string())
+                );
                 (message, result.version.clone())
             },
             (Some(PackageJSONVersion::Unspecified), None) => {

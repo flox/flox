@@ -30,33 +30,33 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{env, fmt, fs, io, mem};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
 use flox_rust_sdk::data::FloxVersion;
 use flox_rust_sdk::flox::{
+    DEFAULT_FLOXHUB_URL,
+    DEFAULT_NAME,
     EnvironmentRef,
+    FLOX_SENTRY_ENV,
+    FLOX_VERSION,
     Flox,
     Floxhub,
     FloxhubToken,
     FloxhubTokenError,
-    DEFAULT_FLOXHUB_URL,
-    DEFAULT_NAME,
-    FLOX_SENTRY_ENV,
-    FLOX_VERSION,
 };
-use flox_rust_sdk::models::env_registry::{EnvRegistry, ENV_REGISTRY_FILENAME};
+use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
-    find_dot_flox,
-    open_path,
     ConcreteEnvironment,
+    DOT_FLOX,
     DotFlox,
     Environment,
     EnvironmentError,
+    FLOX_ACTIVE_ENVIRONMENTS_VAR,
     ManagedPointer,
     UninitializedEnvironment,
-    DOT_FLOX,
-    FLOX_ACTIVE_ENVIRONMENTS_VAR,
+    find_dot_flox,
+    open_path,
 };
 use flox_rust_sdk::models::{env_registry, environment_ref};
 use futures::Future;
@@ -76,10 +76,10 @@ use crate::commands::general::update_config;
 use crate::config::{
     Config,
     EnvironmentTrust,
-    InstallerChannel,
     FLOX_CONFIG_FILE,
     FLOX_DIR_NAME,
     FLOX_DISABLE_METRICS_VAR,
+    InstallerChannel,
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
@@ -90,7 +90,7 @@ use crate::utils::init::{
     telemetry_opt_out_needs_migration,
 };
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FILE_NAME};
-use crate::utils::{message, TRAILING_NETWORK_CALL_TIMEOUT};
+use crate::utils::{TRAILING_NETWORK_CALL_TIMEOUT, message};
 
 // Relative to flox executable
 const DEFAULT_UPDATE_INSTRUCTIONS: &str =
@@ -521,7 +521,7 @@ impl UpdateNotification {
         let notification_file = cache_dir.as_ref().join(UPDATE_NOTIFICATION_FILE_NAME);
         // Release channel won't be set for development builds.
         // Skip printing an update notification.
-        let Some(ref release_env) = release_channel else {
+        let Some(release_env) = release_channel else {
             debug!("Skipping update check in development mode");
             return Ok(UpdateCheckResult::Skipped);
         };
@@ -1192,7 +1192,9 @@ pub fn detect_environment(
 
         // If we can't prompt, use the environment found in the current directory or git repo
         (Some(_), Some(found)) if !Dialog::can_prompt() => {
-            debug!("No TTY detected, using the environment {found:?} found in the current directory or an ancestor directory");
+            debug!(
+                "No TTY detected, using the environment {found:?} found in the current directory or an ancestor directory"
+            );
             Some(UninitializedEnvironment::DotFlox(found))
         },
         // If there's both an activated environment and an environment in the

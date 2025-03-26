@@ -1,26 +1,26 @@
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::manifest::typed::Services;
 use flox_rust_sdk::providers::services::{
-    process_compose_down,
-    restart_service,
     LoggedError,
     ProcessStates,
     ServiceError,
+    process_compose_down,
+    restart_service,
 };
 use tracing::{debug, instrument};
 
 use crate::commands::services::{
+    ServicesEnvironment,
     guard_is_within_activation,
     guard_service_commands_available,
     start_services_with_new_process_compose,
-    ServicesEnvironment,
 };
-use crate::commands::{environment_select, EnvironmentSelect};
+use crate::commands::{EnvironmentSelect, environment_select};
 use crate::config::Config;
 use crate::utils::message;
 use crate::{environment_subcommand_metric, subcommand_metric};
