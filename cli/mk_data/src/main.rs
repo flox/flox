@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use clap::Parser;
-use generate::{execute_jobs, generate_jobs, Config};
+use generate::{Config, execute_jobs, generate_jobs};
 
 pub mod generate;
 
