@@ -13,18 +13,18 @@ use std::sync::{Arc, LazyLock, Mutex};
 use async_stream::try_stream;
 use catalog_api_v1::types::{
     self as api_types,
-    error as api_error,
     ErrorResponse,
     MessageLevel,
     MessageType,
     ResolutionMessageGeneral,
+    error as api_error,
 };
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
-use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
+use reqwest::header::{self, HeaderMap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -274,7 +274,7 @@ impl CatalogClient {
     {
         let new_response =
             serde_json::to_value(response).expect("couldn't convert response to json");
-        if let Value::Array(ref mut responses) = json {
+        if let Value::Array(responses) = json {
             responses.push(new_response);
         } else {
             panic!("expected file to contain a json array, found something else");
@@ -1347,7 +1347,7 @@ pub mod test_helpers {
     /// Clear mock responses and then load responses from a file into the list
     /// of mock responses
     pub fn reset_mocks_from_file(client: &mut Client, relative_path: &str) {
-        let Client::Mock(ref mut client) = client else {
+        let Client::Mock(client) = client else {
             panic!("mocks can only be used with a MockClient");
         };
 

@@ -28,14 +28,14 @@ use super::environment::{CoreEnvironmentError, EnvironmentError};
 use super::manifest::composite::{ManifestMerger, MergeError, ShallowMerger, WarningWithContext};
 use super::manifest::typed::{
     Allows,
+    DEFAULT_GROUP_NAME,
+    DEFAULT_PRIORITY,
     IncludeDescriptor,
     Inner,
     Manifest,
     ManifestPackageDescriptor,
     PackageDescriptorCatalog,
     PackageDescriptorFlake,
-    DEFAULT_GROUP_NAME,
-    DEFAULT_PRIORITY,
 };
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
@@ -1650,16 +1650,20 @@ pub enum ResolveError {
         enabled_systems: Vec<String>,
     },
 
-    #[error("The package '{0}' has license '{1}' which is not in the list of allowed licenses.\n\nAllow this license by adding it to 'options.allow.licenses' in manifest.toml")]
+    #[error(
+        "The package '{0}' has license '{1}' which is not in the list of allowed licenses.\n\nAllow this license by adding it to 'options.allow.licenses' in manifest.toml"
+    )]
     LicenseNotAllowed(String, String),
-    #[error("The package '{0}' is marked as broken.\n\nAllow broken packages by setting 'options.allow.broken = true' in manifest.toml")]
+    #[error(
+        "The package '{0}' is marked as broken.\n\nAllow broken packages by setting 'options.allow.broken = true' in manifest.toml"
+    )]
     BrokenNotAllowed(String),
-    #[error("The package '{0}' has an unfree license.\n\nAllow unfree packages by setting 'options.allow.unfree = true' in manifest.toml")]
+    #[error(
+        "The package '{0}' has an unfree license.\n\nAllow unfree packages by setting 'options.allow.unfree = true' in manifest.toml"
+    )]
     UnfreeNotAllowed(String),
 
-    #[error(
-        "Corrupt manifest; couldn't find flake package descriptor for locked install_id '{0}'"
-    )]
+    #[error("Corrupt manifest; couldn't find flake package descriptor for locked install_id '{0}'")]
     MissingPackageDescriptor(String),
 
     #[error(transparent)]
@@ -1870,13 +1874,13 @@ pub(crate) mod tests {
     use self::catalog::PackageResolutionInfo;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::Environment;
     use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
     use crate::models::environment::path_environment::test_helpers::{
         new_named_path_environment_in,
         new_path_environment_in,
     };
     use crate::models::environment::path_environment::tests::generate_path_environments_without_install_or_include;
-    use crate::models::environment::Environment;
     use crate::models::manifest::raw::RawManifest;
     use crate::models::manifest::typed::{Include, Manifest, Vars};
     use crate::models::search::{PackageDetails, SearchLimit, SearchResults};
@@ -2097,37 +2101,39 @@ pub(crate) mod tests {
     static TEST_LOCKED_MANIFEST: LazyLock<Lockfile> = LazyLock::new(|| Lockfile {
         version: Version::<1>,
         manifest: TEST_TYPED_MANIFEST.clone(),
-        packages: vec![LockedPackageCatalog {
-            attr_path: "hello".to_string(),
-            broken: Some(false),
-            derivation: "derivation".to_string(),
-            description: Some("description".to_string()),
-            install_id: "hello_install_id".to_string(),
-            license: Some("license".to_string()),
-            locked_url: "locked_url".to_string(),
-            name: "hello".to_string(),
-            outputs: [("name".to_string(), "store_path".to_string())]
-                .into_iter()
-                .collect(),
+        packages: vec![
+            LockedPackageCatalog {
+                attr_path: "hello".to_string(),
+                broken: Some(false),
+                derivation: "derivation".to_string(),
+                description: Some("description".to_string()),
+                install_id: "hello_install_id".to_string(),
+                license: Some("license".to_string()),
+                locked_url: "locked_url".to_string(),
+                name: "hello".to_string(),
+                outputs: [("name".to_string(), "store_path".to_string())]
+                    .into_iter()
+                    .collect(),
 
-            outputs_to_install: Some(vec!["name".to_string()]),
-            pname: "pname".to_string(),
-            rev: "rev".to_string(),
-            rev_count: 1,
-            rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
-                .unwrap()
-                .with_timezone(&chrono::offset::Utc),
-            scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
-                .unwrap()
-                .with_timezone(&chrono::offset::Utc),
-            stabilities: Some(vec!["stability".to_string()]),
-            unfree: Some(false),
-            version: "version".to_string(),
-            system: SystemEnum::Aarch64Darwin.to_string(),
-            group: "group".to_string(),
-            priority: 5,
-        }
-        .into()],
+                outputs_to_install: Some(vec!["name".to_string()]),
+                pname: "pname".to_string(),
+                rev: "rev".to_string(),
+                rev_count: 1,
+                rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&chrono::offset::Utc),
+                scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&chrono::offset::Utc),
+                stabilities: Some(vec!["stability".to_string()]),
+                unfree: Some(false),
+                version: "version".to_string(),
+                system: SystemEnum::Aarch64Darwin.to_string(),
+                group: "group".to_string(),
+                priority: 5,
+            }
+            .into(),
+        ],
         compose: None,
     });
 

@@ -1,14 +1,14 @@
 use flox_core::Version;
 
 use super::{
-    append_optional_strings,
-    deep_merge_optional_containerize_config,
-    map_union,
-    shallow_merge_options,
     KeyPath,
     ManifestMergeTrait,
     MergeError,
     Warning,
+    append_optional_strings,
+    deep_merge_optional_containerize_config,
+    map_union,
+    shallow_merge_options,
 };
 use crate::models::manifest::typed::{
     ActivateOptions,

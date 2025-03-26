@@ -179,7 +179,7 @@ impl PartialOrd for FloxVersion {
             (None, Some(_)) => return Some(Ordering::Less),
             (Some(_), None) => return Some(Ordering::Greater),
             (Some(self_commits), Some(other_commits)) => {
-                return Some(self_commits.cmp(&other_commits))
+                return Some(self_commits.cmp(&other_commits));
             },
         }
 

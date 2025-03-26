@@ -8,19 +8,19 @@ use super::core_environment::UpgradeResult;
 use super::fetcher::IncludeFetcher;
 use super::managed_environment::{ManagedEnvironment, ManagedEnvironmentError};
 use super::{
-    gcroots_dir,
     CanonicalPath,
     CanonicalizeError,
+    DOT_FLOX,
+    ENVIRONMENT_POINTER_FILENAME,
     EditResult,
     Environment,
     EnvironmentError,
+    GCROOTS_DIR_NAME,
     InstallationAttempt,
     ManagedPointer,
     RenderedEnvironmentLinks,
     UninstallationAttempt,
-    DOT_FLOX,
-    ENVIRONMENT_POINTER_FILENAME,
-    GCROOTS_DIR_NAME,
+    gcroots_dir,
 };
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment::RenderedEnvironmentLink;
@@ -471,10 +471,12 @@ mod tests {
         )
         .unwrap();
 
-        assert!(environment
-            .dot_flox_path()
-            .join(GCROOTS_DIR_NAME)
-            .is_symlink());
+        assert!(
+            environment
+                .dot_flox_path()
+                .join(GCROOTS_DIR_NAME)
+                .is_symlink()
+        );
 
         // Create a remote environment with the existing managed environment as its backend
         let _ = RemoteEnvironment::new_in(

@@ -103,10 +103,14 @@ impl From<ManagedPointer> for EnvironmentRef {
 
 #[derive(Error, Debug)]
 pub enum EnvironmentRefError {
-    #[error("Name '{0}' is invalid.\nEnvironment names may only contain alphanumeric characters, '.', '_', and '-'.")]
+    #[error(
+        "Name '{0}' is invalid.\nEnvironment names may only contain alphanumeric characters, '.', '_', and '-'."
+    )]
     InvalidName(String),
 
-    #[error("Owner '{0}' is invalid.\nEnvironment owners may only contain alphanumeric characters, '.', '_', and '-'.")]
+    #[error(
+        "Owner '{0}' is invalid.\nEnvironment owners may only contain alphanumeric characters, '.', '_', and '-'."
+    )]
     InvalidOwner(String),
 }
 

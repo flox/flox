@@ -830,7 +830,7 @@ mod realise_nixpkgs_tests {
 
     use super::*;
     use crate::models::lockfile;
-    use crate::providers::catalog::{MockClient, StoreInfo, StoreInfoResponse, GENERATED_DATA};
+    use crate::providers::catalog::{GENERATED_DATA, MockClient, StoreInfo, StoreInfoResponse};
     use crate::providers::nix::test_helpers::known_store_path;
 
     /// Read a single locked package for the current system from a mock lockfile.
@@ -1261,9 +1261,11 @@ mod realise_flakes_tests {
             "failed to build flake: {}",
             result.unwrap_err()
         );
-        assert!(buildenv
-            .check_store_path(locked_package.locked_installable.outputs.values())
-            .unwrap());
+        assert!(
+            buildenv
+                .check_store_path(locked_package.locked_installable.outputs.values())
+                .unwrap()
+        );
     }
 
     /// Realising a flake should fail if the output is not valid and cannot be built.
@@ -1375,7 +1377,7 @@ mod buildenv_tests {
     use std::os::unix::fs::PermissionsExt;
 
     use super::*;
-    use crate::providers::catalog::{MockClient, GENERATED_DATA, MANUALLY_GENERATED};
+    use crate::providers::catalog::{GENERATED_DATA, MANUALLY_GENERATED, MockClient};
 
     trait PathExt {
         fn is_executable_file(&self) -> bool;

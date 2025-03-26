@@ -12,35 +12,35 @@ use super::fetcher::IncludeFetcher;
 use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
-    path_hash,
-    services_socket_path,
+    CACHE_DIR_NAME,
     CanonicalizeError,
     CoreEnvironmentError,
+    ENV_DIR_NAME,
+    ENVIRONMENT_POINTER_FILENAME,
     EditResult,
     Environment,
     EnvironmentError,
     EnvironmentPointer,
+    GCROOTS_DIR_NAME,
     InstallationAttempt,
+    LOG_DIR_NAME,
     ManagedPointer,
     PathPointer,
     RenderedEnvironmentLinks,
     UninstallationAttempt,
-    CACHE_DIR_NAME,
-    ENVIRONMENT_POINTER_FILENAME,
-    ENV_DIR_NAME,
-    GCROOTS_DIR_NAME,
-    LOG_DIR_NAME,
+    path_hash,
+    services_socket_path,
 };
 use crate::data::CanonicalPath;
 use crate::flox::{EnvironmentRef, Flox};
-use crate::models::env_registry::{deregister, ensure_registered, EnvRegistryError};
-use crate::models::environment::{copy_dir_recursive, LOCKFILE_FILENAME};
+use crate::models::env_registry::{EnvRegistryError, deregister, ensure_registered};
+use crate::models::environment::{LOCKFILE_FILENAME, copy_dir_recursive};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{
-    floxmeta_git_options,
+    BRANCH_NAME_PATH_SEPARATOR,
     FloxMeta,
     FloxMetaError,
-    BRANCH_NAME_PATH_SEPARATOR,
+    floxmeta_git_options,
 };
 use crate::models::lockfile::{IncludeToZebra, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
@@ -77,9 +77,13 @@ pub enum ManagedEnvironmentError {
     CheckGitRevision(GitCommandError),
     #[error("failed to check for branch existence")]
     CheckBranchExists(#[source] GitCommandBranchHashError),
-    #[error("can't find local_rev specified in lockfile; local_rev could have been mistakenly committed on another machine")]
+    #[error(
+        "can't find local_rev specified in lockfile; local_rev could have been mistakenly committed on another machine"
+    )]
     LocalRevDoesNotExist,
-    #[error("can't find environment at revision specified in lockfile; this could have been caused by force pushing")]
+    #[error(
+        "can't find environment at revision specified in lockfile; this could have been caused by force pushing"
+    )]
     RevDoesNotExist,
     #[error("invalid {0} file: {filename}", filename = GENERATION_LOCK_FILENAME)]
     InvalidLock(serde_json::Error),
@@ -247,7 +251,7 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut local_checkout, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        if let Some(ref store_paths) = &result.built_environments {
+        if let Some(store_paths) = &result.built_environments {
             self.link(store_paths)?;
         }
 
@@ -280,7 +284,7 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut local_checkout, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        if let Some(ref store_paths) = &result.built_environment_store_paths {
+        if let Some(store_paths) = &result.built_environment_store_paths {
             self.link(store_paths)?;
         }
 
@@ -627,7 +631,7 @@ impl ManagedEnvironment {
             | Err(FloxMetaError::FetchBranch(GitRemoteCommandError::AccessDenied)) => {
                 return Err(EnvironmentError::ManagedEnvironment(
                     ManagedEnvironmentError::AccessDenied,
-                ))
+                ));
             },
             Err(FloxMetaError::CloneBranch(GitRemoteCommandError::RefNotFound(_)))
             | Err(FloxMetaError::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
@@ -637,7 +641,7 @@ impl ManagedEnvironment {
                         upstream: flox.floxhub.base_url().to_string(),
                         user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
                     },
-                ))
+                ));
             },
             Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
         };
@@ -1201,9 +1205,13 @@ fn write_pointer_lockfile(
     };
 
     if let Some(ref local_rev) = local_rev {
-        debug!("writing pointer lockfile: remote_rev='{rev}', local_rev='{local_rev}', lockfile={lock_path:?}");
+        debug!(
+            "writing pointer lockfile: remote_rev='{rev}', local_rev='{local_rev}', lockfile={lock_path:?}"
+        );
     } else {
-        debug!("writing pointer lockfile: remote_rev='{rev}', local_rev=<unset>, ,lockfile={lock_path:?}");
+        debug!(
+            "writing pointer lockfile: remote_rev='{rev}', local_rev=<unset>, ,lockfile={lock_path:?}"
+        );
     }
 
     let lock = GenerationLock {
@@ -1612,7 +1620,7 @@ pub mod test_helpers {
     use tempfile::tempdir_in;
 
     use super::*;
-    use crate::flox::{Floxhub, DEFAULT_FLOXHUB_URL};
+    use crate::flox::{DEFAULT_FLOXHUB_URL, Floxhub};
     use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
     use crate::models::environment::path_environment::test_helpers::{
         new_named_path_environment_from_env_files,
@@ -1739,11 +1747,11 @@ mod test {
     };
     use crate::models::environment::{DOT_FLOX, MANIFEST_FILENAME};
     use crate::models::floxmeta::floxmeta_dir;
-    use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::Lockfile;
+    use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::manifest::typed::{Inner, Manifest, PackageDescriptorCatalog, Vars};
     use crate::providers::catalog::test_helpers::reset_mocks_from_file;
-    use crate::providers::catalog::{MockClient, GENERATED_DATA};
+    use crate::providers::catalog::{GENERATED_DATA, MockClient};
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::{GitCommandOptions, GitCommandProvider};
 
@@ -2389,11 +2397,13 @@ mod test {
 
         // check that local_checkout created files
         assert!(managed_env.path.join(ENV_DIR_NAME).exists());
-        assert!(managed_env
-            .path
-            .join(ENV_DIR_NAME)
-            .join(MANIFEST_FILENAME)
-            .exists());
+        assert!(
+            managed_env
+                .path
+                .join(ENV_DIR_NAME)
+                .join(MANIFEST_FILENAME)
+                .exists()
+        );
 
         // dlete env dir to see whether it is recreated
         fs::remove_dir_all(managed_env.path.join(ENV_DIR_NAME)).unwrap();
@@ -2404,11 +2414,13 @@ mod test {
 
         // check that local_checkout created files
         assert!(managed_env.path.join(ENV_DIR_NAME).exists());
-        assert!(managed_env
-            .path
-            .join(ENV_DIR_NAME)
-            .join(MANIFEST_FILENAME)
-            .exists());
+        assert!(
+            managed_env
+                .path
+                .join(ENV_DIR_NAME)
+                .join(MANIFEST_FILENAME)
+                .exists()
+        );
     }
 
     /// Local checkout should not overwrite existing files
@@ -2829,11 +2841,13 @@ mod test {
             environment.path.join(GENERATION_LOCK_FILENAME).exists(),
             "generation lock should exist"
         );
-        assert!(environment
-            .floxmeta
-            .git
-            .has_branch(&branch_name(&pointer, &environment.path))
-            .unwrap());
+        assert!(
+            environment
+                .floxmeta
+                .git
+                .has_branch(&branch_name(&pointer, &environment.path))
+                .unwrap()
+        );
 
         // Unsafe to create a copy of the git provider
         // due to risk of corrupting the state of the git repo.

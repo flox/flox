@@ -29,7 +29,7 @@ use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;
 use super::fetcher::IncludeFetcher;
-use super::{copy_dir_recursive, ENV_DIR_NAME, LOCKFILE_FILENAME};
+use super::{ENV_DIR_NAME, LOCKFILE_FILENAME, copy_dir_recursive};
 use crate::flox::EnvironmentName;
 use crate::models::environment::MANIFEST_FILENAME;
 use crate::providers::git::{

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
-pub use flox_core::{path_hash, Version};
+pub use flox_core::{Version, path_hash};
 use managed_environment::ManagedEnvironment;
 use path_environment::PathEnvironment;
 use remote_environment::RemoteEnvironment;
@@ -33,12 +33,12 @@ use crate::utils::copy_file_without_permissions;
 
 mod core_environment;
 pub use core_environment::{
-    test_helpers,
     CoreEnvironment,
     CoreEnvironmentError,
     EditResult,
     SingleSystemUpgradeDiff,
     UpgradeResult,
+    test_helpers,
 };
 
 pub mod fetcher;
@@ -929,8 +929,8 @@ mod test {
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::flox::test_helpers::flox_instance;
     use crate::flox::DEFAULT_FLOXHUB_URL;
+    use crate::flox::test_helpers::flox_instance;
     use crate::providers::git::GitProvider;
 
     const MANAGED_ENV_JSON: &'_ str = r#"{
