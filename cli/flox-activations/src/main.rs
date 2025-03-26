@@ -1,6 +1,6 @@
 use clap::Parser;
 use flox_activations::cli::Cli;
-use flox_activations::{cli, Error};
+use flox_activations::{Error, cli};
 use log::debug;
 
 fn main() -> Result<(), Error> {
