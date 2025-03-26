@@ -35,7 +35,7 @@ Possible values for `<package>` are all keys under the `build` attribute
 in the `manifest.toml` and you must specify one.
 
 When publishing a package,
-Flox will send the package matadata to the catalog
+Flox will send the package metadata to the catalog
 and optionally upload the package binaries to the store indicated.
 This allows re-use of the package in other environments.
 
