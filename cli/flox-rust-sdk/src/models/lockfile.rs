@@ -678,15 +678,18 @@ impl Lockfile {
         // Note that we have to preserve the order of the includes in the
         // manifest.
         let mut locked_includes: Vec<LockedInclude> = vec![];
+        let upgrade_all = to_upgrade
+            .as_ref()
+            .map(|to_upgrade| to_upgrade.is_empty())
+            .unwrap_or(false);
         for include_environment in &manifest.include.environments {
             let existing_locked_include = 'existing: {
                 // Don't use existing locked includes if we're upgradeing all
                 // includes
-                if let Some(to_upgrade) = &to_upgrade {
-                    if to_upgrade.is_empty() {
-                        break 'existing None;
-                    }
+                if upgrade_all {
+                    break 'existing None;
                 }
+
                 // If there's a seed_lockfile
                 let Some(seed_lockfile) = seed_lockfile else {
                     break 'existing None;
@@ -706,6 +709,7 @@ impl Lockfile {
 
             let locked_include = match existing_locked_include {
                 Some(locked_include) => {
+                    debug!("found existing locked include for {include_environment}");
                     // The following is a weird edge case,
                     // but I don't think it's too much of a problem:
                     // Suppose composer includes ./dir1 which has name A in
