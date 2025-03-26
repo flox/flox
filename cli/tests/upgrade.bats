@@ -48,20 +48,6 @@ teardown() {
   common_test_teardown
 }
 
-# create a deprecated v0 environment from prepared data
-setup_pkgdb_env() {
-  NAME=$1
-  shift
-
-  mkdir -p "$PROJECT_DIR/.flox/env"
-  cp --no-preserve=mode "$MANUALLY_GENERATED"/empty_v0/* "$PROJECT_DIR/.flox/env"
-
-  echo '{
-    "name": "'$NAME'",
-    "version": 1
-  }' >>"$PROJECT_DIR/.flox/env.json"
-}
-
 # ---------------------------------------------------------------------------- #
 # catalog tests
 
