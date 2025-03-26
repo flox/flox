@@ -44,7 +44,7 @@ use crate::models::floxmeta::{
 };
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::raw::PackageToInstall;
-use crate::models::manifest::typed::Manifest;
+use crate::models::manifest::typed::{IncludeDescriptor, Manifest};
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
     GitCommandBranchHashError,
@@ -133,6 +133,8 @@ pub enum ManagedEnvironmentError {
     },
     #[error("failed to push environment")]
     Push(#[source] GitRemoteCommandError),
+    #[error("cannot push environment that includes local environments")]
+    PushWithLocalIncludes,
     #[error("failed to delete local environment branch")]
     DeleteBranch(#[source] GitCommandError),
     #[error("failed to delete environment directory {0:?}")]
@@ -1317,6 +1319,13 @@ impl ManagedEnvironment {
             .build(flox)
             .map_err(ManagedEnvironmentError::Build)?;
 
+        // Ensure that the environment does not include other local ennvironments
+        check_for_local_includes(
+            &core_environment
+                .manifest()
+                .map_err(ManagedEnvironmentError::ReadLocalManifest)?,
+        )?;
+
         Self::push_new_without_building(flox, owner, name, force, dot_flox_path, core_environment)
     }
 
@@ -1414,7 +1423,9 @@ impl ManagedEnvironment {
         let project_branch = branch_name(&self.pointer, &self.path);
         let sync_branch = remote_branch_name(&self.pointer);
 
-        // Ensure the environment builds before we push it
+        // Ensure the environment builds before we push it,
+        // and that it does not include local environments.
+        //
         // Usually we don't create generations unless they build,
         // but that is not always the case.
         // If a user pulls an environment that is broken on their system, we may
@@ -1436,6 +1447,12 @@ impl ManagedEnvironment {
             local_checkout
                 .build(flox)
                 .map_err(ManagedEnvironmentError::Build)?;
+
+            check_for_local_includes(
+                &local_checkout
+                    .manifest()
+                    .map_err(ManagedEnvironmentError::ReadLocalManifest)?,
+            )?;
         }
 
         // Fetch the remote branch into sync branch
@@ -1616,6 +1633,21 @@ impl ManagedEnvironment {
 
         Ok(path_env)
     }
+}
+
+/// Ensure that the environment does not include local includes before pushing it to FloxHub
+fn check_for_local_includes(manifest: &Manifest) -> Result<(), ManagedEnvironmentError> {
+    let has_local_include = manifest
+        .include
+        .environments
+        .iter()
+        .any(|include| matches!(include, IncludeDescriptor::Local { .. }));
+
+    if has_local_include {
+        Err(ManagedEnvironmentError::PushWithLocalIncludes)?;
+    }
+
+    Ok(())
 }
 
 pub mod test_helpers {

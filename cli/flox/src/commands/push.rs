@@ -103,6 +103,7 @@ impl Push {
         force: bool,
     ) -> Result<()> {
         let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dot_flox_dir)?;
+
         env.push(flox, force).map_err(|err| {
             Self::convert_error(
                 EnvironmentError::ManagedEnvironment(err),
