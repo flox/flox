@@ -7,9 +7,9 @@ use tracing::instrument;
 
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::environment_description;
+use crate::environment_subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Delete an environment
 #[derive(Bpaf, Clone)]

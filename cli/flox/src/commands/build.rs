@@ -13,8 +13,8 @@ use tracing::instrument;
 
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::activate::FLOX_INTERPRETER;
+use crate::environment_subcommand_metric;
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[allow(unused)] // remove when we implement the command
 #[derive(Bpaf, Clone)]

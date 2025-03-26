@@ -21,8 +21,8 @@ use url::Url;
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::ensure_floxhub_token;
 use crate::config::{Config, PublishConfig};
+use crate::environment_subcommand_metric;
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct Publish {

@@ -54,9 +54,9 @@ macro_rules! subcommand_metric {
 macro_rules! environment_subcommand_metric {
     ($subcommand:tt, $environment_select:expr $(, $key:tt = $value:expr)*) => {{
         if let EnvironmentSelect::Remote(environment_ref) = &$environment_select {
-            subcommand_metric!($subcommand, remote_environment = environment_ref.to_string() $(, $key = $value)*);
+            $crate::subcommand_metric!($subcommand, remote_environment = environment_ref.to_string() $(, $key = $value)*);
         } else {
-            subcommand_metric!($subcommand $(, $key = $value)*);
+            $crate::subcommand_metric!($subcommand $(, $key = $value)*);
         }
     }};
 }
