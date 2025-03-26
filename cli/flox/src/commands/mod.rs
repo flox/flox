@@ -8,6 +8,7 @@ mod edit;
 mod envs;
 mod gc;
 mod general;
+mod include;
 mod init;
 mod install;
 mod list;
@@ -939,6 +940,10 @@ enum AdditionalCommands {
     /// Garbage collect data for deleted environments
     #[bpaf(command, hide, footer("Run 'man flox-gc' for more details."))]
     Gc(#[bpaf(external(gc::gc))] gc::Gc),
+
+    /// Interact with included environments
+    #[bpaf(command, hide)]
+    Include(#[bpaf(external(include::include_commands))] include::IncludeCommands),
 }
 
 impl AdditionalCommands {
@@ -956,6 +961,7 @@ impl AdditionalCommands {
             AdditionalCommands::Update(args) => args.handle(flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
             AdditionalCommands::Gc(args) => args.handle(flox)?,
+            AdditionalCommands::Include(args) => args.handle(flox).await?,
         }
         Ok(())
     }

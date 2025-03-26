@@ -732,6 +732,7 @@ impl Lockfile {
                         .unwrap_or(false);
 
                     if should_refetch {
+                        debug!("upgrading included environment {include_environment}");
                         include_fetcher
                             .fetch(flox, include_environment)
                             .map_err(|e| RecoverableMergeError::Fetch {
@@ -748,7 +749,7 @@ impl Lockfile {
                     }
                 },
                 None => {
-                    debug!("fetching included environment {}", include_environment);
+                    debug!("fetching included environment {include_environment}");
 
                     let locked_include =
                         include_fetcher

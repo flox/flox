@@ -994,6 +994,38 @@ impl UpgradeResult {
             })
             .collect()
     }
+
+    /// Returns the names of includes that were changed
+    ///
+    /// If an include exists in new_lockfile but not old_lockfile, that is
+    /// treated as changed
+    pub fn include_diff(&self) -> Vec<String> {
+        let old_include = self
+            .old_lockfile
+            .as_ref()
+            .and_then(|old_lockfile| old_lockfile.compose.as_ref())
+            .map(|old_compose| &old_compose.include);
+
+        let Some(new_compose) = &self.new_lockfile.compose else {
+            return vec![];
+        };
+        let new_include = &new_compose.include;
+
+        // If there aren't any old locked includes, all includes have been
+        // changed
+        let Some(old_include) = old_include else {
+            return new_include
+                .iter()
+                .map(|locked_include| locked_include.name.clone())
+                .collect();
+        };
+
+        new_include
+            .iter()
+            .filter(|new_locked_include| !old_include.contains(new_locked_include))
+            .map(|locked_include| locked_include.name.clone())
+            .collect()
+    }
 }
 
 #[derive(Debug, Error)]
