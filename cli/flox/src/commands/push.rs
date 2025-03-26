@@ -33,8 +33,9 @@ pub struct Push {
     #[bpaf(long, short, argument("path"))]
     dir: Option<PathBuf>,
 
-    /// FloxHub owner to push environment to (default: current FloxHub user)
-    #[bpaf(long, short, argument("owner"))]
+    /// FloxHub account to push environment to (default: current FloxHub user).
+    /// Organizations may use either '--owner=<orgname>' or alias '--org=<orgname>'.
+    #[bpaf(long("owner"), long("org"), short, argument("owner"))]
     owner: Option<EnvironmentOwner>,
 
     /// Forcibly overwrite the remote copy of the environment
