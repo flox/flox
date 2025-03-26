@@ -17,7 +17,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::{IncludeToUpgrade, Lockfile, RecoverableMergeError, ResolveError};
+use super::lockfile::{Lockfile, RecoverableMergeError, ResolveError};
 use super::manifest::raw::PackageToInstall;
 use super::manifest::typed::{ActivateMode, Manifest, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
@@ -137,7 +137,7 @@ pub trait Environment: Send {
     fn include_upgrade(
         &mut self,
         flox: &Flox,
-        to_upgrade: Vec<IncludeToUpgrade>,
+        to_upgrade: Vec<String>,
     ) -> Result<UpgradeResult, EnvironmentError>;
 
     /// Return the lockfile.

@@ -49,7 +49,7 @@ use crate::flox::Flox;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, IncludeToUpgrade, Lockfile};
+use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
 use crate::models::manifest::typed::{ActivateMode, Manifest};
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -286,7 +286,7 @@ impl Environment for PathEnvironment {
     fn include_upgrade(
         &mut self,
         flox: &Flox,
-        to_upgrade: Vec<IncludeToUpgrade>,
+        to_upgrade: Vec<String>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(
             includes = to_upgrade.iter().join(","),
@@ -707,7 +707,6 @@ pub mod tests {
     use proptest::prelude::*;
     use tempfile::TempDir;
 
-    use super::test_helpers::new_path_environment_in;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
@@ -880,145 +879,6 @@ pub mod tests {
         assert!(reg_path.exists());
         let reg = read_environment_registry(&reg_path).unwrap().unwrap();
         assert!(reg.entries.is_empty());
-    }
-
-    /// Setup a composer environment that includes a dep environment with
-    /// variable foo = "v1"
-    /// Edit dep to have foo = "v2" (but that change is not yet pulled in by
-    /// composer)
-    fn setup_include_upgrade_test(flox: &Flox, tempdir: &TempDir) -> (PathEnvironment, PathBuf) {
-        // Create dep
-        let dep_path = tempdir.path().join("dep");
-        let dep_manifest_contents = indoc! {r#"
-        version = 1
-
-        [vars]
-        foo = "v1"
-        "#};
-        fs::create_dir(&dep_path).unwrap();
-        let mut dep = new_path_environment_in(flox, dep_manifest_contents, &dep_path);
-        dep.lockfile(flox).unwrap();
-
-        // Create composer
-        let composer_manifest_contents = indoc! {r#"
-        version = 1
-
-        [include]
-        environments = [
-          { dir = "dep" },
-        ]
-        "#};
-        let composer_path = tempdir.path();
-        let mut composer = new_path_environment_in(flox, composer_manifest_contents, composer_path);
-        let lockfile = composer.lockfile(flox).unwrap();
-
-        assert_eq!(lockfile.manifest.vars.0["foo"], "v1");
-
-        // Modify dep
-        let dep_manifest_contents = indoc! {r#"
-        version = 1
-
-        [vars]
-        foo = "v2"
-        "#};
-        dep.edit(flox, dep_manifest_contents.to_string()).unwrap();
-        (composer, dep_path)
-    }
-
-    // Upgrade works when an absolute path is upgraded
-    #[test]
-    fn can_include_upgrade_absolute_paths() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.features.compose = true;
-
-        let (mut composer, dep_path) = setup_include_upgrade_test(&flox, &tempdir);
-
-        // Upgrade dep
-        composer
-            .include_upgrade(&flox, vec![IncludeToUpgrade::Dir(
-                dep_path.canonicalize().unwrap(),
-            )])
-            .unwrap();
-
-        let lockfile = composer.lockfile(&flox).unwrap();
-        assert_eq!(lockfile.manifest.vars.0["foo"], "v2");
-    }
-
-    /// Can upgrade an included environment specified with the odd relative path
-    /// dep/../dep/../dep
-    #[test]
-    fn can_include_upgrade_paths_with_dot_dot() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.features.compose = true;
-
-        let (mut composer, _) = setup_include_upgrade_test(&flox, &tempdir);
-        // Upgrade dep
-        composer
-            .include_upgrade(&flox, vec![IncludeToUpgrade::Dir(PathBuf::from(
-                "dep/../dep/../dep",
-            ))])
-            .unwrap();
-
-        let lockfile = composer.lockfile(&flox).unwrap();
-        assert_eq!(lockfile.manifest.vars.0["foo"], "v2");
-    }
-
-    /// Include upgrade errors for what would be a valid upgrade if the target
-    /// directory does not exist
-    #[test]
-    fn include_upgrade_errors_for_nonexistent_dir() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.features.compose = true;
-
-        let (mut composer, dep_path) = setup_include_upgrade_test(&flox, &tempdir);
-
-        fs::remove_dir_all(&dep_path).unwrap();
-
-        // Upgrade dep
-        let err = composer
-            .include_upgrade(&flox, vec![IncludeToUpgrade::Dir(dep_path.clone())])
-            .unwrap_err();
-
-        let EnvironmentError::Recoverable(RecoverableMergeError::Catchall(message)) = err else {
-            panic!("expected Catchall error, got: {:?}", err)
-        };
-
-        assert_eq!(
-            message,
-            format!(
-                "can't upgrade include: directory '{}' does not exist",
-                dep_path.to_str().unwrap()
-            )
-        );
-    }
-
-    /// Trying to upgrade a dir that exists but is not included should error
-    /// Note this is a different error than when the dir does not exist at all.
-    #[test]
-    fn upgrade_errors_for_existent_dir_not_included() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.features.compose = true;
-
-        let (mut composer, _) = setup_include_upgrade_test(&flox, &tempdir);
-
-        // Upgrade dep
-        let err = composer
-            .include_upgrade(&flox, vec![IncludeToUpgrade::Dir(
-                tempdir.path().to_path_buf(),
-            )])
-            .unwrap_err();
-
-        let EnvironmentError::Recoverable(RecoverableMergeError::Catchall(message)) = err else {
-            panic!("expected Catchall error, got: {:?}", err)
-        };
-
-        assert_eq!(
-            message,
-            format!(
-                "unknown included environment to upgrade '{}'",
-                tempdir.path().to_str().unwrap()
-            )
-        );
     }
 
     /// If an environment doesn't have any included environments, calling include_upgrade()

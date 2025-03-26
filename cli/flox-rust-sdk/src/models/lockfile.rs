@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::LazyLock;
 
 use catalog_api_v1::types::{MessageLevel, SystemEnum};
@@ -15,7 +14,7 @@ use tracing::instrument;
 pub type FlakeRef = Value;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fmt::{self, Display};
+use std::fmt::Display;
 use std::fs;
 use std::str::FromStr;
 
@@ -372,85 +371,6 @@ struct LockedGroup {
     page: CatalogPage,
 }
 
-/// An include to upgrade can either be specified with a directory or the name of
-/// the included environment.
-pub enum IncludeToUpgrade {
-    Dir(PathBuf),
-    Name(String),
-}
-
-impl IncludeToUpgrade {
-    /// Check if a specified IncludeToUpgrade refers to a LockedInclude
-    pub fn matches_locked_include(
-        &self,
-        locked_include: &LockedInclude,
-        include_fetcher: &IncludeFetcher,
-    ) -> Result<bool, RecoverableMergeError> {
-        match (self, locked_include) {
-            (
-                Self::Dir(dir),
-                LockedInclude {
-                    descriptor:
-                        IncludeDescriptor::Local {
-                            dir: locked_dir, ..
-                        },
-                    ..
-                },
-            ) => {
-                let expanded = include_fetcher.expand_include_dir(dir)?;
-                let canonicalized = expanded.canonicalize().map_err(|_| {
-                    RecoverableMergeError::Catchall(format!(
-                        "can't upgrade include: directory '{}' does not exist",
-                        expanded.to_string_lossy()
-                    ))
-                })?;
-                let matches = if let Ok(locked_canonicalized) = include_fetcher
-                    .expand_include_dir(locked_dir)?
-                    .canonicalize()
-                {
-                    canonicalized == locked_canonicalized
-                } else {
-                    false
-                };
-
-                Ok(matches)
-            },
-            (
-                Self::Name(name),
-                LockedInclude {
-                    name: locked_name, ..
-                },
-            ) => Ok(name == locked_name),
-        }
-    }
-
-    /// Helper method that removes the first IncludeToUpgrade that matches a given
-    /// LockedInclude.
-    /// Used to keep track of what includes have been upgraded.
-    pub fn remove_matching_include(
-        to_upgrade: &mut Vec<IncludeToUpgrade>,
-        locked_include: &LockedInclude,
-        include_fetcher: &IncludeFetcher,
-    ) -> Result<Option<IncludeToUpgrade>, RecoverableMergeError> {
-        // Can't use iter().position() because it's infallible
-        for (i, include_to_upgrade) in to_upgrade.iter().enumerate() {
-            if include_to_upgrade.matches_locked_include(locked_include, include_fetcher)? {
-                return Ok(Some(to_upgrade.swap_remove(i)));
-            }
-        }
-        Ok(None)
-    }
-}
-
-impl Display for IncludeToUpgrade {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Dir(dir) => write!(f, "{}", dir.to_string_lossy()),
-            Self::Name(name) => write!(f, "{}", name),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Compose {
@@ -681,7 +601,7 @@ impl Lockfile {
         manifest: &Manifest,
         seed_lockfile: Option<&Lockfile>,
         include_fetcher: &IncludeFetcher,
-        to_upgrade: Option<Vec<IncludeToUpgrade>>,
+        to_upgrade: Option<Vec<String>>,
     ) -> Result<Lockfile, EnvironmentError> {
         let (merged, compose) = Self::merge_manifest(
             flox,
@@ -733,7 +653,7 @@ impl Lockfile {
         seed_lockfile: Option<&Lockfile>,
         include_fetcher: &IncludeFetcher,
         merger: ManifestMerger,
-        mut to_upgrade: Option<Vec<IncludeToUpgrade>>,
+        mut to_upgrade: Option<Vec<String>>,
     ) -> Result<(Manifest, Option<Compose>), RecoverableMergeError> {
         if manifest.include.environments.is_empty() {
             if to_upgrade.is_some() {
@@ -800,16 +720,12 @@ impl Lockfile {
                     // Check if the existing locked include needs to be upgraded
                     // If it does, remove it from to_upgrade to keep track of
                     // which includes have been upgraded.
-                    let should_refetch = if let Some(to_upgrade) = &mut to_upgrade {
-                        IncludeToUpgrade::remove_matching_include(
-                            to_upgrade,
-                            &locked_include,
-                            include_fetcher,
-                        )?
-                        .is_some()
-                    } else {
-                        false
-                    };
+                    let should_refetch = to_upgrade
+                        .as_mut()
+                        .map(|to_upgrade| {
+                            Self::remove_matching_include(to_upgrade, &locked_include)
+                        })
+                        .unwrap_or(false);
 
                     if should_refetch {
                         include_fetcher
@@ -840,11 +756,7 @@ impl Lockfile {
                     // If this include needed to be upgraded, remove from
                     // to_upgrade to keep track that it was
                     if let Some(to_upgrade) = &mut to_upgrade {
-                        IncludeToUpgrade::remove_matching_include(
-                            to_upgrade,
-                            &locked_include,
-                            include_fetcher,
-                        )?;
+                        Self::remove_matching_include(to_upgrade, &locked_include);
                     }
                     locked_include
                 },
@@ -884,6 +796,25 @@ impl Lockfile {
         };
 
         Ok((merged, Some(compose)))
+    }
+
+    /// Helper method that removes the first IncludeToUpgrade that matches a given
+    /// LockedInclude.
+    /// Used to keep track of what includes have been upgraded.
+    fn remove_matching_include(
+        to_upgrade: &mut Vec<String>,
+        locked_include: &LockedInclude,
+    ) -> bool {
+        let position = to_upgrade
+            .iter()
+            .position(|name| &locked_include.name == name);
+        match position {
+            Some(position) => {
+                to_upgrade.swap_remove(position);
+                true
+            },
+            None => false,
+        }
     }
 
     /// Check that all names in a list of locked includes are unique
