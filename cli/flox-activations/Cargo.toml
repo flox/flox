@@ -1,12 +1,18 @@
 [package]
 name = "flox-activations"
 version = "0.0.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 anyhow.workspace = true
 blake3.workspace = true
-clap = { version = "4.5.32", default-features = false, features = ["std","usage", "help", "error-context", "derive"] }
+clap = { version = "4.5.32", default-features = false, features = [
+    "std",
+    "usage",
+    "help",
+    "error-context",
+    "derive",
+] }
 clap_derive.workspace = true
 env_logger = { version = "0.11.7", default-features = false }
 flox-core.workspace = true
