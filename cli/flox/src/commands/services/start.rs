@@ -21,8 +21,8 @@ use crate::commands::services::{
 };
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::config::Config;
+use crate::environment_subcommand_metric;
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Bpaf, Debug, Clone)]
 pub struct Start {

@@ -31,10 +31,10 @@ use super::{
     environment_select,
 };
 use crate::commands::{EnvironmentSelectError, ensure_floxhub_token};
+use crate::environment_subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Edit declarative environment configuration
 #[derive(Bpaf, Clone)]

@@ -9,8 +9,8 @@ use tracing::{info_span, instrument};
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::{ensure_floxhub_token, environment_description};
+use crate::environment_subcommand_metric;
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Upgrade packages in an environment
 #[derive(Bpaf, Clone)]

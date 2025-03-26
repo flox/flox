@@ -9,9 +9,9 @@ use tracing::{debug, info_span, instrument};
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::{EnvironmentSelectError, ensure_floxhub_token, environment_description};
+use crate::environment_subcommand_metric;
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Uninstall installed packages from an environment
 #[derive(Bpaf, Clone)]

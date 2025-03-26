@@ -16,9 +16,9 @@ use itertools::Itertools;
 use tracing::{debug, instrument};
 
 use super::{EnvironmentSelect, environment_select};
+use crate::environment_subcommand_metric;
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 // List packages installed in an environment
 #[derive(Bpaf, Clone)]

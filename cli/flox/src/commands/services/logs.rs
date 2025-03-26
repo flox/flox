@@ -12,7 +12,7 @@ use tracing::instrument;
 
 use crate::commands::services::{ServicesEnvironment, guard_service_commands_available};
 use crate::commands::{EnvironmentSelect, environment_select};
-use crate::{environment_subcommand_metric, subcommand_metric};
+use crate::environment_subcommand_metric;
 
 #[derive(Bpaf, Debug, Clone)]
 pub struct Logs {
