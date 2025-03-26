@@ -372,15 +372,15 @@ struct LockedGroup {
     page: CatalogPage,
 }
 
-/// An include to zebra can either be specified with a directory or the name of
+/// An include to upgrade can either be specified with a directory or the name of
 /// the included environment.
-pub enum IncludeToZebra {
+pub enum IncludeToUpgrade {
     Dir(PathBuf),
     Name(String),
 }
 
-impl IncludeToZebra {
-    /// Check if a specified IncludeToZebra refers to a LockedInclude
+impl IncludeToUpgrade {
+    /// Check if a specified IncludeToUpgrade refers to a LockedInclude
     pub fn matches_locked_include(
         &self,
         locked_include: &LockedInclude,
@@ -400,7 +400,7 @@ impl IncludeToZebra {
                 let expanded = include_fetcher.expand_include_dir(dir)?;
                 let canonicalized = expanded.canonicalize().map_err(|_| {
                     RecoverableMergeError::Catchall(format!(
-                        "can't zebra include: directory '{}' does not exist",
+                        "can't upgrade include: directory '{}' does not exist",
                         expanded.to_string_lossy()
                     ))
                 })?;
@@ -424,25 +424,25 @@ impl IncludeToZebra {
         }
     }
 
-    /// Helper method that removes the first IncludeToZebra that matches a given
+    /// Helper method that removes the first IncludeToUpgrade that matches a given
     /// LockedInclude.
-    /// Used to keep track of what includes have been zebraed.
+    /// Used to keep track of what includes have been upgraded.
     pub fn remove_matching_include(
-        to_zebra: &mut Vec<IncludeToZebra>,
+        to_upgrade: &mut Vec<IncludeToUpgrade>,
         locked_include: &LockedInclude,
         include_fetcher: &IncludeFetcher,
-    ) -> Result<Option<IncludeToZebra>, RecoverableMergeError> {
+    ) -> Result<Option<IncludeToUpgrade>, RecoverableMergeError> {
         // Can't use iter().position() because it's infallible
-        for (i, include_to_zebra) in to_zebra.iter().enumerate() {
-            if include_to_zebra.matches_locked_include(locked_include, include_fetcher)? {
-                return Ok(Some(to_zebra.swap_remove(i)));
+        for (i, include_to_upgrade) in to_upgrade.iter().enumerate() {
+            if include_to_upgrade.matches_locked_include(locked_include, include_fetcher)? {
+                return Ok(Some(to_upgrade.swap_remove(i)));
             }
         }
         Ok(None)
     }
 }
 
-impl Display for IncludeToZebra {
+impl Display for IncludeToUpgrade {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Dir(dir) => write!(f, "{}", dir.to_string_lossy()),
@@ -659,21 +659,29 @@ impl Lockfile {
         seed_lockfile: Option<&Lockfile>,
         include_fetcher: &IncludeFetcher,
     ) -> Result<Lockfile, EnvironmentError> {
-        Self::lock_manifest_with_zebra(flox, manifest, seed_lockfile, include_fetcher, None).await
+        Self::lock_manifest_with_include_upgrades(
+            flox,
+            manifest,
+            seed_lockfile,
+            include_fetcher,
+            None,
+        )
+        .await
     }
 
-    /// Lock, zebraing if to_zebra is Some
+    /// Lock, upgrading the specified included environments if to_upgrade is
+    /// Some
     ///
-    /// If to_zebra is an empty vector, all included environments are
+    /// If to_upgrade is an empty vector, all included environments are
     /// re-fetched.
-    /// If to_zebra is None, only included environments not in the seed lockfile
+    /// If to_upgrade is None, only included environments not in the seed lockfile
     /// are fetched.
-    pub async fn lock_manifest_with_zebra(
+    pub async fn lock_manifest_with_include_upgrades(
         flox: &Flox,
         manifest: &Manifest,
         seed_lockfile: Option<&Lockfile>,
         include_fetcher: &IncludeFetcher,
-        to_zebra: Option<Vec<IncludeToZebra>>,
+        to_upgrade: Option<Vec<IncludeToUpgrade>>,
     ) -> Result<Lockfile, EnvironmentError> {
         let (merged, compose) = Self::merge_manifest(
             flox,
@@ -681,7 +689,7 @@ impl Lockfile {
             seed_lockfile,
             include_fetcher,
             ManifestMerger::Shallow(ShallowMerger),
-            to_zebra,
+            to_upgrade,
         )
         .map_err(EnvironmentError::Recoverable)?;
         let packages = Self::resolve_manifest(
@@ -709,14 +717,14 @@ impl Lockfile {
     /// instead of a Compose object.
     ///
     /// Any included environments already in the seed lockfile will not be
-    /// re-fetched, unless they are in to_zebra.
+    /// re-fetched, unless they are in to_upgrade.
     ///
-    /// All environments in to_zebra will be re-fetched, and an error is
-    /// returned if any environments in to_zebra do not refer to an actual include.
+    /// All environments in to_upgrade will be re-fetched, and an error is
+    /// returned if any environments in to_upgrade do not refer to an actual include.
     ///
-    /// If to_zebra is an empty vector, all included environments are
+    /// If to_upgrade is an empty vector, all included environments are
     /// re-fetched.
-    /// If to_zebra is None, only included environments not in the seed lockfile
+    /// If to_upgrade is None, only included environments not in the seed lockfile
     /// are fetched.
     #[instrument(skip_all, fields(progress = "Merging environment includes"))]
     fn merge_manifest(
@@ -725,12 +733,12 @@ impl Lockfile {
         seed_lockfile: Option<&Lockfile>,
         include_fetcher: &IncludeFetcher,
         merger: ManifestMerger,
-        mut to_zebra: Option<Vec<IncludeToZebra>>,
+        mut to_upgrade: Option<Vec<IncludeToUpgrade>>,
     ) -> Result<(Manifest, Option<Compose>), RecoverableMergeError> {
         if manifest.include.environments.is_empty() {
-            if to_zebra.is_some() {
+            if to_upgrade.is_some() {
                 return Err(RecoverableMergeError::Catchall(
-                    "cannot zebra environment without any included environments".to_string(),
+                    "cannot upgrade included environments in an environment without any included environments".to_string(),
                 ));
             }
             return Ok((manifest.clone(), None));
@@ -752,10 +760,10 @@ impl Lockfile {
         let mut locked_includes: Vec<LockedInclude> = vec![];
         for include_environment in &manifest.include.environments {
             let existing_locked_include = 'existing: {
-                // Don't use existing locked includes if we're zebraing all
+                // Don't use existing locked includes if we're upgradeing all
                 // includes
-                if let Some(to_zebra) = &to_zebra {
-                    if to_zebra.is_empty() {
+                if let Some(to_upgrade) = &to_upgrade {
+                    if to_upgrade.is_empty() {
                         break 'existing None;
                     }
                 }
@@ -785,16 +793,16 @@ impl Lockfile {
                     // ./dir1 gets renamed A -> B
                     // A manual edit includes ./dir2 which has name A in
                     // env.json
-                    // If we zebra name A, if we loop over ./dir1 first, we'll
+                    // If we upgrade name A, if we loop over ./dir1 first, we'll
                     // fetch both ./dir1 and ./dir2.
                     // If we loop over ./dir2 first, we'll only fetch ./dir2.
 
-                    // Check if the existing locked include needs to be zebraed
-                    // If it does, remove it from to_zebra to keep track of
-                    // which includes have been zebraed.
-                    let should_refetch = if let Some(to_zebra) = &mut to_zebra {
-                        IncludeToZebra::remove_matching_include(
-                            to_zebra,
+                    // Check if the existing locked include needs to be upgraded
+                    // If it does, remove it from to_upgrade to keep track of
+                    // which includes have been upgraded.
+                    let should_refetch = if let Some(to_upgrade) = &mut to_upgrade {
+                        IncludeToUpgrade::remove_matching_include(
+                            to_upgrade,
                             &locked_include,
                             include_fetcher,
                         )?
@@ -829,11 +837,11 @@ impl Lockfile {
                                 include: include_environment.clone(),
                                 err: Box::new(e),
                             })?;
-                    // If this include needed to be zebraed, remove from
-                    // to_zebra to keep track that it was
-                    if let Some(to_zebra) = &mut to_zebra {
-                        IncludeToZebra::remove_matching_include(
-                            to_zebra,
+                    // If this include needed to be upgraded, remove from
+                    // to_upgrade to keep track that it was
+                    if let Some(to_upgrade) = &mut to_upgrade {
+                        IncludeToUpgrade::remove_matching_include(
+                            to_upgrade,
                             &locked_include,
                             include_fetcher,
                         )?;
@@ -846,11 +854,11 @@ impl Lockfile {
 
         Self::check_locked_names_unique(&locked_includes)?;
 
-        if let Some(to_zebra) = &to_zebra {
-            if let Some(unused_include_to_zebra) = to_zebra.first() {
+        if let Some(to_upgrade) = &to_upgrade {
+            if let Some(unused_include_to_upgrade) = to_upgrade.first() {
                 return Err(RecoverableMergeError::Catchall(format!(
-                    "unknown include to zebra '{}'",
-                    unused_include_to_zebra
+                    "unknown included environment to upgrade '{}'",
+                    unused_include_to_upgrade
                 )));
             }
         }

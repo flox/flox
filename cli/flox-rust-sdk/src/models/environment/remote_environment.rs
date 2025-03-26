@@ -26,7 +26,7 @@ use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment::RenderedEnvironmentLink;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
-use crate::models::lockfile::{IncludeToZebra, Lockfile};
+use crate::models::lockfile::{IncludeToUpgrade, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::Manifest;
 
@@ -316,13 +316,13 @@ impl Environment for RemoteEnvironment {
         Ok(result)
     }
 
-    // Zebra includes in the environment
-    fn zebra(
+    /// Upgrade environments included in the environment
+    fn include_upgrade(
         &mut self,
         flox: &Flox,
-        to_zebra: Vec<IncludeToZebra>,
+        to_upgrade: Vec<IncludeToUpgrade>,
     ) -> Result<UpgradeResult, EnvironmentError> {
-        let result = self.inner.zebra(flox, to_zebra)?;
+        let result = self.inner.include_upgrade(flox, to_upgrade)?;
         self.inner
             .push(flox, false)
             .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
