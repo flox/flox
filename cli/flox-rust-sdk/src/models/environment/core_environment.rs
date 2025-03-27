@@ -23,7 +23,13 @@ use super::{
 };
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::lockfile::{LockedPackage, Lockfile, ResolutionFailure, ResolveError};
+use crate::models::lockfile::{
+    LockResult,
+    LockedPackage,
+    Lockfile,
+    ResolutionFailure,
+    ResolveError,
+};
 use crate::models::manifest::raw::{
     PackageToInstall,
     TomlEditError,
@@ -151,10 +157,10 @@ impl<State> CoreEnvironment<State> {
     /// since pkgdb manifests can no longer be locked.
     ///
     /// TODO: consider removing this
-    pub fn ensure_locked(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
+    pub fn ensure_locked(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         match self.lockfile_if_up_to_date()? {
-            Some(lock) => Ok(lock),
-            None => self.lock(flox),
+            Some(lock) => Ok(LockResult::Unchanged(lock)),
+            None => Ok(LockResult::Changed(self.lock(flox)?)),
         }
     }
 

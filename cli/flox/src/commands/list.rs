@@ -61,7 +61,7 @@ impl List {
             .environment
             .detect_concrete_environment(&flox, "List using")?;
 
-        let lockfile = env.lockfile(&flox)?;
+        let lockfile = env.lockfile(&flox)?.into();
         if self.list_mode == ListMode::Config {
             Self::print_config(&flox, &mut env, &lockfile)?;
             return Ok(());
@@ -353,7 +353,7 @@ impl List {
             return Ok(None);
         };
 
-        let current_lockfile = environment.lockfile(flox)?;
+        let current_lockfile = environment.lockfile(flox)?.into();
 
         if Some(current_lockfile) != info.result.old_lockfile {
             // todo: delete the info file?

@@ -80,6 +80,24 @@ pub struct Registry {
     _json: Value,
 }
 
+#[derive(Debug, Clone)]
+pub enum LockResult {
+    /// Locking produced a new Lockfile.
+    /// The change could be a minimal as whitespace.
+    Changed(Lockfile),
+    /// Locking did not produce a new Lockfile.
+    Unchanged(Lockfile),
+}
+
+impl From<LockResult> for Lockfile {
+    fn from(result: LockResult) -> Self {
+        match result {
+            LockResult::Changed(lockfile) => lockfile,
+            LockResult::Unchanged(lockfile) => lockfile,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Lockfile {
