@@ -374,6 +374,7 @@ impl MockClient {
 }
 
 pub type UserBuildInfo = api_types::UserBuildInput;
+pub type UserBuildPublish = api_types::UserBuildPublish;
 pub type UserDerivationInfo = api_types::UserDerivationInput;
 pub type StoreInfoRequest = api_types::StoreInfoRequest;
 pub type StoreInfoResponse = api_types::StoreInfoResponse;
@@ -431,7 +432,7 @@ pub trait ClientTrait {
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
-        _build_info: &UserBuildInfo,
+        _build_info: &UserBuildPublish,
     ) -> Result<(), CatalogClientError>;
 
     /// Get store info for a list of derivations
@@ -648,7 +649,7 @@ impl ClientTrait for CatalogClient {
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
-        build_info: &UserBuildInfo,
+        build_info: &UserBuildPublish,
     ) -> Result<(), CatalogClientError> {
         let catalog = api_types::CatalogName::from_str(catalog_name.as_ref()).map_err(|_e| {
             CatalogClientError::UnexpectedError(APIError::InvalidRequest(
@@ -893,7 +894,7 @@ impl ClientTrait for MockClient {
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
-        _build_info: &UserBuildInfo,
+        _build_info: &UserBuildPublish,
     ) -> Result<(), CatalogClientError> {
         Ok(())
     }

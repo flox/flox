@@ -1843,6 +1843,70 @@ pub mod types {
             value.clone()
         }
     }
+    ///PublishRequest
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PublishRequest",
+    ///  "type": "object"
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct PublishRequest(pub serde_json::Map<String, serde_json::Value>);
+    impl std::ops::Deref for PublishRequest {
+        type Target = serde_json::Map<String, serde_json::Value>;
+        fn deref(&self) -> &serde_json::Map<String, serde_json::Value> {
+            &self.0
+        }
+    }
+    impl From<PublishRequest> for serde_json::Map<String, serde_json::Value> {
+        fn from(value: PublishRequest) -> Self {
+            value.0
+        }
+    }
+    impl From<&PublishRequest> for PublishRequest {
+        fn from(value: &PublishRequest) -> Self {
+            value.clone()
+        }
+    }
+    impl From<serde_json::Map<String, serde_json::Value>> for PublishRequest {
+        fn from(value: serde_json::Map<String, serde_json::Value>) -> Self {
+            Self(value)
+        }
+    }
+    ///PublishResponse
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PublishResponse",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "ingress_uri": {
+    ///      "title": "Ingress Uri",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct PublishResponse {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub ingress_uri: Option<String>,
+    }
+    impl From<&PublishResponse> for PublishResponse {
+        fn from(value: &PublishResponse) -> Self {
+            value.clone()
+        }
+    }
     ///ResolutionMessageGeneral
     ///
     /// <details><summary>JSON schema</summary>
@@ -2526,41 +2590,6 @@ pub mod types {
             value.clone()
         }
     }
-    ///StoreInfoDeprecated
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "StoreInfo_Deprecated",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "auth_token",
-    ///    "url"
-    ///  ],
-    ///  "properties": {
-    ///    "auth_token": {
-    ///      "title": "Auth Token",
-    ///      "type": "string"
-    ///    },
-    ///    "url": {
-    ///      "title": "Url",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct StoreInfoDeprecated {
-        pub auth_token: String,
-        pub url: String,
-    }
-    impl From<&StoreInfoDeprecated> for StoreInfoDeprecated {
-        fn from(value: &StoreInfoDeprecated) -> Self {
-            value.clone()
-        }
-    }
     ///StoreInfoRequest
     ///
     /// <details><summary>JSON schema</summary>
@@ -2727,7 +2756,7 @@ pub mod types {
     ///  "type": "object",
     ///  "properties": {
     ///    "store": {
-    ///      "$ref": "#/components/schemas/StoreInfo_Deprecated"
+    ///      "$ref": "#/components/schemas/StoreInfo"
     ///    }
     ///  }
     ///}
@@ -2736,7 +2765,7 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct UserBuildCreationResponse {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub store: Option<StoreInfoDeprecated>,
+        pub store: Option<StoreInfo>,
     }
     impl From<&UserBuildCreationResponse> for UserBuildCreationResponse {
         fn from(value: &UserBuildCreationResponse) -> Self {
@@ -2994,6 +3023,115 @@ pub mod types {
     }
     impl From<&UserBuildOutput> for UserBuildOutput {
         fn from(value: &UserBuildOutput) -> Self {
+            value.clone()
+        }
+    }
+    ///UserBuildPublish
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserBuildPublish",
+    ///  "examples": [
+    ///    {
+    ///      "derivation": {
+    ///        "description": "A very nice derivation",
+    ///        "drv_path": "foo.bar.curl",
+    ///        "license": "GnuFoo",
+    ///        "name": "mydrv",
+    ///        "outputs": {
+    ///          "bin": "/nix/store/foo"
+    ///        },
+    ///        "outputs_to_install": [
+    ///          "bin"
+    ///        ],
+    ///        "pname": "mydrv",
+    ///        "system": "x86_64-linux",
+    ///        "version": "1.0"
+    ///      },
+    ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+    ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+    ///      "rev_count": 12345,
+    ///      "rev_date": "2021-09-01T00:00:00Z",
+    ///      "url": "https://github.com/org/example"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "derivation",
+    ///    "rev",
+    ///    "rev_count",
+    ///    "rev_date",
+    ///    "url"
+    ///  ],
+    ///  "properties": {
+    ///    "cache_uri": {
+    ///      "title": "Cache Uri",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "derivation": {
+    ///      "$ref": "#/components/schemas/UserDerivation-Input"
+    ///    },
+    ///    "locked_base_catalog_url": {
+    ///      "title": "Locked Base Catalog Url",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "narinfos": {
+    ///      "title": "Narinfos",
+    ///      "type": [
+    ///        "object",
+    ///        "null"
+    ///      ],
+    ///      "additionalProperties": {
+    ///        "type": "object"
+    ///      }
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "rev_count": {
+    ///      "title": "Rev Count",
+    ///      "type": "integer"
+    ///    },
+    ///    "rev_date": {
+    ///      "title": "Rev Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "url": {
+    ///      "title": "Url",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserBuildPublish {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub cache_uri: Option<String>,
+        pub derivation: UserDerivationInput,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub locked_base_catalog_url: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub narinfos: Option<
+            std::collections::HashMap<String, serde_json::Map<String, serde_json::Value>>,
+        >,
+        pub rev: String,
+        pub rev_count: i64,
+        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
+        pub url: String,
+    }
+    impl From<&UserBuildPublish> for UserBuildPublish {
+        fn from(value: &UserBuildPublish) -> Self {
             value.clone()
         }
     }
@@ -3321,6 +3459,7 @@ pub mod types {
     ///    },
     ///    "original_url": {
     ///      "title": "Original Url",
+    ///      "deprecated": true,
     ///      "type": [
     ///        "string",
     ///        "null"
@@ -3353,6 +3492,7 @@ pub mod types {
     ///  "properties": {
     ///    "original_url": {
     ///      "title": "Original Url",
+    ///      "deprecated": true,
     ///      "type": [
     ///        "string",
     ///        "null"
@@ -4176,6 +4316,59 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
+    /**Request access and info to publish a package
+
+Request access and informatin to publish a package to this catalog.
+Path Parameters:
+- **catalog_name**: The name of the catalog
+- **package_name**: The name of the package
+Body Content:
+- **PublishRequest**: The information needed to publish to the catalog
+Returns:
+- **PublishRequestResponse**
+
+Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/publish`
+
+*/
+    pub async fn publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        package_name: &'a types::PackageName,
+        body: &'a types::PublishRequest,
+    ) -> Result<ResponseValue<types::PublishResponse>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/publish", self.baseurl,
+            encode_path(& catalog_name.to_string()), encode_path(& package_name
+            .to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            400u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**Get a list of builds for a given package
 
 Get the list of builds for a given package
@@ -4232,7 +4425,7 @@ Path Parameters:
 - **catalog_name**: The name of the catalog
 - **package_name**: The name of the package
 Body Content:
-- **UserBuild**: The build info to submit
+- **UserBuildPublish**: The build info to submit
 
 Returns:
 - **UserBuildCreationResponse**
@@ -4246,7 +4439,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         &'a self,
         catalog_name: &'a types::CatalogName,
         package_name: &'a types::PackageName,
-        body: &'a types::UserBuildInput,
+        body: &'a types::UserBuildPublish,
     ) -> Result<
         ResponseValue<types::UserBuildCreationResponse>,
         Error<types::ErrorResponse>,

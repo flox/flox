@@ -1801,7 +1801,7 @@ pub(crate) mod tests {
         MsgUnknown,
         ResolutionMessage,
         SearchError,
-        UserBuildInfo,
+        UserBuildPublish,
         VersionsError,
     };
     use catalog_api_v1::types::{Output, ResolvedPackageDescriptor};
@@ -1889,7 +1889,7 @@ pub(crate) mod tests {
             &self,
             _catalog_name: impl AsRef<str> + Send + Sync,
             _package_name: impl AsRef<str> + Send + Sync,
-            _build_info: &UserBuildInfo,
+            _build_info: &UserBuildPublish,
         ) -> Result<(), CatalogClientError> {
             unreachable!("publish_build should not be called");
         }

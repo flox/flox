@@ -11,22 +11,18 @@
             "attr_path": "python3",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/7migdv1gw3nv4dl921mk8algfllzricw-python3-3.12.9.drv",
+            "derivation": "/nix/store/cb1gsjqlf1dzry390xrsl6ghpaqmsaxd-python3-3.12.9.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3-3.12.9",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/wz0j2zi02rvnjiz37nn28h3gfdq61svz-python3-3.12.9"
-              },
-              {
-                "name": "debug",
-                "store_path": "/nix/store/lax69b07pjgj4ahn4zild8vfqdavy9zm-python3-3.12.9-debug"
+                "store_path": "/nix/store/3p3agnh4792y8bgjp0s8xx5bym1ahpks-python3-3.12.9"
               }
             ],
             "outputs_to_install": [
@@ -34,19 +30,19 @@
             ],
             "pkg_path": "python3",
             "pname": "python3",
-            "rev": "c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
-            "rev_count": 768633,
-            "rev_date": "2025-03-15T20:13:08Z",
-            "scrape_date": "2025-03-17T00:32:15Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:10:05.903018Z",
             "stabilities": [
               "unstable"
             ],
-            "system": "x86_64-linux",
+            "system": "aarch64-darwin",
             "unfree": false,
             "version": "3.12.9"
           }
         ],
-        "page": 768633,
+        "page": 773904,
         "url": ""
       }
     }
@@ -63,18 +59,18 @@
             "attr_path": "python3",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/mdsmprmrjc24d5bf2xg5nsp03qix19fh-python3-3.12.9.drv",
+            "derivation": "/nix/store/cb1gsjqlf1dzry390xrsl6ghpaqmsaxd-python3-3.12.9.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3-3.12.9",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/ibnllhp7pc88kgcrxa2gddxcbyl0vngk-python3-3.12.9"
+                "store_path": "/nix/store/3p3agnh4792y8bgjp0s8xx5bym1ahpks-python3-3.12.9"
               }
             ],
             "outputs_to_install": [
@@ -82,10 +78,10 @@
             ],
             "pkg_path": "python3",
             "pname": "python3",
-            "rev": "c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
-            "rev_count": 768633,
-            "rev_date": "2025-03-15T20:13:08Z",
-            "scrape_date": "2025-03-17T00:32:15Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:10:05.903018Z",
             "stabilities": [
               "unstable"
             ],
@@ -97,22 +93,22 @@
             "attr_path": "python3",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/47wg9wf5x9lv03w38j45g6jkq7492bz0-python3-3.12.9.drv",
+            "derivation": "/nix/store/cvm8irmg5j24v0iqk8w6z254jcl9vjzd-python3-3.12.9.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3-3.12.9",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/69nij8d888s5nxm90bwmlza5v1pfniz5-python3-3.12.9"
+                "store_path": "/nix/store/cxhrrsf7spcgdkrxmlbfzc1bh46rzf7w-python3-3.12.9"
               },
               {
                 "name": "debug",
-                "store_path": "/nix/store/61ksnhxna7vrh315zp36swz4563hfip3-python3-3.12.9-debug"
+                "store_path": "/nix/store/p2ym34g9y2w9k3w2pgbj2akn7b5l6xlh-python3-3.12.9-debug"
               }
             ],
             "outputs_to_install": [
@@ -120,10 +116,10 @@
             ],
             "pkg_path": "python3",
             "pname": "python3",
-            "rev": "c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
-            "rev_count": 768633,
-            "rev_date": "2025-03-15T20:13:08Z",
-            "scrape_date": "2025-03-17T00:32:15Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:27:32.740242Z",
             "stabilities": [
               "unstable"
             ],
@@ -135,18 +131,18 @@
             "attr_path": "python3",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/m216wld0xa07pb3kwhm5qf2vcxwcd8kp-python3-3.12.9.drv",
+            "derivation": "/nix/store/xzh86qk42dj8pqq3v9qay3ckvb97hyi3-python3-3.12.9.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3-3.12.9",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/2gr2skg3m0hagibhmhn8fwpvgkg2a3sn-python3-3.12.9"
+                "store_path": "/nix/store/8fw6a4is5mkpmr9vd80inz63qdi130m3-python3-3.12.9"
               }
             ],
             "outputs_to_install": [
@@ -154,10 +150,10 @@
             ],
             "pkg_path": "python3",
             "pname": "python3",
-            "rev": "c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
-            "rev_count": 768633,
-            "rev_date": "2025-03-15T20:13:08Z",
-            "scrape_date": "2025-03-17T00:32:15Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:43:06.093396Z",
             "stabilities": [
               "unstable"
             ],
@@ -169,22 +165,22 @@
             "attr_path": "python3",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/7migdv1gw3nv4dl921mk8algfllzricw-python3-3.12.9.drv",
+            "derivation": "/nix/store/0mg12776wbbfzw2fdslyhir14cw1cgfj-python3-3.12.9.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3-3.12.9",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/wz0j2zi02rvnjiz37nn28h3gfdq61svz-python3-3.12.9"
+                "store_path": "/nix/store/f2krmq3iv5nibcvn4rw7nrnrciqprdkh-python3-3.12.9"
               },
               {
                 "name": "debug",
-                "store_path": "/nix/store/lax69b07pjgj4ahn4zild8vfqdavy9zm-python3-3.12.9-debug"
+                "store_path": "/nix/store/1kjknndig10774mkf6b2b95kn17q4rm5-python3-3.12.9-debug"
               }
             ],
             "outputs_to_install": [
@@ -192,10 +188,10 @@
             ],
             "pkg_path": "python3",
             "pname": "python3",
-            "rev": "c80f6a7e10b39afcc1894e02ef785b1ad0b0d7e5",
-            "rev_count": 768633,
-            "rev_date": "2025-03-15T20:13:08Z",
-            "scrape_date": "2025-03-17T00:32:15Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T02:02:04.966860Z",
             "stabilities": [
               "unstable"
             ],
@@ -204,7 +200,7 @@
             "version": "3.12.9"
           }
         ],
-        "page": 768633,
+        "page": 773904,
         "url": ""
       }
     }
