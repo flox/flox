@@ -84,7 +84,7 @@ impl CheckForUpgrades {
         // - has recently been fetched
         // Otherwise, run a dry-upgrade tof he environment and store the new information
         if let Some(info) = upgrade_information.info() {
-            let environment_lockfile = environment.lockfile(flox)?;
+            let environment_lockfile = environment.lockfile(flox)?.into();
 
             let is_information_for_current_lockfile =
                 info.result.old_lockfile == Some(environment_lockfile);
@@ -258,8 +258,8 @@ mod tests {
         let _ = locked.info_mut().insert(UpgradeInformation {
             last_checked: OffsetDateTime::now_utc(),
             result: UpgradeResult {
-                old_lockfile: Some(environment.lockfile(&flox).unwrap()),
-                new_lockfile: environment.lockfile(&flox).unwrap(),
+                old_lockfile: Some(environment.lockfile(&flox).unwrap().into()),
+                new_lockfile: environment.lockfile(&flox).unwrap().into(),
                 store_path: None,
             },
         });

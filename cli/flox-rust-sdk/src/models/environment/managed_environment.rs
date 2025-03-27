@@ -42,7 +42,7 @@ use crate::models::floxmeta::{
     FloxMetaError,
     floxmeta_git_options,
 };
-use crate::models::lockfile::{IncludeToZebra, Lockfile};
+use crate::models::lockfile::{IncludeToZebra, LockResult};
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::Manifest;
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -220,7 +220,7 @@ impl GenerationLock {
 
 impl Environment for ManagedEnvironment {
     /// This will lock if there is an out of sync local checkout
-    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
+    fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
         self.ensure_locked(flox, &mut local_checkout)
     }
@@ -523,15 +523,6 @@ impl Environment for ManagedEnvironment {
         Ok(path)
     }
 
-    /// The environment is locked,
-    /// and the manifest in the lockfile matches that in the manifest.
-    /// Note that the manifest could have whitespace or comment differences from
-    /// the lockfile.
-    fn lockfile_up_to_date(&self, flox: &Flox) -> Result<bool, EnvironmentError> {
-        let local_checkout = self.local_env_or_copy_current_generation(flox)?;
-        Ok(local_checkout.lockfile_if_up_to_date()?.is_some())
-    }
-
     /// Returns the environment name
     fn name(&self) -> EnvironmentName {
         self.pointer.name.clone()
@@ -569,14 +560,16 @@ impl ManagedEnvironment {
         &mut self,
         flox: &Flox,
         local_checkout: &mut CoreEnvironment,
-    ) -> Result<Lockfile, EnvironmentError> {
+    ) -> Result<LockResult, EnvironmentError> {
         // Otherwise, there would be a generation without a lockfile, which is a bad state,
         // and we error.
         if !Self::validate_checkout(local_checkout, &self.generations())? {
             Ok(local_checkout.ensure_locked(flox)?)
         } else {
-            let content = local_checkout.existing_lockfile()?;
-            content.ok_or(EnvironmentError::MissingLockfile)
+            match local_checkout.existing_lockfile()? {
+                Some(lockfile) => Ok(LockResult::Unchanged(lockfile)),
+                None => Err(EnvironmentError::MissingLockfile),
+            }
         }
     }
 
@@ -2943,7 +2936,7 @@ mod test {
         );
 
         // Check lockfile
-        let lockfile = composer.lockfile(&flox).unwrap();
+        let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
 
         assert_eq!(lockfile.manifest, Manifest {
             version: Version,

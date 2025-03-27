@@ -236,7 +236,7 @@ mod tests {
             dep2_dir = dep2.parent_path().unwrap().to_string_lossy(),
         };
         let mut composer = new_path_environment(&flox, &composer_original_manifest);
-        let lockfile = composer.lockfile(&flox).unwrap();
+        let lockfile = composer.lockfile(&flox).unwrap().into();
 
         let (subscriber, writer) = test_subscriber_message_only();
         async {

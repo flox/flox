@@ -49,7 +49,7 @@ use crate::flox::Flox;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, IncludeToZebra, Lockfile};
+use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, IncludeToZebra, LockResult};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
 use crate::models::manifest::typed::{ActivateMode, Manifest};
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -193,7 +193,7 @@ impl PathEnvironment {
 
 impl Environment for PathEnvironment {
     /// This will lock the environment if it is not already locked.
-    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
+    fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
         env_view.ensure_locked(flox)
     }
@@ -398,15 +398,6 @@ impl Environment for PathEnvironment {
         Ok(self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME))
     }
 
-    /// The environment is locked,
-    /// and the manifest in the lockfile matches that in the manifest.
-    /// Note that the manifest could have whitespace or comment differences from
-    /// the lockfile.
-    fn lockfile_up_to_date(&self, _flox: &Flox) -> Result<bool, EnvironmentError> {
-        let env_view = self.as_core_environment()?;
-        Ok(env_view.lockfile_if_up_to_date()?.is_some())
-    }
-
     /// Return the path where the process compose socket for an environment
     /// should be created
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
@@ -573,6 +564,15 @@ impl PathEnvironment {
         Ok(false)
     }
 
+    /// The environment is locked,
+    /// and the manifest in the lockfile matches that in the manifest.
+    /// Note that the manifest could have whitespace or comment differences from
+    /// the lockfile.
+    pub fn lockfile_up_to_date(&self) -> Result<bool, EnvironmentError> {
+        let env_view = self.as_core_environment()?;
+        Ok(env_view.lockfile_if_up_to_date()?.is_some())
+    }
+
     fn link(
         &mut self,
         _flox: &Flox,
@@ -709,7 +709,7 @@ pub mod tests {
     use crate::flox::test_helpers::flox_instance;
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
     use crate::models::environment::path_environment::test_helpers::new_path_environment;
-    use crate::models::lockfile::RecoverableMergeError;
+    use crate::models::lockfile::{Lockfile, RecoverableMergeError};
     use crate::models::manifest::typed::test::manifest_without_install_or_include;
 
     /// Returns (flox, tempdir, Vec<(dir relative to tempdir, PathEnvironment)>)
@@ -804,10 +804,8 @@ pub mod tests {
         assert!(!env.needs_rebuild().unwrap());
 
         // "modify" the lockfile by changing its formatting -> rebuild necessary
-        let file = fs::write(
-            env.lockfile_path(&flox).unwrap(),
-            env.lockfile(&flox).unwrap().to_string(),
-        );
+        let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
+        let file = fs::write(env.lockfile_path(&flox).unwrap(), lockfile.to_string());
         drop(file);
         assert!(env.needs_rebuild().unwrap());
     }
@@ -907,7 +905,7 @@ pub mod tests {
         "#};
         let composer_path = tempdir.path();
         let mut composer = new_path_environment_in(flox, composer_manifest_contents, composer_path);
-        let lockfile = composer.lockfile(flox).unwrap();
+        let lockfile: Lockfile = composer.lockfile(flox).unwrap().into();
 
         assert_eq!(lockfile.manifest.vars.0["foo"], "v1");
 
@@ -937,7 +935,7 @@ pub mod tests {
             )])
             .unwrap();
 
-        let lockfile = composer.lockfile(&flox).unwrap();
+        let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
         assert_eq!(lockfile.manifest.vars.0["foo"], "v2");
     }
 
@@ -956,7 +954,7 @@ pub mod tests {
             ))])
             .unwrap();
 
-        let lockfile = composer.lockfile(&flox).unwrap();
+        let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
         assert_eq!(lockfile.manifest.vars.0["foo"], "v2");
     }
 

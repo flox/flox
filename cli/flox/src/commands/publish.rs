@@ -86,7 +86,8 @@ impl Publish {
         no_store: bool,
         cache_args: Option<CacheArgs>,
     ) -> Result<()> {
-        if !check_target_exists(&env.lockfile(&flox)?, &package)? {
+        let lockfile = env.lockfile(&flox)?.into();
+        if !check_target_exists(&lockfile, &package)? {
             bail!("Package '{}' not found in environment", package);
         }
 

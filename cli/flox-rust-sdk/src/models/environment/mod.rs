@@ -17,7 +17,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::{IncludeToZebra, Lockfile, RecoverableMergeError, ResolveError};
+use super::lockfile::{IncludeToZebra, LockResult, RecoverableMergeError, ResolveError};
 use super::manifest::raw::PackageToInstall;
 use super::manifest::typed::{ActivateMode, Manifest, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
@@ -144,7 +144,7 @@ pub trait Environment: Send {
     ///
     /// Some implementations error if the lock does not already exist, while
     /// others call lock.
-    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError>;
+    fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError>;
 
     /// Extract the current content of the manifest
     ///
@@ -217,12 +217,6 @@ pub trait Environment: Send {
     /// [Environment::manifest_path] and [Environment::lockfile_path]
     /// may be located in different directories.
     fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
-
-    /// The environment is locked,
-    /// and the manifest in the lockfile matches that in the manifest.
-    /// Note that the manifest could have whitespace or comment differences from
-    /// the lockfile.
-    fn lockfile_up_to_date(&self, flox: &Flox) -> Result<bool, EnvironmentError>;
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;

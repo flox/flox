@@ -26,7 +26,7 @@ use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment::RenderedEnvironmentLink;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
-use crate::models::lockfile::{IncludeToZebra, Lockfile};
+use crate::models::lockfile::{IncludeToZebra, LockResult};
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::Manifest;
 
@@ -245,7 +245,7 @@ impl RemoteEnvironment {
 impl Environment for RemoteEnvironment {
     /// Return the lockfile content,
     /// or error if the lockfile doesn't exist.
-    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
+    fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         self.inner.lockfile(flox)
     }
 
@@ -385,14 +385,6 @@ impl Environment for RemoteEnvironment {
     /// Path to the lockfile. The path may not exist.
     fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         self.inner.lockfile_path(flox)
-    }
-
-    /// The environment is locked,
-    /// and the manifest in the lockfile matches that in the manifest.
-    /// Note that the manifest could have whitespace or comment differences from
-    /// the lockfile.
-    fn lockfile_up_to_date(&self, flox: &Flox) -> Result<bool, EnvironmentError> {
-        self.inner.lockfile_up_to_date(flox)
     }
 
     /// Returns the environment name
