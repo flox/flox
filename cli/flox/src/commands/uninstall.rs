@@ -74,12 +74,20 @@ impl Uninstall {
             environment = %description,
             progress = format!("Uninstalling {} packages", self.packages.len()));
 
-        span.in_scope(|| environment.uninstall(self.packages.clone(), &flox))?;
+        let attempt = span.in_scope(|| environment.uninstall(self.packages.clone(), &flox))?;
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.
-        self.packages.iter().for_each(|p| {
-            message::deleted(format!("'{p}' uninstalled from environment {description}"))
+        self.packages.iter().for_each(|package| {
+            message::deleted(format!(
+                "'{package}' uninstalled from environment {description}"
+            ));
+            if let Some(include) = attempt.still_included.get(package) {
+                message::info(format!(
+                    "'{package}' is still installed by environment '{}'",
+                    include.name,
+                ));
+            }
         });
 
         warn_manifest_changes_for_services(&flox, environment.as_ref());

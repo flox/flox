@@ -17,7 +17,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::{LockResult, RecoverableMergeError, ResolveError};
+use super::lockfile::{LockResult, LockedInclude, RecoverableMergeError, ResolveError};
 use super::manifest::raw::PackageToInstall;
 use super::manifest::typed::{ActivateMode, Manifest, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
@@ -95,6 +95,9 @@ pub struct InstallationAttempt {
 #[derive(Debug)]
 pub struct UninstallationAttempt {
     pub new_manifest: Option<String>,
+    /// Packages that were requested to be uninstalled but are stilled provided
+    /// by included environments.
+    pub still_included: HashMap<String, LockedInclude>,
     /// The store path of environment that was built to validate the uninstall.
     /// This is used as an optimization to skip builds that we've already done.
     pub built_environment_store_paths: Option<BuildEnvOutputs>,

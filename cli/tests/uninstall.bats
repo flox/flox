@@ -130,3 +130,99 @@ teardown() {
   manifest_after_uninstall=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
   ! assert_regex "$manifest_after_uninstall" 'rails\.pkg-path = "rubyPackages_3_2\.rails"'
 }
+
+@test "uninstall: removes a package from a composing environment" {
+  "$FLOX_BIN" init -d included
+  "$FLOX_BIN" edit -d included -f - <<- EOF
+version = 1
+EOF
+
+  "$FLOX_BIN" init -d composer
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" edit -d composer -f - <<- EOF
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+
+[include]
+environments = [
+  { dir = "../included" },
+]
+EOF
+
+  run "$FLOX_BIN" uninstall -d composer hello
+  assert_success
+  assert_output "🗑️  'hello' uninstalled from environment 'composer'"
+
+  run "$FLOX_BIN" list -d composer
+  assert_success
+  assert_output - << EOF
+⚠️  No packages are installed for your current system ('${NIX_SYSTEM}').
+
+You can see the whole manifest with 'flox list --config'.
+EOF
+}
+
+@test "uninstall: refuses to remove a package from an included environment" {
+  "$FLOX_BIN" init -d included
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" edit -d included -f - <<- EOF
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+EOF
+
+  "$FLOX_BIN" init -d composer
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" edit -d composer -f - <<- EOF
+version = 1
+
+[include]
+environments = [
+  { dir = "../included" },
+]
+EOF
+
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 \
+    run "$FLOX_BIN" uninstall -d composer hello
+  assert_failure
+  assert_output - << EOF
+❌ ERROR: Cannot remove included package 'hello'
+Remove the package from environment 'included' and then run 'flox include upgrade'
+EOF
+}
+
+@test "uninstall: warns when removing a package that is still provided by an include" {
+  "$FLOX_BIN" init -d included
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" edit -d included -f - <<- EOF
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+EOF
+
+  "$FLOX_BIN" init -d composer
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" edit -d composer -f - <<- EOF
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+
+[include]
+environments = [
+  { dir = "../included" },
+]
+EOF
+
+  run "$FLOX_BIN" uninstall -d composer hello
+  assert_success
+  assert_output - << EOF
+🗑️  'hello' uninstalled from environment 'composer'
+ℹ️ 'hello' is still installed by environment 'included'
+EOF
+}

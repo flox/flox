@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -25,6 +25,7 @@ use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::lockfile::{
     LockResult,
+    LockedInclude,
     LockedPackage,
     Lockfile,
     ResolutionFailure,
@@ -321,6 +322,8 @@ impl CoreEnvironment<ReadOnly> {
 
     /// Uninstall packages from the environment atomically
     ///
+    /// Locks the environment first in order to detect and resolve any composition.
+    ///
     /// Returns the modified environment if there were no errors.
     pub fn uninstall(
         &mut self,
@@ -329,15 +332,73 @@ impl CoreEnvironment<ReadOnly> {
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let current_manifest_contents = self.manifest_contents()?;
 
-        let install_ids = Self::get_install_ids_to_uninstall(&self.manifest()?, packages)?;
+        let lockfile: Lockfile = self.lock(flox)?.into();
+        let packages_in_includes = if let Some(compose) = lockfile.compose {
+            Self::get_includes_for_packages(&packages, &compose.include)?
+        } else {
+            HashMap::new()
+        };
+
+        let install_ids = match Self::get_install_ids(&self.manifest()?, packages) {
+            Ok(ids) => ids,
+            Err(err) => {
+                if let CoreEnvironmentError::PackageNotFound(ref package) = err {
+                    if let Some(include) = packages_in_includes.get(package) {
+                        return Err(EnvironmentError::Core(
+                            CoreEnvironmentError::PackageOnlyIncluded(
+                                package.to_string(),
+                                include.name.clone(),
+                            ),
+                        ));
+                    }
+                };
+                return Err(EnvironmentError::Core(err));
+            },
+        };
 
         let toml = remove_packages(&current_manifest_contents, &install_ids)
             .map_err(CoreEnvironmentError::ModifyToml)?;
         let (store_path, _) = self.transact_with_manifest_contents(toml.to_string(), flox)?;
+
         Ok(UninstallationAttempt {
             new_manifest: Some(toml.to_string()),
+            still_included: packages_in_includes,
             built_environment_store_paths: Some(store_path),
         })
+    }
+
+    /// Get the highest priority included environment which provides each package.
+    /// Packages that are not provided by any included environments will be absent from the map.
+    fn get_includes_for_packages(
+        packages: &[String],
+        includes: &[LockedInclude],
+    ) -> Result<HashMap<String, LockedInclude>, EnvironmentError> {
+        let mut result = HashMap::new();
+        for package in packages {
+            if let Some(include) = Self::get_include_for_package(package, includes)? {
+                result.insert(package.clone(), include);
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Detect which included environment, if any, provides a given package.
+    fn get_include_for_package(
+        package: &String,
+        includes: &[LockedInclude],
+    ) -> Result<Option<LockedInclude>, EnvironmentError> {
+        // Reverse of merge order so that we return the highest priority match.
+        for include in includes.iter().rev() {
+            match Self::get_install_ids_to_uninstall(&include.manifest, vec![package.to_string()]) {
+                Ok(_) => return Ok(Some(include.clone())),
+                Err(CoreEnvironmentError::PackageNotFound(_)) => continue,
+                Err(CoreEnvironmentError::MultiplePackagesMatch(_, _)) => continue,
+                Err(err) => return Err(EnvironmentError::Core(err)),
+            }
+        }
+
+        Ok(None)
     }
 
     fn get_install_ids_to_uninstall(
@@ -1072,6 +1133,12 @@ pub enum CoreEnvironmentError {
     /// Tried to uninstall a package that wasn't installed
     #[error("couldn't uninstall '{0}', wasn't previously installed")]
     PackageNotFound(String),
+    /// Tried to uninstall a package that was only provided by an include.
+    #[error(
+        "Cannot remove included package '{0}'\n\
+         Remove the package from environment '{1}' and then run 'flox include upgrade'"
+    )]
+    PackageOnlyIncluded(String, String),
     // Multiple packages match user input, must specify install_id
     #[error(
         "multiple packages match '{0}', please specify an install id from possible matches: {1:?}"
