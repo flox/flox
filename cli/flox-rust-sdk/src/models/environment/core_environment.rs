@@ -160,7 +160,7 @@ impl<State> CoreEnvironment<State> {
     pub fn ensure_locked(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         match self.lockfile_if_up_to_date()? {
             Some(lock) => Ok(LockResult::Unchanged(lock)),
-            None => Ok(LockResult::Changed(self.lock(flox)?)),
+            None => self.lock(flox),
         }
     }
 
@@ -175,7 +175,7 @@ impl<State> CoreEnvironment<State> {
     /// Technically this does write to disk as a side effect for now.
     /// It's included in the [ReadOnly] struct for ergonomic reasons
     /// and because it doesn't modify the manifest.
-    pub fn lock(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
+    pub fn lock(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         let manifest = self.manifest()?;
         let existing_lockfile_contents = self.existing_lockfile_contents()?;
         let existing_lockfile = existing_lockfile_contents
@@ -202,7 +202,7 @@ impl<State> CoreEnvironment<State> {
                 ?environment_lockfile_path,
                 "lockfile is up to date, skipping write"
             );
-            return Ok(lockfile);
+            return Ok(LockResult::Unchanged(lockfile));
         }
 
         // Write the lockfile to disk
@@ -222,7 +222,7 @@ impl<State> CoreEnvironment<State> {
             .persist(&environment_lockfile_path)
             .map_err(|persist_error| CoreEnvironmentError::WriteLockfile(persist_error.error))?;
 
-        Ok(lockfile)
+        Ok(LockResult::Changed(lockfile))
     }
 
     /// Build the environment.
@@ -463,7 +463,7 @@ impl CoreEnvironment<ReadOnly> {
         debug!("transaction: building environment, ignoring errors (unsafe)");
 
         let new_lockfile = match temp_env.lock(flox) {
-            Ok(lockfile) => lockfile,
+            Ok(lockfile) => lockfile.into(),
             Err(lock_err) => {
                 debug!("transaction: lock failed: {:?}", lock_err);
                 debug!("transaction: replacing environment");
@@ -788,7 +788,7 @@ impl CoreEnvironment<ReadOnly> {
         temp_env.update_manifest(&manifest_contents)?;
 
         debug!("transaction: locking environment");
-        let lockfile = temp_env.lock(flox)?;
+        let lockfile = temp_env.lock(flox)?.into();
 
         debug!("transaction: building environment");
         let store_path = temp_env.build(flox)?;
