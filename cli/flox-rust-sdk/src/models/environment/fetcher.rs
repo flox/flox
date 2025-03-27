@@ -36,7 +36,7 @@ impl IncludeFetcher {
 
         match &environment {
             ConcreteEnvironment::Path(environment) => {
-                if !environment.lockfile_up_to_date(flox)? {
+                if !environment.lockfile_up_to_date()? {
                     return Err(EnvironmentError::Recoverable(
                         RecoverableMergeError::Catchall(
                             "cannot include environment since its manifest and lockfile are out of sync".to_string()
