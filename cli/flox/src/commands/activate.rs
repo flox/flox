@@ -232,7 +232,7 @@ impl Activate {
             path
         };
 
-        let lockfile_version = environment.lockfile(&flox)?.version();
+        let lockfile_version = lockfile.version();
         subcommand_metric!("activate#version", lockfile_version = lockfile_version);
 
         // read the currently active environments from the environment
