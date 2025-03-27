@@ -10,6 +10,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerNix};
 use flox_rust_sdk::utils::{ReaderExt, WireTap};
 use indoc::indoc;
@@ -64,7 +65,8 @@ impl Containerize {
 
         let built_environment = env.build(&flox)?;
         let env_name = env.name();
-        let manifest = env.lockfile(&flox)?.manifest;
+        let lockfile: Lockfile = env.lockfile(&flox)?.into();
+        let manifest = lockfile.manifest;
         let mode = manifest.options.activate.mode.unwrap_or_default();
 
         let source = if std::env::consts::OS == "linux" {

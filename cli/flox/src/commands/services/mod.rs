@@ -5,6 +5,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::{ActivateMode, Inner, Manifest, Services};
 use flox_rust_sdk::providers::services::{ProcessState, ProcessStates, new_services_to_start};
 use tracing::{debug, instrument};
@@ -285,7 +286,7 @@ pub async fn start_services_with_new_process_compose(
     names: &[String],
 ) -> Result<Vec<String>> {
     let environment = concrete_environment.dyn_environment_ref_mut();
-    let lockfile = environment.lockfile(&flox)?;
+    let lockfile: Lockfile = environment.lockfile(&flox)?.into();
     let system = flox.system.clone();
 
     for name in names {
