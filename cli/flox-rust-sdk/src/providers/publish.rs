@@ -9,7 +9,7 @@ use tracing::{info, instrument};
 use url::Url;
 
 use super::build::{BuildResult, BuildResults, ManifestBuilder};
-use super::catalog::{Client, ClientTrait, UserBuildInfo, UserDerivationInfo};
+use super::catalog::{Client, ClientTrait, UserBuildPublish, UserDerivationInfo};
 use super::git::GitCommandProvider;
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
@@ -213,7 +213,7 @@ where
             .await
             .map_err(|e| PublishError::CatalogError(Box::new(e)))?;
 
-        let build_info = UserBuildInfo {
+        let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
                 broken: Some(false),
                 description: self.env_metadata.description.clone(),
@@ -233,6 +233,7 @@ where
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
             rev_date: self.env_metadata.build_repo_ref.rev_date,
             cache_uri: self.cache.map(|c| c.cache_url().to_string()),
+            narinfos: None,
         };
 
         if let Some(cache) = self.cache {

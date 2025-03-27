@@ -1,6 +1,6 @@
 [
   {
-    "count": 876,
+    "count": 868,
     "results": [
       {
         "attr_path": "javacc",
@@ -10,7 +10,7 @@
         "pkg_path": "javacc",
         "pname": "javacc",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "7.0.13"
       },
       {
@@ -21,7 +21,7 @@
         "pkg_path": "javaCup",
         "pname": "javaCup",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20160615"
       },
       {
@@ -32,7 +32,7 @@
         "pkg_path": "hdf_java",
         "pname": "hdf_java",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "3.3.2"
       },
       {
@@ -43,7 +43,7 @@
         "pkg_path": "dbus_java",
         "pname": "dbus_java",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "2.7"
       },
       {
@@ -54,7 +54,7 @@
         "pkg_path": "geoipjava",
         "pname": "geoipjava",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.2.5"
       },
       {
@@ -65,7 +65,7 @@
         "pkg_path": "tabula-java",
         "pname": "tabula-java",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.0.5"
       },
       {
@@ -76,7 +76,7 @@
         "pkg_path": "erlang_javac",
         "pname": "erlang_javac",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "25.3.2.12"
       },
       {
@@ -87,7 +87,7 @@
         "pkg_path": "swigWithJava",
         "pname": "swigWithJava",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "4.2.1"
       },
       {
@@ -98,7 +98,7 @@
         "pkg_path": "yourkit-java",
         "pname": "yourkit-java",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "2024.9-b164"
       },
       {
@@ -109,7 +109,7 @@
         "pkg_path": "java-hamcrest",
         "pname": "java-hamcrest",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "3.0"
       }
     ]
@@ -125,7 +125,7 @@
         "pkg_path": "jdk",
         "pname": "jdk",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "21.0.4"
       },
       {
@@ -136,7 +136,7 @@
         "pkg_path": "jdk8",
         "pname": "jdk8",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "8.0.422"
       },
       {
@@ -147,7 +147,7 @@
         "pkg_path": "jdk11",
         "pname": "jdk11",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "11.0.25+9"
       }
     ]

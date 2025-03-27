@@ -11,18 +11,18 @@
             "attr_path": "jupyter",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/0zc6mkkl7mcihvych7d15fnh67bxgzy2-python3-3.12.8-env.drv",
+            "derivation": "/nix/store/wz246w6a2rndprqccqa5r27cbc0bkzf7-python3-3.12.9-env.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "jupyter",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
-            "name": "python3-3.12.8-env",
+            "name": "python3-3.12.9-env",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/g664zm20wnd9svqk8b0b4irh6hh9ldgb-python3-3.12.8-env"
+                "store_path": "/nix/store/5vddqzzkbwnadkxzkbwqi43gqr0lphva-python3-3.12.9-env"
               }
             ],
             "outputs_to_install": [
@@ -30,35 +30,33 @@
             ],
             "pkg_path": "jupyter",
             "pname": "jupyter",
-            "rev": "73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
-            "rev_count": 755230,
-            "rev_date": "2025-02-18T08:17:47Z",
-            "scrape_date": "2025-02-20T02:25:42Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:09:58.357919Z",
             "stabilities": [
-              "stable",
-              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "python3-3.12.8-env"
+            "version": "python3-3.12.9-env"
           },
           {
             "attr_path": "jupyter",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/sxjb2mppj5wjrws3nqa19ym59iqikrsb-python3-3.12.8-env.drv",
+            "derivation": "/nix/store/gjffv01adwxs5gnq9m1qfp7zppsx3bra-python3-3.12.9-env.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "jupyter",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
-            "name": "python3-3.12.8-env",
+            "name": "python3-3.12.9-env",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/prr629wflm94x3mwxk14lkcgj24aycx4-python3-3.12.8-env"
+                "store_path": "/nix/store/jm71l7s1mc2bh105lw8ghrw9yff5wamp-python3-3.12.9-env"
               }
             ],
             "outputs_to_install": [
@@ -66,35 +64,33 @@
             ],
             "pkg_path": "jupyter",
             "pname": "jupyter",
-            "rev": "73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
-            "rev_count": 755230,
-            "rev_date": "2025-02-18T08:17:47Z",
-            "scrape_date": "2025-02-20T02:25:42Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:27:14.569316Z",
             "stabilities": [
-              "stable",
-              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "python3-3.12.8-env"
+            "version": "python3-3.12.9-env"
           },
           {
             "attr_path": "jupyter",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/64y78an4gg8sjn0b2bh7ns84f2f3qjnv-python3-3.12.8-env.drv",
+            "derivation": "/nix/store/c1aaxrn3zash9apnvpk6l8higqvjcy4l-python3-3.12.9-env.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "jupyter",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
-            "name": "python3-3.12.8-env",
+            "name": "python3-3.12.9-env",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/6g2ngpqsh8zn2nvwgq8qcky33h2z62rb-python3-3.12.8-env"
+                "store_path": "/nix/store/hibkwwgckzrdr3m8d9yd4l9xfab027nf-python3-3.12.9-env"
               }
             ],
             "outputs_to_install": [
@@ -102,35 +98,33 @@
             ],
             "pkg_path": "jupyter",
             "pname": "jupyter",
-            "rev": "73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
-            "rev_count": 755230,
-            "rev_date": "2025-02-18T08:17:47Z",
-            "scrape_date": "2025-02-20T02:25:42Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:42:58.751512Z",
             "stabilities": [
-              "stable",
-              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "python3-3.12.8-env"
+            "version": "python3-3.12.9-env"
           },
           {
             "attr_path": "jupyter",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/haw0xr31v7iv84vjis9yxqhwlyqxa5a2-python3-3.12.8-env.drv",
+            "derivation": "/nix/store/x8nj25lh5pv04j9hvi2wzlxhh0dypznn-python3-3.12.9-env.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "jupyter",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
-            "name": "python3-3.12.8-env",
+            "name": "python3-3.12.9-env",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/js3d8wlzy9lpigxlwn234fzghpn5d0ps-python3-3.12.8-env"
+                "store_path": "/nix/store/yyg065825l17049mfbjb0j1by51ka5s7-python3-3.12.9-env"
               }
             ],
             "outputs_to_install": [
@@ -138,39 +132,37 @@
             ],
             "pkg_path": "jupyter",
             "pname": "jupyter",
-            "rev": "73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
-            "rev_count": 755230,
-            "rev_date": "2025-02-18T08:17:47Z",
-            "scrape_date": "2025-02-20T02:25:42Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T02:01:44.594645Z",
             "stabilities": [
-              "stable",
-              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "python3-3.12.8-env"
+            "version": "python3-3.12.9-env"
           },
           {
             "attr_path": "python312Packages.jupyterlab-git",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/jfvlch2kcd27h75iyv1naf3x0yl4jzxy-python3.12-jupyterlab-git-0.50.2.drv",
+            "derivation": "/nix/store/1wn54k2mczq6bykg7wmx831ja6zcbqgn-python3.12-jupyterlab-git-0.50.2.drv",
             "description": "Jupyter lab extension for version control with Git",
             "insecure": false,
             "install_id": "jupyterlab-git",
             "license": "[ BSD-3-Clause ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3.12-jupyterlab-git-0.50.2",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/7lmz8wysihg1w6bwgnjvkvd0rbvx9rv3-python3.12-jupyterlab-git-0.50.2"
+                "store_path": "/nix/store/xafi30l7qgbh7driz8ggw56pjxn9zds9-python3.12-jupyterlab-git-0.50.2"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/bvmmjip6jq4ap5m12dfkj370r4wh0w1j-python3.12-jupyterlab-git-0.50.2-dist"
+                "store_path": "/nix/store/5vy1s9d0k7l7xyk0w0nwdgjjll6hqqls-python3.12-jupyterlab-git-0.50.2-dist"
               }
             ],
             "outputs_to_install": [
@@ -178,13 +170,11 @@
             ],
             "pkg_path": "python312Packages.jupyterlab-git",
             "pname": "jupyterlab-git",
-            "rev": "73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
-            "rev_count": 755230,
-            "rev_date": "2025-02-18T08:17:47Z",
-            "scrape_date": "2025-02-20T02:25:42Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:10:08.559553Z",
             "stabilities": [
-              "stable",
-              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -195,22 +185,22 @@
             "attr_path": "python312Packages.jupyterlab-git",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/zipdpy1mclslnvw87scgln94c7sca15a-python3.12-jupyterlab-git-0.50.2.drv",
+            "derivation": "/nix/store/pj272mmw5i9aw66bp0s5lcz28a37bkhp-python3.12-jupyterlab-git-0.50.2.drv",
             "description": "Jupyter lab extension for version control with Git",
             "insecure": false,
             "install_id": "jupyterlab-git",
             "license": "[ BSD-3-Clause ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3.12-jupyterlab-git-0.50.2",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/4va9phfxr7ds2qkjv2x8adrjbwg7qgkb-python3.12-jupyterlab-git-0.50.2"
+                "store_path": "/nix/store/2vpafmqqcmfxcw319z0hyqq557iqjyxz-python3.12-jupyterlab-git-0.50.2"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/qwls4ksmk8c1h6xa11ykpvyfs6vxkqhw-python3.12-jupyterlab-git-0.50.2-dist"
+                "store_path": "/nix/store/3y1nbw54kf2i6z7pvs1iv6a8jrkbq3pk-python3.12-jupyterlab-git-0.50.2-dist"
               }
             ],
             "outputs_to_install": [
@@ -218,13 +208,11 @@
             ],
             "pkg_path": "python312Packages.jupyterlab-git",
             "pname": "jupyterlab-git",
-            "rev": "73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
-            "rev_count": 755230,
-            "rev_date": "2025-02-18T08:17:47Z",
-            "scrape_date": "2025-02-20T02:25:42Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:27:36.783397Z",
             "stabilities": [
-              "stable",
-              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -235,22 +223,22 @@
             "attr_path": "python312Packages.jupyterlab-git",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/56bg6zsac949asjd81pd5fr9g9782bz8-python3.12-jupyterlab-git-0.50.2.drv",
+            "derivation": "/nix/store/118z4bicxb07ya44p32lpzr5j79ipnr8-python3.12-jupyterlab-git-0.50.2.drv",
             "description": "Jupyter lab extension for version control with Git",
             "insecure": false,
             "install_id": "jupyterlab-git",
             "license": "[ BSD-3-Clause ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3.12-jupyterlab-git-0.50.2",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/8pjpyfdi3h0ayin8jddm87f942pvnccv-python3.12-jupyterlab-git-0.50.2"
+                "store_path": "/nix/store/62vxhsp726h4s5zqmfy3fjpicyams14c-python3.12-jupyterlab-git-0.50.2"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/7d32z3bl3iv1kmkazn29da3b081bh2k9-python3.12-jupyterlab-git-0.50.2-dist"
+                "store_path": "/nix/store/jr87byi7zd4z75vggjn8q70fyshpg14r-python3.12-jupyterlab-git-0.50.2-dist"
               }
             ],
             "outputs_to_install": [
@@ -258,13 +246,11 @@
             ],
             "pkg_path": "python312Packages.jupyterlab-git",
             "pname": "jupyterlab-git",
-            "rev": "73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
-            "rev_count": 755230,
-            "rev_date": "2025-02-18T08:17:47Z",
-            "scrape_date": "2025-02-20T02:25:42Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:43:08.642091Z",
             "stabilities": [
-              "stable",
-              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -275,22 +261,22 @@
             "attr_path": "python312Packages.jupyterlab-git",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/37144559sgadhy82vkifdgc43x7jr6sw-python3.12-jupyterlab-git-0.50.2.drv",
+            "derivation": "/nix/store/xw34x39qq4h0idiilzqy0zwa9zz2ppci-python3.12-jupyterlab-git-0.50.2.drv",
             "description": "Jupyter lab extension for version control with Git",
             "insecure": false,
             "install_id": "jupyterlab-git",
             "license": "[ BSD-3-Clause ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3.12-jupyterlab-git-0.50.2",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/2bqf003fwvdcj36lgby1zbv2f13kqc18-python3.12-jupyterlab-git-0.50.2"
+                "store_path": "/nix/store/gdvqhz6hacpvvqrrsk7l5r54j2i2yd70-python3.12-jupyterlab-git-0.50.2"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/ihyn4fyj7igwc5hsc0appq78h58sqp21-python3.12-jupyterlab-git-0.50.2-dist"
+                "store_path": "/nix/store/b3bkiji0mmvkvp7fjcq8wk9pd5l5ii0i-python3.12-jupyterlab-git-0.50.2-dist"
               }
             ],
             "outputs_to_install": [
@@ -298,13 +284,11 @@
             ],
             "pkg_path": "python312Packages.jupyterlab-git",
             "pname": "jupyterlab-git",
-            "rev": "73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
-            "rev_count": 755230,
-            "rev_date": "2025-02-18T08:17:47Z",
-            "scrape_date": "2025-02-20T02:25:42Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T02:02:09.277285Z",
             "stabilities": [
-              "stable",
-              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
@@ -315,22 +299,22 @@
             "attr_path": "python312Packages.jupyterlab-widgets",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/sbb5kkz28013xz0y6r7svnb7pl170wb3-python3.12-jupyterlab-widgets-3.0.13.drv",
+            "derivation": "/nix/store/w4lmln6nrkw5fgywscfhlmv8mhmixcny-python3.12-jupyterlab-widgets-3.0.13.drv",
             "description": "Jupyter Widgets JupyterLab Extension",
             "insecure": false,
             "install_id": "jupyterlab-widgets",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3.12-jupyterlab-widgets-3.0.13",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/2xajyrhzsyh0lmbn9xnixn4cxglnkhjd-python3.12-jupyterlab-widgets-3.0.13"
+                "store_path": "/nix/store/1rcl3rpzyqfsjk3f1ya6sxfy0x18xlqm-python3.12-jupyterlab-widgets-3.0.13"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/y2ac9gp6xpma0miiry81nhp77mr9q1q3-python3.12-jupyterlab-widgets-3.0.13-dist"
+                "store_path": "/nix/store/2d9aznxzw5mc2d6nqd780vazk98h4m54-python3.12-jupyterlab-widgets-3.0.13-dist"
               }
             ],
             "outputs_to_install": [
@@ -338,13 +322,11 @@
             ],
             "pkg_path": "python312Packages.jupyterlab-widgets",
             "pname": "jupyterlab-widgets",
-            "rev": "73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
-            "rev_count": 755230,
-            "rev_date": "2025-02-18T08:17:47Z",
-            "scrape_date": "2025-02-20T02:25:42Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:10:08.562904Z",
             "stabilities": [
-              "stable",
-              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -355,22 +337,22 @@
             "attr_path": "python312Packages.jupyterlab-widgets",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/701c22ppd79df1c4sxp6wcvxly5hp4si-python3.12-jupyterlab-widgets-3.0.13.drv",
+            "derivation": "/nix/store/lzbg02pd0gpaph107pzgisl7l4nlchs8-python3.12-jupyterlab-widgets-3.0.13.drv",
             "description": "Jupyter Widgets JupyterLab Extension",
             "insecure": false,
             "install_id": "jupyterlab-widgets",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3.12-jupyterlab-widgets-3.0.13",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/ikajv3wr2yv7ka7wrsa50pg0zp161kq9-python3.12-jupyterlab-widgets-3.0.13"
+                "store_path": "/nix/store/3fqd5j34bhxi4jjx1rcsarbv7zzj2h68-python3.12-jupyterlab-widgets-3.0.13"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/zgxp98xyrhjxivd26f530fa1ixbd0pqn-python3.12-jupyterlab-widgets-3.0.13-dist"
+                "store_path": "/nix/store/bn3apyva8yiayl3j864g7baimqb5lawh-python3.12-jupyterlab-widgets-3.0.13-dist"
               }
             ],
             "outputs_to_install": [
@@ -378,13 +360,11 @@
             ],
             "pkg_path": "python312Packages.jupyterlab-widgets",
             "pname": "jupyterlab-widgets",
-            "rev": "73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
-            "rev_count": 755230,
-            "rev_date": "2025-02-18T08:17:47Z",
-            "scrape_date": "2025-02-20T02:25:42Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:27:36.788259Z",
             "stabilities": [
-              "stable",
-              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -395,22 +375,22 @@
             "attr_path": "python312Packages.jupyterlab-widgets",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/qmh3mlw9aw2qdhz8qcg74hn0kbss6450-python3.12-jupyterlab-widgets-3.0.13.drv",
+            "derivation": "/nix/store/8wpwdq46cdpakk39ybrsbp0cd58drii5-python3.12-jupyterlab-widgets-3.0.13.drv",
             "description": "Jupyter Widgets JupyterLab Extension",
             "insecure": false,
             "install_id": "jupyterlab-widgets",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3.12-jupyterlab-widgets-3.0.13",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/w5mm0f203k86lk4nqj7054b46i7k4l2i-python3.12-jupyterlab-widgets-3.0.13"
+                "store_path": "/nix/store/hrm1g8ay4nh039dc3vq7db3jp2i91zba-python3.12-jupyterlab-widgets-3.0.13"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/77kg983vq1sp357hs6rscdrpb53nl3rn-python3.12-jupyterlab-widgets-3.0.13-dist"
+                "store_path": "/nix/store/05n9mf4vpbsvls37y2p4b7sb9i1703gp-python3.12-jupyterlab-widgets-3.0.13-dist"
               }
             ],
             "outputs_to_install": [
@@ -418,13 +398,11 @@
             ],
             "pkg_path": "python312Packages.jupyterlab-widgets",
             "pname": "jupyterlab-widgets",
-            "rev": "73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
-            "rev_count": 755230,
-            "rev_date": "2025-02-18T08:17:47Z",
-            "scrape_date": "2025-02-20T02:25:42Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:43:08.645354Z",
             "stabilities": [
-              "stable",
-              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -435,22 +413,22 @@
             "attr_path": "python312Packages.jupyterlab-widgets",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/w2rph9npkz9v119g5jxs6gsmf6ixwqk6-python3.12-jupyterlab-widgets-3.0.13.drv",
+            "derivation": "/nix/store/11y3pi9kzvyg615dj6pbakip2hnfhql8-python3.12-jupyterlab-widgets-3.0.13.drv",
             "description": "Jupyter Widgets JupyterLab Extension",
             "insecure": false,
             "install_id": "jupyterlab-widgets",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "python3.12-jupyterlab-widgets-3.0.13",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/xcz0npsm0s3h97zigkqaa0z0j8icix5b-python3.12-jupyterlab-widgets-3.0.13"
+                "store_path": "/nix/store/vqyzwwxihcx4jnlcwz59sr4zzdlbf5a3-python3.12-jupyterlab-widgets-3.0.13"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/g1bzxa3xx8gmnrbp02i9cx5a07rwmq36-python3.12-jupyterlab-widgets-3.0.13-dist"
+                "store_path": "/nix/store/a33jm5058z21imgz4wkdzbyhr9gwkxhs-python3.12-jupyterlab-widgets-3.0.13-dist"
               }
             ],
             "outputs_to_install": [
@@ -458,13 +436,11 @@
             ],
             "pkg_path": "python312Packages.jupyterlab-widgets",
             "pname": "jupyterlab-widgets",
-            "rev": "73cf49b8ad837ade2de76f87eb53fc85ed5d4680",
-            "rev_count": 755230,
-            "rev_date": "2025-02-18T08:17:47Z",
-            "scrape_date": "2025-02-20T02:25:42Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T02:02:09.282454Z",
             "stabilities": [
-              "stable",
-              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
@@ -472,7 +448,7 @@
             "version": "3.0.13"
           }
         ],
-        "page": 755230,
+        "page": 773904,
         "url": ""
       }
     }
