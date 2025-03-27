@@ -18,6 +18,7 @@ use flox_rust_sdk::models::environment::{
     Environment,
     EnvironmentError,
 };
+use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use flox_rust_sdk::providers::services::ServiceError;
 use itertools::Itertools;
@@ -203,7 +204,7 @@ impl Edit {
 
                 warn_manifest_changes_for_services(flox, environment);
 
-                let lockfile = environment.lockfile(flox)?;
+                let lockfile: Lockfile = environment.lockfile(flox)?.into();
                 if lockfile.compose.is_some() {
                     message::print_overridden_manifest_fields(&lockfile);
                     message::info("Run 'flox list -c' to see merged manifest.");

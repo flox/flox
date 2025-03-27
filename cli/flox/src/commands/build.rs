@@ -90,8 +90,9 @@ impl Build {
 
         let base_dir = env.parent_path()?;
         let flox_env = env.rendered_env_links(&flox)?;
+        let lockfile = env.lockfile(&flox)?.into();
 
-        let packages_to_clean = available_packages(&env.lockfile(&flox)?, packages)?;
+        let packages_to_clean = available_packages(&lockfile, packages)?;
 
         let builder = FloxBuildMk;
         builder.clean(&flox, &base_dir, &flox_env.development, &packages_to_clean)?;
@@ -109,8 +110,9 @@ impl Build {
 
         let base_dir = env.parent_path()?;
         let built_environments = env.build(&flox)?;
+        let lockfile = env.lockfile(&flox)?.into();
 
-        let packages_to_build = available_packages(&env.lockfile(&flox)?, packages)?;
+        let packages_to_build = available_packages(&lockfile, packages)?;
 
         let builder = FloxBuildMk;
         let output = builder.build(

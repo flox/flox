@@ -17,7 +17,7 @@ use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::{Lockfile, RecoverableMergeError, ResolveError};
+use super::lockfile::{LockResult, RecoverableMergeError, ResolveError};
 use super::manifest::raw::PackageToInstall;
 use super::manifest::typed::{ActivateMode, Manifest, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
@@ -144,7 +144,7 @@ pub trait Environment: Send {
     ///
     /// Some implementations error if the lock does not already exist, while
     /// others call lock.
-    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError>;
+    fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError>;
 
     /// Extract the current content of the manifest
     ///

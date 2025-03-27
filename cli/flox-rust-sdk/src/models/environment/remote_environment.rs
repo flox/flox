@@ -26,7 +26,7 @@ use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment::RenderedEnvironmentLink;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
-use crate::models::lockfile::Lockfile;
+use crate::models::lockfile::LockResult;
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::Manifest;
 
@@ -245,7 +245,7 @@ impl RemoteEnvironment {
 impl Environment for RemoteEnvironment {
     /// Return the lockfile content,
     /// or error if the lockfile doesn't exist.
-    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
+    fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         self.inner.lockfile(flox)
     }
 

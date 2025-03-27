@@ -19,6 +19,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
     FLOX_SERVICES_SOCKET_VAR,
 };
+use flox_rust_sdk::models::lockfile::LockResult;
 use flox_rust_sdk::models::manifest::typed::{ActivateMode, Inner};
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
@@ -164,12 +165,14 @@ impl Activate {
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
 
         let environment = concrete_environment.dyn_environment_ref_mut();
-        let is_locked = environment.lockfile_up_to_date(&flox)?;
-        let lockfile = environment.lockfile(&flox)?;
+        let lockfile = match environment.lockfile(&flox)? {
+            LockResult::Changed(lockfile) => {
+                message::print_overridden_manifest_fields(&lockfile);
+                lockfile
+            },
+            LockResult::Unchanged(lockfile) => lockfile,
+        };
         let manifest = &lockfile.manifest;
-        if !is_locked {
-            message::print_overridden_manifest_fields(&lockfile);
-        }
 
         let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         let interactive = !in_place && self.run_args.is_empty();
@@ -653,7 +656,7 @@ fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironmen
         return Ok(());
     };
 
-    let current_lockfile = environment.lockfile(flox)?;
+    let current_lockfile = environment.lockfile(flox)?.into();
 
     if Some(current_lockfile) != info.result.old_lockfile {
         // todo: delete the info file?
@@ -819,7 +822,7 @@ mod upgrade_notification_tests {
         new_named_path_environment_from_env_files,
         new_path_environment_from_env_files,
     };
-    use flox_rust_sdk::models::lockfile::LockedPackage;
+    use flox_rust_sdk::models::lockfile::{LockedPackage, Lockfile};
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
     use flox_rust_sdk::providers::upgrade_checks::UpgradeInformation;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
@@ -851,7 +854,7 @@ mod upgrade_notification_tests {
             UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
         let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
 
-        let mut new_lockfile = environment.lockfile(flox).unwrap();
+        let mut new_lockfile: Lockfile = environment.lockfile(flox).unwrap().into();
         for locked_package in new_lockfile.packages.iter_mut() {
             match locked_package {
                 LockedPackage::Catalog(locked_package_catalog) => {
@@ -867,7 +870,7 @@ mod upgrade_notification_tests {
         let _ = locked.info_mut().insert(UpgradeInformation {
             last_checked: OffsetDateTime::now_utc(),
             result: UpgradeResult {
-                old_lockfile: Some(environment.lockfile(flox).unwrap()),
+                old_lockfile: Some(environment.lockfile(flox).unwrap().into()),
                 new_lockfile,
 
                 store_path: None,
@@ -950,14 +953,14 @@ mod upgrade_notification_tests {
             let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
 
             // cause old_lockfile to evaluate as non-equal to the current lockfile
-            let mut old_lockfile = environment.lockfile(&flox).unwrap();
+            let mut old_lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
             old_lockfile.packages.clear();
 
             let _ = locked.info_mut().insert(UpgradeInformation {
                 last_checked: OffsetDateTime::now_utc(),
                 result: UpgradeResult {
                     old_lockfile: Some(old_lockfile),
-                    new_lockfile: environment.lockfile(&flox).unwrap(),
+                    new_lockfile: environment.lockfile(&flox).unwrap().into(),
 
                     store_path: None,
                 },
@@ -988,8 +991,8 @@ mod upgrade_notification_tests {
                 UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
 
             let result = UpgradeResult {
-                old_lockfile: Some(environment.lockfile(&flox).unwrap()),
-                new_lockfile: environment.lockfile(&flox).unwrap(),
+                old_lockfile: Some(environment.lockfile(&flox).unwrap().into()),
+                new_lockfile: environment.lockfile(&flox).unwrap().into(),
 
                 store_path: None,
             };
