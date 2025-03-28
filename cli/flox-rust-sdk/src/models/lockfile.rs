@@ -1799,6 +1799,7 @@ pub(crate) mod tests {
         MsgAttrPathNotFoundSystemsNotOnSamePage,
         MsgGeneral,
         MsgUnknown,
+        PublishResponse,
         ResolutionMessage,
         SearchError,
         UserBuildPublish,
@@ -1872,7 +1873,7 @@ pub(crate) mod tests {
         async fn create_catalog(
             &self,
             _catalog_name: impl AsRef<str> + Send + Sync,
-        ) -> Result<(), CatalogClientError> {
+        ) -> Result<PublishResponse, CatalogClientError> {
             unreachable!("create_catalog should not be called");
         }
 

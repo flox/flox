@@ -7,7 +7,7 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::Inner;
 use flox_rust_sdk::providers::build::FloxBuildMk;
-use flox_rust_sdk::providers::catalog::Client;
+use flox_rust_sdk::providers::catalog::ClientTrait;
 use flox_rust_sdk::providers::publish::{
     NixCopyCache,
     PublishProvider,
@@ -106,13 +106,16 @@ impl Publish {
 
         // TODO: this we should be able to provide via cli
         let catalog_name = token.handle().to_string();
+        let catalog_client = &flox.catalog_client;
 
-        let remote_store_url = None;
-        //let result = catalog_client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(
-        //    &catalog_name,
-        //    &package_name,
-        //    &body,
-        //);
+        // TODO: Move into publish provider.
+        // TODO: Is signing key still optional when remote_store_url is present?
+        let remote_store_url = catalog_client
+            .create_catalog(&catalog_name)
+            .await?
+            .ingress_uri
+            .map(|s| Url::parse(&s))
+            .transpose()?;
 
         let cache = if no_store {
             None
@@ -127,7 +130,7 @@ impl Publish {
 
         debug!("publishing package: {}", &package);
         match publish_provider
-            .publish(&flox.catalog_client, &catalog_name)
+            .publish(catalog_client, &catalog_name)
             .await
         {
             Ok(_) => message::updated(formatdoc! {"
@@ -167,6 +170,7 @@ fn merge_cache_options(
     args: Option<CacheArgs>,
     remote_store_url: Option<Url>,
 ) -> Result<Option<NixCopyCache>> {
+    // TODO: Do we still need URL from config if it's only for testing?
     let url = args
         .as_ref()
         .and_then(|args| args.store_url.clone())
@@ -204,6 +208,7 @@ mod tests {
         let key_args = PathBuf::from("args.key");
         let key_config = PathBuf::from("config.key");
 
+        // TODO: Test remote_store_url
         let test_cases = vec![
             TestCase {
                 name: "None when both None",
@@ -269,7 +274,8 @@ mod tests {
 
         for tc in test_cases {
             assert_eq!(
-                merge_cache_options(tc.config, tc.args).unwrap(),
+                // TODO: Test remote_store_url
+                merge_cache_options(tc.config, tc.args, None).unwrap(),
                 tc.expected,
                 "test case: {}",
                 tc.name
@@ -307,7 +313,10 @@ mod tests {
 
         for (config, args) in test_cases {
             assert_eq!(
-                merge_cache_options(config, args).unwrap_err().to_string(),
+                // TODO: Test remote_store_url
+                merge_cache_options(config, args, None)
+                    .unwrap_err()
+                    .to_string(),
                 "cache URL and key are mutually required options"
             );
         }

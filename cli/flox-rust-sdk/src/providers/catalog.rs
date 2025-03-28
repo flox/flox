@@ -373,6 +373,7 @@ impl MockClient {
     }
 }
 
+pub type PublishResponse = api_types::PublishResponse;
 pub type UserBuildInfo = api_types::UserBuildInput;
 pub type UserBuildPublish = api_types::UserBuildPublish;
 pub type UserDerivationInfo = api_types::UserDerivationInput;
@@ -417,7 +418,7 @@ pub trait ClientTrait {
     async fn create_catalog(
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError>;
+    ) -> Result<PublishResponse, CatalogClientError>;
 
     /// Create a package within a user catalog
     async fn create_package(
@@ -598,9 +599,45 @@ impl ClientTrait for CatalogClient {
 
     async fn create_catalog(
         &self,
-        _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError> {
-        Ok(())
+        catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<PublishResponse, CatalogClientError> {
+        let catalog = api_types::CatalogName::from_str(catalog_name.as_ref()).map_err(|_e| {
+            CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+                format!(
+                    "catalog name {} does not meet API requirements.",
+                    catalog_name.as_ref()
+                )
+                .to_string(),
+            ))
+        })?;
+
+        // TODO: change endpoint and remove after https://github.com/flox/catalog-server/pull/285
+        let body = api_types::PublishRequest(serde_json::Map::new());
+        let package = api_types::PackageName::from_str("unused").map_err(|e| {
+            CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+                format!("package name does not meet API requirements: {}", e).to_string(),
+            ))
+        })?;
+
+        // This endpoint idempotently creates a catalog and gets publish info in
+        // one step, unlike `create_catalog_api_v1_catalog_catalogs_post()`, and
+        // should be consolidated in the future:
+        //
+        // - https://api.preview.flox.dev/docs#/catalogs/create_catalog_api_v1_catalog_catalogs__post
+        let response = self.client
+            .publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(
+                &catalog, &package, &body,
+            )
+            .await
+            .map_err(|e| match e {
+                APIError::ErrorResponse(err) => {
+                    CatalogClientError::UnexpectedError(APIError::ErrorResponse(err))
+                },
+                _ => CatalogClientError::UnexpectedError(e),
+            })?;
+
+        debug!("successfully created catalog",);
+        Ok(response.into_inner())
     }
 
     async fn create_package(
@@ -877,8 +914,8 @@ impl ClientTrait for MockClient {
     async fn create_catalog(
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError> {
-        Ok(())
+    ) -> Result<PublishResponse, CatalogClientError> {
+        Ok(PublishResponse { ingress_uri: None })
     }
 
     async fn create_package(
