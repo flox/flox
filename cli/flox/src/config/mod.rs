@@ -134,9 +134,6 @@ pub enum EnvironmentPromptConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PublishConfig {
-    /// Default URL of the store used by 'flox publish'
-    pub store_url: Option<Url>,
-
     /// Default path of the signing key used by 'flox publish'
     pub signing_key: Option<PathBuf>,
 }
