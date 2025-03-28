@@ -105,7 +105,20 @@ pub struct Features {
     #[serde(default)]
     pub upload: bool,
     #[serde(default)]
-    pub compose: bool,
+    compose: bool,
+    #[serde(default)]
+    pub qa: bool,
+}
+
+impl Features {
+    pub fn compose(&self) -> bool {
+        self.qa || self.compose
+    }
+
+    #[cfg(any(test, feature = "tests"))]
+    pub fn set_compose(&mut self, compose: bool) {
+        self.compose = compose;
+    }
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, derive_more::Deref)]

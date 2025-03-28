@@ -664,7 +664,7 @@ impl Lockfile {
             return Ok((manifest.clone(), None));
         }
 
-        if !flox.features.compose {
+        if !flox.features.compose() {
             return Err(RecoverableMergeError::Catchall(
                 indoc! {"Cannot handle [include] when compose feature flag is disabled.
                 Use 'flox config --set-bool features.compose true' to enable composition."}
@@ -3375,7 +3375,7 @@ pub(crate) mod tests {
         /// generate resolution responses
         #[test]
         fn lock_manifest_noop_if_locked_without_install_section((mut flox, tempdir, environments_to_include) in generate_path_environments_without_install_or_include(3)) {
-            flox.features.compose = true;
+            flox.features.set_compose(true);
 
             let manifest = Manifest {
                 version: Version,
@@ -3930,7 +3930,7 @@ pub(crate) mod tests {
     #[test]
     fn merge_manifest_fetches_included_environment() {
         let (mut flox, tempdir) = flox_instance();
-        flox.features.compose = true;
+        flox.features.set_compose(true);
         let manifest_contents = indoc! {r#"
         version = 1
 
@@ -3982,7 +3982,7 @@ pub(crate) mod tests {
     #[test]
     fn merge_manifest_preserves_include_order() {
         let (mut flox, tempdir) = flox_instance();
-        flox.features.compose = true;
+        flox.features.set_compose(true);
         let manifest_contents = indoc! {r#"
         version = 1
 
@@ -4074,7 +4074,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn merge_manifest_respects_precedence_when_skipping_fetch() {
         let (mut flox, tempdir) = flox_instance();
-        flox.features.compose = true;
+        flox.features.set_compose(true);
 
         let manifest_contents = indoc! {r#"
         version = 1
@@ -4195,7 +4195,7 @@ pub(crate) mod tests {
     /// Otherwise, re-merging should not re-fetch.
     async fn re_merge_after_editing_dep(modify_include_descriptor: bool) {
         let (mut flox, tempdir) = flox_instance();
-        flox.features.compose = true;
+        flox.features.set_compose(true);
 
         let mut manifest_contents = indoc! {r#"
         version = 1
@@ -4314,7 +4314,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn merge_manifest_removes_stale_locked_includes() {
         let (mut flox, tempdir) = flox_instance();
-        flox.features.compose = true;
+        flox.features.set_compose(true);
 
         let mut manifest_contents = indoc! {r#"
         version = 1
@@ -4385,7 +4385,7 @@ pub(crate) mod tests {
     #[test]
     fn merge_manifest_errors_for_non_unique_include_names() {
         let (mut flox, tempdir) = flox_instance();
-        flox.features.compose = true;
+        flox.features.set_compose(true);
 
         let manifest_contents = indoc! {r#"
         version = 1

@@ -797,7 +797,7 @@ mod tests {
     async fn edit_warns_when_include_changed() {
         let (mut flox, tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
-        flox.features.compose = true;
+        flox.features.set_compose(true);
 
         // Create composer environment
         let composer_path = tempdir.path().join("composer");
@@ -852,7 +852,7 @@ mod tests {
     async fn edit_warns_when_fields_overridden() {
         let (mut flox, tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
-        flox.features.compose = true;
+        flox.features.set_compose(true);
 
         let mut dep = new_path_environment(&flox, indoc! {r#"
             version = 1

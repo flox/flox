@@ -2940,7 +2940,7 @@ mod test {
     fn managed_can_include_managed() {
         let owner = "owner".parse().unwrap();
         let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
-        flox.features.compose = true;
+        flox.features.set_compose(true);
 
         // Create dep
         let dep_path = tempdir.path().join("dep");
