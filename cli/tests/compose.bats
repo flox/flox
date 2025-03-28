@@ -167,8 +167,9 @@ EOF
   run "$FLOX_BIN" include upgrade -d composer
   assert_success
   assert_output - <<EOF
-✅ Upgraded included environment 'included1'
-✅ Upgraded included environment 'included2'
+✅ Upgraded 'composer' with latest changes to:
+- 'included1'
+- 'included2'
 EOF
 
   run "$FLOX_BIN" list -c -d composer
@@ -177,14 +178,33 @@ EOF
   assert_output --partial 'included2 = "v2"'
 }
 
-@test "include upgrade can upgrade a single included environment" {
+@test "include upgrade can get latest changes for a single included environment" {
   setup_composer_and_two_includes
   edit_both_included_environments
 
   run "$FLOX_BIN" include upgrade -d composer included1
   assert_success
   assert_output - <<EOF
-✅ Upgraded included environment 'included1'
+✅ Upgraded 'composer' with latest changes to:
+- 'included1'
+EOF
+
+  run "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_output --partial 'included1 = "v2"'
+  assert_output --partial 'included2 = "v1"'
+}
+
+@test "include upgrade reports which included environments have changes" {
+  setup_composer_and_two_includes
+  edit_included1
+
+  run "$FLOX_BIN" include upgrade -d composer included1 included2
+  assert_success
+  assert_output - <<EOF
+✅ Upgraded 'composer' with latest changes to:
+- 'included1'
+ℹ️ Included environment 'included2' has no changes.
 EOF
 
   run "$FLOX_BIN" list -c -d composer

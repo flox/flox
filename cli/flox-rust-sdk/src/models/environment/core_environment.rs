@@ -625,7 +625,7 @@ impl CoreEnvironment<ReadOnly> {
         Ok(result)
     }
 
-    /// Upgrade included environments in an environment.
+    /// Upgrade environment with latest changes to included environments.
     ///
     /// This just delegates to Lockfile::lock_manifest_with_include_upgrades and
     /// runs locking boilerplate.

@@ -133,7 +133,7 @@ pub trait Environment: Send {
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError>;
 
-    /// Upgrade environments included in the environment
+    /// Upgrade environment with latest changes to included environments.
     fn include_upgrade(
         &mut self,
         flox: &Flox,

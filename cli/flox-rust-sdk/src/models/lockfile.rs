@@ -658,7 +658,7 @@ impl Lockfile {
         if manifest.include.environments.is_empty() {
             if to_upgrade.is_some() {
                 return Err(RecoverableMergeError::Catchall(
-                    "cannot upgrade included environments in an environment without any included environments".to_string(),
+                    "environment has no included environments".to_string(),
                 ));
             }
             return Ok((manifest.clone(), None));
@@ -774,7 +774,7 @@ impl Lockfile {
         if let Some(to_upgrade) = &to_upgrade {
             if let Some(unused_include_to_upgrade) = to_upgrade.first() {
                 return Err(RecoverableMergeError::Catchall(format!(
-                    "unknown included environment to upgrade '{}'",
+                    "unknown included environment to check for changes '{}'",
                     unused_include_to_upgrade
                 )));
             }
