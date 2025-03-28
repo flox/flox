@@ -188,13 +188,11 @@ EOF
   # TODO: Unspecified tables and empty vecs should be omitted.
   assert_equal "$output" 'version = 1
 
-[install.hello]
-pkg-path = "hello"
+[install]
+hello.pkg-path = "hello"
 
-[options.allow]
-licenses = []
-
-[options.semver]'
+[options]
+allow.licenses = []'
   assert_equal "$stderr" 'ℹ️ Displaying merged manifest.'
 }
 
