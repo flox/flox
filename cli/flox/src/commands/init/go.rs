@@ -22,6 +22,7 @@ use crate::utils::message;
 
 const GO_MOD_FILENAME: &str = "go.mod";
 const GO_WORK_FILENAME: &str = "go.work";
+const GO_WORK_ENV: &str = "GOWORK";
 
 const GO_HOOK: &str = indoc! {"
     # Point GOENV to Flox environment cache
@@ -56,10 +57,15 @@ impl Go {
     }
 
     /// Determines which [GoModuleSystemKind] is being used.
-    /// Since the [GO_WORK_FILENAME] file declares a multiple module based workspace, it takes
+    /// Since the [GO_WORK_ENV] and [GO_WORK_FILENAME] file declares a multiple module based workspace, it takes
     /// precedence over any other [GO_MOD_FILENAME] file that could possibly be found.
     async fn detect_module_system(flox: &Flox, path: &Path) -> Result<Option<GoModuleSystemKind>> {
         debug!(path = traceable_path(path), "detecting go module system");
+
+        if let Some(go_work) = GoWorkSystem::try_new_from_env_var(flox).await? {
+            return Ok(Some(GoModuleSystemKind::Workspace(go_work)));
+        }
+
         if let Some(go_work) = GoWorkSystem::try_new_from_path(flox, path).await? {
             return Ok(Some(GoModuleSystemKind::Workspace(go_work)));
         }
@@ -79,13 +85,13 @@ impl InitHook for Go {
         let module_system = self.module_system.get_system();
 
         message::plain(formatdoc! {"
-            Flox detected a {} file in the current directory.
+            {}
 
             Go projects typically need:
             * Go
             * A shell hook to apply environment variables
 
-        ", module_system.get_filename()});
+        ", module_system.get_detection_description()});
 
         let message = formatdoc! {"
         Would you like Flox to apply the standard Go environment?
@@ -188,12 +194,22 @@ trait GoModuleSystemMode {
     where
         Self: Sized;
 
+    /// Detects and returns the possible instance of a Go module or workspace system
+    /// from an environment variable. Returns None if the environment variable is not set,
+    /// points to an invalid file, or doesn't contain valid Go version information.
+    async fn try_new_from_env_var(flox: &Flox) -> Result<Option<Self>>
+    where
+        Self: Sized;
+
     /// Returns the filename of the module system mode. It can either be `go.mod`
     /// (for single module systems) or `go.work` (for multi-module workspace systems).
     fn get_filename(&self) -> &'static str;
 
     /// Returns the provided version obtained from the module system file.
     fn get_version(&self) -> ProvidedVersion;
+
+    /// Returns a user-friendly description of how the Go module system was detected
+    fn get_detection_description(&self) -> String;
 }
 
 /// Represents the single-module system from the content of `go.mod` files.
@@ -228,6 +244,13 @@ impl GoModuleSystemMode for GoModSystem {
         Self::try_new_from_content(flox, &mod_content).await
     }
 
+    // This method returns `None` since there is currently (as of Go 1.23) no
+    // support for using different go modules based on environment.
+    async fn try_new_from_env_var(_flox: &Flox) -> Result<Option<Self>> {
+        debug!("skipping building go mod system from env variables");
+        Ok(None)
+    }
+
     #[inline(always)]
     fn get_filename(&self) -> &'static str {
         GO_MOD_FILENAME
@@ -235,6 +258,13 @@ impl GoModuleSystemMode for GoModSystem {
 
     fn get_version(&self) -> ProvidedVersion {
         self.version.clone()
+    }
+
+    fn get_detection_description(&self) -> String {
+        format!(
+            "Flox detected a {} module file in the current directory.",
+            self.get_filename()
+        )
     }
 }
 
@@ -254,8 +284,18 @@ impl GoModuleSystemMode for GoWorkSystem {
         }
     }
 
-    /// This method returns `None` if [GO_WORK_FILENAME] is a directory.
+    /// This method returns `None` if [GO_WORK_FILENAME] is a directory
+    /// or if [GO_WORK_ENV] is set to "off".
     async fn try_new_from_path(flox: &Flox, path: &Path) -> Result<Option<Self>> {
+        // Check if Go workspaces are "off"
+        if std::env::var(GO_WORK_ENV)
+            .map(|value| value == "off")
+            .unwrap_or(false)
+        {
+            debug!("{GO_WORK_ENV} set to 'off', skipping workspace detection");
+            return Ok(None);
+        }
+
         let work_path = path.join(GO_WORK_FILENAME);
         if !work_path.exists() || work_path.is_dir() {
             debug!(path = traceable_path(&work_path), "go.work not located");
@@ -266,6 +306,45 @@ impl GoModuleSystemMode for GoWorkSystem {
         Self::try_new_from_content(flox, &work_content).await
     }
 
+    /// This method returns `None` if [GO_WORK_ENV] is set to "off".
+    async fn try_new_from_env_var(flox: &Flox) -> Result<Option<Self>> {
+        let Ok(go_work_path) = std::env::var(GO_WORK_ENV) else {
+            debug!("{GO_WORK_ENV} environment variable not set");
+            return Ok(None);
+        };
+
+        // "off" is a special value for GOWORK:
+        // when set to "off", it's expected that Go is in a "single module context"
+        // and should ignore "go.work" files.
+        // Reference: https://go.dev/ref/mod#workspaces
+        if go_work_path == "off" {
+            debug!("{GO_WORK_ENV} set to 'off', skipping workspace detection");
+            return Ok(None);
+        }
+
+        let path = Path::new(&go_work_path);
+        if !path.exists() || path.is_dir() {
+            debug!(
+                path = traceable_path(path),
+                "{GO_WORK_ENV} points to invalid path"
+            );
+            return Ok(None);
+        }
+
+        // Validate the .work extension
+        if path.extension().is_some_and(|ext| ext == "work") {
+            debug!(path = traceable_path(path), "using {GO_WORK_ENV} file");
+            let content = fs::read_to_string(path)?;
+            Self::try_new_from_content(flox, &content).await
+        } else {
+            debug!(
+                path = traceable_path(path),
+                "{GO_WORK_ENV} file has invalid extension"
+            );
+            Ok(None)
+        }
+    }
+
     #[inline(always)]
     fn get_filename(&self) -> &'static str {
         GO_WORK_FILENAME
@@ -273,6 +352,23 @@ impl GoModuleSystemMode for GoWorkSystem {
 
     fn get_version(&self) -> ProvidedVersion {
         self.version.clone()
+    }
+
+    fn get_detection_description(&self) -> String {
+        // Check if this instance was created from the GOWORK environment variable
+        if let Ok(gowork_path) = std::env::var(GO_WORK_ENV) {
+            if gowork_path != "off" {
+                return format!(
+                    "Flox detected the GOWORK environment variable pointing to a {} file.",
+                    self.get_filename()
+                );
+            }
+        }
+
+        format!(
+            "Flox detected a {} workspace file in the current directory.",
+            self.get_filename()
+        )
     }
 }
 
@@ -400,6 +496,47 @@ mod tests {
             .await
             .unwrap();
         assert!(module_system.is_none());
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn go_work_system_from_env_var_with_catalog() {
+        let (mut flox, temp_dir_handle) = flox_instance();
+
+        // Create a custom go workspace file that does not follow common "go.work" convention
+        let gowork_path = temp_dir_handle.path().join("custom.work");
+        std::fs::write(&gowork_path, "go 1.21.0\n").unwrap();
+        let go_work_env = ("GOWORK", Some(gowork_path.to_str().unwrap()));
+
+        temp_env::async_with_vars([go_work_env], async move {
+            if let Client::Mock(ref mut client) = flox.catalog_client {
+                client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                    "go_group",
+                    &System::from("aarch64-darwin"),
+                    "go",
+                    "go",
+                    "1.23.0",
+                )]);
+            }
+
+            let go_work = GoWorkSystem::try_new_from_env_var(&flox).await.unwrap();
+            assert!(go_work.is_some());
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn go_work_system_from_env_var_off_returns_none() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        // Go workspaces are off and should return "None"
+        let go_work_env = ("GOWORK", Some("off"));
+        temp_env::async_with_vars([go_work_env], async move {
+            let go_work = GoWorkSystem::try_new_from_env_var(&flox).await.unwrap();
+            assert!(go_work.is_none());
+        })
+        .await;
     }
 
     #[tokio::test]

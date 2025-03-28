@@ -62,7 +62,7 @@ proptest.workspace = true
 proptest-derive.workspace = true
 serde_with.workspace = true
 serial_test.workspace = true
-temp-env.workspace = true
+temp-env = { workspace = true, features = ["async_closure"] }
 tempfile.workspace = true
 toml.workspace = true
 flox-rust-sdk = { workspace = true, features = ["tests"] }
