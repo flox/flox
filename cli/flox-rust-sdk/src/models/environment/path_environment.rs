@@ -710,7 +710,10 @@ pub mod tests {
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
-    use crate::models::environment::path_environment::test_helpers::new_path_environment;
+    use crate::models::environment::path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_in,
+    };
     use crate::models::lockfile::RecoverableMergeError;
     use crate::models::manifest::typed::test::manifest_without_install_or_include;
 
@@ -903,5 +906,52 @@ pub mod tests {
         };
 
         assert_eq!(message, "environment has no included environments",);
+    }
+
+    /// include_upgrade()errors when specified included environment doesn't exist
+    #[test]
+    fn include_upgrade_errors_when_included_environment_does_not_exist() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.set_compose(true);
+
+        // Create dep
+        let dep_path = tempdir.path().join("dep");
+        let dep_manifest_contents = indoc! {r#"
+            version = 1
+            [vars]
+            foo = "v1"
+            "#};
+        fs::create_dir(&dep_path).unwrap();
+        let mut dep = new_path_environment_in(&flox, dep_manifest_contents, &dep_path);
+        dep.lockfile(&flox).unwrap();
+
+        // Create composer
+        let composer_manifest_contents = indoc! {r#"
+            version = 1
+            [include]
+            environments = [
+              { dir = "dep" },
+            ]
+            "#};
+        let composer_path = tempdir.path();
+        let mut composer =
+            new_path_environment_in(&flox, composer_manifest_contents, composer_path);
+        let lockfile = composer.lockfile(&flox).unwrap();
+
+        assert_eq!(lockfile.manifest.vars.0["foo"], "v1");
+
+        // Call include_upgrade() with a name of an included environment that does not exist
+        let err = composer
+            .include_upgrade(&flox, vec!["does_not_exist".to_string()])
+            .unwrap_err();
+
+        let EnvironmentError::Recoverable(RecoverableMergeError::Catchall(message)) = err else {
+            panic!("expected Catchall error, got: {:?}", err)
+        };
+
+        assert_eq!(
+            message,
+            "unknown included environment to check for changes 'does_not_exist'"
+        );
     }
 }
