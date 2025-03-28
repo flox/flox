@@ -30,8 +30,8 @@ pub struct Publish {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    #[bpaf(external(cache_args), optional)]
-    cache: Option<CacheArgs>,
+    #[bpaf(external(cache_args))]
+    cache: CacheArgs,
 
     /// Only publish the metadata of the package, and do not upload the artifact
     /// itself.
@@ -44,11 +44,11 @@ pub struct Publish {
     publish_target: PublishTarget,
 }
 
-#[derive(Debug, Bpaf, Clone)]
+#[derive(Debug, Bpaf, Clone, Default)]
 struct CacheArgs {
     /// URL of store to copy packages to.
     /// Takes precedence over a value from 'flox config'.
-    #[bpaf(long, argument("URL"))]
+    #[bpaf(long, argument("URL"), hide)]
     store_url: Option<Url>,
 
     /// Path of the key file used to sign packages before copying.
@@ -88,7 +88,7 @@ impl Publish {
         mut env: ConcreteEnvironment,
         package: String,
         metadata_only: bool,
-        cache_args: Option<CacheArgs>,
+        cache_args: CacheArgs,
     ) -> Result<()> {
         if !check_target_exists(&env.lockfile(&flox)?, &package)? {
             bail!("Package '{}' not found in environment", package);
@@ -113,7 +113,36 @@ impl Publish {
         let cache = if metadata_only {
             None
         } else {
+            // Get the ingress URI for this catalog if it has one configured.
             let ingress_uri = flox.catalog_client.get_ingress_uri(&catalog_name).await?;
+            let catalog_has_ingress_uri = ingress_uri.is_some();
+
+            // Determine whether a signing key was supplied.
+            let no_key_in_config = config
+                .flox
+                .publish
+                .as_ref()
+                .and_then(|p_conf| p_conf.signing_key.as_ref())
+                .is_none();
+            let no_key_arg = cache_args.signing_private_key.is_none();
+            let no_key_supplied = no_key_in_config && no_key_arg;
+
+            // It is an error (for now) if a user has a catalog configured that accepts
+            // uploads, but the user has attempted to publish without a signing key,
+            // and has not explicitly asked to only upload metadata.
+            if catalog_has_ingress_uri && no_key_supplied && !metadata_only {
+                let msg = formatdoc! { "
+                   A signing key is required to upload artifacts.
+
+                   You can supply a signing key by either:
+                   - Providing a path to a key with the '--signing-private-key' option.
+                   - Setting it in the config via 'flox config --set publish.signing-key <path>'
+
+                   Or you can publish without uploading artifacts via the '--metadata-only' option.
+                "};
+                bail!(msg);
+            }
+
             merge_cache_options(config.flox.publish, cache_args, ingress_uri)?
         };
         let publish_provider = PublishProvider::<&NixCopyCache> {
@@ -161,16 +190,12 @@ fn check_target_exists(lockfile: &Lockfile, package: &str) -> Result<bool> {
 /// Values must be mutually present or absent.
 fn merge_cache_options(
     config: Option<PublishConfig>,
-    args: Option<CacheArgs>,
+    args: CacheArgs,
     ingress_uri: Option<Url>,
 ) -> Result<Option<NixCopyCache>> {
-    let url = args
-        .as_ref()
-        .and_then(|args| args.store_url.clone())
-        .or(ingress_uri);
+    let url = args.store_url.or(ingress_uri);
     let key_file = args
-        .as_ref()
-        .and_then(|args| args.signing_private_key.clone())
+        .signing_private_key
         .or(config.as_ref().and_then(|cfg| cfg.signing_key.clone()));
 
     match (url, key_file) {
@@ -191,7 +216,7 @@ mod tests {
         struct TestCase {
             name: &'static str,
             config: Option<PublishConfig>,
-            args: Option<CacheArgs>,
+            args: CacheArgs,
             ingress_uri: Option<Url>,
             expected: Option<NixCopyCache>,
         }
@@ -205,17 +230,20 @@ mod tests {
             TestCase {
                 name: "None when all None",
                 config: None,
-                args: None,
+                args: CacheArgs {
+                    store_url: None,
+                    signing_private_key: None,
+                },
                 ingress_uri: None,
                 expected: None,
             },
             TestCase {
                 name: "args when ingress_uri None",
                 config: None,
-                args: Some(CacheArgs {
+                args: CacheArgs {
                     store_url: Some(url_args.clone()),
                     signing_private_key: Some(key_args.clone()),
-                }),
+                },
                 ingress_uri: None,
                 expected: Some(NixCopyCache {
                     url: url_args.clone(),
@@ -227,7 +255,10 @@ mod tests {
                 config: Some(PublishConfig {
                     signing_key: Some(key_config.clone()),
                 }),
-                args: None,
+                args: CacheArgs {
+                    store_url: None,
+                    signing_private_key: None,
+                },
                 ingress_uri: Some(url_response.clone()),
                 expected: Some(NixCopyCache {
                     url: url_response.clone(),
@@ -239,10 +270,10 @@ mod tests {
                 config: Some(PublishConfig {
                     signing_key: Some(key_config.clone()),
                 }),
-                args: Some(CacheArgs {
+                args: CacheArgs {
                     store_url: Some(url_args.clone()),
                     signing_private_key: Some(key_args.clone()),
-                }),
+                },
                 ingress_uri: Some(url_response.clone()),
                 expected: Some(NixCopyCache {
                     url: url_args.clone(),
@@ -252,10 +283,10 @@ mod tests {
             TestCase {
                 name: "mix of url from response and key from args",
                 config: Some(PublishConfig { signing_key: None }),
-                args: Some(CacheArgs {
+                args: CacheArgs {
                     store_url: None,
                     signing_private_key: Some(key_args.clone()),
-                }),
+                },
                 ingress_uri: Some(url_response.clone()),
                 expected: Some(NixCopyCache {
                     url: url_response.clone(),
