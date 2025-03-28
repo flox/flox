@@ -311,10 +311,16 @@ impl Config {
         let reload = false;
 
         let final_config = Self::raw_config(reload)?;
-        let cli_config: Config = final_config
+        let mut cli_config: Config = final_config
             .to_owned()
             .try_deserialize()
             .context("Could not parse config")?;
+        #[allow(deprecated, reason = "Usage inside this module is okay")]
+        if let Some(features) = cli_config.features.as_mut() {
+            if features.in_qa {
+                features.compose = true;
+            }
+        }
         Ok(cli_config)
     }
 
