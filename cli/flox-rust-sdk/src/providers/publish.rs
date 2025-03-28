@@ -5,7 +5,7 @@ use std::str::FromStr;
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
-use tracing::{info, instrument};
+use tracing::instrument;
 use url::Url;
 
 use super::build::{BuildResult, BuildResults, ManifestBuilder};
@@ -346,10 +346,10 @@ pub fn check_build_metadata(
                 panic!("expected build to succeed");
             },
             build::Output::Stdout(line) => {
-                info!("stdout: {line}");
+                println!("{line}");
             },
             build::Output::Stderr(line) => {
-                info!("stderr: {line}");
+                eprintln!("{line}");
             },
         }
     }
