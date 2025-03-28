@@ -7,6 +7,7 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::Inner;
 use flox_rust_sdk::providers::build::FloxBuildMk;
+use flox_rust_sdk::providers::catalog::Client;
 use flox_rust_sdk::providers::publish::{
     NixCopyCache,
     PublishProvider,
@@ -44,7 +45,7 @@ pub struct Publish {
 struct CacheArgs {
     /// URL of store to copy packages to.
     /// Takes precedence over a value from 'flox config'.
-    #[bpaf(long, argument("URL"))]
+    #[bpaf(long, hide)]
     store_url: Option<Url>,
 
     /// Path of the key file used to sign packages before copying.
@@ -101,20 +102,28 @@ impl Publish {
         let build_metadata =
             check_build_metadata(&flox, &env_metadata, &path_env, &FloxBuildMk, &package)?;
 
+        let token = ensure_floxhub_token(&mut flox).await?;
+
+        // TODO: this we should be able to provide via cli
+        let catalog_name = token.handle().to_string();
+
         let cache = if no_store {
             None
         } else {
-            merge_cache_options(config.flox.publish, cache_args)?
+            merge_cache_options(
+                &catalog_name,
+                &package,
+                &flox.catalog_client,
+                config.flox.publish,
+                cache_args,
+            )
+            .await?
         };
         let publish_provider = PublishProvider::<&NixCopyCache> {
             env_metadata,
             build_metadata,
             cache: cache.as_ref(),
         };
-
-        let token = ensure_floxhub_token(&mut flox).await?;
-
-        let catalog_name = token.handle().to_string();
 
         debug!("publishing package: {}", &package);
         match publish_provider
@@ -153,14 +162,27 @@ fn check_target_exists(lockfile: &Lockfile, package: &str) -> Result<bool> {
 
 /// Merge cache values from config and args, with args taking precedence.
 /// Values must be mutually present or absent.
-fn merge_cache_options(
+async fn merge_cache_options(
+    catalog_name: &str,
+    package_name: &str,
+    catalog_client: &Client,
     config: Option<PublishConfig>,
     args: Option<CacheArgs>,
 ) -> Result<Option<NixCopyCache>> {
     let url = args
         .as_ref()
         .and_then(|args| args.store_url.clone())
-        .or(config.as_ref().and_then(|cfg| cfg.store_url.clone()));
+        .or(config.as_ref().and_then(|cfg| cfg.store_url.clone()))
+        .or_else(|| async {
+            // Fetch the url from the catalog
+            let body = None;
+            let result = catalog_client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(
+                &catalog_name,
+                &package_name,
+                &body,
+            ).await?;
+            None
+        }.await);
     let key_file = args
         .as_ref()
         .and_then(|args| args.signing_key.clone())
