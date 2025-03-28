@@ -316,7 +316,7 @@ impl Environment for RemoteEnvironment {
         Ok(result)
     }
 
-    /// Upgrade environments included in the environment
+    /// Upgrade environment with latest changes to included environments.
     fn include_upgrade(
         &mut self,
         flox: &Flox,

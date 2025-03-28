@@ -369,7 +369,7 @@ impl Environment for ManagedEnvironment {
         Ok(result)
     }
 
-    /// Upgrade environments included in the environment
+    /// Upgrade environment with latest changes to included environments.
     fn include_upgrade(
         &mut self,
         flox: &Flox,
@@ -389,10 +389,10 @@ impl Environment for ManagedEnvironment {
         }
 
         let metadata = if to_upgrade.is_empty() {
-            "upgraded all included environments".to_string()
+            "upgraded environment with latest changes to all included environments".to_string()
         } else {
             format!(
-                "upgraded included environments: {}",
+                "upgraded environment with latest change to included environments: {}",
                 to_upgrade.iter().join(", ")
             )
         };

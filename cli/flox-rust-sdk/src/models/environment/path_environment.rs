@@ -282,7 +282,7 @@ impl Environment for PathEnvironment {
         Ok(result)
     }
 
-    /// Upgrade environments included in the environment
+    /// Upgrade environment with latest changes to included environments.
     fn include_upgrade(
         &mut self,
         flox: &Flox,
@@ -902,9 +902,6 @@ pub mod tests {
             panic!("expected Catchall error, got: {:?}", err)
         };
 
-        assert_eq!(
-            message,
-            "cannot upgrade included environments in an environment without any included environments",
-        );
+        assert_eq!(message, "environment has no included environments",);
     }
 }
