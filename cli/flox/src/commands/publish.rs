@@ -7,6 +7,7 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::Inner;
 use flox_rust_sdk::providers::build::FloxBuildMk;
+use flox_rust_sdk::providers::catalog::ClientTrait;
 use flox_rust_sdk::providers::publish::{
     NixCopyCache,
     PublishProvider,
@@ -90,6 +91,11 @@ impl Publish {
             bail!("Package '{}' not found in environment", package);
         }
 
+        // Fail as early as possible if the user isn't authenticated or doesn't
+        // belong to an org with a catalog.
+        let token = ensure_floxhub_token(&mut flox).await?;
+        let catalog_name = token.handle().to_string();
+
         let path_env = match env {
             ConcreteEnvironment::Path(path_env) => path_env,
             _ => bail!("Unsupported environment type"),
@@ -104,17 +110,14 @@ impl Publish {
         let cache = if no_store {
             None
         } else {
-            merge_cache_options(config.flox.publish, cache_args)?
+            let ingress_uri = flox.catalog_client.get_ingress_uri(&catalog_name).await?;
+            merge_cache_options(config.flox.publish, cache_args, ingress_uri)?
         };
         let publish_provider = PublishProvider::<&NixCopyCache> {
             env_metadata,
             build_metadata,
             cache: cache.as_ref(),
         };
-
-        let token = ensure_floxhub_token(&mut flox).await?;
-
-        let catalog_name = token.handle().to_string();
 
         debug!("publishing package: {}", &package);
         match publish_provider
@@ -156,11 +159,12 @@ fn check_target_exists(lockfile: &Lockfile, package: &str) -> Result<bool> {
 fn merge_cache_options(
     config: Option<PublishConfig>,
     args: Option<CacheArgs>,
+    ingress_uri: Option<Url>,
 ) -> Result<Option<NixCopyCache>> {
     let url = args
         .as_ref()
         .and_then(|args| args.store_url.clone())
-        .or(config.as_ref().and_then(|cfg| cfg.store_url.clone()));
+        .or(ingress_uri);
     let key_file = args
         .as_ref()
         .and_then(|args| args.signing_key.clone())
@@ -185,72 +189,73 @@ mod tests {
             name: &'static str,
             config: Option<PublishConfig>,
             args: Option<CacheArgs>,
+            ingress_uri: Option<Url>,
             expected: Option<NixCopyCache>,
         }
 
         let url_args = Url::parse("http://example.com/args").unwrap();
-        let url_config = Url::parse("http://example.com/config").unwrap();
+        let url_response = Url::parse("http://example.com/response").unwrap();
         let key_args = PathBuf::from("args.key");
         let key_config = PathBuf::from("config.key");
 
         let test_cases = vec![
             TestCase {
-                name: "None when both None",
+                name: "None when all None",
                 config: None,
                 args: None,
+                ingress_uri: None,
                 expected: None,
             },
             TestCase {
-                name: "args when config None",
+                name: "args when ingress_uri None",
                 config: None,
                 args: Some(CacheArgs {
                     store_url: Some(url_args.clone()),
                     signing_key: Some(key_args.clone()),
                 }),
+                ingress_uri: None,
                 expected: Some(NixCopyCache {
                     url: url_args.clone(),
                     key_file: key_args.clone(),
                 }),
             },
             TestCase {
-                name: "config when args None",
+                name: "ingress_uri when args None",
                 config: Some(PublishConfig {
-                    store_url: Some(url_config.clone()),
                     signing_key: Some(key_config.clone()),
                 }),
                 args: None,
+                ingress_uri: Some(url_response.clone()),
                 expected: Some(NixCopyCache {
-                    url: url_config.clone(),
+                    url: url_response.clone(),
                     key_file: key_config.clone(),
                 }),
             },
             TestCase {
                 name: "args when both Some",
                 config: Some(PublishConfig {
-                    store_url: Some(url_config.clone()),
                     signing_key: Some(key_config.clone()),
                 }),
                 args: Some(CacheArgs {
                     store_url: Some(url_args.clone()),
                     signing_key: Some(key_args.clone()),
                 }),
+                ingress_uri: Some(url_response.clone()),
                 expected: Some(NixCopyCache {
                     url: url_args.clone(),
                     key_file: key_args.clone(),
                 }),
             },
             TestCase {
-                name: "mix of url from config and key from args",
-                config: Some(PublishConfig {
-                    store_url: Some(url_config.clone()),
-                    signing_key: None,
-                }),
+                name: "mix of url from response and key from args",
+                config: Some(PublishConfig { signing_key: None }),
                 args: Some(CacheArgs {
                     store_url: None,
                     signing_key: Some(key_args.clone()),
                 }),
+                ingress_uri: Some(url_response.clone()),
                 expected: Some(NixCopyCache {
-                    url: url_config.clone(),
+                    url: url_response.clone(),
                     key_file: key_args.clone(),
                 }),
             },
@@ -258,46 +263,10 @@ mod tests {
 
         for tc in test_cases {
             assert_eq!(
-                merge_cache_options(tc.config, tc.args).unwrap(),
+                merge_cache_options(tc.config, tc.args, tc.ingress_uri).unwrap(),
                 tc.expected,
                 "test case: {}",
                 tc.name
-            );
-        }
-    }
-
-    #[test]
-    fn test_merge_cache_options_error() {
-        let url = Url::parse("http://example.com").unwrap();
-        let key = PathBuf::from("key");
-
-        let test_cases = vec![
-            (
-                Some(PublishConfig {
-                    store_url: Some(url.clone()),
-                    signing_key: None,
-                }),
-                Some(CacheArgs {
-                    store_url: Some(url.clone()),
-                    signing_key: None,
-                }),
-            ),
-            (
-                Some(PublishConfig {
-                    store_url: None,
-                    signing_key: Some(key.clone()),
-                }),
-                Some(CacheArgs {
-                    store_url: None,
-                    signing_key: Some(key.clone()),
-                }),
-            ),
-        ];
-
-        for (config, args) in test_cases {
-            assert_eq!(
-                merge_cache_options(config, args).unwrap_err().to_string(),
-                "cache URL and key are mutually required options"
             );
         }
     }
