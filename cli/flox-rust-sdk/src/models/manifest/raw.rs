@@ -60,7 +60,7 @@ impl RawManifest {
         Self::add_profile_section(&mut manifest, customization);
         Self::add_services_section(&mut manifest);
 
-        if features.compose {
+        if features.compose() {
             Self::add_include_section(&mut manifest);
         }
 
@@ -310,7 +310,7 @@ impl RawManifest {
 
         include_table.decor_mut().set_prefix(indoc! {r#"
 
-                
+
                  ## Include ----------------------------------------------------------
                  ## ... environments to create a composed environment
                  ## ------------------------------------------------------------------

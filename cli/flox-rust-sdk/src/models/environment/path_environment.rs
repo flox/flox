@@ -728,7 +728,7 @@ pub mod tests {
         )
             .prop_map(|(manifests, names, dirs)| {
                 let (mut flox, tempdir) = flox_instance();
-                flox.features.compose = true;
+                flox.features.set_compose(true);
 
                 let mut environments = vec![];
                 for (manifest, name, dir) in izip!(&manifests, &names, &dirs) {
@@ -886,7 +886,7 @@ pub mod tests {
     #[test]
     fn include_upgrade_errors_without_includes() {
         let (mut flox, _tempdir) = flox_instance();
-        flox.features.compose = true;
+        flox.features.set_compose(true);
 
         // Create environment
         let manifest_contents = indoc! {r#"
