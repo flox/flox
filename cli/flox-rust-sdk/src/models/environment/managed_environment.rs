@@ -2960,13 +2960,10 @@ mod test {
         );
 
         // Create composer, which locks implicitly
+        // Create environment _without_ including `dep`,
+        // because _pushing_ an environment with local imports is not allowed.
         let composer_manifest_contents = indoc! {r#"
         version = 1
-
-        [include]
-        environments = [
-          { dir = "dep" },
-        ]
         "#};
 
         let mut composer = mock_managed_environment_in(
@@ -2976,6 +2973,20 @@ mod test {
             tempdir.path(),
             Some("composer"),
         );
+
+        // Add an include of an environment by local path
+        let composer_manifest_contents_with_include = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep" },
+        ]
+        "#};
+
+        composer
+            .edit(&flox, composer_manifest_contents_with_include.to_string())
+            .unwrap();
 
         // Check lockfile
         let lockfile = composer.lockfile(&flox).unwrap();
