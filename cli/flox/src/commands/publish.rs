@@ -33,9 +33,12 @@ pub struct Publish {
     #[bpaf(external(cache_args), optional)]
     cache: Option<CacheArgs>,
 
-    /// Do not copy packages to a store irrespective of other config or args.
-    #[bpaf(long, hide)]
-    no_store: bool,
+    /// Only publish the metadata of the package, and do not upload the artifact
+    /// itself.
+    ///
+    /// With this option present, a signing key is not required.
+    #[bpaf(long)]
+    metadata_only: bool,
 
     #[bpaf(external(publish_target))]
     publish_target: PublishTarget,
@@ -75,7 +78,7 @@ impl Publish {
             .environment
             .detect_concrete_environment(&flox, "Publish")?;
 
-        Self::publish(config, flox, env, target, self.no_store, self.cache).await
+        Self::publish(config, flox, env, target, self.metadata_only, self.cache).await
     }
 
     #[instrument(name = "publish", skip_all, fields(package))]
@@ -84,7 +87,7 @@ impl Publish {
         mut flox: Flox,
         mut env: ConcreteEnvironment,
         package: String,
-        no_store: bool,
+        metadata_only: bool,
         cache_args: Option<CacheArgs>,
     ) -> Result<()> {
         if !check_target_exists(&env.lockfile(&flox)?, &package)? {
@@ -107,7 +110,7 @@ impl Publish {
         let build_metadata =
             check_build_metadata(&flox, &env_metadata, &path_env, &FloxBuildMk, &package)?;
 
-        let cache = if no_store {
+        let cache = if metadata_only {
             None
         } else {
             let ingress_uri = flox.catalog_client.get_ingress_uri(&catalog_name).await?;
