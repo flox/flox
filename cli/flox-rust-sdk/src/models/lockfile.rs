@@ -1808,6 +1808,7 @@ pub(crate) mod tests {
         MsgAttrPathNotFoundSystemsNotOnSamePage,
         MsgGeneral,
         MsgUnknown,
+        PublishResponse,
         ResolutionMessage,
         SearchError,
         UserBuildPublish,
@@ -1823,6 +1824,7 @@ pub(crate) mod tests {
         fake_flake_installable_lock,
         fake_store_path_lock,
     };
+    use url::Url;
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
@@ -1881,7 +1883,14 @@ pub(crate) mod tests {
         async fn create_catalog(
             &self,
             _catalog_name: impl AsRef<str> + Send + Sync,
-        ) -> Result<(), CatalogClientError> {
+        ) -> Result<PublishResponse, CatalogClientError> {
+            unreachable!("create_catalog should not be called");
+        }
+
+        async fn get_ingress_uri(
+            &self,
+            _catalog_name: impl AsRef<str> + Send + Sync,
+        ) -> Result<Option<Url>, CatalogClientError> {
             unreachable!("create_catalog should not be called");
         }
 

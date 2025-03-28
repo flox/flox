@@ -29,6 +29,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 use tracing::{debug, instrument};
+use url::Url;
 
 use crate::data::System;
 use crate::flox::FLOX_VERSION;
@@ -373,6 +374,7 @@ impl MockClient {
     }
 }
 
+pub type PublishResponse = api_types::PublishResponse;
 pub type UserBuildInfo = api_types::UserBuildInput;
 pub type UserBuildPublish = api_types::UserBuildPublish;
 pub type UserDerivationInfo = api_types::UserDerivationInput;
@@ -417,7 +419,17 @@ pub trait ClientTrait {
     async fn create_catalog(
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError>;
+    ) -> Result<PublishResponse, CatalogClientError>;
+
+    /// Requests access and upload information for a package in a particular
+    /// private catalog.
+    ///
+    /// This is mainly used to get the upload URL for a package that's about
+    /// to be published.
+    async fn get_ingress_uri(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<Option<Url>, CatalogClientError>;
 
     /// Create a package within a user catalog
     async fn create_package(
@@ -598,9 +610,23 @@ impl ClientTrait for CatalogClient {
 
     async fn create_catalog(
         &self,
-        _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError> {
-        Ok(())
+        catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<PublishResponse, CatalogClientError> {
+        let catalog = str_to_catalog_name(catalog_name)?;
+        let package = str_to_package_name("unused")?;
+        // Body contents aren't important for this request.
+        let body = api_types::PublishRequest(serde_json::Map::new());
+        // This endpoint idempotently creates a catalog and gets publish info in
+        // one step, unlike `create_catalog_api_v1_catalog_catalogs_post()`, and
+        // should be consolidated in the future:
+        //
+        // - https://api.preview.flox.dev/docs#/catalogs/create_catalog_api_v1_catalog_catalogs__post
+        self.client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(&catalog, &package, &body).await.map_err(|e| match e {
+                APIError::ErrorResponse(err) => {
+                    CatalogClientError::UnexpectedError(APIError::ErrorResponse(err))
+                },
+                _ => CatalogClientError::UnexpectedError(e),
+            }).map(|resp| resp.into_inner())
     }
 
     async fn create_package(
@@ -651,24 +677,8 @@ impl ClientTrait for CatalogClient {
         package_name: impl AsRef<str> + Send + Sync,
         build_info: &UserBuildPublish,
     ) -> Result<(), CatalogClientError> {
-        let catalog = api_types::CatalogName::from_str(catalog_name.as_ref()).map_err(|_e| {
-            CatalogClientError::UnexpectedError(APIError::InvalidRequest(
-                format!(
-                    "catalog name {} does not meet API requirements.",
-                    catalog_name.as_ref()
-                )
-                .to_string(),
-            ))
-        })?;
-        let package = api_types::PackageName::from_str(package_name.as_ref()).map_err(|_e| {
-            CatalogClientError::UnexpectedError(APIError::InvalidRequest(
-                format!(
-                    "package name {} does not meet API requirements.",
-                    package_name.as_ref()
-                )
-                .to_string(),
-            ))
-        })?;
+        let catalog = str_to_catalog_name(catalog_name)?;
+        let package = str_to_package_name(package_name)?;
         self.client
             .create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_post(
                 &catalog, &package, build_info,
@@ -704,6 +714,49 @@ impl ClientTrait for CatalogClient {
         let store_info = response.into_inner();
         Ok(store_info.items)
     }
+
+    async fn get_ingress_uri(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<Option<Url>, CatalogClientError> {
+        let uri_str = self.create_catalog(catalog_name).await?.ingress_uri;
+        uri_str
+            .map(|s| Url::from_str(&s))
+            .transpose()
+            .map_err(CatalogClientError::InvalidIngressUri)
+    }
+}
+
+/// Converts a catalog name to a semantic type and performs validation that it
+/// meets the expected format.
+fn str_to_catalog_name(
+    name: impl AsRef<str>,
+) -> Result<api_types::CatalogName, CatalogClientError> {
+    api_types::CatalogName::from_str(name.as_ref()).map_err(|_e| {
+        CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+            format!(
+                "catalog name {} does not meet API requirements.",
+                name.as_ref()
+            )
+            .to_string(),
+        ))
+    })
+}
+
+/// Converts a package name to a semantic type and performs validation that it
+/// meets the expected format.
+fn str_to_package_name(
+    name: impl AsRef<str>,
+) -> Result<api_types::PackageName, CatalogClientError> {
+    api_types::PackageName::from_str(name.as_ref()).map_err(|_e| {
+        CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+            format!(
+                "package name {} does not meet API requirements.",
+                name.as_ref()
+            )
+            .to_string(),
+        ))
+    })
 }
 
 /// Collects a stream of search results into a container, returning the total count as well.
@@ -874,11 +927,18 @@ impl ClientTrait for MockClient {
         }
     }
 
+    async fn get_ingress_uri(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<Option<Url>, CatalogClientError> {
+        Ok(None)
+    }
+
     async fn create_catalog(
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError> {
-        Ok(())
+    ) -> Result<PublishResponse, CatalogClientError> {
+        Ok(api_types::PublishResponse { ingress_uri: None })
     }
 
     async fn create_package(
@@ -944,6 +1004,8 @@ pub enum CatalogClientError {
     NegativeNumberOfResults,
     #[error("resolution message error: {0}")]
     ResolutionMessage(String),
+    #[error("invalid ingress URI")]
+    InvalidIngressUri(#[source] url::ParseError),
 }
 
 #[derive(Debug, Error)]
