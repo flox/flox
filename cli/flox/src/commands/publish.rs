@@ -51,6 +51,11 @@ struct CacheArgs {
     #[bpaf(long, argument("URL"), hide)]
     store_url: Option<Url>,
 
+    /// Which catalog to publish to.
+    /// Takes precedence over the default value of the user's GitHub handle.
+    #[bpaf(short, long, argument("NAME"))]
+    catalog: Option<String>,
+
     /// Path of the key file used to sign packages before copying.
     /// Takes precedence over a value from 'flox config'.
     #[bpaf(long, argument("FILE"))]
@@ -97,7 +102,10 @@ impl Publish {
         // Fail as early as possible if the user isn't authenticated or doesn't
         // belong to an org with a catalog.
         let token = ensure_floxhub_token(&mut flox).await?;
-        let catalog_name = token.handle().to_string();
+        let catalog_name = cache_args
+            .catalog
+            .clone()
+            .unwrap_or(token.handle().to_string());
 
         let path_env = match env {
             ConcreteEnvironment::Path(path_env) => path_env,
@@ -232,6 +240,7 @@ mod tests {
                 config: None,
                 args: CacheArgs {
                     store_url: None,
+                    catalog: None,
                     signing_private_key: None,
                 },
                 ingress_uri: None,
@@ -242,6 +251,7 @@ mod tests {
                 config: None,
                 args: CacheArgs {
                     store_url: Some(url_args.clone()),
+                    catalog: None,
                     signing_private_key: Some(key_args.clone()),
                 },
                 ingress_uri: None,
@@ -257,6 +267,7 @@ mod tests {
                 }),
                 args: CacheArgs {
                     store_url: None,
+                    catalog: None,
                     signing_private_key: None,
                 },
                 ingress_uri: Some(url_response.clone()),
@@ -272,6 +283,7 @@ mod tests {
                 }),
                 args: CacheArgs {
                     store_url: Some(url_args.clone()),
+                    catalog: None,
                     signing_private_key: Some(key_args.clone()),
                 },
                 ingress_uri: Some(url_response.clone()),
@@ -285,6 +297,7 @@ mod tests {
                 config: Some(PublishConfig { signing_key: None }),
                 args: CacheArgs {
                     store_url: None,
+                    catalog: None,
                     signing_private_key: Some(key_args.clone()),
                 },
                 ingress_uri: Some(url_response.clone()),
