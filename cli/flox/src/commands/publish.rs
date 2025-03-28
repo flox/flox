@@ -107,17 +107,17 @@ impl Publish {
         // TODO: this we should be able to provide via cli
         let catalog_name = token.handle().to_string();
 
+        let remote_store_url = None;
+        //let result = catalog_client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(
+        //    &catalog_name,
+        //    &package_name,
+        //    &body,
+        //);
+
         let cache = if no_store {
             None
         } else {
-            merge_cache_options(
-                &catalog_name,
-                &package,
-                &flox.catalog_client,
-                config.flox.publish,
-                cache_args,
-            )
-            .await?
+            merge_cache_options(config.flox.publish, cache_args, remote_store_url)?
         };
         let publish_provider = PublishProvider::<&NixCopyCache> {
             env_metadata,
@@ -162,27 +162,16 @@ fn check_target_exists(lockfile: &Lockfile, package: &str) -> Result<bool> {
 
 /// Merge cache values from config and args, with args taking precedence.
 /// Values must be mutually present or absent.
-async fn merge_cache_options(
-    catalog_name: &str,
-    package_name: &str,
-    catalog_client: &Client,
+fn merge_cache_options(
     config: Option<PublishConfig>,
     args: Option<CacheArgs>,
+    remote_store_url: Option<Url>,
 ) -> Result<Option<NixCopyCache>> {
     let url = args
         .as_ref()
         .and_then(|args| args.store_url.clone())
         .or(config.as_ref().and_then(|cfg| cfg.store_url.clone()))
-        .or_else(|| async {
-            // Fetch the url from the catalog
-            let body = None;
-            let result = catalog_client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(
-                &catalog_name,
-                &package_name,
-                &body,
-            ).await?;
-            None
-        }.await);
+        .or(remote_store_url);
     let key_file = args
         .as_ref()
         .and_then(|args| args.signing_key.clone())
