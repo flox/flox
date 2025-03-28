@@ -20,7 +20,7 @@ flox-publish - Publish local packages for Flox
 flox [<general-options>] publish
      [-d=<path>]
      [--store-url]
-     [--signing-key]
+     [--signing-private-key]
      [<package>]...
 ```
 
@@ -53,7 +53,7 @@ This ensures that all files
 required to build the package are included in the git repo.
 
 Upon completion,
-the package closure is signed with the key file provided in `--signing-key`
+the package closure is signed with the key file provided in `--signing-private-key`
 and uploaded to the location specified in `--store_url`.
 
 ## After publishing
@@ -120,7 +120,7 @@ where you intend to install this packages
 signed by it.
 
 ``` bash
-# This is the key file you pass to --signing-key
+# This is the key file you pass to --signing-private-key
 nix key generate-secret --key-name mytest > mytest.key
 
 # Put this public key in `/etc/nix/nix.conf` as an `extra-trusted-public-keys` and restart the nix-daemon
@@ -154,7 +154,7 @@ for additional details.
     Currently this must be an S3 bucket like
     `s3://my-bucket`.
 
-`--signing-key <path>`
+`--signing-private-key <path>`
 :   The private key to use in signing the packge
     during upload.  This is a local file path.
 

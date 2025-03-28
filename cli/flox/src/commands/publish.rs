@@ -51,7 +51,7 @@ struct CacheArgs {
     /// Path of the key file used to sign packages before copying.
     /// Takes precedence over a value from 'flox config'.
     #[bpaf(long, argument("FILE"))]
-    signing_key: Option<PathBuf>,
+    signing_private_key: Option<PathBuf>,
 }
 
 #[derive(Debug, Bpaf, Clone)]
@@ -167,7 +167,7 @@ fn merge_cache_options(
         .or(ingress_uri);
     let key_file = args
         .as_ref()
-        .and_then(|args| args.signing_key.clone())
+        .and_then(|args| args.signing_private_key.clone())
         .or(config.as_ref().and_then(|cfg| cfg.signing_key.clone()));
 
     match (url, key_file) {
@@ -211,7 +211,7 @@ mod tests {
                 config: None,
                 args: Some(CacheArgs {
                     store_url: Some(url_args.clone()),
-                    signing_key: Some(key_args.clone()),
+                    signing_private_key: Some(key_args.clone()),
                 }),
                 ingress_uri: None,
                 expected: Some(NixCopyCache {
@@ -238,7 +238,7 @@ mod tests {
                 }),
                 args: Some(CacheArgs {
                     store_url: Some(url_args.clone()),
-                    signing_key: Some(key_args.clone()),
+                    signing_private_key: Some(key_args.clone()),
                 }),
                 ingress_uri: Some(url_response.clone()),
                 expected: Some(NixCopyCache {
@@ -251,7 +251,7 @@ mod tests {
                 config: Some(PublishConfig { signing_key: None }),
                 args: Some(CacheArgs {
                     store_url: None,
-                    signing_key: Some(key_args.clone()),
+                    signing_private_key: Some(key_args.clone()),
                 }),
                 ingress_uri: Some(url_response.clone()),
                 expected: Some(NixCopyCache {
