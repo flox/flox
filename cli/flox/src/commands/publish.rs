@@ -208,10 +208,20 @@ fn merge_cache_options(
 
     match (url, key_file) {
         (Some(url), Some(key_file)) => Ok(Some(NixCopyCache { url, key_file })),
-        (Some(_), None) | (None, Some(_)) => {
-            Err(anyhow!("cache URL and key are mutually required options"))
+        (Some(_), None) => {
+            let msg = formatdoc! { "
+               A signing key is required to upload artifacts.
+
+               You can supply a signing key by either:
+               - Providing a path to a key with the '--signing-private-key' option.
+               - Setting it in the config via 'flox config --set publish.signing-key <path>'
+
+               Or you can publish without uploading artifacts via the '--metadata-only' option.
+            "};
+            Err(anyhow!(msg))
         },
-        (None, None) => Ok(None),
+        // We don't care if you have a signing key when there's no ingress URI
+        (None, _) => Ok(None),
     }
 }
 
@@ -305,6 +315,19 @@ mod tests {
                     url: url_response.clone(),
                     key_file: key_args.clone(),
                 }),
+            },
+            TestCase {
+                name: "no error when config contains signing key without an ingress uri",
+                config: Some(PublishConfig {
+                    signing_key: Some(key_config.clone()),
+                }),
+                args: CacheArgs {
+                    store_url: None,
+                    catalog: None,
+                    signing_private_key: None,
+                },
+                ingress_uri: None,
+                expected: None,
             },
         ];
 
