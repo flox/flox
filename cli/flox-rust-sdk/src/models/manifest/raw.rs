@@ -849,6 +849,9 @@ pub fn insert_packages(
             match pkg {
                 PackageToInstall::Catalog(pkg) => {
                     descriptor_table = InlineTable::from(pkg);
+                    if is_custom_package(&pkg.id) {
+                        descriptor_table.insert("pkg-group", pkg.id.as_str().into());
+                    }
                     debug!(
                         "package newly installed: id={}, pkg-path={}",
                         pkg.id, pkg.pkg_path
@@ -898,6 +901,21 @@ pub fn insert_packages(
         },
         already_installed,
     })
+}
+
+// Custom packages are of the form "<prefix>/<suffix>" where the prefix is not
+// allowed to contain a '.' character. This is a quick and dirty way of
+// identifying custom packages using that logic.
+fn is_custom_package(install_id: &str) -> bool {
+    let parts = install_id.split('/').collect::<Vec<_>>();
+    if parts.len() < 2 {
+        return false;
+    }
+    if let Some(maybe_catalog_name) = parts.first() {
+        !maybe_catalog_name.contains('.')
+    } else {
+        false
+    }
 }
 
 /// Remove package names from the `[install]` table of a manifest based on their install IDs.
@@ -1908,5 +1926,12 @@ pub(super) mod test {
             "apache-httpd",
             dummy_system,
         );
+    }
+
+    #[test]
+    fn detects_custom_packages() {
+        assert!(is_custom_package("zmitchell/hello"));
+        assert!(!is_custom_package("hello"));
+        assert!(!is_custom_package("foo.bar/hello"));
     }
 }
