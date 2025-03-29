@@ -42,13 +42,25 @@ let
       default = null;
       description = mdDoc "The command to override the unit's script with";
     };
-    tokenFile = mkOption {
+    floxHubTokenFile = mkOption {
       type = types.nullOr types.path;
       default = null;
       example = "/run/secrets/floxhub/secret.token";
       description = mdDoc "Full path to the FloxHub token file";
     };
-    pullArgs = mkOption {
+    extraFloxArgs = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      example = "-v -v";
+      description = mdDoc "Additional arguments to pass to `flox`";
+    };
+    extraFloxActivateArgs = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      example = "--mode dev";
+      description = mdDoc "Additional arguments to pass to `flox activate`";
+    };
+    extraFloxPullArgs = mkOption {
       type = types.listOf types.str;
       default = [ ];
       example = [ "--force" ];
@@ -102,6 +114,26 @@ let
           config.flox.execStart
         else
           "${jobScripts} ${config.scriptArgs}";
+
+      # We need a wrapper to detect and set things that are hard or impossible
+      # to do at the Nix expression level. For example, services which set their
+      # DynamicUser=true will not have a home directory, so will require certain
+      # variables to be set.
+      floxWrapper = pkgs.writeScript "flox-wrapper" ''
+        #! ${pkgs.runtimeShell} -eu
+        if [ -z "''${XDG_CACHE_HOME:-}" -o \
+             -z "''${XDG_CONFIG_HOME:-}" -o \
+             -z "''${XDG_DATA_HOME:-}" -o \
+           ! -w "''${XDG_CACHE_HOME:-}" -o \
+           ! -w "''${XDG_CONFIG_HOME:-}" -o \
+           ! -w "''${XDG_DATA_HOME:-}" ]; then
+          export XDG_CACHE_HOME=/tmp/.cache
+          export XDG_DATA_HOME=/tmp/.local/share
+          export XDG_CONFIG_HOME=/tmp/.config
+        fi
+        exec -a ${cfg.package}/bin/flox ${cfg.package}/bin/flox "$@"
+      '';
+
     in
     {
       options.flox = floxModOpts;
@@ -113,23 +145,26 @@ let
               # Default service config
               {
                 Environment = [
-                  # "FLOX_DISABLE_METRICS=true"
+                  # FIXME: add flag for disabling metrics
+                  "FLOX_DISABLE_METRICS=true"
                 ];
                 # Completely override the ExecStart config
-                ExecStart = mkForce "${cfg.package}/bin/flox activate -r ${config.flox.environment} -- ${scriptAndArgs}";
+                ExecStart = mkForce "${floxWrapper} ${escapeShellArgs config.flox.extraFloxArgs} activate -r ${config.flox.environment} ${escapeShellArgs config.flox.extraFloxActivateArgs} -- ${scriptAndArgs}";
               }
+
               # Workaround so the service can pull the environment from private repositories
-              (mkIf (config.flox.tokenFile != null) {
+              (mkIf (config.flox.floxHubTokenFile != null) {
                 # TODO: update `flox auth login` to accept `--with-token` and
                 #       read from STDIN (like `gh auth`)
                 ExecStartPre = [
-                  "/bin/sh -c '${cfg.package}/bin/flox auth login --with-token < ${config.flox.token}'"
+                  "/bin/sh -c '${floxWrapper} ${escapeShellArgs config.flox.extraFloxArgs} auth login --with-token < ${config.flox.token}'"
                 ];
               })
+
               # Pull the environment at service start
               (mkIf (config.flox.pullAtServiceStart) {
                 ExecStartPre = [
-                  "${cfg.package}/bin/flox pull ${escapeShellArgs config.flox.pullArgs} -r ${config.flox.environment}"
+                  "${floxWrapper} ${escapeShellArgs config.flox.extraFloxArgs} pull -r ${config.flox.environment} ${escapeShellArgs config.flox.extraFloxPullArgs}"
                 ];
               })
             ];

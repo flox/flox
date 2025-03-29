@@ -131,18 +131,32 @@ Optional attributes:
     - _Default_: string
     - _Example_: "flox/default"
 
-* `tokenFile`
+* `floxHubTokenFile`
     Full path to the FloxHub token file.
 
     - _Type_: null or path
     - _Default_: `null`
     - _Example_: "flox/default"
 
-* `pullArgs`
+* `extraFloxArgs`
+    Additional arguments to pass to `flox`.
+
+    - _Type_: list of strings
+    - _Default_: [ ]
+    - _Example_: "-v -v"
+
+* `extraFloxActivateArgs`
+    Additional arguments to pass to `flox activate`.
+
+    - _Type_: list of strings
+    - _Default_: [ ]
+    - _Example_: "--mode dev"
+
+* `extraFloxPullArgs`
     Additional arguments to pass to `flox pull`.
 
-    - _Type_: string
-    - _Default_: `null`
+    - _Type_: list of strings
+    - _Default_: [ ]
     - _Example_: "flox/default"
 
 * `pullAtServiceStart`
@@ -217,7 +231,7 @@ This allows you to override systemd services to use Flox environments.
     }
     // lib.optionalAttrs (cfg.envName == "production") {
       flox = { # (2)
-        inherit (floxServiceAttrs) environment tokenFile; # (3)
+        inherit (floxServiceAttrs) environment floxHubTokenFile; # (3)
         execStart = "floxEM --bind ${cfg.host}:${toString cfg.port}"; # (4)
       };
     };
@@ -226,7 +240,7 @@ This allows you to override systemd services to use Flox environments.
 
 1. Note that we are still defining an `ExecStart` attribute. This is the part we'll be overriding later.
 1. Since we enabled Flox with `programs.flox.enable = true;`, we can now use the `flox` attribute within the `systemd.services.*` attributes.
-1. We get the Flox environment and a tokenFile from elsewhere. The `environment` attribute has the format of Flox environments. The `tokenFile` attribute—at the time of writing—is the path to a GitHub access token.
+1. We get the Flox environment and a floxHubTokenFile from elsewhere. The `environment` attribute has the format of Flox environments. The `floxHubTokenFile` attribute—at the time of writing—is the path to a GitHub access token.
 1. Here, we override the `ExecStart` attribute to use another command than previously defined.
 
 ### Overriding a service defined by a NixOS module
@@ -248,7 +262,7 @@ This allows you to override systemd services to use Flox environments.
   systemd.services.cowsay.flox = { # (3)
     environment = "foobar/cowsay"; # (4)
     execStart = "cowsay ${config.services.cowsay.message}"; # (5)
-    tokenFile = "/run/secrets/cowsay/github.token";
+    floxHubTokenFile = "/run/secrets/cowsay/github.token";
   };
 }
 ```
