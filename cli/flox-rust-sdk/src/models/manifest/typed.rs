@@ -21,6 +21,7 @@ use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
+use super::raw::RawManifest;
 use crate::data::System;
 use crate::providers::services::ServiceError;
 
@@ -174,6 +175,14 @@ impl Manifest {
         pkg: impl AsRef<str>,
     ) -> Result<bool, ManifestError> {
         pkg_belongs_to_non_empty_toplevel_group(pkg.as_ref(), &self.install.0)
+    }
+}
+
+impl FromStr for Manifest {
+    type Err = toml_edit::de::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        RawManifest::from_str(s)?.to_typed()
     }
 }
 
@@ -1022,6 +1031,13 @@ pub mod test {
         fn manifest_round_trip(manifest in any::<Manifest>()) {
             let toml = toml_edit::ser::to_string(&manifest).unwrap();
             let parsed = toml_edit::de::from_str::<Manifest>(&toml).unwrap();
+            prop_assert_eq!(manifest, parsed);
+        }
+
+        #[test]
+        fn manifest_from_str_round_trip(manifest in any::<Manifest>()) {
+            let toml = toml_edit::ser::to_string(&manifest).unwrap();
+            let parsed = Manifest::from_str(&toml).unwrap();
             prop_assert_eq!(manifest, parsed);
         }
     }
