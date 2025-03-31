@@ -321,9 +321,7 @@ impl CoreEnvironment<ReadOnly> {
 
     /// Uninstall packages from the environment atomically
     ///
-    /// Returns true if the environment was modified and false otherwise.
-    /// TODO: this should return a list of packages that were actually
-    /// uninstalled rather than a bool.
+    /// Returns the modified environment if there were no errors.
     pub fn uninstall(
         &mut self,
         packages: Vec<String>,
