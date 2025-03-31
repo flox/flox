@@ -14,6 +14,7 @@ let
   inherit (lib)
     escapeShellArgs
     literalExpression
+    mkBefore
     mdDoc
     mkDefault
     mkEnableOption
@@ -28,19 +29,25 @@ let
 
   floxModOpts = {
     environment = mkOption {
-      type = types.str;
+      type = types.nullOr types.str;
+      default = null;
       example = "flox/default";
       description = mdDoc "The Flox environment to use for the service";
     };
+    trustEnvironment = mkOption {
+      type = types.bool;
+      default = false;
+      description = mdDoc "Whether to trust the environment using invocation option";
+    };
     execStart = mkOption {
-      type = types.nullOr types.str;
-      default = null;
+      type = types.str;
+      default = "";
       description = mdDoc "The command to override the unit's ExecStart with";
     };
     script = mkOption {
-      type = types.nullOr types.str;
-      default = null;
-      description = mdDoc "The command to override the unit's script with";
+      type = types.str;
+      default = "";
+      description = mdDoc "A script to entirely replace the unit's script";
     };
     floxHubTokenFile = mkOption {
       type = types.nullOr types.path;
@@ -107,13 +114,20 @@ let
       ...
     }:
     let
-      jobScripts = makeJobScript "${name}-start" config.flox.script;
-      # Prefer config.flox.execStart over config.flox.script
+
+      jobScripts = makeJobScript {
+        name = "${name}-start";
+        text = if (config.flox.script != "") then config.flox.script else if (config.script != "") then config.script else "WHATEVER";
+        inherit (config) enableStrictShellChecks;
+      };
+      # Prefer config.flox.execStart over config{,.flox}.script.
       scriptAndArgs =
-        if (config.flox.execStart != null && config.flox.script == null) then
+        if (config.flox.execStart != "") then
           config.flox.execStart
+        else if (config.flox.script != "" || config.script != "") then
+          "${jobScripts} ${config.scriptArgs}"
         else
-          "${jobScripts} ${config.scriptArgs}";
+          null;
 
       # We need a wrapper to detect and set things that are hard or impossible
       # to do at the Nix expression level. For example, services which set their
@@ -134,41 +148,83 @@ let
         exec -a ${cfg.package}/bin/flox ${cfg.package}/bin/flox "$@"
       '';
 
+      floxWrapperWithArgs = escapeShellArgs ([ floxWrapper ] ++ config.flox.extraFloxArgs);
+
+      floxActivateWithArgs = escapeShellArgs (
+        [
+          floxWrapperWithArgs
+          "activate"
+          "-r"
+          config.flox.environment
+        ]
+        ++ lib.optionals config.flox.trustEnvironment [ "--trust" ]
+        ++ config.flox.extraFloxActivateArgs
+      );
+
+      floxAuthLoginWithArgs = escapeShellArgs [
+        floxWrapperWithArgs
+        "auth"
+        "login"
+        "with-token"
+        "<"
+        config.flox.floxHubTokenFile
+      ];
+
+      floxPullWithArgs = escapeShellArgs (
+        [
+          floxWrapperWithArgs
+          "pull"
+          "-r"
+          config.flox.environment
+        ]
+        ++ config.flox.extraFloxPullArgs
+      );
+
     in
     {
       options.flox = floxModOpts;
-      config =
-        mkIf
-          ((config.flox.execStart != null || config.flox.script != null) && config.flox.environment != null)
+      config = mkIf (config.flox.environment != null) {
+        serviceConfig = mkMerge [
+          # Default service config
           {
-            serviceConfig = mkMerge [
-              # Default service config
-              {
-                Environment = [
-                  # FIXME: add flag for disabling metrics
-                  "FLOX_DISABLE_METRICS=true"
-                ];
-                # Completely override the ExecStart config
-                ExecStart = mkForce "${floxWrapper} ${escapeShellArgs config.flox.extraFloxArgs} activate -r ${config.flox.environment} ${escapeShellArgs config.flox.extraFloxActivateArgs} -- ${scriptAndArgs}";
-              }
-
-              # Workaround so the service can pull the environment from private repositories
-              (mkIf (config.flox.floxHubTokenFile != null) {
-                # TODO: update `flox auth login` to accept `--with-token` and
-                #       read from STDIN (like `gh auth`)
-                ExecStartPre = [
-                  "/bin/sh -c '${floxWrapper} ${escapeShellArgs config.flox.extraFloxArgs} auth login --with-token < ${config.flox.token}'"
-                ];
-              })
-
-              # Pull the environment at service start
-              (mkIf (config.flox.pullAtServiceStart) {
-                ExecStartPre = [
-                  "${floxWrapper} ${escapeShellArgs config.flox.extraFloxArgs} pull -r ${config.flox.environment} ${escapeShellArgs config.flox.extraFloxPullArgs}"
-                ];
-              })
+            Environment = [
+              # FIXME: add flag for disabling metrics
+              "FLOX_DISABLE_METRICS=true"
             ];
-          };
+          }
+
+          (mkIf (false && config.serviceConfig.DynamicUser) { # breaks w/ infinite recursion
+            Environment = [
+              "XDG_CACHE_HOME=/tmp/.cache"
+              "XDG_DATA_HOME=/tmp/.local/share"
+              "XDG_CONFIG_HOME=/tmp/.config"
+            ];
+          })
+
+          (mkIf (scriptAndArgs != null) {
+            # Completely override the ExecStart config
+            ExecStart = mkForce "${floxActivateWithArgs} -- ${scriptAndArgs}";
+          })
+
+          (mkIf (false && scriptAndArgs == null) {
+            # Prepend Flox activation to existing ExecStart line
+            ExecStart = mkForce "${floxActivateWithArgs} -- ${config.serviceConfig.ExecStart}"; # breaks w/ infinite recursion
+          })
+
+          # config.serviceConfig.ExecStart;
+
+          # Workaround so the service can pull the environment from private repositories
+          (mkIf (config.flox.floxHubTokenFile != null) {
+            # TODO: update `flox auth login` to accept `--with-token` and
+            #       read from STDIN (like `gh auth`)
+            ExecStartPre = [ "/bin/sh -c '${floxAuthLoginWithArgs}'" ];
+          })
+          # Pull the environment at service start
+          (mkIf (config.flox.pullAtServiceStart) {
+            ExecStartPre = [ floxPullWithArgs ];
+          })
+        ];
+      };
     };
 
 in
