@@ -90,6 +90,9 @@ pub enum BuildEnvError {
         output: String,
         err: serde_json::Error,
     },
+
+    #[error("Building published packages from source is not yet supported")]
+    BuildPublishedPackage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -350,7 +353,7 @@ impl BuildEnvNix {
                 if all_found {
                     return Ok(());
                 };
-                todo!("Building published packages is not yet supported");
+                return Err(BuildEnvError::BuildPublishedPackage);
             }
 
             // build all out paths
@@ -1075,7 +1078,6 @@ mod realise_nixpkgs_tests {
     }
 
     #[test]
-    #[should_panic = "Building published packages is not yet supported"]
     fn nixpkgs_published_pkg_cache_download_failure() {
         let locked_package = locked_published_package(None);
         let mut client = MockClient::new(None::<String>).unwrap();
@@ -1097,7 +1099,8 @@ mod realise_nixpkgs_tests {
         client.push_store_info_response(resp);
 
         let buildenv = BuildEnvNix;
-        let _result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
+        let result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
+        assert!(matches!(result, Err(BuildEnvError::BuildPublishedPackage)));
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
