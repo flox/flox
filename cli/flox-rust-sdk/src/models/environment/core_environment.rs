@@ -390,7 +390,7 @@ impl CoreEnvironment<ReadOnly> {
     ) -> Result<Option<LockedInclude>, EnvironmentError> {
         // Reverse of merge order so that we return the highest priority match.
         for include in includes.iter().rev() {
-            match Self::get_install_ids_to_uninstall(&include.manifest, vec![package.to_string()]) {
+            match Self::get_install_ids(&include.manifest, vec![package.to_string()]) {
                 Ok(_) => return Ok(Some(include.clone())),
                 Err(CoreEnvironmentError::PackageNotFound(_)) => continue,
                 Err(CoreEnvironmentError::MultiplePackagesMatch(_, _)) => continue,
@@ -401,7 +401,10 @@ impl CoreEnvironment<ReadOnly> {
         Ok(None)
     }
 
-    fn get_install_ids_to_uninstall(
+    /// Resolve "loose" package references (e.g. pkg-paths),
+    /// to `install_ids` if unambiguous
+    /// so that installation references remain valid for other package operations.
+    fn get_install_ids(
         manifest: &Manifest,
         packages: Vec<String>,
     ) -> Result<Vec<String>, CoreEnvironmentError> {
@@ -1696,10 +1699,9 @@ mod tests {
     #[test]
     fn test_get_install_ids_to_uninstall_by_install_id() {
         let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
-        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
-            "testInstallID".to_string(),
-        ])
-        .unwrap();
+        let result =
+            CoreEnvironment::get_install_ids(&manifest_mock, vec!["testInstallID".to_string()])
+                .unwrap();
         assert_eq!(result, vec!["testInstallID".to_string()]);
     }
 
@@ -1707,10 +1709,9 @@ mod tests {
     /// Return the install ID if a pkg-path matches the user input
     fn test_get_install_ids_to_uninstall_by_pkg_path() {
         let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
-        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
-            "dotted.package".to_string(),
-        ])
-        .unwrap();
+        let result =
+            CoreEnvironment::get_install_ids(&manifest_mock, vec!["dotted.package".to_string()])
+                .unwrap();
         assert_eq!(result, vec!["testInstallID".to_string()]);
     }
 
@@ -1723,10 +1724,9 @@ mod tests {
             ("dotted.package", "dotted.package"),
         ]);
 
-        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
-            "dotted.package".to_string(),
-        ])
-        .unwrap();
+        let result =
+            CoreEnvironment::get_install_ids(&manifest_mock, vec!["dotted.package".to_string()])
+                .unwrap();
         assert_eq!(result, vec!["dotted.package".to_string()]);
     }
 
@@ -1738,10 +1738,9 @@ mod tests {
             ("testInstallID2", "dotted.package"),
             ("testInstallID3", "dotted.package"),
         ]);
-        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
-            "dotted.package".to_string(),
-        ])
-        .unwrap_err();
+        let result =
+            CoreEnvironment::get_install_ids(&manifest_mock, vec!["dotted.package".to_string()])
+                .unwrap_err();
         assert!(matches!(
             result,
             CoreEnvironmentError::MultiplePackagesMatch(_, _)
@@ -1752,7 +1751,7 @@ mod tests {
     /// Throw an error if no install ID or pkg-path matches the user input
     fn test_get_install_ids_to_uninstall_pkg_not_found() {
         let manifest_mock = generate_mock_manifest(vec![("testInstallID1", "dotted.package")]);
-        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+        let result = CoreEnvironment::get_install_ids(&manifest_mock, vec![
             "invalid.packageName".to_string(),
         ])
         .unwrap_err();
@@ -1772,7 +1771,7 @@ mod tests {
             descriptor.version = Some("1.0".to_string());
         };
 
-        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+        let result = CoreEnvironment::get_install_ids(&manifest_mock, vec![
             "dotted.package@1.0".to_string(),
         ])
         .unwrap();
