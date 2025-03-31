@@ -42,7 +42,7 @@ use crate::models::floxmeta::{
     FloxMetaError,
     floxmeta_git_options,
 };
-use crate::models::lockfile::LockResult;
+use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::{IncludeDescriptor, Manifest};
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -225,6 +225,13 @@ impl Environment for ManagedEnvironment {
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
         self.ensure_locked(flox, &mut local_checkout)
+    }
+
+    /// Returns the lockfile if it already exists.
+    fn existing_lockfile(&self, flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError> {
+        self.local_env_or_copy_current_generation(flox)?
+            .existing_lockfile()
+            .map_err(EnvironmentError::Core)
     }
 
     /// Install packages to the environment atomically

@@ -26,7 +26,7 @@ use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment::RenderedEnvironmentLink;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
-use crate::models::lockfile::LockResult;
+use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::Manifest;
 
@@ -247,6 +247,11 @@ impl Environment for RemoteEnvironment {
     /// or error if the lockfile doesn't exist.
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         self.inner.lockfile(flox)
+    }
+
+    /// Returns the lockfile if it exists.
+    fn existing_lockfile(&self, flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError> {
+        self.inner.existing_lockfile(flox)
     }
 
     /// Install packages to the environment atomically

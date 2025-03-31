@@ -283,9 +283,8 @@ impl CoreEnvironment<()> {
 /// even if the concrete [super::Environment] tracks the files in a different way
 /// such as a git repository or a database.
 impl CoreEnvironment<ReadOnly> {
-    /// Create a new environment view for the given directory
-    ///
-    /// This assumes that the directory contains a valid manifest.
+    /// Create a new environment view given the path to a directory that
+    /// contains a valid manifest.
     pub fn new(env_dir: impl AsRef<Path>, include_fetcher: IncludeFetcher) -> Self {
         CoreEnvironment {
             env_dir: env_dir.as_ref().to_path_buf(),
