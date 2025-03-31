@@ -135,7 +135,7 @@ pub enum EnvironmentPromptConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PublishConfig {
     /// Default path of the signing key used by 'flox publish'
-    pub signing_key: Option<PathBuf>,
+    pub signing_private_key: Option<PathBuf>,
 }
 
 /// Channels must match: https://downloads.flox.dev/?prefix=by-env/

@@ -130,7 +130,7 @@ impl Publish {
                 .flox
                 .publish
                 .as_ref()
-                .and_then(|p_conf| p_conf.signing_key.as_ref())
+                .and_then(|p_conf| p_conf.signing_private_key.as_ref())
                 .is_none();
             let no_key_arg = cache_args.signing_private_key.is_none();
             let no_key_supplied = no_key_in_config && no_key_arg;
@@ -202,9 +202,9 @@ fn merge_cache_options(
     ingress_uri: Option<Url>,
 ) -> Result<Option<NixCopyCache>> {
     let url = args.store_url.or(ingress_uri);
-    let key_file = args
-        .signing_private_key
-        .or(config.as_ref().and_then(|cfg| cfg.signing_key.clone()));
+    let key_file = args.signing_private_key.or(config
+        .as_ref()
+        .and_then(|cfg| cfg.signing_private_key.clone()));
 
     match (url, key_file) {
         (Some(url), Some(key_file)) => Ok(Some(NixCopyCache { url, key_file })),
@@ -273,7 +273,7 @@ mod tests {
             TestCase {
                 name: "ingress_uri when args None",
                 config: Some(PublishConfig {
-                    signing_key: Some(key_config.clone()),
+                    signing_private_key: Some(key_config.clone()),
                 }),
                 args: CacheArgs {
                     store_url: None,
@@ -289,7 +289,7 @@ mod tests {
             TestCase {
                 name: "args when both Some",
                 config: Some(PublishConfig {
-                    signing_key: Some(key_config.clone()),
+                    signing_private_key: Some(key_config.clone()),
                 }),
                 args: CacheArgs {
                     store_url: Some(url_args.clone()),
@@ -304,7 +304,9 @@ mod tests {
             },
             TestCase {
                 name: "mix of url from response and key from args",
-                config: Some(PublishConfig { signing_key: None }),
+                config: Some(PublishConfig {
+                    signing_private_key: None,
+                }),
                 args: CacheArgs {
                     store_url: None,
                     catalog: None,
@@ -319,7 +321,7 @@ mod tests {
             TestCase {
                 name: "no error when config contains signing key without an ingress uri",
                 config: Some(PublishConfig {
-                    signing_key: Some(key_config.clone()),
+                    signing_private_key: Some(key_config.clone()),
                 }),
                 args: CacheArgs {
                     store_url: None,
