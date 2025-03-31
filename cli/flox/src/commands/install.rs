@@ -3,9 +3,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{
@@ -17,7 +16,6 @@ use flox_rust_sdk::models::environment::{
 };
 use flox_rust_sdk::models::lockfile::{
     LockedPackage,
-    Lockfile,
     ResolutionFailure,
     ResolutionFailures,
     ResolveError,
@@ -228,23 +226,16 @@ impl Install {
         let mut environment = concrete_environment.into_dyn_environment();
 
         // Get a list of the packages that this environment is already overriding via composition.
-        let lockfile_path = environment.lockfile_path(&flox)?;
-        let canonicalized_lockfile_path_res = CanonicalPath::new(lockfile_path);
-        let existing_composer_package_overrides = if let Ok(path) = canonicalized_lockfile_path_res
-        {
-            let lockfile_content =
-                std::fs::read_to_string(&path).context("Failed to read lockfile")?;
-            let lockfile =
-                Lockfile::from_str(&lockfile_content).context("Failed to parse lockfile")?;
-            let existing_composer_overrides = lockfile
+        let maybe_lockfile = environment.existing_lockfile(&flox)?;
+        let existing_composer_package_overrides = if let Some(lockfile) = maybe_lockfile {
+            lockfile
                 .compose
                 .map(|c| c.warnings)
                 .map(|warnings| package_overrides_for_manifest_id(&warnings, COMPOSER_MANIFEST_ID))
-                .unwrap_or_default();
-            Ok::<_, anyhow::Error>(existing_composer_overrides)
+                .unwrap_or_default()
         } else {
-            Ok(vec![])
-        }?;
+            vec![]
+        };
 
         // We don't know the contents of the packages field when the span is created
         sentry_set_tag(
@@ -283,10 +274,9 @@ impl Install {
             },
         };
 
-        let lockfile_path = environment.lockfile_path(&flox)?;
-        let lockfile_path = CanonicalPath::new(lockfile_path)?;
-        let lockfile_content = std::fs::read_to_string(&lockfile_path)?;
-        let lockfile: Lockfile = serde_json::from_str(&lockfile_content)?;
+        let lockfile = environment.existing_lockfile(&flox)?.ok_or(anyhow!(
+            "Expected lockfile to exist after successful install"
+        ))?;
 
         // Get the new set of composer overrides
         let new_composer_package_overrides = lockfile

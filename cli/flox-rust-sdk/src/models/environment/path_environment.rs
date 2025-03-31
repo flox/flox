@@ -49,7 +49,7 @@ use crate::flox::Flox;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, LockResult};
+use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
 use crate::models::manifest::typed::{ActivateMode, Manifest};
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -196,6 +196,13 @@ impl Environment for PathEnvironment {
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         let mut env_view = self.as_core_environment_mut()?;
         env_view.ensure_locked(flox)
+    }
+
+    /// Returns the lockfile if it already exists.
+    fn existing_lockfile(&self, _flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError> {
+        self.as_core_environment()?
+            .existing_lockfile()
+            .map_err(EnvironmentError::Core)
     }
 
     /// Install packages to the environment atomically
