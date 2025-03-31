@@ -972,6 +972,10 @@ impl Lockfile {
     ) -> Result<(), ResolveError> {
         for package in locked_packages {
             if let Some(ref licenses) = allow.licenses {
+                // If licenses is empty, allow any license.
+                // There isn't any reason to disallow all licenses,
+                // and setting licenses to [] is the only way with composition
+                // currently to allow all licenses if an included environment has licenses.
                 if !licenses.is_empty() {
                     let Some(ref license) = package.license else {
                         continue;
@@ -3719,6 +3723,23 @@ pub(crate) mod tests {
                 unfree: None,
                 broken: None,
                 licenses: Some(vec!["allowed".to_string()])
+            })
+            .is_ok()
+        );
+    }
+
+    /// [Lockfile::check_packages_are_allowed] allows any license if allowed
+    /// licenses is empty
+    #[test]
+    fn check_packages_are_allowed_for_empty_licenses() {
+        let (_, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
+        foo_locked.license = Some("allowed".to_string());
+
+        assert!(
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: None,
+                licenses: Some(vec![]),
             })
             .is_ok()
         );

@@ -530,6 +530,7 @@ Semver ::= {
 `allow.licenses`
 :   An allowlist of software licenses to allow in search results in installs.
     Valid entries are [SPDX Identifiers](https://spdx.org/licenses).
+    An empty list allows all licenses.
 
 `semver.allow-pre-releases`
 :   Whether to allow pre-release software for package installations.
