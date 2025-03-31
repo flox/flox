@@ -93,6 +93,11 @@ pub enum BuildEnvError {
 
     #[error("Building published packages from source is not yet supported")]
     BuildPublishedPackage,
+
+    /// A custom package has been uploaded, but the current user hasn't configured
+    /// a trusted public key that matches a signature of this package.
+    #[error("Package '{0}' is not signed by a trusted key")]
+    UntrustedPackage(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -265,6 +270,9 @@ impl BuildEnvNix {
                 if !output.status.success() {
                     // If we failed, log the error and try the next location.
                     let stderr = String::from_utf8_lossy(&output.stderr);
+                    if stderr.contains("because it lacks a signature by a trusted key") {
+                        return Err(BuildEnvError::UntrustedPackage(locked.install_id.clone()));
+                    }
                     debug!(%path, %location.url, %stderr, "Failed to copy package from store");
                 } else {
                     // If we suceeded, then we can continue with the nex path
