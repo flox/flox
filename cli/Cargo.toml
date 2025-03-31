@@ -16,11 +16,11 @@ resolver = "2"
 [workspace.dependencies]
 anyhow = "1"
 async-stream = "0.3.6"
-blake3 = "1.6.1"
+blake3 = "1.8.0"
 bpaf = { version = "0.9.19", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.40", features = ["serde"] }
-clap = { version = "4.5.32", features = ["derive"] }
+clap = { version = "4.5.34", features = ["derive"] }
 clap_derive = "4.5.4"
 close_fds = "0.3"
 # Pinned due to bug: https://github.com/rust-cli/config-rs/issues/531
@@ -44,10 +44,10 @@ inquire = "0.6.0"
 indicatif = "0.17"
 itertools = "0.12.1"
 jsonwebtoken = "9.3"
-log = "0.4.26"
+log = "0.4.27"
 nix = { version = "0.28", features = ["signal", "process", "user"] }
 oauth2 = "4.4"
-once_cell = "1.21.1"
+once_cell = "1.21.3"
 path-dedot = "3.1.1"
 pollster = "0.3.0"
 progenitor-client = "0.6"
@@ -74,7 +74,7 @@ sysinfo = "0.32.1"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
-tempfile = "3.19.0"
+tempfile = "3.19.1"
 textwrap = { version = "0.16.2", features = ["terminal_size"] }
 thiserror = "2"
 time = { version = "0.3", features = ["serde", "formatting"] }
