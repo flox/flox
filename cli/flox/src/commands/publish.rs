@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
-use flox_rust_sdk::models::manifest::typed::Inner;
+use flox_rust_sdk::models::manifest::typed::{Inner, Manifest};
 use flox_rust_sdk::providers::build::FloxBuildMk;
 use flox_rust_sdk::providers::catalog::ClientTrait;
 use flox_rust_sdk::providers::publish::{
@@ -40,8 +40,8 @@ pub struct Publish {
     #[bpaf(long)]
     metadata_only: bool,
 
-    #[bpaf(external(publish_target))]
-    publish_target: PublishTarget,
+    #[bpaf(external(publish_target), optional)]
+    publish_target: Option<PublishTarget>,
 }
 
 #[derive(Debug, Bpaf, Clone, Default)]
@@ -78,12 +78,45 @@ impl Publish {
         }
 
         environment_subcommand_metric!("publish", self.environment);
-        let PublishTarget { target } = self.publish_target;
         let env = self
             .environment
             .detect_concrete_environment(&flox, "Publish")?;
-
+        let target = Self::get_publish_target(
+            &env.manifest(&flox)
+                .context("failed to get environment manifest")?,
+            &self.publish_target,
+        )?;
         Self::publish(config, flox, env, target, self.metadata_only, self.cache).await
+    }
+
+    fn get_publish_target(
+        manifest: &Manifest,
+        target_arg: &Option<PublishTarget>,
+    ) -> Result<String> {
+        let target = if target_arg.is_none() {
+            match manifest.build.inner().len() {
+                0 => {
+                    bail!("Cannot publish without a build specified");
+                },
+                1 => manifest
+                    .build
+                    .inner()
+                    .keys()
+                    .next()
+                    .expect("expect there to be at least one build")
+                    .clone(),
+                _ => {
+                    bail!("Must specify an artifact to publish");
+                },
+            }
+        } else {
+            target_arg
+                .as_ref()
+                .expect("already checked that publish target existed")
+                .target
+                .clone()
+        };
+        Ok(target)
     }
 
     #[instrument(name = "publish", skip_all, fields(package))]
@@ -227,6 +260,8 @@ fn merge_cache_options(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     #[test]
@@ -341,5 +376,112 @@ mod tests {
                 tc.name
             );
         }
+    }
+
+    #[test]
+    fn detects_default_publish_target() {
+        let manifest_str = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello" 
+
+            [build.hello]
+            command = '''
+                doesn't matter
+            '''
+        "#};
+        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        let target = Publish::get_publish_target(&manifest, &None).unwrap();
+        assert_eq!(target, "hello");
+    }
+
+    #[test]
+    fn error_when_no_publish_target_arg_no_builds() {
+        let manifest_str = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello" 
+        "#};
+        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        let res = Publish::get_publish_target(&manifest, &None);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn error_when_no_publish_target_arg_multiple_builds() {
+        let manifest_str = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello" 
+
+            [build.hello]
+            command = '''
+                doesn't matter
+            '''
+
+            [build.hello2]
+            command = '''
+                doesn't matter
+            '''
+        "#};
+        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        let res = Publish::get_publish_target(&manifest, &None);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn no_error_when_target_arg_supplied_multiple_builds() {
+        let manifest_str = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello" 
+
+            [build.hello]
+            command = '''
+                doesn't matter
+            '''
+
+            [build.hello2]
+            command = '''
+                doesn't matter
+            '''
+        "#};
+        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        let target = Publish::get_publish_target(
+            &manifest,
+            &Some(PublishTarget {
+                target: "hello2".to_string(),
+            }),
+        )
+        .unwrap();
+        assert_eq!(target, "hello2".to_string());
+    }
+
+    #[test]
+    fn no_error_when_target_arg_supplied_one_build() {
+        let manifest_str = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello" 
+
+            [build.hello]
+            command = '''
+                doesn't matter
+            '''
+        "#};
+        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        let target = Publish::get_publish_target(
+            &manifest,
+            &Some(PublishTarget {
+                target: "hello".to_string(),
+            }),
+        )
+        .unwrap();
+        assert_eq!(target, "hello".to_string());
     }
 }
