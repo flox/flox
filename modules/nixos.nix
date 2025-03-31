@@ -284,7 +284,7 @@ in
       autoPullScript = pkgs.writeShellApplication {
         name = "flox-autoPull";
         runtimeInputs = with pkgs; [
-          su
+          sudo
           config.programs.flox.package
         ];
         text = ''
@@ -295,7 +295,16 @@ in
           # $user and $environment must be set by sourcing the conf file
           # shellcheck disable=SC2154
           echo "Pulling $environment as user $user"
-          su "$user" -s "${pkgs.bash}/bin/bash" -c "flox pull -r $environment"
+          xdg_tmpdir=$(mktemp -d)
+          cd "$xdg_tmpdir"
+          chown "$user" .
+          sudo -u "$user" -HE \
+            FLOX_DISABLE_METRICS=true \
+            XDG_CACHE_HOME="$xdg_tmpdir"/.cache \
+            XDG_DATA_HOME="$xdg_tmpdir"/.local/share \
+            XDG_CONFIG_HOME="$xdg_tmpdir"/.config \
+            flox pull -r "$environment"
+          rm -rf "$xdg_tmpdir"
         '';
       };
     in
