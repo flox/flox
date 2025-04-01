@@ -363,18 +363,18 @@ EOF
 @test "changes to the local environment block 'flox uninstall'"  {
   make_empty_remote_env
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.json" \
-    "$FLOX_BIN" install vim
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" install hello
 
-  tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
+  tomlq -i -t '.install.curl."pkg-path" = "curl"' .flox/env/manifest.toml
 
-  run "$FLOX_BIN" uninstall vim
+  run "$FLOX_BIN" uninstall hello
   assert_failure
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" \
     "$FLOX_BIN" edit --sync
 
-  run "$FLOX_BIN" uninstall vim
+  run "$FLOX_BIN" uninstall hello
   assert_success
 }
 
