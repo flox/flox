@@ -179,8 +179,6 @@ Each option is described below:
     and `["python310Packages", "pip"]` are equivalent for the `pkg-path`
     option.
 
-    This option is mutually exclusive with `abs-path`.
-
 `priority`
 :   A priority used to resolve file conflicts where lower values indicate
     higher priority.
