@@ -1056,12 +1056,9 @@ pub enum VersionsError {
 /// APIError.
 /// We should find something cleaner.
 fn fmt_info(error_response: &ApiErrorResponseValue) -> String {
-    format!(
-        "status: {}; headers: {:?}; value: {:?}",
-        error_response.status(),
-        error_response.headers(),
-        error_response.as_ref()
-    )
+    let status = error_response.status();
+    let details = &error_response.detail;
+    format!("{status} {details}")
 }
 
 impl TryFrom<PackageGroup> for api_types::PackageGroup {
