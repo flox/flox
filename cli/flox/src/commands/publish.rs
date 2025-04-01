@@ -155,38 +155,9 @@ impl Publish {
         let cache = if metadata_only {
             None
         } else {
-            // Get the ingress URI for this catalog if it has one configured.
-            let ingress_uri = flox.catalog_client.get_ingress_uri(&catalog_name).await?;
-            let catalog_has_ingress_uri = ingress_uri.is_some();
-
-            // Determine whether a signing key was supplied.
-            let no_key_in_config = config
-                .flox
-                .publish
-                .as_ref()
-                .and_then(|p_conf| p_conf.signing_private_key.as_ref())
-                .is_none();
-            let no_key_arg = cache_args.signing_private_key.is_none();
-            let no_key_supplied = no_key_in_config && no_key_arg;
-
-            // It is an error (for now) if a user has a catalog configured that accepts
-            // uploads, but the user has attempted to publish without a signing key,
-            // and has not explicitly asked to only upload metadata.
-            if catalog_has_ingress_uri && no_key_supplied && !metadata_only {
-                let msg = formatdoc! { "
-                   A signing key is required to upload artifacts.
-
-                   You can supply a signing key by either:
-                   - Providing a path to a key with the '--signing-private-key' option.
-                   - Setting it in the config via 'flox config --set publish.signing-key <path>'
-
-                   Or you can publish without uploading artifacts via the '--metadata-only' option.
-                "};
-                bail!(msg);
-            }
-
-            merge_cache_options(config.flox.publish, cache_args, ingress_uri)?
+            merge_cache_options(&flox, &catalog_name, config.flox.publish, cache_args).await?
         };
+
         let publish_provider = PublishProvider::<&NixCopyCache> {
             env_metadata,
             build_metadata,
@@ -229,13 +200,18 @@ fn check_target_exists(lockfile: &Lockfile, package: &str) -> Result<bool> {
 }
 
 /// Merge cache values from config and args, with args taking precedence.
-/// Values must be mutually present or absent.
-fn merge_cache_options(
+/// If there's an ingress URI, there must be a signing key.
+async fn merge_cache_options(
+    flox: &Flox,
+    catalog_name: impl AsRef<str> + Send + Sync,
     config: Option<PublishConfig>,
     args: CacheArgs,
-    ingress_uri: Option<Url>,
 ) -> Result<Option<NixCopyCache>> {
-    let url = args.store_url.or(ingress_uri);
+    let url = match args.store_url {
+        Some(url) => Some(url),
+        // Get the ingress URI for this catalog if it has one configured.
+        None => flox.catalog_client.get_ingress_uri(catalog_name).await?,
+    };
     let key_file = args.signing_private_key.or(config
         .as_ref()
         .and_then(|cfg| cfg.signing_private_key.clone()));
@@ -252,7 +228,7 @@ fn merge_cache_options(
 
                Or you can publish without uploading artifacts via the '--metadata-only' option.
             "};
-            Err(anyhow!(msg))
+            Err(anyhow!(msg))?
         },
         // We don't care if you have a signing key when there's no ingress URI
         (None, _) => Ok(None),
@@ -263,20 +239,25 @@ fn merge_cache_options(
 mod tests {
     use std::str::FromStr;
 
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::providers::catalog::test_helpers::reset_mocks;
+    use flox_rust_sdk::providers::catalog::{PublishResponse, Response};
+
     use super::*;
 
-    #[test]
-    fn test_merge_cache_options_success() {
+    #[tokio::test]
+    async fn test_merge_cache_options_success() {
         struct TestCase {
             name: &'static str,
             config: Option<PublishConfig>,
             args: CacheArgs,
-            ingress_uri: Option<Url>,
-            expected: Option<NixCopyCache>,
+            ingress_uri: Option<String>,
+            expected: Result<Option<NixCopyCache>>,
         }
 
         let url_args = Url::parse("http://example.com/args").unwrap();
-        let url_response = Url::parse("http://example.com/response").unwrap();
+        let url_response_str = "http://example.com/response";
+        let url_response = Url::parse(url_response_str).unwrap();
         let key_args = PathBuf::from("args.key");
         let key_config = PathBuf::from("config.key");
 
@@ -290,7 +271,7 @@ mod tests {
                     signing_private_key: None,
                 },
                 ingress_uri: None,
-                expected: None,
+                expected: Ok(None),
             },
             TestCase {
                 name: "args when ingress_uri None",
@@ -301,10 +282,10 @@ mod tests {
                     signing_private_key: Some(key_args.clone()),
                 },
                 ingress_uri: None,
-                expected: Some(NixCopyCache {
+                expected: Ok(Some(NixCopyCache {
                     url: url_args.clone(),
                     key_file: key_args.clone(),
-                }),
+                })),
             },
             TestCase {
                 name: "ingress_uri when args None",
@@ -316,11 +297,11 @@ mod tests {
                     catalog: None,
                     signing_private_key: None,
                 },
-                ingress_uri: Some(url_response.clone()),
-                expected: Some(NixCopyCache {
+                ingress_uri: Some(url_response_str.to_string()),
+                expected: Ok(Some(NixCopyCache {
                     url: url_response.clone(),
                     key_file: key_config.clone(),
-                }),
+                })),
             },
             TestCase {
                 name: "args when both Some",
@@ -332,11 +313,11 @@ mod tests {
                     catalog: None,
                     signing_private_key: Some(key_args.clone()),
                 },
-                ingress_uri: Some(url_response.clone()),
-                expected: Some(NixCopyCache {
+                ingress_uri: Some(url_response_str.to_string()),
+                expected: Ok(Some(NixCopyCache {
                     url: url_args.clone(),
                     key_file: key_args.clone(),
-                }),
+                })),
             },
             TestCase {
                 name: "mix of url from response and key from args",
@@ -348,11 +329,11 @@ mod tests {
                     catalog: None,
                     signing_private_key: Some(key_args.clone()),
                 },
-                ingress_uri: Some(url_response.clone()),
-                expected: Some(NixCopyCache {
+                ingress_uri: Some(url_response_str.to_string()),
+                expected: Ok(Some(NixCopyCache {
                     url: url_response.clone(),
                     key_file: key_args.clone(),
-                }),
+                })),
             },
             TestCase {
                 name: "no error when config contains signing key without an ingress uri",
@@ -365,17 +346,46 @@ mod tests {
                     signing_private_key: None,
                 },
                 ingress_uri: None,
-                expected: None,
+                expected: Ok(None),
+            },
+            TestCase {
+                name: "error when catalog has ingress uri and no key supplied",
+                config: Some(PublishConfig {
+                    signing_private_key: None,
+                }),
+                args: CacheArgs {
+                    store_url: None,
+                    catalog: None,
+                    signing_private_key: None,
+                },
+                ingress_uri: Some(url_response_str.to_string()),
+                expected: Err(anyhow!(formatdoc! {"
+                    A signing key is required to upload artifacts.
+
+                    You can supply a signing key by either:
+                    - Providing a path to a key with the '--signing-private-key' option.
+                    - Setting it in the config via 'flox config --set publish.signing-key <path>'
+
+                    Or you can publish without uploading artifacts via the '--metadata-only' option.
+            "})),
             },
         ];
 
+        let (mut flox, _temp_dir) = flox_instance();
         for tc in test_cases {
-            assert_eq!(
-                merge_cache_options(tc.config, tc.args, tc.ingress_uri).unwrap(),
+            reset_mocks(&mut flox.catalog_client, vec![Response::Publish(
+                PublishResponse {
+                    ingress_uri: tc.ingress_uri,
+                },
+            )]);
+            match (
                 tc.expected,
-                "test case: {}",
-                tc.name
-            );
+                merge_cache_options(&flox, "catalog_name", tc.config, tc.args).await,
+            ) {
+                (Ok(expected), Ok(actual)) => assert_eq!(actual, expected),
+                (Err(e), Err(e2)) => assert_eq!(e.to_string(), e2.to_string()),
+                (_, actual) => panic!("unexpected result {actual:?} for test case: {}", tc.name),
+            }
         }
     }
 
