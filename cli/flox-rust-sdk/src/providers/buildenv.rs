@@ -342,12 +342,11 @@ impl BuildEnvNix {
             return Ok(());
         }
 
-        let _span = info_span!(
-            "build from catalog",
-            progress = format!("Building '{}' from source", locked.attr_path)
-        )
-        .entered();
-
+        // TODO: less flimsy handling of building published packages
+        // 1. custom catalogs are distinguished from nixpkgs catalog
+        //    only by the prefix of the url field.
+        // 2. custom packages cannot be referred to by nix installable
+        // 3. from this point onward the whole buildprocess diverges between both types of packages
         let installable = {
             let mut locked_url = locked.locked_url.to_string();
 
@@ -355,7 +354,12 @@ impl BuildEnvNix {
                 locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
             } else {
                 debug!(?locked.attr_path, "Trying to substitute published package");
-                let all_found = self.try_substitute_published_pkg(client, locked)?;
+                let span = info_span!(
+                    "substitute custom catalog package",
+                    progress = format!("Downloading '{}'", locked.attr_path)
+                );
+                let all_found =
+                    span.in_scope(|| self.try_substitute_published_pkg(client, locked))?;
                 // We asked for all the outputs for the package, got store info for
                 // each, and were able to substitute them all.  If so, then we're done here.
                 if all_found {
@@ -369,6 +373,12 @@ impl BuildEnvNix {
 
             format!("{}#{}", locked_url, attrpath)
         };
+
+        let _span = info_span!(
+            "build from catalog",
+            progress = format!("Building '{}' from source", locked.attr_path)
+        )
+        .entered();
 
         let mut nix_build_command = self.base_command();
 
