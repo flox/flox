@@ -11,7 +11,7 @@ use url::Url;
 
 use super::build::{BuildResult, BuildResults, ManifestBuilder};
 use super::catalog::{Client, ClientTrait, UserBuildPublish, UserDerivationInfo};
-use super::git::GitCommandProvider;
+use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::path_environment::PathEnvironment;
@@ -53,6 +53,9 @@ pub enum PublishError {
 
     #[error("{0}")]
     Catchall(String),
+
+    #[error(transparent)]
+    Git(#[from] GitCommandError),
 }
 
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
@@ -401,14 +404,14 @@ pub fn check_build_metadata(
     Ok(metadata)
 }
 
+/// Check the local repo that the build source is in to make sure that it's in
+/// a state amenable to publishing an artifact built from it.
+///
+/// This entails checking that:
+/// - The repo has a remote configured.
+/// - The tracked source files are clean.
+/// - The current revision is the latest one on the remote.
 fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, PublishError> {
-    // Gather build repo info
-    let origin = git.get_current_branch_remote_info().map_err(|_e| {
-        PublishError::UnsupportedEnvironmentState(
-            "Unable to identify repository origin info. Checkout a branch with 'git checkout -b' and set upstream with 'git branch --set-upstream-to origin/branch'".to_string(),
-        )
-    })?;
-
     let status = git.status().map_err(|_e| {
         PublishError::UnsupportedEnvironmentState("Unable to get respository status.".to_string())
     })?;
@@ -419,20 +422,95 @@ fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, Publi
         ));
     }
 
-    // This may be too strict, we may want to allow an older local revision to
-    // be published, as long as it exists in the remote.
-    if origin.revision != Some(status.rev.clone()) {
-        return Err(PublishError::UnsupportedEnvironmentState(
-            "Build repository must be at the same revision as the remote.".to_string(),
-        ));
-    }
+    // Check whether the current branch is tracking a remote branch, and if so,
+    // get information about that tracked remote.
+    let remote_url = url_for_remote_containing_current_rev(git, &status)?;
 
     Ok(LockedUrlInfo {
-        url: origin.url,
+        url: remote_url,
         rev: status.rev,
         rev_count: status.rev_count,
         rev_date: status.rev_date,
     })
+}
+
+fn url_for_remote_containing_current_rev(
+    git: &impl GitProvider,
+    status: &StatusInfo,
+) -> Result<String, PublishError> {
+    match git.get_current_branch_remote_info() {
+        Ok(tracked_remote_info) => {
+            // Ensure that the current rev is actually on the remote, not just
+            // that the current branch is tracking a remote branch. We do this
+            // by ensuring that the list of remote branches containing this rev
+            // includes the branch that the build repo is tracking.
+            let expected_branch = format!(
+                "{}/{}",
+                tracked_remote_info.name, tracked_remote_info.reference
+            );
+            let branches_containing_rev = git.remote_branches_containing_revision(&status.rev)?;
+            if !branches_containing_rev.contains(&expected_branch) {
+                Err(PublishError::UnsupportedEnvironmentState(
+                     "Unable to identify repository origin info. Checkout a branch with 'git checkout -b' and set upstream with 'git branch --set-upstream-to origin/branch'".to_string(),
+                 ))
+            } else {
+                Ok(tracked_remote_info.url)
+            }
+        },
+        Err(_) => {
+            // Try to identify whether the revision exists on a remote even though
+            // it's not tracking a remote branch.
+            let remote_names = git.remotes()?;
+            match remote_names.len() {
+                // If there are no remotes configured, that's an error we want the
+                // user to address.
+                0 => Err(PublishError::UnsupportedEnvironmentState(
+                    "The repository must have at least one remote configured.".to_string(),
+                )),
+                // If there's only a single remote configured, use that.
+                1 => {
+                    let branches = git.remote_branches_containing_revision(&status.rev)?;
+                    if !branches
+                        .iter()
+                        .any(|branch_name| git.branch_is_from_remote(branch_name, &remote_names[0]))
+                    {
+                        Err(PublishError::UnsupportedEnvironmentState(
+                            "Could not find revision on remote.".to_string(),
+                        ))
+                    } else {
+                        Ok(git.remote_url(&remote_names[0])?.to_string())
+                    }
+                },
+                // Otherwise, we need to inspect the remotes and apply some heuristics
+                // to determine which one to use (if it contains the revision). One
+                // heuristic is to prefer remotes named "upstream" and "origin" since
+                // those are more likely to be what the canonical repository is.
+                _ => {
+                    const PREFERRED_REMOTE_NAMES: [&str; 2] = ["upstream", "origin"];
+                    let branches_containing_rev =
+                        git.remote_branches_containing_revision(&status.rev)?;
+                    let mut chosen_remote = None;
+                    for remote_name in PREFERRED_REMOTE_NAMES.iter() {
+                        if branches_containing_rev
+                            .iter()
+                            .any(|b| git.branch_is_from_remote(b, remote_name))
+                        {
+                            chosen_remote = Some(remote_name);
+                            break;
+                        }
+                    }
+                    if let Some(remote_name) = chosen_remote {
+                        Ok(git.remote_url(remote_name)?.to_string())
+                    } else {
+                        // If the user doesn't have a remote named "upstream" or "origin",
+                        // we don't really have any other information we can use to decide
+                        // which remote to use, so just pick one.
+                        Ok(git.remote_url(&remote_names[0])?.to_string())
+                    }
+                },
+            }
+        },
+    }
 }
 
 fn gather_base_repo_meta(
@@ -531,9 +609,11 @@ pub mod tests {
     const EXAMPLE_PACKAGE_NAME: &str = "mypkg";
     const EXAMPLE_MANIFEST: &str = "envs/publish-simple";
 
+    use std::collections::HashMap;
     use std::io::Write;
 
     use pretty_assertions::assert_eq;
+    use tempfile::TempDir;
 
     use super::*;
     use crate::data::CanonicalPath;
@@ -544,6 +624,7 @@ pub mod tests {
     use crate::providers::build::FloxBuildMk;
     use crate::providers::catalog::test_helpers::reset_mocks;
     use crate::providers::catalog::{GENERATED_DATA, MockClient, PublishResponse, Response};
+    use crate::providers::git::tests::{commit_file, init_temp_repo};
 
     fn example_remote() -> (tempfile::TempDir, GitCommandProvider, String) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -878,5 +959,154 @@ pub mod tests {
         // The 'cache' should be non-empty after the publish
         let entries = std::fs::read_dir(&cache_path).unwrap();
         assert!(entries.count() != 0);
+    }
+
+    fn repo_local_url(repo: &impl GitProvider) -> String {
+        format!("file://{}", repo.path().display())
+    }
+
+    type RemoteMap = HashMap<String, (GitCommandProvider, TempDir)>;
+
+    fn create_remotes(local_repo: &impl GitProvider, remote_names: &[&str]) -> RemoteMap {
+        let mut remotes = HashMap::new();
+        for remote_name in remote_names.iter() {
+            let (repo, tempdir) = init_temp_repo(true);
+            local_repo
+                .add_remote(remote_name, &repo_local_url(&repo))
+                .unwrap();
+            remotes.insert(remote_name.to_string(), (repo, tempdir));
+        }
+        remotes
+    }
+
+    fn get_remote_url(remotes: &RemoteMap, name: &str) -> String {
+        repo_local_url(&remotes.get(name).unwrap().0)
+    }
+
+    #[test]
+    fn prefers_tracked_remote() {
+        let remote_name = "some_remote";
+        let branch_name = "some_branch";
+        let (build_repo, _tempdir) = init_temp_repo(false);
+        commit_file(&build_repo, "foo");
+        let status = build_repo.status().unwrap();
+        build_repo.create_branch(branch_name, &status.rev).unwrap();
+        let remotes = create_remotes(&build_repo, &[remote_name, "other_remote"]);
+        build_repo
+            .push_ref(remote_name, branch_name, false)
+            .unwrap();
+        build_repo
+            .push_ref("other_remote", branch_name, false)
+            .unwrap();
+        // Make this repo track the upstream `main` branch
+        let mut cmd = build_repo.new_command();
+        cmd.args(["branch", "-u", &format!("{}/{}", remote_name, branch_name)]);
+        GitCommandProvider::run_command(&mut cmd).unwrap();
+        let remote_url =
+            url_for_remote_containing_current_rev(&build_repo, &build_repo.status().unwrap())
+                .unwrap();
+        assert_eq!(remote_url, get_remote_url(&remotes, remote_name));
+    }
+
+    #[test]
+    fn finds_single_untracked_remote() {
+        let remote_name = "some_remote";
+        let branch_name = "some_branch";
+        let (build_repo, _tempdir) = init_temp_repo(false);
+        commit_file(&build_repo, "foo");
+        let status = build_repo.status().unwrap();
+        build_repo.create_branch(branch_name, &status.rev).unwrap();
+        let remotes = create_remotes(&build_repo, &[remote_name]);
+        build_repo
+            .push_ref(remote_name, branch_name, false)
+            .unwrap();
+        let remote_url =
+            url_for_remote_containing_current_rev(&build_repo, &build_repo.status().unwrap())
+                .unwrap();
+        assert_eq!(remote_url, get_remote_url(&remotes, remote_name));
+    }
+
+    #[test]
+    fn prefers_upstream_to_other_remote() {
+        let remote_name = "upstream";
+        let branch_name = "some_branch";
+        let (build_repo, _tempdir) = init_temp_repo(false);
+        commit_file(&build_repo, "foo");
+        let status = build_repo.status().unwrap();
+        build_repo.create_branch(branch_name, &status.rev).unwrap();
+        let remotes = create_remotes(&build_repo, &[remote_name, "other_remote"]);
+        build_repo
+            .push_ref(remote_name, branch_name, false)
+            .unwrap();
+        build_repo
+            .push_ref("other_remote", branch_name, false)
+            .unwrap();
+        let remote_url =
+            url_for_remote_containing_current_rev(&build_repo, &build_repo.status().unwrap())
+                .unwrap();
+        assert_eq!(remote_url, get_remote_url(&remotes, remote_name));
+    }
+
+    #[test]
+    fn prefers_upstream_to_origin() {
+        let remote_name = "upstream";
+        let branch_name = "some_branch";
+        let (build_repo, _tempdir) = init_temp_repo(false);
+        commit_file(&build_repo, "foo");
+        let status = build_repo.status().unwrap();
+        build_repo.create_branch(branch_name, &status.rev).unwrap();
+        let remotes = create_remotes(&build_repo, &[remote_name, "origin"]);
+        build_repo
+            .push_ref(remote_name, branch_name, false)
+            .unwrap();
+        build_repo.push_ref("origin", branch_name, false).unwrap();
+        let remote_url =
+            url_for_remote_containing_current_rev(&build_repo, &build_repo.status().unwrap())
+                .unwrap();
+        assert_eq!(remote_url, get_remote_url(&remotes, remote_name));
+    }
+
+    #[test]
+    fn prefers_origin_to_other_remote() {
+        let remote_name = "origin";
+        let branch_name = "some_branch";
+        let (build_repo, _tempdir) = init_temp_repo(false);
+        commit_file(&build_repo, "foo");
+        let status = build_repo.status().unwrap();
+        build_repo.create_branch(branch_name, &status.rev).unwrap();
+        let remotes = create_remotes(&build_repo, &[remote_name, "other_remote"]);
+        build_repo
+            .push_ref(remote_name, branch_name, false)
+            .unwrap();
+        build_repo
+            .push_ref("other_remote", branch_name, false)
+            .unwrap();
+        let remote_url =
+            url_for_remote_containing_current_rev(&build_repo, &build_repo.status().unwrap())
+                .unwrap();
+        let expected_remote_url = get_remote_url(&remotes, remote_name);
+        assert_eq!(remote_url, expected_remote_url);
+    }
+
+    #[test]
+    fn falls_back_to_some_remote() {
+        let branch_name = "some_branch";
+        let (build_repo, _tempdir) = init_temp_repo(false);
+        commit_file(&build_repo, "foo");
+        let status = build_repo.status().unwrap();
+        build_repo.create_branch(branch_name, &status.rev).unwrap();
+        let remotes = create_remotes(&build_repo, &["some_remote", "other_remote"]);
+        build_repo
+            .push_ref("some_remote", branch_name, false)
+            .unwrap();
+        build_repo
+            .push_ref("other_remote", branch_name, false)
+            .unwrap();
+        let remote_url =
+            url_for_remote_containing_current_rev(&build_repo, &build_repo.status().unwrap())
+                .unwrap();
+        let is_some_remote = remote_url == get_remote_url(&remotes, "some_remote");
+        let is_other_remote = remote_url == get_remote_url(&remotes, "other_remote");
+        assert!(is_some_remote || is_other_remote);
     }
 }

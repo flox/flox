@@ -88,7 +88,20 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     fn checkout(&self, name: &str, orphan: bool) -> Result<(), Self::CheckoutError>;
     fn list_branches(&self) -> Result<Vec<BranchInfo>, Self::ListBranchesError>;
     fn rename_branch(&self, new_name: &str) -> Result<(), Self::RenameError>;
+    fn remote_branches_containing_revision(
+        &self,
+        rev: &str,
+    ) -> Result<Vec<String>, GitCommandError>;
+    fn branch_is_from_remote(&self, branch_name: &str, remote_name: &str) -> bool {
+        let parts = branch_name.split('/').collect::<Vec<_>>();
+        if parts.len() < 2 {
+            return false;
+        }
+        parts[0] == remote_name
+    }
 
+    fn remotes(&self) -> Result<Vec<String>, GitCommandError>;
+    fn remote_url(&self, name: &str) -> Result<String, GitCommandError>;
     fn add_remote(&self, origin_name: &str, url: &str) -> Result<(), Self::AddRemoteError>;
     fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError>;
     fn rm(
@@ -121,6 +134,10 @@ pub enum GitCommandError {
     Command(#[from] std::io::Error),
     #[error("Git failed with: [exit code {0}]\n  stdout: {1}\n  stderr: {2}")]
     BadExit(i32, String, String),
+    #[error("Git output was invalid: {0}")]
+    InvalidOutput(String),
+    #[error("Remote URL was invalid")]
+    InvalidUrl(#[source] url::ParseError),
 }
 
 /// Configuration options for the git command
@@ -209,7 +226,7 @@ impl GitCommandProvider {
         command
     }
 
-    fn run_command(command: &mut Command) -> Result<OsString, GitCommandError> {
+    pub(crate) fn run_command(command: &mut Command) -> Result<OsString, GitCommandError> {
         debug!("running git command: {}", command.display());
         let out = command.output()?;
 
@@ -1110,6 +1127,51 @@ impl GitProvider for GitCommandProvider {
             ))
         }
     }
+
+    /// Returns a list of remote names configured for this repo.
+    fn remotes(&self) -> Result<Vec<String>, GitCommandError> {
+        let mut command = self.new_command();
+        command.arg("remote");
+        let output = Self::run_command(&mut command)?
+            .into_string()
+            .map_err(|s| GitCommandError::InvalidOutput(s.to_string_lossy().to_string()))?;
+        let remotes = output
+            .trim()
+            .split('\n')
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
+        Ok(remotes)
+    }
+
+    /// Returns the URL for the provided remote name, erroring if the remote
+    /// does not exist or the URL can't be parsed.
+    fn remote_url(&self, name: &str) -> Result<String, GitCommandError> {
+        let mut command = self.new_command();
+        command.args(["remote", "get-url", name]);
+        let output = Self::run_command(&mut command)?
+            .into_string()
+            .map(|s| s.trim().to_string())
+            .map_err(|s| GitCommandError::InvalidOutput(s.to_string_lossy().trim().to_string()))?;
+        Ok(output)
+    }
+
+    /// Returns the list of branches that contain the provided revision.
+    fn remote_branches_containing_revision(
+        &self,
+        rev: &str,
+    ) -> Result<Vec<String>, GitCommandError> {
+        let mut command = self.new_command();
+        command.args(["branch", "--remotes", "--contains", rev]);
+        let output = Self::run_command(&mut command)?
+            .into_string()
+            .map_err(|s| GitCommandError::InvalidOutput(s.to_string_lossy().to_string()))?;
+        let branches = output
+            .trim()
+            .split('\n')
+            .map(|s| s.trim().to_string())
+            .collect::<Vec<_>>();
+        Ok(branches)
+    }
 }
 
 pub mod test_helpers {
@@ -1135,7 +1197,7 @@ pub mod tests {
 
     use super::*;
 
-    fn init_temp_repo(bare: bool) -> (GitCommandProvider, tempfile::TempDir) {
+    pub fn init_temp_repo(bare: bool) -> (GitCommandProvider, tempfile::TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
         let git_command_provider = GitCommandProvider::init(tempdir_handle.path(), bare).unwrap();
