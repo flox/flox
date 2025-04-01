@@ -34,7 +34,7 @@ impl Show {
             // didn't match a package.
             // So translate 404 into an empty vec![].
             // Once we drop the pkgdb code path, we can clean this up.
-            Err(VersionsError::Versions(e)) if e.status() == 404 => PackageDetails {
+            Err(VersionsError::NotFound) => PackageDetails {
                 results: vec![],
                 count: None::<u64>,
             },

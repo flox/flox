@@ -498,10 +498,7 @@ impl ClientTrait for CatalogClient {
             .client
             .resolve_api_v1_catalog_resolve_post(&package_groups)
             .await
-            .map_err(|e| match e {
-                APIError::ErrorResponse(e) => ResolveError::Resolve(e),
-                _ => CatalogClientError::UnexpectedError(e).into(),
-            })?;
+            .map_err(CatalogClientError::APIError)?;
 
         let api_resolved_package_groups = response.into_inner();
 
@@ -575,10 +572,7 @@ impl ClientTrait for CatalogClient {
                         system,
                     )
                     .await
-                    .map_err(|e| match e {
-                        APIError::ErrorResponse(e) => SearchError::Search(e),
-                        _ => CatalogClientError::UnexpectedError(e).into(),
-                    })?;
+                    .map_err(CatalogClientError::APIError)?;
 
                 let packages = response.into_inner();
 
@@ -613,8 +607,12 @@ impl ClientTrait for CatalogClient {
                     )
                     .await
                     .map_err(|e| match e {
-                        APIError::ErrorResponse(e) => VersionsError::Versions(e),
-                        _ => CatalogClientError::UnexpectedError(e).into(),
+                        APIError::ErrorResponse(response)
+                            if response.status() == StatusCode::NOT_FOUND =>
+                        {
+                            VersionsError::NotFound
+                        },
+                        _ => CatalogClientError::APIError(e).into(),
                     })?;
 
                 let packages = response.into_inner();
@@ -647,9 +645,9 @@ impl ClientTrait for CatalogClient {
         // - https://api.preview.flox.dev/docs#/catalogs/create_catalog_api_v1_catalog_catalogs__post
         self.client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(&catalog, &package, &body).await.map_err(|e| match e {
                 APIError::ErrorResponse(err) => {
-                    CatalogClientError::UnexpectedError(APIError::ErrorResponse(err))
+                    CatalogClientError::APIError(APIError::ErrorResponse(err))
                 },
-                _ => CatalogClientError::UnexpectedError(e),
+                _ => CatalogClientError::APIError(e),
             }).map(|resp| resp.into_inner())
     }
 
@@ -663,7 +661,7 @@ impl ClientTrait for CatalogClient {
             original_url: Some(original_url.as_ref().to_string()),
         };
         let catalog = api_types::CatalogName::from_str(catalog_name.as_ref()).map_err(|_e| {
-            CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+            CatalogClientError::APIError(APIError::InvalidRequest(
                 format!(
                     "catalog name {} does not meet API requirements.",
                     catalog_name.as_ref()
@@ -672,7 +670,7 @@ impl ClientTrait for CatalogClient {
             ))
         })?;
         let package = api_types::Name::from_str(package_name.as_ref()).map_err(|_e| {
-            CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+            CatalogClientError::APIError(APIError::InvalidRequest(
                 format!(
                     "package name {} does not meet API requirements.",
                     package_name.as_ref()
@@ -687,9 +685,9 @@ impl ClientTrait for CatalogClient {
             .await
             .map_err(|e| match e {
                 APIError::ErrorResponse(err) => {
-                    CatalogClientError::UnexpectedError(APIError::ErrorResponse(err))
+                    CatalogClientError::APIError(APIError::ErrorResponse(err))
                 },
-                _ => CatalogClientError::UnexpectedError(e),
+                _ => CatalogClientError::APIError(e),
             })?;
         debug!("successfully created package");
         Ok(())
@@ -710,9 +708,9 @@ impl ClientTrait for CatalogClient {
             .await
             .map_err(|e| match e {
                 APIError::ErrorResponse(err) => {
-                    CatalogClientError::UnexpectedError(APIError::ErrorResponse(err))
+                    CatalogClientError::APIError(APIError::ErrorResponse(err))
                 },
-                _ => CatalogClientError::UnexpectedError(e),
+                _ => CatalogClientError::APIError(e),
             })?;
         Ok(())
     }
@@ -731,9 +729,9 @@ impl ClientTrait for CatalogClient {
             .await
             .map_err(|e| match e {
                 APIError::ErrorResponse(err) => {
-                    CatalogClientError::UnexpectedError(APIError::ErrorResponse(err))
+                    CatalogClientError::APIError(APIError::ErrorResponse(err))
                 },
-                _ => CatalogClientError::UnexpectedError(e),
+                _ => CatalogClientError::APIError(e),
             })?;
         let store_info = response.into_inner();
         Ok(store_info.items)
@@ -746,7 +744,7 @@ fn str_to_catalog_name(
     name: impl AsRef<str>,
 ) -> Result<api_types::CatalogName, CatalogClientError> {
     api_types::CatalogName::from_str(name.as_ref()).map_err(|_e| {
-        CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+        CatalogClientError::APIError(APIError::InvalidRequest(
             format!(
                 "catalog name {} does not meet API requirements.",
                 name.as_ref()
@@ -762,7 +760,7 @@ fn str_to_package_name(
     name: impl AsRef<str>,
 ) -> Result<api_types::PackageName, CatalogClientError> {
     api_types::PackageName::from_str(name.as_ref()).map_err(|_e| {
-        CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+        CatalogClientError::APIError(APIError::InvalidRequest(
             format!(
                 "package name {} does not meet API requirements.",
                 name.as_ref()
@@ -872,9 +870,11 @@ impl ClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::Resolve(resp)) => Ok(resp),
-            Some(Response::Error(err)) => Err(ResolveError::Resolve(
-                err.try_into()
-                    .expect("couldn't convert mock error response"),
+            Some(Response::Error(err)) => Err(ResolveError::CatalogClientError(
+                CatalogClientError::APIError(APIError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                )),
             )),
             _ => panic!("expected resolve response, found {:?}", &mock_resp),
         }
@@ -913,9 +913,11 @@ impl ClientTrait for MockClient {
                 results: vec![],
                 count: Some(0),
             }),
-            Some(Response::Error(err)) => Err(SearchError::Search(
-                err.try_into()
-                    .expect("couldn't convert mock error response"),
+            Some(Response::Error(err)) => Err(SearchError::CatalogClientError(
+                CatalogClientError::APIError(APIError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                )),
             )),
             _ => panic!("expected search response, found {:?}", &mock_resp),
         }
@@ -932,9 +934,12 @@ impl ClientTrait for MockClient {
             .pop_front();
         match mock_resp {
             Some(Response::Packages(resp)) => Ok(resp),
-            Some(Response::Error(err)) => Err(VersionsError::Versions(
-                err.try_into()
-                    .expect("couldn't convert mock error response"),
+            Some(Response::Error(err)) if err.status == 404 => Err(VersionsError::NotFound),
+            Some(Response::Error(err)) => Err(VersionsError::CatalogClientError(
+                CatalogClientError::APIError(APIError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                )),
             )),
             _ => panic!("expected packages response, found {:?}", &mock_resp),
         }
@@ -1011,10 +1016,8 @@ pub struct PackageGroup {
 pub enum CatalogClientError {
     #[error("system not supported by catalog")]
     UnsupportedSystem(#[source] api_error::ConversionError),
-    /// UnexpectedError corresponds to any variant of APIError other than
-    /// ErrorResponse, which is the only error that is in the API schema.
-    #[error("unexpected catalog connection error")]
-    UnexpectedError(#[source] APIError<api_types::ErrorResponse>),
+    #[error("{}", fmt_api_error(.0))]
+    APIError(APIError<api_types::ErrorResponse>),
     #[error("negative number of results")]
     NegativeNumberOfResults,
     #[error("resolution message error: {0}")]
@@ -1023,15 +1026,28 @@ pub enum CatalogClientError {
     InvalidIngressUri(#[source] url::ParseError),
 }
 
+fn fmt_api_error(api_error: &APIError<api_types::ErrorResponse>) -> String {
+    match api_error {
+        APIError::ErrorResponse(error_response) => {
+            let status = error_response.status();
+            let details = &error_response.detail;
+            format!("{status}: {details}")
+        },
+        APIError::UnexpectedResponse(resp) => {
+            let status = resp.status();
+            format!("{status}")
+        },
+        _ => format!("{api_error}"),
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum SearchError {
-    #[error("search failed: {}", fmt_info(_0))]
-    Search(ApiErrorResponseValue),
     #[error("invalid search term")]
     InvalidSearchTerm(#[source] api_error::ConversionError),
     #[error("encountered attribute path with less than 3 elements: {0}")]
     ShortAttributePath(String),
-    #[error(transparent)]
+    #[error("catalog error")]
     CatalogClientError(#[from] CatalogClientError),
     #[error("did not provide total result count")]
     NoTotalCount,
@@ -1039,26 +1055,15 @@ pub enum SearchError {
 
 #[derive(Debug, Error)]
 pub enum ResolveError {
-    #[error("resolution failed: {}", fmt_info(_0))]
-    Resolve(ApiErrorResponseValue),
-    #[error(transparent)]
+    #[error("catalog error")]
     CatalogClientError(#[from] CatalogClientError),
 }
 #[derive(Debug, Error)]
 pub enum VersionsError {
-    #[error("getting package versions failed: {}", fmt_info(_0))]
-    Versions(ApiErrorResponseValue),
-    #[error(transparent)]
+    #[error("catalog error")]
     CatalogClientError(#[from] CatalogClientError),
-}
-
-/// TODO: I copied this from the fmt_info function used by the Display impl of
-/// APIError.
-/// We should find something cleaner.
-fn fmt_info(error_response: &ApiErrorResponseValue) -> String {
-    let status = error_response.status();
-    let details = &error_response.detail;
-    format!("{status} {details}")
+    #[error("package not found")]
+    NotFound,
 }
 
 impl TryFrom<PackageGroup> for api_types::PackageGroup {

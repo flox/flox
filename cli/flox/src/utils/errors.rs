@@ -606,11 +606,7 @@ pub fn format_resolve_error(err: &ResolveError) -> String {
     trace!("formatting locked_manifest_error: {err:?}");
     match err {
         // region: errors from the catalog locking
-        ResolveError::CatalogResolve(err) => formatdoc! {"
-            Failed to lock the manifest.
-
-            {err}
-        "},
+        ResolveError::CatalogResolve(err) => display_chain(err),
         // endregion
         ResolveError::UnrecognizedSystem(system) => formatdoc! {"
             Unrecognized system in manifest: {system}
