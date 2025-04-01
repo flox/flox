@@ -395,7 +395,7 @@ mod tests {
             version = 1
 
             [install]
-            hello.pkg-path = "hello" 
+            hello.pkg-path = "hello"
 
             [build.hello]
             command = '''
@@ -413,7 +413,7 @@ mod tests {
             version = 1
 
             [install]
-            hello.pkg-path = "hello" 
+            hello.pkg-path = "hello"
         "#};
         let manifest = Manifest::from_str(&manifest_str).unwrap();
         let res = Publish::get_publish_target(&manifest, &None);
@@ -426,7 +426,7 @@ mod tests {
             version = 1
 
             [install]
-            hello.pkg-path = "hello" 
+            hello.pkg-path = "hello"
 
             [build.hello]
             command = '''
@@ -449,7 +449,7 @@ mod tests {
             version = 1
 
             [install]
-            hello.pkg-path = "hello" 
+            hello.pkg-path = "hello"
 
             [build.hello]
             command = '''
@@ -478,7 +478,7 @@ mod tests {
             version = 1
 
             [install]
-            hello.pkg-path = "hello" 
+            hello.pkg-path = "hello"
 
             [build.hello]
             command = '''
