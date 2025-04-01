@@ -139,7 +139,11 @@ impl RawManifest {
 
             table
         } else {
-            Table::from_iter(packages.iter().map(|pkg| (&pkg.id, InlineTable::from(pkg))))
+            Table::from_iter(packages.iter().map(|pkg| {
+                let mut table = InlineTable::from(pkg);
+                table.set_dotted(true);
+                (&pkg.id, table)
+            }))
         };
 
         install_table.decor_mut().set_prefix(indoc! {r#"
@@ -1177,7 +1181,8 @@ pub(super) mod test {
             ##  $ flox show gum     <- show all versions of a package
             ## -------------------------------------------------------------------
             [install]
-            python3 = { pkg-path = "python3", version = "3.11.6" }
+            python3.pkg-path = "python3"
+            python3.version = "3.11.6"
 
 
             ## Environment Variables ---------------------------------------------
