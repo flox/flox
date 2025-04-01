@@ -73,6 +73,7 @@ impl<T> TryFrom<GenericResponse<T>> for ResponseValue<T> {
     }
 }
 
+/// A mock response
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Response {
@@ -83,6 +84,7 @@ pub enum Response {
     Search(SearchResults),
     GetStoreInfo(StoreInfoResponse),
     Error(GenericResponse<ErrorResponse>),
+    Publish(PublishResponse),
 }
 
 #[derive(Debug, Error)]
@@ -376,6 +378,11 @@ impl MockClient {
         let data_path = (*GENERATED_DATA).join(relative_path);
         eprintln!("data path: {}", data_path.display());
         let responses = read_mock_responses(data_path).expect("couldn't read mock responses");
+        self.reset_mocks(responses);
+    }
+
+    /// See [test_helpers::reset_mocks].
+    fn reset_mocks(&mut self, responses: impl IntoIterator<Item = Response>) {
         let mut locked_mock_responses = self
             .mock_responses
             .lock()
@@ -439,8 +446,14 @@ pub trait ClientTrait {
     /// to be published.
     async fn get_ingress_uri(
         &self,
-        _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<Option<Url>, CatalogClientError>;
+        catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<Option<Url>, CatalogClientError> {
+        let uri_str = self.create_catalog(catalog_name).await?.ingress_uri;
+        uri_str
+            .map(|s| Url::from_str(&s))
+            .transpose()
+            .map_err(CatalogClientError::InvalidIngressUri)
+    }
 
     /// Create a package within a user catalog
     async fn create_package(
@@ -725,17 +738,6 @@ impl ClientTrait for CatalogClient {
         let store_info = response.into_inner();
         Ok(store_info.items)
     }
-
-    async fn get_ingress_uri(
-        &self,
-        catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<Option<Url>, CatalogClientError> {
-        let uri_str = self.create_catalog(catalog_name).await?.ingress_uri;
-        uri_str
-            .map(|s| Url::from_str(&s))
-            .transpose()
-            .map_err(CatalogClientError::InvalidIngressUri)
-    }
 }
 
 /// Converts a catalog name to a semantic type and performs validation that it
@@ -938,18 +940,20 @@ impl ClientTrait for MockClient {
         }
     }
 
-    async fn get_ingress_uri(
-        &self,
-        _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<Option<Url>, CatalogClientError> {
-        Ok(None)
-    }
-
     async fn create_catalog(
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
     ) -> Result<PublishResponse, CatalogClientError> {
-        Ok(api_types::PublishResponse { ingress_uri: None })
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::Publish(resp)) => Ok(resp),
+            // We don't need to test errors at the moment
+            _ => panic!("expected publish response, found {:?}", &mock_resp),
+        }
     }
 
     async fn create_package(
@@ -1412,8 +1416,6 @@ impl SearchTerm {
     }
 }
 
-// These functions should really be a #[cfg(test)] method on their
-// respective types, but you can't import test features across crates
 pub mod test_helpers {
     use super::*;
     use crate::data::System;
@@ -1426,6 +1428,15 @@ pub mod test_helpers {
         };
 
         client.reset_mocks_from_file(relative_path);
+    }
+
+    /// Clear mock responses and then load provided responses
+    pub fn reset_mocks(client: &mut Client, responses: Vec<Response>) {
+        let Client::Mock(client) = client else {
+            panic!("mocks can only be used with a MockClient");
+        };
+
+        client.reset_mocks(responses);
     }
 
     pub fn resolved_pkg_group_with_dummy_package(
