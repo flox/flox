@@ -121,15 +121,6 @@ impl Features {
     }
 }
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, derive_more::Deref)]
-pub struct UseCatalog(bool);
-
-impl Default for UseCatalog {
-    fn default() -> Self {
-        UseCatalog(true)
-    }
-}
-
 pub static DEFAULT_FLOXHUB_URL: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://hub.flox.dev").unwrap());
 
