@@ -96,7 +96,7 @@ pub struct Flox {
 
 impl Flox {}
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, Default)]
 pub struct Features {
     #[serde(default)]
     pub build: bool,
@@ -105,7 +105,20 @@ pub struct Features {
     #[serde(default)]
     pub upload: bool,
     #[serde(default)]
-    pub compose: bool,
+    compose: bool,
+    #[serde(default)]
+    pub qa: bool,
+}
+
+impl Features {
+    pub fn compose(&self) -> bool {
+        self.qa || self.compose
+    }
+
+    #[cfg(any(test, feature = "tests"))]
+    pub fn set_compose(&mut self, compose: bool) {
+        self.compose = compose;
+    }
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, derive_more::Deref)]
@@ -259,10 +272,14 @@ pub enum FloxhubError {
 pub mod test_helpers {
     use std::fs;
 
-    use tempfile::{tempdir_in, TempDir};
+    use tempfile::{TempDir, tempdir_in};
 
     use self::catalog::MockClient;
     use super::*;
+    use crate::providers::flake_installable_locker::{
+        InstallableLockerImpl,
+        InstallableLockerMock,
+    };
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
     pub fn create_test_token(handle: &str) -> FloxhubToken {
@@ -335,7 +352,7 @@ pub mod test_helpers {
             .unwrap(),
             floxhub_token: None,
             catalog_client: MockClient::default().into(),
-            installable_locker: Default::default(),
+            installable_locker: InstallableLockerImpl::Mock(InstallableLockerMock::new()),
             features: Default::default(),
             verbosity: 0,
         };
@@ -363,7 +380,7 @@ pub mod tests {
     /// }
     /// .
     /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-    const FAKE_TOKEN: &str= "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74";
+    const FAKE_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74";
 
     /// A fake floxhub token, that is expired
     ///
@@ -378,7 +395,7 @@ pub mod tests {
     /// }
     /// .
     /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-    const FAKE_EXPIRED_TOKEN: &str= "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY";
+    const FAKE_EXPIRED_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY";
 
     #[tokio::test]
     async fn test_get_username() {

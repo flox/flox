@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use flox_core::{serialize_atomically, SerializeError, Version};
+use flox_core::{SerializeError, Version, serialize_atomically};
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use super::environment::{path_hash, EnvironmentPointer};
+use super::environment::{EnvironmentPointer, path_hash};
 use super::floxmeta::{FloxMeta, FloxMetaError};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
@@ -347,7 +347,7 @@ mod test {
     use std::fs::OpenOptions;
     use std::io::BufWriter;
 
-    use proptest::arbitrary::{any, Arbitrary};
+    use proptest::arbitrary::{Arbitrary, any};
     use proptest::collection::vec;
     use proptest::path::PathParams;
     use proptest::strategy::{BoxedStrategy, Just, Strategy};

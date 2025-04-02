@@ -1,4 +1,4 @@
-use std::io::{stdout, Write};
+use std::io::{Write, stdout};
 
 use anyhow::Result;
 use bpaf::Bpaf;
@@ -13,12 +13,14 @@ use flox_rust_sdk::providers::flake_installable_locker::LockedInstallable;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use indoc::formatdoc;
 use itertools::Itertools;
+use toml_edit::visit_mut::VisitMut;
+use toml_edit::{Item, KeyMut, Value};
 use tracing::{debug, instrument};
 
-use super::{environment_select, EnvironmentSelect};
+use super::{EnvironmentSelect, environment_select};
+use crate::environment_subcommand_metric;
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 // List packages installed in an environment
 #[derive(Bpaf, Clone)]
@@ -59,14 +61,13 @@ impl List {
             .environment
             .detect_concrete_environment(&flox, "List using")?;
 
-        let manifest_contents = env.manifest_contents(&flox)?;
+        let lockfile = env.lockfile(&flox)?.into();
         if self.list_mode == ListMode::Config {
-            println!("{manifest_contents}");
+            Self::print_config(&flox, &env, &lockfile)?;
             return Ok(());
         }
 
         let system = &flox.system;
-        let lockfile = Self::get_lockfile(&flox, &mut env)?;
         let packages = lockfile.list_packages(system)?;
 
         if packages.is_empty() {
@@ -98,6 +99,69 @@ impl List {
                 )?;
             },
             ListMode::Config => unreachable!(),
+        }
+
+        Ok(())
+    }
+
+    /// Serialize the manifest to a string.
+    /// If the manifest includes other environments,
+    /// configure the serializer to produce output closer to the reference
+    /// style.
+    fn manifest_contents_to_print(
+        flox: &Flox,
+        env: &ConcreteEnvironment,
+        lockfile: &Lockfile,
+    ) -> Result<String> {
+        let is_composed = lockfile.compose.is_some();
+
+        // A visitor that converts inline tables to proper tables
+        // Nested tables are rendered as `dotted` tables.
+        // The default behavior when instantiating with `Visitor::new_for_document`,
+        // is to render toplevel tables as non-dotted, sections.
+        struct Visitor {
+            dotted: bool,
+        }
+        impl Visitor {
+            fn new_for_document() -> Self {
+                Visitor { dotted: false }
+            }
+        }
+        impl VisitMut for Visitor {
+            fn visit_table_like_kv_mut(&mut self, _key: KeyMut<'_>, node: &mut Item) {
+                if let toml_edit::Item::Value(Value::InlineTable(inline_table)) = node {
+                    let mut table = std::mem::take(inline_table).into_table();
+                    table.set_implicit(true);
+                    table.set_dotted(self.dotted);
+                    toml_edit::visit_mut::visit_table_mut(
+                        &mut Visitor { dotted: true },
+                        &mut table,
+                    );
+                    *node = toml_edit::Item::Table(table);
+                }
+            }
+        }
+
+        let manifest_contents = if is_composed {
+            let mut document = toml_edit::ser::to_document(&lockfile.manifest)?;
+            toml_edit::visit_mut::visit_document_mut(
+                &mut Visitor::new_for_document(),
+                &mut document,
+            );
+            document.to_string()
+        } else {
+            env.manifest_contents(flox)?
+        };
+        Ok(manifest_contents)
+    }
+
+    /// print the manifest contents
+    fn print_config(flox: &Flox, env: &ConcreteEnvironment, lockfile: &Lockfile) -> Result<()> {
+        println!("{}", Self::manifest_contents_to_print(flox, env, lockfile)?);
+        let is_composed = lockfile.compose.is_some();
+        if is_composed {
+            message::info("Displaying merged manifest.");
+            message::print_overridden_manifest_fields(lockfile);
         }
 
         Ok(())
@@ -291,22 +355,6 @@ impl List {
         Ok(())
     }
 
-    /// Read existing lockfile or lock to create a new [LockedManifest].
-    ///
-    /// This may write the lockfile depending on the type of environment;
-    /// path and managed environments with local checkouts will lock if there
-    /// isn't a lockfile or it has different manifest contents than the
-    /// manifest.
-    ///
-    /// Check the implementation docs of [Environment::lockfile] for more
-    /// information.
-    fn get_lockfile(flox: &Flox, env: &mut ConcreteEnvironment) -> Result<Lockfile> {
-        // TODO: it would be better if we knew when a lock was actually happening
-        let lockfile = env.lockfile(flox)?;
-
-        Ok(lockfile)
-    }
-
     fn get_cached_upgrades_for_current_system(
         flox: &Flox,
         environment: &mut ConcreteEnvironment,
@@ -317,7 +365,7 @@ impl List {
             return Ok(None);
         };
 
-        let current_lockfile = environment.lockfile(flox)?;
+        let current_lockfile = environment.lockfile(flox)?.into();
 
         if Some(current_lockfile) != info.result.old_lockfile {
             // todo: delete the info file?
@@ -331,12 +379,16 @@ impl List {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use flox_rust_sdk::models::lockfile::LockedPackage;
     use flox_rust_sdk::models::lockfile::test_helpers::{
+        LOCKED_NIX_EVAL_JOBS,
         fake_catalog_package_lock,
         nix_eval_jobs_descriptor,
-        LOCKED_NIX_EVAL_JOBS,
     };
-    use flox_rust_sdk::models::lockfile::LockedPackage;
     use flox_rust_sdk::models::manifest::typed::DEFAULT_PRIORITY;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -709,5 +761,64 @@ mod tests {
               Unfree:       false
               Broken:       false
         "});
+    }
+
+    /// manifest_contents_to_print puts items in the same table with dotted
+    /// subtables for composed environments
+    #[test]
+    fn print_config_puts_packages_in_same_table() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.set_compose(true);
+
+        // Create dep environment
+        let dep_path = tempdir.path().join("dep");
+        let dep_manifest_contents = indoc! {r#"
+        version = 1
+
+        [services]
+        sleep2.command = "sleep infinity"
+        sleep2.is-daemon = true
+        "#};
+
+        fs::create_dir(&dep_path).unwrap();
+        let mut dep = new_path_environment_in(&flox, dep_manifest_contents, &dep_path);
+        dep.lockfile(&flox).unwrap();
+
+        // Create composer environment
+        let composer_path = tempdir.path().join("composer");
+        let composer_manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "../dep" }
+        ]
+
+        [services]
+        sleep1.command = "sleep infinity"
+        sleep1.is-daemon = true
+        "#};
+        fs::create_dir(&composer_path).unwrap();
+        let mut composer =
+            new_path_environment_in(&flox, composer_manifest_contents, &composer_path);
+        let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
+
+        assert_eq!(
+            List::manifest_contents_to_print(
+                &flox,
+                &ConcreteEnvironment::Path(composer),
+                &lockfile
+            )
+            .unwrap(),
+            indoc! {r#"
+                version = 1
+
+                [services]
+                sleep1.command = "sleep infinity"
+                sleep1.is-daemon = true
+                sleep2.command = "sleep infinity"
+                sleep2.is-daemon = true
+            "#}
+        );
     }
 }

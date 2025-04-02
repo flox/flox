@@ -19,37 +19,39 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use indoc::formatdoc;
+use itertools::Itertools;
 use tracing::debug;
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
+use super::fetcher::IncludeFetcher;
 use super::{
-    path_hash,
-    services_socket_path,
+    CACHE_DIR_NAME,
+    DOT_FLOX,
     DotFlox,
+    ENVIRONMENT_POINTER_FILENAME,
     EditResult,
     Environment,
     EnvironmentError,
     EnvironmentPointer,
-    InstallationAttempt,
-    PathPointer,
-    RenderedEnvironmentLinks,
-    UninstallationAttempt,
-    CACHE_DIR_NAME,
-    DOT_FLOX,
-    ENVIRONMENT_POINTER_FILENAME,
     GCROOTS_DIR_NAME,
+    InstallationAttempt,
     LIB_DIR_NAME,
     LOCKFILE_FILENAME,
     LOG_DIR_NAME,
+    PathPointer,
+    RenderedEnvironmentLinks,
+    UninstallationAttempt,
+    path_hash,
+    services_socket_path,
 };
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::lockfile::{Lockfile, DEFAULT_SYSTEMS_STR};
+use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
-use crate::models::manifest::typed::Manifest;
+use crate::models::manifest::typed::{ActivateMode, Manifest};
 use crate::providers::buildenv::BuildEnvOutputs;
 
 /// Struct representing a local environment
@@ -86,6 +88,7 @@ pub struct InitCustomization {
     pub profile_tcsh: Option<String>,
     pub profile_zsh: Option<String>,
     pub packages: Option<Vec<CatalogPackage>>,
+    pub activate_mode: Option<ActivateMode>,
 }
 
 impl PartialEq for PathEnvironment {
@@ -136,13 +139,30 @@ impl PathEnvironment {
         })
     }
 
+    fn include_fetcher(&self) -> Result<IncludeFetcher, EnvironmentError> {
+        Ok(IncludeFetcher {
+            base_directory: Some(self.parent_path()?),
+        })
+    }
+
     /// Get a view of the environment that can be used to perform operations
     /// on the environment without side effects.
     ///
     /// This method should only be used to create [CoreEnvironment]s for a [PathEnvironment].
     /// To modify the environment, use the [PathEnvironment] methods instead.
-    pub(super) fn into_core_environment(self) -> CoreEnvironment {
-        CoreEnvironment::new(self.path.join(ENV_DIR_NAME))
+    pub(super) fn into_core_environment(self) -> Result<CoreEnvironment, EnvironmentError> {
+        self.as_core_environment()
+    }
+
+    fn as_core_environment(&self) -> Result<CoreEnvironment, EnvironmentError> {
+        Ok(CoreEnvironment::new(
+            self.path.join(ENV_DIR_NAME),
+            self.include_fetcher()?,
+        ))
+    }
+
+    fn as_core_environment_mut(&mut self) -> Result<CoreEnvironment, EnvironmentError> {
+        self.as_core_environment()
     }
 
     pub fn rename(&mut self, new_name: EnvironmentName) -> Result<(), EnvironmentError> {
@@ -173,9 +193,16 @@ impl PathEnvironment {
 
 impl Environment for PathEnvironment {
     /// This will lock the environment if it is not already locked.
-    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
-        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
-        Ok(env_view.ensure_locked(flox)?)
+    fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
+        let mut env_view = self.as_core_environment_mut()?;
+        env_view.ensure_locked(flox)
+    }
+
+    /// Returns the lockfile if it already exists.
+    fn existing_lockfile(&self, _flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError> {
+        self.as_core_environment()?
+            .existing_lockfile()
+            .map_err(EnvironmentError::Core)
     }
 
     /// Install packages to the environment atomically
@@ -191,7 +218,7 @@ impl Environment for PathEnvironment {
         packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError> {
-        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let mut env_view = self.as_core_environment_mut()?;
         let result = env_view.install(packages, flox)?;
         if let Some(ref store_paths) = result.built_environments {
             self.link(flox, store_paths)?;
@@ -210,7 +237,7 @@ impl Environment for PathEnvironment {
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
-        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let mut env_view = self.as_core_environment_mut()?;
         let result = env_view.uninstall(packages, flox)?;
         if let Some(ref store_paths) = result.built_environment_store_paths {
             self.link(flox, store_paths)?;
@@ -221,12 +248,16 @@ impl Environment for PathEnvironment {
 
     /// Atomically edit this environment, ensuring that it still builds
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
-        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let mut env_view = self.as_core_environment_mut()?;
         let result = env_view.edit(flox, contents)?;
-        if result != EditResult::Unchanged {
-            if let Some(ref store_paths) = result.built_environment_store_paths() {
-                self.link(flox, store_paths)?;
-            };
+        match &result {
+            EditResult::Changed {
+                built_environment_store_paths,
+                ..
+            } => {
+                self.link(flox, built_environment_store_paths)?;
+            },
+            EditResult::Unchanged => {},
         }
         Ok(result)
     }
@@ -237,7 +268,7 @@ impl Environment for PathEnvironment {
         flox: &Flox,
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
-        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let mut env_view = self.as_core_environment_mut()?;
         let result = env_view.upgrade(flox, groups_or_iids, false)?;
         Ok(result)
     }
@@ -249,8 +280,27 @@ impl Environment for PathEnvironment {
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
-        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let mut env_view = self.as_core_environment_mut()?;
         let result = env_view.upgrade(flox, groups_or_iids, true)?;
+        if let Some(ref store_paths) = result.store_path {
+            self.link(flox, store_paths)?;
+        }
+
+        Ok(result)
+    }
+
+    /// Upgrade environment with latest changes to included environments.
+    fn include_upgrade(
+        &mut self,
+        flox: &Flox,
+        to_upgrade: Vec<String>,
+    ) -> Result<UpgradeResult, EnvironmentError> {
+        tracing::debug!(
+            includes = to_upgrade.iter().join(","),
+            "upgrading included environments"
+        );
+        let mut env_view = self.as_core_environment_mut()?;
+        let result = env_view.include_upgrade(flox, to_upgrade)?;
         if let Some(ref store_paths) = result.store_path {
             self.link(flox, store_paths)?;
         }
@@ -265,7 +315,7 @@ impl Environment for PathEnvironment {
 
     /// Return the deserialized manifest
     fn manifest(&self, _flox: &Flox) -> Result<Manifest, EnvironmentError> {
-        let env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let env_view = self.as_core_environment()?;
         env_view.manifest().map_err(EnvironmentError::Core)
     }
 
@@ -304,7 +354,7 @@ impl Environment for PathEnvironment {
     /// Build the environment
     /// This will lock the environment if it is not already locked.
     fn build(&mut self, flox: &Flox) -> Result<BuildEnvOutputs, EnvironmentError> {
-        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let mut env_view = self.as_core_environment_mut()?;
         env_view.lock(flox)?;
         let store_paths = env_view.build(flox)?;
         Ok(store_paths)
@@ -409,6 +459,7 @@ impl PathEnvironment {
         let manifest = {
             tracing::debug!("creating raw catalog manifest");
             RawManifest::new_documented(
+                flox.features,
                 &DEFAULT_SYSTEMS_STR.iter().collect::<Vec<_>>(),
                 customization,
             )
@@ -419,7 +470,10 @@ impl PathEnvironment {
 
         // Build environment if customization installs at least one package
         if matches!(customization.packages.as_deref(), Some([_, ..])) {
-            let mut env_view = CoreEnvironment::new(environment.path.join(ENV_DIR_NAME));
+            let mut env_view = CoreEnvironment::new(
+                environment.path.join(ENV_DIR_NAME),
+                environment.include_fetcher()?,
+            );
             env_view.lock(flox)?;
             let store_paths = env_view.build(flox)?;
             environment.link(flox, &store_paths)?;
@@ -496,7 +550,7 @@ impl PathEnvironment {
     /// or differs from the definition in the environment,
     /// the environment will be rebuilt.
     fn needs_rebuild(&self) -> Result<bool, EnvironmentError> {
-        let env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let env_view = self.as_core_environment()?;
         let Some(lockfile_contents) = env_view.existing_lockfile_contents()? else {
             return Ok(true);
         };
@@ -518,6 +572,15 @@ impl PathEnvironment {
         }
 
         Ok(false)
+    }
+
+    /// The environment is locked,
+    /// and the manifest in the lockfile matches that in the manifest.
+    /// Note that the manifest could have whitespace or comment differences from
+    /// the lockfile.
+    pub fn lockfile_up_to_date(&self) -> Result<bool, EnvironmentError> {
+        let env_view = self.as_core_environment()?;
+        Ok(env_view.lockfile_if_up_to_date()?.is_some())
     }
 
     fn link(
@@ -542,7 +605,25 @@ pub mod test_helpers {
         contents: &str,
         path: impl AsRef<Path>,
     ) -> PathEnvironment {
-        let pointer = PathPointer::new("name".parse().unwrap());
+        let pointer = PathPointer::new(
+            path.as_ref()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .parse()
+                .unwrap(),
+        );
+        PathEnvironment::write_new_unchecked(flox, pointer, path, contents).unwrap()
+    }
+
+    pub fn new_named_path_environment_in(
+        flox: &Flox,
+        contents: &str,
+        path: impl AsRef<Path>,
+        name: &str,
+    ) -> PathEnvironment {
+        let pointer = PathPointer::new(name.parse().unwrap());
         PathEnvironment::write_new_unchecked(flox, pointer, path, contents).unwrap()
     }
 
@@ -554,23 +635,58 @@ pub mod test_helpers {
         )
     }
 
+    pub fn new_named_path_environment(flox: &Flox, contents: &str, name: &str) -> PathEnvironment {
+        new_named_path_environment_in(
+            flox,
+            contents,
+            tempdir_in(&flox.temp_dir).unwrap().into_path(),
+            name,
+        )
+    }
+
     pub fn new_path_environment_from_env_files(
         flox: &Flox,
         env_files_dir: impl AsRef<Path>,
     ) -> PathEnvironment {
         let dot_flox_parent_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
-        new_path_environment_from_env_files_in(flox, env_files_dir, dot_flox_parent_path)
+        new_path_environment_from_env_files_in(flox, env_files_dir, dot_flox_parent_path, None)
+    }
+
+    pub fn new_named_path_environment_from_env_files(
+        flox: &Flox,
+        env_files_dir: impl AsRef<Path>,
+        name: &str,
+    ) -> PathEnvironment {
+        let dot_flox_parent_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+        new_path_environment_from_env_files_in(
+            flox,
+            env_files_dir,
+            dot_flox_parent_path,
+            Some(name),
+        )
     }
 
     pub fn new_path_environment_from_env_files_in(
         flox: &Flox,
         env_files_dir: impl AsRef<Path>,
         dot_flox_parent_path: impl AsRef<Path>,
+        name: Option<&str>,
     ) -> PathEnvironment {
         let env_files_dir = env_files_dir.as_ref();
         let manifest_contents = fs::read_to_string(env_files_dir.join(MANIFEST_FILENAME)).unwrap();
         let lockfile_contents = fs::read_to_string(env_files_dir.join(LOCKFILE_FILENAME)).unwrap();
-        let pointer = PathPointer::new("name".parse().unwrap());
+        let pointer = PathPointer::new(
+            name.unwrap_or_else(|| {
+                dot_flox_parent_path
+                    .as_ref()
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+            })
+            .parse()
+            .unwrap(),
+        );
         PathEnvironment::write_new_unchecked(
             flox,
             pointer.clone(),
@@ -589,11 +705,63 @@ pub mod test_helpers {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
+
+    use flox_test_utils::proptest::{alphanum_string, lowercase_alphanum_string};
+    use indoc::indoc;
+    use itertools::izip;
+    use proptest::collection::{hash_set as prop_hash_set, vec as prop_vec};
+    use proptest::prelude::*;
+    use tempfile::TempDir;
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
+    use crate::models::environment::path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_in,
+    };
+    use crate::models::lockfile::{Lockfile, RecoverableMergeError};
+    use crate::models::manifest::typed::test::manifest_without_install_or_include;
+
+    /// Returns (flox, tempdir, Vec<(dir relative to tempdir, PathEnvironment)>)
+    /// This is a list of relative paths to environments that can be included in
+    /// another environment.
+    /// The environment names and directories are unique.
+    pub fn generate_path_environments_without_install_or_include(
+        max_size: usize,
+    ) -> impl Strategy<Value = (Flox, TempDir, Vec<(PathBuf, PathEnvironment)>)> {
+        (1..=max_size).prop_flat_map(|size| {
+            (
+                prop_vec(manifest_without_install_or_include(), size..=size),
+                prop_hash_set(alphanum_string(2), size..=size),
+                // macOS is case-insensitive,
+                // so only use lowercase directories so there isn't a collision
+                // between e.g. dir and DIR
+                prop_hash_set(lowercase_alphanum_string(2), size..=size),
+            )
+                .prop_map(|(manifests, names, dirs)| {
+                    let (mut flox, tempdir) = flox_instance();
+                    flox.features.set_compose(true);
+
+                    let mut environments = vec![];
+                    for (manifest, name, dir) in izip!(&manifests, &names, &dirs) {
+                        let relative_path = PathBuf::from(dir);
+                        let absolute_path = tempdir.path().join(&relative_path);
+                        fs::create_dir(&absolute_path).unwrap();
+                        let mut environment = test_helpers::new_named_path_environment_in(
+                            &flox,
+                            &toml_edit::ser::to_string_pretty(&manifest).unwrap(),
+                            absolute_path,
+                            name,
+                        );
+                        environment.lockfile(&flox).unwrap();
+                        environments.push((relative_path, environment));
+                    }
+                    (flox, tempdir, environments)
+                })
+        })
+    }
 
     #[test]
     fn create_env() {
@@ -644,7 +812,8 @@ mod tests {
         assert!(env.needs_rebuild().unwrap());
 
         // build the environment -> out link is created -> no rebuild necessary
-        let mut env_view = CoreEnvironment::new(env.path.join(ENV_DIR_NAME));
+        let mut env_view =
+            CoreEnvironment::new(env.path.join(ENV_DIR_NAME), env.include_fetcher().unwrap());
         env_view.lock(&flox).unwrap();
         let store_paths = env_view.build(&flox).unwrap();
         env.link(&flox, &store_paths).unwrap();
@@ -652,10 +821,8 @@ mod tests {
         assert!(!env.needs_rebuild().unwrap());
 
         // "modify" the lockfile by changing its formatting -> rebuild necessary
-        let file = fs::write(
-            env.lockfile_path(&flox).unwrap(),
-            env.lockfile(&flox).unwrap().to_string(),
-        );
+        let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
+        let file = fs::write(env.lockfile_path(&flox).unwrap(), lockfile.to_string());
         drop(file);
         assert!(env.needs_rebuild().unwrap());
     }
@@ -725,5 +892,76 @@ mod tests {
         assert!(reg_path.exists());
         let reg = read_environment_registry(&reg_path).unwrap().unwrap();
         assert!(reg.entries.is_empty());
+    }
+
+    /// If an environment doesn't have any included environments, calling include_upgrade()
+    /// should error
+    #[test]
+    fn include_upgrade_errors_without_includes() {
+        let (mut flox, _tempdir) = flox_instance();
+        flox.features.set_compose(true);
+
+        // Create environment
+        let manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+        let mut composer = new_path_environment(&flox, manifest_contents);
+        composer.lockfile(&flox).unwrap();
+
+        // Try to upgrade
+        let err = composer.include_upgrade(&flox, vec![]).unwrap_err();
+
+        let EnvironmentError::Recoverable(RecoverableMergeError::Catchall(message)) = err else {
+            panic!("expected Catchall error, got: {:?}", err)
+        };
+
+        assert_eq!(message, "environment has no included environments",);
+    }
+
+    /// include_upgrade()errors when specified included environment doesn't exist
+    #[test]
+    fn include_upgrade_errors_when_included_environment_does_not_exist() {
+        let (mut flox, tempdir) = flox_instance();
+        flox.features.set_compose(true);
+
+        // Create dep
+        let dep_path = tempdir.path().join("dep");
+        let dep_manifest_contents = indoc! {r#"
+            version = 1
+            [vars]
+            foo = "v1"
+            "#};
+        fs::create_dir(&dep_path).unwrap();
+        let mut dep = new_path_environment_in(&flox, dep_manifest_contents, &dep_path);
+        dep.lockfile(&flox).unwrap();
+
+        // Create composer
+        let composer_manifest_contents = indoc! {r#"
+            version = 1
+            [include]
+            environments = [
+              { dir = "dep" },
+            ]
+            "#};
+        let composer_path = tempdir.path();
+        let mut composer =
+            new_path_environment_in(&flox, composer_manifest_contents, composer_path);
+        let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
+
+        assert_eq!(lockfile.manifest.vars.0["foo"], "v1");
+
+        // Call include_upgrade() with a name of an included environment that does not exist
+        let err = composer
+            .include_upgrade(&flox, vec!["does_not_exist".to_string()])
+            .unwrap_err();
+
+        let EnvironmentError::Recoverable(RecoverableMergeError::Catchall(message)) = err else {
+            panic!("expected Catchall error, got: {:?}", err)
+        };
+
+        assert_eq!(
+            message,
+            "unknown included environment to check for changes 'does_not_exist'"
+        );
     }
 }

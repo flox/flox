@@ -192,6 +192,13 @@ EOF
 
   chmod +x "$FLOX_TEST_HOME/bin/podman"
   export PATH="$FLOX_TEST_HOME/bin:$PATH:/run/wrappers/bin"
+
+  # Check that podman is functioning
+  # and ensure it has created the necessary directories.
+  # Without this, starting multiple podman containers in parallel,
+  # may cause a race between the containers to create the directories,
+  # in particular `$HOME/.ssh`.
+  podman ps
 }
 
 teardown() {
@@ -409,11 +416,22 @@ EOF
 
   TAG="cmd-runs-in-activation"
 
-  bash -c "FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=main $FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
+  bash -c "$FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
 
   run podman run --rm "test:$TAG"
   assert_success
   assert_output --partial "Hello, world!"
+
+  # Verify that the `activate` entrypoint is still used when an ad-hoc command
+  # is used and that (since it's quicker than executing a separate test)
+  # `FLOX_ENV_*` are set correctly.
+  run podman run --rm "test:$TAG" -c 'echo $FLOX_ENV_CACHE'
+  assert_success
+  assert_output "/tmp"
+
+  run podman run --rm "test:$TAG" -c 'echo $FLOX_ENV_DESCRIPTION'
+  assert_success
+  assert_output "test"
 }
 
 @test "container with user:group set can run as specified user:group" {
@@ -433,7 +451,7 @@ EOF
 
   TAG="whoami-in-container"
 
-  bash -c "FLOX_CONTAINERIZE_FLAKE_REF_OR_REV=main $FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
+  bash -c "$FLOX_BIN containerize --tag $TAG --runtime podman" 3>&- # TODO: why close FD 3?
 
   run podman run --rm "test:$TAG" 'whoami'
   assert_success

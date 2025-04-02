@@ -121,10 +121,7 @@ EOF
   assert_output "influxdb2: influxdb2 (influxdb2)"
 }
 
-# ------------------------------ Catalog Tests ------------------------------- #
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=list,list:catalog
+# bats test_tags=list
 @test "'flox list' lists packages of environment in the current dir; One package from nixpkgs" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
@@ -135,17 +132,22 @@ EOF
   assert_output --regexp 'hello: hello \([0-9]+\.[0-9]+(\.[0-9]+)?\)'
 }
 
-# bats test_tags=list,list:catalog,list:config
+# bats test_tags=list,list:config
 @test "'flox list --config' shows manifest content" {
   "$FLOX_BIN" init
   MANIFEST_CONTENTS="$(
     cat <<-EOF
-    version = 1
+version = 1
 
-    [install]
+[hook]
+on-activate = "something suspicious"
 
-    [hook]
-    on-activate = "something suspicious"
+[profile]
+
+[options.allow]
+licenses = []
+
+[options.semver]
 EOF
   )"
 
@@ -156,4 +158,68 @@ EOF
   assert_output "$MANIFEST_CONTENTS"
 }
 
-# ---------------------------------------------------------------------------- #
+# bats test_tags=list,list:config
+@test "'flox list --config' shows manifest content for composed environments" {
+  "$FLOX_BIN" init -d included
+  cat > included/.flox/env/manifest.toml <<-EOF
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+EOF
+
+  "$FLOX_BIN" init -d composer
+  cat > composer/.flox/env/manifest.toml <<-EOF
+version = 1
+
+[include]
+environments = [
+  { dir = "../included" },
+]
+EOF
+
+  # Trigger a lock of included
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" list -d included
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run --separate-stderr "$FLOX_BIN" list -c -d composer
+  assert_success
+  # TODO: Unspecified tables and empty vecs should be omitted.
+  assert_equal "$output" 'version = 1
+
+[install]
+hello.pkg-path = "hello"'
+  assert_equal "$stderr" 'ℹ️ Displaying merged manifest.'
+}
+
+# bats test_tags=list,list:config
+@test "'flox list --config' shows notices about overrides" {
+  "$FLOX_BIN" init -d included
+  "$FLOX_BIN" edit -d included -f - <<- EOF
+version = 1
+
+[vars]
+foo = "included"
+EOF
+
+  "$FLOX_BIN" init -d composer
+  "$FLOX_BIN" edit -d composer -f - <<- EOF
+version = 1
+
+[vars]
+foo = "composer"
+
+[include]
+environments = [
+  { dir = "../included" },
+]
+EOF
+
+  run --separate-stderr "$FLOX_BIN" list -c -d composer
+  assert_success
+  assert_equal "$stderr" "ℹ️ Displaying merged manifest.
+ℹ️ The following manifest fields were overridden during merging:
+- This environment set:
+  - vars.foo"
+}

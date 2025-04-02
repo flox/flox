@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::EnvironmentError;
@@ -7,11 +7,11 @@ use itertools::Itertools;
 use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
-use super::{environment_select, EnvironmentSelect};
-use crate::commands::{ensure_floxhub_token, environment_description, EnvironmentSelectError};
+use super::{EnvironmentSelect, environment_select};
+use crate::commands::{EnvironmentSelectError, ensure_floxhub_token, environment_description};
+use crate::environment_subcommand_metric;
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Uninstall installed packages from an environment
 #[derive(Bpaf, Clone)]
@@ -74,12 +74,20 @@ impl Uninstall {
             environment = %description,
             progress = format!("Uninstalling {} packages", self.packages.len()));
 
-        span.in_scope(|| environment.uninstall(self.packages.clone(), &flox))?;
+        let attempt = span.in_scope(|| environment.uninstall(self.packages.clone(), &flox))?;
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.
-        self.packages.iter().for_each(|p| {
-            message::deleted(format!("'{p}' uninstalled from environment {description}"))
+        self.packages.iter().for_each(|package| {
+            message::deleted(format!(
+                "'{package}' uninstalled from environment {description}"
+            ));
+            if let Some(include) = attempt.still_included.get(package) {
+                message::info(format!(
+                    "'{package}' is still installed by environment '{}'",
+                    include.name,
+                ));
+            }
         });
 
         warn_manifest_changes_for_services(&flox, environment.as_ref());

@@ -1,20 +1,20 @@
 use std::env;
 use std::path::Path;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::Inner;
-use flox_rust_sdk::providers::build::{build_symlink_path, FloxBuildMk, ManifestBuilder, Output};
+use flox_rust_sdk::providers::build::{FloxBuildMk, ManifestBuilder, Output, build_symlink_path};
 use indoc::{formatdoc, indoc};
 use tracing::instrument;
 
-use super::{environment_select, EnvironmentSelect};
+use super::{EnvironmentSelect, environment_select};
 use crate::commands::activate::FLOX_INTERPRETER;
+use crate::environment_subcommand_metric;
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[allow(unused)] // remove when we implement the command
 #[derive(Bpaf, Clone)]
@@ -90,8 +90,9 @@ impl Build {
 
         let base_dir = env.parent_path()?;
         let flox_env = env.rendered_env_links(&flox)?;
+        let lockfile = env.lockfile(&flox)?.into();
 
-        let packages_to_clean = available_packages(&env.lockfile(&flox)?, packages)?;
+        let packages_to_clean = available_packages(&lockfile, packages)?;
 
         let builder = FloxBuildMk;
         builder.clean(&flox, &base_dir, &flox_env.development, &packages_to_clean)?;
@@ -109,8 +110,9 @@ impl Build {
 
         let base_dir = env.parent_path()?;
         let built_environments = env.build(&flox)?;
+        let lockfile = env.lockfile(&flox)?.into();
 
-        let packages_to_build = available_packages(&env.lockfile(&flox)?, packages)?;
+        let packages_to_build = available_packages(&lockfile, packages)?;
 
         let builder = FloxBuildMk;
         let output = builder.build(

@@ -42,7 +42,7 @@
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
             "rev_date": "2024-12-19T23:01:11Z",
-            "scrape_date": "2024-12-23T03:03:04Z",
+            "scrape_date": "2024-12-23T03:54:12Z",
             "stabilities": [
               "stable",
               "staging",
@@ -50,7 +50,7 @@
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "python3.11-pip-24.0"
+            "version": "24.0"
           },
           {
             "attr_path": "python311Packages.pip",
@@ -87,7 +87,7 @@
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
             "rev_date": "2024-12-19T23:01:11Z",
-            "scrape_date": "2024-12-23T03:03:04Z",
+            "scrape_date": "2024-12-23T03:54:12Z",
             "stabilities": [
               "stable",
               "staging",
@@ -95,7 +95,7 @@
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "python3.11-pip-24.0"
+            "version": "24.0"
           },
           {
             "attr_path": "python311Packages.pip",
@@ -132,7 +132,7 @@
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
             "rev_date": "2024-12-19T23:01:11Z",
-            "scrape_date": "2024-12-23T03:03:04Z",
+            "scrape_date": "2024-12-23T03:54:12Z",
             "stabilities": [
               "stable",
               "staging",
@@ -140,7 +140,7 @@
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "python3.11-pip-24.0"
+            "version": "24.0"
           },
           {
             "attr_path": "python311Packages.pip",
@@ -177,7 +177,7 @@
             "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
             "rev_count": 724962,
             "rev_date": "2024-12-19T23:01:11Z",
-            "scrape_date": "2024-12-23T03:03:04Z",
+            "scrape_date": "2024-12-23T03:54:12Z",
             "stabilities": [
               "stable",
               "staging",
@@ -185,7 +185,7 @@
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "python3.11-pip-24.0"
+            "version": "24.0"
           }
         ],
         "page": 724962,

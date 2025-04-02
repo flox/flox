@@ -14,14 +14,7 @@
         "pkg-group": "not-toplevel"
       }
     },
-    "hook": {},
-    "profile": {},
-    "options": {
-      "allow": {
-        "licenses": []
-      },
-      "semver": {}
-    },
+    "options": {},
     "build": {
       "myhello": {
         "command": "    mkdir -p $out/bin\n    echo echo hello foo > $out/bin/hello\n    echo exec hello >> $out/bin/hello\n    chmod +x $out/bin/hello\n",
@@ -35,29 +28,29 @@
     {
       "attr_path": "vim",
       "broken": false,
-      "derivation": "/nix/store/cwkqb3k4945g3p60xdqhpa7pjkhavxzw-vim-9.1.1046.drv",
+      "derivation": "/nix/store/qgracad2r6mvlzpvg75ak5daqfxrj2z2-vim-9.1.1122.drv",
       "description": "Most popular clone of the VI editor",
       "install_id": "vim",
       "license": "Vim",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "name": "vim-9.1.1046",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+      "name": "vim-9.1.1122",
       "pname": "vim",
-      "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "rev_count": 750629,
-      "rev_date": "2025-02-08T13:21:17Z",
-      "scrape_date": "2025-02-09T04:06:52Z",
+      "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+      "rev_count": 773904,
+      "rev_date": "2025-03-25T07:53:30Z",
+      "scrape_date": "2025-03-27T01:10:47.456254Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "9.1.1046",
+      "version": "9.1.1122",
       "outputs_to_install": [
         "out",
         "xxd"
       ],
       "outputs": {
-        "out": "/nix/store/rx2i32cjx1y09n3qr5939xxfqjpkrhsr-vim-9.1.1046",
-        "xxd": "/nix/store/kbq8w3npsqgdipxc3ml57z67s0gn95yf-vim-9.1.1046-xxd"
+        "out": "/nix/store/lj23pafixhp5y9hrl9lpah10pnc1x5rv-vim-9.1.1122",
+        "xxd": "/nix/store/lb4h2ib8dfa0sgxkz5ffq8hbd8s18ag5-vim-9.1.1122-xxd"
       },
       "system": "aarch64-darwin",
       "group": "not-toplevel",
@@ -66,29 +59,29 @@
     {
       "attr_path": "vim",
       "broken": false,
-      "derivation": "/nix/store/irhnp947921gpqfj5yv0q11mgg65n22d-vim-9.1.1046.drv",
+      "derivation": "/nix/store/3d0ab92shp0qn4vx94zj9q0y1dyqazql-vim-9.1.1122.drv",
       "description": "Most popular clone of the VI editor",
       "install_id": "vim",
       "license": "Vim",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "name": "vim-9.1.1046",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+      "name": "vim-9.1.1122",
       "pname": "vim",
-      "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "rev_count": 750629,
-      "rev_date": "2025-02-08T13:21:17Z",
-      "scrape_date": "2025-02-09T04:06:52Z",
+      "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+      "rev_count": 773904,
+      "rev_date": "2025-03-25T07:53:30Z",
+      "scrape_date": "2025-03-27T01:28:30.674343Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "9.1.1046",
+      "version": "9.1.1122",
       "outputs_to_install": [
         "out",
         "xxd"
       ],
       "outputs": {
-        "out": "/nix/store/j67dghzznffvqvdg4q676ygw2pif1hw9-vim-9.1.1046",
-        "xxd": "/nix/store/0jh6sz9n3hrx7rnb44fq3xngya14ds4j-vim-9.1.1046-xxd"
+        "out": "/nix/store/74cwwydjna238r6vi59gb6sxykbmzdlb-vim-9.1.1122",
+        "xxd": "/nix/store/1d9fsfllxd2x0ncy20sh304svlh675fs-vim-9.1.1122-xxd"
       },
       "system": "aarch64-linux",
       "group": "not-toplevel",
@@ -97,29 +90,29 @@
     {
       "attr_path": "vim",
       "broken": false,
-      "derivation": "/nix/store/wg3bia8sxisvbvcnzcl80q0015i0pvrc-vim-9.1.1046.drv",
+      "derivation": "/nix/store/my3av4i4hyv4f8iky78m9djvayz7fv4y-vim-9.1.1122.drv",
       "description": "Most popular clone of the VI editor",
       "install_id": "vim",
       "license": "Vim",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "name": "vim-9.1.1046",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+      "name": "vim-9.1.1122",
       "pname": "vim",
-      "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "rev_count": 750629,
-      "rev_date": "2025-02-08T13:21:17Z",
-      "scrape_date": "2025-02-09T04:06:52Z",
+      "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+      "rev_count": 773904,
+      "rev_date": "2025-03-25T07:53:30Z",
+      "scrape_date": "2025-03-27T01:43:46.150069Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "9.1.1046",
+      "version": "9.1.1122",
       "outputs_to_install": [
         "out",
         "xxd"
       ],
       "outputs": {
-        "out": "/nix/store/n4rw363dm6mmi8zrcyzd8k0yhmnyw333-vim-9.1.1046",
-        "xxd": "/nix/store/kr9p6d9ws269mq9mf0b7al60b687x862-vim-9.1.1046-xxd"
+        "out": "/nix/store/iwf960q141pxd1d1inm3m82pvqkhqkky-vim-9.1.1122",
+        "xxd": "/nix/store/av4c0afl1s7604axf0dqqd125h2z4khf-vim-9.1.1122-xxd"
       },
       "system": "x86_64-darwin",
       "group": "not-toplevel",
@@ -128,29 +121,29 @@
     {
       "attr_path": "vim",
       "broken": false,
-      "derivation": "/nix/store/zb6y3yjpgkk6zk2sgwrk1p8myfbgg1ak-vim-9.1.1046.drv",
+      "derivation": "/nix/store/fwqybr1vw0wkvnvq61c0brhls33h6psr-vim-9.1.1122.drv",
       "description": "Most popular clone of the VI editor",
       "install_id": "vim",
       "license": "Vim",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "name": "vim-9.1.1046",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+      "name": "vim-9.1.1122",
       "pname": "vim",
-      "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "rev_count": 750629,
-      "rev_date": "2025-02-08T13:21:17Z",
-      "scrape_date": "2025-02-09T04:06:52Z",
+      "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+      "rev_count": 773904,
+      "rev_date": "2025-03-25T07:53:30Z",
+      "scrape_date": "2025-03-27T02:03:06.262832Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "9.1.1046",
+      "version": "9.1.1122",
       "outputs_to_install": [
         "out",
         "xxd"
       ],
       "outputs": {
-        "out": "/nix/store/91af2356mvkx4km3ngqi7sgfv6kimnc7-vim-9.1.1046",
-        "xxd": "/nix/store/4n2k7vffrqzgm8pxa1a4vdky1hzfyl2d-vim-9.1.1046-xxd"
+        "out": "/nix/store/817sg4h0hbb1xixaysk3mbss0kvksqpr-vim-9.1.1122",
+        "xxd": "/nix/store/4qw9s8dzls6zkzkgx7nixnmi3anv09h5-vim-9.1.1122-xxd"
       },
       "system": "x86_64-linux",
       "group": "not-toplevel",
@@ -159,28 +152,28 @@
     {
       "attr_path": "coreutils",
       "broken": false,
-      "derivation": "/nix/store/vjfwxkpsdmjc6zwvjavkw7wygvdkpn2i-coreutils-9.5.drv",
+      "derivation": "/nix/store/vgpd706nh33jmrzsjhn08kyxj9ix7iq8-coreutils-9.6.drv",
       "description": "GNU Core Utilities",
       "install_id": "coreutils",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "name": "coreutils-9.5",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+      "name": "coreutils-9.6",
       "pname": "coreutils",
-      "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "rev_count": 750629,
-      "rev_date": "2025-02-08T13:21:17Z",
-      "scrape_date": "2025-02-09T04:06:52Z",
+      "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+      "rev_count": 773904,
+      "rev_date": "2025-03-25T07:53:30Z",
+      "scrape_date": "2025-03-27T01:09:57.491548Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "9.5",
+      "version": "9.6",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/simc3qvyl7p7jpg75rxv8x649yp8zsx2-coreutils-9.5-info",
-        "out": "/nix/store/y47p66ilr9q34s9mizscsdxw5vxq62qj-coreutils-9.5"
+        "info": "/nix/store/k0hz5d3y6f6lk8mgzlggw6rqhdw65y56-coreutils-9.6-info",
+        "out": "/nix/store/4idwmksk4s5bdmzl1sz1z17bj0yfqgkj-coreutils-9.6"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -189,29 +182,29 @@
     {
       "attr_path": "coreutils",
       "broken": false,
-      "derivation": "/nix/store/55k13swx2vgmhaivk2x60iq0800sqd4r-coreutils-9.5.drv",
+      "derivation": "/nix/store/nwwcs1c805a51ihrhx4lzxvk2jm4crfh-coreutils-9.6.drv",
       "description": "GNU Core Utilities",
       "install_id": "coreutils",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "name": "coreutils-9.5",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+      "name": "coreutils-9.6",
       "pname": "coreutils",
-      "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "rev_count": 750629,
-      "rev_date": "2025-02-08T13:21:17Z",
-      "scrape_date": "2025-02-09T04:06:52Z",
+      "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+      "rev_count": 773904,
+      "rev_date": "2025-03-25T07:53:30Z",
+      "scrape_date": "2025-03-27T01:27:12.376697Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "9.5",
+      "version": "9.6",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "debug": "/nix/store/6bwh9mdkkm6by9fif5fs4gds70syjrlx-coreutils-9.5-debug",
-        "info": "/nix/store/rhypb4vgwpdqqpzdvn66g9r1r349chdg-coreutils-9.5-info",
-        "out": "/nix/store/262cihc8b77953r05p353h9xd7axjrbz-coreutils-9.5"
+        "debug": "/nix/store/r82rf3iq14gpcgn134snrrvjfc7cwxhs-coreutils-9.6-debug",
+        "info": "/nix/store/zi75ncfk3kanibc2rz5ym2vdf1ph47q7-coreutils-9.6-info",
+        "out": "/nix/store/ch9dmykfvimybpb0qm7ppi3zap8fx5s0-coreutils-9.6"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -220,28 +213,28 @@
     {
       "attr_path": "coreutils",
       "broken": false,
-      "derivation": "/nix/store/g1nysyhfj53ddn45nc8wiczkl38ilnk0-coreutils-9.5.drv",
+      "derivation": "/nix/store/9v1iwgkdpx37i257i2ml7nq70xbakjzz-coreutils-9.6.drv",
       "description": "GNU Core Utilities",
       "install_id": "coreutils",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "name": "coreutils-9.5",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+      "name": "coreutils-9.6",
       "pname": "coreutils",
-      "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "rev_count": 750629,
-      "rev_date": "2025-02-08T13:21:17Z",
-      "scrape_date": "2025-02-09T04:06:52Z",
+      "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+      "rev_count": 773904,
+      "rev_date": "2025-03-25T07:53:30Z",
+      "scrape_date": "2025-03-27T01:42:57.882537Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "9.5",
+      "version": "9.6",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "info": "/nix/store/4rz5jm5rk648bxgnhr1ijyw3xfnmsg2h-coreutils-9.5-info",
-        "out": "/nix/store/qjdqc0jddszwwb2jhpwyn2c92gsrdhwj-coreutils-9.5"
+        "info": "/nix/store/3abcqd1gc89j9nqzgp6whfcvqsni6p1a-coreutils-9.6-info",
+        "out": "/nix/store/9rafq6wr1m4k3kcrq3p7z2v5q5r66j50-coreutils-9.6"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -250,29 +243,29 @@
     {
       "attr_path": "coreutils",
       "broken": false,
-      "derivation": "/nix/store/8n2r30qdxcc6mj7hzf88gb1xzc1hjbrw-coreutils-9.5.drv",
+      "derivation": "/nix/store/5h55gpcb1nljrqg6hzrp7bblgjk47h1s-coreutils-9.6.drv",
       "description": "GNU Core Utilities",
       "install_id": "coreutils",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "name": "coreutils-9.5",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+      "name": "coreutils-9.6",
       "pname": "coreutils",
-      "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "rev_count": 750629,
-      "rev_date": "2025-02-08T13:21:17Z",
-      "scrape_date": "2025-02-09T04:06:52Z",
+      "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+      "rev_count": 773904,
+      "rev_date": "2025-03-25T07:53:30Z",
+      "scrape_date": "2025-03-27T02:01:42.175267Z",
       "stabilities": [
         "unstable"
       ],
       "unfree": false,
-      "version": "9.5",
+      "version": "9.6",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "debug": "/nix/store/fc58f079w7wy0kpicpdpvx1a0xf24hi4-coreutils-9.5-debug",
-        "info": "/nix/store/sihgjmzsla41aywcnflvvr43hc6nq0kk-coreutils-9.5-info",
-        "out": "/nix/store/wdap4cr3bnm685f27y9bb6q5b6q18msl-coreutils-9.5"
+        "debug": "/nix/store/m6z0fyhip7nhls7bg65fzdpnzb4dyw42-coreutils-9.6-debug",
+        "info": "/nix/store/g1jlc3r1ca84cw21kggs3cq3vr677rhr-coreutils-9.6-info",
+        "out": "/nix/store/yh6qg1nsi5h2xblcr67030pz58fsaxx3-coreutils-9.6"
       },
       "system": "x86_64-linux",
       "group": "toplevel",
@@ -281,17 +274,17 @@
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/z42jh2zwrkxd5vncfi5cs55ax1zl2vq4-hello-2.12.1.drv",
+      "derivation": "/nix/store/6jpg2ljbj3r03n47yy2x9yzhmi4miw88-hello-2.12.1.drv",
       "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
       "name": "hello-2.12.1",
       "pname": "hello",
-      "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "rev_count": 750629,
-      "rev_date": "2025-02-08T13:21:17Z",
-      "scrape_date": "2025-02-09T04:06:52Z",
+      "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+      "rev_count": 773904,
+      "rev_date": "2025-03-25T07:53:30Z",
+      "scrape_date": "2025-03-27T01:09:58.108597Z",
       "stabilities": [
         "unstable"
       ],
@@ -301,7 +294,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/8jjsg3ydmjy7f5j6r4l1ilbliwln8prd-hello-2.12.1"
+        "out": "/nix/store/zh4ha2m108qnkzib36mxchngqj4j13hn-hello-2.12.1"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -310,17 +303,17 @@
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/9bslplnvfbnir4zsy30k5x4w7s4nnzmm-hello-2.12.1.drv",
+      "derivation": "/nix/store/kpag2xqscc8cv2i2dq0d598bvzk5jkb3-hello-2.12.1.drv",
       "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
       "name": "hello-2.12.1",
       "pname": "hello",
-      "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "rev_count": 750629,
-      "rev_date": "2025-02-08T13:21:17Z",
-      "scrape_date": "2025-02-09T04:06:52Z",
+      "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+      "rev_count": 773904,
+      "rev_date": "2025-03-25T07:53:30Z",
+      "scrape_date": "2025-03-27T01:27:13.712222Z",
       "stabilities": [
         "unstable"
       ],
@@ -330,7 +323,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/ymqdzlj7sk38ql3bvd2s50nmv204mxag-hello-2.12.1"
+        "out": "/nix/store/kfhcq0i3ls63ac09lil23ni6l9a2rqrv-hello-2.12.1"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -339,17 +332,17 @@
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/jjgfn17x1s8zc7vmwq6nwgkb632d5qjb-hello-2.12.1.drv",
+      "derivation": "/nix/store/zxls6abvsr15mx7p39iinm2s0wsfjy3z-hello-2.12.1.drv",
       "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
       "name": "hello-2.12.1",
       "pname": "hello",
-      "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "rev_count": 750629,
-      "rev_date": "2025-02-08T13:21:17Z",
-      "scrape_date": "2025-02-09T04:06:52Z",
+      "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+      "rev_count": 773904,
+      "rev_date": "2025-03-25T07:53:30Z",
+      "scrape_date": "2025-03-27T01:42:58.504505Z",
       "stabilities": [
         "unstable"
       ],
@@ -359,7 +352,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/7bcrsa7xz2nwf6jqh1mjm26njhf38zq6-hello-2.12.1"
+        "out": "/nix/store/n902l28i9qnd5wryqv94swvgvq8b8n28-hello-2.12.1"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -368,17 +361,17 @@
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/b9jmfj0gcm36prvjv9lm7brgvpwh72c0-hello-2.12.1.drv",
+      "derivation": "/nix/store/wx45r069h9fcnbq7i4w0bmxciap0zihc-hello-2.12.1.drv",
       "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
       "name": "hello-2.12.1",
       "pname": "hello",
-      "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-      "rev_count": 750629,
-      "rev_date": "2025-02-08T13:21:17Z",
-      "scrape_date": "2025-02-09T04:06:52Z",
+      "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+      "rev_count": 773904,
+      "rev_date": "2025-03-25T07:53:30Z",
+      "scrape_date": "2025-03-27T02:01:43.663519Z",
       "stabilities": [
         "unstable"
       ],
@@ -388,7 +381,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/p09fxxwkdj69hk4mgddk4r3nassiryzc-hello-2.12.1"
+        "out": "/nix/store/y4qpcibkj767szhjb58i2sidmz8m24hb-hello-2.12.1"
       },
       "system": "x86_64-linux",
       "group": "toplevel",

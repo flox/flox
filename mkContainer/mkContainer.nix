@@ -5,6 +5,8 @@
   nixpkgsFlakeRef,
   # the path to the environment that was built previously
   environmentOutPath,
+  # what mode it should be activation with
+  activationMode,
   # the system to build for
   system,
   containerSystem,
@@ -120,8 +122,10 @@ let
       # errors when users try to run a container on an incompatible architecture.
       architecture = containerPkgs.go.GOARCH;
 
+      # No /tmp by default: https://github.com/NixOS/nixpkgs/issues/257172
       # Activate script requires writable directory, /run feels like a logical place.
       extraCommands = ''
+        mkdir -m 1777 tmp
         mkdir -m 1770 run
         mkdir -p -m 1770 run/flox
       '';
@@ -147,17 +151,27 @@ let
         #   podman run -i [SIC]
         #     -> launches crippled interactive shell with no controlling
         #        terminal .. kinda useless
-        Entrypoint = [ "${environment}/activate" ];
+        Entrypoint = [
+          "${environment}/activate"
+          "--env"
+          environment
+          "--mode"
+          activationMode
+          "--env-cache"
+          "/tmp"
+          "--env-description"
+          containerName
+          "--shell"
+          "${containerPkgs.bashInteractive}/bin/bash"
+        ];
 
         Env = mapAttrsToList (name: value: "${name}=${value}") {
-          "FLOX_ENV" = environment;
           "FLOX_PROMPT_ENVIRONMENTS" = "floxenv";
           "FLOX_PROMPT_COLOR_1" = "99";
           "FLOX_PROMPT_COLOR_2" = "141";
           "_FLOX_ACTIVE_ENVIRONMENTS" = "[]";
           "FLOX_SOURCED_FROM_SHELL_RC" = "1"; # don't source from shell rc (again)
           "_FLOX_FORCE_INTERACTIVE" = "1"; # Required when running podman without "-t"
-          "FLOX_SHELL" = "${containerPkgs.bashInteractive}/bin/bash";
           "FLOX_RUNTIME_DIR" = "/run/flox";
         };
       };

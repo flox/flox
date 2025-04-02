@@ -4,7 +4,7 @@ use tracing::{debug, error};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::reload::Handle;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{filter, EnvFilter, Registry};
+use tracing_subscriber::{EnvFilter, Registry, filter};
 
 use crate::commands::Verbosity;
 use crate::utils::metrics::MetricsLayer;
@@ -122,12 +122,12 @@ mod indicatif {
     use std::fmt::{self, Display, Write};
 
     use indicatif::{ProgressState, ProgressStyle};
-    use tracing::field::{Field, Visit};
     use tracing::Subscriber;
+    use tracing::field::{Field, Visit};
     use tracing_indicatif::IndicatifWriter;
     use tracing_subscriber::field::RecordFields;
-    use tracing_subscriber::fmt::format::Writer;
     use tracing_subscriber::fmt::FormatFields;
+    use tracing_subscriber::fmt::format::Writer;
     use tracing_subscriber::layer::Layer;
     use tracing_subscriber::registry;
 

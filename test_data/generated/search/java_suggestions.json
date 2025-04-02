@@ -1,6 +1,6 @@
 [
   {
-    "count": 869,
+    "count": 881,
     "results": [
       {
         "attr_path": "javacc",
@@ -10,7 +10,7 @@
         "pkg_path": "javacc",
         "pname": "javacc",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "7.0.13"
       },
       {
@@ -21,8 +21,8 @@
         "pkg_path": "javaCup",
         "pname": "javaCup",
         "stabilities": [],
-        "system": "x86_64-linux",
-        "version": "java-cup-11b-20160615"
+        "system": "aarch64-darwin",
+        "version": "20160615"
       },
       {
         "attr_path": "hdf_java",
@@ -32,8 +32,8 @@
         "pkg_path": "hdf_java",
         "pname": "hdf_java",
         "stabilities": [],
-        "system": "x86_64-linux",
-        "version": "hdf-java-3.3.2"
+        "system": "aarch64-darwin",
+        "version": "3.3.2"
       },
       {
         "attr_path": "dbus_java",
@@ -43,8 +43,8 @@
         "pkg_path": "dbus_java",
         "pname": "dbus_java",
         "stabilities": [],
-        "system": "x86_64-linux",
-        "version": "dbus-java-2.7"
+        "system": "aarch64-darwin",
+        "version": "2.7"
       },
       {
         "attr_path": "geoipjava",
@@ -54,8 +54,8 @@
         "pkg_path": "geoipjava",
         "pname": "geoipjava",
         "stabilities": [],
-        "system": "x86_64-linux",
-        "version": "GeoIPJava-1.2.5"
+        "system": "aarch64-darwin",
+        "version": "1.2.5"
       },
       {
         "attr_path": "tabula-java",
@@ -65,7 +65,7 @@
         "pkg_path": "tabula-java",
         "pname": "tabula-java",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.0.5"
       },
       {
@@ -76,7 +76,7 @@
         "pkg_path": "erlang_javac",
         "pname": "erlang_javac",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "25.3.2.12"
       },
       {
@@ -87,19 +87,19 @@
         "pkg_path": "swigWithJava",
         "pname": "swigWithJava",
         "stabilities": [],
-        "system": "x86_64-linux",
-        "version": "swig-4.2.1"
+        "system": "aarch64-darwin",
+        "version": "4.2.1"
       },
       {
         "attr_path": "yourkit-java",
         "catalog": null,
         "description": "Award winning, fully featured low overhead profiler for Java EE and Java SE platforms",
-        "name": "yourkit-java-2024.9-b163",
+        "name": "yourkit-java-2024.9-b164",
         "pkg_path": "yourkit-java",
         "pname": "yourkit-java",
         "stabilities": [],
-        "system": "x86_64-linux",
-        "version": "2024.9-b163"
+        "system": "aarch64-darwin",
+        "version": "2024.9-b164"
       },
       {
         "attr_path": "java-hamcrest",
@@ -109,13 +109,13 @@
         "pkg_path": "java-hamcrest",
         "pname": "java-hamcrest",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "3.0"
       }
     ]
   },
   {
-    "count": 140,
+    "count": 135,
     "results": [
       {
         "attr_path": "jdk",
@@ -125,30 +125,30 @@
         "pkg_path": "jdk",
         "pname": "jdk",
         "stabilities": [],
-        "system": "x86_64-linux",
-        "version": "openjdk-21.0.5+11"
+        "system": "aarch64-darwin",
+        "version": "21.0.5+11"
       },
       {
         "attr_path": "jdk8",
         "catalog": null,
-        "description": "Certified builds of OpenJDK",
-        "name": "zulu-ca-jdk-8.0.422",
+        "description": "Open-source Java Development Kit",
+        "name": "openjdk-8u432-b06",
         "pkg_path": "jdk8",
         "pname": "jdk8",
         "stabilities": [],
-        "system": "x86_64-linux",
-        "version": "zulu-ca-jdk-8.0.422"
+        "system": "aarch64-darwin",
+        "version": "8u432-b06"
       },
       {
         "attr_path": "jdk11",
         "catalog": null,
-        "description": "Certified builds of OpenJDK",
-        "name": "zulu-ca-jdk-11.0.24",
+        "description": "Open-source Java Development Kit",
+        "name": "openjdk-11.0.25+9",
         "pkg_path": "jdk11",
         "pname": "jdk11",
         "stabilities": [],
-        "system": "x86_64-linux",
-        "version": "zulu-ca-jdk-11.0.24"
+        "system": "aarch64-darwin",
+        "version": "11.0.25+9"
       }
     ]
   }

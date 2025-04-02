@@ -8,6 +8,7 @@ mod edit;
 mod envs;
 mod gc;
 mod general;
+mod include;
 mod init;
 mod install;
 mod list;
@@ -30,36 +31,33 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{env, fmt, fs, io, mem};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
-use flox_rust_sdk::data::{CanonicalPath, FloxVersion};
+use flox_rust_sdk::data::FloxVersion;
 use flox_rust_sdk::flox::{
-    EnvironmentName,
-    EnvironmentOwner,
+    DEFAULT_FLOXHUB_URL,
+    DEFAULT_NAME,
     EnvironmentRef,
+    FLOX_SENTRY_ENV,
+    FLOX_VERSION,
     Flox,
     Floxhub,
     FloxhubToken,
     FloxhubTokenError,
-    DEFAULT_FLOXHUB_URL,
-    DEFAULT_NAME,
-    FLOX_SENTRY_ENV,
-    FLOX_VERSION,
 };
-use flox_rust_sdk::models::env_registry::{EnvRegistry, ENV_REGISTRY_FILENAME};
-use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
-use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
+use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
-    find_dot_flox,
     ConcreteEnvironment,
+    DOT_FLOX,
     DotFlox,
     Environment,
     EnvironmentError,
-    EnvironmentPointer,
-    ManagedPointer,
-    DOT_FLOX,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
+    ManagedPointer,
+    UninitializedEnvironment,
+    find_dot_flox,
+    open_path,
 };
 use flox_rust_sdk::models::{env_registry, environment_ref};
 use futures::Future;
@@ -82,6 +80,7 @@ use crate::config::{
     FLOX_CONFIG_FILE,
     FLOX_DIR_NAME,
     FLOX_DISABLE_METRICS_VAR,
+    InstallerChannel,
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
@@ -92,7 +91,7 @@ use crate::utils::init::{
     telemetry_opt_out_needs_migration,
 };
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FILE_NAME};
-use crate::utils::{message, TRAILING_NETWORK_CALL_TIMEOUT};
+use crate::utils::{TRAILING_NETWORK_CALL_TIMEOUT, message};
 
 // Relative to flox executable
 const DEFAULT_UPDATE_INSTRUCTIONS: &str =
@@ -359,12 +358,15 @@ impl FloxArgs {
             catalog_client,
             installable_locker: Default::default(),
             #[allow(deprecated, reason = "This should be the only internal use")]
-            features: config.features.clone().unwrap_or_default(),
+            features: config.features.unwrap_or_default(),
             verbosity: self.verbosity.to_i32(),
         };
         debug!(
             "features enabled, build={}, publish={}, upload={}, compose={}",
-            flox.features.build, flox.features.publish, flox.features.upload, flox.features.compose
+            flox.features.build,
+            flox.features.publish,
+            flox.features.upload,
+            flox.features.compose()
         );
 
         // in debug mode keep the tempdir to reproduce nix commands
@@ -506,7 +508,7 @@ enum UpdateCheckResult {
 impl UpdateNotification {
     pub async fn check_for_and_print_update_notification(
         cache_dir: impl AsRef<Path>,
-        release_channel: &Option<String>,
+        release_channel: &Option<InstallerChannel>,
     ) {
         Self::handle_update_result(
             Self::check_for_update(cache_dir, release_channel).await,
@@ -518,12 +520,12 @@ impl UpdateNotification {
     /// UPDATE_NOTIFICATION_EXPIRY time has passed, check for an update.
     pub async fn check_for_update(
         cache_dir: impl AsRef<Path>,
-        release_channel: &Option<String>,
+        release_channel: &Option<InstallerChannel>,
     ) -> Result<UpdateCheckResult, UpdateNotificationError> {
         let notification_file = cache_dir.as_ref().join(UPDATE_NOTIFICATION_FILE_NAME);
         // Release channel won't be set for development builds.
         // Skip printing an update notification.
-        let Some(ref release_env) = release_channel else {
+        let Some(release_env) = release_channel else {
             debug!("Skipping update check in development mode");
             return Ok(UpdateCheckResult::Skipped);
         };
@@ -591,7 +593,7 @@ impl UpdateNotification {
     /// or handle an error
     pub fn handle_update_result(
         update_notification: Result<UpdateCheckResult, UpdateNotificationError>,
-        release_env: &Option<String>,
+        release_env: &Option<InstallerChannel>,
     ) {
         match update_notification {
             Ok(UpdateCheckResult::Skipped) => {},
@@ -619,7 +621,7 @@ impl UpdateNotification {
     // and is created by an installer
     fn update_instructions(
         update_instructions_relative_file_path: &str,
-        release_env: &Option<String>,
+        release_env: &Option<InstallerChannel>,
     ) -> String {
         let instructions: Cow<str> = 'inst: {
             let Ok(exe) = env::current_exe() else {
@@ -648,16 +650,18 @@ impl UpdateNotification {
                 .clone()
                 .unwrap_or("stable".to_string())
                 .as_str(),
-            release_env.clone().unwrap_or("stable".to_string()).as_str(),
+            &release_env.clone().unwrap_or_default().to_string(),
         )
     }
 
     /// If a new version is available, print a message to the user.
     ///
     /// Write the notification_file with the current time.
-    fn print_new_version_available(self, release_env: &Option<String>) {
-        let release_env_unwrapped = release_env.clone().unwrap_or("stable".to_string());
-        if release_env_unwrapped == *FLOX_SENTRY_ENV.clone().unwrap_or("stable".to_string()) {
+    fn print_new_version_available(self, release_env: &Option<InstallerChannel>) {
+        let release_env_unwrapped = release_env.clone().unwrap_or_default();
+        if release_env_unwrapped.to_string()
+            == *FLOX_SENTRY_ENV.clone().unwrap_or("stable".to_string())
+        {
             message::plain(formatdoc! {"
 
                 🚀  Flox has a new version available. {} -> {}
@@ -708,7 +712,9 @@ impl UpdateNotification {
     /// Get latest version from downloads.flox.dev
     ///
     /// Timeout after TRAILING_NETWORK_CALL_TIMEOUT
-    async fn get_latest_version(release_env: &str) -> Result<String, UpdateNotificationError> {
+    async fn get_latest_version(
+        release_env: &InstallerChannel,
+    ) -> Result<String, UpdateNotificationError> {
         let client = reqwest::Client::new();
 
         let request = client
@@ -937,6 +943,10 @@ enum AdditionalCommands {
     /// Garbage collect data for deleted environments
     #[bpaf(command, hide, footer("Run 'man flox-gc' for more details."))]
     Gc(#[bpaf(external(gc::gc))] gc::Gc),
+
+    /// Interact with included environments
+    #[bpaf(command, hide)]
+    Include(#[bpaf(external(include::include_commands))] include::IncludeCommands),
 }
 
 impl AdditionalCommands {
@@ -954,6 +964,7 @@ impl AdditionalCommands {
             AdditionalCommands::Update(args) => args.handle(flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
             AdditionalCommands::Gc(args) => args.handle(flox)?,
+            AdditionalCommands::Include(args) => args.handle(flox).await?,
         }
         Ok(())
     }
@@ -1190,7 +1201,9 @@ pub fn detect_environment(
 
         // If we can't prompt, use the environment found in the current directory or git repo
         (Some(_), Some(found)) if !Dialog::can_prompt() => {
-            debug!("No TTY detected, using the environment {found:?} found in the current directory or an ancestor directory");
+            debug!(
+                "No TTY detected, using the environment {found:?} found in the current directory or an ancestor directory"
+            );
             Some(UninitializedEnvironment::DotFlox(found))
         },
         // If there's both an activated environment and an environment in the
@@ -1232,8 +1245,8 @@ fn query_which_environment(
         help_message: None,
         typed: Select {
             options: vec![
-                format!("{type_of_directory} [{}]", found.bare_description()?),
-                format!("currently active [{}]", activated_env.bare_description()?),
+                format!("{type_of_directory} [{}]", found.bare_description()),
+                format!("currently active [{}]", activated_env.bare_description()),
             ],
         },
     };
@@ -1242,222 +1255,6 @@ fn query_which_environment(
         0 => Ok(found),
         1 => Ok(activated_env),
         _ => unreachable!(),
-    }
-}
-
-/// Open an environment defined in `{path}/.flox`
-fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError> {
-    DotFlox::open_in(path)
-        .map(UninitializedEnvironment::DotFlox)?
-        .into_concrete_environment(flox)
-}
-
-/// An environment descriptor of an environment that can be (re)opened,
-/// i.e. to install packages into it.
-///
-/// Unlike [ConcreteEnvironment], this type does not hold a concrete instance any environment,
-/// but rather fully qualified metadata to create an instance from.
-///
-/// * for [PathEnvironment] and [ManagedEnvironment] that's the path to their `.flox` and `.flox/pointer.json`
-/// * for [RemoteEnvironment] that's the [ManagedPointer] to the remote environment
-///
-/// Serialized as is into [FLOX_ACTIVE_ENVIRONMENTS_VAR] to be able to reopen environments.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
-#[serde(tag = "type")]
-#[serde(rename_all = "kebab-case")]
-pub enum UninitializedEnvironment {
-    /// Container for "local" environments pointed to by [DotFlox]
-    DotFlox(DotFlox),
-    /// Container for [RemoteEnvironment]
-    Remote(ManagedPointer),
-}
-
-impl UninitializedEnvironment {
-    pub fn from_concrete_environment(env: &ConcreteEnvironment) -> Result<Self> {
-        match env {
-            ConcreteEnvironment::Path(path_env) => {
-                let pointer = path_env.pointer.clone().into();
-                Ok(Self::DotFlox(DotFlox {
-                    path: path_env.path.to_path_buf(),
-                    pointer,
-                }))
-            },
-            ConcreteEnvironment::Managed(managed_env) => {
-                let pointer = managed_env.pointer().clone().into();
-                Ok(Self::DotFlox(DotFlox {
-                    path: managed_env.dot_flox_path().to_path_buf(),
-                    pointer,
-                }))
-            },
-            ConcreteEnvironment::Remote(remote_env) => {
-                let env_ref = remote_env.pointer().clone();
-                Ok(Self::Remote(env_ref))
-            },
-        }
-    }
-
-    /// Open the contained environment and return a [ConcreteEnvironment]
-    ///
-    /// This function will fail if the contained environment is not available or invalid
-    pub fn into_concrete_environment(
-        self,
-        flox: &Flox,
-    ) -> Result<ConcreteEnvironment, EnvironmentError> {
-        match self {
-            UninitializedEnvironment::DotFlox(dot_flox) => {
-                let dot_flox_path = CanonicalPath::new(dot_flox.path)
-                    .map_err(|err| EnvironmentError::DotFloxNotFound(err.path))?;
-
-                let env = match dot_flox.pointer {
-                    EnvironmentPointer::Path(path_pointer) => {
-                        debug!("detected concrete environment type: path");
-                        ConcreteEnvironment::Path(PathEnvironment::open(
-                            flox,
-                            path_pointer,
-                            dot_flox_path,
-                        )?)
-                    },
-                    EnvironmentPointer::Managed(managed_pointer) => {
-                        debug!("detected concrete environment type: managed");
-                        let env = ManagedEnvironment::open(flox, managed_pointer, dot_flox_path)?;
-                        ConcreteEnvironment::Managed(env)
-                    },
-                };
-                Ok(env)
-            },
-            UninitializedEnvironment::Remote(pointer) => {
-                let env = RemoteEnvironment::new(flox, pointer)?;
-                Ok(ConcreteEnvironment::Remote(env))
-            },
-        }
-    }
-
-    fn pointer(&self) -> EnvironmentPointer {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.clone(),
-            UninitializedEnvironment::Remote(pointer) => {
-                EnvironmentPointer::Managed(pointer.clone())
-            },
-        }
-    }
-
-    /// If the environment is remote or managed, the name of the owner
-    pub fn owner(&self) -> Option<&EnvironmentOwner> {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.owner(),
-            UninitializedEnvironment::Remote(pointer) => Some(&pointer.owner),
-        }
-    }
-
-    /// The name of the environment
-    pub fn name(&self) -> &EnvironmentName {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.name(),
-            UninitializedEnvironment::Remote(pointer) => &pointer.name,
-        }
-    }
-
-    /// Returns true if the environment is in the current directory
-    pub fn is_current_dir(&self) -> Result<bool> {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => {
-                let current_dir = std::env::current_dir()?;
-                let is_current = current_dir.canonicalize()? == path.canonicalize()?;
-                Ok(is_current)
-            },
-            UninitializedEnvironment::Remote(_) => Ok(false),
-        }
-    }
-
-    /// Returns the path to the environment if it isn't remote
-    #[allow(dead_code)]
-    pub fn path(&self) -> Option<&Path> {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => Some(path),
-            UninitializedEnvironment::Remote(_) => None,
-        }
-    }
-
-    /// Returns true if the environment is a managed environment
-    pub fn is_managed(&self) -> bool {
-        matches!(
-            self,
-            UninitializedEnvironment::DotFlox(DotFlox {
-                path: _,
-                pointer: EnvironmentPointer::Managed(_)
-            })
-        )
-    }
-
-    /// Returns true if the environment is a path environment
-    #[allow(dead_code)]
-    pub fn is_path_env(&self) -> bool {
-        matches!(
-            self,
-            UninitializedEnvironment::DotFlox(DotFlox {
-                path: _,
-                pointer: EnvironmentPointer::Path(_)
-            })
-        )
-    }
-
-    /// Returns true if the environment is a remote environment
-    pub fn is_remote(&self) -> bool {
-        match self {
-            UninitializedEnvironment::DotFlox(_) => false,
-            UninitializedEnvironment::Remote(_) => true,
-        }
-    }
-
-    /// The environment description when displayed in a prompt
-    // TODO: we use this for activate errors in Bash since it doesn't have
-    // quotes whereas we use message_description for activate errors in Rust.
-    pub fn bare_description(&self) -> Result<String> {
-        if self.is_remote() {
-            Ok(format!(
-                "{}/{} (remote)",
-                self.owner()
-                    .context("remote environments should have an owner")?,
-                self.name()
-            ))
-        } else if self.is_managed() {
-            Ok(format!(
-                "{}/{}",
-                self.owner()
-                    .context("managed environments should have an owner")?,
-                self.name()
-            ))
-        } else {
-            Ok(format!("{}", self.name()))
-        }
-    }
-
-    /// The environment description when displayed in messages
-    // TODO: we use this for activate errors in Rust whereas we use
-    // bare_description for activate errors in Bash since it doesn't add quotes.
-    pub fn message_description(&self) -> Result<String> {
-        if self.is_remote() {
-            Ok(format!(
-                "'{}/{}' (remote)",
-                self.owner()
-                    .context("remote environments should have an owner")?,
-                self.name()
-            ))
-        } else if self.is_managed() {
-            Ok(format!(
-                "'{}/{}'",
-                self.owner()
-                    .context("managed environments should have an owner")?,
-                self.name()
-            ))
-        } else if self
-            .is_current_dir()
-            .context("couldn't read current directory")?
-        {
-            Ok(String::from("in current directory"))
-        } else {
-            Ok(format!("'{}'", self.name()))
-        }
     }
 }
 
@@ -1726,7 +1523,37 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<&FloxhubToke
 }
 
 pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
-    UninitializedEnvironment::from_concrete_environment(environment)?.message_description()
+    uninitialized_environment_description(&UninitializedEnvironment::from_concrete_environment(
+        environment,
+    ))
+}
+
+/// The environment description when displayed in messages
+/// Use UninitializedEnvironment::bare_description for other cases
+pub fn uninitialized_environment_description(
+    environment: &UninitializedEnvironment,
+) -> Result<String> {
+    if let Some(owner) = environment.owner_if_remote() {
+        Ok(format!("'{}/{}' (remote)", owner, environment.name()))
+    } else if let Some(owner) = environment.owner_if_managed() {
+        Ok(format!("'{}/{}'", owner, environment.name()))
+    } else if is_current_dir(environment).context("couldn't read current directory")? {
+        Ok(String::from("in current directory"))
+    } else {
+        Ok(format!("'{}'", environment.name()))
+    }
+}
+
+/// Returns true if the environment is in the current directory
+fn is_current_dir(environment: &UninitializedEnvironment) -> Result<bool> {
+    match environment {
+        UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => {
+            let current_dir = std::env::current_dir()?;
+            let is_current = current_dir.canonicalize()? == path.canonicalize()?;
+            Ok(is_current)
+        },
+        UninitializedEnvironment::Remote(_) => Ok(false),
+    }
 }
 
 /// Check if the environment needs to be migrated to version 1.
@@ -1734,7 +1561,7 @@ pub fn environment_description(environment: &ConcreteEnvironment) -> Result<Stri
 mod tests {
 
     use flox_rust_sdk::flox::EnvironmentName;
-    use flox_rust_sdk::models::environment::PathPointer;
+    use flox_rust_sdk::models::environment::{EnvironmentPointer, PathPointer};
     use sentry::test::with_captured_events;
     use tempfile::tempdir;
 
@@ -1829,7 +1656,7 @@ mod tests {
                 new_version: "new_version".to_string(),
                 notification_file: notification_file.clone(),
             })),
-            &Some("stable".to_string()),
+            &Some(InstallerChannel::Stable),
         );
 
         serde_json::from_str::<LastUpdateCheck>(&fs::read_to_string(notification_file).unwrap())
@@ -1847,7 +1674,7 @@ mod tests {
             Ok(UpdateCheckResult::RefreshNotificationFile(
                 notification_file.clone(),
             )),
-            &Some("stable".to_string()),
+            &Some(InstallerChannel::Stable),
         );
 
         serde_json::from_str::<LastUpdateCheck>(&fs::read_to_string(notification_file).unwrap())
@@ -2049,7 +1876,7 @@ mod tests {
 
         let message = UpdateNotification::update_instructions(
             update_instructions_file.to_str().unwrap(),
-            &Some("stable".to_string()),
+            &Some(InstallerChannel::Stable),
         );
         assert!(message.contains(custom_message));
     }

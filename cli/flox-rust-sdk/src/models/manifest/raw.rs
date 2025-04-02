@@ -12,6 +12,7 @@ use tracing::{debug, trace};
 
 use super::typed::Manifest;
 use crate::data::System;
+use crate::flox::Features;
 use crate::models::environment::path_environment::InitCustomization;
 
 /// Represents the `[version]` number key in manifest.toml
@@ -30,6 +31,8 @@ pub const MANIFEST_SERVICES_KEY: &str = "services";
 pub const MANIFEST_OPTIONS_KEY: &str = "options";
 /// Represents the `systems = []` array key in manifest.toml
 pub const MANIFEST_SYSTEMS_KEY: &str = "systems";
+/// Represents the `[include]` table key in manifest.toml
+pub const MANIFEST_INCLUDE_KEY: &str = "include";
 
 /// A wrapper around a [`toml_edit::DocumentMut`]
 /// that allows modifications of the raw manifest document,
@@ -42,9 +45,64 @@ impl RawManifest {
     ///
     /// Additionally, this method prefixes each table with documentation on its usage, and
     /// and inserts commented configuration examples for tables left empty.
-    pub fn new_documented(systems: &[&System], customization: &InitCustomization) -> RawManifest {
+    pub fn new_documented(
+        features: Features,
+        systems: &[&System],
+        customization: &InitCustomization,
+    ) -> RawManifest {
         let mut manifest = DocumentMut::new();
 
+        Self::add_header(&mut manifest);
+        Self::add_version(&mut manifest);
+        Self::add_install_section(&mut manifest, customization);
+        Self::add_vars_section(&mut manifest);
+        Self::add_hook_section(&mut manifest, customization);
+        Self::add_profile_section(&mut manifest, customization);
+        Self::add_services_section(&mut manifest);
+
+        if features.compose() {
+            Self::add_include_section(&mut manifest);
+        }
+
+        Self::add_options_section(&mut manifest, systems, customization);
+
+        RawManifest(manifest)
+    }
+
+    /// Get the version of the manifest.
+    fn get_version(&self) -> Option<i64> {
+        self.0.get("version").and_then(Item::as_integer)
+    }
+
+    /// Serde's error messages for _untagged_ enums are rather bad
+    /// and don't appear to become better any time soon:
+    /// - <https://github.com/serde-rs/serde/pull/1544>
+    /// - <https://github.com/serde-rs/serde/pull/2376>
+    ///
+    /// This function aims to provide the intermediate version matching on
+    /// the `version` field, and then deserializes the correct version
+    /// of the Manifest explicitly.
+    ///
+    /// <https://github.com/serde-rs/serde/pull/2525> will allow the use of integers
+    /// (i.e. versions) as enum tags, which will allow us to use `#[serde(tag = "version")]`
+    /// and avoid the [Version] field entirely, where the version field is not optional.
+    ///
+    /// Discussion: using a string field as the version tag `version: "1"` vs `version: 1`
+    /// could work today, but is still limited by the lack of an optional tag.
+    pub fn to_typed(&self) -> Result<Manifest, toml_edit::de::Error> {
+        match self.get_version() {
+            Some(1) => Ok(toml_edit::de::from_document(self.0.clone())?),
+            Some(v) => {
+                let msg = format!("unsupported manifest version: {v}");
+                Err(toml_edit::de::Error::custom(msg))
+            },
+            None => Err(toml_edit::de::Error::custom("unsupported manifest version")),
+        }
+    }
+
+    /// Populates a header at the top of the manifest with a link to
+    /// the documentation.
+    fn add_header(manifest: &mut DocumentMut) {
         manifest.decor_mut().set_prefix(indoc! {r#"
             ## Flox Environment Manifest -----------------------------------------
             ##
@@ -55,11 +113,17 @@ impl RawManifest {
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
         "#});
+    }
 
+    /// Populates the manifest schema version.
+    fn add_version(manifest: &mut DocumentMut) {
         // `version` number
         manifest.insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
+    }
 
-        // `[install]` table
+    /// Populates an example install section with any packages necessary for
+    /// init customizations.
+    fn add_install_section(manifest: &mut DocumentMut, customization: &InitCustomization) {
         let packages_vec = vec![];
         let packages = customization.packages.as_ref().unwrap_or(&packages_vec);
 
@@ -75,7 +139,11 @@ impl RawManifest {
 
             table
         } else {
-            Table::from_iter(packages.iter().map(|pkg| (&pkg.id, InlineTable::from(pkg))))
+            Table::from_iter(packages.iter().map(|pkg| {
+                let mut table = InlineTable::from(pkg);
+                table.set_dotted(true);
+                (&pkg.id, table)
+            }))
         };
 
         install_table.decor_mut().set_prefix(indoc! {r#"
@@ -89,8 +157,10 @@ impl RawManifest {
         "#});
 
         manifest.insert(MANIFEST_INSTALL_KEY, Item::Table(install_table));
+    }
 
-        // `[vars]` table
+    /// Populates an example vars section.
+    fn add_vars_section(manifest: &mut DocumentMut) {
         let mut vars_table = Table::new();
 
         vars_table.decor_mut().set_prefix(indoc! {r#"
@@ -108,8 +178,11 @@ impl RawManifest {
             # INTRO_MESSAGE = "It's gettin' Flox in here""#});
 
         manifest.insert(MANIFEST_VARS_KEY, Item::Table(vars_table));
+    }
 
-        // `[hook]` table
+    /// Populates an example hook section with any automatic setup added by
+    /// init customizations.
+    fn add_hook_section(manifest: &mut DocumentMut, customization: &InitCustomization) {
         let mut hook_table = Table::new();
 
         hook_table.decor_mut().set_prefix(indoc! {r#"
@@ -139,8 +212,11 @@ impl RawManifest {
         };
 
         manifest.insert(MANIFEST_HOOK_KEY, Item::Table(hook_table));
+    }
 
-        // `[profile]` table
+    /// Populates an example profile section with any automatic setup added by
+    /// init customizations.
+    fn add_profile_section(manifest: &mut DocumentMut, customization: &InitCustomization) {
         let mut profile_table = Table::new();
 
         profile_table.decor_mut().set_prefix(indoc! {r#"
@@ -209,8 +285,10 @@ impl RawManifest {
         };
 
         manifest.insert(MANIFEST_PROFILE_KEY, Item::Table(profile_table));
+    }
 
-        // `[services]` table
+    /// Populates an example services section.
+    fn add_services_section(manifest: &mut DocumentMut) {
         let mut services_table = Table::new();
 
         services_table.decor_mut().set_prefix(indoc! {r#"
@@ -228,8 +306,35 @@ impl RawManifest {
                 # myservice.command = "python3 -m http.server""#});
 
         manifest.insert(MANIFEST_SERVICES_KEY, Item::Table(services_table));
+    }
 
-        // `[options]` table
+    /// Populates an example include section.
+    fn add_include_section(manifest: &mut DocumentMut) {
+        let mut include_table = Table::new();
+
+        include_table.decor_mut().set_prefix(indoc! {r#"
+
+
+                 ## Include ----------------------------------------------------------
+                 ## ... environments to create a composed environment
+                 ## ------------------------------------------------------------------
+            "#});
+
+        include_table.decor_mut().set_suffix(indoc! {r#"
+
+                # environments = [
+                #     { dir = "../common" }
+                # ]"#});
+
+        manifest.insert(MANIFEST_INCLUDE_KEY, Item::Table(include_table));
+    }
+
+    /// Populates an example options section.
+    fn add_options_section(
+        manifest: &mut DocumentMut,
+        systems: &[&System],
+        customization: &InitCustomization,
+    ) {
         let mut options_table = Table::new();
 
         options_table.decor_mut().set_prefix(indoc! {r#"
@@ -265,40 +370,17 @@ impl RawManifest {
             # "#});
         }
 
-        manifest.insert(MANIFEST_OPTIONS_KEY, Item::Table(options_table));
+        // `options.activate.mode`, only when customized.
+        if let Some(activate_mode) = &customization.activate_mode {
+            let activate_key = Key::new("activate");
+            let mut activate_table = Table::new();
 
-        RawManifest(manifest)
-    }
-
-    /// Get the version of the manifest.
-    fn get_version(&self) -> Option<i64> {
-        self.0.get("version").and_then(Item::as_integer)
-    }
-
-    /// Serde's error messages for _untagged_ enums are rather bad
-    /// and don't appear to become better any time soon:
-    /// - <https://github.com/serde-rs/serde/pull/1544>
-    /// - <https://github.com/serde-rs/serde/pull/2376>
-    ///
-    /// This function aims to provide the intermediate version matching on
-    /// the `version` field, and then deserializes the correct version
-    /// of the Manifest explicitly.
-    ///
-    /// <https://github.com/serde-rs/serde/pull/2525> will allow the use of integers
-    /// (i.e. versions) as enum tags, which will allow us to use `#[serde(tag = "version")]`
-    /// and avoid the [Version] field entirely, where the version field is not optional.
-    ///
-    /// Discussion: using a string field as the version tag `version: "1"` vs `version: 1`
-    /// could work today, but is still limited by the lack of an optional tag.
-    pub fn to_typed(&self) -> Result<Manifest, toml_edit::de::Error> {
-        match self.get_version() {
-            Some(1) => Ok(toml_edit::de::from_document(self.0.clone())?),
-            Some(v) => {
-                let msg = format!("unsupported manifest version: {v}");
-                Err(toml_edit::de::Error::custom(msg))
-            },
-            None => Err(toml_edit::de::Error::custom("unsupported manifest version")),
+            let mode_key = Key::new("mode");
+            activate_table.insert(&mode_key, toml_edit::value(activate_mode.to_string()));
+            options_table.insert(&activate_key, Item::Table(activate_table));
         }
+
+        manifest.insert(MANIFEST_OPTIONS_KEY, Item::Table(options_table));
     }
 }
 
@@ -771,6 +853,9 @@ pub fn insert_packages(
             match pkg {
                 PackageToInstall::Catalog(pkg) => {
                     descriptor_table = InlineTable::from(pkg);
+                    if is_custom_package(&pkg.id) {
+                        descriptor_table.insert("pkg-group", pkg.id.as_str().into());
+                    }
                     debug!(
                         "package newly installed: id={}, pkg-path={}",
                         pkg.id, pkg.pkg_path
@@ -820,6 +905,21 @@ pub fn insert_packages(
         },
         already_installed,
     })
+}
+
+// Custom packages are of the form "<prefix>/<suffix>" where the prefix is not
+// allowed to contain a '.' character. This is a quick and dirty way of
+// identifying custom packages using that logic.
+fn is_custom_package(install_id: &str) -> bool {
+    let parts = install_id.split('/').collect::<Vec<_>>();
+    if parts.len() < 2 {
+        return false;
+    }
+    if let Some(maybe_catalog_name) = parts.first() {
+        !maybe_catalog_name.contains('.')
+    } else {
+        false
+    }
 }
 
 /// Remove package names from the `[install]` table of a manifest based on their install IDs.
@@ -927,6 +1027,7 @@ pub(super) mod test {
 
     use super::*;
     use crate::models::lockfile::DEFAULT_SYSTEMS_STR;
+    use crate::models::manifest::typed::ActivateMode;
 
     const DUMMY_MANIFEST: &str = indoc! {r#"
         version = 1
@@ -959,13 +1060,7 @@ pub(super) mod test {
     fn create_documented_manifest_not_customized() {
         let systems = &*DEFAULT_SYSTEMS_STR.iter().collect::<Vec<_>>();
         let customization = InitCustomization {
-            hook_on_activate: None,
-            profile_common: None,
-            profile_bash: None,
-            profile_fish: None,
-            profile_tcsh: None,
-            profile_zsh: None,
-            packages: None,
+            ..Default::default()
         };
 
         let expected_string = indoc! {r#"
@@ -1050,26 +1145,22 @@ pub(super) mod test {
             # cuda-detection = false
         "#};
 
-        let manifest = RawManifest::new_documented(systems, &customization);
+        let manifest = RawManifest::new_documented(Features::default(), systems, &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
+        manifest.to_typed().expect("should parse as typed");
     }
 
     #[test]
     fn create_documented_manifest_with_packages() {
         let systems = &*DEFAULT_SYSTEMS_STR.iter().collect::<Vec<_>>();
         let customization = InitCustomization {
-            hook_on_activate: None,
-            profile_common: None,
-            profile_bash: None,
-            profile_fish: None,
-            profile_tcsh: None,
-            profile_zsh: None,
             packages: Some(vec![CatalogPackage {
                 id: "python3".to_string(),
                 pkg_path: "python3".to_string(),
                 version: Some("3.11.6".to_string()),
                 systems: None,
             }]),
+            ..Default::default()
         };
 
         let expected_string = indoc! {r#"
@@ -1090,7 +1181,8 @@ pub(super) mod test {
             ##  $ flox show gum     <- show all versions of a package
             ## -------------------------------------------------------------------
             [install]
-            python3 = { pkg-path = "python3", version = "3.11.6" }
+            python3.pkg-path = "python3"
+            python3.version = "3.11.6"
 
 
             ## Environment Variables ---------------------------------------------
@@ -1153,8 +1245,9 @@ pub(super) mod test {
             # cuda-detection = false
         "#};
 
-        let manifest = RawManifest::new_documented(systems, &customization);
+        let manifest = RawManifest::new_documented(Features::default(), systems, &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
+        manifest.to_typed().expect("should parse as typed");
     }
 
     #[test]
@@ -1171,12 +1264,7 @@ pub(super) mod test {
                 "#}
                 .to_string(),
             ),
-            profile_common: None,
-            profile_bash: None,
-            profile_fish: None,
-            profile_tcsh: None,
-            profile_zsh: None,
-            packages: None,
+            ..Default::default()
         };
 
         let expected_string = indoc! {r#"
@@ -1257,26 +1345,23 @@ pub(super) mod test {
             # cuda-detection = false
         "#};
 
-        let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
+        let manifest =
+            RawManifest::new_documented(Features::default(), systems.as_slice(), &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
+        manifest.to_typed().expect("should parse as typed");
     }
 
     #[test]
     fn create_documented_profile_script() {
         let systems = [&"x86_64-linux".to_string()];
         let customization = InitCustomization {
-            hook_on_activate: None,
             profile_common: Some(
                 indoc! { r#"
                     echo "Hello from Flox"
                 "#}
                 .to_string(),
             ),
-            profile_bash: None,
-            profile_fish: None,
-            profile_tcsh: None,
-            profile_zsh: None,
-            packages: None,
+            ..Default::default()
         };
 
         let expected_string = indoc! {r#"
@@ -1351,8 +1436,106 @@ pub(super) mod test {
             # cuda-detection = false
         "#};
 
-        let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
+        let manifest =
+            RawManifest::new_documented(Features::default(), systems.as_slice(), &customization);
         assert_eq!(manifest.to_string(), expected_string.to_string());
+        manifest.to_typed().expect("should parse as typed");
+    }
+
+    #[test]
+    fn create_documented_manifest_with_activate_mode() {
+        let systems = [&"x86_64-linux".to_string()];
+        let customization = InitCustomization {
+            activate_mode: Some(ActivateMode::Run),
+            ..Default::default()
+        };
+
+        let expected_string = indoc! {r#"
+            ## Flox Environment Manifest -----------------------------------------
+            ##
+            ##   _Everything_ you need to know about the _manifest_ is here:
+            ##
+            ##               https://flox.dev/docs/concepts/manifest
+            ##
+            ## -------------------------------------------------------------------
+            # Flox manifest version managed by Flox CLI
+            version = 1
+
+
+            ## Install Packages --------------------------------------------------
+            ##  $ flox install gum  <- puts a package in [install] section below
+            ##  $ flox search gum   <- search for a package
+            ##  $ flox show gum     <- show all versions of a package
+            ## -------------------------------------------------------------------
+            [install]
+            # gum.pkg-path = "gum"
+            # gum.version = "^0.14.5"
+
+
+            ## Environment Variables ---------------------------------------------
+            ##  ... available for use in the activated environment
+            ##      as well as [hook], [profile] scripts and [services] below.
+            ## -------------------------------------------------------------------
+            [vars]
+            # INTRO_MESSAGE = "It's gettin' Flox in here"
+
+
+            ## Activation Hook ---------------------------------------------------
+            ##  ... run by _bash_ shell when you run 'flox activate'.
+            ## -------------------------------------------------------------------
+            [hook]
+            # on-activate = '''
+            #   # -> Set variables, create files and directories
+            #   # -> Perform initialization steps, e.g. create a python venv
+            #   # -> Useful environment variables:
+            #   #      - FLOX_ENV_PROJECT=/home/user/example
+            #   #      - FLOX_ENV=/home/user/example/.flox/run
+            #   #      - FLOX_ENV_CACHE=/home/user/example/.flox/cache
+            # '''
+
+
+            ## Profile script ----------------------------------------------------
+            ## ... sourced by _your shell_ when you run 'flox activate'.
+            ## -------------------------------------------------------------------
+            [profile]
+            # common = '''
+            #   gum style \
+            #   --foreground 212 --border-foreground 212 --border double \
+            #   --align center --width 50 --margin "1 2" --padding "2 4" \
+            #     $INTRO_MESSAGE
+            # '''
+            ## Shell specific profiles go here:
+            # bash = ...
+            # zsh  = ...
+            # fish = ...
+
+
+            ## Services ----------------------------------------------------------
+            ##  $ flox services start             <- Starts all services
+            ##  $ flox services status            <- Status of running services
+            ##  $ flox activate --start-services  <- Activates & starts all
+            ## -------------------------------------------------------------------
+            [services]
+            # myservice.command = "python3 -m http.server"
+
+
+            ## Other Environment Options -----------------------------------------
+            [options]
+            # Systems that environment is compatible with
+            systems = [
+              "x86_64-linux",
+            ]
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
+
+            [options.activate]
+            mode = "run"
+        "#};
+
+        let manifest =
+            RawManifest::new_documented(Features::default(), systems.as_slice(), &customization);
+        assert_eq!(manifest.to_string(), expected_string.to_string());
+        manifest.to_typed().expect("should parse as typed");
     }
 
     #[test]
@@ -1748,5 +1931,12 @@ pub(super) mod test {
             "apache-httpd",
             dummy_system,
         );
+    }
+
+    #[test]
+    fn detects_custom_packages() {
+        assert!(is_custom_package("zmitchell/hello"));
+        assert!(!is_custom_package("hello"));
+        assert!(!is_custom_package("foo.bar/hello"));
     }
 }

@@ -11,18 +11,18 @@
             "attr_path": "fish",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/iq8lc5nzgrinjyjikdwwismllws4cg9z-fish-3.2.2.drv",
+            "derivation": "/nix/store/mpd5gk4j8ksm3w4j78bfhbiih1sa3g3d-fish-3.2.2.drv",
             "description": "Smart and user-friendly command line shell",
             "insecure": false,
             "install_id": "fish",
             "license": "GPL-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=e1f8852faac7638e88d5e8a5b9ee2a7568685e3f",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=fa0326ce5233f7d592271df52c9d0812bec47b84",
             "missing_builds": false,
             "name": "fish-3.2.2",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/an3v67vnw060gkzaynqm1szif38k27q7-fish-3.2.2"
+                "store_path": "/nix/store/fi2l0ncrb1dfjmw3impyc9y2agl7nc9z-fish-3.2.2"
               }
             ],
             "outputs_to_install": [
@@ -30,11 +30,15 @@
             ],
             "pkg_path": "fish",
             "pname": "fish",
-            "rev": "e1f8852faac7638e88d5e8a5b9ee2a7568685e3f",
-            "rev_count": 297796,
-            "rev_date": "2021-06-25T13:06:37Z",
-            "scrape_date": "2024-08-08T04:03:47Z",
-            "stabilities": null,
+            "rev": "fa0326ce5233f7d592271df52c9d0812bec47b84",
+            "rev_count": 295280,
+            "rev_date": "2021-06-13T10:36:29Z",
+            "scrape_date": "2024-08-15T21:00:57Z",
+            "stabilities": [
+              "stable",
+              "staging",
+              "unstable"
+            ],
             "system": "aarch64-darwin",
             "unfree": false,
             "version": "3.2.2"
@@ -43,18 +47,18 @@
             "attr_path": "fish",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/kzl04x6vpcbdhsl49m8rkqlxj0ijjcm9-fish-3.2.2.drv",
+            "derivation": "/nix/store/1m1g3sz15zbqdh5q61r3572fbapgh78d-fish-3.2.2.drv",
             "description": "Smart and user-friendly command line shell",
             "insecure": false,
             "install_id": "fish",
             "license": "GPL-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=e1f8852faac7638e88d5e8a5b9ee2a7568685e3f",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=fa0326ce5233f7d592271df52c9d0812bec47b84",
             "missing_builds": false,
             "name": "fish-3.2.2",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/g5lwfa2fg9jgb88ndvni2azq32bgzz12-fish-3.2.2"
+                "store_path": "/nix/store/nqy2i56jmvi447ix1zd9x7217arhivw4-fish-3.2.2"
               }
             ],
             "outputs_to_install": [
@@ -62,11 +66,15 @@
             ],
             "pkg_path": "fish",
             "pname": "fish",
-            "rev": "e1f8852faac7638e88d5e8a5b9ee2a7568685e3f",
-            "rev_count": 297796,
-            "rev_date": "2021-06-25T13:06:37Z",
-            "scrape_date": "2024-08-08T04:03:47Z",
-            "stabilities": null,
+            "rev": "fa0326ce5233f7d592271df52c9d0812bec47b84",
+            "rev_count": 295280,
+            "rev_date": "2021-06-13T10:36:29Z",
+            "scrape_date": "2024-08-15T21:00:57Z",
+            "stabilities": [
+              "stable",
+              "staging",
+              "unstable"
+            ],
             "system": "aarch64-linux",
             "unfree": false,
             "version": "3.2.2"
@@ -75,18 +83,18 @@
             "attr_path": "fish",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/s6rwx318lf4p6i0vavr13l3xks06b0ip-fish-3.2.2.drv",
+            "derivation": "/nix/store/4q7m7m88gzzfjdm1rziqg3k4xw3mns16-fish-3.2.2.drv",
             "description": "Smart and user-friendly command line shell",
             "insecure": false,
             "install_id": "fish",
             "license": "GPL-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=e1f8852faac7638e88d5e8a5b9ee2a7568685e3f",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=fa0326ce5233f7d592271df52c9d0812bec47b84",
             "missing_builds": false,
             "name": "fish-3.2.2",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/p9g3vq3v5xln1np4dcxz9fmr1k4risjx-fish-3.2.2"
+                "store_path": "/nix/store/dk3hnvp3p862624cj9h2ng0487435d90-fish-3.2.2"
               }
             ],
             "outputs_to_install": [
@@ -94,11 +102,15 @@
             ],
             "pkg_path": "fish",
             "pname": "fish",
-            "rev": "e1f8852faac7638e88d5e8a5b9ee2a7568685e3f",
-            "rev_count": 297796,
-            "rev_date": "2021-06-25T13:06:37Z",
-            "scrape_date": "2024-08-08T04:03:47Z",
-            "stabilities": null,
+            "rev": "fa0326ce5233f7d592271df52c9d0812bec47b84",
+            "rev_count": 295280,
+            "rev_date": "2021-06-13T10:36:29Z",
+            "scrape_date": "2024-08-15T21:00:57Z",
+            "stabilities": [
+              "stable",
+              "staging",
+              "unstable"
+            ],
             "system": "x86_64-darwin",
             "unfree": false,
             "version": "3.2.2"
@@ -107,18 +119,18 @@
             "attr_path": "fish",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/1myn8ym7qdrm2gppm7szxr8zqzn372cx-fish-3.2.2.drv",
+            "derivation": "/nix/store/mnkrqj17bdk7n4jszz85g7r48kqlz5hk-fish-3.2.2.drv",
             "description": "Smart and user-friendly command line shell",
             "insecure": false,
             "install_id": "fish",
             "license": "GPL-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=e1f8852faac7638e88d5e8a5b9ee2a7568685e3f",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=fa0326ce5233f7d592271df52c9d0812bec47b84",
             "missing_builds": false,
             "name": "fish-3.2.2",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/hczcmlqr9ksl86qa1pm072k791piblfd-fish-3.2.2"
+                "store_path": "/nix/store/3igy088vzbz8f297in3haznrmg4p0yn6-fish-3.2.2"
               }
             ],
             "outputs_to_install": [
@@ -126,17 +138,21 @@
             ],
             "pkg_path": "fish",
             "pname": "fish",
-            "rev": "e1f8852faac7638e88d5e8a5b9ee2a7568685e3f",
-            "rev_count": 297796,
-            "rev_date": "2021-06-25T13:06:37Z",
-            "scrape_date": "2024-08-08T04:03:47Z",
-            "stabilities": null,
+            "rev": "fa0326ce5233f7d592271df52c9d0812bec47b84",
+            "rev_count": 295280,
+            "rev_date": "2021-06-13T10:36:29Z",
+            "scrape_date": "2024-08-15T21:00:57Z",
+            "stabilities": [
+              "stable",
+              "staging",
+              "unstable"
+            ],
             "system": "x86_64-linux",
             "unfree": false,
             "version": "3.2.2"
           }
         ],
-        "page": 297796,
+        "page": 295280,
         "url": ""
       }
     }

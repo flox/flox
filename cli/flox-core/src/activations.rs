@@ -13,7 +13,7 @@ use crate::proc_status::pid_is_running;
 type Error = anyhow::Error;
 
 /// Latest supported version for compatibility between:
-/// - `flox` and `flox-activation-scripts`
+/// - `flox` and `flox-interpreter`
 /// - `flox-activations` and `flox-watchdog`
 ///
 /// Incrementing this will require existing activations to exit.

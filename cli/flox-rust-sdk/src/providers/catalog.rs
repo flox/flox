@@ -13,22 +13,23 @@ use std::sync::{Arc, LazyLock, Mutex};
 use async_stream::try_stream;
 use catalog_api_v1::types::{
     self as api_types,
-    error as api_error,
     ErrorResponse,
     MessageLevel,
     MessageType,
     ResolutionMessageGeneral,
+    error as api_error,
 };
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
-use reqwest::header::{self, HeaderMap};
 use reqwest::StatusCode;
+use reqwest::header::{self, HeaderMap};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 use tracing::{debug, instrument};
+use url::Url;
 
 use crate::data::System;
 use crate::flox::FLOX_VERSION;
@@ -95,6 +96,8 @@ pub enum MockDataError {
     /// The data was parsed as JSON but it wasn't semantically valid
     #[error("invalid mocked data: {0}")]
     InvalidData(String),
+    #[error("couldn't find generated data")]
+    GeneratedDataVar,
 }
 
 /// Reads a list of mock responses from disk.
@@ -272,7 +275,7 @@ impl CatalogClient {
     {
         let new_response =
             serde_json::to_value(response).expect("couldn't convert response to json");
-        if let Value::Array(ref mut responses) = json {
+        if let Value::Array(responses) = json {
             responses.push(new_response);
         } else {
             panic!("expected file to contain a json array, found something else");
@@ -321,12 +324,31 @@ impl MockClient {
             .push_back(Response::Resolve(resp));
     }
 
+    /// Push a new response into the list of mock responses given a name under
+    /// the `test_data/generated/resolve` directory.
+    pub fn push_named_resolve_response(&mut self, name: &str) {
+        let msg = format!("couldn't read resolve response named '{name}'");
+        let resp = read_mock_responses((*GENERATED_DATA).join("resolve").join(name)).expect(&msg);
+        self.mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .extend(resp);
+    }
+
     /// Push a new response into the list of mock responses
     pub fn push_search_response(&mut self, resp: SearchResults) {
         self.mock_responses
             .lock()
             .expect("couldn't acquire mock lock")
             .push_back(Response::Search(resp));
+    }
+
+    /// Push _any_ kind of response
+    pub fn push_response(&mut self, resp: Response) {
+        self.mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .push_back(resp);
     }
 
     /// Push a new response into the list of mock responses
@@ -363,7 +385,9 @@ impl MockClient {
     }
 }
 
+pub type PublishResponse = api_types::PublishResponse;
 pub type UserBuildInfo = api_types::UserBuildInput;
+pub type UserBuildPublish = api_types::UserBuildPublish;
 pub type UserDerivationInfo = api_types::UserDerivationInput;
 pub type StoreInfoRequest = api_types::StoreInfoRequest;
 pub type StoreInfoResponse = api_types::StoreInfoResponse;
@@ -378,6 +402,15 @@ pub trait ClientTrait {
         &self,
         package_groups: Vec<PackageGroup>,
     ) -> Result<Vec<ResolvedPackageGroup>, ResolveError>;
+
+    /// Search for packages in the catalog that match a given search_term,
+    /// showing a spinner during the operation.
+    async fn search_with_spinner(
+        &self,
+        search_term: impl AsRef<str> + Send + Sync,
+        system: System,
+        limit: SearchLimit,
+    ) -> Result<SearchResults, SearchError>;
 
     /// Search for packages in the catalog that match a given search_term.
     async fn search(
@@ -397,7 +430,17 @@ pub trait ClientTrait {
     async fn create_catalog(
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError>;
+    ) -> Result<PublishResponse, CatalogClientError>;
+
+    /// Requests access and upload information for a package in a particular
+    /// private catalog.
+    ///
+    /// This is mainly used to get the upload URL for a package that's about
+    /// to be published.
+    async fn get_ingress_uri(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<Option<Url>, CatalogClientError>;
 
     /// Create a package within a user catalog
     async fn create_package(
@@ -412,7 +455,7 @@ pub trait ClientTrait {
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
-        _build_info: &UserBuildInfo,
+        _build_info: &UserBuildPublish,
     ) -> Result<(), CatalogClientError>;
 
     /// Get store info for a list of derivations
@@ -471,6 +514,17 @@ impl ClientTrait for CatalogClient {
         search_term = %search_term.as_ref(),
         system = %system,
         progress = format!("Searching for packages matching '{}' in catalog", search_term.as_ref())))]
+    async fn search_with_spinner(
+        &self,
+        search_term: impl AsRef<str> + Send + Sync,
+        system: System,
+        limit: SearchLimit,
+    ) -> Result<SearchResults, SearchError> {
+        self.search(search_term, system, limit).await
+    }
+
+    /// Wrapper around the autogenerated
+    /// [catalog_api_v1::Client::search_api_v1_catalog_search_get]
     async fn search(
         &self,
         search_term: impl AsRef<str> + Send + Sync,
@@ -567,9 +621,23 @@ impl ClientTrait for CatalogClient {
 
     async fn create_catalog(
         &self,
-        _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError> {
-        Ok(())
+        catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<PublishResponse, CatalogClientError> {
+        let catalog = str_to_catalog_name(catalog_name)?;
+        let package = str_to_package_name("unused")?;
+        // Body contents aren't important for this request.
+        let body = api_types::PublishRequest(serde_json::Map::new());
+        // This endpoint idempotently creates a catalog and gets publish info in
+        // one step, unlike `create_catalog_api_v1_catalog_catalogs_post()`, and
+        // should be consolidated in the future:
+        //
+        // - https://api.preview.flox.dev/docs#/catalogs/create_catalog_api_v1_catalog_catalogs__post
+        self.client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(&catalog, &package, &body).await.map_err(|e| match e {
+                APIError::ErrorResponse(err) => {
+                    CatalogClientError::UnexpectedError(APIError::ErrorResponse(err))
+                },
+                _ => CatalogClientError::UnexpectedError(e),
+            }).map(|resp| resp.into_inner())
     }
 
     async fn create_package(
@@ -579,7 +647,7 @@ impl ClientTrait for CatalogClient {
         original_url: impl AsRef<str> + Send + Sync,
     ) -> Result<(), CatalogClientError> {
         let body = api_types::UserPackageCreate {
-            original_url: original_url.as_ref().to_string(),
+            original_url: Some(original_url.as_ref().to_string()),
         };
         let catalog = api_types::CatalogName::from_str(catalog_name.as_ref()).map_err(|_e| {
             CatalogClientError::UnexpectedError(APIError::InvalidRequest(
@@ -618,26 +686,10 @@ impl ClientTrait for CatalogClient {
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
-        build_info: &UserBuildInfo,
+        build_info: &UserBuildPublish,
     ) -> Result<(), CatalogClientError> {
-        let catalog = api_types::CatalogName::from_str(catalog_name.as_ref()).map_err(|_e| {
-            CatalogClientError::UnexpectedError(APIError::InvalidRequest(
-                format!(
-                    "catalog name {} does not meet API requirements.",
-                    catalog_name.as_ref()
-                )
-                .to_string(),
-            ))
-        })?;
-        let package = api_types::PackageName::from_str(package_name.as_ref()).map_err(|_e| {
-            CatalogClientError::UnexpectedError(APIError::InvalidRequest(
-                format!(
-                    "package name {} does not meet API requirements.",
-                    package_name.as_ref()
-                )
-                .to_string(),
-            ))
-        })?;
+        let catalog = str_to_catalog_name(catalog_name)?;
+        let package = str_to_package_name(package_name)?;
         self.client
             .create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_post(
                 &catalog, &package, build_info,
@@ -673,6 +725,49 @@ impl ClientTrait for CatalogClient {
         let store_info = response.into_inner();
         Ok(store_info.items)
     }
+
+    async fn get_ingress_uri(
+        &self,
+        catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<Option<Url>, CatalogClientError> {
+        let uri_str = self.create_catalog(catalog_name).await?.ingress_uri;
+        uri_str
+            .map(|s| Url::from_str(&s))
+            .transpose()
+            .map_err(CatalogClientError::InvalidIngressUri)
+    }
+}
+
+/// Converts a catalog name to a semantic type and performs validation that it
+/// meets the expected format.
+fn str_to_catalog_name(
+    name: impl AsRef<str>,
+) -> Result<api_types::CatalogName, CatalogClientError> {
+    api_types::CatalogName::from_str(name.as_ref()).map_err(|_e| {
+        CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+            format!(
+                "catalog name {} does not meet API requirements.",
+                name.as_ref()
+            )
+            .to_string(),
+        ))
+    })
+}
+
+/// Converts a package name to a semantic type and performs validation that it
+/// meets the expected format.
+fn str_to_package_name(
+    name: impl AsRef<str>,
+) -> Result<api_types::PackageName, CatalogClientError> {
+    api_types::PackageName::from_str(name.as_ref()).map_err(|_e| {
+        CatalogClientError::UnexpectedError(APIError::InvalidRequest(
+            format!(
+                "package name {} does not meet API requirements.",
+                name.as_ref()
+            )
+            .to_string(),
+        ))
+    })
 }
 
 /// Collects a stream of search results into a container, returning the total count as well.
@@ -783,6 +878,15 @@ impl ClientTrait for MockClient {
         }
     }
 
+    async fn search_with_spinner(
+        &self,
+        _search_term: impl AsRef<str> + Send + Sync,
+        _system: System,
+        _limit: SearchLimit,
+    ) -> Result<SearchResults, SearchError> {
+        self.search(_search_term, _system, _limit).await
+    }
+
     async fn search(
         &self,
         _search_term: impl AsRef<str> + Send + Sync,
@@ -834,11 +938,18 @@ impl ClientTrait for MockClient {
         }
     }
 
+    async fn get_ingress_uri(
+        &self,
+        _catalog_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<Option<Url>, CatalogClientError> {
+        Ok(None)
+    }
+
     async fn create_catalog(
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<(), CatalogClientError> {
-        Ok(())
+    ) -> Result<PublishResponse, CatalogClientError> {
+        Ok(api_types::PublishResponse { ingress_uri: None })
     }
 
     async fn create_package(
@@ -854,7 +965,7 @@ impl ClientTrait for MockClient {
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
-        _build_info: &UserBuildInfo,
+        _build_info: &UserBuildPublish,
     ) -> Result<(), CatalogClientError> {
         Ok(())
     }
@@ -904,6 +1015,8 @@ pub enum CatalogClientError {
     NegativeNumberOfResults,
     #[error("resolution message error: {0}")]
     ResolutionMessage(String),
+    #[error("invalid ingress URI")]
+    InvalidIngressUri(#[source] url::ParseError),
 }
 
 #[derive(Debug, Error)]
@@ -1308,7 +1421,7 @@ pub mod test_helpers {
     /// Clear mock responses and then load responses from a file into the list
     /// of mock responses
     pub fn reset_mocks_from_file(client: &mut Client, relative_path: &str) {
-        let Client::Mock(ref mut client) = client else {
+        let Client::Mock(client) = client else {
             panic!("mocks can only be used with a MockClient");
         };
 
@@ -1340,7 +1453,7 @@ pub mod test_helpers {
             rev: String::new(),
             rev_count: 0,
             rev_date: chrono::offset::Utc::now(),
-            scrape_date: chrono::offset::Utc::now(),
+            scrape_date: Some(chrono::offset::Utc::now()),
             stabilities: None,
             unfree: None,
             version: version.to_string(),
@@ -1361,7 +1474,42 @@ pub mod test_helpers {
             msgs: vec![],
         }
     }
+
+    pub fn constraints_too_tight_dummy_response(attr_path: &str) -> ResolvedPackageGroup {
+        ResolvedPackageGroup {
+            name: attr_path.to_string(),
+            page: None,
+            msgs: vec![ResolutionMessage::ConstraintsTooTight(
+                MsgConstraintsTooTight {
+                    level: MessageLevel::Error,
+                    msg: "Resolution constraints are too tight".to_string(),
+                },
+            )],
+        }
+    }
+
+    /// Name = path under test_data/generated e.g. "resolve/hello.json"
+    pub fn read_named_mock_responses(name: &str) -> Result<VecDeque<Response>, MockDataError> {
+        let data_dir =
+            std::env::var("GENERATED_DATA").map_err(|_| MockDataError::GeneratedDataVar)?;
+        let response_path = PathBuf::from(data_dir).join(name);
+        read_mock_responses(response_path)
+    }
+
+    /// Name = filename under test_data/generated/search e.g. "ello_all.json"
+    pub fn read_search_response(name: &str) -> SearchResults {
+        let name = format!("search/{name}");
+        let mut responses = read_named_mock_responses(&name).unwrap();
+        if responses.len() > 1 {
+            panic!("search response had more than one response");
+        }
+        let Some(Response::Search(search_response)) = responses.pop_front() else {
+            panic!("expected search response, found something else");
+        };
+        search_response
+    }
 }
+
 #[cfg(test)]
 mod tests {
 

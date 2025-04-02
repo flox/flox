@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
@@ -11,13 +11,13 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
+    DOT_FLOX,
     DotFlox,
+    ENVIRONMENT_POINTER_FILENAME,
     Environment,
     EnvironmentError,
     EnvironmentPointer,
     ManagedPointer,
-    DOT_FLOX,
-    ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::manifest::raw::add_system;
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
@@ -26,7 +26,7 @@ use toml_edit::DocumentMut;
 use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
-use super::{open_path, ConcreteEnvironment};
+use super::{ConcreteEnvironment, open_path};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::{display_chain, format_core_error};
@@ -509,27 +509,28 @@ impl Pull {
         Ok(choice == 1)
     }
 
-    fn handle_error(err: ManagedEnvironmentError) -> anyhow::Error {
-        match err {
-            ManagedEnvironmentError::AccessDenied => {
-                let message = "You do not have permission to pull this environment";
-                anyhow::Error::msg(message)
-            },
-            ManagedEnvironmentError::Diverged => {
-                let message = "The environment has diverged from the remote version";
-                anyhow::Error::msg(message)
-            },
-            ManagedEnvironmentError::UpstreamNotFound {
-                env_ref,
-                upstream: _,
-                user,
-            } => {
-                let by_current_user = user
-                    .map(|u| u == env_ref.owner().as_str())
-                    .unwrap_or_default();
-                let message = format!("The environment {env_ref} does not exist.");
-                if by_current_user {
-                    anyhow!(formatdoc! {"
+    fn handle_error(err: EnvironmentError) -> anyhow::Error {
+        if let EnvironmentError::ManagedEnvironment(err) = err {
+            match err {
+                ManagedEnvironmentError::AccessDenied => {
+                    let message = "You do not have permission to pull this environment";
+                    anyhow::Error::msg(message)
+                },
+                ManagedEnvironmentError::Diverged => {
+                    let message = "The environment has diverged from the remote version";
+                    anyhow::Error::msg(message)
+                },
+                ManagedEnvironmentError::UpstreamNotFound {
+                    env_ref,
+                    upstream: _,
+                    user,
+                } => {
+                    let by_current_user = user
+                        .map(|u| u == env_ref.owner().as_str())
+                        .unwrap_or_default();
+                    let message = format!("The environment {env_ref} does not exist.");
+                    if by_current_user {
+                        anyhow!(formatdoc! {"
                         {message}
 
                         Double check the name or create it with:
@@ -537,11 +538,14 @@ impl Pull {
                             $ flox init --name {name}
                             $ flox push
                     ", name = env_ref.name()})
-                } else {
-                    anyhow!(message)
-                }
-            },
-            _ => err.into(),
+                    } else {
+                        anyhow!(message)
+                    }
+                },
+                _ => err.into(),
+            }
+        } else {
+            err.into()
         }
     }
 }
@@ -568,7 +572,7 @@ enum PullResultResolutionContext {
 mod tests {
     use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::{
-        mock_managed_environment,
+        mock_managed_environment_unlocked,
         unusable_mock_managed_environment,
     };
     use flox_rust_sdk::models::environment::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
@@ -608,17 +612,19 @@ mod tests {
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
-        assert!(Pull::handle_pull_result(
-            &flox,
-            incompatible_system_result(),
-            &dot_flox_path,
-            false,
-            &mut unusable_mock_managed_environment(),
-            None
-        )
-        .unwrap_err()
-        .to_string()
-        .contains("This environment is not yet compatible with your system"));
+        assert!(
+            Pull::handle_pull_result(
+                &flox,
+                incompatible_system_result(),
+                &dot_flox_path,
+                false,
+                &mut unusable_mock_managed_environment(),
+                None
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("This environment is not yet compatible with your system")
+        );
 
         assert!(!dot_flox_path.exists());
     }
@@ -638,7 +644,7 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             true,
-            &mut mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            &mut mock_managed_environment_unlocked(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
             None,
         )
         .unwrap();
@@ -656,20 +662,22 @@ mod tests {
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
-        assert!(Pull::handle_pull_result(
-            &flox,
-            incompatible_system_result(),
-            &dot_flox_path,
-            false,
-            &mut mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
-            Some(QueryFunctions {
-                query_add_system: |_| Ok(false),
-                query_ignore_build_errors: || panic!(),
-            })
-        )
-        .unwrap_err()
-        .to_string()
-        .contains("Did not pull the environment"));
+        assert!(
+            Pull::handle_pull_result(
+                &flox,
+                incompatible_system_result(),
+                &dot_flox_path,
+                false,
+                &mut mock_managed_environment_unlocked(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+                Some(QueryFunctions {
+                    query_add_system: |_| Ok(false),
+                    query_ignore_build_errors: || panic!(),
+                })
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("Did not pull the environment")
+        );
 
         assert!(!dot_flox_path.exists());
     }
@@ -690,7 +698,7 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             false,
-            &mut mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            &mut mock_managed_environment_unlocked(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
             Some(QueryFunctions {
                 query_add_system: |_| Ok(true),
                 query_ignore_build_errors: || panic!(),
@@ -710,20 +718,22 @@ mod tests {
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
-        assert!(Pull::handle_pull_result(
-            &flox,
-            incompatible_package_result(),
-            &dot_flox_path,
-            false,
-            &mut unusable_mock_managed_environment(),
-            Some(QueryFunctions {
-                query_add_system: |_| panic!(),
-                query_ignore_build_errors: || Ok(false),
-            })
-        )
-        .unwrap_err()
-        .to_string()
-        .contains("Did not pull the environment"));
+        assert!(
+            Pull::handle_pull_result(
+                &flox,
+                incompatible_package_result(),
+                &dot_flox_path,
+                false,
+                &mut unusable_mock_managed_environment(),
+                Some(QueryFunctions {
+                    query_add_system: |_| panic!(),
+                    query_ignore_build_errors: || Ok(false),
+                })
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("Did not pull the environment")
+        );
 
         assert!(!dot_flox_path.exists());
     }

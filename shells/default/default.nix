@@ -124,13 +124,14 @@ mkShell (
         define_dev_env_var FLOX_ACTIVATIONS_BIN "''${REPO_ROOT}/cli/target/debug/flox-activations";
 
         # make built binaries
+        define_dev_env_var BUILDENV_BIN "''${REPO_ROOT}/build/flox-buildenv/bin/buildenv";
         define_dev_env_var NIX_PLUGINS "''${REPO_ROOT}/build/nix-plugins/lib/nix-plugins";
 
         # static nix files
         define_dev_env_var FLOX_MK_CONTAINER_NIX "''${REPO_ROOT}/mkContainer/mkContainer.nix";
 
         # Nix built subsystems
-        define_dev_env_var FLOX_INTERPRETER "''${REPO_ROOT}/build/flox-activation-scripts";
+        define_dev_env_var FLOX_INTERPRETER "''${REPO_ROOT}/build/flox-interpreter";
         define_dev_env_var FLOX_BUILDENV "''${REPO_ROOT}/build/flox-buildenv";
         define_dev_env_var FLOX_BUILDENV_NIX "''${FLOX_BUILDENV}/lib/buildenv.nix";
         define_dev_env_var FLOX_PACKAGE_BUILDER "''${REPO_ROOT}/build/flox-package-builder";
@@ -138,6 +139,7 @@ mkShell (
         define_dev_env_var FLOX_MANPAGES "''${REPO_ROOT}/build/flox-manpages";
 
         # test data
+        define_dev_env_var INPUT_DATA "''${REPO_ROOT}/test_data/input_data";
         define_dev_env_var GENERATED_DATA "''${REPO_ROOT}/test_data/generated";
         define_dev_env_var MANUALLY_GENERATED "''${REPO_ROOT}/test_data/manually_generated";
 

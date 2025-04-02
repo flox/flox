@@ -4,7 +4,7 @@ pub use flox_core::traceable_path;
 
 /// Returns a `tracing`-compatible form of an `Option<PathBuf>`
 pub fn maybe_traceable_path(maybe_path: &Option<PathBuf>) -> impl tracing::Value {
-    if let Some(ref p) = maybe_path {
+    if let Some(p) = maybe_path {
         p.display().to_string()
     } else {
         String::from("null")
@@ -63,6 +63,17 @@ pub mod test_helpers {
             .with_target(false)
             .finish();
 
+        (subscriber, writer)
+    }
+
+    #[cfg(any(test, feature = "tests"))]
+    pub fn test_subscriber_message_only() -> (impl tracing::Subscriber, CollectingWriter) {
+        use tracing_subscriber::layer::SubscriberExt;
+
+        let (subscriber, writer) = test_subscriber();
+        let subscriber = subscriber.with(tracing_subscriber::filter::FilterFn::new(|metadata| {
+            metadata.target() == "flox::utils::message"
+        }));
         (subscriber, writer)
     }
 }

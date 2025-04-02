@@ -1,32 +1,26 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::io::stdout;
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::str::FromStr;
 use std::sync::LazyLock;
 use std::{env, fs};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
+use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     Environment,
     EnvironmentError,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
-    FLOX_ENV_CACHE_VAR,
-    FLOX_ENV_DESCRIPTION_VAR,
     FLOX_ENV_LOG_DIR_VAR,
-    FLOX_ENV_PROJECT_VAR,
-    FLOX_ENV_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
     FLOX_SERVICES_SOCKET_VAR,
 };
-use flox_rust_sdk::models::manifest::typed::Inner;
+use flox_rust_sdk::models::lockfile::LockResult;
+use flox_rust_sdk::models::manifest::typed::{ActivateMode, Inner};
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
@@ -37,14 +31,19 @@ use tracing::{debug, warn};
 
 use super::services::ServicesEnvironment;
 use super::{
-    activated_environments,
-    environment_select,
     EnvironmentSelect,
     UninitializedEnvironment,
+    activated_environments,
+    environment_description,
+    environment_select,
 };
 use crate::commands::check_for_upgrades::spawn_detached_check_for_upgrades_process;
 use crate::commands::services::ServicesCommandsError;
-use crate::commands::{ensure_environment_trust, EnvironmentSelectError};
+use crate::commands::{
+    EnvironmentSelectError,
+    ensure_environment_trust,
+    uninitialized_environment_description,
+};
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::openers::Shell;
 use crate::utils::{default_nix_env_vars, message};
@@ -63,34 +62,6 @@ pub static WATCHDOG_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
 pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
 });
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum Mode {
-    #[default]
-    Dev,
-    Run,
-}
-
-impl Display for Mode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Mode::Dev => write!(f, "dev"),
-            Mode::Run => write!(f, "run"),
-        }
-    }
-}
-
-impl FromStr for Mode {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "dev" => Ok(Mode::Dev),
-            "run" => Ok(Mode::Run),
-            _ => Err(anyhow!("'{s}' is not a valid activation mode")),
-        }
-    }
-}
 
 #[derive(Bpaf, Clone)]
 pub struct Activate {
@@ -114,11 +85,10 @@ pub struct Activate {
     #[bpaf(long, hide)]
     pub use_fallback_interpreter: bool,
 
-    /// Whether to activate in "dev" mode or "run" mode, the difference being
-    /// that "dev" mode will set environment variables necessary for
-    /// development, whereas "run" will simply put executables in PATH.
+    /// Activate the environment in either "dev" or "run" mode.
+    /// Overrides the "options.activate.mode" setting in the manifest.
     #[bpaf(short, long)]
-    pub mode: Option<Mode>,
+    pub mode: Option<ActivateMode>,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
@@ -162,7 +132,7 @@ impl Activate {
 
         // Spawn a detached process to check for upgrades in the background.
         let environment =
-            UninitializedEnvironment::from_concrete_environment(&concrete_environment)?;
+            UninitializedEnvironment::from_concrete_environment(&concrete_environment);
         spawn_detached_check_for_upgrades_process(
             &environment,
             None,
@@ -192,14 +162,20 @@ impl Activate {
         is_ephemeral: bool,
         services_to_start: &[String],
     ) -> Result<()> {
-        let now_active =
-            UninitializedEnvironment::from_concrete_environment(&concrete_environment)?;
+        let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
 
         let environment = concrete_environment.dyn_environment_ref_mut();
+        let lockfile = match environment.lockfile(&flox)? {
+            LockResult::Changed(lockfile) => {
+                message::print_overridden_manifest_fields(&lockfile);
+                lockfile
+            },
+            LockResult::Unchanged(lockfile) => lockfile,
+        };
+        let manifest = &lockfile.manifest;
 
         let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         let interactive = !in_place && self.run_args.is_empty();
-        let mode = self.mode.clone().unwrap_or_default();
 
         // Don't spin in bashrcs and similar contexts
         let rendered_env_path_result = environment.rendered_env_links(&flox);
@@ -224,11 +200,17 @@ impl Activate {
             other => other?,
         };
 
-        let mode_link_path = match mode {
-            Mode::Dev => &rendered_env_path.development.clone(),
-            Mode::Run => &rendered_env_path.runtime.clone(),
-        };
-        let store_path = fs::read_link(mode_link_path).with_context(|| {
+        // Must not be evaluated inline with the macro or we'll leak TRACE logs
+        // for reasons unknown.
+        let lockfile_version = lockfile.version();
+        subcommand_metric!("activate#version", lockfile_version = lockfile_version);
+
+        let mode = self
+            .mode
+            .clone()
+            .unwrap_or(manifest.options.activate.mode.clone().unwrap_or_default());
+        let mode_link_path = rendered_env_path.clone().for_mode(&mode);
+        let store_path = fs::read_link(&mode_link_path).with_context(|| {
             format!(
                 "a symlink at {} was just created and should still exist",
                 mode_link_path.display()
@@ -253,10 +235,7 @@ impl Activate {
             path
         };
 
-        // Must come after getting an activation path to prevent premature
-        // locking or migration. It must also not be evaluated inline with the
-        // macro or we'll leak TRACE logs for reasons unknown.
-        let lockfile_version = environment.lockfile(&flox)?.version();
+        let lockfile_version = lockfile.version();
         subcommand_metric!("activate#version", lockfile_version = lockfile_version);
 
         // read the currently active environments from the environment
@@ -268,12 +247,12 @@ impl Activate {
         let profile_only = if flox_active_environments.is_active(&now_active) {
             debug!(
                 "Environment is already active: environment={}. Not adding to active environments",
-                now_active.bare_description()?
+                now_active.bare_description()
             );
             if interactive {
                 return Err(anyhow!(
                     "Environment {} is already active",
-                    now_active.message_description()?
+                    uninitialized_environment_description(&now_active)?
                 ));
             }
             !is_ephemeral
@@ -317,7 +296,6 @@ impl Activate {
             .unwrap_or(utils::colors::INDIGO_300.to_ansi256().to_string());
 
         let mut exports = HashMap::from([
-            (FLOX_ENV_VAR, mode_link_path.to_string_lossy().to_string()),
             (
                 FLOX_ACTIVE_ENVIRONMENTS_VAR,
                 flox_active_environments.to_string(),
@@ -326,29 +304,12 @@ impl Activate {
                 FLOX_ENV_LOG_DIR_VAR,
                 environment.log_path()?.to_string_lossy().to_string(),
             ),
-            (
-                FLOX_ENV_CACHE_VAR,
-                environment.cache_path()?.to_string_lossy().to_string(),
-            ),
-            (
-                FLOX_ENV_PROJECT_VAR,
-                environment.project_path()?.to_string_lossy().to_string(),
-            ),
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
             // Set `FLOX_PROMPT_ENVIRONMENTS` to the constructed prompt string,
             // which may be ""
             (FLOX_PROMPT_ENVIRONMENTS_VAR, flox_prompt_environments),
             ("_FLOX_SET_PROMPT", set_prompt.to_string()),
-            // Export FLOX_ENV_DESCRIPTION for this environment and let the
-            // activation script take care of tracking active environments
-            // and invoking the appropriate script to set the prompt.
-            (
-                FLOX_ENV_DESCRIPTION_VAR,
-                now_active
-                    .bare_description()
-                    .expect("`bare_description` is infallible"),
-            ),
             (
                 "_FLOX_ACTIVATE_STORE_PATH",
                 store_path.to_string_lossy().to_string(),
@@ -372,7 +333,6 @@ impl Activate {
         }
 
         let socket_path = environment.services_socket_path(&flox)?;
-        let manifest = environment.manifest(&flox)?;
         exports.insert(
             "_FLOX_ENV_CUDA_DETECTION",
             match manifest.options.cuda_detection {
@@ -432,6 +392,32 @@ impl Activate {
         exports.extend(default_nix_env_vars());
 
         let activate_path = interpreter_path.join("activate");
+        let mut command = Command::new(activate_path);
+        command.envs(exports);
+
+        // Don't rely on FLOX_ENV in the environment when we explicitly know
+        // what it should be. This is necessary for nested activations where an
+        // outer export of FLOX_ENV would be inherited by the inner activation.
+        command
+            .arg("--env")
+            .arg(mode_link_path.to_string_lossy().to_string());
+        command
+            .arg("--env-project")
+            .arg(environment.project_path()?.to_string_lossy().to_string());
+        command
+            .arg("--env-cache")
+            .arg(environment.cache_path()?.to_string_lossy().to_string());
+        command
+            .arg("--env-description")
+            .arg(now_active.bare_description());
+
+        // Pass down the activation mode
+        command.arg("--mode").arg(mode.to_string());
+
+        command
+            .arg("--watchdog")
+            .arg(WATCHDOG_BIN.to_string_lossy().to_string());
+
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
         //
@@ -441,61 +427,33 @@ impl Activate {
         //    eval "$(flox activate)"
         if in_place {
             let shell = Self::detect_shell_for_in_place()?;
-            Self::activate_in_place(&mode, mode_link_path, &shell, &exports, &activate_path);
+            command.arg("--shell").arg(shell.exe_path());
+            Self::activate_in_place(command, shell);
 
             return Ok(());
         }
 
         let shell = Self::detect_shell_for_subshell();
+        command.arg("--shell").arg(shell.exe_path());
         // These functions will only return if exec fails
         if interactive {
-            Self::activate_interactive(&mode, mode_link_path, shell, exports, &activate_path)
+            Self::activate_interactive(command)
         } else {
-            Self::activate_command(
-                &mode,
-                mode_link_path,
-                self.run_args,
-                shell,
-                exports,
-                &activate_path,
-                is_ephemeral,
-            )
+            Self::activate_command(command, self.run_args, is_ephemeral)
         }
     }
 
     /// Used for `flox activate -- run_args`
     fn activate_command(
-        mode: &Mode,
-        mode_link_path: &Path,
+        mut command: Command,
         run_args: Vec<String>,
-        shell: Shell,
-        exports: HashMap<&str, String>,
-        activate_path: &Path,
         is_ephemeral: bool,
     ) -> Result<()> {
-        let mut command = Command::new(activate_path);
-        command.env("FLOX_SHELL", shell.exe_path());
-        command.envs(exports);
-
         // The activation script works like a shell in that it accepts the "-c"
         // flag which takes exactly one argument to be passed verbatim to the
         // userShell invocation. Take this opportunity to combine these args
         // safely, and *exactly* as the user provided them in argv.
         command.arg("-c").arg(Self::quote_run_args(&run_args));
-
-        // Don't rely on FLOX_ENV in the environment when we explicitly know
-        // what it should be. This is necessary for nested activations where an
-        // outer export of FLOX_ENV would be inherited by the inner activation.
-        command
-            .arg("--env")
-            .arg(mode_link_path.to_string_lossy().to_string());
-
-        // Pass down the activation mode
-        command.arg("--mode").arg(mode.to_string());
-
-        command
-            .arg("--watchdog")
-            .arg(WATCHDOG_BIN.to_string_lossy().to_string());
 
         debug!("running activation command: {:?}", command);
 
@@ -521,31 +479,7 @@ impl Activate {
     /// and running the respective activation scripts.
     ///
     /// This function should never return as it replaces the current process
-    fn activate_interactive(
-        mode: &Mode,
-        mode_link_path: &Path,
-        shell: Shell,
-        exports: HashMap<&str, String>,
-        activate_path: &Path,
-    ) -> Result<()> {
-        let mut command = Command::new(activate_path);
-        command.env("FLOX_SHELL", shell.exe_path());
-        command.envs(exports);
-
-        // Don't rely on FLOX_ENV in the environment when we explicitly know
-        // what it should be. This is necessary for nested activations where an
-        // outer export of FLOX_ENV would be inherited by the inner activation.
-        command
-            .arg("--env")
-            .arg(mode_link_path.to_string_lossy().to_string());
-
-        // Pass down the activation mode
-        command.arg("--mode").arg(mode.to_string());
-
-        command
-            .arg("--watchdog")
-            .arg(WATCHDOG_BIN.to_string_lossy().to_string());
-
+    fn activate_interactive(mut command: Command) -> Result<()> {
         debug!("running activation command: {:?}", command);
 
         // exec should never return
@@ -553,40 +487,23 @@ impl Activate {
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(
-        mode: &Mode,
-        mode_link_path: &Path,
-        shell: &Shell,
-        exports: &HashMap<&str, String>,
-        activate_path: &Path,
-    ) {
-        let mut command = Command::new(activate_path);
-        command.env("FLOX_SHELL", shell.exe_path());
-        command.envs(exports);
-
-        // Don't rely on FLOX_ENV in the environment when we explicitly know
-        // what it should be. This is necessary for nested activations where an
-        // outer export of FLOX_ENV would be inherited by the inner activation.
-        command
-            .arg("--env")
-            .arg(mode_link_path.to_string_lossy().to_string());
-
-        // Pass down the activation mode
-        command.arg("--mode").arg(mode.to_string());
-
-        command
-            .arg("--watchdog")
-            .arg(WATCHDOG_BIN.to_string_lossy().to_string());
-
+    fn activate_in_place(mut command: Command, shell: Shell) {
         debug!("running activation command: {:?}", command);
 
         let output = command.output().expect("failed to run activation script");
         eprint!("{}", String::from_utf8_lossy(&output.stderr));
 
         // Render the exports in the correct shell dialect.
-        let exports_rendered = exports
-            .iter()
-            .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
+        let exports_rendered = command
+            .get_envs()
+            .filter_map(|(key, value)| {
+                value.map(|v| {
+                    (
+                        key.to_string_lossy(),
+                        shell_escape::escape(v.to_string_lossy()),
+                    )
+                })
+            })
             .map(|(key, value)| match shell {
                 Shell::Bash(_) => format!("export {key}={value};",),
                 Shell::Fish(_) => format!("set -gx {key} {value};",),
@@ -694,10 +611,7 @@ impl Activate {
                 if hide_default_prompt && env.name().as_ref() == DEFAULT_NAME {
                     return None;
                 }
-                Some(
-                    env.bare_description()
-                        .expect("`bare_description` is infallible"),
-                )
+                Some(env.bare_description())
             })
             .collect();
 
@@ -728,7 +642,7 @@ impl Activate {
 /// so they are not wondering whether upgrades may have been applied automatically.
 /// To make this less annoying, we tried to make the message as unobtrusive as possible.
 fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironment) -> Result<()> {
-    let current_environment = UninitializedEnvironment::from_concrete_environment(environment)?;
+    let current_environment = UninitializedEnvironment::from_concrete_environment(environment);
     let active_environments = activated_environments();
     if active_environments.is_active(&current_environment) {
         debug!("Not notifying user of upgrade, environment is already active");
@@ -742,7 +656,7 @@ fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironmen
         return Ok(());
     };
 
-    let current_lockfile = environment.lockfile(flox)?;
+    let current_lockfile = environment.lockfile(flox)?.into();
 
     if Some(current_lockfile) != info.result.old_lockfile {
         // todo: delete the info file?
@@ -756,13 +670,12 @@ fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironmen
         return Ok(());
     }
 
-    let description =
-        UninitializedEnvironment::from_concrete_environment(environment)?.message_description()?;
+    let description = environment_description(environment)?;
 
     // Update this message in flox-config.md if you change it here
     let message = formatdoc! {"
         ℹ️  Upgrades are available for packages in {description}.
-        Use 'flox upgrade' to get the latest.
+        Use 'flox upgrade --dry-run' for details.
     "};
 
     message::plain(message);
@@ -904,32 +817,24 @@ mod tests {
 #[cfg(test)]
 mod upgrade_notification_tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
     use flox_rust_sdk::models::environment::UpgradeResult;
-    use flox_rust_sdk::models::lockfile::LockedPackage;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_named_path_environment_from_env_files,
+        new_path_environment_from_env_files,
+    };
+    use flox_rust_sdk::models::lockfile::{LockedPackage, Lockfile};
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
     use flox_rust_sdk::providers::upgrade_checks::UpgradeInformation;
-    use flox_rust_sdk::utils::logging::test_helpers::CollectingWriter;
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use time::OffsetDateTime;
-    use tracing::Subscriber;
-    use tracing_subscriber::filter::FilterFn;
-    use tracing_subscriber::layer::SubscriberExt;
 
     use super::*;
     use crate::commands::ActiveEnvironments;
 
-    fn test_subscriber() -> (impl Subscriber, CollectingWriter) {
-        let (subscriber, writer) = flox_rust_sdk::utils::logging::test_helpers::test_subscriber();
-        let subscriber = subscriber.with(FilterFn::new(|metadata| {
-            metadata.target() == "flox::utils::message"
-        }));
-        (subscriber, writer)
-    }
-
     #[test]
     fn no_notification_printed_if_absent() {
         let (flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber();
+        let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
@@ -949,7 +854,7 @@ mod upgrade_notification_tests {
             UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
         let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
 
-        let mut new_lockfile = environment.lockfile(flox).unwrap();
+        let mut new_lockfile: Lockfile = environment.lockfile(flox).unwrap().into();
         for locked_package in new_lockfile.packages.iter_mut() {
             match locked_package {
                 LockedPackage::Catalog(locked_package_catalog) => {
@@ -965,7 +870,7 @@ mod upgrade_notification_tests {
         let _ = locked.info_mut().insert(UpgradeInformation {
             last_checked: OffsetDateTime::now_utc(),
             result: UpgradeResult {
-                old_lockfile: Some(environment.lockfile(flox).unwrap()),
+                old_lockfile: Some(environment.lockfile(flox).unwrap().into()),
                 new_lockfile,
 
                 store_path: None,
@@ -978,16 +883,16 @@ mod upgrade_notification_tests {
     #[test]
     fn no_notification_printed_if_already_active() {
         let (flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber();
+        let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
         let mut environment = ConcreteEnvironment::Path(environment);
 
         let mut active = ActiveEnvironments::default();
-        active.set_last_active(
-            UninitializedEnvironment::from_concrete_environment(&environment).unwrap(),
-        );
+        active.set_last_active(UninitializedEnvironment::from_concrete_environment(
+            &environment,
+        ));
 
         write_upgrade_available(&flox, &mut environment);
 
@@ -1009,10 +914,13 @@ mod upgrade_notification_tests {
     #[test]
     fn notification_printed_if_present() {
         let (flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber();
+        let (subscriber, writer) = test_subscriber_message_only();
 
-        let environment =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let environment = new_named_path_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            "name",
+        );
         let mut environment = ConcreteEnvironment::Path(environment);
 
         write_upgrade_available(&flox, &mut environment);
@@ -1025,7 +933,7 @@ mod upgrade_notification_tests {
 
         assert_eq!(printed, formatdoc! {"
             ℹ️  Upgrades are available for packages in 'name'.
-            Use 'flox upgrade' to get the latest.
+            Use 'flox upgrade --dry-run' for details.
 
         "});
     }
@@ -1033,7 +941,7 @@ mod upgrade_notification_tests {
     #[test]
     fn no_notification_printed_if_outdated() {
         let (flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber();
+        let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
@@ -1045,14 +953,14 @@ mod upgrade_notification_tests {
             let mut locked = upgrade_information.lock_if_unlocked().unwrap().unwrap();
 
             // cause old_lockfile to evaluate as non-equal to the current lockfile
-            let mut old_lockfile = environment.lockfile(&flox).unwrap();
+            let mut old_lockfile: Lockfile = environment.lockfile(&flox).unwrap().into();
             old_lockfile.packages.clear();
 
             let _ = locked.info_mut().insert(UpgradeInformation {
                 last_checked: OffsetDateTime::now_utc(),
                 result: UpgradeResult {
                     old_lockfile: Some(old_lockfile),
-                    new_lockfile: environment.lockfile(&flox).unwrap(),
+                    new_lockfile: environment.lockfile(&flox).unwrap().into(),
 
                     store_path: None,
                 },
@@ -1072,7 +980,7 @@ mod upgrade_notification_tests {
     #[test]
     fn no_notification_printed_if_no_diff() {
         let (flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber();
+        let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
@@ -1083,8 +991,8 @@ mod upgrade_notification_tests {
                 UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
 
             let result = UpgradeResult {
-                old_lockfile: Some(environment.lockfile(&flox).unwrap()),
-                new_lockfile: environment.lockfile(&flox).unwrap(),
+                old_lockfile: Some(environment.lockfile(&flox).unwrap().into()),
+                new_lockfile: environment.lockfile(&flox).unwrap().into(),
 
                 store_path: None,
             };

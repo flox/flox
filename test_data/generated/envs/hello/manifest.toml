@@ -67,6 +67,15 @@ hello.pkg-path = "hello"
 # myservice.command = "python3 -m http.server"
 
 
+## Include ----------------------------------------------------------
+## ... environments to create a composed environment
+## ------------------------------------------------------------------
+[include]
+# environments = [
+#     { dir = "../common" }
+# ]
+
+
 ## Other Environment Options -----------------------------------------
 [options]
 # Systems that environment is compatible with

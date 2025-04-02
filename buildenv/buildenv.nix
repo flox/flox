@@ -1,6 +1,6 @@
 {
-  activationScripts_out_storePath ? "@activationScripts_out@",
-  activationScripts_build_wrapper_storePath ? "@activationScripts_build_wrapper@",
+  interpreter_out_storePath ? "@interpreter_out@",
+  interpreter_wrapper_storePath ? "@interpreter_wrapper@",
   defaultEnvrc_storePath ? "@defaultEnvrc@",
   coreutils_storePath ? "@coreutils@",
   floxBuildenv_storePath ? "@out@",
@@ -19,8 +19,8 @@ let
   # and returns a string with the path added to its string context[1].
   #
   # [1]: <https://nix.dev/manual/nix/2.24/language/string-context>
-  activationScripts_out = builtins.storePath activationScripts_out_storePath;
-  activationScripts_build_wrapper = builtins.storePath activationScripts_build_wrapper_storePath;
+  interpreter_out = builtins.storePath interpreter_out_storePath;
+  interpreter_wrapper = builtins.storePath interpreter_wrapper_storePath;
   defaultEnvrc = builtins.storePath defaultEnvrc_storePath;
   floxBuildEnv = builtins.storePath floxBuildenv_storePath;
   coreutils = builtins.storePath coreutils_storePath;
@@ -75,9 +75,9 @@ let
       # static chunks
       ''
         export PATH="${coreutils}/bin''${PATH:+:}''${PATH}"
-        mkdir -p $out/activate.d
-        cp --no-preserve=mode ${manifestLockFile} $out/manifest.lock
-        cp --no-preserve=mode ${defaultEnvrc} $out/activate.d/envrc
+        "${coreutils}/bin/mkdir" -p $out/activate.d
+        "${coreutils}/bin/cp" --no-preserve=mode ${manifestLockFile} $out/manifest.lock
+        "${coreutils}/bin/cp" --no-preserve=mode ${defaultEnvrc} $out/activate.d/envrc
       ''
       # [vars] section
       (
@@ -85,7 +85,7 @@ let
           ""
         else
           ''
-            cat ${vars} >> $out/activate.d/envrc
+            "${coreutils}/bin/cat" ${vars} >> $out/activate.d/envrc
           ''
       )
       # [hook] section
@@ -96,7 +96,7 @@ let
           in
           if (v != null) then
             ''
-              cp ${builtins.toFile "hook-on-activate" v} $out/activate.d/hook-on-activate
+              "${coreutils}/bin/cp" ${builtins.toFile "hook-on-activate" v} $out/activate.d/hook-on-activate
             ''
           else
             ""
@@ -115,7 +115,7 @@ let
             };
           in
           ''
-            cp ${serviceConfigYamlStorePath} $out/service-config.yaml
+            "${coreutils}/bin/cp" ${serviceConfigYamlStorePath} $out/service-config.yaml
           ''
       )
     ]
@@ -132,7 +132,9 @@ let
               let
                 f = builtins.toFile "profile-${i}" v;
               in
-              "cp ${f} $out/activate.d/profile-${i}\n"
+              ''
+                "${coreutils}/bin/cp" ${f} $out/activate.d/profile-${i}
+              ''
             else
               ""
           else
@@ -164,8 +166,8 @@ let
                   f = builtins.toFile "build-${i}" v;
                 in
                 ''
-                  mkdir -p $out/package-builds.d
-                  cp ${f} $out/package-builds.d/${i}
+                  "${coreutils}/bin/mkdir" -p $out/package-builds.d
+                  "${coreutils}/bin/cp" ${f} $out/package-builds.d/${i}
                 ''
               )
             else
@@ -253,8 +255,8 @@ builtins.derivation {
 
   # Pull in external attributes and those calculated above.
   inherit
-    activationScripts_out
-    activationScripts_build_wrapper
+    interpreter_out
+    interpreter_wrapper
     inputSrcs
     manifestPackage
     system
@@ -321,8 +323,8 @@ builtins.derivation {
   # The `builder.pl` script is responsible for parsing this when computing
   # the contents of requisites.txt for each output.
   exportReferencesGraph.graph = inputSrcs ++ [
-    activationScripts_out
-    activationScripts_build_wrapper
+    interpreter_out
+    interpreter_wrapper
     manifestPackage
   ];
 }

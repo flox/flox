@@ -1,56 +1,65 @@
 use std::path::PathBuf;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
-use flox_rust_sdk::models::manifest::typed::Inner;
+use flox_rust_sdk::models::manifest::typed::{Inner, Manifest};
 use flox_rust_sdk::providers::build::FloxBuildMk;
+use flox_rust_sdk::providers::catalog::ClientTrait;
 use flox_rust_sdk::providers::publish::{
-    check_build_metadata,
-    check_environment_metadata,
     NixCopyCache,
     PublishProvider,
     Publisher,
+    check_build_metadata,
+    check_environment_metadata,
 };
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
 use url::Url;
 
-use super::{environment_select, EnvironmentSelect};
+use super::{EnvironmentSelect, environment_select};
 use crate::commands::ensure_floxhub_token;
 use crate::config::{Config, PublishConfig};
+use crate::environment_subcommand_metric;
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Bpaf, Clone)]
 pub struct Publish {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    #[bpaf(external(cache_args), optional)]
-    cache: Option<CacheArgs>,
+    #[bpaf(external(cache_args))]
+    cache: CacheArgs,
 
-    /// Do not copy packages to a store irrespective of other config or args.
-    #[bpaf(long, hide)]
-    no_store: bool,
+    /// Only publish the metadata of the package, and do not upload the artifact
+    /// itself.
+    ///
+    /// With this option present, a signing key is not required.
+    #[bpaf(long)]
+    metadata_only: bool,
 
-    #[bpaf(external(publish_target))]
-    publish_target: PublishTarget,
+    #[bpaf(external(publish_target), optional)]
+    publish_target: Option<PublishTarget>,
 }
 
-#[derive(Debug, Bpaf, Clone)]
+#[derive(Debug, Bpaf, Clone, Default)]
 struct CacheArgs {
     /// URL of store to copy packages to.
     /// Takes precedence over a value from 'flox config'.
-    #[bpaf(long, argument("URL"))]
+    #[bpaf(long, argument("URL"), hide)]
     store_url: Option<Url>,
+
+    /// Which catalog to publish to.
+    /// Takes precedence over the default value of the user's GitHub handle.
+    #[bpaf(short, long, argument("NAME"))]
+    catalog: Option<String>,
 
     /// Path of the key file used to sign packages before copying.
     /// Takes precedence over a value from 'flox config'.
     #[bpaf(long, argument("FILE"))]
-    signing_key: Option<PathBuf>,
+    signing_private_key: Option<PathBuf>,
 }
 
 #[derive(Debug, Bpaf, Clone)]
@@ -69,12 +78,45 @@ impl Publish {
         }
 
         environment_subcommand_metric!("publish", self.environment);
-        let PublishTarget { target } = self.publish_target;
         let env = self
             .environment
             .detect_concrete_environment(&flox, "Publish")?;
+        let target = Self::get_publish_target(
+            &env.manifest(&flox)
+                .context("failed to get environment manifest")?,
+            &self.publish_target,
+        )?;
+        Self::publish(config, flox, env, target, self.metadata_only, self.cache).await
+    }
 
-        Self::publish(config, flox, env, target, self.no_store, self.cache).await
+    fn get_publish_target(
+        manifest: &Manifest,
+        target_arg: &Option<PublishTarget>,
+    ) -> Result<String> {
+        let target = if target_arg.is_none() {
+            match manifest.build.inner().len() {
+                0 => {
+                    bail!("Cannot publish without a build specified");
+                },
+                1 => manifest
+                    .build
+                    .inner()
+                    .keys()
+                    .next()
+                    .expect("expect there to be at least one build")
+                    .clone(),
+                _ => {
+                    bail!("Must specify an artifact to publish");
+                },
+            }
+        } else {
+            target_arg
+                .as_ref()
+                .expect("already checked that publish target existed")
+                .target
+                .clone()
+        };
+        Ok(target)
     }
 
     #[instrument(name = "publish", skip_all, fields(package))]
@@ -83,12 +125,21 @@ impl Publish {
         mut flox: Flox,
         mut env: ConcreteEnvironment,
         package: String,
-        no_store: bool,
-        cache_args: Option<CacheArgs>,
+        metadata_only: bool,
+        cache_args: CacheArgs,
     ) -> Result<()> {
-        if !check_target_exists(&env.lockfile(&flox)?, &package)? {
+        let lockfile = env.lockfile(&flox)?.into();
+        if !check_target_exists(&lockfile, &package)? {
             bail!("Package '{}' not found in environment", package);
         }
+
+        // Fail as early as possible if the user isn't authenticated or doesn't
+        // belong to an org with a catalog.
+        let token = ensure_floxhub_token(&mut flox).await?;
+        let catalog_name = cache_args
+            .catalog
+            .clone()
+            .unwrap_or(token.handle().to_string());
 
         let path_env = match env {
             ConcreteEnvironment::Path(path_env) => path_env,
@@ -101,20 +152,46 @@ impl Publish {
         let build_metadata =
             check_build_metadata(&flox, &env_metadata, &path_env, &FloxBuildMk, &package)?;
 
-        let cache = if no_store {
+        let cache = if metadata_only {
             None
         } else {
-            merge_cache_options(config.flox.publish, cache_args)?
+            // Get the ingress URI for this catalog if it has one configured.
+            let ingress_uri = flox.catalog_client.get_ingress_uri(&catalog_name).await?;
+            let catalog_has_ingress_uri = ingress_uri.is_some();
+
+            // Determine whether a signing key was supplied.
+            let no_key_in_config = config
+                .flox
+                .publish
+                .as_ref()
+                .and_then(|p_conf| p_conf.signing_private_key.as_ref())
+                .is_none();
+            let no_key_arg = cache_args.signing_private_key.is_none();
+            let no_key_supplied = no_key_in_config && no_key_arg;
+
+            // It is an error (for now) if a user has a catalog configured that accepts
+            // uploads, but the user has attempted to publish without a signing key,
+            // and has not explicitly asked to only upload metadata.
+            if catalog_has_ingress_uri && no_key_supplied && !metadata_only {
+                let msg = formatdoc! { "
+                   A signing key is required to upload artifacts.
+
+                   You can supply a signing key by either:
+                   - Providing a path to a key with the '--signing-private-key' option.
+                   - Setting it in the config via 'flox config --set publish.signing-key <path>'
+
+                   Or you can publish without uploading artifacts via the '--metadata-only' option.
+                "};
+                bail!(msg);
+            }
+
+            merge_cache_options(config.flox.publish, cache_args, ingress_uri)?
         };
         let publish_provider = PublishProvider::<&NixCopyCache> {
             env_metadata,
             build_metadata,
             cache: cache.as_ref(),
         };
-
-        let token = ensure_floxhub_token(&mut flox).await?;
-
-        let catalog_name = token.handle().to_string();
 
         debug!("publishing package: {}", &package);
         match publish_provider
@@ -155,28 +232,37 @@ fn check_target_exists(lockfile: &Lockfile, package: &str) -> Result<bool> {
 /// Values must be mutually present or absent.
 fn merge_cache_options(
     config: Option<PublishConfig>,
-    args: Option<CacheArgs>,
+    args: CacheArgs,
+    ingress_uri: Option<Url>,
 ) -> Result<Option<NixCopyCache>> {
-    let url = args
+    let url = args.store_url.or(ingress_uri);
+    let key_file = args.signing_private_key.or(config
         .as_ref()
-        .and_then(|args| args.store_url.clone())
-        .or(config.as_ref().and_then(|cfg| cfg.store_url.clone()));
-    let key_file = args
-        .as_ref()
-        .and_then(|args| args.signing_key.clone())
-        .or(config.as_ref().and_then(|cfg| cfg.signing_key.clone()));
+        .and_then(|cfg| cfg.signing_private_key.clone()));
 
     match (url, key_file) {
         (Some(url), Some(key_file)) => Ok(Some(NixCopyCache { url, key_file })),
-        (Some(_), None) | (None, Some(_)) => {
-            Err(anyhow!("cache URL and key are mutually required options"))
+        (Some(_), None) => {
+            let msg = formatdoc! { "
+               A signing key is required to upload artifacts.
+
+               You can supply a signing key by either:
+               - Providing a path to a key with the '--signing-private-key' option.
+               - Setting it in the config via 'flox config --set publish.signing-key <path>'
+
+               Or you can publish without uploading artifacts via the '--metadata-only' option.
+            "};
+            Err(anyhow!(msg))
         },
-        (None, None) => Ok(None),
+        // We don't care if you have a signing key when there's no ingress URI
+        (None, _) => Ok(None),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     #[test]
@@ -184,81 +270,108 @@ mod tests {
         struct TestCase {
             name: &'static str,
             config: Option<PublishConfig>,
-            args: Option<CacheArgs>,
+            args: CacheArgs,
+            ingress_uri: Option<Url>,
             expected: Option<NixCopyCache>,
         }
 
         let url_args = Url::parse("http://example.com/args").unwrap();
-        let url_config = Url::parse("http://example.com/config").unwrap();
+        let url_response = Url::parse("http://example.com/response").unwrap();
         let key_args = PathBuf::from("args.key");
         let key_config = PathBuf::from("config.key");
 
         let test_cases = vec![
             TestCase {
-                name: "None when both None",
+                name: "None when all None",
                 config: None,
-                args: None,
+                args: CacheArgs {
+                    store_url: None,
+                    catalog: None,
+                    signing_private_key: None,
+                },
+                ingress_uri: None,
                 expected: None,
             },
             TestCase {
-                name: "args when config None",
+                name: "args when ingress_uri None",
                 config: None,
-                args: Some(CacheArgs {
+                args: CacheArgs {
                     store_url: Some(url_args.clone()),
-                    signing_key: Some(key_args.clone()),
-                }),
+                    catalog: None,
+                    signing_private_key: Some(key_args.clone()),
+                },
+                ingress_uri: None,
                 expected: Some(NixCopyCache {
                     url: url_args.clone(),
                     key_file: key_args.clone(),
                 }),
             },
             TestCase {
-                name: "config when args None",
+                name: "ingress_uri when args None",
                 config: Some(PublishConfig {
-                    store_url: Some(url_config.clone()),
-                    signing_key: Some(key_config.clone()),
+                    signing_private_key: Some(key_config.clone()),
                 }),
-                args: None,
+                args: CacheArgs {
+                    store_url: None,
+                    catalog: None,
+                    signing_private_key: None,
+                },
+                ingress_uri: Some(url_response.clone()),
                 expected: Some(NixCopyCache {
-                    url: url_config.clone(),
+                    url: url_response.clone(),
                     key_file: key_config.clone(),
                 }),
             },
             TestCase {
                 name: "args when both Some",
                 config: Some(PublishConfig {
-                    store_url: Some(url_config.clone()),
-                    signing_key: Some(key_config.clone()),
+                    signing_private_key: Some(key_config.clone()),
                 }),
-                args: Some(CacheArgs {
+                args: CacheArgs {
                     store_url: Some(url_args.clone()),
-                    signing_key: Some(key_args.clone()),
-                }),
+                    catalog: None,
+                    signing_private_key: Some(key_args.clone()),
+                },
+                ingress_uri: Some(url_response.clone()),
                 expected: Some(NixCopyCache {
                     url: url_args.clone(),
                     key_file: key_args.clone(),
                 }),
             },
             TestCase {
-                name: "mix of url from config and key from args",
+                name: "mix of url from response and key from args",
                 config: Some(PublishConfig {
-                    store_url: Some(url_config.clone()),
-                    signing_key: None,
+                    signing_private_key: None,
                 }),
-                args: Some(CacheArgs {
+                args: CacheArgs {
                     store_url: None,
-                    signing_key: Some(key_args.clone()),
-                }),
+                    catalog: None,
+                    signing_private_key: Some(key_args.clone()),
+                },
+                ingress_uri: Some(url_response.clone()),
                 expected: Some(NixCopyCache {
-                    url: url_config.clone(),
+                    url: url_response.clone(),
                     key_file: key_args.clone(),
                 }),
+            },
+            TestCase {
+                name: "no error when config contains signing key without an ingress uri",
+                config: Some(PublishConfig {
+                    signing_private_key: Some(key_config.clone()),
+                }),
+                args: CacheArgs {
+                    store_url: None,
+                    catalog: None,
+                    signing_private_key: None,
+                },
+                ingress_uri: None,
+                expected: None,
             },
         ];
 
         for tc in test_cases {
             assert_eq!(
-                merge_cache_options(tc.config, tc.args).unwrap(),
+                merge_cache_options(tc.config, tc.args, tc.ingress_uri).unwrap(),
                 tc.expected,
                 "test case: {}",
                 tc.name
@@ -267,38 +380,109 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_cache_options_error() {
-        let url = Url::parse("http://example.com").unwrap();
-        let key = PathBuf::from("key");
+    fn detects_default_publish_target() {
+        let manifest_str = formatdoc! {r#"
+            version = 1
 
-        let test_cases = vec![
-            (
-                Some(PublishConfig {
-                    store_url: Some(url.clone()),
-                    signing_key: None,
-                }),
-                Some(CacheArgs {
-                    store_url: Some(url.clone()),
-                    signing_key: None,
-                }),
-            ),
-            (
-                Some(PublishConfig {
-                    store_url: None,
-                    signing_key: Some(key.clone()),
-                }),
-                Some(CacheArgs {
-                    store_url: None,
-                    signing_key: Some(key.clone()),
-                }),
-            ),
-        ];
+            [install]
+            hello.pkg-path = "hello" 
 
-        for (config, args) in test_cases {
-            assert_eq!(
-                merge_cache_options(config, args).unwrap_err().to_string(),
-                "cache URL and key are mutually required options"
-            );
-        }
+            [build.hello]
+            command = '''
+                doesn't matter
+            '''
+        "#};
+        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        let target = Publish::get_publish_target(&manifest, &None).unwrap();
+        assert_eq!(target, "hello");
+    }
+
+    #[test]
+    fn error_when_no_publish_target_arg_no_builds() {
+        let manifest_str = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello" 
+        "#};
+        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        let res = Publish::get_publish_target(&manifest, &None);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn error_when_no_publish_target_arg_multiple_builds() {
+        let manifest_str = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello" 
+
+            [build.hello]
+            command = '''
+                doesn't matter
+            '''
+
+            [build.hello2]
+            command = '''
+                doesn't matter
+            '''
+        "#};
+        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        let res = Publish::get_publish_target(&manifest, &None);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn no_error_when_target_arg_supplied_multiple_builds() {
+        let manifest_str = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello" 
+
+            [build.hello]
+            command = '''
+                doesn't matter
+            '''
+
+            [build.hello2]
+            command = '''
+                doesn't matter
+            '''
+        "#};
+        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        let target = Publish::get_publish_target(
+            &manifest,
+            &Some(PublishTarget {
+                target: "hello2".to_string(),
+            }),
+        )
+        .unwrap();
+        assert_eq!(target, "hello2".to_string());
+    }
+
+    #[test]
+    fn no_error_when_target_arg_supplied_one_build() {
+        let manifest_str = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello" 
+
+            [build.hello]
+            command = '''
+                doesn't matter
+            '''
+        "#};
+        let manifest = Manifest::from_str(&manifest_str).unwrap();
+        let target = Publish::get_publish_target(
+            &manifest,
+            &Some(PublishTarget {
+                target: "hello".to_string(),
+            }),
+        )
+        .unwrap();
+        assert_eq!(target, "hello".to_string());
     }
 }

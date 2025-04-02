@@ -7,7 +7,7 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::env_registry::{garbage_collect, EnvRegistry};
+use flox_rust_sdk::models::env_registry::{EnvRegistry, garbage_collect};
 use flox_rust_sdk::models::environment::DotFlox;
 use serde_json::json;
 use tracing::instrument;
@@ -154,7 +154,7 @@ impl Display for DisplayEnvironments<'_> {
         let widest = self
             .envs
             .iter()
-            .map(|env| format_description(env).len())
+            .map(|env| env.bare_description().len())
             .max()
             .unwrap_or(0);
 
@@ -174,13 +174,6 @@ impl Display for DisplayEnvironments<'_> {
         }
 
         Ok(())
-    }
-}
-
-fn format_description(env: &UninitializedEnvironment) -> Cow<'_, str> {
-    match env.bare_description() {
-        Ok(desc) => desc.into(),
-        Err(_) => "(unknown)".into(),
     }
 }
 

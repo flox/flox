@@ -1,17 +1,17 @@
 use flox_rust_sdk::data::CanonicalizeError;
 use flox_rust_sdk::models::environment::managed_environment::{
-    ManagedEnvironmentError,
     GENERATION_LOCK_FILENAME,
+    ManagedEnvironmentError,
 };
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
+    ENVIRONMENT_POINTER_FILENAME,
     EnvironmentError,
     UpgradeError,
-    ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::floxmeta::FloxMetaError;
-use flox_rust_sdk::models::lockfile::LockedManifestError;
+use flox_rust_sdk::models::lockfile::ResolveError;
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use flox_rust_sdk::providers::services::{LoggedError, ServiceError};
 use indoc::{formatdoc, indoc};
@@ -277,8 +277,6 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 
             Please ensure that you have write permissions to '.flox/env/manifest.toml'.
         "},
-        CoreEnvironmentError::PackageNotFound(_) => display_chain(err),
-        CoreEnvironmentError::MultiplePackagesMatch(_, _) => display_chain(err),
 
         // internal error, a bug if this happens to users!
         CoreEnvironmentError::BadLockfilePath(_) => display_chain(err),
@@ -289,8 +287,8 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             {err}
         ", err = display_chain(err)},
 
-        CoreEnvironmentError::LockedManifest(locked_manifest_error) => {
-            format_locked_manifest_error(locked_manifest_error)
+        CoreEnvironmentError::Resolve(locked_manifest_error) => {
+            format_resolve_error(locked_manifest_error)
         },
 
         CoreEnvironmentError::UpgradeFailedCatalog(err) => match err {
@@ -303,8 +301,17 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
                     $ flox upgrade
             "},
         },
+        CoreEnvironmentError::UninstallError(_) => display_chain(err),
         // User facing
         CoreEnvironmentError::Services(err) => display_chain(err),
+
+        // this is a bug, but likely needs some formatting
+        CoreEnvironmentError::ReadLockfile(_) => display_chain(err),
+        CoreEnvironmentError::ParseLockfile(serde_error) => formatdoc! {"
+            Failed to parse lockfile as JSON: {serde_error}
+
+            This is likely due to a corrupt environment.
+        "},
     }
 }
 
@@ -460,6 +467,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         },
         // access denied is caught early as ManagedEnvironmentError::AccessDenied
         ManagedEnvironmentError::Push(_) => display_chain(err),
+        ManagedEnvironmentError::PushWithLocalIncludes => display_chain(err),
         ManagedEnvironmentError::DeleteBranch(_) => display_chain(err),
         ManagedEnvironmentError::DeleteEnvironment(path, err) => formatdoc! {"
             Failed to delete remote environment at {path:?}: {err}
@@ -499,9 +507,6 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
 
             Please ensure that the path exists and that you have read permissions.
         "},
-        ManagedEnvironmentError::Lock(core_environment_error) => {
-            format_core_error(core_environment_error)
-        },
         ManagedEnvironmentError::Build(core_environment_error) => {
             format_core_error(core_environment_error)
         },
@@ -597,66 +602,34 @@ pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
     }
 }
 
-pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
+pub fn format_resolve_error(err: &ResolveError) -> String {
     trace!("formatting locked_manifest_error: {err:?}");
     match err {
-        // this is likely a BUG, since we ensure that the lockfile exists in all cases
-        LockedManifestError::BadLockfilePath(canonicalize_error) => formatdoc! {"
-            Bad lockfile path: {canonicalize_error}
-
-            Please ensure that the path exists and that you have read permissions.
-        "},
-
-        LockedManifestError::BadManifestPath(canonicalize_error) => formatdoc! {"
-            Corrupt environment: {canonicalize_error}
-
-            Please ensure that the path exists and that you have read permissions.
-        "},
-
         // region: errors from the catalog locking
-        LockedManifestError::CatalogResolve(err) => formatdoc! {"
+        ResolveError::CatalogResolve(err) => formatdoc! {"
             Failed to lock the manifest.
 
             {err}
         "},
         // endregion
-
-        // this is a bug, but likely needs some formatting
-        LockedManifestError::ReadLockfile(_) => display_chain(err),
-        LockedManifestError::ParseLockfile(serde_error) => formatdoc! {"
-            Failed to parse lockfile as JSON: {serde_error}
-
-            This is likely due to a corrupt environment.
-        "},
-
-        LockedManifestError::ParseLockedManifest(serde_error) => formatdoc! {"
-            Failed to parse lockfile structure: {serde_error}
-
-            This is likely due to a corrupt environment.
-        "},
-
-        LockedManifestError::ParseCheckWarnings(_) => display_chain(err),
-        LockedManifestError::UnsupportedLockfileForUpdate => display_chain(err),
-        LockedManifestError::NoPackagesOnFirstPage(_, _) => display_chain(err),
-        LockedManifestError::UnrecognizedSystem(system) => formatdoc! {"
+        ResolveError::UnrecognizedSystem(system) => formatdoc! {"
             Unrecognized system in manifest: {system}
 
             Supported systems are: aarch64-linux, x86_64-linux, aarch64-darwin, x86_64-darwin
         "},
 
-        LockedManifestError::SystemUnavailableInManifest { .. } => display_chain(err),
+        ResolveError::SystemUnavailableInManifest { .. } => display_chain(err),
 
-        LockedManifestError::ResolutionFailed(_) => display_chain(err),
-        LockedManifestError::EmptyPage => display_chain(err),
+        ResolveError::ResolutionFailed(_) => display_chain(err),
         // User facing
-        LockedManifestError::LicenseNotAllowed(..) => display_chain(err),
+        ResolveError::LicenseNotAllowed(..) => display_chain(err),
         // User facing
-        LockedManifestError::BrokenNotAllowed(_) => display_chain(err),
+        ResolveError::BrokenNotAllowed(_) => display_chain(err),
         // User facing
-        LockedManifestError::UnfreeNotAllowed(_) => display_chain(err),
-        LockedManifestError::MissingPackageDescriptor(_) => display_chain(err),
-        LockedManifestError::LockFlakeNixError(_) => display_chain(err),
-        LockedManifestError::InstallIdNotInManifest(_) => display_chain(err),
+        ResolveError::UnfreeNotAllowed(_) => display_chain(err),
+        ResolveError::MissingPackageDescriptor(_) => display_chain(err),
+        ResolveError::LockFlakeNixError(_) => display_chain(err),
+        ResolveError::InstallIdNotInManifest(_) => display_chain(err),
     }
 }
 

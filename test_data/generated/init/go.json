@@ -11,18 +11,18 @@
             "attr_path": "go",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/xmn5jv5riq7py4gx0ybr58krz1bci99d-go-1.23.5.drv",
+            "derivation": "/nix/store/p823p8i547lj7yp3yr2b5i12a4wnwby6-go-1.24.1.drv",
             "description": "Go Programming language",
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
-            "name": "go-1.23.5",
+            "name": "go-1.24.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/kaajk63cgb8yrqvqvlmbss31b6nia854-go-1.23.5"
+                "store_path": "/nix/store/jp3z5jp9gaxsw7fdzbqn29aabmrxq62j-go-1.24.1"
               }
             ],
             "outputs_to_install": [
@@ -30,19 +30,19 @@
             ],
             "pkg_path": "go",
             "pname": "go",
-            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-            "rev_count": 750629,
-            "rev_date": "2025-02-08T13:21:17Z",
-            "scrape_date": "2025-02-09T04:06:52Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:09:57.949639Z",
             "stabilities": [
               "unstable"
             ],
-            "system": "x86_64-linux",
+            "system": "aarch64-darwin",
             "unfree": false,
-            "version": "1.23.5"
+            "version": "1.24.1"
           }
         ],
-        "page": 750629,
+        "page": 773904,
         "url": ""
       }
     }
@@ -59,18 +59,18 @@
             "attr_path": "go",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/xdnakh8bwh206h0la1xd1q7p5pwga4rw-go-1.23.5.drv",
+            "derivation": "/nix/store/p823p8i547lj7yp3yr2b5i12a4wnwby6-go-1.24.1.drv",
             "description": "Go Programming language",
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
-            "name": "go-1.23.5",
+            "name": "go-1.24.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/nygq6zbzjqg8zkx8p9xh0ydvvi0v2vvv-go-1.23.5"
+                "store_path": "/nix/store/jp3z5jp9gaxsw7fdzbqn29aabmrxq62j-go-1.24.1"
               }
             ],
             "outputs_to_install": [
@@ -78,33 +78,33 @@
             ],
             "pkg_path": "go",
             "pname": "go",
-            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-            "rev_count": 750629,
-            "rev_date": "2025-02-08T13:21:17Z",
-            "scrape_date": "2025-02-09T04:06:52Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:09:57.949639Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "1.23.5"
+            "version": "1.24.1"
           },
           {
             "attr_path": "go",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/a3b6qy31mx9khlfpb4s73j0f0a40r2yb-go-1.23.5.drv",
+            "derivation": "/nix/store/5difmnrawi0hf4a7vsz0my25ivf34khi-go-1.24.1.drv",
             "description": "Go Programming language",
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
-            "name": "go-1.23.5",
+            "name": "go-1.24.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/f3psxd8yplxjxv5nzkhhrczlfdipqqas-go-1.23.5"
+                "store_path": "/nix/store/6zvrmsmdg7p8yw3vii20g40b4zsh6kjr-go-1.24.1"
               }
             ],
             "outputs_to_install": [
@@ -112,33 +112,33 @@
             ],
             "pkg_path": "go",
             "pname": "go",
-            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-            "rev_count": 750629,
-            "rev_date": "2025-02-08T13:21:17Z",
-            "scrape_date": "2025-02-09T04:06:52Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:27:13.421485Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "1.23.5"
+            "version": "1.24.1"
           },
           {
             "attr_path": "go",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/j779dhnhb5ff4ns69jbx7k0wz5prbpy9-go-1.23.5.drv",
+            "derivation": "/nix/store/992wk5rpadggrac2hyv44w4wvw4gpmxl-go-1.24.1.drv",
             "description": "Go Programming language",
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
-            "name": "go-1.23.5",
+            "name": "go-1.24.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/xjyip7f73zvpbld41qgj0jspka4624jr-go-1.23.5"
+                "store_path": "/nix/store/2bcic1xcha2k11djynr488v3pg0nnghr-go-1.24.1"
               }
             ],
             "outputs_to_install": [
@@ -146,33 +146,33 @@
             ],
             "pkg_path": "go",
             "pname": "go",
-            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-            "rev_count": 750629,
-            "rev_date": "2025-02-08T13:21:17Z",
-            "scrape_date": "2025-02-09T04:06:52Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:42:58.350151Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "1.23.5"
+            "version": "1.24.1"
           },
           {
             "attr_path": "go",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/xmn5jv5riq7py4gx0ybr58krz1bci99d-go-1.23.5.drv",
+            "derivation": "/nix/store/xj7x9f9c6z1wc7b7hpy8k3w65vb6lfi5-go-1.24.1.drv",
             "description": "Go Programming language",
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
-            "name": "go-1.23.5",
+            "name": "go-1.24.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/kaajk63cgb8yrqvqvlmbss31b6nia854-go-1.23.5"
+                "store_path": "/nix/store/g29rrn8qqlg4yjqv543ryrkimr7fk43h-go-1.24.1"
               }
             ],
             "outputs_to_install": [
@@ -180,19 +180,19 @@
             ],
             "pkg_path": "go",
             "pname": "go",
-            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-            "rev_count": 750629,
-            "rev_date": "2025-02-08T13:21:17Z",
-            "scrape_date": "2025-02-09T04:06:52Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T02:01:43.344245Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "1.23.5"
+            "version": "1.24.1"
           }
         ],
-        "page": 750629,
+        "page": 773904,
         "url": ""
       }
     }

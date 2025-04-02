@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 pub mod proptest;
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{Context, anyhow, bail};
 // use flox_core::proc_status::{pid_is_running, pid_with_var};
 use indoc::formatdoc;
 use nix::sys::signal::Signal::{SIGKILL, SIGTERM};

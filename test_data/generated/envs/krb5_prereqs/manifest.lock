@@ -49,19 +49,13 @@
         "pkg-path": "python3"
       }
     },
-    "hook": {},
-    "profile": {},
     "options": {
       "systems": [
         "aarch64-darwin",
         "x86_64-darwin",
         "aarch64-linux",
         "x86_64-linux"
-      ],
-      "allow": {
-        "licenses": []
-      },
-      "semver": {}
+      ]
     }
   },
   "packages": [
@@ -76,13 +70,13 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "llvm-16.0.6-973.0.1",
+      "version": "16.0.6-973.0.1",
       "outputs_to_install": [
         "man",
         "out"
@@ -107,13 +101,13 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "llvm-16.0.6-973.0.1",
+      "version": "16.0.6-973.0.1",
       "outputs_to_install": [
         "man",
         "out"
@@ -140,13 +134,13 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "wrapper-16.0.6",
+      "version": "16.0.6",
       "outputs_to_install": [
         "out"
       ],
@@ -170,13 +164,13 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "wrapper-16.0.6",
+      "version": "16.0.6",
       "outputs_to_install": [
         "out"
       ],
@@ -200,13 +194,13 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "wrapper-13.2.0",
+      "version": "13.2.0",
       "outputs_to_install": [
         "man",
         "out"
@@ -233,13 +227,13 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
       ],
       "unfree": false,
-      "version": "wrapper-13.2.0",
+      "version": "13.2.0",
       "outputs_to_install": [
         "man",
         "out"
@@ -266,7 +260,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -297,7 +291,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -328,7 +322,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -359,7 +353,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -390,7 +384,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -423,7 +417,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -456,7 +450,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -490,7 +484,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -524,7 +518,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -555,7 +549,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -586,7 +580,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -617,7 +611,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -648,7 +642,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -678,7 +672,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -708,7 +702,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"
@@ -739,7 +733,7 @@
       "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
       "rev_count": 598982,
       "rev_date": "2024-03-19T00:06:43Z",
-      "scrape_date": "2024-08-07T21:07:38Z",
+      "scrape_date": "2024-08-15T21:33:02Z",
       "stabilities": [
         "staging",
         "unstable"

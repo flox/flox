@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
-pub use flox_core::{path_hash, Version};
+pub use flox_core::{Version, path_hash};
 use managed_environment::ManagedEnvironment;
 use path_environment::PathEnvironment;
 use remote_environment::RemoteEnvironment;
@@ -17,9 +17,9 @@ use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::{LockedManifestError, Lockfile};
+use super::lockfile::{LockResult, LockedInclude, Lockfile, RecoverableMergeError, ResolveError};
 use super::manifest::raw::PackageToInstall;
-use super::manifest::typed::{Manifest, ManifestError};
+use super::manifest::typed::{ActivateMode, Manifest, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -33,14 +33,15 @@ use crate::utils::copy_file_without_permissions;
 
 mod core_environment;
 pub use core_environment::{
-    test_helpers,
     CoreEnvironment,
     CoreEnvironmentError,
     EditResult,
     SingleSystemUpgradeDiff,
     UpgradeResult,
+    test_helpers,
 };
 
+pub mod fetcher;
 pub mod generations;
 pub mod managed_environment;
 pub mod path_environment;
@@ -61,21 +62,13 @@ pub const CACHE_DIR_NAME: &str = "cache";
 pub const LIB_DIR_NAME: &str = "lib";
 pub const LOG_DIR_NAME: &str = "log";
 pub const ENV_DIR_NAME: &str = "env";
-pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 
 // The FLOX_* variables which follow are currently updated by the CLI as it
 // activates new environments, and they are consequently *not* updated with
 // manual invocations of the activation script. We want the activation script
 // to eventually have feature parity with the CLI, so in future we will need
-// to migrate this logic to the activation script itself. The only information
-// known by the CLI that cannot be easily derived at runtime is the description
-// text to be added to the prompt, and FLOX_ENV_DESCRIPTION_VAR was introduced
-// to provide the means by which the CLI will be able to communicate this detail
-// to the activation script.
-pub const FLOX_ENV_DESCRIPTION_VAR: &str = "FLOX_ENV_DESCRIPTION";
+// to migrate this logic to the activation script itself.
 
-pub const FLOX_ENV_CACHE_VAR: &str = "FLOX_ENV_CACHE";
-pub const FLOX_ENV_PROJECT_VAR: &str = "FLOX_ENV_PROJECT";
 pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
@@ -102,6 +95,9 @@ pub struct InstallationAttempt {
 #[derive(Debug)]
 pub struct UninstallationAttempt {
     pub new_manifest: Option<String>,
+    /// Packages that were requested to be uninstalled but are stilled provided
+    /// by included environments.
+    pub still_included: HashMap<String, LockedInclude>,
     /// The store path of environment that was built to validate the uninstall.
     /// This is used as an optimization to skip builds that we've already done.
     pub built_environment_store_paths: Option<BuildEnvOutputs>,
@@ -140,11 +136,18 @@ pub trait Environment: Send {
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError>;
 
+    /// Upgrade environment with latest changes to included environments.
+    fn include_upgrade(
+        &mut self,
+        flox: &Flox,
+        to_upgrade: Vec<String>,
+    ) -> Result<UpgradeResult, EnvironmentError>;
+
     /// Return the lockfile.
     ///
     /// Some implementations error if the lock does not already exist, while
     /// others call lock.
-    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError>;
+    fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError>;
 
     /// Extract the current content of the manifest
     ///
@@ -217,6 +220,9 @@ pub trait Environment: Send {
     /// [Environment::manifest_path] and [Environment::lockfile_path]
     /// may be located in different directories.
     fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
+
+    /// Returns the lockfile if it already exists.
+    fn existing_lockfile(&self, flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError>;
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;
@@ -316,6 +322,14 @@ impl RenderedEnvironmentLinks {
         let runtime_name = format!("{system}.{name}.run", name = name.as_ref());
         let runtime_path = base_dir.join(runtime_name);
         Self::new_unchecked(development_path, runtime_path)
+    }
+
+    /// Returns the built environment path for an activation mode.
+    pub fn for_mode(self, mode: &ActivateMode) -> RenderedEnvironmentLink {
+        match mode {
+            ActivateMode::Dev => self.development,
+            ActivateMode::Run => self.runtime,
+        }
     }
 }
 
@@ -462,6 +476,157 @@ impl DotFlox {
     }
 }
 
+/// An environment descriptor of an environment that can be (re)opened,
+/// i.e. to install packages into it.
+///
+/// Unlike [ConcreteEnvironment], this type does not hold a concrete instance any environment,
+/// but rather fully qualified metadata to create an instance from.
+///
+/// * for [PathEnvironment] and [ManagedEnvironment] that's the path to their `.flox` and `.flox/pointer.json`
+/// * for [RemoteEnvironment] that's the [ManagedPointer] to the remote environment
+///
+/// Serialized as is into [FLOX_ACTIVE_ENVIRONMENTS_VAR] to be able to reopen environments.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(tag = "type")]
+#[serde(rename_all = "kebab-case")]
+pub enum UninitializedEnvironment {
+    /// Container for "local" environments pointed to by [DotFlox]
+    DotFlox(DotFlox),
+    /// Container for [RemoteEnvironment]
+    Remote(ManagedPointer),
+}
+
+impl UninitializedEnvironment {
+    pub fn from_concrete_environment(env: &ConcreteEnvironment) -> Self {
+        match env {
+            ConcreteEnvironment::Path(path_env) => {
+                let pointer = path_env.pointer.clone().into();
+                Self::DotFlox(DotFlox {
+                    path: path_env.path.to_path_buf(),
+                    pointer,
+                })
+            },
+            ConcreteEnvironment::Managed(managed_env) => {
+                let pointer = managed_env.pointer().clone().into();
+                Self::DotFlox(DotFlox {
+                    path: managed_env.dot_flox_path().to_path_buf(),
+                    pointer,
+                })
+            },
+            ConcreteEnvironment::Remote(remote_env) => {
+                let env_ref = remote_env.pointer().clone();
+                Self::Remote(env_ref)
+            },
+        }
+    }
+
+    /// Open the contained environment and return a [ConcreteEnvironment]
+    ///
+    /// This function will fail if the contained environment is not available or invalid
+    pub fn into_concrete_environment(
+        self,
+        flox: &Flox,
+    ) -> Result<ConcreteEnvironment, EnvironmentError> {
+        match self {
+            UninitializedEnvironment::DotFlox(dot_flox) => {
+                let dot_flox_path = CanonicalPath::new(dot_flox.path)
+                    .map_err(|err| EnvironmentError::DotFloxNotFound(err.path))?;
+
+                let env = match dot_flox.pointer {
+                    EnvironmentPointer::Path(path_pointer) => {
+                        debug!("detected concrete environment type: path");
+                        ConcreteEnvironment::Path(PathEnvironment::open(
+                            flox,
+                            path_pointer,
+                            dot_flox_path,
+                        )?)
+                    },
+                    EnvironmentPointer::Managed(managed_pointer) => {
+                        debug!("detected concrete environment type: managed");
+                        let env = ManagedEnvironment::open(flox, managed_pointer, dot_flox_path)?;
+                        ConcreteEnvironment::Managed(env)
+                    },
+                };
+                Ok(env)
+            },
+            UninitializedEnvironment::Remote(pointer) => {
+                let env = RemoteEnvironment::new(flox, pointer)?;
+                Ok(ConcreteEnvironment::Remote(env))
+            },
+        }
+    }
+
+    pub fn pointer(&self) -> EnvironmentPointer {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.clone(),
+            UninitializedEnvironment::Remote(pointer) => {
+                EnvironmentPointer::Managed(pointer.clone())
+            },
+        }
+    }
+
+    /// The name of the environment
+    pub fn name(&self) -> &EnvironmentName {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.name(),
+            UninitializedEnvironment::Remote(pointer) => &pointer.name,
+        }
+    }
+
+    /// Returns the path to the environment if it isn't remote
+    #[allow(dead_code)]
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => Some(path),
+            UninitializedEnvironment::Remote(_) => None,
+        }
+    }
+
+    /// If the environment is managed, returns its owner
+    pub fn owner_if_managed(&self) -> Option<&EnvironmentOwner> {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox {
+                path: _,
+                pointer: EnvironmentPointer::Managed(pointer),
+            }) => Some(&pointer.owner),
+            _ => None,
+        }
+    }
+
+    /// Returns true if the environment is a path environment
+    #[allow(dead_code)]
+    pub fn is_path_env(&self) -> bool {
+        matches!(
+            self,
+            UninitializedEnvironment::DotFlox(DotFlox {
+                path: _,
+                pointer: EnvironmentPointer::Path(_)
+            })
+        )
+    }
+
+    /// If the environment is remote, returns its owner
+    pub fn owner_if_remote(&self) -> Option<&EnvironmentOwner> {
+        match self {
+            UninitializedEnvironment::DotFlox(_) => None,
+            UninitializedEnvironment::Remote(pointer) => Some(&pointer.owner),
+        }
+    }
+
+    /// The environment description when displayed in a prompt
+    // TODO: we use this for activate errors in Bash since it doesn't have
+    // quotes whereas we use message_description for activate errors in Rust.
+    pub fn bare_description(&self) -> String {
+        if let Some(owner) = self.owner_if_remote() {
+            format!("{}/{} (remote)", owner, self.name())
+        } else if let Some(owner) = self.owner_if_managed() {
+            format!("{}/{}", owner, self.name())
+        } else {
+            format!("{}", self.name())
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum EnvironmentError {
     // todo: candidate for impl specific error
@@ -487,6 +652,8 @@ pub enum EnvironmentError {
     ManifestNotFound,
 
     // endregion
+    #[error(transparent)]
+    ManifestError(#[from] ManifestError),
 
     // todo: candidate for impl specific error
     // * only path env implements init
@@ -578,7 +745,7 @@ pub enum EnvironmentError {
     Registry(#[from] EnvRegistryError),
 
     #[error(transparent)]
-    LockedManifest(LockedManifestError),
+    LockedManifest(ResolveError),
 
     #[error(transparent)]
     Canonicalize(CanonicalizeError),
@@ -591,6 +758,10 @@ pub enum EnvironmentError {
 
     #[error("corrupt environment; environment does not have a lockfile")]
     MissingLockfile,
+
+    /// An error flox edit can recover from
+    #[error(transparent)]
+    Recoverable(RecoverableMergeError),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -599,6 +770,24 @@ pub enum UpgradeError {
     PkgNotFound(#[from] ManifestError),
     #[error("'{pkg}' is a package in the group '{group}' with multiple packages")]
     NonEmptyNamedGroup { pkg: String, group: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum UninstallError {
+    #[error(transparent)]
+    ManifestError(#[from] ManifestError),
+    #[error(
+        "Cannot remove included package '{0}'\n\
+         Remove the package from environment '{1}' and then run 'flox include upgrade'"
+    )]
+    PackageOnlyIncluded(String, String),
+}
+
+/// Open an environment defined in `{path}/.flox`
+pub fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError> {
+    DotFlox::open_in(path)
+        .map(UninitializedEnvironment::DotFlox)?
+        .into_concrete_environment(flox)
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
@@ -753,8 +942,8 @@ mod test {
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::flox::test_helpers::flox_instance;
     use crate::flox::DEFAULT_FLOXHUB_URL;
+    use crate::flox::test_helpers::flox_instance;
     use crate::providers::git::GitProvider;
 
     const MANAGED_ENV_JSON: &'_ str = r#"{

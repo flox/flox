@@ -6,8 +6,8 @@ use flox_rust_sdk::providers::catalog::{
     CatalogClient,
     CatalogClientConfig,
     Client,
-    MockClient,
     FLOX_CATALOG_MOCK_DATA_VAR,
+    MockClient,
 };
 use flox_rust_sdk::utils::logging::traceable_path;
 use tracing::debug;

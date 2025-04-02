@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 
@@ -8,6 +8,8 @@ pub struct Update;
 
 impl Update {
     pub async fn handle(self, _flox: Flox) -> Result<()> {
-        bail!("'flox update' has been removed.\n\nTo upgrade packages, run 'flox upgrade'. See flox-upgrade(1) for more.");
+        bail!(
+            "'flox update' has been removed.\n\nTo upgrade packages, run 'flox upgrade'. See flox-upgrade(1) for more."
+        );
     }
 }

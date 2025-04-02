@@ -5,27 +5,28 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 
 use super::core_environment::UpgradeResult;
+use super::fetcher::IncludeFetcher;
 use super::managed_environment::{ManagedEnvironment, ManagedEnvironmentError};
 use super::{
-    gcroots_dir,
     CanonicalPath,
     CanonicalizeError,
+    DOT_FLOX,
+    ENVIRONMENT_POINTER_FILENAME,
     EditResult,
     Environment,
     EnvironmentError,
+    GCROOTS_DIR_NAME,
     InstallationAttempt,
     ManagedPointer,
     RenderedEnvironmentLinks,
     UninstallationAttempt,
-    DOT_FLOX,
-    ENVIRONMENT_POINTER_FILENAME,
-    GCROOTS_DIR_NAME,
+    gcroots_dir,
 };
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::environment::RenderedEnvironmentLink;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
-use crate::models::lockfile::Lockfile;
+use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
 use crate::models::manifest::typed::Manifest;
 
@@ -135,6 +136,11 @@ impl RemoteEnvironment {
             pointer.clone(),
             dot_flox_path,
             inner_rendered_env_links,
+            // remote environments shouldn't be able to fetch dir includes,
+            // so set base_directory to None
+            IncludeFetcher {
+                base_directory: None,
+            },
         )
         .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
 
@@ -239,8 +245,13 @@ impl RemoteEnvironment {
 impl Environment for RemoteEnvironment {
     /// Return the lockfile content,
     /// or error if the lockfile doesn't exist.
-    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
+    fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
         self.inner.lockfile(flox)
+    }
+
+    /// Returns the lockfile if it exists.
+    fn existing_lockfile(&self, flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError> {
+        self.inner.existing_lockfile(flox)
     }
 
     /// Install packages to the environment atomically
@@ -302,6 +313,21 @@ impl Environment for RemoteEnvironment {
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
         let result = self.inner.upgrade(flox, groups_or_iids)?;
+        self.inner
+            .push(flox, false)
+            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
+            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+
+        Ok(result)
+    }
+
+    /// Upgrade environment with latest changes to included environments.
+    fn include_upgrade(
+        &mut self,
+        flox: &Flox,
+        to_upgrade: Vec<String>,
+    ) -> Result<UpgradeResult, EnvironmentError> {
+        let result = self.inner.include_upgrade(flox, to_upgrade)?;
         self.inner
             .push(flox, false)
             .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
@@ -389,10 +415,38 @@ impl Environment for RemoteEnvironment {
 mod tests {
     use std::os::unix::fs::symlink;
 
+    use indoc::indoc;
+    use tempfile::tempdir_in;
+
     use super::*;
     use crate::flox::test_helpers::flox_instance_with_optional_floxhub;
-    use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_from_env_files;
+    use crate::models::environment::managed_environment::test_helpers::{
+        mock_managed_environment_from_env_files,
+        mock_managed_environment_in,
+    };
+    use crate::models::lockfile::RecoverableMergeError;
     use crate::providers::catalog::GENERATED_DATA;
+
+    fn mock_remote_environment(
+        flox: &Flox,
+        contents: &str,
+        owner: EnvironmentOwner,
+        name: Option<&str>,
+    ) -> RemoteEnvironment {
+        let managed_environment = mock_managed_environment_in(
+            flox,
+            contents,
+            owner,
+            tempdir_in(&flox.temp_dir).unwrap().into_path(),
+            name,
+        );
+        RemoteEnvironment::new_in(
+            flox,
+            managed_environment.parent_path().unwrap(),
+            managed_environment.pointer().clone(),
+        )
+        .unwrap()
+    }
 
     #[test]
     fn migrate_remote_gcroot_link_to_dir() {
@@ -414,10 +468,12 @@ mod tests {
         )
         .unwrap();
 
-        assert!(environment
-            .dot_flox_path()
-            .join(GCROOTS_DIR_NAME)
-            .is_symlink());
+        assert!(
+            environment
+                .dot_flox_path()
+                .join(GCROOTS_DIR_NAME)
+                .is_symlink()
+        );
 
         // Create a remote environment with the existing managed environment as its backend
         let _ = RemoteEnvironment::new_in(
@@ -429,5 +485,40 @@ mod tests {
 
         // Once created, the symlink should be replaced with a directory
         assert!(environment.dot_flox_path().join(GCROOTS_DIR_NAME).is_dir())
+    }
+
+    /// Remote environment cannot include local environment
+    #[test]
+    fn remote_cannot_include_local() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+        flox.features.set_compose(true);
+
+        let manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+
+        let mut environment =
+            mock_remote_environment(&flox, manifest_contents, owner, Some("name"));
+
+        let manifest_edited_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "dep" }
+        ]
+        "#};
+        let err = environment
+            .edit(&flox, manifest_edited_contents.to_string())
+            .unwrap_err();
+
+        let EnvironmentError::Recoverable(RecoverableMergeError::Fetch { err, .. }) = err else {
+            panic!("expected Fetch error, got: {err:?}");
+        };
+        let EnvironmentError::Recoverable(RecoverableMergeError::CannotIncludeInRemote) = *err
+        else {
+            panic!("expected CannotIncludeInRemote error, got: {err:?}");
+        };
     }
 }

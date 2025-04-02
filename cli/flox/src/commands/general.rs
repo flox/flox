@@ -11,7 +11,7 @@ use tokio::fs;
 use toml_edit::Key;
 use tracing::instrument;
 
-use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
+use crate::config::{Config, FLOX_CONFIG_FILE, ReadWriteError};
 use crate::subcommand_metric;
 use crate::utils::message;
 use crate::utils::metrics::{

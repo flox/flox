@@ -1,7 +1,7 @@
 use std::cmp::max;
 use std::fmt::Display;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::manifest::typed::Inner;
@@ -10,9 +10,9 @@ use itertools::Itertools;
 use serde::Serialize;
 use tracing::instrument;
 
-use crate::commands::services::{guard_service_commands_available, ServicesEnvironment};
-use crate::commands::{environment_select, EnvironmentSelect};
-use crate::{environment_subcommand_metric, subcommand_metric};
+use crate::commands::services::{ServicesEnvironment, guard_service_commands_available};
+use crate::commands::{EnvironmentSelect, environment_select};
+use crate::environment_subcommand_metric;
 
 #[derive(Bpaf, Debug, Clone)]
 pub struct Status {
@@ -87,10 +87,8 @@ impl Status {
         }?;
 
         if self.json {
-            for proc in process_states_display {
-                let line = serde_json::to_string(&proc)?;
-                println!("{line}");
-            }
+            let json_array = serde_json::to_string_pretty(&process_states_display)?;
+            println!("{json_array}");
         } else {
             println!("{process_states_display}");
         }
@@ -221,8 +219,6 @@ impl Display for ProcessStatesDisplay {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use flox_rust_sdk::providers::services::test_helpers::{
         generate_completed_process_state,
         generate_process_state,
@@ -302,23 +298,33 @@ mod tests {
     }
 
     #[test]
-    fn test_processstatedisplay_json_lines() {
+    fn test_processstatesdisplay_json_array() {
         let states = ProcessStates::from(vec![
             generate_process_state("aaa", "Running", 123, true),
             generate_stopped_process_state("bbb", 456),
             generate_completed_process_state("ccc", 789, 0),
         ]);
         let states_display: ProcessStatesDisplay = states.into();
-        let mut buffer = Vec::new();
-        for proc in states_display {
-            let line = serde_json::to_string(&proc).unwrap();
-            writeln!(buffer, "{line}").unwrap();
-        }
-        let buffer_str = String::from_utf8(buffer).unwrap();
-        assert_eq!(buffer_str, indoc! {r#"
-            {"name":"aaa","status":"Running","pid":123,"exit_code":null}
-            {"name":"bbb","status":"Stopped","pid":456,"exit_code":null}
-            {"name":"ccc","status":"Completed","pid":789,"exit_code":0}
-        "#});
+        let json_array = serde_json::to_string_pretty(&states_display).unwrap();
+        assert_eq!(json_array, indoc! {r#"[
+              {
+                "name": "aaa",
+                "status": "Running",
+                "pid": 123,
+                "exit_code": null
+              },
+              {
+                "name": "bbb",
+                "status": "Stopped",
+                "pid": 456,
+                "exit_code": null
+              },
+              {
+                "name": "ccc",
+                "status": "Completed",
+                "pid": 789,
+                "exit_code": 0
+              }
+            ]"#});
     }
 }

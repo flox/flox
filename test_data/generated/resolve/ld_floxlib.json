@@ -249,7 +249,7 @@
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "wrapper-9.3.0"
+            "version": "9.3.0"
           },
           {
             "attr_path": "gcc",
@@ -295,7 +295,7 @@
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "wrapper-11.3.0"
+            "version": "11.3.0"
           },
           {
             "attr_path": "gcc-unwrapped",
@@ -345,7 +345,7 @@
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "gcc-9.3.0"
+            "version": "9.3.0"
           },
           {
             "attr_path": "gcc-unwrapped",
@@ -395,7 +395,7 @@
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "gcc-11.3.0"
+            "version": "11.3.0"
           },
           {
             "attr_path": "glibc",

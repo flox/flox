@@ -2,18 +2,20 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::AttrPath;
-use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
+use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
-use flox_rust_sdk::models::manifest::raw::{insert_packages, CatalogPackage, PackageToInstall};
+use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall, insert_packages};
+use flox_rust_sdk::models::manifest::typed::ActivateMode;
 use flox_rust_sdk::providers::catalog::{
     ClientTrait,
     PackageDescriptor,
     PackageGroup,
     PackageResolutionInfo,
+    SystemEnum,
 };
 use indoc::formatdoc;
 use path_dedot::ParseDot;
@@ -86,16 +88,20 @@ impl Init {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("init");
 
-        let dir = self
-            .dir
-            .clone()
-            .unwrap_or_else(|| std::env::current_dir().unwrap());
+        let dir = match &self.dir {
+            Some(dir) => dir.clone(),
+            None => std::env::current_dir().context("Couldn't determine current directory")?,
+        };
 
-        let home_dir = dirs::home_dir().unwrap();
+        let Some(home_dir) = dirs::home_dir() else {
+            bail!("Couldn't determine home directory");
+        };
+
+        let default_environment = dir == home_dir;
 
         let env_name = if let Some(ref name) = self.env_name {
             EnvironmentName::from_str(name)?
-        } else if dir == home_dir {
+        } else if default_environment {
             EnvironmentName::from_str(DEFAULT_NAME)?
         } else {
             let name = dir
@@ -106,8 +112,8 @@ impl Init {
             EnvironmentName::from_str(&name)?
         };
 
-        // Don't run language hooks in home dir
-        let customization = if dir != home_dir || self.auto_setup {
+        // Don't run language hooks for "default" environment
+        let customization = if !default_environment || self.auto_setup {
             self.run_language_hooks(&flox, &dir)
                 .await
                 .unwrap_or_else(|e| {
@@ -116,7 +122,10 @@ impl Init {
                 })
         } else {
             debug!("Skipping language hooks in home directory");
-            InitCustomization::default()
+            InitCustomization {
+                activate_mode: Some(ActivateMode::Run),
+                ..Default::default()
+            }
         };
 
         let env = if customization.packages.is_some() {
@@ -283,6 +292,7 @@ impl Init {
             profile_tcsh: custom_profile_tcsh,
             profile_zsh: custom_profile_zsh,
             packages,
+            activate_mode: None, // Language hooks don't touch mode.
         }
     }
 }
@@ -539,6 +549,84 @@ async fn try_find_compatible_package(
     Ok(Some(pkg))
 }
 
+/// For languages like Node, Python, etc where there are separate packages for
+/// each major version, attempt to find the major version package that matches
+/// a semver requirement.
+///
+/// Submits a single request with a separate package group for each major version
+/// package, and only returns those that matched the semver requirement.
+async fn try_find_compatible_major_version_package(
+    flox: &Flox,
+    description: &str, // only used for logging
+    major_version_packages: &[impl AsRef<str>],
+    version: Option<&str>,
+) -> Result<Vec<ProvidedPackage>> {
+    tracing::debug!(
+        package = description,
+        version = version.unwrap_or("null"),
+        "using catalog client to find compatible major version package"
+    );
+
+    let system = flox.system.parse()?;
+    let pkg_groups = major_version_packages
+        .iter()
+        .map(|pkg_name| group_for_single_package(pkg_name.as_ref(), version, system))
+        .collect::<Vec<_>>();
+    let resolved_groups = flox.catalog_client.resolve(pkg_groups).await?;
+    let candidate_pkgs: Vec<ProvidedPackage> = resolved_groups
+        .into_iter()
+        .filter_map(|maybe_pkg_group| {
+            maybe_pkg_group
+                .page
+                .as_ref()
+                .and_then(|page| page.packages.as_ref())
+                .and_then(|pkgs| pkgs.first().cloned())
+        })
+        .map(|pkg| {
+            // Type-inference fails without the fully-qualified method call
+            <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
+        })
+        .collect::<Vec<_>>();
+
+    if candidate_pkgs.is_empty() {
+        tracing::debug!(package = description, "no compatible package version found");
+    } else {
+        let found = candidate_pkgs
+            .iter()
+            .map(|pkg| pkg.attr_path.to_string())
+            .collect::<Vec<_>>();
+        tracing::debug!(
+            found = found.join(","),
+            "found matching major version package"
+        );
+    }
+
+    Ok(candidate_pkgs)
+}
+
+fn group_for_single_package(
+    attr_path: &str,
+    version: Option<&str>,
+    system: SystemEnum,
+) -> PackageGroup {
+    PackageGroup {
+        descriptors: vec![PackageDescriptor {
+            attr_path: attr_path.to_string(),
+            install_id: attr_path.to_string(),
+            version: version.map(|v| v.to_string()),
+            allow_pre_releases: None,
+            derivation: None,
+            allow_broken: None,
+            allow_insecure: None,
+            allow_unfree: None,
+            allowed_licenses: None,
+            allow_missing_builds: None,
+            systems: vec![system],
+        }],
+        name: attr_path.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -595,6 +683,7 @@ mod tests {
                         systems: None,
                     },
                 ]),
+                activate_mode: None,
             },
             InitCustomization {
                 hook_on_activate: Some("hook_on_activate2".to_string()),
@@ -617,6 +706,7 @@ mod tests {
                         systems: None,
                     },
                 ]),
+                activate_mode: None,
             },
         ];
 
@@ -716,6 +806,7 @@ mod tests {
                     systems: None,
                 },
             ]),
+            activate_mode: None,
         });
     }
 }

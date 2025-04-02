@@ -31,22 +31,22 @@
             "attr_path": "bpftrace",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/2iq83vk6injwx7fhiccs8gz74i1q2hmv-bpftrace-0.22.1.drv",
+            "derivation": "/nix/store/z2152p28h0dy966w3vfk2bcj04phpd8c-bpftrace-0.22.1.drv",
             "description": "High-level tracing language for Linux eBPF",
             "insecure": false,
             "install_id": "bpftrace",
             "license": "Apache-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "bpftrace-0.22.1",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/6xxmnyv8cvh2f3ak3vxhi47c4vi0isv1-bpftrace-0.22.1-man"
+                "store_path": "/nix/store/bnf9nsydp5hnb79bpapm9h9a523jz1ir-bpftrace-0.22.1-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/ni76h1lfjczfs70yp673ms43qm12yz1c-bpftrace-0.22.1"
+                "store_path": "/nix/store/2f93g1i4959ai580b9aza5bz9w1m3rsp-bpftrace-0.22.1"
               }
             ],
             "outputs_to_install": [
@@ -55,10 +55,10 @@
             ],
             "pkg_path": "bpftrace",
             "pname": "bpftrace",
-            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-            "rev_count": 750629,
-            "rev_date": "2025-02-08T13:21:17Z",
-            "scrape_date": "2025-02-09T04:06:52Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:27:12.144212Z",
             "stabilities": [
               "unstable"
             ],
@@ -70,22 +70,22 @@
             "attr_path": "bpftrace",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/h88lpxrk8lw75mfbv114igk7vwa6ah3b-bpftrace-0.22.1.drv",
+            "derivation": "/nix/store/p7dcvxknalmkwgvg5rsl620p8p8f0br3-bpftrace-0.22.1.drv",
             "description": "High-level tracing language for Linux eBPF",
             "insecure": false,
             "install_id": "bpftrace",
             "license": "Apache-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=a79cfe0ebd24952b580b1cf08cd906354996d547",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
             "missing_builds": false,
             "name": "bpftrace-0.22.1",
             "outputs": [
               {
                 "name": "man",
-                "store_path": "/nix/store/0rlzwd2bmhagc47nqxwbqad9gk0k0ghg-bpftrace-0.22.1-man"
+                "store_path": "/nix/store/cfqs2qmln1d5xy72a6bvv12hrpdvjfbg-bpftrace-0.22.1-man"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/6f3mznp9dbwgsz773jkpin470sphcp29-bpftrace-0.22.1"
+                "store_path": "/nix/store/jmhil2kj5453wdg0dmfl3k9rs5s0c8qb-bpftrace-0.22.1"
               }
             ],
             "outputs_to_install": [
@@ -94,10 +94,10 @@
             ],
             "pkg_path": "bpftrace",
             "pname": "bpftrace",
-            "rev": "a79cfe0ebd24952b580b1cf08cd906354996d547",
-            "rev_count": 750629,
-            "rev_date": "2025-02-08T13:21:17Z",
-            "scrape_date": "2025-02-09T04:06:52Z",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T02:01:41.930786Z",
             "stabilities": [
               "unstable"
             ],
@@ -106,7 +106,7 @@
             "version": "0.22.1"
           }
         ],
-        "page": 750629,
+        "page": 773904,
         "url": ""
       }
     }

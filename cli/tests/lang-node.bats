@@ -52,7 +52,6 @@ teardown() {
 
 # bats test_tags=catalog
 @test "flox activate works with npm" {
-  cp -r "$INPUT_DATA/init/node/common/." .
   cp -r "$INPUT_DATA/init/node/npm/." .
   # Files copied from the store are read-only
   chmod -R +w .
@@ -65,18 +64,59 @@ teardown() {
 }
 
 # bats test_tags=catalog
-@test "flox activate works with yarn" {
-  cp -r "$INPUT_DATA/init/node/common/." .
-  cp -r "$INPUT_DATA/init/node/yarn/." .
+@test "auto init matches yarn version to yarn 1.x" {
+  cp -r "$INPUT_DATA/init/node/yarn_1x/." .
   # Files copied from the store are read-only
   chmod -R +w .
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/node_yarn.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/yarn_1x.json" \
     run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'yarn' installed"
   refute_output "nodejs"
+  run "$FLOX_BIN" list
+  assert_regex "$output" "yarn: yarn \(.+\)"
   run "$FLOX_BIN" activate -- yarn run start
   assert_output --partial "86400000"
+}
+
+# bats test_tags=catalog,init
+@test "auto init installs nodejs major version package" {
+  cp -r "$INPUT_DATA/init/node/nodejs_20/." .
+  chmod -R +w .
+  # This test ensures that when a package.json has a version requirement,
+  # in this case "20", we give them the corresponding nodejs_* package.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/nodejs_20.json" \
+    run "$FLOX_BIN" init --auto-setup
+  assert_output --partial "'nodejs' installed"
+  run "$FLOX_BIN" list
+  assert_regex "$output" "nodejs: nodejs_20.*"
+}
+
+# bats test_tags=catalog,init
+@test "auto init installs latest nodejs major version package" {
+  cp -r "$INPUT_DATA/init/node/nodejs_gt_20/." .
+  chmod -R +w .
+  # This test ensures that when a package.json has a version requirment,
+  # in this case ">=20", we give them the nodejs_* package corresponding
+  # to the latest version.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/nodejs_gt_20.json" \
+    run "$FLOX_BIN" init --auto-setup
+  assert_output --partial "'nodejs' installed"
+  run "$FLOX_BIN" list
+  assert_regex "$output" "nodejs: nodejs_23.*"
+}
+
+# bats test_tags=catalog,init
+@test "auto init matches yarn version to yarn-berry" {
+  cp -r "$INPUT_DATA/init/node/yarn_berry/." .
+  chmod -R +w .
+  # We specify yarn 4 in `package.json` but this is also equivalent to the
+  # default case if there is a `yarn.lock` and no version specified.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/yarn_berry.json" \
+    run "$FLOX_BIN" init --auto-setup
+  assert_output --partial "'yarn' installed"
+  run "$FLOX_BIN" list
+  assert_regex "$output" "yarn: yarn-berry \(.+\)"
 }
 
 # bats test_tags=catalog

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use flox_core::{serialize_atomically, traceable_path, SerializeError};
+use flox_core::{SerializeError, serialize_atomically, traceable_path};
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use tracing::debug;

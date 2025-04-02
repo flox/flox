@@ -33,14 +33,14 @@
             "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
             "rev_count": 439146,
             "rev_date": "2023-01-02T00:06:23Z",
-            "scrape_date": "2024-08-08T01:50:21Z",
+            "scrape_date": "2024-08-16T02:13:46Z",
             "stabilities": [
               "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "python-2.7.18.5"
+            "version": "2.7.18.5"
           },
           {
             "attr_path": "python2",
@@ -68,14 +68,14 @@
             "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
             "rev_count": 439146,
             "rev_date": "2023-01-02T00:06:23Z",
-            "scrape_date": "2024-08-08T01:50:21Z",
+            "scrape_date": "2024-08-16T02:13:46Z",
             "stabilities": [
               "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "python-2.7.18.5"
+            "version": "2.7.18.5"
           },
           {
             "attr_path": "python2",
@@ -103,14 +103,14 @@
             "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
             "rev_count": 439146,
             "rev_date": "2023-01-02T00:06:23Z",
-            "scrape_date": "2024-08-08T01:50:21Z",
+            "scrape_date": "2024-08-16T02:13:46Z",
             "stabilities": [
               "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "python-2.7.18.5"
+            "version": "2.7.18.5"
           },
           {
             "attr_path": "python2",
@@ -138,14 +138,14 @@
             "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
             "rev_count": 439146,
             "rev_date": "2023-01-02T00:06:23Z",
-            "scrape_date": "2024-08-08T01:50:21Z",
+            "scrape_date": "2024-08-16T02:13:46Z",
             "stabilities": [
               "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "python-2.7.18.5"
+            "version": "2.7.18.5"
           }
         ],
         "page": 439146,

@@ -2,14 +2,7 @@
   "lockfile-version": 1,
   "manifest": {
     "version": 1,
-    "hook": {},
-    "profile": {},
-    "options": {
-      "allow": {
-        "licenses": []
-      },
-      "semver": {}
-    },
+    "options": {},
     "build": {
       "hello": {
         "command": "echo hello"

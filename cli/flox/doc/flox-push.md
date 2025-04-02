@@ -49,7 +49,7 @@ FloxHub with local changes to the environment.
 `-d`, `--dir`
 :   Directory to push the environment from (default: current directory).
 
-`-o`, `--owner`
+`-o`, `--owner`, `--org`
 :   FloxHub owner to push environment to (default: current FloxHub user).
 
 `-f`, `--force`

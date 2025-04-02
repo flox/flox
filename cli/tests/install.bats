@@ -75,41 +75,6 @@ EOF
   assert_success
 }
 
-@test "uninstall confirmation message" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
-  "$FLOX_BIN" init
-  run "$FLOX_BIN" install hello
-  assert_success
-  assert_output "✅ 'hello' installed to environment 'test'"
-
-  run "$FLOX_BIN" uninstall hello
-  assert_success
-  # Note that there's TWO spaces between the emoji and the package name
-  assert_output "🗑️  'hello' uninstalled from environment 'test'"
-}
-
-@test "'flox uninstall' errors (without proceeding) for already uninstalled packages" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
-  "$FLOX_BIN" init
-  run "$FLOX_BIN" install hello
-  assert_success
-
-  # disable backtrace; we expect this to fail and assert output
-  RUST_BACKTRACE=0 run "$FLOX_BIN" uninstall hello curl
-  assert_failure
-  assert_output "❌ ERROR: couldn't uninstall 'curl', wasn't previously installed"
-}
-
-@test "'flox uninstall' edits manifest" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
-  "$FLOX_BIN" init
-  run "$FLOX_BIN" install hello
-  assert_success
-  run "$FLOX_BIN" uninstall hello
-  run grep '^hello.pkg-path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml"
-  assert_failure
-}
-
 @test "'flox install' provides suggestions when package not found" {
   "$FLOX_BIN" init
   # This package doesn't exist but *does* have suggestions
@@ -154,13 +119,6 @@ EOF
   assert_output --partial "Could not install java, make"
 }
 
-@test "'flox uninstall' reports error when package not found" {
-  "$FLOX_BIN" init
-  run "$FLOX_BIN" uninstall not-a-package
-  assert_failure
-  assert_output --partial "couldn't uninstall 'not-a-package', wasn't previously installed"
-}
-
 @test "'flox install' creates link to installed binary" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   "$FLOX_BIN" init
@@ -170,51 +128,6 @@ EOF
   run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello" ]
   run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.run/bin/hello" ]
   assert_success
-}
-
-@test "'flox uninstall' removes link to installed binary" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
-  "$FLOX_BIN" init
-  run "$FLOX_BIN" install hello
-  assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
-  run [ -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello" ]
-  assert_success
-  run "$FLOX_BIN" uninstall hello
-  assert_success
-  run [ ! -e "$PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello" ]
-  assert_success
-}
-
-@test "'flox uninstall' has helpful error message with no packages installed" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
-  # If the [install] table is missing entirely we don't want to report a TOML
-  # parse error, we want to report that there's nothing to uninstall.
-  "$FLOX_BIN" init
-  run "$FLOX_BIN" uninstall hello
-  assert_failure
-  assert_output --partial "couldn't uninstall 'hello', wasn't previously installed"
-}
-
-@test "'flox uninstall' can uninstall packages with dotted att_paths" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rubyPackages_3_2.rails.json"
-  run "$FLOX_BIN" init
-  assert_success
-  # Install a dotted package
-  run "$FLOX_BIN" install rubyPackages_3_2.rails
-  assert_success
-
-  # The package should be in the manifest
-  manifest_after_install=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
-  assert_regex "$manifest_after_install" 'rails\.pkg-path = "rubyPackages_3_2\.rails"'
-
-  # Flox can uninstall the dotted package
-  run "$FLOX_BIN" uninstall rubyPackages_3_2.rails
-  assert_success
-
-  # The package should be removed from the manifest
-  manifest_after_uninstall=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
-  ! assert_regex "$manifest_after_uninstall" 'rails\.pkg-path = "rubyPackages_3_2\.rails"'
 }
 
 @test "'flox install' installs by path" {
@@ -472,7 +385,7 @@ EOF
   assert_output "$(
     cat << EOF
 ❌ ERROR: resolution failed: 
-The attr_path python311Packages.torchvision-bin is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,aarch64-linux,x86_64-linux), (aarch64-darwin,x86_64-darwin,x86_64-linux), (aarch64-darwin,x86_64-linux), (x86_64-linux).
+The attr_path python311Packages.torchvision-bin is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,aarch64-linux,x86_64-linux), (aarch64-darwin,aarch64-linux), (aarch64-linux,x86_64-linux), (aarch64-darwin,x86_64-darwin,x86_64-linux), (aarch64-darwin,x86_64-linux), (x86_64-linux).
 EOF
   )"
 }
@@ -533,4 +446,42 @@ EOF
   run "$FLOX_BIN" activate -- bash -c 'realpath "$(command -v vim)"'
   assert_success
   assert_output "$vim_store_path/bin/vim"
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox install' info message when overriding included package" {
+  # This will be an included environment
+  "$FLOX_BIN" init -d included
+
+  # Install a package that will be overridden by the composer later
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" install -d included hello
+
+  # Create the composing environment
+  "$FLOX_BIN" init -n "composer"
+
+  # Add the include to the manifest
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  "$FLOX_BIN" edit -f - <<- EOF
+version = 1
+
+[include]
+environments = [
+  { dir = "included" }
+]
+
+[options]
+systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
+EOF
+
+  # Install the overriding package to the composer
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" install hello
+
+  assert_output --partial "This environment now overrides package with id 'hello'"
+
+  # Ensure that the package actually ended up in the manifest
+  hello_pkg_path="$(tomlq -r -c '.install.hello."pkg-path"' < .flox/env/manifest.toml)"
+  assert_equal "$hello_pkg_path" "hello"
 }

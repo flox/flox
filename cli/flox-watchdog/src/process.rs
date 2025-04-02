@@ -10,12 +10,12 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-use anyhow::{bail, Result};
-use flox_core::activations::{read_activations_json, Activations, AttachedPid, UncheckedVersion};
+use anyhow::{Result, bail};
+use flox_core::activations::{Activations, AttachedPid, UncheckedVersion, read_activations_json};
 use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
 use time::OffsetDateTime;
@@ -166,13 +166,13 @@ impl Watcher for PidWatcher {
 pub mod test {
     use std::path::PathBuf;
     use std::process::{Child, Command};
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
 
     use flox_activations::cli::attach::{AttachArgs, AttachExclusiveArgs};
     use flox_activations::cli::{SetReadyArgs, StartOrAttachArgs};
     use flox_core::activations::activations_json_path;
-    use flox_core::proc_status::{read_pid_status, ProcStatus};
+    use flox_core::proc_status::{ProcStatus, read_pid_status};
 
     use super::*;
 

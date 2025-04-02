@@ -73,9 +73,11 @@ pub fn default_nix_env_vars() -> std::collections::HashMap<&'static str, String>
 }
 
 /// Set the default nix environment variables for the current process
+///
+/// SAFETY: called once, prior to possible concurrent access to env
 pub fn populate_default_nix_env_vars() {
     let env_map = default_nix_env_vars();
     for (key, value) in env_map {
-        env::set_var(key, value)
+        unsafe { env::set_var(key, value) }
     }
 }

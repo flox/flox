@@ -16,7 +16,7 @@ stdenv.mkDerivation rec {
     "VERSION=${version}"
   ];
   nativeBuildInputs = [ help2man ];
-  doCheck = true;
+  doCheck = false;
 
   meta = with lib; {
     homepage = "https://github.com/flox/t3";

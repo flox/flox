@@ -5,11 +5,11 @@ use std::str::FromStr;
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
 use thiserror::Error;
-use tracing::{info, instrument};
+use tracing::instrument;
 use url::Url;
 
 use super::build::{BuildResult, BuildResults, ManifestBuilder};
-use super::catalog::{Client, ClientTrait, UserBuildInfo, UserDerivationInfo};
+use super::catalog::{Client, ClientTrait, UserBuildPublish, UserDerivationInfo};
 use super::git::GitCommandProvider;
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
@@ -213,7 +213,7 @@ where
             .await
             .map_err(|e| PublishError::CatalogError(Box::new(e)))?;
 
-        let build_info = UserBuildInfo {
+        let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
                 broken: Some(false),
                 description: self.env_metadata.description.clone(),
@@ -233,6 +233,7 @@ where
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
             rev_date: self.env_metadata.build_repo_ref.rev_date,
             cache_uri: self.cache.map(|c| c.cache_url().to_string()),
+            narinfos: None,
         };
 
         if let Some(cache) = self.cache {
@@ -345,10 +346,10 @@ pub fn check_build_metadata(
                 panic!("expected build to succeed");
             },
             build::Output::Stdout(line) => {
-                info!("stdout: {line}");
+                println!("{line}");
             },
             build::Output::Stderr(line) => {
-                info!("stderr: {line}");
+                eprintln!("{line}");
             },
         }
     }
@@ -509,11 +510,11 @@ pub mod tests {
     use super::*;
     use crate::data::CanonicalPath;
     use crate::flox::test_helpers::{create_test_token, flox_instance};
-    use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::environment::path_environment::PathEnvironment;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::lockfile::Lockfile;
     use crate::providers::build::FloxBuildMk;
-    use crate::providers::catalog::{MockClient, GENERATED_DATA};
+    use crate::providers::catalog::{GENERATED_DATA, MockClient};
 
     fn example_remote() -> (tempfile::TempDir, GitCommandProvider, String) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -566,6 +567,7 @@ pub mod tests {
             flox,
             GENERATED_DATA.join(EXAMPLE_MANIFEST),
             repo_subdir,
+            None,
         );
 
         let git = GitCommandProvider::init(repo_root, false).unwrap();
@@ -646,9 +648,11 @@ pub mod tests {
 
         let build_repo_meta = meta.build_repo_ref;
         assert!(build_repo_meta.url.contains(&remote_uri));
-        assert!(build_repo
-            .contains_commit(build_repo_meta.rev.as_str())
-            .is_ok());
+        assert!(
+            build_repo
+                .contains_commit(build_repo_meta.rev.as_str())
+                .is_ok()
+        );
         assert_eq!(build_repo_meta.rev_count, 1);
 
         let lockfile_path = CanonicalPath::new(env.lockfile_path(&flox).unwrap());

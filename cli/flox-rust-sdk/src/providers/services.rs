@@ -10,8 +10,8 @@ use std::env;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc::{Receiver, Sender};
 use std::sync::LazyLock;
+use std::sync::mpsc::{Receiver, Sender};
 
 #[cfg(test)]
 use proptest::prelude::*;
@@ -24,8 +24,8 @@ use tracing::debug;
 use crate::flox::Flox;
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::{Inner, ServiceShutdown, Services};
-use crate::utils::logging::traceable_path;
 use crate::utils::CommandExt;
+use crate::utils::logging::traceable_path;
 
 const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
 /// The path to the nix provided `sleep` binary.
@@ -156,8 +156,8 @@ impl From<ServiceShutdown> for ProcessShutdown {
 }
 
 #[cfg(test)]
-fn arbitrary_process_config_environment(
-) -> impl proptest::strategy::Strategy<Value = Option<BTreeMap<String, String>>> {
+fn arbitrary_process_config_environment()
+-> impl proptest::strategy::Strategy<Value = Option<BTreeMap<String, String>>> {
     proptest::option::of(proptest::collection::btree_map(
         any::<String>(),
         any::<String>(),

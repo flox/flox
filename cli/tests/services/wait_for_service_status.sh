@@ -15,7 +15,7 @@ check_status() {
     for status in "${name_status_pairs[@]}"; do
         service_name=$(echo $status | cut -d':' -f1)
         expected_status=$(echo $status | cut -d':' -f2)
-        current_status=$(echo "$status_output" | jq --slurp --raw-output ".[] | select(.name==\"$service_name\") | .status")
+        current_status=$(echo "$status_output" | jq --raw-output ".[] | select(.name==\"$service_name\") | .status")
 
         if [ "$current_status" != "$expected_status" ]; then
             echo "Service '$service_name' status current=$current_status, expected=$expected_status"

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration as TimeoutDuration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use fslock::LockFile;
 use indoc::indoc;
@@ -54,9 +54,9 @@ macro_rules! subcommand_metric {
 macro_rules! environment_subcommand_metric {
     ($subcommand:tt, $environment_select:expr $(, $key:tt = $value:expr)*) => {{
         if let EnvironmentSelect::Remote(environment_ref) = &$environment_select {
-            subcommand_metric!($subcommand, remote_environment = environment_ref.to_string() $(, $key = $value)*);
+            $crate::subcommand_metric!($subcommand, remote_environment = environment_ref.to_string() $(, $key = $value)*);
         } else {
-            subcommand_metric!($subcommand $(, $key = $value)*);
+            $crate::subcommand_metric!($subcommand $(, $key = $value)*);
         }
     }};
 }

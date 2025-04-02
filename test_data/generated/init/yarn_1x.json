@@ -1,0 +1,390 @@
+[
+  {
+    "count": 11,
+    "results": [
+      {
+        "attr_path": "nodejs_14",
+        "catalog": null,
+        "description": "Event-driven I/O framework for the V8 JavaScript engine",
+        "name": "nodejs-14.21.3",
+        "pkg_path": "nodejs_14",
+        "pname": "nodejs_14",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "14.21.3"
+      },
+      {
+        "attr_path": "nodejs_16",
+        "catalog": null,
+        "description": "Event-driven I/O framework for the V8 JavaScript engine",
+        "name": "nodejs-16.20.2",
+        "pkg_path": "nodejs_16",
+        "pname": "nodejs_16",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "16.20.2"
+      },
+      {
+        "attr_path": "nodejs_18",
+        "catalog": null,
+        "description": "Event-driven I/O framework for the V8 JavaScript engine",
+        "name": "nodejs-18.20.7",
+        "pkg_path": "nodejs_18",
+        "pname": "nodejs_18",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "18.20.7"
+      },
+      {
+        "attr_path": "nodejs_19",
+        "catalog": null,
+        "description": "Event-driven I/O framework for the V8 JavaScript engine",
+        "name": "nodejs-19.9.0",
+        "pkg_path": "nodejs_19",
+        "pname": "nodejs_19",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "19.9.0"
+      },
+      {
+        "attr_path": "nodejs_20",
+        "catalog": null,
+        "description": "Event-driven I/O framework for the V8 JavaScript engine",
+        "name": "nodejs-20.19.0",
+        "pkg_path": "nodejs_20",
+        "pname": "nodejs_20",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "20.19.0"
+      },
+      {
+        "attr_path": "nodejs_21",
+        "catalog": null,
+        "description": "Event-driven I/O framework for the V8 JavaScript engine",
+        "name": "nodejs-21.7.3",
+        "pkg_path": "nodejs_21",
+        "pname": "nodejs_21",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "21.7.3"
+      },
+      {
+        "attr_path": "nodejs_22",
+        "catalog": null,
+        "description": "Event-driven I/O framework for the V8 JavaScript engine",
+        "name": "nodejs-22.14.0",
+        "pkg_path": "nodejs_22",
+        "pname": "nodejs_22",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "22.14.0"
+      },
+      {
+        "attr_path": "nodejs_23",
+        "catalog": null,
+        "description": "Event-driven I/O framework for the V8 JavaScript engine",
+        "name": "nodejs-23.10.0",
+        "pkg_path": "nodejs_23",
+        "pname": "nodejs_23",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "23.10.0"
+      },
+      {
+        "attr_path": "nodejs_latest",
+        "catalog": null,
+        "description": "Event-driven I/O framework for the V8 JavaScript engine",
+        "name": "nodejs-23.10.0",
+        "pkg_path": "nodejs_latest",
+        "pname": "nodejs_latest",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "23.10.0"
+      },
+      {
+        "attr_path": "haxePackages.hxnodejs_4",
+        "catalog": null,
+        "description": "Extern definitions for node.js 4.x",
+        "name": "hxnodejs-4.0.9",
+        "pkg_path": "haxePackages.hxnodejs_4",
+        "pname": "hxnodejs_4",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "4.0.9"
+      },
+      {
+        "attr_path": "haxePackages.hxnodejs_6",
+        "catalog": null,
+        "description": "Extern definitions for node.js 6.9",
+        "name": "hxnodejs-6.9.0",
+        "pkg_path": "haxePackages.hxnodejs_6",
+        "pname": "hxnodejs_6",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "6.9.0"
+      }
+    ]
+  },
+  [
+    {
+      "msgs": [],
+      "name": "nodejs",
+      "page": {
+        "complete": true,
+        "msgs": [],
+        "packages": [
+          {
+            "attr_path": "nodejs",
+            "broken": false,
+            "catalog": "nixpkgs",
+            "derivation": "/nix/store/4bl62dvqxj7m1c9jf0h6i7dj8kvmfph3-nodejs-22.14.0.drv",
+            "description": "Event-driven I/O framework for the V8 JavaScript engine",
+            "insecure": false,
+            "install_id": "nodejs",
+            "license": "MIT",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+            "missing_builds": false,
+            "name": "nodejs-22.14.0",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/i1v519j66jmvpqr5h382i9nanxwa5l6n-nodejs-22.14.0"
+              },
+              {
+                "name": "libv8",
+                "store_path": "/nix/store/4m6xhygkx74fsd5k99nihgr7vg85f553-nodejs-22.14.0-libv8"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pkg_path": "nodejs",
+            "pname": "nodejs",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:10:00.064594Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "22.14.0"
+          }
+        ],
+        "page": 773904,
+        "url": ""
+      }
+    }
+  ],
+  [
+    {
+      "msgs": [
+        {
+          "ConstraintsTooTight": {
+            "level": "error",
+            "msg": "Resolution constraints are too tight."
+          }
+        }
+      ],
+      "name": "yarn-berry",
+      "page": null
+    },
+    {
+      "msgs": [],
+      "name": "yarn",
+      "page": {
+        "complete": true,
+        "msgs": [],
+        "packages": [
+          {
+            "attr_path": "yarn",
+            "broken": false,
+            "catalog": "nixpkgs",
+            "derivation": "/nix/store/33szjggz23rmrm3ql572690kvnmx5rs8-yarn-1.22.22.drv",
+            "description": "Fast, reliable, and secure dependency management for javascript",
+            "insecure": false,
+            "install_id": "yarn",
+            "license": "BSD-2-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+            "missing_builds": false,
+            "name": "yarn-1.22.22",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/0nincnkbkk7inb1nrqf83mmzwc94xiyl-yarn-1.22.22"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pkg_path": "yarn",
+            "pname": "yarn",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:10:53.836113Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "1.22.22"
+          }
+        ],
+        "page": 773904,
+        "url": ""
+      }
+    }
+  ],
+  [
+    {
+      "msgs": [],
+      "name": "toplevel",
+      "page": {
+        "complete": true,
+        "msgs": [],
+        "packages": [
+          {
+            "attr_path": "yarn",
+            "broken": false,
+            "catalog": "nixpkgs",
+            "derivation": "/nix/store/33szjggz23rmrm3ql572690kvnmx5rs8-yarn-1.22.22.drv",
+            "description": "Fast, reliable, and secure dependency management for javascript",
+            "insecure": false,
+            "install_id": "yarn",
+            "license": "BSD-2-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+            "missing_builds": false,
+            "name": "yarn-1.22.22",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/0nincnkbkk7inb1nrqf83mmzwc94xiyl-yarn-1.22.22"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pkg_path": "yarn",
+            "pname": "yarn",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:10:53.836113Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "1.22.22"
+          },
+          {
+            "attr_path": "yarn",
+            "broken": false,
+            "catalog": "nixpkgs",
+            "derivation": "/nix/store/yfxgljg5vvv3knkycnsazdfsx1pkg2pq-yarn-1.22.22.drv",
+            "description": "Fast, reliable, and secure dependency management for javascript",
+            "insecure": false,
+            "install_id": "yarn",
+            "license": "BSD-2-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+            "missing_builds": false,
+            "name": "yarn-1.22.22",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/qxymdihqclkg42i4185f7y9nf7j1cwz8-yarn-1.22.22"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pkg_path": "yarn",
+            "pname": "yarn",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:28:39.763697Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "1.22.22"
+          },
+          {
+            "attr_path": "yarn",
+            "broken": false,
+            "catalog": "nixpkgs",
+            "derivation": "/nix/store/mdg1fracn8xp9ak3np89gli8kbk95am6-yarn-1.22.22.drv",
+            "description": "Fast, reliable, and secure dependency management for javascript",
+            "insecure": false,
+            "install_id": "yarn",
+            "license": "BSD-2-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+            "missing_builds": false,
+            "name": "yarn-1.22.22",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/2li1br96rd013mimbvnsf81fk564jx0v-yarn-1.22.22"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pkg_path": "yarn",
+            "pname": "yarn",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T01:43:52.362728Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "1.22.22"
+          },
+          {
+            "attr_path": "yarn",
+            "broken": false,
+            "catalog": "nixpkgs",
+            "derivation": "/nix/store/kn27ww92add7a76bnh2fqq0g0jqb6rig-yarn-1.22.22.drv",
+            "description": "Fast, reliable, and secure dependency management for javascript",
+            "insecure": false,
+            "install_id": "yarn",
+            "license": "BSD-2-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+            "missing_builds": false,
+            "name": "yarn-1.22.22",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/sfh8adsjz44xyismwlzamq25k6lk9igl-yarn-1.22.22"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pkg_path": "yarn",
+            "pname": "yarn",
+            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
+            "rev_count": 773904,
+            "rev_date": "2025-03-25T07:53:30Z",
+            "scrape_date": "2025-03-27T02:03:16.044337Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "1.22.22"
+          }
+        ],
+        "page": 773904,
+        "url": ""
+      }
+    }
+  ]
+]

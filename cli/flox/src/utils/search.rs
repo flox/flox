@@ -152,10 +152,10 @@ impl DisplaySearchResults {
         }
 
         Some(format!(
-                "Showing {n_results} of {count} results. Use `flox search {search_term} --all` to see the full list.",
-                n_results = self.n_results,
-                search_term = self.search_term
-            ))
+            "Showing {n_results} of {count} results. Use `flox search {search_term} --all` to see the full list.",
+            n_results = self.n_results,
+            search_term = self.search_term
+        ))
     }
 }
 

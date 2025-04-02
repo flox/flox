@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
-use std::sync::mpsc::Receiver;
 use std::sync::LazyLock;
+use std::sync::mpsc::Receiver;
 use std::{env, thread};
 
 use serde::Deserialize;
@@ -359,8 +359,8 @@ pub mod test_helpers {
 
     use super::*;
     use crate::flox::Flox;
-    use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::Environment;
+    use crate::models::environment::path_environment::PathEnvironment;
 
     pub fn result_dir(parent: &Path, package: &str) -> PathBuf {
         parent.join(format!("result-{package}"))
@@ -486,13 +486,13 @@ mod tests {
     use super::test_helpers::*;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::Environment;
     use crate::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
     };
-    use crate::models::environment::Environment;
-    use crate::providers::catalog::test_helpers::reset_mocks_from_file;
     use crate::providers::catalog::GENERATED_DATA;
+    use crate::providers::catalog::test_helpers::reset_mocks_from_file;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
     #[test]
@@ -1090,17 +1090,17 @@ mod tests {
     }
 
     #[test]
-    fn build_uses_hook_from_manifest() {
+    fn build_does_not_use_hook_from_manifest() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
-        let file_content = String::from("some content");
+        let file_content = String::from("");
 
         let manifest = formatdoc! {r#"
             version = 1
 
             [hook]
             on-activate = '''
-              export FOO="{file_content}"
+              export FOO="will not be used"
             '''
 
             [build.{package_name}]

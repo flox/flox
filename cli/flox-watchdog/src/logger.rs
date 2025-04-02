@@ -54,9 +54,11 @@ pub(crate) fn spawn_heartbeat_log() {
         "`HEARTBEAT_INTERVAL` must be less than `KEEP_WATCHDOG_DAYS` days"
     );
 
-    spawn(|| loop {
-        debug!("still watching, woof woof");
-        sleep(HEARTBEAT_INTERVAL);
+    spawn(|| {
+        loop {
+            debug!("still watching, woof woof");
+            sleep(HEARTBEAT_INTERVAL);
+        }
     });
 }
 
@@ -68,19 +70,21 @@ pub(crate) fn spawn_heartbeat_log() {
 /// multiple watchdogs running for the same environment log dir.
 pub(crate) fn spawn_logs_gc_threads(dir: impl AsRef<Path>) {
     let dir = dir.as_ref().to_path_buf();
-    spawn(move || loop {
-        gc_logs_watchdog(&dir, KEEP_WATCHDOG_DAYS)
-            .unwrap_or_else(|err| error!(%err, "failed to delete watchdog logs"));
-        gc_logs_per_process(&dir, "services.*.log", KEEP_LAST_N_PROCESSES)
-            .unwrap_or_else(|err| error!(%err, "failed to delete services logs"));
-        gc_logs_per_process(
-            &dir,
-            &log_file_format_upgrade_check("*"),
-            KEEP_LAST_N_PROCESSES,
-        )
-        .unwrap_or_else(|err| error!(%err, "failed to delete upgrade-check logs"));
+    spawn(move || {
+        loop {
+            gc_logs_watchdog(&dir, KEEP_WATCHDOG_DAYS)
+                .unwrap_or_else(|err| error!(%err, "failed to delete watchdog logs"));
+            gc_logs_per_process(&dir, "services.*.log", KEEP_LAST_N_PROCESSES)
+                .unwrap_or_else(|err| error!(%err, "failed to delete services logs"));
+            gc_logs_per_process(
+                &dir,
+                &log_file_format_upgrade_check("*"),
+                KEEP_LAST_N_PROCESSES,
+            )
+            .unwrap_or_else(|err| error!(%err, "failed to delete upgrade-check logs"));
 
-        std::thread::sleep(WATCHDOG_GC_INTERVAL);
+            std::thread::sleep(WATCHDOG_GC_INTERVAL);
+        }
     });
 }
 
@@ -170,7 +174,7 @@ fn try_delete_log(file: impl AsRef<Path>) {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{create_dir, File};
+    use std::fs::{File, create_dir};
 
     use tempfile::tempdir;
 
@@ -250,9 +254,11 @@ mod tests {
             .collect();
         assert_eq!(files.len(), filenames.len());
 
-        assert!(watchdog_logs_to_gc(dir.path(), keep_last)
-            .unwrap()
-            .is_empty());
+        assert!(
+            watchdog_logs_to_gc(dir.path(), keep_last)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

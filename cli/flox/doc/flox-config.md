@@ -78,17 +78,17 @@ flox config --set 'trusted_environments."owner/name"' trust
 # SUPPORTED CONFIGURATION OPTIONS
 
 `config_dir`
-:   Directory where flox should load its configuration file
+:   Directory where Flox should load its configuration file
     (default: `$XDG_CONFIG_HOME/flox`).
     This option will only take effect if set with `$FLOX_CONFIG_DIR`.
     `config_dir` is ignored.
 
 `cache_dir`
-:   Directory where flox should store ephemeral data
+:   Directory where Flox should store ephemeral data
     (default: `$XDG_CACHE_HOME/flox`).
 
 `data_dir`
-:   Directory where flox should store persistent data
+:   Directory where Flox should store persistent data
     (default: `$XDG_DATA_HOME/flox`).
 
 `disable_metrics`
@@ -100,6 +100,11 @@ flox config --set 'trusted_environments."owner/name"' trust
 `hide_default_prompt`
 :   Hide environments named 'default' from the shell prompt,
     and don't add environments named 'default' to `$FLOX_PROMPT_ENVIRONMENTS` (default: true).
+
+`installer_channel`
+:   Release channel to use when checking for updates to Flox.
+    Valid values are `stable`, `nightly`, or `qa`.
+    (default: `stable`)
 
 `search_limit`
 :   How many items `flox search` should show by default.
@@ -117,7 +122,7 @@ flox config --set 'trusted_environments."owner/name"' trust
     * "hide-default": filters out environments named 'default' from the shell prompt
 
 `state_dir`
-:   Directory where flox should store data that's not critical but also
+:   Directory where Flox should store data that's not critical but also
     shouldn't be able to be freely deleted like data in the cache directory.
     (default: `$XDG_STATE_HOME/flox` e.g. `~/.local/state/flox`)
 
@@ -131,7 +136,7 @@ flox config --set 'trusted_environments."owner/name"' trust
     The notification message is:
     ```
     Upgrades are available for packages in 'environment-name'.
-    Use 'flox upgrade' to get the latest.
+    Use 'flox upgrade --dry-run' for details.
     ```
 
     (default: true)

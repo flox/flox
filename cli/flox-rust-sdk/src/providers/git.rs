@@ -1197,10 +1197,12 @@ pub mod tests {
     fn discover_not_git_repo() {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
         let path = tempdir_handle.path().to_path_buf();
-        assert!(GitCommandProvider::discover(path)
-            .err()
-            .unwrap()
-            .not_found());
+        assert!(
+            GitCommandProvider::discover(path)
+                .err()
+                .unwrap()
+                .not_found()
+        );
     }
 
     #[test]

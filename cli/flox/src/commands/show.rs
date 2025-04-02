@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;

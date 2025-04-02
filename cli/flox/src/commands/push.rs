@@ -10,12 +10,13 @@ use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironmentError,
 };
 use flox_rust_sdk::models::environment::{
-    path_environment,
     DotFlox,
     Environment,
+    EnvironmentError,
     EnvironmentPointer,
     ManagedPointer,
     PathPointer,
+    path_environment,
 };
 use indoc::formatdoc;
 use tracing::{debug, instrument};
@@ -32,8 +33,9 @@ pub struct Push {
     #[bpaf(long, short, argument("path"))]
     dir: Option<PathBuf>,
 
-    /// FloxHub owner to push environment to (default: current FloxHub user)
-    #[bpaf(long, short, argument("owner"))]
+    /// FloxHub account to push environment to (default: current FloxHub user).
+    /// Organizations may use either '--owner=<orgname>' or alias '--org=<orgname>'.
+    #[bpaf(long("owner"), long("org"), short, argument("owner"))]
     owner: Option<EnvironmentOwner>,
 
     /// Forcibly overwrite the remote copy of the environment
@@ -101,8 +103,14 @@ impl Push {
         force: bool,
     ) -> Result<()> {
         let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dot_flox_dir)?;
-        env.push(flox, force)
-            .map_err(|err| Self::convert_error(err, managed_pointer, false))?;
+
+        env.push(flox, force).map_err(|err| {
+            Self::convert_error(
+                EnvironmentError::ManagedEnvironment(err),
+                managed_pointer,
+                false,
+            )
+        })?;
 
         Ok(())
     }
@@ -127,7 +135,7 @@ impl Push {
     }
 
     fn convert_error(
-        err: ManagedEnvironmentError,
+        err: EnvironmentError,
         pointer: ManagedPointer,
         create_remote: bool,
     ) -> anyhow::Error {
@@ -135,17 +143,17 @@ impl Push {
         let name = &pointer.name;
 
         let message = match err {
-            ManagedEnvironmentError::AccessDenied => formatdoc! {"
+            EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::AccessDenied) => formatdoc! {"
                 You do not have permission to write to {owner}/{name}
             "}.into(),
-            ManagedEnvironmentError::Diverged if create_remote => formatdoc! {"
+            EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::Diverged) if create_remote => formatdoc! {"
                 An environment named {owner}/{name} already exists!
 
                 To rename your environment: 'flox edit --name <new name>'
                 To pull and manually re-apply your changes: 'flox delete && flox pull -r {owner}/{name}'
                 To overwrite and force update: 'flox push --force'
             "}.into(),
-            ManagedEnvironmentError::Build(ref err) => formatdoc! {"
+            EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::Build(ref err)) => formatdoc! {"
                 {err}
 
                 Unable to push environment with build errors.

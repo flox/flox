@@ -6,20 +6,21 @@ use std::process::{Child, Command, Stdio};
 use std::str::FromStr;
 use std::{fs, io};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, MkContainerNix};
 use flox_rust_sdk::utils::{ReaderExt, WireTap};
 use indoc::indoc;
 use macos_containerize_proxy::ContainerizeProxy;
 use tracing::{debug, info, instrument};
 
-use super::{environment_select, EnvironmentSelect};
+use super::{EnvironmentSelect, environment_select};
+use crate::environment_subcommand_metric;
 use crate::utils::message;
 use crate::utils::openers::first_in_path;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 mod macos_containerize_proxy;
 
@@ -64,17 +65,19 @@ impl Containerize {
 
         let built_environment = env.build(&flox)?;
         let env_name = env.name();
+        let lockfile: Lockfile = env.lockfile(&flox)?.into();
+        let manifest = lockfile.manifest;
+        let mode = manifest.options.activate.mode.unwrap_or_default();
 
         let source = if std::env::consts::OS == "linux" {
-            let container_config = env
-                .lockfile(&flox)?
-                .manifest
+            let container_config = manifest
                 .containerize
                 .and_then(|c| c.config)
                 .map(|c| c.into());
             // this method is only executed on linux
             #[cfg_attr(not(target_os = "linux"), allow(deprecated))]
-            let builder = MkContainerNix::new(built_environment.develop, container_config);
+            let builder =
+                MkContainerNix::new(built_environment.for_mode(&mode), mode, container_config);
 
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         } else {
@@ -153,7 +156,7 @@ impl OutputTarget {
         OutputTarget::Runtime(runtime)
     }
 
-    fn to_writer(&self) -> Result<Box<dyn ContainerSink>> {
+    fn to_writer(&self) -> Result<Box<dyn ContainerSink + '_>> {
         let writer: Box<dyn ContainerSink> = match self {
             OutputTarget::File(FileOrStdout::File(path)) => {
                 let file = fs::OpenOptions::new()

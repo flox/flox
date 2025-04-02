@@ -12,8 +12,8 @@ use Time::HiRes qw( gettimeofday tv_interval );
 
 STDOUT->autoflush(1);
 
-$SIG{__WARN__} = sub { warn "warning: ", @_ };
-$SIG{__DIE__}  = sub { die "error: ", @_ };
+$SIG{__WARN__} = sub { warn "⚠️ WARNING: ", @_ };
+$SIG{__DIE__}  = sub { die "❌ ERROR: ", @_ };
 
 # <flox>
 # Set required ENV variables to avoid warnings.
@@ -96,7 +96,7 @@ sub findFilesInDir {
     my @names = readdir DIR or die;
     closedir DIR;
 
-    foreach my $name (@names) {
+    foreach my $name (sort @names) {
         next if $name eq "." || $name eq "..";
         findFiles("$relName/$name", "$target/$name", $name, $ignoreCollisions, $checkCollisionContents, $priority);
     }
@@ -125,6 +125,31 @@ sub checkCollision {
 sub prependDangling {
     my $path = shift;
     return (-l $path && ! -e $path ? "dangling symlink " : "") . "`$path'";
+}
+
+# Parses a /nix/store/<checksum>-<name>-<version>/<basename> path and
+# returns its constituent (name, version, basename) parts.
+sub parseStorePath($) {
+    my $path = shift;
+    # Split the path into its components.
+    my @path = split "/", $path;
+    # Removes the "/nix/store/<checksum>-<name>-<version>" part.
+    my $storePath = join "/", (splice @path, 0, 4);
+    # Verify that the path prefix is the expected store path.
+    die "not a store path: $storePath" unless isStorePath $storePath;
+    # Discard the checksum part of $path[3] to identify the package name
+    # and version.
+    my ($checksum, $pkgName) = split /-/, basename($storePath), 2;
+    die "invalid checksum '$checksum' in store path: $storePath"
+        unless length($checksum) == 32;
+    # Split the package name from its version by splitting on
+    # the first instance of "-" followed by a number.
+    my @pkgParts = split /-(?=\d)/, $pkgName;
+    # Assign and return all elements of the tuple.
+    my $name = shift @pkgParts;
+    my $version = shift @pkgParts;
+    my $basename = join "/", @path;
+    return ($name, $version, $basename);
 }
 
 sub findFiles {
@@ -197,7 +222,21 @@ sub findFiles {
         } elsif ($checkCollisionContents && checkCollision($oldTarget, $target)) {
             return;
         } else {
-            die "collision between $targetRef and $oldTargetRef\n";
+            # Improve upon the default collision message from upstream.
+            my ($targetName, $targetVersion, $targetBasename) = parseStorePath($target);
+            my ($oldTargetName, $oldTargetVersion, $oldTargetBasename) = parseStorePath($oldTarget);
+            my $origPriority = $oldPriority / 1000; # Convert to original priority value
+            my $errmsg = "'$oldTargetName' conflicts with '$targetName'. ";
+            if ($targetBasename eq $oldTargetBasename) {
+                $errmsg .= "Both packages provide the file '$targetBasename'";
+            } else {
+                # This is unexpected ... revert to reporting the exact refs encountered.
+                $errmsg .= "collision between $targetRef and $oldTargetRef";
+            }
+            die $errmsg . "\n\n" .
+                "Resolve by uninstalling one of the conflicting packages or " .
+                "setting the priority of the preferred package to a value " .
+                "lower than '$origPriority'\n";
         }
     }
 
@@ -399,6 +438,12 @@ if ($manifest) {
                     # next unless grep { $_ eq $output } @{$package->{"outputs_to_install"}};
                     # push @outputsToInstall, $package->{"outputs"}{$output};
 
+                    # Pure sandbox manifest builds also include a "log" output which is
+                    # a file, and therefore cannot / should not be installed to the env.
+                    # If we encounter this output and it's a file then we skip it.
+                    # XXX Remove once we properly support outputs_to_install.
+                    next if $output eq "log" and -f $package->{"outputs"}{$output};
+
                     # And for now we divide the outputs into two categories: those
                     # that should be installed by default and those that should not.
                     # XXX Remove once we properly support outputs_to_install.
@@ -431,8 +476,8 @@ if ($manifest) {
         }
 
         # We can have nice names for things.
-        my $activationScripts_out = $nix_attrs->{"activationScripts_out"};
-        my $activationScripts_build_wrapper = $nix_attrs->{"activationScripts_build_wrapper"};
+        my $interpreter_out = $nix_attrs->{"interpreter_out"};
+        my $interpreter_wrapper = $nix_attrs->{"interpreter_wrapper"};
         my $manifestPackage = $nix_attrs->{"manifestPackage"};
         my $system = $nix_attrs->{"system"};
         my $packages = $manifestData->{"packages"};
@@ -442,19 +487,19 @@ if ($manifest) {
         my @buildNames = keys %{$builds};
 
         # Construct hashes for each of the flox-sourced packages.
-        my %activationScripts_out_PackageEntry = (
+        my %interpreter_out_PackageEntry = (
             "group" => "toplevel", # Want to appear in build closures.
             "outputs_to_install" => [ "out" ],
             "outputs" => {
-                "out" => $activationScripts_out
+                "out" => $interpreter_out
             },
             priority => 1
         );
-        my %activationScripts_build_wrapper_PackageEntry = (
+        my %interpreter_wrapper_PackageEntry = (
             "group" => "toplevel", # Want to appear in build closures.
             "outputs_to_install" => [ "out" ],
             "outputs" => {
-                "out" => $activationScripts_build_wrapper
+                "out" => $interpreter_wrapper
             },
             priority => 1
         );
@@ -473,7 +518,7 @@ if ($manifest) {
         # Define the "develop" output as all packages with activation scripts included.
         my @developPackages = (
             @outPackages,
-            \%activationScripts_out_PackageEntry,
+            \%interpreter_out_PackageEntry,
             \%manifestPackageEntry
         );
 
@@ -516,13 +561,13 @@ if ($manifest) {
                     # Represent the result as a hash keyed by the build name.
                     $buildPackagesHash{$build} = [
                         @buildPackages,
-                        \%activationScripts_build_wrapper_PackageEntry,
+                        \%interpreter_wrapper_PackageEntry,
                         \%manifestPackageEntry
                     ];
                 } else {
                     $buildPackagesHash{$build} = [
                         @toplevelPackages,
-                        \%activationScripts_build_wrapper_PackageEntry,
+                        \%interpreter_wrapper_PackageEntry,
                         \%manifestPackageEntry
                     ];
                 }
@@ -556,6 +601,17 @@ if ($manifest) {
         return \@outputData;
     }
 
+    # Subroutine for stable sorting of store paths by package name,
+    # version, and basename.
+    sub byPackageName {
+        my ($aName, $aVersion, $aBasename) = parseStorePath($a);
+        my ($bName, $bVersion, $bBasename) = parseStorePath($b);
+        return ( 8 * ($aName cmp $bName) ) +
+               ( 4 * ($aVersion cmp $bVersion) ) +
+               ( 2 * ($aBasename cmp $bBasename) ) +
+               ( 1 * ($a cmp $b) );
+    }
+
     sub buildEnv($$$$) {
         my $envName = shift;
         my $requisites = shift;
@@ -568,7 +624,7 @@ if ($manifest) {
         # Symlink to the packages that have been installed explicitly by the
         # user.
         for my $pkg (@{$pkgs}) {
-            for my $path (@{$pkg->{paths}}) {
+            for my $path (sort byPackageName @{$pkg->{paths}}) {
                 addPkg($path,
                        $ENV{"ignoreCollisions"} eq "1",
                        $ENV{"checkCollisionContents"} eq "1",
@@ -585,7 +641,7 @@ if ($manifest) {
         while (scalar(keys %postponed) > 0) {
             my @pkgDirs = keys %postponed;
             %postponed = ();
-            foreach my $pkgDir (sort @pkgDirs) {
+            foreach my $pkgDir (sort byPackageName @pkgDirs) {
                 addPkg($pkgDir, 2, $ENV{"checkCollisionContents"} eq "1", $priorityCounter++);
             }
         }
@@ -684,12 +740,14 @@ if ($manifest) {
         my $references = shift @_;
         my $pkg = shift @_;
         my @retarray = ( $pkg );
-        if (defined $references->{$pkg} and not defined $seen{$pkg}) {
-            foreach my $reference (@{$references->{$pkg}}) {
-                next if $reference eq $pkg;
-                push @retarray, walkReferences($references, $reference);
+        if (defined $references->{$pkg}) {
+            if (not defined $seen{$pkg}) {
+                foreach my $reference (@{$references->{$pkg}}) {
+                    next if $reference eq $pkg;
+                    push @retarray, walkReferences($references, $reference);
+                }
+                $seen{$pkg} = 1;
             }
-            $seen{$pkg} = 1;
         } else {
             warn "references for package $pkg not found\n";
         }

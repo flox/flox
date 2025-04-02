@@ -7,10 +7,10 @@ use itertools::Itertools;
 use tracing::{info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
-use super::{environment_select, EnvironmentSelect};
+use super::{EnvironmentSelect, environment_select};
 use crate::commands::{ensure_floxhub_token, environment_description};
+use crate::environment_subcommand_metric;
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Upgrade packages in an environment
 #[derive(Bpaf, Clone)]
@@ -160,40 +160,32 @@ fn render_diff(diff: &SingleSystemUpgradeDiff) -> String {
 #[cfg(test)]
 mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
-        new_path_environment,
-        new_path_environment_from_env_files,
-    };
     use flox_rust_sdk::models::environment::Environment;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_named_path_environment,
+        new_named_path_environment_from_env_files,
+    };
     use flox_rust_sdk::models::manifest::raw::PackageToInstall;
-    use flox_rust_sdk::providers::catalog::test_helpers::reset_mocks_from_file;
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
-    use flox_rust_sdk::utils::logging::test_helpers::CollectingWriter;
+    use flox_rust_sdk::providers::catalog::test_helpers::reset_mocks_from_file;
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use tracing::instrument::WithSubscriber;
-    use tracing::Subscriber;
-    use tracing_subscriber::filter::FilterFn;
-    use tracing_subscriber::layer::SubscriberExt;
 
     use super::*;
     use crate::commands::EnvironmentSelect;
-
-    fn test_subscriber() -> (impl Subscriber, CollectingWriter) {
-        let (subscriber, writer) = flox_rust_sdk::utils::logging::test_helpers::test_subscriber();
-        let subscriber = subscriber.with(FilterFn::new(|metadata| {
-            metadata.target() == "flox::utils::message"
-        }));
-        (subscriber, writer)
-    }
 
     /// Check message printed when there are no upgrades available
     #[tokio::test]
     async fn confirmation_when_up_to_date() {
         let (mut flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber();
+        let (subscriber, writer) = test_subscriber_message_only();
 
-        let environment =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        let environment = new_named_path_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs/hello"),
+            "name",
+        );
 
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         Upgrade {
@@ -214,9 +206,9 @@ mod tests {
     /// Run an upgrade of an environment that only has upgrades on other systems
     async fn run_upgrade_with_upgrades_on_other_system(dry_run: bool) -> String {
         let (mut flox, _tempdir) = flox_instance();
-        let (subscriber, writer) = test_subscriber();
+        let (subscriber, writer) = test_subscriber_message_only();
 
-        let mut environment = new_path_environment(&flox, "version = 1");
+        let mut environment = new_named_path_environment(&flox, "version = 1", "name");
 
         #[cfg(target_os = "macos")]
         reset_mocks_from_file(&mut flox.catalog_client, "resolve/old_linux_hello.json");

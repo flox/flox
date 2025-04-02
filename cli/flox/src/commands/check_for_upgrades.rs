@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::SystemTime;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use bpaf::{Bpaf, Parser};
 use flox_core::log_file_format_upgrade_check;
 use flox_rust_sdk::flox::Flox;
@@ -84,7 +84,7 @@ impl CheckForUpgrades {
         // - has recently been fetched
         // Otherwise, run a dry-upgrade tof he environment and store the new information
         if let Some(info) = upgrade_information.info() {
-            let environment_lockfile = environment.lockfile(flox)?;
+            let environment_lockfile = environment.lockfile(flox)?.into();
 
             let is_information_for_current_lockfile =
                 info.result.old_lockfile == Some(environment_lockfile);
@@ -238,7 +238,7 @@ mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
     use flox_rust_sdk::models::environment::{ConcreteEnvironment, UpgradeResult};
-    use flox_rust_sdk::providers::catalog::{Client, MockClient, GENERATED_DATA};
+    use flox_rust_sdk::providers::catalog::{Client, GENERATED_DATA, MockClient};
 
     use super::*;
 
@@ -258,8 +258,8 @@ mod tests {
         let _ = locked.info_mut().insert(UpgradeInformation {
             last_checked: OffsetDateTime::now_utc(),
             result: UpgradeResult {
-                old_lockfile: Some(environment.lockfile(&flox).unwrap()),
-                new_lockfile: environment.lockfile(&flox).unwrap(),
+                old_lockfile: Some(environment.lockfile(&flox).unwrap().into()),
+                new_lockfile: environment.lockfile(&flox).unwrap().into(),
                 store_path: None,
             },
         });
@@ -267,8 +267,7 @@ mod tests {
 
         let serialized = UninitializedEnvironment::from_concrete_environment(
             &ConcreteEnvironment::Path(environment),
-        )
-        .unwrap();
+        );
 
         // Check for upgrades with a timeout of u64::MAX
         // to ensure that the fake upgrade information is always considered recent
@@ -298,8 +297,7 @@ mod tests {
 
         let serialized = UninitializedEnvironment::from_concrete_environment(
             &ConcreteEnvironment::Path(environment),
-        )
-        .unwrap();
+        );
 
         let command = CheckForUpgrades {
             check_timeout: 0,
@@ -323,8 +321,7 @@ mod tests {
 
         let serialized = UninitializedEnvironment::from_concrete_environment(
             &ConcreteEnvironment::Path(environment),
-        )
-        .unwrap();
+        );
 
         let command = CheckForUpgrades {
             check_timeout: 0,

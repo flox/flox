@@ -4,7 +4,7 @@ use std::io::stdin;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
@@ -18,6 +18,7 @@ use flox_rust_sdk::models::environment::{
     Environment,
     EnvironmentError,
 };
+use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use flox_rust_sdk::providers::services::ServiceError;
 use itertools::Itertools;
@@ -25,16 +26,16 @@ use tracing::{debug, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{
-    activated_environments,
-    environment_select,
     EnvironmentSelect,
     UninitializedEnvironment,
+    activated_environments,
+    environment_select,
 };
-use crate::commands::{ensure_floxhub_token, EnvironmentSelectError};
+use crate::commands::{EnvironmentSelectError, ensure_floxhub_token};
+use crate::environment_subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
-use crate::utils::errors::format_core_error;
+use crate::utils::errors::format_error;
 use crate::utils::message;
-use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
@@ -163,13 +164,13 @@ impl Edit {
         environment: &mut ConcreteEnvironment,
         contents: Option<String>,
     ) -> Result<()> {
-        if let ConcreteEnvironment::Managed(ref environment) = environment {
+        if let ConcreteEnvironment::Managed(environment) = environment {
             if environment.has_local_changes(flox)? && contents.is_none() {
                 bail!(ManagedEnvironmentError::CheckoutOutOfSync)
             }
         };
 
-        let active_environment = UninitializedEnvironment::from_concrete_environment(environment)?;
+        let active_environment = UninitializedEnvironment::from_concrete_environment(environment);
         let environment = environment.dyn_environment_ref_mut();
 
         let result = match contents {
@@ -192,19 +193,23 @@ impl Edit {
             EditResult::Unchanged => {
                 message::warning("No changes made to environment.");
             },
-            EditResult::ReActivateRequired { .. }
-                if activated_environments().is_active(&active_environment) =>
-            {
-                message::warning(reactivate_required_note)
-            },
-            EditResult::ReActivateRequired { .. } => {
-                message::updated("Environment successfully updated.")
-            },
-            EditResult::Success { .. } => message::updated("Environment successfully updated."),
-        }
+            EditResult::Changed { .. } => {
+                if result.reactivate_required()
+                    && activated_environments().is_active(&active_environment)
+                {
+                    message::warning(reactivate_required_note);
+                } else {
+                    message::updated("Environment successfully updated.")
+                }
 
-        if result != EditResult::Unchanged {
-            warn_manifest_changes_for_services(flox, environment);
+                warn_manifest_changes_for_services(flox, environment);
+
+                let lockfile: Lockfile = environment.lockfile(flox)?.into();
+                if lockfile.compose.is_some() {
+                    message::print_overridden_manifest_fields(&lockfile);
+                    message::info("Run 'flox list -c' to see merged manifest.");
+                }
+            },
         }
 
         Ok(())
@@ -249,7 +254,7 @@ impl Edit {
 
                 // for recoverable errors, prompt the user to continue editing
                 Err(e) => {
-                    message::error(format_core_error(&e));
+                    message::error(format_error(&e));
 
                     if !Dialog::can_prompt() {
                         bail!("Can't prompt to continue editing in non-interactive context");
@@ -265,18 +270,21 @@ impl Edit {
     /// Returns `Ok` if the edit result is successful or recoverable, `Err` otherwise
     fn make_interactively_recoverable(
         result: Result<EditResult, EnvironmentError>,
-    ) -> Result<Result<EditResult, CoreEnvironmentError>, EnvironmentError> {
+    ) -> Result<Result<EditResult, EnvironmentError>, EnvironmentError> {
         match result {
-            Err(EnvironmentError::Core(e @ CoreEnvironmentError::LockedManifest(_)))
-            | Err(EnvironmentError::Core(e @ CoreEnvironmentError::DeserializeManifest(_)))
-            | Err(EnvironmentError::Core(
-                e @ CoreEnvironmentError::BuildEnv(
+            Err(e @ EnvironmentError::Core(CoreEnvironmentError::Resolve(_)))
+            | Err(e @ EnvironmentError::Core(CoreEnvironmentError::DeserializeManifest(_)))
+            | Err(
+                e @ EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
                     BuildEnvError::Realise2 { .. } | BuildEnvError::Build(_),
-                ),
-            ))
-            | Err(EnvironmentError::Core(
-                e @ CoreEnvironmentError::Services(ServiceError::InvalidConfig(_)),
-            )) => Ok(Err(e)),
+                )),
+            )
+            | Err(
+                e @ EnvironmentError::Core(CoreEnvironmentError::Services(
+                    ServiceError::InvalidConfig(_),
+                )),
+            )
+            | Err(e @ EnvironmentError::Recoverable(_)) => Ok(Err(e)),
             Err(e) => Err(e),
             Ok(result) => Ok(Ok(result)),
         }
@@ -373,12 +381,19 @@ impl Edit {
 mod tests {
     use std::fs;
 
-    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
-    use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment;
-    use flox_rust_sdk::models::lockfile::LockedManifestError;
-    use indoc::indoc;
+    use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
+    use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment_unlocked;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_in,
+    };
+    use flox_rust_sdk::models::lockfile::{ResolutionFailures, ResolveError};
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
+    use indoc::{formatdoc, indoc};
+    use pretty_assertions::assert_eq;
     use serde::de::Error;
     use tempfile::tempdir;
+    use tracing::instrument::WithSubscriber;
 
     use super::*;
 
@@ -407,9 +422,9 @@ mod tests {
     /// errors locking the manifest are recoverable
     #[test]
     fn test_recover_edit_loop_result_locking() {
-        let result = Err(EnvironmentError::Core(
-            CoreEnvironmentError::LockedManifest(LockedManifestError::EmptyPage),
-        ));
+        let result = Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
+            ResolveError::ResolutionFailed(ResolutionFailures(vec![])),
+        )));
 
         Edit::make_interactively_recoverable(result)
             .expect("should be recoverable")
@@ -732,7 +747,7 @@ mod tests {
             foo = "bar"
         "#};
 
-        let environment = mock_managed_environment(&flox, old_contents, owner);
+        let environment = mock_managed_environment_unlocked(&flox, old_contents, owner);
 
         // edit the local manifest
         fs::write(environment.manifest_path(&flox).unwrap(), new_contents).unwrap();
@@ -764,7 +779,7 @@ mod tests {
             foo = "bar"
         "#};
 
-        let environment = mock_managed_environment(&flox, old_contents, owner);
+        let environment = mock_managed_environment_unlocked(&flox, old_contents, owner);
 
         // edit the local manifest
         fs::write(environment.manifest_path(&flox).unwrap(), new_contents).unwrap();
@@ -776,5 +791,120 @@ mod tests {
         )
         .await
         .expect("edit should succeed");
+    }
+
+    /// When the [include] section is modified, a warning is printed
+    #[tokio::test]
+    async fn edit_warns_when_include_changed() {
+        let (mut flox, tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        flox.features.set_compose(true);
+
+        // Create composer environment
+        let composer_path = tempdir.path().join("composer");
+        let mut composer_manifest_contents = indoc! {r#"
+        version = 1
+        "#};
+        fs::create_dir(&composer_path).unwrap();
+        let composer = new_path_environment_in(&flox, composer_manifest_contents, &composer_path);
+
+        // Create dep environment
+        let dep_path = tempdir.path().join("dep");
+        let dep_manifest_contents = indoc! {r#"
+        version = 1
+
+        [vars]
+        foo = "dep"
+        "#};
+
+        fs::create_dir(&dep_path).unwrap();
+        let mut dep = new_path_environment_in(&flox, dep_manifest_contents, &dep_path);
+        dep.lockfile(&flox).unwrap();
+
+        composer_manifest_contents = indoc! {r#"
+        version = 1
+
+        [include]
+        environments = [
+          { dir = "../dep" }
+        ]
+        "#};
+        let composer_new_manifest_path = tempdir.path().join("temporary-manifest.toml");
+        fs::write(&composer_new_manifest_path, composer_manifest_contents).unwrap();
+
+        Edit {
+            environment: EnvironmentSelect::Dir(composer.parent_path().unwrap()),
+            action: EditAction::EditManifest {
+                file: Some(composer_new_manifest_path),
+            },
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ✅ Environment successfully updated.
+            ℹ️ Run 'flox list -c' to see merged manifest.
+            "});
+    }
+
+    #[tokio::test]
+    async fn edit_warns_when_fields_overridden() {
+        let (mut flox, tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+        flox.features.set_compose(true);
+
+        let mut dep = new_path_environment(&flox, indoc! {r#"
+            version = 1
+
+            [vars]
+            foo = "dep1"
+        "#});
+        dep.lockfile(&flox).unwrap();
+
+        // Lock with includes but no top-level overrides yet.
+        let composer_original_manifest = formatdoc! {r#"
+            version = 1
+
+            [include]
+            environments = [
+                {{ dir = "{dir}", name = "dep" }},
+            ]"#,
+            dir = dep.parent_path().unwrap().to_string_lossy(),
+        };
+        let mut composer = new_path_environment(&flox, &composer_original_manifest);
+        composer.lockfile(&flox).unwrap();
+
+        // Edit with top-level overrides.
+        let composer_new_manifest = formatdoc! {r#"
+            {composer_original_manifest}
+
+            [vars]
+            foo = "composer"
+        "#};
+        let composer_new_manifest_path = tempdir.path().join("temporary-manifest.toml");
+        fs::write(&composer_new_manifest_path, composer_new_manifest).unwrap();
+
+        Edit {
+            environment: EnvironmentSelect::Dir(composer.parent_path().unwrap()),
+            action: EditAction::EditManifest {
+                file: Some(composer_new_manifest_path),
+            },
+        }
+        .handle(flox)
+        .with_subscriber(subscriber)
+        .await
+        .unwrap();
+
+        // - overrides are shown even if `includes` didn't change.
+        // - hint to see the merged manifest is shown.
+        assert_eq!(writer.to_string(), indoc! {"
+            ✅ Environment successfully updated.
+            ℹ️ The following manifest fields were overridden during merging:
+            - This environment set:
+              - vars.foo
+            ℹ️ Run 'flox list -c' to see merged manifest.
+            "});
     }
 }

@@ -1,4 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Display;
+use std::path::PathBuf;
+use std::str::FromStr;
 
 use flox_core::Version;
 #[cfg(test)]
@@ -10,7 +13,6 @@ use flox_test_utils::proptest::{
     optional_btree_set,
     optional_string,
     optional_vec_of_strings,
-    vec_of_strings,
 };
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -19,12 +21,15 @@ use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
+use super::raw::RawManifest;
 use crate::data::System;
 use crate::providers::services::ServiceError;
 
 pub(crate) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub const DEFAULT_PRIORITY: u64 = 5;
 
+/// An interface codifying how to access types that are just semantic wrappers
+/// around inner types. This impl may be generated with a macro.
 pub trait Inner {
     type Inner;
 
@@ -33,6 +38,7 @@ pub trait Inner {
     fn into_inner(self) -> Self::Inner;
 }
 
+/// A macro that generates a `Inner` impl.
 macro_rules! impl_into_inner {
     ($wrapper:ty, $inner_type:ty) => {
         impl Inner for $wrapper {
@@ -53,20 +59,25 @@ macro_rules! impl_into_inner {
     };
 }
 
-/// Not meant for writing manifest files, only for reading them.
-/// Modifications should be made using the the raw functions in this module.
+pub(crate) use impl_into_inner;
 
-// We use skip_serializing_if throughout to reduce the size of the lockfile and
-// improve backwards compatibility when we introduce fields.
-// We don't use Option and skip_serializing_none because an empty table gets
-// treated as Some,
-// but we don't care about distinguishing between a table not being present and
-// a table being present but empty.
-// In both cases, we can just skip serializing.
+/// An interface for the type of function that serde's skip_serializing_if
+/// method takes.
+pub(crate) trait SkipSerializing {
+    fn skip_serializing(&self) -> bool;
+}
+
+/// Not meant for writing manifest files, only for reading them.
+/// Modifications should be made using `manifest::raw`.
+
+// We use `skip_serializing_none` and `skip_serializing_if` throughout to reduce
+// the size of the lockfile and improve backwards compatibility when we
+// introduce fields.
+//
 // It would be better if we could deny_unknown_fields when we're deserializing
 // the user provided manifest but allow unknown fields when deserializing the
-// lockfile,
-// but that doesn't seem worth the effort at the moment.
+// lockfile, but that doesn't seem worth the effort at the moment.
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
@@ -84,10 +95,10 @@ pub struct Manifest {
     /// Hooks that are run at various times during the lifecycle of the manifest
     /// in a known shell environment.
     #[serde(default)]
-    pub hook: Hook,
+    pub hook: Option<Hook>,
     /// Profile scripts that are run in the user's shell upon activation.
     #[serde(default)]
-    pub profile: Profile,
+    pub profile: Option<Profile>,
     /// Options that control the behavior of the manifest.
     #[serde(default)]
     pub options: Options,
@@ -100,8 +111,10 @@ pub struct Manifest {
     #[serde(skip_serializing_if = "Build::skip_serializing")]
     pub build: Build,
     #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub containerize: Option<Containerize>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Include::skip_serializing")]
+    pub include: Include,
 }
 
 impl Manifest {
@@ -164,6 +177,77 @@ impl Manifest {
         pkg: impl AsRef<str>,
     ) -> Result<bool, ManifestError> {
         pkg_belongs_to_non_empty_toplevel_group(pkg.as_ref(), &self.install.0)
+    }
+
+    /// Resolve "loose" package references (e.g. pkg-paths),
+    /// to `install_ids` if unambiguous
+    /// so that installation references remain valid for other package operations.
+    pub fn get_install_ids(&self, packages: Vec<String>) -> Result<Vec<String>, ManifestError> {
+        let mut install_ids = Vec::new();
+        for pkg in packages {
+            // User passed an install id directly
+            if self.install.inner().contains_key(&pkg) {
+                install_ids.push(pkg);
+                continue;
+            }
+
+            // User passed a package path to uninstall
+            // To support version constraints, we match the provided value against
+            // `<pkg-path>` and `<pkg-path>@<version>`.
+            let matching_iids_by_pkg_path = self
+                .install
+                .inner()
+                .iter()
+                .filter(|(_iid, descriptor)| {
+                    // Find matching pkg-paths and select for uninstall
+
+                    // If the descriptor is not a catalog descriptor, skip.
+                    // flakes descriptors are only matched by install_id.
+                    let ManifestPackageDescriptor::Catalog(des) = descriptor else {
+                        return false;
+                    };
+
+                    // Select if the descriptor's pkg_path matches the user's input
+                    if des.pkg_path == pkg {
+                        return true;
+                    }
+
+                    // Select if the descriptor matches the user's input when the version is included
+                    // Future: if we want to allow uninstalling a specific outputs as well,
+                    //         parsing of uninstall specs will need to be more sophisticated.
+                    //         For now going with a simple check for pkg-path@version.
+                    if let Some(version) = &des.version {
+                        format!("{}@{}", des.pkg_path, version) == pkg
+                    } else {
+                        false
+                    }
+                })
+                .map(|(iid, _)| iid.to_owned())
+                .collect::<Vec<String>>();
+
+            // Extend the install_ids with the matching install id from pkg-path
+            match matching_iids_by_pkg_path.len() {
+                0 => return Err(ManifestError::PackageNotFound(pkg)),
+                // if there is only one package with the given pkg-path, uninstall it
+                1 => install_ids.extend(matching_iids_by_pkg_path),
+                // if there are multiple packages with the given pkg-path, ask for a specific install id
+                _ => {
+                    return Err(ManifestError::MultiplePackagesMatch(
+                        pkg,
+                        matching_iids_by_pkg_path,
+                    ));
+                },
+            }
+        }
+        Ok(install_ids)
+    }
+}
+
+impl FromStr for Manifest {
+    type Err = toml_edit::de::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        RawManifest::from_str(s)?.to_typed()
     }
 }
 
@@ -239,7 +323,7 @@ fn pkg_belongs_to_non_empty_named_group(
         return Ok(None);
     };
 
-    let Some(ref group) = pkg_group else {
+    let Some(group) = pkg_group else {
         return Ok(None);
     };
     let pkgs = pkg_descriptors_in_named_group(group, descriptors);
@@ -276,7 +360,7 @@ pub struct Install(
     pub(crate) BTreeMap<String, ManifestPackageDescriptor>,
 );
 
-impl Install {
+impl SkipSerializing for Install {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
@@ -476,7 +560,7 @@ pub struct Vars(
     pub(crate)  BTreeMap<String, String>,
 );
 
-impl Vars {
+impl SkipSerializing for Vars {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
@@ -547,11 +631,19 @@ pub struct Options {
     pub systems: Option<Vec<System>>,
     /// Options that control what types of packages are allowed.
     #[serde(default)]
+    #[serde(skip_serializing_if = "Allows::skip_serializing")]
     pub allow: Allows,
     /// Options that control how semver versions are resolved.
     #[serde(default)]
+    #[serde(skip_serializing_if = "SemverOptions::skip_serializing")]
     pub semver: SemverOptions,
+    /// Whether to detect CUDA devices and libs during activation.
+    // TODO: Migrate to `ActivateOptions`.
     pub cuda_detection: Option<bool>,
+    /// Options that control the behavior of activations.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "ActivateOptions::skip_serializing")]
+    pub activate: ActivateOptions,
 }
 
 #[skip_serializing_none]
@@ -565,8 +657,21 @@ pub struct Allows {
     pub broken: Option<bool>,
     /// A list of license descriptors that are allowed
     #[serde(default)]
-    #[cfg_attr(test, proptest(strategy = "vec_of_strings(3, 4)"))]
-    pub licenses: Vec<String>,
+    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
+    pub licenses: Option<Vec<String>>,
+}
+
+impl SkipSerializing for Allows {
+    fn skip_serializing(&self) -> bool {
+        // Destructuring here prevents us from missing new fields if they're
+        // added in the future.
+        let Allows {
+            unfree,
+            broken,
+            licenses,
+        } = self;
+        unfree.is_none() && broken.is_none() && licenses.is_none()
+    }
 }
 
 #[skip_serializing_none]
@@ -580,6 +685,62 @@ pub struct SemverOptions {
     pub allow_pre_releases: Option<bool>,
 }
 
+impl SkipSerializing for SemverOptions {
+    fn skip_serializing(&self) -> bool {
+        // Destructuring here prevents us from missing new fields if they're
+        // added in the future.
+        let SemverOptions { allow_pre_releases } = self;
+        allow_pre_releases.is_none()
+    }
+}
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ActivateOptions {
+    pub mode: Option<ActivateMode>,
+}
+
+impl SkipSerializing for ActivateOptions {
+    /// Don't write a struct of None's into the lockfile but also don't
+    /// explicitly check fields which we might forget to update.
+    fn skip_serializing(&self) -> bool {
+        self == &ActivateOptions::default()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Ord, PartialOrd, Default)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+pub enum ActivateMode {
+    #[default]
+    Dev,
+    Run,
+}
+
+impl Display for ActivateMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ActivateMode::Dev => write!(f, "dev"),
+            ActivateMode::Run => write!(f, "run"),
+        }
+    }
+}
+
+impl FromStr for ActivateMode {
+    type Err = ManifestError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "dev" => Ok(ActivateMode::Dev),
+            "run" => Ok(ActivateMode::Run),
+            _ => Err(ManifestError::ActivateModeInvalid),
+        }
+    }
+}
+
 /// A map of service names to service definitions
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -591,7 +752,7 @@ pub struct Services(
     pub(crate) BTreeMap<String, ServiceDescriptor>,
 );
 
-impl Services {
+impl SkipSerializing for Services {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
@@ -660,7 +821,7 @@ impl Services {
             if desc
                 .systems
                 .as_ref()
-                .map_or(true, |systems| systems.contains(system))
+                .is_none_or(|systems| systems.contains(system))
             {
                 services.insert(name.clone(), desc.clone());
             }
@@ -692,7 +853,7 @@ pub struct Build(
 
 impl_into_inner!(Build, BTreeMap<String,BuildDescriptor>);
 
-impl Build {
+impl SkipSerializing for Build {
     fn skip_serializing(&self) -> bool {
         self.0.is_empty()
     }
@@ -800,10 +961,62 @@ pub struct ContainerizeConfig {
 pub enum ManifestError {
     #[error("no package or group named '{0}' in the manifest")]
     PkgOrGroupNotFound(String),
+    #[error("no package named '{0}' in the manifest")]
+    PackageNotFound(String),
+    #[error(
+        "multiple packages match '{0}', please specify an install id from possible matches: {1:?}"
+    )]
+    MultiplePackagesMatch(String, Vec<String>),
+    #[error("not a valid activation mode")]
+    ActivateModeInvalid,
+}
+
+/// The section where users can declare dependencies on other environments.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct Include {
+    #[serde(default)]
+    pub environments: Vec<IncludeDescriptor>,
+}
+
+impl SkipSerializing for Include {
+    fn skip_serializing(&self) -> bool {
+        self.environments.is_empty()
+    }
+}
+
+/// The structure for how a user is able to declare a dependency on an environment.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(
+    untagged,
+    expecting = "Expected either a local or remote include descriptor."
+)]
+pub enum IncludeDescriptor {
+    Local {
+        /// The directory where the environment is located.
+        dir: PathBuf,
+        /// A name similar to an install ID that a user could use to specify
+        /// the environment on the command line e.g. for upgrades, or in an
+        /// error message.
+        #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+    },
+}
+
+impl Display for IncludeDescriptor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IncludeDescriptor::Local { dir, name } => {
+                write!(f, "{}", name.as_deref().unwrap_or(&dir.to_string_lossy()))
+            },
+        }
+    }
 }
 
 #[cfg(test)]
-pub(super) mod test {
+pub mod test {
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
@@ -813,6 +1026,34 @@ pub(super) mod test {
     const CATALOG_MANIFEST: &str = indoc! {r#"
         version = 1
     "#};
+
+    // Generate a Manifest that has empty install and include sections
+    pub fn manifest_without_install_or_include() -> impl Strategy<Value = Manifest> {
+        (
+            any::<Version<1>>(),
+            any::<Vars>(),
+            any::<Option<Hook>>(),
+            any::<Option<Profile>>(),
+            any::<Options>(),
+            any::<Services>(),
+            any::<Build>(),
+            any::<Option<Containerize>>(),
+        )
+            .prop_map(
+                |(version, vars, hook, profile, options, services, build, containerize)| Manifest {
+                    version,
+                    install: Install::default(),
+                    vars,
+                    hook,
+                    profile,
+                    options,
+                    services,
+                    build,
+                    containerize,
+                    include: Include::default(),
+                },
+            )
+    }
 
     #[test]
     fn catalog_manifest_rejects_unknown_fields() {
@@ -863,6 +1104,13 @@ pub(super) mod test {
             let parsed = toml_edit::de::from_str::<Manifest>(&toml).unwrap();
             prop_assert_eq!(manifest, parsed);
         }
+
+        #[test]
+        fn manifest_from_str_round_trip(manifest in any::<Manifest>()) {
+            let toml = toml_edit::ser::to_string(&manifest).unwrap();
+            let parsed = Manifest::from_str(&toml).unwrap();
+            prop_assert_eq!(manifest, parsed);
+        }
     }
 
     fn has_null_fields(json_str: &str) -> bool {
@@ -889,6 +1137,48 @@ pub(super) mod test {
             let json_str = serde_json::to_string_pretty(&manifest).unwrap();
             prop_assert!(!has_null_fields(&json_str), "json: {}", &json_str);
         }
+    }
+
+    // A serialized manifest shouldn't contain any tables that aren't specified
+    // or required. This makes the lockfile and presentation of merged manifests
+    // (which have to come from `Manifest` rather than `RawManifest`) tidier.
+    #[test]
+    fn serialize_omits_unspecified_fields() {
+        let manifest = Manifest::default();
+        // TODO: omit `options` in https://github.com/flox/flox/issues/2812
+        let expected = indoc! {r#"
+            version = 1
+
+            [options]
+        "#};
+
+        let actual = toml_edit::ser::to_string_pretty(&manifest).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    // If a user specifies an uncommented `[hook]` or `[profile]` table without
+    // any contents, like the manifest template does, then we preserve that in
+    // the serialized output.
+    #[test]
+    fn serialize_preserves_explicitly_empty_tables() {
+        let manifest = Manifest {
+            hook: Some(Hook::default()),
+            profile: Some(Profile::default()),
+            ..Default::default()
+        };
+        // TODO: omit `options` in https://github.com/flox/flox/issues/2812
+        let expected = indoc! {r#"
+            version = 1
+
+            [hook]
+
+            [profile]
+
+            [options]
+        "#};
+
+        let actual = toml_edit::ser::to_string_pretty(&manifest).unwrap();
+        assert_eq!(actual, expected);
     }
 
     #[test]
@@ -946,5 +1236,134 @@ pub(super) mod test {
             .copy_for_system(&"aarch64-darwin".to_string());
         assert_eq!(filtered.inner().len(), 1, "{:?}", filtered);
         assert!(filtered.inner().contains_key("postgres"));
+    }
+
+    #[test]
+    fn parses_include_section_manifest() {
+        let manifest = indoc! {r#"
+            version = 1
+
+            [include]
+            environments = [
+                { dir = "../foo", name = "bar" },
+            ]
+        "#};
+        let parsed = toml_edit::de::from_str::<Manifest>(manifest).unwrap();
+
+        assert_eq!(parsed.include.environments.len(), 1);
+        let included = parsed.include.environments[0].clone();
+        let IncludeDescriptor::Local { dir, name } = included;
+        assert_eq!(dir, PathBuf::from("../foo"));
+        assert_eq!(name.unwrap().as_str(), "bar");
+    }
+
+    /// Generates a mock `TypedManifest` for testing purposes.
+    /// This function is designed to simplify the creation of test data by
+    /// generating a `TypedManifest` based on a list of install IDs and
+    /// package paths.
+    /// # Arguments
+    ///
+    /// * `entries` - A vector of tuples, where each tuple contains an install
+    ///   ID and a package path.
+    ///
+    /// # Returns
+    ///
+    /// * `TypedManifest` - A mock `TypedManifest` containing the provided entries.
+    fn generate_mock_manifest(entries: Vec<(&str, &str)>) -> Manifest {
+        let mut typed_manifest_mock = Manifest::default();
+
+        for (test_iid, dotted_package) in entries {
+            typed_manifest_mock.install.inner_mut().insert(
+                test_iid.to_string(),
+                ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+                    pkg_path: dotted_package.to_string(),
+                    pkg_group: None,
+                    priority: None,
+                    version: None,
+                    systems: None,
+                }),
+            );
+        }
+
+        typed_manifest_mock
+    }
+    /// Return the install ID if it matches the user input
+    #[test]
+    fn test_get_install_ids_to_uninstall_by_install_id() {
+        let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
+        let result = manifest_mock
+            .get_install_ids(vec!["testInstallID".to_string()])
+            .unwrap();
+        assert_eq!(result, vec!["testInstallID".to_string()]);
+    }
+
+    #[test]
+    /// Return the install ID if a pkg-path matches the user input
+    fn test_get_install_ids_to_uninstall_by_pkg_path() {
+        let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
+        let result = manifest_mock
+            .get_install_ids(vec!["dotted.package".to_string()])
+            .unwrap();
+        assert_eq!(result, vec!["testInstallID".to_string()]);
+    }
+
+    #[test]
+    /// Ensure that the install ID takes precedence over pkg-path when both are present
+    fn test_get_install_ids_to_uninstall_iid_wins() {
+        let manifest_mock = generate_mock_manifest(vec![
+            ("testInstallID1", "dotted.package"),
+            ("testInstallID2", "dotted.package"),
+            ("dotted.package", "dotted.package"),
+        ]);
+
+        let result = manifest_mock
+            .get_install_ids(vec!["dotted.package".to_string()])
+            .unwrap();
+        assert_eq!(result, vec!["dotted.package".to_string()]);
+    }
+
+    #[test]
+    /// Throw an error when multiple packages match by pkg_path and flox can't determine which to uninstall
+    fn test_get_install_ids_to_uninstall_multiple_pkg_paths_match() {
+        let manifest_mock = generate_mock_manifest(vec![
+            ("testInstallID1", "dotted.package"),
+            ("testInstallID2", "dotted.package"),
+            ("testInstallID3", "dotted.package"),
+        ]);
+        let result = manifest_mock
+            .get_install_ids(vec!["dotted.package".to_string()])
+            .unwrap_err();
+        assert!(matches!(result, ManifestError::MultiplePackagesMatch(_, _)));
+    }
+
+    #[test]
+    /// Throw an error if no install ID or pkg-path matches the user input
+    fn test_get_install_ids_to_uninstall_pkg_not_found() {
+        let manifest_mock = generate_mock_manifest(vec![("testInstallID1", "dotted.package")]);
+        let result = manifest_mock
+            .get_install_ids(vec!["invalid.packageName".to_string()])
+            .unwrap_err();
+        assert!(matches!(result, ManifestError::PackageNotFound(_)));
+    }
+
+    #[test]
+    fn test_get_install_ids_to_uninstall_with_version() {
+        let mut manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
+
+        if let ManifestPackageDescriptor::Catalog(descriptor) = manifest_mock
+            .install
+            .inner_mut()
+            .get_mut("testInstallID")
+            .unwrap()
+        {
+            descriptor.version = Some("1.0".to_string());
+        };
+
+        let result = manifest_mock
+            .get_install_ids(vec!["dotted.package@1.0".to_string()])
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], "testInstallID");
     }
 }

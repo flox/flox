@@ -1,23 +1,37 @@
-use std::convert::Infallible;
 use std::env;
 use std::ffi::OsString;
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 
-use flox_rust_sdk::flox::{Flox, FLOX_VERSION};
+use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
+use flox_rust_sdk::providers::nix::NIX_VERSION;
+use flox_rust_sdk::utils::ReaderExt;
+use indoc::formatdoc;
+use thiserror::Error;
+use tracing::{debug, info, instrument};
 
 use super::Runtime;
 use crate::config::{FLOX_CONFIG_FILE, FLOX_DISABLE_METRICS_VAR};
 
+const NIX_PROXY_IMAGE: &str = "nixos/nix";
+static NIX_PROXY_IMAGE_REF: LazyLock<Option<String>> =
+    LazyLock::new(|| env::var("_FLOX_CONTAINERIZE_PROXY_IMAGE_REF").ok());
+
 const FLOX_FLAKE: &str = "github:flox/flox";
-const FLOX_PROXY_IMAGE: &str = "ghcr.io/flox/flox";
 const FLOX_PROXY_IMAGE_FLOX_CONFIG_DIR: &str = "/root/.config/flox";
-pub static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
-    LazyLock::new(|| env::var("FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
-const CONTAINER_VOLUME_PREFIX: &str = "flox-nix-";
+static FLOX_CONTAINERIZE_FLAKE_REF_OR_REV: LazyLock<Option<String>> =
+    LazyLock::new(|| env::var("_FLOX_CONTAINERIZE_FLAKE_REF_OR_REV").ok());
+const CONTAINER_NIX_CACHE_VOLUME: &str = "flox-nix";
 
 const MOUNT_ENV: &str = "/flox_env";
+
+#[derive(Debug, Error)]
+pub enum ContainerizeProxyError {
+    #[error("failed to populate proxy container cache volume")]
+    PopulateCacheVolume(#[source] std::io::Error),
+}
 
 /// An implementation of [ContainerBuilder] for macOS that uses `flox
 /// containerize` within a proxy container of a given [Runtime].
@@ -34,26 +48,92 @@ impl ContainerizeProxy {
             container_runtime,
         }
     }
-}
 
-impl ContainerBuilder for ContainerizeProxy {
-    type Error = Infallible;
-
-    /// Create a [ContainerSource] for macOS that streams the output via:
-    /// 1. `<container> run`
-    /// 2. `nix run`
-    /// 3. `flox containerize`
-    fn create_container_source(
-        &self,
-        flox: &Flox,
-        // Inferred from `self.environment_path` by flox _inside_ the container.
-        _name: impl AsRef<str>,
-        tag: impl AsRef<str>,
-    ) -> Result<ContainerSource, Self::Error> {
-        // Inception L1: Container runtime args.
+    /// Base command for the container runtime.
+    fn runtime_base_command(&self) -> Command {
         let mut command = self.container_runtime.to_command();
         command.arg("run");
         command.arg("--rm");
+        command
+    }
+
+    // Use a Nix container that matches the version of Nix that this Flox
+    // has been built with because it's smaller and changes less frequently
+    // than a Flox container of the corresponding version, which result in less
+    // container image pulls. It also prevents the chicken-and-egg problem when
+    // we bump `VERSION` in Flox but haven't published the container image yet.
+    fn container_image(&self) -> String {
+        format!(
+            "{}:{}",
+            NIX_PROXY_IMAGE,
+            NIX_PROXY_IMAGE_REF
+                .clone()
+                .unwrap_or(NIX_VERSION.to_string())
+        )
+    }
+
+    /// Add a cache volume mount to the container runtime command.
+    fn add_cache_mount(&self, command: &mut Command, path: &str) {
+        command.args([
+            "--mount",
+            &format!("type=volume,src={CONTAINER_NIX_CACHE_VOLUME},dst={path}"),
+        ]);
+    }
+
+    /// Copy the Nix store from the container image to the cache volume.
+    #[instrument(skip_all, fields(progress = "Populating proxy container cache volume"))]
+    fn populate_cache_volume(&self) -> Result<(), ContainerizeProxyError> {
+        let mut command = self.runtime_base_command();
+
+        // The cache volume has to be mounted in parallel to the container's own
+        // `/nix` and at a prefix where it can be treated as a new local root:
+        // https://nix.dev/manual/nix/2.24/command-ref/new-cli/nix3-help-stores#local-store
+        let cache_root = "/cache";
+        self.add_cache_mount(&mut command, &format!("{cache_root}/nix"));
+
+        command.arg(self.container_image());
+        // We have to additionally copy some parts of `/nix/var/nix` so that the
+        // container isn't broken when the cache volume shadows its `/nix`.
+        command.args(["bash", "-c", &formatdoc! {"
+            set -euo pipefail
+            nix --extra-experimental-features nix-command copy --all --no-check-sigs --to {cache_root}
+            cp -R /nix/var/nix/profiles /nix/var/nix/gcroots {cache_root}/nix/var/nix/
+        "}]);
+
+        debug!(?command, "running populate cache volume command");
+        let mut child = command
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(ContainerizeProxyError::PopulateCacheVolume)?;
+
+        let stderr = child
+            .stderr
+            .take()
+            .expect("STDERR is piped")
+            .tap_lines(|line| info!("{line}"));
+
+        child
+            .stdout
+            .take()
+            .expect("STDOUT is piped")
+            .tap_lines(|line| info!("{line}"));
+
+        let status = child
+            .wait()
+            .map_err(ContainerizeProxyError::PopulateCacheVolume)?;
+
+        if !status.success() {
+            return Err(ContainerizeProxyError::PopulateCacheVolume(
+                std::io::Error::new(std::io::ErrorKind::Other, stderr.wait().to_string()),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Inception L1: Container runtime args.
+    fn add_runtime_args(&self, command: &mut Command, flox: &Flox) {
         // The `--userns` flag creates a mapping of users in the container,
         // which we need. However, in order to work we also need the user
         // in the container to be `root` otherwise you run into multi-user
@@ -71,36 +151,7 @@ impl ContainerBuilder for ContainerizeProxy {
             ),
         ]);
 
-        let flox_version = &*FLOX_VERSION;
-        let flox_version_tag = format!("v{}", flox_version.base_semver());
-
-        // The cache volume must be unique per Flox version, otherwise store
-        // paths in the container will be shadowed by the cache.
-        let volume_name = format!("{}{}", CONTAINER_VOLUME_PREFIX, flox_version_tag);
-        command.args([
-            // From https://docs.docker.com/engine/storage/volumes
-            // If you mount an empty volume into a directory in the container in
-            // which files or directories exist, these files or directories are
-            // propagated (copied) into the volume by default. Similarly, if you
-            // start a container and specify a volume which does not already
-            // exist, an empty volume is created for you.
-            //
-            // From https://docs.podman.io/en/v5.1.1/markdown/podman-run.1.html
-            // If no such named volume exists, Podman creates one.
-            //
-            // I confirmed manually that Podman has the same propagation
-            // behavior as Docker for an auto created volume.
-            //
-            // This gives us precisely the behavior we want;
-            // /nix is bootstrapped from FLOX_PROXY_IMAGE,
-            // and then subsequently CONTAINER_VOLUME_NAME acts as a cache of
-            // /nix.
-            //
-            // There are no tests for this behavior since that would just be
-            // testing podman and Docker work as expected.
-            "--mount",
-            &format!("type=volume,src={},dst=/nix", volume_name),
-        ]);
+        self.add_cache_mount(command, "/nix");
 
         // Honour config from the user's flox.toml
         // This could include things like floxhub_token and floxhub_url
@@ -131,35 +182,33 @@ impl ContainerBuilder for ContainerizeProxy {
             ]);
         }
 
-        // Use a released Flox container of the same semantic version as a base
-        // because it already has:
-        //
-        // - most of the dependency store paths
-        // - substitutors configured
-        // - correct version of nix
-        let flox_container = format!("{}:{}", FLOX_PROXY_IMAGE, flox_version_tag);
-        command.arg(flox_container);
+        command.arg(self.container_image());
+    }
 
-        // Inception L2: Nix args.
+    /// Inception L2: Nix args.
+    fn add_nix_args(&self, command: &mut Command) {
         command.arg("nix");
         command.args([
             "--extra-experimental-features",
             "nix-command flakes",
             "--accept-flake-config",
         ]);
+
+        let flox_version = &*FLOX_VERSION;
+        let flox_version_tag = format!("v{}", flox_version.base_semver());
         let flox_flake = format!(
             "{}/{}",
             FLOX_FLAKE,
             // Use a more specific commit if available, e.g. pushed to GitHub.
-            // TODO: Doesn't always work: https://github.com/flox/flox/issues/2502
             (*FLOX_CONTAINERIZE_FLAKE_REF_OR_REV)
                 .clone()
                 .unwrap_or(flox_version.commit_sha().unwrap_or(flox_version_tag))
         );
         command.args(["run", &flox_flake, "--"]);
+    }
 
-        // Inception L3: Flox args.
-
+    /// Inception L3: Flox args.
+    fn add_flox_args(&self, command: &mut Command, flox: &Flox, tag: impl AsRef<str>) {
         // TODO: this should probably be a method on Verbosity
         match flox.verbosity {
             -1 => {
@@ -177,6 +226,26 @@ impl ContainerBuilder for ContainerizeProxy {
         command.args(["--dir", MOUNT_ENV]);
         command.args(["--tag", tag.as_ref()]);
         command.args(["--file", "-"]);
+    }
+}
+
+impl ContainerBuilder for ContainerizeProxy {
+    type Error = ContainerizeProxyError;
+
+    /// Create a [ContainerSource] for macOS that streams the output via a proxy container.
+    fn create_container_source(
+        &self,
+        flox: &Flox,
+        // Inferred from `self.environment_path` by flox _inside_ the container.
+        _name: impl AsRef<str>,
+        tag: impl AsRef<str>,
+    ) -> Result<ContainerSource, Self::Error> {
+        self.populate_cache_volume()?;
+
+        let mut command = self.runtime_base_command();
+        self.add_runtime_args(&mut command, flox);
+        self.add_nix_args(&mut command);
+        self.add_flox_args(&mut command, flox, tag);
 
         let container_source = ContainerSource::new(command);
         Ok(container_source)

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -99,7 +100,7 @@ pub struct FloxConfig {
     /// The notification message is:
     /// ```
     /// Upgrades are available for packages in 'environment-name'.
-    /// Use 'flox upgrade' to get the latest.
+    /// Use 'flox upgrade --dry-run' for details.
     /// ```
     ///
     /// (default: true)
@@ -108,7 +109,8 @@ pub struct FloxConfig {
     /// Configuration for 'flox publish'.
     pub publish: Option<PublishConfig>,
 
-    pub installer_channel: Option<String>,
+    /// Release channel to use when checking for updates to Flox.
+    pub installer_channel: Option<InstallerChannel>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -132,11 +134,29 @@ pub enum EnvironmentPromptConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PublishConfig {
-    /// Default URL of the store used by 'flox publish'
-    pub store_url: Option<Url>,
-
     /// Default path of the signing key used by 'flox publish'
-    pub signing_key: Option<PathBuf>,
+    pub signing_private_key: Option<PathBuf>,
+}
+
+/// Channels must match: https://downloads.flox.dev/?prefix=by-env/
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "lowercase")]
+pub enum InstallerChannel {
+    #[default]
+    Stable,
+    Nightly,
+    Qa,
+}
+
+impl Display for InstallerChannel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InstallerChannel::Stable => write!(f, "stable"),
+            InstallerChannel::Nightly => write!(f, "nightly"),
+            InstallerChannel::Qa => write!(f, "qa"),
+        }
+    }
 }
 
 /// Error returned by [`Config::get()`]
@@ -201,7 +221,13 @@ impl Config {
                     let config_dir = config_dir
                         .canonicalize()
                         .context("Could not canonicalize config directory '{config_dir:?}'")?;
-                    env::set_var(FLOX_CONFIG_DIR_VAR, &config_dir);
+
+                    // Allow subshells to find the same config dir.
+                    // TODO: decide if its worth modifying the env for this.
+                    // SAFTEY: config initially read when there is no concurrent access to env variables.
+                    unsafe {
+                        env::set_var(FLOX_CONFIG_DIR_VAR, &config_dir);
+                    }
                     config_dir
                 },
             };
@@ -431,6 +457,7 @@ fn mk_environment(envs: &mut Vec<(String, String)>, prefix: &str) -> Environment
 mod tests {
 
     use indoc::indoc;
+    use proptest::prelude::*;
 
     use super::*;
 
@@ -456,13 +483,16 @@ mod tests {
                 ("FLOX_FLOXHUB_URL", Some("https://example.com")),
             ],
             || {
-                env::set_var("FLOX_FLOXHUB_URL", "https://example.com");
+                // SAFETY: env already isolated from concurrent access via `temp_env`
+                unsafe {
+                    env::set_var("FLOX_FLOXHUB_URL", "https://example.com");
+                }
                 let config = Config::parse().unwrap();
                 assert_eq!(
                     config.get(&Key::parse("floxhub_url").unwrap()).unwrap(),
                     "\"https://example.com/\"".to_string()
                 );
-                env::remove_var(FLOX_CONFIG_DIR_VAR);
+                unsafe { env::remove_var(FLOX_CONFIG_DIR_VAR) };
             },
         );
     }
@@ -613,5 +643,14 @@ mod tests {
         assert_eq!(config_content, indoc! {"
         [trusted_environments]
         "});
+    }
+
+    proptest! {
+        #[test]
+        fn installer_channel_display_matches_serialized(channel in any::<InstallerChannel>()) {
+            let display_quoted = format!("\"{}\"", channel);
+            let serialized = serde_json::to_string(&channel).unwrap();
+            prop_assert_eq!(display_quoted, serialized);
+        }
     }
 }

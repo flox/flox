@@ -23,6 +23,7 @@ use crate::models::lockfile::{
     LockedPackageStorePath,
     Lockfile,
 };
+use crate::models::manifest::typed::ActivateMode;
 use crate::models::nix_plugins::NIX_PLUGINS;
 use crate::providers::catalog::CatalogClientError;
 use crate::utils::CommandExt;
@@ -89,6 +90,14 @@ pub enum BuildEnvError {
         output: String,
         err: serde_json::Error,
     },
+
+    #[error("Building published packages from source is not yet supported")]
+    BuildPublishedPackage,
+
+    /// A custom package has been uploaded, but the current user hasn't configured
+    /// a trusted public key that matches a signature of this package.
+    #[error("Package '{0}' is not signed by a trusted key")]
+    UntrustedPackage(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -101,6 +110,16 @@ pub struct BuildEnvOutputs {
     // todo: nest additional built paths for manifest builds
     #[serde(flatten)]
     pub manifest_build_runtimes: HashMap<String, BuiltStorePath>,
+}
+
+impl BuildEnvOutputs {
+    /// Returns the built environment path for an activation mode.
+    pub fn for_mode(self, mode: &ActivateMode) -> BuiltStorePath {
+        match mode {
+            ActivateMode::Dev => self.develop,
+            ActivateMode::Run => self.runtime,
+        }
+    }
 }
 
 #[derive(
@@ -251,6 +270,9 @@ impl BuildEnvNix {
                 if !output.status.success() {
                     // If we failed, log the error and try the next location.
                     let stderr = String::from_utf8_lossy(&output.stderr);
+                    if stderr.contains("because it lacks a signature by a trusted key") {
+                        return Err(BuildEnvError::UntrustedPackage(locked.install_id.clone()));
+                    }
                     debug!(%path, %location.url, %stderr, "Failed to copy package from store");
                 } else {
                     // If we suceeded, then we can continue with the nex path
@@ -320,12 +342,11 @@ impl BuildEnvNix {
             return Ok(());
         }
 
-        let _span = info_span!(
-            "build from catalog",
-            progress = format!("Building '{}' from source", locked.attr_path)
-        )
-        .entered();
-
+        // TODO: less flimsy handling of building published packages
+        // 1. custom catalogs are distinguished from nixpkgs catalog
+        //    only by the prefix of the url field.
+        // 2. custom packages cannot be referred to by nix installable
+        // 3. from this point onward the whole buildprocess diverges between both types of packages
         let installable = {
             let mut locked_url = locked.locked_url.to_string();
 
@@ -333,13 +354,18 @@ impl BuildEnvNix {
                 locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
             } else {
                 debug!(?locked.attr_path, "Trying to substitute published package");
-                let all_found = self.try_substitute_published_pkg(client, locked)?;
+                let span = info_span!(
+                    "substitute custom catalog package",
+                    progress = format!("Downloading '{}'", locked.attr_path)
+                );
+                let all_found =
+                    span.in_scope(|| self.try_substitute_published_pkg(client, locked))?;
                 // We asked for all the outputs for the package, got store info for
                 // each, and were able to substitute them all.  If so, then we're done here.
                 if all_found {
                     return Ok(());
                 };
-                todo!("Building published packages is not yet supported");
+                return Err(BuildEnvError::BuildPublishedPackage);
             }
 
             // build all out paths
@@ -347,6 +373,12 @@ impl BuildEnvNix {
 
             format!("{}#{}", locked_url, attrpath)
         };
+
+        let _span = info_span!(
+            "build from catalog",
+            progress = format!("Building '{}' from source", locked.attr_path)
+        )
+        .entered();
 
         let mut nix_build_command = self.base_command();
 
@@ -562,6 +594,7 @@ impl BuildEnvNix {
                 .arg(service_config_path);
         }
         debug!(cmd=%nix_build_command.display(), "building environment");
+
         let output = nix_build_command
             .output()
             .map_err(BuildEnvError::CallNixBuild)?;
@@ -574,7 +607,36 @@ impl BuildEnvNix {
         struct BuildEnvResultRaw {
             outputs: BuildEnvOutputs,
         }
+        let build_env_result: Result<[BuildEnvResultRaw; 1], _> =
+            serde_json::from_slice(&output.stdout).map_err(|err| BuildEnvError::ReadOutputs {
+                output: String::from_utf8_lossy(&output.stdout).to_string(),
+                err,
+            });
+
+        if let Ok([build_env_result]) = build_env_result {
+            return Ok(build_env_result.outputs);
+        }
+
+        // Preexisting store paths produced by the build may have-new been (partially) swept away.
+        // In that case the above `nix build` only documents the _new_ outputs.
+        // A second build with the same arguments will be fully substituted and contain all outputs.
+        //
+        // We only try this once because the weindow for paths to disappear between the last build
+        // and this one is particularly short, incorrect output is now reliably wrong
+        // and should be propagated up.
+        debug!(err=%build_env_result.unwrap_err(), "failed to deserialize output, retrying once");
+        debug!(cmd=%nix_build_command.display(), "building environment");
+
+        let output = nix_build_command
+            .output()
+            .map_err(BuildEnvError::CallNixBuild)?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(BuildEnvError::Build(stderr.to_string()));
+        }
+
         let [build_env_result]: [BuildEnvResultRaw; 1] = serde_json::from_slice(&output.stdout)
+            .inspect_err(|_| debug!("failed to deserialize output on second try"))
             .map_err(|err| BuildEnvError::ReadOutputs {
                 output: String::from_utf8_lossy(&output.stdout).to_string(),
                 err,
@@ -789,7 +851,7 @@ mod realise_nixpkgs_tests {
 
     use super::*;
     use crate::models::lockfile;
-    use crate::providers::catalog::{MockClient, StoreInfo, StoreInfoResponse, GENERATED_DATA};
+    use crate::providers::catalog::{GENERATED_DATA, MockClient, StoreInfo, StoreInfoResponse};
     use crate::providers::nix::test_helpers::known_store_path;
 
     /// Read a single locked package for the current system from a mock lockfile.
@@ -1034,7 +1096,6 @@ mod realise_nixpkgs_tests {
     }
 
     #[test]
-    #[should_panic = "Building published packages is not yet supported"]
     fn nixpkgs_published_pkg_cache_download_failure() {
         let locked_package = locked_published_package(None);
         let mut client = MockClient::new(None::<String>).unwrap();
@@ -1056,7 +1117,8 @@ mod realise_nixpkgs_tests {
         client.push_store_info_response(resp);
 
         let buildenv = BuildEnvNix;
-        let _result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
+        let result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
+        assert!(matches!(result, Err(BuildEnvError::BuildPublishedPackage)));
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
@@ -1220,9 +1282,11 @@ mod realise_flakes_tests {
             "failed to build flake: {}",
             result.unwrap_err()
         );
-        assert!(buildenv
-            .check_store_path(locked_package.locked_installable.outputs.values())
-            .unwrap());
+        assert!(
+            buildenv
+                .check_store_path(locked_package.locked_installable.outputs.values())
+                .unwrap()
+        );
     }
 
     /// Realising a flake should fail if the output is not valid and cannot be built.
@@ -1333,10 +1397,8 @@ mod buildenv_tests {
     use std::collections::HashSet;
     use std::os::unix::fs::PermissionsExt;
 
-    use regex::Regex;
-
     use super::*;
-    use crate::providers::catalog::{MockClient, GENERATED_DATA, MANUALLY_GENERATED};
+    use crate::providers::catalog::{GENERATED_DATA, MANUALLY_GENERATED, MockClient};
 
     trait PathExt {
         fn is_executable_file(&self) -> bool;
@@ -1466,13 +1528,14 @@ mod buildenv_tests {
             panic!("expected build to fail, got {}", err);
         };
 
-        let output_matches = Regex::new("error: collision between .*-vim-.* and .*-vim-.*")
-            .unwrap()
-            .is_match(&output);
+        let expected =
+            "> ❌ ERROR: 'vim' conflicts with 'vim-full'. Both packages provide the file 'bin/ex'";
 
         assert!(
-            output_matches,
-            "expected output to contain a conflict message: {output}"
+            output.contains(expected),
+            "expected output to contain a conflict message:\n\
+            actual: {output}\n\
+            expected: {expected}"
         );
     }
 
@@ -1578,7 +1641,14 @@ mod buildenv_tests {
             panic!("expected build to fail, got {}", err);
         };
 
-        assert!(output.contains("error: package 'vim' is not in 'toplevel' pkg-group"));
+        let expected = "❌ ERROR: package 'vim' is not in 'toplevel' pkg-group";
+
+        assert!(
+            output.contains(expected),
+            "expected output to contain an error message\n\
+            actual: {output}\n\
+            expected: {expected}"
+        );
     }
 
     #[test]
@@ -1593,7 +1663,13 @@ mod buildenv_tests {
             panic!("expected build to fail, got {}", err);
         };
 
-        assert!(output
-            .contains("error: package 'goodbye' not found in '[install]' section of manifest"));
+        let expected = "❌ ERROR: package 'goodbye' not found in '[install]' section of manifest";
+
+        assert!(
+            output.contains(expected),
+            "expected output to contain an error message\n\
+            actual: {output}\n\
+            expected: {expected}"
+        );
     }
 }

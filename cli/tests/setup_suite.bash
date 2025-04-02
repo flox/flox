@@ -15,9 +15,10 @@ bats_require_minimum_version '1.5.0'
 
 # Unset all FLOX_ENV related vars to prevent an outer activation from leaking
 # back into test activations.
+# Some of this will be unnecessary after https://github.com/flox/flox/issues/2629
 unset_flox_env_setup() {
   for var in $(env | awk -F= '{print $1}'); do
-    if [[ $var == FLOX_ENV* || $var == _FLOX_ENV* || $var == LD_FLOXLIB_* ]];
+    if [[ $var == FLOX_ENV* || $var == _FLOX_ENV* || $var == LD_FLOXLIB_* || $var == FLOX_SAVE_* ]];
     then
       unset "$var"
     fi
@@ -91,7 +92,13 @@ reals_setup() {
   xdg_reals_setup
   git_reals_setup
   {
+    print_var _FLOX_LOCAL_DEV
     print_var FLOX_BIN
+    print_var BUILDENV_BIN
+    print_var WATCHDOG_BIN
+    print_var FLOX_ACTIVATIONS_BIN
+    print_var FLOX_INTERPRETER
+    print_var NIX_PLUGINS
     print_var NIX_BIN
     print_var NIX_STORE
     print_var REAL_GIT_CONFIG_GLOBAL
@@ -102,7 +109,9 @@ reals_setup() {
     print_var REAL_XDG_DATA_HOME
     print_var REAL_XDG_STATE_HOME
     print_var TESTS_DIR
+    print_var INPUT_DATA
     print_var GENERATED_DATA
+    print_var MANUALLY_GENERATED
   } >&3
 }
 
@@ -385,6 +394,8 @@ home_setup() {
 # `{setup,teardown}_suite' functions must be defined in `setup_suite.bash'
 # files, AND keep in mind that `SET_TESTS_DIR' will likely differ.
 common_suite_setup() {
+  export FLOX_FEATURES_COMPOSE='true'
+
   unset_flox_env_setup
   # Backup real env vars.
   reals_setup

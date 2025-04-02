@@ -30,6 +30,7 @@ let
       # rather than relying on or modifying the user's `PATH` variable
       GIT_PKG = gitMinimal;
       NIX_BIN = "${nix}/bin/nix";
+      NIX_VERSION = nix.version;
       GNUMAKE_BIN = "${gnumake}/bin/make";
       SLEEP_BIN = "${coreutils}/bin/sleep";
       PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";

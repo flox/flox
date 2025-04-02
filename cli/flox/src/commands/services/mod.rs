@@ -5,16 +5,16 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
-use flox_rust_sdk::models::manifest::typed::{Inner, Manifest, Services};
-use flox_rust_sdk::providers::services::{new_services_to_start, ProcessState, ProcessStates};
+use flox_rust_sdk::models::lockfile::Lockfile;
+use flox_rust_sdk::models::manifest::typed::{ActivateMode, Inner, Manifest, Services};
+use flox_rust_sdk::providers::services::{ProcessState, ProcessStates, new_services_to_start};
 use tracing::{debug, instrument};
 
-use super::activate::Mode;
 use super::{
-    activated_environments,
     ConcreteEnvironment,
     EnvironmentSelect,
     UninitializedEnvironment,
+    activated_environments,
 };
 use crate::commands::activate::Activate;
 use crate::commands::display_help;
@@ -204,7 +204,7 @@ pub fn guard_is_within_activation(
 
     if !activated_environments.is_active(&UninitializedEnvironment::from_concrete_environment(
         &services_environment.environment,
-    )?) {
+    )) {
         return Err(ServicesCommandsError::NotInActivation {
             action: action.to_string(),
         }
@@ -286,7 +286,7 @@ pub async fn start_services_with_new_process_compose(
     names: &[String],
 ) -> Result<Vec<String>> {
     let environment = concrete_environment.dyn_environment_ref_mut();
-    let lockfile = environment.lockfile(&flox)?;
+    let lockfile: Lockfile = environment.lockfile(&flox)?.into();
     let system = flox.system.clone();
 
     for name in names {
@@ -315,7 +315,8 @@ pub async fn start_services_with_new_process_compose(
         print_script: false,
         start_services: true,
         use_fallback_interpreter: false,
-        mode: Some(Mode::Dev),
+        // FIXME: This should match the current activation.
+        mode: Some(ActivateMode::Dev),
         run_args: vec!["true".to_string()],
     }
     .activate(

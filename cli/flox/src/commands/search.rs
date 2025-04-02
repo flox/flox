@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::num::NonZeroU8;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::search::SearchResults;
@@ -67,7 +67,7 @@ impl Search {
             };
 
             flox.catalog_client
-                .search(parsed_search, flox.system.clone(), limit)
+                .search_with_spinner(parsed_search, flox.system.clone(), limit)
                 .await?
         };
 

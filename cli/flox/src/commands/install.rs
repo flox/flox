@@ -3,10 +3,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
-use flox_rust_sdk::data::CanonicalPath;
-use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
+use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
@@ -16,17 +15,22 @@ use flox_rust_sdk::models::environment::{
     PathPointer,
 };
 use flox_rust_sdk::models::lockfile::{
-    LockedManifestError,
     LockedPackage,
-    Lockfile,
     ResolutionFailure,
     ResolutionFailures,
+    ResolveError,
+};
+use flox_rust_sdk::models::manifest::composite::{
+    COMPOSER_MANIFEST_ID,
+    new_package_overrides,
+    package_overrides_for_manifest_id,
 };
 use flox_rust_sdk::models::manifest::raw::{
-    catalog_packages_to_install,
     CatalogPackage,
     PackageToInstall,
+    catalog_packages_to_install,
 };
+use flox_rust_sdk::models::manifest::typed::ActivateMode;
 use flox_rust_sdk::models::user_state::{
     lock_and_read_user_state_file,
     user_state_path,
@@ -41,13 +45,13 @@ use itertools::Itertools;
 use tracing::{debug, info_span, instrument, span, warn};
 
 use super::services::warn_manifest_changes_for_services;
-use super::{environment_select, EnvironmentSelect};
+use super::{EnvironmentSelect, environment_select};
 use crate::commands::activate::Activate;
 use crate::commands::{
-    ensure_floxhub_token,
-    environment_description,
     ConcreteEnvironment,
     EnvironmentSelectError,
+    ensure_floxhub_token,
+    environment_description,
 };
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
@@ -55,7 +59,7 @@ use crate::utils::errors::format_error;
 use crate::utils::message;
 use crate::utils::openers::Shell;
 use crate::utils::tracing::sentry_set_tag;
-use crate::{environment_subcommand_metric, subcommand_metric, Exit};
+use crate::{Exit, environment_subcommand_metric, subcommand_metric};
 
 // Install a package into an environment
 #[derive(Bpaf, Clone)]
@@ -200,7 +204,10 @@ impl Install {
                     user_state.confirmed_create_default_env = Some(false);
                     write_user_state_file(&user_state, &user_state_path, lock)
                         .context("failed to save default environment choice")?;
-                    let msg = format!("Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'", self.packages.join(" "));
+                    let msg = format!(
+                        "Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
+                        self.packages.join(" ")
+                    );
                     message::plain(msg);
                     return Err(Exit(1.into()).into());
                 }
@@ -217,6 +224,18 @@ impl Install {
         let description = environment_description(&concrete_environment)?;
 
         let mut environment = concrete_environment.into_dyn_environment();
+
+        // Get a list of the packages that this environment is already overriding via composition.
+        let maybe_lockfile = environment.existing_lockfile(&flox)?;
+        let existing_composer_package_overrides = if let Some(lockfile) = maybe_lockfile {
+            lockfile
+                .compose
+                .map(|c| c.warnings)
+                .map(|warnings| package_overrides_for_manifest_id(&warnings, COMPOSER_MANIFEST_ID))
+                .unwrap_or_default()
+        } else {
+            vec![]
+        };
 
         // We don't know the contents of the packages field when the span is created
         sentry_set_tag(
@@ -255,15 +274,24 @@ impl Install {
             },
         };
 
-        let lockfile_path = environment.lockfile_path(&flox)?;
-        let lockfile_path = CanonicalPath::new(lockfile_path)?;
-        let lockfile_content = std::fs::read_to_string(&lockfile_path)?;
+        let lockfile = environment.existing_lockfile(&flox)?.ok_or(anyhow!(
+            "Expected lockfile to exist after successful install"
+        ))?;
 
-        // Check for warnings in the lockfile
-        let lockfile: Lockfile = serde_json::from_str(&lockfile_content)?;
+        // Get the new set of composer overrides
+        let new_composer_package_overrides = lockfile
+            .compose
+            .map(|c| c.warnings)
+            .map(|warnings| package_overrides_for_manifest_id(&warnings, COMPOSER_MANIFEST_ID))
+            .unwrap_or_default();
+        let new_package_overrides = new_package_overrides(
+            &existing_composer_package_overrides,
+            &new_composer_package_overrides,
+        );
+
         // TODO: move this behind the `installation.new_manifest.is_some()`
         // check below so we don't warn when we don't even install anything
-        for warning in Self::generate_warnings(
+        for warning in Self::generate_unfree_and_broken_warnings(
             &lockfile.packages,
             &catalog_packages_to_install(&packages_to_install),
         ) {
@@ -288,6 +316,7 @@ impl Install {
         message::packages_successfully_installed(&partitioned.successes, &description);
         message::packages_installed_with_system_subsets(&partitioned.system_subsets);
         message::packages_already_installed(&partitioned.already_installed, &description);
+        message::packages_newly_overridden_by_composer(&new_package_overrides);
 
         if installation.new_manifest.is_some() {
             warn_manifest_changes_for_services(&flox, environment.as_ref());
@@ -338,8 +367,8 @@ impl Install {
         requested_packages: &[PackageToInstall],
     ) -> Option<(ResolutionFailures, Vec<PackageToInstallRetry>)> {
         match err {
-            EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
-                LockedManifestError::ResolutionFailed(failures),
+            EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                ResolveError::ResolutionFailed(failures),
             )) if failures.0.iter().all(|f| {
                 matches!(f, ResolutionFailure::PackageUnavailableOnSomeSystems { .. })
             }) =>
@@ -366,7 +395,9 @@ impl Install {
                         invalid_systems: _,
                     } = failure
                     else {
-                        unreachable!("already checked that these failures are 'package unavailable on some systems'")
+                        unreachable!(
+                            "already checked that these failures are 'package unavailable on some systems'"
+                        )
                     };
 
                     let Some(pkg_retry) = packages.get_mut(install_id) else {
@@ -427,11 +458,9 @@ impl Install {
                     ", err = format_error(&err).trim()
                 };
                 failures.0.push(ResolutionFailure::FallbackMessage { msg });
-                Err(EnvironmentError::Core(
-                    CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(
-                        failures,
-                    )),
-                ))
+                Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                    ResolveError::ResolutionFailed(failures),
+                )))
             },
         }
     }
@@ -452,8 +481,8 @@ impl Install {
 
         match err {
             // Try to make suggestions when a package isn't found
-            EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
-                LockedManifestError::ResolutionFailed(failures),
+            EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                ResolveError::ResolutionFailed(failures),
             )) => {
                 let (need_didyoumean, mut other_failures): (Vec<_>, Vec<_>) = failures
                     .0
@@ -489,8 +518,8 @@ impl Install {
                     };
                     other_failures.push(ResolutionFailure::FallbackMessage { msg });
                 }
-                Err(EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
-                    LockedManifestError::ResolutionFailed(ResolutionFailures(other_failures)),
+                Err(EnvironmentError::Core(CoreEnvironmentError::Resolve(
+                    ResolveError::ResolutionFailed(ResolutionFailures(other_failures)),
                 ))
                 .into())
             },
@@ -499,7 +528,7 @@ impl Install {
     }
 
     /// Generate warnings to print to the user about unfree and broken packages.
-    fn generate_warnings(
+    fn generate_unfree_and_broken_warnings(
         locked_packages: &[LockedPackage],
         packages_to_install: &[CatalogPackage],
     ) -> Vec<String> {
@@ -555,7 +584,10 @@ fn package_list_for_prompt(packages: &[PackageToInstall]) -> Option<String> {
 /// customizations and skipping the normal `init` output.
 fn create_default_env(flox: &Flox) -> Result<PathEnvironment, anyhow::Error> {
     let home_dir = dirs::home_dir().context("user must have a home directory")?;
-    let customization = InitCustomization::default();
+    let customization = InitCustomization {
+        activate_mode: Some(ActivateMode::Run),
+        ..Default::default()
+    };
     PathEnvironment::init(
         PathPointer::new(
             EnvironmentName::from_str(DEFAULT_NAME)
@@ -679,15 +711,15 @@ fn add_activation_to_rc_file(
 mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
-    use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
+    use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall};
-    use flox_rust_sdk::providers::catalog::{Client, MockClient, SystemEnum, GENERATED_DATA};
+    use flox_rust_sdk::providers::catalog::{Client, GENERATED_DATA, MockClient, SystemEnum};
     use flox_test_utils::manifests::EMPTY_ALL_SYSTEMS;
 
     use super::{add_activation_to_rc_file, ensure_rc_file_exists};
-    use crate::commands::install::{package_list_for_prompt, Install};
     use crate::commands::EnvironmentSelect;
+    use crate::commands::install::{Install, package_list_for_prompt};
     use crate::utils::message::history::History;
 
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
@@ -696,7 +728,7 @@ mod tests {
         let locked_packages = vec![];
         let packages_to_install = vec![];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, &packages_to_install),
+            Install::generate_unfree_and_broken_warnings(&locked_packages, &packages_to_install),
             Vec::<String>::new()
         );
     }
@@ -714,7 +746,10 @@ mod tests {
             systems: None,
         }];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, packages_to_install.as_slice()),
+            Install::generate_unfree_and_broken_warnings(
+                &locked_packages,
+                packages_to_install.as_slice()
+            ),
             vec![format!(
                 "The package '{foo_iid}' has an unfree license, please verify the licensing terms of use"
             )]
@@ -742,7 +777,10 @@ mod tests {
             systems: None,
         }];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, packages_to_install.as_slice()),
+            Install::generate_unfree_and_broken_warnings(
+                &locked_packages,
+                packages_to_install.as_slice()
+            ),
             vec![format!(
                 "The package '{foo_iid}' has an unfree license, please verify the licensing terms of use"
             )]
@@ -762,7 +800,10 @@ mod tests {
             systems: None,
         }];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, packages_to_install.as_slice()),
+            Install::generate_unfree_and_broken_warnings(
+                &locked_packages,
+                packages_to_install.as_slice()
+            ),
             vec![format!(
                 "The package '{foo_iid}' is marked as broken, it may not behave as expected during runtime."
             )]
@@ -790,7 +831,10 @@ mod tests {
             systems: None,
         }];
         assert_eq!(
-            Install::generate_warnings(&locked_packages, packages_to_install.as_slice()),
+            Install::generate_unfree_and_broken_warnings(
+                &locked_packages,
+                packages_to_install.as_slice()
+            ),
             vec![format!(
                 "The package '{foo_iid}' is marked as broken, it may not behave as expected during runtime."
             )]
@@ -872,7 +916,9 @@ mod tests {
         };
         install_cmd.handle(flox).await.expect("installation failed");
         let msgs = &History::global().messages();
-        let expected = format!("⚠\u{fe0f}  '{install_id}' installed only for the following systems: {installed_systems}");
+        let expected = format!(
+            "⚠\u{fe0f}  '{install_id}' installed only for the following systems: {installed_systems}"
+        );
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0], expected);
     }

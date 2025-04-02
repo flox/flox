@@ -28,7 +28,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;
-use super::{copy_dir_recursive, ENV_DIR_NAME, LOCKFILE_FILENAME};
+use super::fetcher::IncludeFetcher;
+use super::{ENV_DIR_NAME, LOCKFILE_FILENAME, copy_dir_recursive};
 use crate::flox::EnvironmentName;
 use crate::models::environment::MANIFEST_FILENAME;
 use crate::providers::git::{
@@ -243,12 +244,17 @@ impl Generations<ReadWrite<'_>> {
     ///
     ///   When a generation needs to be used again after being modified,
     ///   it is recommended to create a new [Generations<ReadWrite>] instance first.
-    pub fn get_generation(&self, generation: usize) -> Result<CoreEnvironment, GenerationsError> {
+    pub fn get_generation(
+        &self,
+        generation: usize,
+        include_fetcher: IncludeFetcher,
+    ) -> Result<CoreEnvironment, GenerationsError> {
         let environment = CoreEnvironment::new(
             self.repo
                 .path()
                 .join(generation.to_string())
                 .join(ENV_DIR_NAME),
+            include_fetcher,
         );
 
         Ok(environment)
@@ -259,12 +265,15 @@ impl Generations<ReadWrite<'_>> {
     ///
     /// The generation can then be safely modified
     /// and registered as a new generation using [Self::add_generation].
-    pub fn get_current_generation(&self) -> Result<CoreEnvironment, GenerationsError> {
+    pub fn get_current_generation(
+        &self,
+        include_fetcher: IncludeFetcher,
+    ) -> Result<CoreEnvironment, GenerationsError> {
         let metadata = self.metadata()?;
         let current_gen = metadata
             .current_gen
             .ok_or(GenerationsError::NoGenerations)?;
-        self.get_generation(*current_gen)
+        self.get_generation(*current_gen, include_fetcher)
     }
 
     /// Import an existing environment into a generation
