@@ -213,8 +213,6 @@ EOF
 
 # bats test_tags=push:composed:local-include
 @test "push composed environment (managed): fail if includes local env" {
-  export FLOX_FEATURES_COMPOSE=true
-
   mkdir -p composer included
   "$FLOX_BIN" init --dir composer
   # make composer managed

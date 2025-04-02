@@ -491,8 +491,7 @@ mod tests {
     #[test]
     fn remote_cannot_include_local() {
         let owner = "owner".parse().unwrap();
-        let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-        flox.features.set_compose(true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let manifest_contents = indoc! {r#"
         version = 1

@@ -65,17 +65,6 @@ project_teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
-
-# bats test_tags=compose
-@test "compose: feature flag works" {
-  "$FLOX_BIN" init
-  RUST_LOG=debug FLOX_FEATURES_COMPOSE=true run "$FLOX_BIN" activate -- true
-  assert_output --partial "compose=true"
-  RUST_LOG=debug FLOX_FEATURES_COMPOSE=false run "$FLOX_BIN" activate -- true
-  assert_output --partial "compose=false"
-}
-
-# ---------------------------------------------------------------------------- #
 # Tests that share some helpers for setting up a composer and included
 # environments
 # ---------------------------------------------------------------------------- #

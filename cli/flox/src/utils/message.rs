@@ -219,8 +219,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_print_overridden_manifest_fields() {
-        let (mut flox, _tempdir) = flox_instance();
-        flox.features.set_compose(true);
+        let (flox, _tempdir) = flox_instance();
 
         let mut dep1 = new_path_environment(&flox, indoc! {r#"
             version = 1

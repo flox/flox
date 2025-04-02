@@ -4,7 +4,7 @@ use catalog_api_v1::types::{MessageLevel, SystemEnum};
 #[cfg(test)]
 use flox_test_utils::proptest::{alphanum_string, chrono_strat};
 use indent::{indent_all_by, indent_by};
-use indoc::{formatdoc, indoc};
+use indoc::formatdoc;
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -717,14 +717,6 @@ impl Lockfile {
                 ));
             }
             return Ok((manifest.clone(), None));
-        }
-
-        if !flox.features.compose() {
-            return Err(RecoverableMergeError::Catchall(
-                indoc! {"Cannot handle [include] when compose feature flag is disabled.
-                Use 'flox config --set-bool features.compose true' to enable composition."}
-                .to_string(),
-            ));
         }
 
         debug!("composing included environments");
@@ -3461,9 +3453,7 @@ pub(crate) mod tests {
         /// Use manifests without [install] sections so we don't have to
         /// generate resolution responses
         #[test]
-        fn lock_manifest_noop_if_locked_without_install_section((mut flox, tempdir, environments_to_include) in generate_path_environments_without_install_or_include(3)) {
-            flox.features.set_compose(true);
-
+        fn lock_manifest_noop_if_locked_without_install_section((flox, tempdir, environments_to_include) in generate_path_environments_without_install_or_include(3)) {
             let manifest = Manifest {
                 version: Version,
                 include: Include {
@@ -4033,8 +4023,7 @@ pub(crate) mod tests {
     /// not already locked
     #[test]
     fn merge_manifest_fetches_included_environment() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.features.set_compose(true);
+        let (flox, tempdir) = flox_instance();
         let manifest_contents = indoc! {r#"
         version = 1
 
@@ -4085,8 +4074,7 @@ pub(crate) mod tests {
     /// [Lockfile::merge_manifest] preserves precedence of includes
     #[test]
     fn merge_manifest_preserves_include_order() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.features.set_compose(true);
+        let (flox, tempdir) = flox_instance();
         let manifest_contents = indoc! {r#"
         version = 1
 
@@ -4177,8 +4165,7 @@ pub(crate) mod tests {
     /// Precedence should still reflect the order of included environments.
     #[tokio::test]
     async fn merge_manifest_respects_precedence_when_skipping_fetch() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.features.set_compose(true);
+        let (flox, tempdir) = flox_instance();
 
         let manifest_contents = indoc! {r#"
         version = 1
@@ -4298,8 +4285,7 @@ pub(crate) mod tests {
     /// which should trigger a re-fetch.
     /// Otherwise, re-merging should not re-fetch.
     async fn re_merge_after_editing_dep(modify_include_descriptor: bool) {
-        let (mut flox, tempdir) = flox_instance();
-        flox.features.set_compose(true);
+        let (flox, tempdir) = flox_instance();
 
         let mut manifest_contents = indoc! {r#"
         version = 1
@@ -4417,8 +4403,7 @@ pub(crate) mod tests {
     /// [Lockfile::merge_manifest] doesn't leave stale locked includes
     #[tokio::test]
     async fn merge_manifest_removes_stale_locked_includes() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.features.set_compose(true);
+        let (flox, tempdir) = flox_instance();
 
         let mut manifest_contents = indoc! {r#"
         version = 1
@@ -4488,8 +4473,7 @@ pub(crate) mod tests {
     /// [Lockfile::merge_manifest] errors if locked include names are not unique
     #[test]
     fn merge_manifest_errors_for_non_unique_include_names() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.features.set_compose(true);
+        let (flox, tempdir) = flox_instance();
 
         let manifest_contents = indoc! {r#"
         version = 1

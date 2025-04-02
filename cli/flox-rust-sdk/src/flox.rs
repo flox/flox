@@ -105,20 +105,7 @@ pub struct Features {
     #[serde(default)]
     pub upload: bool,
     #[serde(default)]
-    compose: bool,
-    #[serde(default)]
     pub qa: bool,
-}
-
-impl Features {
-    pub fn compose(&self) -> bool {
-        self.qa || self.compose
-    }
-
-    #[cfg(any(test, feature = "tests"))]
-    pub fn set_compose(&mut self, compose: bool) {
-        self.compose = compose;
-    }
 }
 
 pub static DEFAULT_FLOXHUB_URL: LazyLock<Url> =
