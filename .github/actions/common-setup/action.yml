@@ -36,6 +36,7 @@ runs:
         args: "--timeout 30s --login-server ${{ inputs.TAILSCALE_URL }}"
         tags: "tag:ci"
         authkey: "${{ inputs.TAILSCALE_AUTH_KEY }}"
+        version: latest
 
     - name: "Install newer Nix"
       uses: "cachix/install-nix-action@V28"
