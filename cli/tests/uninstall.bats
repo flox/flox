@@ -81,9 +81,10 @@ teardown() {
 
 @test "uninstall: reports error when package not found" {
   "$FLOX_BIN" init
-  run "$FLOX_BIN" uninstall not-a-package
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 run "$FLOX_BIN" uninstall not-a-package
   assert_failure
-  assert_output --partial "couldn't uninstall 'not-a-package', wasn't previously installed"
+  assert_output "❌ ERROR: couldn't uninstall 'not-a-package', wasn't previously installed"
 }
 
 @test "uninstall: removes link to installed binary" {
@@ -105,9 +106,10 @@ teardown() {
   # If the [install] table is missing entirely we don't want to report a TOML
   # parse error, we want to report that there's nothing to uninstall.
   "$FLOX_BIN" init
-  run "$FLOX_BIN" uninstall hello
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 run "$FLOX_BIN" uninstall hello
   assert_failure
-  assert_output --partial "couldn't uninstall 'hello', wasn't previously installed"
+  assert_output "❌ ERROR: couldn't uninstall 'hello', wasn't previously installed"
 }
 
 @test "uninstall: can uninstall packages with dotted att_paths" {
