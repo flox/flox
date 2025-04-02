@@ -178,6 +178,69 @@ impl Manifest {
     ) -> Result<bool, ManifestError> {
         pkg_belongs_to_non_empty_toplevel_group(pkg.as_ref(), &self.install.0)
     }
+
+    /// Resolve "loose" package references (e.g. pkg-paths),
+    /// to `install_ids` if unambiguous
+    /// so that installation references remain valid for other package operations.
+    pub fn get_install_ids(&self, packages: Vec<String>) -> Result<Vec<String>, ManifestError> {
+        let mut install_ids = Vec::new();
+        for pkg in packages {
+            // User passed an install id directly
+            if self.install.inner().contains_key(&pkg) {
+                install_ids.push(pkg);
+                continue;
+            }
+
+            // User passed a package path to uninstall
+            // To support version constraints, we match the provided value against
+            // `<pkg-path>` and `<pkg-path>@<version>`.
+            let matching_iids_by_pkg_path = self
+                .install
+                .inner()
+                .iter()
+                .filter(|(_iid, descriptor)| {
+                    // Find matching pkg-paths and select for uninstall
+
+                    // If the descriptor is not a catalog descriptor, skip.
+                    // flakes descriptors are only matched by install_id.
+                    let ManifestPackageDescriptor::Catalog(des) = descriptor else {
+                        return false;
+                    };
+
+                    // Select if the descriptor's pkg_path matches the user's input
+                    if des.pkg_path == pkg {
+                        return true;
+                    }
+
+                    // Select if the descriptor matches the user's input when the version is included
+                    // Future: if we want to allow uninstalling a specific outputs as well,
+                    //         parsing of uninstall specs will need to be more sophisticated.
+                    //         For now going with a simple check for pkg-path@version.
+                    if let Some(version) = &des.version {
+                        format!("{}@{}", des.pkg_path, version) == pkg
+                    } else {
+                        false
+                    }
+                })
+                .map(|(iid, _)| iid.to_owned())
+                .collect::<Vec<String>>();
+
+            // Extend the install_ids with the matching install id from pkg-path
+            match matching_iids_by_pkg_path.len() {
+                0 => return Err(ManifestError::PackageNotFound(pkg)),
+                // if there is only one package with the given pkg-path, uninstall it
+                1 => install_ids.extend(matching_iids_by_pkg_path),
+                // if there are multiple packages with the given pkg-path, ask for a specific install id
+                _ => {
+                    return Err(ManifestError::MultiplePackagesMatch(
+                        pkg,
+                        matching_iids_by_pkg_path,
+                    ));
+                },
+            }
+        }
+        Ok(install_ids)
+    }
 }
 
 impl FromStr for Manifest {
@@ -898,6 +961,12 @@ pub struct ContainerizeConfig {
 pub enum ManifestError {
     #[error("no package or group named '{0}' in the manifest")]
     PkgOrGroupNotFound(String),
+    #[error("no package named '{0}' in the manifest")]
+    PackageNotFound(String),
+    #[error(
+        "multiple packages match '{0}', please specify an install id from possible matches: {1:?}"
+    )]
+    MultiplePackagesMatch(String, Vec<String>),
     #[error("not a valid activation mode")]
     ActivateModeInvalid,
 }
@@ -1186,5 +1255,115 @@ pub mod test {
         let IncludeDescriptor::Local { dir, name } = included;
         assert_eq!(dir, PathBuf::from("../foo"));
         assert_eq!(name.unwrap().as_str(), "bar");
+    }
+
+    /// Generates a mock `TypedManifest` for testing purposes.
+    /// This function is designed to simplify the creation of test data by
+    /// generating a `TypedManifest` based on a list of install IDs and
+    /// package paths.
+    /// # Arguments
+    ///
+    /// * `entries` - A vector of tuples, where each tuple contains an install
+    ///   ID and a package path.
+    ///
+    /// # Returns
+    ///
+    /// * `TypedManifest` - A mock `TypedManifest` containing the provided entries.
+    fn generate_mock_manifest(entries: Vec<(&str, &str)>) -> Manifest {
+        let mut typed_manifest_mock = Manifest::default();
+
+        for (test_iid, dotted_package) in entries {
+            typed_manifest_mock.install.inner_mut().insert(
+                test_iid.to_string(),
+                ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+                    pkg_path: dotted_package.to_string(),
+                    pkg_group: None,
+                    priority: None,
+                    version: None,
+                    systems: None,
+                }),
+            );
+        }
+
+        typed_manifest_mock
+    }
+    /// Return the install ID if it matches the user input
+    #[test]
+    fn test_get_install_ids_to_uninstall_by_install_id() {
+        let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
+        let result = manifest_mock
+            .get_install_ids(vec!["testInstallID".to_string()])
+            .unwrap();
+        assert_eq!(result, vec!["testInstallID".to_string()]);
+    }
+
+    #[test]
+    /// Return the install ID if a pkg-path matches the user input
+    fn test_get_install_ids_to_uninstall_by_pkg_path() {
+        let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
+        let result = manifest_mock
+            .get_install_ids(vec!["dotted.package".to_string()])
+            .unwrap();
+        assert_eq!(result, vec!["testInstallID".to_string()]);
+    }
+
+    #[test]
+    /// Ensure that the install ID takes precedence over pkg-path when both are present
+    fn test_get_install_ids_to_uninstall_iid_wins() {
+        let manifest_mock = generate_mock_manifest(vec![
+            ("testInstallID1", "dotted.package"),
+            ("testInstallID2", "dotted.package"),
+            ("dotted.package", "dotted.package"),
+        ]);
+
+        let result = manifest_mock
+            .get_install_ids(vec!["dotted.package".to_string()])
+            .unwrap();
+        assert_eq!(result, vec!["dotted.package".to_string()]);
+    }
+
+    #[test]
+    /// Throw an error when multiple packages match by pkg_path and flox can't determine which to uninstall
+    fn test_get_install_ids_to_uninstall_multiple_pkg_paths_match() {
+        let manifest_mock = generate_mock_manifest(vec![
+            ("testInstallID1", "dotted.package"),
+            ("testInstallID2", "dotted.package"),
+            ("testInstallID3", "dotted.package"),
+        ]);
+        let result = manifest_mock
+            .get_install_ids(vec!["dotted.package".to_string()])
+            .unwrap_err();
+        assert!(matches!(result, ManifestError::MultiplePackagesMatch(_, _)));
+    }
+
+    #[test]
+    /// Throw an error if no install ID or pkg-path matches the user input
+    fn test_get_install_ids_to_uninstall_pkg_not_found() {
+        let manifest_mock = generate_mock_manifest(vec![("testInstallID1", "dotted.package")]);
+        let result = manifest_mock
+            .get_install_ids(vec!["invalid.packageName".to_string()])
+            .unwrap_err();
+        assert!(matches!(result, ManifestError::PackageNotFound(_)));
+    }
+
+    #[test]
+    fn test_get_install_ids_to_uninstall_with_version() {
+        let mut manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
+
+        if let ManifestPackageDescriptor::Catalog(descriptor) = manifest_mock
+            .install
+            .inner_mut()
+            .get_mut("testInstallID")
+            .unwrap()
+        {
+            descriptor.version = Some("1.0".to_string());
+        };
+
+        let result = manifest_mock
+            .get_install_ids(vec!["dotted.package@1.0".to_string()])
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], "testInstallID");
     }
 }
