@@ -1,0 +1,10 @@
+version = 1
+
+[build]
+hello.command = '''
+mkdir -p $out
+echo "hello world" >> $out/hello.txt
+'''
+
+[install]
+hello.pkg-path = "hello"
