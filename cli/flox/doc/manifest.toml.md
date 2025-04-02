@@ -460,6 +460,112 @@ Shutdown ::= {
 :   An optional list of systems on which to run this service.
     If omitted, the service is not restricted.
 
+## `[include]`
+
+The `[include]` section of the manifest describes other environments that you'd
+like to merge with the current manifest in order to compose them into a single
+environment.
+
+The list of environments to include is specified by the `include.environments`
+array. The order of the "include descriptors" in this array specifies the
+priority that should be used when merging the manifests. Descriptors later in
+the array take higher priority than those earlier in the array, and manifest
+fields in the composing manifest take the highest priority.
+
+The merged manifest can be viewed with `flox list --config`.
+
+### Syntax
+
+An example `[include]` section is shown below:
+```toml
+[include]
+environments = [
+    { dir = "../path/to/env" },
+    { dir = "../path/to/other/env", name = "myenv" }
+]
+```
+
+As mentioned above, you include other environments my listing them as an array
+of tables in the `include.environments` array. The schema for these "include
+descriptors" is shown below:
+
+```
+IncludeDescriptor ::= {
+  dir  = STRING
+, name = null | STRING
+}
+```
+
+The fields in the include descriptor are as follows:
+
+`dir`
+: The path to the environment to include. This has the same semantics as the
+  `--dir` flag passed to many Flox commands.
+
+`name`
+: An optional override to the name of the environment. When including multiple
+  environments it's possible that the name of the environment itself is not
+  intuitive or convenient, and it's possible that there are name conflicts with
+  other included environments. This field allows you to override the name of an
+  environment to solve those name conflicts or simply provide a more convenient
+  name.
+
+### Merge semantics
+When merging manifests, different sections have different merge semantics. As
+mentioned above, the order in which include descriptors are listed in the
+`include.environments` array determines the priority of the manifests, with the
+composing manifest having the highest priority. In the following discussion we
+refer to "lower priority manifests" and "higher priority manifests" as those
+being listed earlier or later in the array, respectively.
+
+As of right now there is no way to *remove* something from a lower priority
+manifest, but things can be overridden or added by higher priority manifests.
+
+`[install]`
+: Package descriptors are overwritten entirely by a higher priority manifest.
+
+`[vars]`
+: Variables are overwritten entirely by a higher priority manifest.
+
+`[hook]`
+: The scripts in `hook` are appended to one another with a newline in betweeen.
+  Scripts from higher priority manifests come after those from lower priority
+  manifests.
+
+`[profile]`
+: The scripts in the `profile` section are appended in the same way that they
+  are for `hook`.
+
+`[services]`
+: Service descriptors are entirely overwritten by higher priority manifests
+
+`[include]`
+: The `include` section is ommitted from merged manifests, so no merging of the
+  `include` section ever happens.
+
+`[containerize]`
+: The `containerize.config` field is deep merged, meaning that individual
+  fields of `containerize.config` are merged rather than `containerize.config`
+  being completely overwritten. The fields within `containerize.config` are
+  merged as follows: `user`, `cmd`, `working_dir`, and `stop_signal` are
+  overwritten; `labels` and `exposed_ports` are merged via the union of the
+  values in the high priority and low priority manifests.
+
+`[options]`
+: The `options` section is also deep merged, meaning that individual fields of
+  the `options` section are merged rather than being completely overwritten.
+  All of the fields in the `options` section are individually overwritten by
+  higher priority manifests e.g. `options.allow.broken` is individually
+  overwritten by a higher priority manifest, as is `options.allow.licenses`,
+  etc.
+
+  This has implications for the activation mode of a composed environment. Since
+  the default activation mode is `dev`, it is not present in the manifest by
+  default. This means that if one included environment sets
+  `options.activate.mode` to `run`, the merged manifest will also have
+  `options.activate.mode = run` unless a higher priority manifest explicitly
+  sets `options.activate.mode = dev`.
+
 ## `[options]`
 
 The `[options]` section of the manifest details settings for the environment
