@@ -1641,6 +1641,91 @@ mod tests {
         mock.assert();
     }
 
+    // region: Error response handling
+    //
+    // Client errors and response error handling of the progenitor generated client
+    // follows the client spec.
+    // For example the pacakge version API is expected
+    // to return 404 and 422 error responses with a json body
+    // of the form `{ "detail": <String> }`.
+    // Errorneous responses (!= 200) _not_ mathcing these two cases,
+    // are represented as `APIError::UnexpectedResponse`s.
+    // Responses with expected status but not matching the expected body schema,
+    // will turn into `APIError::InvalidResponsePayload`.
+
+    /// 404 errors are mapped to [VersionsError::NotFound],
+    /// so consumers dont need to inspect raw error response
+    #[tokio::test]
+    async fn versions_error_response_not_found() {
+        let server = MockServer::start_async().await;
+
+        let mock = server.mock(|_, then| {
+            then.status(404)
+                .header("content-type", "application/json")
+                .json_body(json! ({"detail" : "(╯°□°)╯︵ ┻━┻ "}));
+        });
+
+        let client = CatalogClient::new(client_config(server.base_url().as_str()));
+        let result = client.package_versions("some-package").await;
+        assert!(
+            matches!(result, Err(VersionsError::NotFound)),
+            "expected VersionsError::NotFound, found: {result:?}"
+        );
+        mock.assert()
+    }
+
+    /// Other known error responses are detected
+    #[tokio::test]
+    async fn version_error_response() {
+        let server = MockServer::start_async().await;
+
+        let mock = server.mock(|_, then| {
+            then.status(422)
+                .header("content-type", "application/json")
+                .json_body(json! ({"detail" : "(╯°□°)╯︵ ┻━┻ "}));
+        });
+
+        let client = CatalogClient::new(client_config(server.base_url().as_str()));
+        let result = client.package_versions("some-package").await;
+        assert!(
+            matches!(
+                result,
+                Err(VersionsError::CatalogClientError(
+                    CatalogClientError::APIError(APIError::ErrorResponse(_))
+                ))
+            ),
+            "expected ErrorResponse, found: {result:?}"
+        );
+        mock.assert()
+    }
+
+    /// Other unknown error responses are [APIError::UnexpectedResponse]s
+    #[tokio::test]
+    async fn version_unknown_response() {
+        let server = MockServer::start_async().await;
+
+        let mock = server.mock(|_, then| {
+            then.status(418)
+                .header("content-type", "application/json")
+                .json_body(json! ({"detail" : "ceramic"}));
+        });
+
+        let client = CatalogClient::new(client_config(server.base_url().as_str()));
+        let result = client.package_versions("some-package").await;
+        assert!(
+            matches!(
+                result,
+                Err(VersionsError::CatalogClientError(
+                    CatalogClientError::APIError(APIError::UnexpectedResponse(_))
+                ))
+            ),
+            "expected APIError::UnexpectedResponse, found: {result:?}"
+        );
+        mock.assert()
+    }
+
+    // endregion
+
     /// make_depaging_stream collects items from multiple pages
     #[tokio::test]
     async fn depage_multiple_pages() {
