@@ -66,7 +66,7 @@ teardown() {
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 run "$FLOX_BIN" uninstall hello curl
   assert_failure
-  assert_output "❌ ERROR: couldn't uninstall 'curl', wasn't previously installed"
+  assert_output "❌ ERROR: no package named 'curl' in the manifest"
 }
 
 @test "uninstall: edits manifest" {
@@ -84,7 +84,7 @@ teardown() {
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 run "$FLOX_BIN" uninstall not-a-package
   assert_failure
-  assert_output "❌ ERROR: couldn't uninstall 'not-a-package', wasn't previously installed"
+  assert_output "❌ ERROR: no package named 'not-a-package' in the manifest"
 }
 
 @test "uninstall: removes link to installed binary" {
@@ -109,7 +109,7 @@ teardown() {
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 run "$FLOX_BIN" uninstall hello
   assert_failure
-  assert_output "❌ ERROR: couldn't uninstall 'hello', wasn't previously installed"
+  assert_output "❌ ERROR: no package named 'hello' in the manifest"
 }
 
 @test "uninstall: can uninstall packages with dotted att_paths" {

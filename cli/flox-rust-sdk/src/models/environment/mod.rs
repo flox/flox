@@ -652,6 +652,8 @@ pub enum EnvironmentError {
     ManifestNotFound,
 
     // endregion
+    #[error(transparent)]
+    ManifestError(#[from] ManifestError),
 
     // todo: candidate for impl specific error
     // * only path env implements init
@@ -768,6 +770,17 @@ pub enum UpgradeError {
     PkgNotFound(#[from] ManifestError),
     #[error("'{pkg}' is a package in the group '{group}' with multiple packages")]
     NonEmptyNamedGroup { pkg: String, group: String },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum UninstallError {
+    #[error(transparent)]
+    ManifestError(#[from] ManifestError),
+    #[error(
+        "Cannot remove included package '{0}'\n\
+         Remove the package from environment '{1}' and then run 'flox include upgrade'"
+    )]
+    PackageOnlyIncluded(String, String),
 }
 
 /// Open an environment defined in `{path}/.flox`

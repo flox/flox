@@ -32,6 +32,7 @@ use super::manifest::typed::{
     IncludeDescriptor,
     Inner,
     Manifest,
+    ManifestError,
     ManifestPackageDescriptor,
     PackageDescriptorCatalog,
     PackageDescriptorFlake,
@@ -399,6 +400,42 @@ pub struct Compose {
     pub include: Vec<LockedInclude>,
     /// Warnings generated during composition + locking.
     pub warnings: Vec<WarningWithContext>,
+}
+
+impl Compose {
+    /// Get the highest priority included environment which provides each package.
+    /// Packages that are not provided by any included environments will be absent from the map.
+    pub fn get_includes_for_packages(
+        &self,
+        packages: &[String],
+    ) -> Result<HashMap<String, LockedInclude>, ManifestError> {
+        let mut result = HashMap::new();
+        for package in packages {
+            if let Some(include) = Self::get_include_for_package(package, &self.include)? {
+                result.insert(package.clone(), include);
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Detect which included environment, if any, provides a given package.
+    fn get_include_for_package(
+        package: &String,
+        includes: &[LockedInclude],
+    ) -> Result<Option<LockedInclude>, ManifestError> {
+        // Reverse of merge order so that we return the highest priority match.
+        for include in includes.iter().rev() {
+            match include.manifest.get_install_ids(vec![package.to_string()]) {
+                Ok(_) => return Ok(Some(include.clone())),
+                Err(ManifestError::PackageNotFound(_)) => continue,
+                Err(ManifestError::MultiplePackagesMatch(_, _)) => continue,
+                Err(err) => return Err(err),
+            }
+        }
+
+        Ok(None)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -17,6 +17,7 @@ use super::{
     InstallationAttempt,
     LOCKFILE_FILENAME,
     MANIFEST_FILENAME,
+    UninstallError,
     UninstallationAttempt,
     UpgradeError,
     copy_dir_recursive,
@@ -25,7 +26,6 @@ use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::lockfile::{
     LockResult,
-    LockedInclude,
     LockedPackage,
     Lockfile,
     ResolutionFailure,
@@ -37,7 +37,7 @@ use crate::models::manifest::raw::{
     insert_packages,
     remove_packages,
 };
-use crate::models::manifest::typed::{Inner, Manifest, ManifestError, ManifestPackageDescriptor};
+use crate::models::manifest::typed::{Manifest, ManifestError};
 use crate::providers::buildenv::{
     BuildEnv,
     BuildEnvError,
@@ -333,25 +333,28 @@ impl CoreEnvironment<ReadOnly> {
 
         let lockfile: Lockfile = self.lock(flox)?.into();
         let packages_in_includes = if let Some(compose) = lockfile.compose {
-            Self::get_includes_for_packages(&packages, &compose.include)?
+            compose.get_includes_for_packages(&packages)?
         } else {
             HashMap::new()
         };
 
-        let install_ids = match Self::get_install_ids(&self.manifest()?, packages) {
+        let manifest = self.manifest()?;
+        let install_ids = match manifest.get_install_ids(packages) {
             Ok(ids) => ids,
             Err(err) => {
-                if let CoreEnvironmentError::PackageNotFound(ref package) = err {
+                if let ManifestError::PackageNotFound(ref package) = err {
                     if let Some(include) = packages_in_includes.get(package) {
                         return Err(EnvironmentError::Core(
-                            CoreEnvironmentError::PackageOnlyIncluded(
-                                package.to_string(),
-                                include.name.clone(),
+                            CoreEnvironmentError::UninstallError(
+                                UninstallError::PackageOnlyIncluded(
+                                    package.to_string(),
+                                    include.name.clone(),
+                                ),
                             ),
                         ));
                     }
                 };
-                return Err(EnvironmentError::Core(err));
+                return Err(EnvironmentError::ManifestError(err));
             },
         };
 
@@ -364,106 +367,6 @@ impl CoreEnvironment<ReadOnly> {
             still_included: packages_in_includes,
             built_environment_store_paths: Some(store_path),
         })
-    }
-
-    /// Get the highest priority included environment which provides each package.
-    /// Packages that are not provided by any included environments will be absent from the map.
-    fn get_includes_for_packages(
-        packages: &[String],
-        includes: &[LockedInclude],
-    ) -> Result<HashMap<String, LockedInclude>, EnvironmentError> {
-        let mut result = HashMap::new();
-        for package in packages {
-            if let Some(include) = Self::get_include_for_package(package, includes)? {
-                result.insert(package.clone(), include);
-            }
-        }
-
-        Ok(result)
-    }
-
-    /// Detect which included environment, if any, provides a given package.
-    fn get_include_for_package(
-        package: &String,
-        includes: &[LockedInclude],
-    ) -> Result<Option<LockedInclude>, EnvironmentError> {
-        // Reverse of merge order so that we return the highest priority match.
-        for include in includes.iter().rev() {
-            match Self::get_install_ids(&include.manifest, vec![package.to_string()]) {
-                Ok(_) => return Ok(Some(include.clone())),
-                Err(CoreEnvironmentError::PackageNotFound(_)) => continue,
-                Err(CoreEnvironmentError::MultiplePackagesMatch(_, _)) => continue,
-                Err(err) => return Err(EnvironmentError::Core(err)),
-            }
-        }
-
-        Ok(None)
-    }
-
-    /// Resolve "loose" package references (e.g. pkg-paths),
-    /// to `install_ids` if unambiguous
-    /// so that installation references remain valid for other package operations.
-    fn get_install_ids(
-        manifest: &Manifest,
-        packages: Vec<String>,
-    ) -> Result<Vec<String>, CoreEnvironmentError> {
-        let mut install_ids = Vec::new();
-        for pkg in packages {
-            // User passed an install id directly
-            if manifest.install.inner().contains_key(&pkg) {
-                install_ids.push(pkg);
-                continue;
-            }
-
-            // User passed a package path to uninstall
-            // To support version constraints, we match the provided value against
-            // `<pkg-path>` and `<pkg-path>@<version>`.
-            let matching_iids_by_pkg_path = manifest
-                .install
-                .inner()
-                .iter()
-                .filter(|(_iid, descriptor)| {
-                    // Find matching pkg-paths and select for uninstall
-
-                    // If the descriptor is not a catalog descriptor, skip.
-                    // flakes descriptors are only matched by install_id.
-                    let ManifestPackageDescriptor::Catalog(des) = descriptor else {
-                        return false;
-                    };
-
-                    // Select if the descriptor's pkg_path matches the user's input
-                    if des.pkg_path == pkg {
-                        return true;
-                    }
-
-                    // Select if the descriptor matches the user's input when the version is included
-                    // Future: if we want to allow uninstalling a specific outputs as well,
-                    //         parsing of uninstall specs will need to be more sophisticated.
-                    //         For now going with a simple check for pkg-path@version.
-                    if let Some(version) = &des.version {
-                        format!("{}@{}", des.pkg_path, version) == pkg
-                    } else {
-                        false
-                    }
-                })
-                .map(|(iid, _)| iid.to_owned())
-                .collect::<Vec<String>>();
-
-            // Extend the install_ids with the matching install id from pkg-path
-            match matching_iids_by_pkg_path.len() {
-                0 => return Err(CoreEnvironmentError::PackageNotFound(pkg)),
-                // if there is only one package with the given pkg-path, uninstall it
-                1 => install_ids.extend(matching_iids_by_pkg_path),
-                // if there are multiple packages with the given pkg-path, ask for a specific install id
-                _ => {
-                    return Err(CoreEnvironmentError::MultiplePackagesMatch(
-                        pkg,
-                        matching_iids_by_pkg_path,
-                    ));
-                },
-            }
-        }
-        Ok(install_ids)
     }
 
     /// Atomically edit this environment, ensuring that it still builds
@@ -1132,20 +1035,6 @@ pub enum CoreEnvironmentError {
     OpenManifest(#[source] std::io::Error),
     #[error("could not write manifest")]
     UpdateManifest(#[source] std::io::Error),
-    /// Tried to uninstall a package that wasn't installed
-    #[error("couldn't uninstall '{0}', wasn't previously installed")]
-    PackageNotFound(String),
-    /// Tried to uninstall a package that was only provided by an include.
-    #[error(
-        "Cannot remove included package '{0}'\n\
-         Remove the package from environment '{1}' and then run 'flox include upgrade'"
-    )]
-    PackageOnlyIncluded(String, String),
-    // Multiple packages match user input, must specify install_id
-    #[error(
-        "multiple packages match '{0}', please specify an install id from possible matches: {1:?}"
-    )]
-    MultiplePackagesMatch(String, Vec<String>),
     // endregion
     #[error(transparent)]
     Resolve(ResolveError),
@@ -1157,6 +1046,9 @@ pub enum CoreEnvironmentError {
     #[error("failed to upgrade environment")]
     UpgradeFailedCatalog(#[source] UpgradeError),
     // endregion
+    #[error(transparent)]
+    UninstallError(#[from] UninstallError),
+
     #[error("could not automatically migrate manifest to version 1")]
     MigrateManifest(#[source] toml_edit::de::Error),
 
@@ -1283,7 +1175,7 @@ mod tests {
     use crate::flox::test_helpers::flox_instance;
     use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
-    use crate::models::manifest::typed::{DEFAULT_GROUP_NAME, PackageDescriptorCatalog};
+    use crate::models::manifest::typed::{DEFAULT_GROUP_NAME, Inner};
     use crate::providers::catalog::{self, Client};
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
@@ -1660,123 +1552,6 @@ mod tests {
             .unwrap();
 
         assert_ne!(mtime_after, mtime_original);
-    }
-
-    /// UNINSTALL TESTS
-    ///
-    /// Generates a mock `TypedManifest` for testing purposes.
-    /// This function is designed to simplify the creation of test data by
-    /// generating a `TypedManifest` based on a list of install IDs and
-    /// package paths.
-    /// # Arguments
-    ///
-    /// * `entries` - A vector of tuples, where each tuple contains an install
-    ///   ID and a package path.
-    ///
-    /// # Returns
-    ///
-    /// * `TypedManifest` - A mock `TypedManifest` containing the provided entries.
-    fn generate_mock_manifest(entries: Vec<(&str, &str)>) -> Manifest {
-        let mut typed_manifest_mock = Manifest::default();
-
-        for (test_iid, dotted_package) in entries {
-            typed_manifest_mock.install.inner_mut().insert(
-                test_iid.to_string(),
-                ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
-                    pkg_path: dotted_package.to_string(),
-                    pkg_group: None,
-                    priority: None,
-                    version: None,
-                    systems: None,
-                }),
-            );
-        }
-
-        typed_manifest_mock
-    }
-    /// Return the install ID if it matches the user input
-    #[test]
-    fn test_get_install_ids_to_uninstall_by_install_id() {
-        let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
-        let result =
-            CoreEnvironment::get_install_ids(&manifest_mock, vec!["testInstallID".to_string()])
-                .unwrap();
-        assert_eq!(result, vec!["testInstallID".to_string()]);
-    }
-
-    #[test]
-    /// Return the install ID if a pkg-path matches the user input
-    fn test_get_install_ids_to_uninstall_by_pkg_path() {
-        let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
-        let result =
-            CoreEnvironment::get_install_ids(&manifest_mock, vec!["dotted.package".to_string()])
-                .unwrap();
-        assert_eq!(result, vec!["testInstallID".to_string()]);
-    }
-
-    #[test]
-    /// Ensure that the install ID takes precedence over pkg-path when both are present
-    fn test_get_install_ids_to_uninstall_iid_wins() {
-        let manifest_mock = generate_mock_manifest(vec![
-            ("testInstallID1", "dotted.package"),
-            ("testInstallID2", "dotted.package"),
-            ("dotted.package", "dotted.package"),
-        ]);
-
-        let result =
-            CoreEnvironment::get_install_ids(&manifest_mock, vec!["dotted.package".to_string()])
-                .unwrap();
-        assert_eq!(result, vec!["dotted.package".to_string()]);
-    }
-
-    #[test]
-    /// Throw an error when multiple packages match by pkg_path and flox can't determine which to uninstall
-    fn test_get_install_ids_to_uninstall_multiple_pkg_paths_match() {
-        let manifest_mock = generate_mock_manifest(vec![
-            ("testInstallID1", "dotted.package"),
-            ("testInstallID2", "dotted.package"),
-            ("testInstallID3", "dotted.package"),
-        ]);
-        let result =
-            CoreEnvironment::get_install_ids(&manifest_mock, vec!["dotted.package".to_string()])
-                .unwrap_err();
-        assert!(matches!(
-            result,
-            CoreEnvironmentError::MultiplePackagesMatch(_, _)
-        ));
-    }
-
-    #[test]
-    /// Throw an error if no install ID or pkg-path matches the user input
-    fn test_get_install_ids_to_uninstall_pkg_not_found() {
-        let manifest_mock = generate_mock_manifest(vec![("testInstallID1", "dotted.package")]);
-        let result = CoreEnvironment::get_install_ids(&manifest_mock, vec![
-            "invalid.packageName".to_string(),
-        ])
-        .unwrap_err();
-        assert!(matches!(result, CoreEnvironmentError::PackageNotFound(_)));
-    }
-
-    #[test]
-    fn test_get_install_ids_to_uninstall_with_version() {
-        let mut manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
-
-        if let ManifestPackageDescriptor::Catalog(descriptor) = manifest_mock
-            .install
-            .inner_mut()
-            .get_mut("testInstallID")
-            .unwrap()
-        {
-            descriptor.version = Some("1.0".to_string());
-        };
-
-        let result = CoreEnvironment::get_install_ids(&manifest_mock, vec![
-            "dotted.package@1.0".to_string(),
-        ])
-        .unwrap();
-
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], "testInstallID");
     }
 
     #[test]
