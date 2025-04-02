@@ -511,6 +511,7 @@ The fields in the include descriptor are as follows:
   name.
 
 ### Merge semantics
+
 When merging manifests, different sections have different merge semantics. As
 mentioned above, the order in which include descriptors are listed in the
 `include.environments` array determines the priority of the manifests, with the
@@ -528,7 +529,7 @@ manifest, but things can be overridden or added by higher priority manifests.
 : Variables are overwritten entirely by a higher priority manifest.
 
 `[hook]`
-: The scripts in `hook` are appended to one another with a newline in betweeen.
+: The scripts in `hook` are appended to one another with a newline in between.
   Scripts from higher priority manifests come after those from lower priority
   manifests.
 
@@ -540,7 +541,7 @@ manifest, but things can be overridden or added by higher priority manifests.
 : Service descriptors are entirely overwritten by higher priority manifests
 
 `[include]`
-: The `include` section is ommitted from merged manifests, so no merging of the
+: The `include` section is omitted from merged manifests, so no merging of the
   `include` section ever happens.
 
 `[containerize]`
