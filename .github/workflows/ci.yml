@@ -154,6 +154,27 @@ jobs:
           RUST_BACKTRACE: 1
         run: nix develop -L --no-update-lock-file --command just impure-tests
 
+      - name: "Upload CLI Unit Test Results"
+        if: ${{ (matrix.test-tags == '!activate,!containerize,!catalog') && (github.event_name == 'merge_group') }}
+        env:
+          BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_RUST_UNIT_TESTS_TOKEN }}
+        run: |
+          curl \
+            -X POST \
+            --fail-with-body \
+            -H "Authorization: Token token=\"$BUILDKITE_ANALYTICS_TOKEN\"" \
+            -F "data=@cli/target/nextest/ci/junit.xml" \
+            -F "format=junit" \
+            -F "run_env[CI]=github_actions" \
+            -F "run_env[key]=$GITHUB_ACTION-$GITHUB_RUN_NUMBER-$GITHUB_RUN_ATTEMPT" \
+            -F "run_env[number]=$GITHUB_RUN_NUMBER" \
+            -F "run_env[branch]=$GITHUB_REF" \
+            -F "run_env[commit_sha]=$GITHUB_SHA" \
+            -F "run_env[message]=$(git log -1 --pretty=format:"%s")" \
+            -F "run_env[url]=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            https://analytics-api.buildkite.com/v1/uploads
+
+
       # This differs from `nix-build-bats-tests` in that:
       #   - a cargo-built debug binary is used, like you would in local development
       #   - envrionment variables unskip some tests against live systems
@@ -401,14 +422,8 @@ jobs:
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30
-        run: |
-          git clean -xfd
-          ssh github@$REMOTE_SERVER_ADDRESS \
-            -oLogLevel=ERROR \
-            -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
-            nix run \
-                --accept-flake-config \
-                --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests' -- \
-                  --ci-runner '"flox-${{ matrix.system }}"' -- \
-                  --filter-tags '"${{ matrix.test-tags }}"'
+        env:
+          BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_INTEGRATION_TESTS_TOKEN }}
+          MATRIX_SYSTEM: ${{ matrix.system }}
+          MATRIX_TEST_TAGS: ${{ matrix.test-tags }}
+        run: ./.github/scripts/remote-execute-integration-tests.sh
