@@ -741,8 +741,7 @@ pub mod tests {
                 prop_hash_set(lowercase_alphanum_string(2), size..=size),
             )
                 .prop_map(|(manifests, names, dirs)| {
-                    let (mut flox, tempdir) = flox_instance();
-                    flox.features.set_compose(true);
+                    let (flox, tempdir) = flox_instance();
 
                     let mut environments = vec![];
                     for (manifest, name, dir) in izip!(&manifests, &names, &dirs) {
@@ -898,8 +897,7 @@ pub mod tests {
     /// should error
     #[test]
     fn include_upgrade_errors_without_includes() {
-        let (mut flox, _tempdir) = flox_instance();
-        flox.features.set_compose(true);
+        let (flox, _tempdir) = flox_instance();
 
         // Create environment
         let manifest_contents = indoc! {r#"
@@ -921,8 +919,7 @@ pub mod tests {
     /// include_upgrade()errors when specified included environment doesn't exist
     #[test]
     fn include_upgrade_errors_when_included_environment_does_not_exist() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.features.set_compose(true);
+        let (flox, tempdir) = flox_instance();
 
         // Create dep
         let dep_path = tempdir.path().join("dep");

@@ -796,9 +796,8 @@ mod tests {
     /// When the [include] section is modified, a warning is printed
     #[tokio::test]
     async fn edit_warns_when_include_changed() {
-        let (mut flox, tempdir) = flox_instance();
+        let (flox, tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
-        flox.features.set_compose(true);
 
         // Create composer environment
         let composer_path = tempdir.path().join("composer");
@@ -851,9 +850,8 @@ mod tests {
 
     #[tokio::test]
     async fn edit_warns_when_fields_overridden() {
-        let (mut flox, tempdir) = flox_instance();
+        let (flox, tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
-        flox.features.set_compose(true);
 
         let mut dep = new_path_environment(&flox, indoc! {r#"
             version = 1

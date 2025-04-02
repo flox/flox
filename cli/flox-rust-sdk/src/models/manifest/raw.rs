@@ -46,7 +46,7 @@ impl RawManifest {
     /// Additionally, this method prefixes each table with documentation on its usage, and
     /// and inserts commented configuration examples for tables left empty.
     pub fn new_documented(
-        features: Features,
+        _features: Features,
         systems: &[&System],
         customization: &InitCustomization,
     ) -> RawManifest {
@@ -59,11 +59,7 @@ impl RawManifest {
         Self::add_hook_section(&mut manifest, customization);
         Self::add_profile_section(&mut manifest, customization);
         Self::add_services_section(&mut manifest);
-
-        if features.compose() {
-            Self::add_include_section(&mut manifest);
-        }
-
+        Self::add_include_section(&mut manifest);
         Self::add_options_section(&mut manifest, systems, customization);
 
         RawManifest(manifest)
@@ -1132,6 +1128,15 @@ pub(super) mod test {
             # myservice.command = "python3 -m http.server"
 
 
+            ## Include ----------------------------------------------------------
+            ## ... environments to create a composed environment
+            ## ------------------------------------------------------------------
+            [include]
+            # environments = [
+            #     { dir = "../common" }
+            # ]
+
+
             ## Other Environment Options -----------------------------------------
             [options]
             # Systems that environment is compatible with
@@ -1230,6 +1235,15 @@ pub(super) mod test {
             ## -------------------------------------------------------------------
             [services]
             # myservice.command = "python3 -m http.server"
+
+
+            ## Include ----------------------------------------------------------
+            ## ... environments to create a composed environment
+            ## ------------------------------------------------------------------
+            [include]
+            # environments = [
+            #     { dir = "../common" }
+            # ]
 
 
             ## Other Environment Options -----------------------------------------
@@ -1335,6 +1349,15 @@ pub(super) mod test {
             # myservice.command = "python3 -m http.server"
 
 
+            ## Include ----------------------------------------------------------
+            ## ... environments to create a composed environment
+            ## ------------------------------------------------------------------
+            [include]
+            # environments = [
+            #     { dir = "../common" }
+            # ]
+
+
             ## Other Environment Options -----------------------------------------
             [options]
             # Systems that environment is compatible with
@@ -1424,6 +1447,15 @@ pub(super) mod test {
             ## -------------------------------------------------------------------
             [services]
             # myservice.command = "python3 -m http.server"
+
+
+            ## Include ----------------------------------------------------------
+            ## ... environments to create a composed environment
+            ## ------------------------------------------------------------------
+            [include]
+            # environments = [
+            #     { dir = "../common" }
+            # ]
 
 
             ## Other Environment Options -----------------------------------------
@@ -1517,6 +1549,15 @@ pub(super) mod test {
             ## -------------------------------------------------------------------
             [services]
             # myservice.command = "python3 -m http.server"
+
+
+            ## Include ----------------------------------------------------------
+            ## ... environments to create a composed environment
+            ## ------------------------------------------------------------------
+            [include]
+            # environments = [
+            #     { dir = "../common" }
+            # ]
 
 
             ## Other Environment Options -----------------------------------------

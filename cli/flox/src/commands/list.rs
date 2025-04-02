@@ -767,8 +767,7 @@ mod tests {
     /// subtables for composed environments
     #[test]
     fn print_config_puts_packages_in_same_table() {
-        let (mut flox, tempdir) = flox_instance();
-        flox.features.set_compose(true);
+        let (flox, tempdir) = flox_instance();
 
         // Create dep environment
         let dep_path = tempdir.path().join("dep");
