@@ -171,7 +171,7 @@ To use it the `publish` feature flag has to be enabled:
 ```shell
 $ flox config --set-bool features.publish true
 # OR
-$ export FLOX_FEATURE_PUBLIsH=true
+$ export FLOX_FEATURES_PUBLISH=true
 ```
 
 # SEE ALSO

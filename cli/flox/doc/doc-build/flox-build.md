@@ -90,7 +90,7 @@ To use it the `build` feature flag has to be enabled:
 ```shell
 $ flox config --set-bool features.build true
 # OR
-$ export FLOX_FEATURE_BUILD=true
+$ export FLOX_FEATURES_BUILD=true
 ```
 
 ## Building a simple pure package
