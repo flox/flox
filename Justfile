@@ -13,7 +13,7 @@
 nix_options := "--extra-experimental-features nix-command \
                 --extra-experimental-features flakes"
 INPUT_DATA := "${PWD}/test_data/input_data"
-cargo_test_invocation := "cargo nextest run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
+cargo_test_invocation := "cargo nextest --profile ci run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
 
 # Set the FLOX_VERSION variable so that it can be used in the build/runtime
 # It's important to add the git revision to the version string,
