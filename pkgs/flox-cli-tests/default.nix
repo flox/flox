@@ -140,6 +140,10 @@ writeShellScriptBin PROJECT_NAME ''
   FLOX_LATEST_VERSION=${builtins.readFile ../../VERSION}
   export FLOX_LATEST_VERSION
 
+  # This makes test failures easier to debug, especially in CI, but requires
+  # explicitly disabling in tests that use `assert_failure` and `assert_output`.
+  export RUST_BACKTRACE=1
+
   # TODO: we shouldn't do this but rather use absolute paths
   # Look if we can use https://github.com/abathur/resholve
   export PATH="$PROJECT_PATH:${lib.makeBinPath paths}"
