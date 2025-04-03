@@ -310,7 +310,7 @@ let
                       let
                         floxActivateWithArgs = escapeShellArgs (
                           [
-                            programsCfg.package
+                            "${programsCfg.package}/bin/flox"
                             "activate"
                             "--remote"
                             activationCfg.environment
