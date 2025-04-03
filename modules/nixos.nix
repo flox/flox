@@ -205,7 +205,14 @@ let
 
     in
     {
-      options = floxModuleOpts;
+      options = floxModuleOpts // {
+        description = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          example = "Foobar Web Server";
+          description = mdDoc "The systemd description for the service";
+        };
+      };
     };
 
   floxServicesModule =
@@ -220,6 +227,12 @@ let
           user = mkOption {
             type = types.str;
             default = "flox";
+            description = "FIX ME";
+          };
+          group = mkOption {
+            type = types.str;
+            default = "flox";
+            description = "FIX ME";
           };
           floxHubTokenFile = mkOption {
             type = types.nullOr types.path;
@@ -242,9 +255,13 @@ let
 
           floxUser = mkIf (serviceCfg.user == options.services.flox.user.default) {
             users.users = {
-              "flox" = {
+              flox = {
+                group = serviceCfg.group;
                 isSystemUser = true;
               };
+            };
+            users.groups = {
+              flox = { };
             };
           };
 
@@ -289,30 +306,8 @@ let
                   })
 
                   {
-                    services."flox-activation@${name}" =
+                    services."${name}" =
                       let
-                        jobScripts = makeJobScript {
-                          name = "${name}-start";
-                          text =
-                            if (activationCfg.script != "") then
-                              activationCfg.script
-                            else if (config.script != "") then
-                              config.script
-                            else
-                              "WHATEVER";
-                          inherit (config) enableStrictShellChecks;
-                        };
-
-                        # Prefer activationCfg.execStart over config{,.flox}.script.
-                        scriptAndArgs =
-                          if (activationCfg.execStart != "") then
-                            activationCfg.execStart
-                          else if (activationCfg.script != "") then
-                            "${jobScripts} ${activationCfg.scriptArgs}"
-                          else
-                            # todo: encode in type
-                            throw "must specify either a script or execStart command";
-
                         floxActivateWithArgs = escapeShellArgs (
                           [
                             programsCfg.package
@@ -325,6 +320,15 @@ let
                         );
                       in
                       {
+                        description =
+                          if (activationCfg.description != null) then
+                            activationCfg.description
+                          else
+                            "Flox ${name} service running from ${activationCfg.environment} environment";
+                        wants = [ "network-online.target" ];
+                        after = [ "network-online.target" ];
+                        wantedBy = [ "multi-user.target" ];
+
                         serviceConfig = mkMerge [
                           # Default service config
                           {
@@ -336,7 +340,7 @@ let
 
                           # Set the ExecStart config
                           {
-                            ExecStart = "${floxActivateWithArgs} -- ${scriptAndArgs}";
+                            ExecStart = "${floxActivateWithArgs} --start-services";
                           }
 
                           # Workaround so the service can pull the environment from private repositories
