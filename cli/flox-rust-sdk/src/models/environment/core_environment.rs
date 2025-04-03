@@ -372,14 +372,17 @@ impl CoreEnvironment<ReadOnly> {
     /// Atomically edit this environment, ensuring that it still builds
     pub fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
         let old_contents = self.manifest_contents()?;
+        let lockfile_up_to_date = self.lockfile_if_up_to_date()?.is_some();
 
         // skip the edit if the contents are unchanged
+        // and the existing lockfile is up to date
         // note: consumers of this function may call [Self::link] separately,
         //       causing an evaluation/build of the environment.
-        if contents == old_contents {
+        if contents == old_contents && lockfile_up_to_date {
             return Ok(EditResult::Unchanged);
         }
 
+        // Use the existing lockfile regardless of whether it's up-to-date.
         let old_lockfile = self.existing_lockfile()?;
         let (store_path, new_lockfile) = self.transact_with_manifest_contents(&contents, flox)?;
 
@@ -1213,15 +1216,29 @@ mod tests {
         assert!(env_view.env_dir.join(LOCKFILE_FILENAME).exists());
     }
 
-    /// A no-op with edit returns EditResult::Unchanged
+    /// A no-op with edit against a locked environment returns EditResult::Unchanged
     #[test]
-    fn edit_no_op_returns_unchanged() {
+    fn edit_no_op_locked_returns_unchanged() {
         let (flox, _temp_dir_handle) = flox_instance();
-        let mut env_view = new_core_environment(&flox, "version = 1");
 
-        let result = env_view.edit(&flox, "version = 1".to_string()).unwrap();
+        let same_manifest = "version = 1";
+        let mut env_view = new_core_environment(&flox, same_manifest);
+        env_view.lock(&flox).unwrap(); // Explicit lock
 
+        let result = env_view.edit(&flox, same_manifest.to_string()).unwrap();
         assert!(matches!(result, EditResult::Unchanged));
+    }
+
+    /// A no-op with edit against an unlocked environment returns EditResult::Changed
+    #[test]
+    fn edit_no_op_unlocked_returns_changed() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let same_manifest = "version = 1";
+        let mut env_view = new_core_environment(&flox, same_manifest);
+
+        let result = env_view.edit(&flox, same_manifest.to_string()).unwrap();
+        assert!(matches!(result, EditResult::Changed { .. }));
     }
 
     /// Trying to build a manifest with a system other than the current one

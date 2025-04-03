@@ -212,7 +212,21 @@ EOF
   run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   assert_success
   assert_output "⚠️  No changes made to environment."
+}
 
+# bats test_tags=edit:unlocked
+@test "'flox edit' locks when there are no changes and no lockfile" {
+  "$FLOX_BIN" init
+
+  # Lock once and delete the lock.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
+  rm .flox/env/manifest.lock
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
+  assert_success
+  assert_output "✅ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
