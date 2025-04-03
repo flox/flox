@@ -510,6 +510,10 @@ The fields in the include descriptor are as follows:
   environment to solve those name conflicts or simply provide a more convenient
   name.
 
+Changes to the included environments aren't automatically reflected in the
+composing environment. You control when updates are pulled in by using
+[`flox include upgrade`](./flox-include-upgrade.md).
+
 ### Merge semantics
 
 When merging manifests, different sections have different merge semantics. As
