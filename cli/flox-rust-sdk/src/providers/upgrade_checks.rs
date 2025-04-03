@@ -194,12 +194,17 @@ fn read_upgrade_information(
     }
 
     let info_str =
-        fs::read_to_string(upgrade_information_path).map_err(UpgradeChecksError::Read)?;
+        fs::read_to_string(&upgrade_information_path).map_err(UpgradeChecksError::Read)?;
 
-    // todo: should we ignore deserialize errors and just return none here,
-    // so the file may just get overriden with a good one later?
-    let info = serde_json::from_str(&info_str).map_err(UpgradeChecksError::Deserialize)?;
-    Ok(Some(info))
+    let info = match serde_json::from_str(&info_str) {
+        Ok(info) => Some(info),
+        Err(err) => {
+            debug!(?err, path = ?upgrade_information_path.as_ref(), "discarding existing upgrade information");
+            None
+        },
+    };
+
+    Ok(info)
 }
 
 #[cfg(test)]
@@ -249,6 +254,21 @@ mod tests {
     #[test]
     fn upgrade_information_is_none_if_absent() {
         let temp_dir = tempfile::tempdir().unwrap();
+
+        let guard = UpgradeInformationGuard::read_in(temp_dir.path()).unwrap();
+        assert_eq!(guard.info(), &None);
+    }
+
+    #[test]
+    fn upgrade_information_is_discarded_if_invalid() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = upgrade_information_path(temp_dir.path());
+
+        // The more likely cause of a deserialization failure is that an
+        // existing serialized `Lockfile` is missing new non-optional fields and
+        // is no longer forwards-compatible, but we use a simpler variation for
+        // the test.
+        fs::write(&path, r#"{"missing_fields": true}"#).unwrap();
 
         let guard = UpgradeInformationGuard::read_in(temp_dir.path()).unwrap();
         assert_eq!(guard.info(), &None);
