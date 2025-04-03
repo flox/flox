@@ -1140,12 +1140,15 @@ pub mod test {
     }
 
     // A serialized manifest shouldn't contain any tables that aren't specified
-    // or required. This makes the lockfile and presentation of merged manifests
-    // (which have to come from `Manifest` rather than `RawManifest`) tidier.
+    // or required, with the exception of `options` which is fiddly to implement
+    // `skip_serializing_if` for such a mixture of fields.
+    //
+    // This makes the lockfile tidier and improve cross-version compatibility.
+    // It doesn't affect the presentation of composed manifests because `flox
+    // list` uses a different serializer.
     #[test]
     fn serialize_omits_unspecified_fields() {
         let manifest = Manifest::default();
-        // TODO: omit `options` in https://github.com/flox/flox/issues/2812
         let expected = indoc! {r#"
             version = 1
 
@@ -1166,7 +1169,6 @@ pub mod test {
             profile: Some(Profile::default()),
             ..Default::default()
         };
-        // TODO: omit `options` in https://github.com/flox/flox/issues/2812
         let expected = indoc! {r#"
             version = 1
 
