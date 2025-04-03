@@ -38,8 +38,11 @@ impl IncludeFetcher {
             ConcreteEnvironment::Path(environment) => {
                 if !environment.lockfile_up_to_date()? {
                     return Err(EnvironmentError::Recoverable(
-                        RecoverableMergeError::Catchall(
-                            "cannot include environment since its manifest and lockfile are out of sync".to_string()
+                        RecoverableMergeError::Catchall(formatdoc! {"
+                            cannot include environment since its manifest and lockfile are out of sync
+
+                            To resolve this issue run 'flox edit -d {}' and retry
+                        ", path.to_string_lossy()}.to_string()
                         ),
                     ));
                 }
@@ -201,14 +204,17 @@ mod test {
             name: None,
         };
 
+        let expected_error = formatdoc! {r#"
+        cannot include environment since its manifest and lockfile are out of sync
+
+        To resolve this issue run 'flox edit -d {}' and retry
+        "#, environment_path.to_string_lossy()};
+
         // Fetching should fail before locking
         let err = include_fetcher
             .fetch(&flox, &include_descriptor)
             .unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "cannot include environment since its manifest and lockfile are out of sync"
-        );
+        assert_eq!(err.to_string(), expected_error);
 
         // After locking, fetching should succeed
         environment.lockfile(&flox).unwrap();
@@ -235,10 +241,7 @@ mod test {
         let err = include_fetcher
             .fetch(&flox, &include_descriptor)
             .unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "cannot include environment since its manifest and lockfile are out of sync"
-        );
+        assert_eq!(err.to_string(), expected_error);
     }
 
     /// fetch() errors if attempting to fetch an out of sync managed environment
