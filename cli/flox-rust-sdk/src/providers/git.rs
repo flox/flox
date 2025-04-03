@@ -109,7 +109,7 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     fn push(&self, remote: &str, force: bool) -> Result<(), Self::PushError>;
     fn set_origin(&self, branch: &str, origin_name: &str) -> Result<(), Self::SetOriginError>;
 
-    fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError>;
+    fn get_current_branch_remote_info(&self) -> Result<OriginInfo, Self::GetOriginError>;
 
     fn workdir(&self) -> Option<&Path>;
     fn path(&self) -> &Path;
@@ -860,7 +860,7 @@ impl GitProvider for GitCommandProvider {
     ///   (remote_name, branch_name) = split_once "/" upstream_ref
     ///   upstream_url = git remote get-url ${remote_name}
     ///   upstream_rev = git ls-remote ${remote_name} ${branch_name}
-    fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError> {
+    fn get_current_branch_remote_info(&self) -> Result<OriginInfo, Self::GetOriginError> {
         let (remote_name, remote_branch) = {
             let reference = GitCommandProvider::run_command(
                 self.new_command()
