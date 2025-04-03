@@ -141,13 +141,6 @@ version = 1
 
 [hook]
 on-activate = "something suspicious"
-
-[profile]
-
-[options.allow]
-licenses = []
-
-[options.semver]
 EOF
   )"
 
