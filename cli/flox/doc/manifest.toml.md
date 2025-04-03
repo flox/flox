@@ -514,6 +514,8 @@ Changes to the included environments aren't automatically reflected in the
 composing environment. You control when updates are pulled in by using
 [`flox include upgrade`](./flox-include-upgrade.md).
 
+Remote environments are not currently supported as includes.
+
 ### Merge semantics
 
 When merging manifests, different sections have different merge semantics. As
