@@ -6,7 +6,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::search::SearchResults;
 use flox_rust_sdk::providers::catalog::{ClientTrait, SearchTerm};
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
 
 use crate::config::Config;
@@ -18,6 +18,14 @@ use crate::utils::tracing::sentry_set_tag;
 
 pub(crate) const DEFAULT_SEARCH_LIMIT: Option<NonZeroU8> = NonZeroU8::new(10);
 const FLOX_SHOW_HINT: &str = "Use 'flox show <package>' to see available versions";
+
+fn missing_search_term<T>() -> Result<T> {
+    bail!(indoc! {"
+        No search term provided.
+
+        Try searching with a search term. For example, 'flox search curl'
+    "});
+}
 
 // Search for packages to install
 #[derive(Debug, Bpaf, Clone)]
@@ -33,19 +41,14 @@ pub struct Search {
     /// The package to search for in the format '<pkg-path>'.
     ///
     /// ex. python310Packages.pip
-    #[bpaf(positional("search-term"), optional)]
-    pub search_term: Option<String>,
+    #[bpaf(positional("search-term"), fallback_with(missing_search_term))]
+    pub search_term: String,
 }
 
 impl Search {
     #[instrument(name = "search", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        let Some(search_term) = &self.search_term else {
-            bail!(
-                "No search term provided.\n\n\
-                Try searching with a search term. For example, 'flox search curl'"
-            );
-        };
+        let search_term = &self.search_term;
 
         sentry_set_tag("json", self.json);
         sentry_set_tag("show_all", self.all);
