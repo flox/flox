@@ -172,6 +172,13 @@ EOF
   assert_line "run/"
 }
 
+@test "c9: flox init adds .gitattributes" {
+  "$FLOX_BIN" init
+  run cat .flox/.gitattributes
+  assert_success
+  assert_line "env/manifest.lock linguist-generated=true linguist-language=JSON"
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=init:python:requirements
