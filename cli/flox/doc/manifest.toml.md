@@ -503,12 +503,9 @@ The fields in the include descriptor are as follows:
   `--dir` flag passed to many Flox commands.
 
 `name`
-: An optional override to the name of the environment. When including multiple
-  environments it's possible that the name of the environment itself is not
-  intuitive or convenient, and it's possible that there are name conflicts with
-  other included environments. This field allows you to override the name of an
-  environment to solve those name conflicts or simply provide a more convenient
-  name.
+: An optional override to the name of the included environment. This is useful
+  when you are including multiple environments that have the same name, or when
+  you want to provide a more convenient name for the included environment.
 
 Changes to the included environments aren't automatically reflected in the
 composing environment. You control when updates are pulled in by using
