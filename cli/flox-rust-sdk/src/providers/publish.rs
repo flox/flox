@@ -403,7 +403,7 @@ pub fn check_build_metadata(
 
 fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, PublishError> {
     // Gather build repo info
-    let origin = git.get_origin().map_err(|_e| {
+    let origin = git.get_current_branch_remote_info().map_err(|_e| {
         PublishError::UnsupportedEnvironmentState(
             "Unable to identify repository origin info. Checkout a branch with 'git checkout -b' and set upstream with 'git branch --set-upstream-to origin/branch'".to_string(),
         )
