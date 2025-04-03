@@ -644,6 +644,8 @@ pub enum EnvironmentError {
     EnvironmentExists(PathBuf),
     #[error("could not write .gitignore file")]
     WriteGitignore(#[source] std::io::Error),
+    #[error("could not write .gitattributes file")]
+    WriteGitattributes(#[source] std::io::Error),
     // endregion
 
     // todo: move pointer related errors somewhere else?
