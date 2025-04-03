@@ -76,9 +76,10 @@ pub fn format_error(err: &EnvironmentError) -> String {
             delete the existing environment using 'flox delete -d {path:?}' and try again.
         "},
 
-        // This should rarely happen.
-        // At this point we already proved that we can write to the directory.
+        // These errors should rarely happen.
+        // At this point, we already proved that we can write to the directory.
         EnvironmentError::WriteGitignore(_) => display_chain(err),
+        EnvironmentError::WriteGitattributes(_) => display_chain(err),
 
         // todo: enrich with a path?
         EnvironmentError::ReadEnvironmentMetadata(error) => formatdoc! {"

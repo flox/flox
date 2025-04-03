@@ -18,6 +18,7 @@ use std::fs::{self};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::debug;
 
@@ -525,6 +526,12 @@ impl PathEnvironment {
 
         // Write stateful directories to .flox/.gitignore
         create_dot_flox_gitignore(&dot_flox_path)?;
+
+        // Write (configure) Git attributes to ./flox/.gitattributes
+        fs::write(dot_flox_path.join(".gitattributes"), formatdoc! {"
+            {ENV_DIR_NAME}/{LOCKFILE_FILENAME} linguist-generated=true linguist-language=JSON
+            "})
+        .map_err(EnvironmentError::WriteGitattributes)?;
 
         let dot_flox_path = CanonicalPath::new(dot_flox_path).expect("the directory just created");
 
