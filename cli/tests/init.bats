@@ -165,7 +165,7 @@ EOF
 }
 
 # bats test_tags=init:gitignore
-@test "c9: flox init adds .gitingore that ignores run/ directory" {
+@test "c9: flox init adds .gitignore that ignores run/ directory" {
   "$FLOX_BIN" init
   run cat .flox/.gitignore
   assert_success
