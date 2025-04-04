@@ -31,9 +31,14 @@ runs:
   steps:
     - name: "Install newer Nix"
       uses: "cachix/install-nix-action@v31"
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
+          accept-flake-config = true
+        github_access_token: ${{ github.token }}
 
     - name: "Configure Nix"
-      uses: "flox/configure-nix-action@main"
+      uses: "flox/configure-nix-action@bryanhonof.fix-configure-ssh-on-macos"
       with:
         github-access-token:    "${{ inputs.GITHUB_ACCESS_TOKEN }}"
         substituter:            "${{ inputs.SUBSTITUTER }}"
@@ -42,15 +47,6 @@ runs:
         aws-secret-access-key:  "${{ inputs.AWS_SECRET_ACCESS_KEY }}"
         ssh-key:                "${{ inputs.SSH_KEY }}"
         remote-builders:        "${{ inputs.REMOTE_BUILDERS }}"
-
-    - name: "Configure Nix"
-      shell: "bash"
-      run: |
-        sudo echo
-        {
-          echo "experimental-features = nix-command flakes";
-          echo "accept-flake-config = true";
-        } | sudo tee -a /etc/nix/nix.conf >/dev/null
 
     - name: "Setup Tailscale"
       if: ${{ inputs.TAILSCALE_URL && inputs.TAILSCALE_AUTH_KEY }}
