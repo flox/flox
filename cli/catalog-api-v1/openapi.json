@@ -1268,7 +1268,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigMetaOnly__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__"
+                  "$ref": "#/components/schemas/CatalogStoreConfig"
                 }
               }
             }
@@ -1324,7 +1324,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigMetaOnly__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__"
+                "$ref": "#/components/schemas/CatalogStoreConfig"
               }
             }
           }
@@ -1335,7 +1335,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigMetaOnly__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__"
+                  "$ref": "#/components/schemas/CatalogStoreConfig"
                 }
               }
             }
@@ -1651,6 +1651,32 @@
           "tags"
         ],
         "title": "CatalogStatus"
+      },
+      "CatalogStoreConfig": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/CatalogStoreConfigNull"
+          },
+          {
+            "$ref": "#/components/schemas/CatalogStoreConfigMetaOnly"
+          },
+          {
+            "$ref": "#/components/schemas/CatalogStoreConfigNixCopy"
+          },
+          {
+            "$ref": "#/components/schemas/CatalogStoreConfigPublisher"
+          }
+        ],
+        "title": "CatalogStoreConfig",
+        "discriminator": {
+          "propertyName": "store_type",
+          "mapping": {
+            "meta-only": "#/components/schemas/CatalogStoreConfigMetaOnly",
+            "nix-copy": "#/components/schemas/CatalogStoreConfigNixCopy",
+            "null": "#/components/schemas/CatalogStoreConfigNull",
+            "publisher": "#/components/schemas/CatalogStoreConfigPublisher"
+          }
+        }
       },
       "CatalogStoreConfigMetaOnly": {
         "properties": {
@@ -2306,9 +2332,15 @@
             "title": "Ingress Uri",
             "nullable": true,
             "type": "string"
+          },
+          "catalog_store_config": {
+            "$ref": "#/components/schemas/CatalogStoreConfig"
           }
         },
         "type": "object",
+        "required": [
+          "catalog_store_config"
+        ],
         "title": "PublishResponse"
       },
       "ResolutionMessageGeneral": {
@@ -2547,32 +2579,6 @@
           "items"
         ],
         "title": "ResolvedPackageGroups"
-      },
-      "RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigMetaOnly__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__": {
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/CatalogStoreConfigNull"
-          },
-          {
-            "$ref": "#/components/schemas/CatalogStoreConfigMetaOnly"
-          },
-          {
-            "$ref": "#/components/schemas/CatalogStoreConfigNixCopy"
-          },
-          {
-            "$ref": "#/components/schemas/CatalogStoreConfigPublisher"
-          }
-        ],
-        "title": "CatalogStoreConfig",
-        "discriminator": {
-          "propertyName": "store_type",
-          "mapping": {
-            "meta-only": "#/components/schemas/CatalogStoreConfigMetaOnly",
-            "nix-copy": "#/components/schemas/CatalogStoreConfigNixCopy",
-            "null": "#/components/schemas/CatalogStoreConfigNull",
-            "publisher": "#/components/schemas/CatalogStoreConfigPublisher"
-          }
-        }
       },
       "ServiceStatus": {
         "properties": {

@@ -351,6 +351,63 @@ pub mod types {
             value.clone()
         }
     }
+    ///CatalogStoreConfig
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CatalogStoreConfig",
+    ///  "oneOf": [
+    ///    {
+    ///      "$ref": "#/components/schemas/CatalogStoreConfigNull"
+    ///    },
+    ///    {
+    ///      "$ref": "#/components/schemas/CatalogStoreConfigMetaOnly"
+    ///    },
+    ///    {
+    ///      "$ref": "#/components/schemas/CatalogStoreConfigNixCopy"
+    ///    },
+    ///    {
+    ///      "$ref": "#/components/schemas/CatalogStoreConfigPublisher"
+    ///    }
+    ///  ]
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[serde(untagged)]
+    pub enum CatalogStoreConfig {
+        Null(CatalogStoreConfigNull),
+        MetaOnly(CatalogStoreConfigMetaOnly),
+        NixCopy(CatalogStoreConfigNixCopy),
+        Publisher(CatalogStoreConfigPublisher),
+    }
+    impl From<&CatalogStoreConfig> for CatalogStoreConfig {
+        fn from(value: &CatalogStoreConfig) -> Self {
+            value.clone()
+        }
+    }
+    impl From<CatalogStoreConfigNull> for CatalogStoreConfig {
+        fn from(value: CatalogStoreConfigNull) -> Self {
+            Self::Null(value)
+        }
+    }
+    impl From<CatalogStoreConfigMetaOnly> for CatalogStoreConfig {
+        fn from(value: CatalogStoreConfigMetaOnly) -> Self {
+            Self::MetaOnly(value)
+        }
+    }
+    impl From<CatalogStoreConfigNixCopy> for CatalogStoreConfig {
+        fn from(value: CatalogStoreConfigNixCopy) -> Self {
+            Self::NixCopy(value)
+        }
+    }
+    impl From<CatalogStoreConfigPublisher> for CatalogStoreConfig {
+        fn from(value: CatalogStoreConfigPublisher) -> Self {
+            Self::Publisher(value)
+        }
+    }
     ///CatalogStoreConfigMetaOnly
     ///
     /// <details><summary>JSON schema</summary>
@@ -1683,7 +1740,13 @@ pub mod types {
     ///{
     ///  "title": "PublishResponse",
     ///  "type": "object",
+    ///  "required": [
+    ///    "catalog_store_config"
+    ///  ],
     ///  "properties": {
+    ///    "catalog_store_config": {
+    ///      "$ref": "#/components/schemas/CatalogStoreConfig"
+    ///    },
     ///    "ingress_uri": {
     ///      "title": "Ingress Uri",
     ///      "type": [
@@ -1697,6 +1760,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PublishResponse {
+        pub catalog_store_config: CatalogStoreConfig,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub ingress_uri: Option<String>,
     }
@@ -2059,72 +2123,6 @@ pub mod types {
     impl From<&ResolvedPackageGroups> for ResolvedPackageGroups {
         fn from(value: &ResolvedPackageGroups) -> Self {
             value.clone()
-        }
-    }
-    ///RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "CatalogStoreConfig",
-    ///  "oneOf": [
-    ///    {
-    ///      "$ref": "#/components/schemas/CatalogStoreConfigNull"
-    ///    },
-    ///    {
-    ///      "$ref": "#/components/schemas/CatalogStoreConfigMetaOnly"
-    ///    },
-    ///    {
-    ///      "$ref": "#/components/schemas/CatalogStoreConfigNixCopy"
-    ///    },
-    ///    {
-    ///      "$ref": "#/components/schemas/CatalogStoreConfigPublisher"
-    ///    }
-    ///  ]
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    #[serde(untagged)]
-    pub enum RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
-        Null(CatalogStoreConfigNull),
-        MetaOnly(CatalogStoreConfigMetaOnly),
-        NixCopy(CatalogStoreConfigNixCopy),
-        Publisher(CatalogStoreConfigPublisher),
-    }
-    impl From<
-        &RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
-    >
-    for RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
-        fn from(
-            value: &RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
-        ) -> Self {
-            value.clone()
-        }
-    }
-    impl From<CatalogStoreConfigNull>
-    for RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
-        fn from(value: CatalogStoreConfigNull) -> Self {
-            Self::Null(value)
-        }
-    }
-    impl From<CatalogStoreConfigMetaOnly>
-    for RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
-        fn from(value: CatalogStoreConfigMetaOnly) -> Self {
-            Self::MetaOnly(value)
-        }
-    }
-    impl From<CatalogStoreConfigNixCopy>
-    for RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
-        fn from(value: CatalogStoreConfigNixCopy) -> Self {
-            Self::NixCopy(value)
-        }
-    }
-    impl From<CatalogStoreConfigPublisher>
-    for RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
-        fn from(value: CatalogStoreConfigPublisher) -> Self {
-            Self::Publisher(value)
         }
     }
     ///SearchTerm
@@ -4176,12 +4174,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
     >(
         &'a self,
         catalog_name: &'a types::CatalogName,
-    ) -> Result<
-        ResponseValue<
-            types::RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
-        >,
-        Error<types::ErrorResponse>,
-    > {
+    ) -> Result<ResponseValue<types::CatalogStoreConfig>, Error<types::ErrorResponse>> {
         let url = format!(
             "{}/api/v1/catalog/catalogs/{}/store/config", self.baseurl, encode_path(&
             catalog_name.to_string()),
@@ -4220,13 +4213,8 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
     >(
         &'a self,
         catalog_name: &'a types::CatalogName,
-        body: &'a types::RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
-    ) -> Result<
-        ResponseValue<
-            types::RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
-        >,
-        Error<types::ErrorResponse>,
-    > {
+        body: &'a types::CatalogStoreConfig,
+    ) -> Result<ResponseValue<types::CatalogStoreConfig>, Error<types::ErrorResponse>> {
         let url = format!(
             "{}/api/v1/catalog/catalogs/{}/store/config", self.baseurl, encode_path(&
             catalog_name.to_string()),
