@@ -29,15 +29,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: "Setup Tailscale"
-      uses: "tailscale/github-action@v3"
-      if: ${{ inputs.TAILSCALE_URL && inputs.TAILSCALE_AUTH_KEY }}
-      with:
-        args: "--timeout 30s --login-server ${{ inputs.TAILSCALE_URL }}"
-        tags: "tag:ci"
-        authkey: "${{ inputs.TAILSCALE_AUTH_KEY }}"
-        version: latest
-
     - name: "Install newer Nix"
       uses: "cachix/install-nix-action@V28"
 
@@ -60,6 +51,40 @@ runs:
           echo "experimental-features = nix-command flakes";
           echo "accept-flake-config = true";
         } | sudo tee -a /etc/nix/nix.conf >/dev/null
+
+    - name: "Setup Tailscale"
+      if: ${{ inputs.TAILSCALE_URL && inputs.TAILSCALE_AUTH_KEY }}
+      shell: "bash"
+      run: |
+        # Run tailscale from nixpkgs to workaround download issue:
+        #   - https://github.com/tailscale/github-action/issues/158
+        #
+        # This is a Linux-only simplfication of:
+        #   - https://github.com/tailscale/github-action/blob/v3.1.0/action.yml#L165-L182
+        #   - https://github.com/tailscale/github-action/blob/v3.1.0/action.yml#L183-L205
+
+        # `sudo -E` and `sudo --preserve-env=PATH` fail to resolve `nix` from
+        # the install in the preceding step so just resolve the path ourselves.
+        _nix=$(which nix)
+
+        echo "::group::Starting tailscaled.."
+        sudo $_nix shell nixpkgs#tailscale -c tailscaled --state=mem: 2>~/tailscaled.log &
+        # And check that tailscaled came up. The CLI will block for a bit waiting
+        # for it. And --json will make it exit with status 0 even if we're logged
+        # out (as we will be). Without --json it returns an error if we're not up.
+        sudo $_nix run nixpkgs#tailscale -- status --json >/dev/null
+        echo "::endgroup::"
+
+        echo "::group::Starting tailscale.."
+        TIMEOUT="2m"
+        HOSTNAME="${HOSTNAME:-github-$(hostname)}"
+        ADDITIONAL_ARGS="--timeout 30s --login-server ${{ inputs.TAILSCALE_URL }}"
+        TAILSCALE_AUTHKEY="${{ inputs.TAILSCALE_AUTH_KEY }}"
+        TAGS_ARG="--advertise-tags=tag:ci"
+        timeout --verbose --kill-after=1s ${TIMEOUT} \
+          sudo $_nix run nixpkgs#tailscale -- \
+          up ${TAGS_ARG} --authkey=${TAILSCALE_AUTHKEY} --hostname=${HOSTNAME} --accept-routes ${ADDITIONAL_ARGS}
+        echo "::endgroup::"
 
     - name: "Find remote server to run tests on"
       if: ${{ inputs.SYSTEM }}
