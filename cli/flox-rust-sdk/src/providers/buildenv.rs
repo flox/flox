@@ -388,6 +388,17 @@ impl BuildEnvNix {
         nix_build_command.arg("--no-write-lock-file");
         nix_build_command.arg("--no-update-lock-file");
         nix_build_command.args(["--option", "pure-eval", "true"]);
+
+        match std::env::var("_FLOX_NIX_EVAL_STORE_URL").ok().as_deref() {
+            None | Some("") => {
+                debug!("using 'auto' eval store");
+            },
+            Some(eval_store_url) => {
+                debug!(%eval_store_url, "overriding Nix eval store");
+                nix_build_command.args(["--eval-store", eval_store_url]);
+            },
+        }
+
         nix_build_command.arg("--no-link");
         nix_build_command.arg(&installable);
 
@@ -582,6 +593,12 @@ impl BuildEnvNix {
     ) -> Result<BuildEnvOutputs, BuildEnvError> {
         let mut nix_build_command = self.base_command();
         nix_build_command.args(["build", "--no-link", "--offline", "--json"]);
+
+        // Do not honor the _FLOX_NIX_EVAL_STORE_URL here because we rely on
+        // the eval cache sharing the nix store with the calling process for
+        // providing the (otherwise impure) storepaths used in the build, which
+        // includes buildenv.nix itself.
+
         nix_build_command.arg("--file").arg(&*BUILDENV_NIX);
         nix_build_command
             .arg("--argstr")
@@ -739,6 +756,10 @@ impl BuildEnv for BuildEnvNix {
         // avoid trying to substitute
         nix_build_command.arg("--offline");
 
+        // Do not honor the _FLOX_NIX_EVAL_STORE_URL here because there is
+        // nothing to evaluate when simply creating a GC root against an
+        // existing storepath.
+
         debug!(cmd=%nix_build_command.display(), "linking store path");
 
         let output = nix_build_command
@@ -748,6 +769,35 @@ impl BuildEnv for BuildEnvNix {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(BuildEnvError::Link(stderr.to_string()));
+        }
+
+        // When using a remote store the --out-link option is silently ignored:
+        //
+        // $ /nix/store/yj1iakcj37rli5713cv5yaamm41gghrn-nix-2.24.8/bin/nix --option extra-experimental-features 'nix-command flakes' --option pure-eval false --option store 'ssh-ng://storehouse.foobar.com' --print-build-logs build /nix/store/b5zh7g4an1vxfzc1v5h2y72mklwxwpk7-environment-runtime --out-link /tmp/tmp.yQQjb6ikm5/.flox/run/x86_64-linux.tmp.yQQjb6ikm5.run --offline
+        // $ echo $?
+        // 0
+        // $ ls -ld /tmp/tmp.yQQjb6ikm5/.flox/run/x86_64-linux.tmp.yQQjb6ikm5.run
+        // ls: cannot access '/tmp/tmp.yQQjb6ikm5/.flox/run/x86_64-linux.tmp.yQQjb6ikm5.run':
+        // No such file or directory
+        //
+        // To address this problem we verify the target of the symlink following
+        // a "successful" build, replacing it if necessary.
+        if let Ok(metadata) = std::fs::symlink_metadata(destination.as_ref()) {
+            if metadata.file_type().is_symlink() {
+                if let Ok(target) = std::fs::read_link(destination.as_ref()) {
+                    if target != *store_path.as_ref() {
+                        // Link exists with wrong value, delete it.
+                        let _ = std::fs::remove_file(destination.as_ref());
+                    }
+                }
+            }
+        }
+        if !destination.as_ref().exists() {
+            // Explicitly create link.
+            // TODO: figure out GCRoot solution for remote stores.
+            if let Err(e) = std::os::unix::fs::symlink(store_path.as_ref(), destination.as_ref()) {
+                return Err(BuildEnvError::Link(e.to_string()));
+            }
         }
 
         Ok(())
@@ -815,6 +865,16 @@ fn check_store_paths(
     command.stderr(Stdio::null());
     command.stdout(Stdio::piped());
     command.args(["path-info", "--offline", "--stdin"]);
+
+    match std::env::var("_FLOX_NIX_EVAL_STORE_URL").ok().as_deref() {
+        None | Some("") => {
+            debug!("using 'auto' eval store");
+        },
+        Some(eval_store_url) => {
+            debug!(%eval_store_url, "overriding Nix eval store");
+            command.args(["--eval-store", eval_store_url]);
+        },
+    }
 
     let mut child = command.spawn().map_err(BuildEnvError::CallNixBuild)?;
     let stdin = child.stdin.as_mut().unwrap();
