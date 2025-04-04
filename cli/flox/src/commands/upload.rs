@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::publish::{BinaryCache, NixCopyCache};
+use flox_rust_sdk::providers::publish::NixCopyCache;
 use tracing::instrument;
 use url::Url;
 

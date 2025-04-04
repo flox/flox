@@ -121,20 +121,15 @@ pub struct CheckedBuildMetadata {
     _private: (),
 }
 
-pub trait BinaryCache {
-    fn upload(&self, path: &str) -> Result<(), PublishError>;
-    fn cache_url(&self) -> &Url;
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct NixCopyCache {
     pub url: Url,
     pub key_file: PathBuf,
 }
 
-impl BinaryCache for NixCopyCache {
+impl NixCopyCache {
     #[instrument(skip(self), fields(progress = format!("Uploading '{path}' to '{}'", self.url)))]
-    fn upload(&self, path: &str) -> Result<(), PublishError> {
+    pub fn upload(&self, path: &str) -> Result<(), PublishError> {
         let mut url = self.url.clone();
         let url_with_key = url
             .query_pairs_mut()
@@ -167,29 +162,6 @@ impl BinaryCache for NixCopyCache {
             let stderr = String::from_utf8_lossy(&output.stderr);
             Err(PublishError::CacheUploadError(stderr.to_string()))
         }
-    }
-
-    fn cache_url(&self) -> &Url {
-        &self.url
-    }
-}
-
-pub struct MockCache {
-    pub url: Url,
-    pub error_msg: Option<String>,
-}
-
-impl BinaryCache for MockCache {
-    fn upload(&self, _path: &str) -> Result<(), PublishError> {
-        if let Some(msg) = &self.error_msg {
-            Err(PublishError::CacheUploadError(msg.to_string()))
-        } else {
-            Ok(())
-        }
-    }
-
-    fn cache_url(&self) -> &Url {
-        &self.url
     }
 }
 
