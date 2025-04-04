@@ -30,7 +30,7 @@ runs:
   using: "composite"
   steps:
     - name: "Install newer Nix"
-      uses: "cachix/install-nix-action@V28"
+      uses: "cachix/install-nix-action@v31"
 
     - name: "Configure Nix"
       uses: "flox/configure-nix-action@main"
