@@ -1908,7 +1908,6 @@ pub(crate) mod tests {
         fake_flake_installable_lock,
         fake_store_path_lock,
     };
-    use url::Url;
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
@@ -1926,7 +1925,7 @@ pub(crate) mod tests {
     use crate::models::manifest::raw::RawManifest;
     use crate::models::manifest::typed::{Include, Manifest, Vars};
     use crate::models::search::{PackageDetails, SearchLimit, SearchResults};
-    use crate::providers::catalog::Client;
+    use crate::providers::catalog::{Client, PublishError};
     use crate::providers::flake_installable_locker::{
         FlakeInstallableError,
         InstallableLockerMock,
@@ -1967,18 +1966,12 @@ pub(crate) mod tests {
             unreachable!("package_versions should not be called");
         }
 
-        async fn create_catalog(
+        async fn publish(
             &self,
             _catalog_name: impl AsRef<str> + Send + Sync,
-        ) -> Result<PublishResponse, CatalogClientError> {
-            unreachable!("create_catalog should not be called");
-        }
-
-        async fn get_ingress_uri(
-            &self,
-            _catalog_name: impl AsRef<str> + Send + Sync,
-        ) -> Result<Option<Url>, CatalogClientError> {
-            unreachable!("create_catalog should not be called");
+            _package_name: impl AsRef<str> + Send + Sync,
+        ) -> Result<PublishResponse, PublishError> {
+            unreachable!("publish should not be called");
         }
 
         async fn create_package(

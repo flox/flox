@@ -29,7 +29,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 use tracing::{debug, instrument};
-use url::Url;
 
 use crate::data::System;
 use crate::flox::FLOX_VERSION;
@@ -399,6 +398,8 @@ pub type UserDerivationInfo = api_types::UserDerivationInput;
 pub type StoreInfoRequest = api_types::StoreInfoRequest;
 pub type StoreInfoResponse = api_types::StoreInfoResponse;
 pub type StoreInfo = api_types::StoreInfo;
+pub type CatalogStoreConfig = api_types::CatalogStoreConfig;
+pub type CatalogStoreConfigNixCopy = api_types::CatalogStoreConfigNixCopy;
 
 #[enum_dispatch]
 #[allow(async_fn_in_trait)]
@@ -433,27 +434,14 @@ pub trait ClientTrait {
         attr_path: impl AsRef<str> + Send + Sync,
     ) -> Result<PackageDetails, VersionsError>;
 
-    /// Create a user catalog
-    async fn create_catalog(
-        &self,
-        _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<PublishResponse, CatalogClientError>;
-
-    /// Requests access and upload information for a package in a particular
-    /// private catalog.
-    ///
-    /// This is mainly used to get the upload URL for a package that's about
-    /// to be published.
-    async fn get_ingress_uri(
+    /// This begins the publish of a package.
+    /// At the moment it just returns info about how the catalog's store is
+    /// configured.
+    async fn publish(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<Option<Url>, CatalogClientError> {
-        let uri_str = self.create_catalog(catalog_name).await?.ingress_uri;
-        uri_str
-            .map(|s| Url::from_str(&s))
-            .transpose()
-            .map_err(CatalogClientError::InvalidIngressUri)
-    }
+        package_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<PublishResponse, PublishError>;
 
     /// Create a package within a user catalog
     async fn create_package(
@@ -630,24 +618,25 @@ impl ClientTrait for CatalogClient {
         Ok(search_results)
     }
 
-    async fn create_catalog(
+    async fn publish(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<PublishResponse, CatalogClientError> {
+        package_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<PublishResponse, PublishError> {
         let catalog = str_to_catalog_name(catalog_name)?;
-        let package = str_to_package_name("unused")?;
+        let package = str_to_package_name(package_name)?;
         // Body contents aren't important for this request.
         let body = api_types::PublishRequest(serde_json::Map::new());
-        // This endpoint idempotently creates a catalog and gets publish info in
-        // one step, unlike `create_catalog_api_v1_catalog_catalogs_post()`, and
-        // should be consolidated in the future:
-        //
-        // - https://api.preview.flox.dev/docs#/catalogs/create_catalog_api_v1_catalog_catalogs__post
         self.client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(&catalog, &package, &body).await.map_err(|e| match e {
-                APIError::ErrorResponse(err) => {
-                    CatalogClientError::APIError(APIError::ErrorResponse(err))
+                APIError::ErrorResponse(e) => {
+                    debug!("publish error response: {:?}", e);
+                    if e.status() == 400 && e.detail == "unconfigured store" {
+                        PublishError::UnconfiguredCatalog
+                    } else {
+                        PublishError::CatalogClientError(CatalogClientError::APIError(APIError::ErrorResponse(e)))
+                    }
                 },
-                _ => CatalogClientError::APIError(e),
+                _ => PublishError::CatalogClientError(CatalogClientError::APIError(e)),
             }).map(|resp| resp.into_inner())
     }
 
@@ -945,10 +934,11 @@ impl ClientTrait for MockClient {
         }
     }
 
-    async fn create_catalog(
+    async fn publish(
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<PublishResponse, CatalogClientError> {
+        _package_name: impl AsRef<str> + Send + Sync,
+    ) -> Result<PublishResponse, PublishError> {
         let mock_resp = self
             .mock_responses
             .lock()
@@ -1018,8 +1008,6 @@ pub enum CatalogClientError {
     UnsupportedSystem(#[source] api_error::ConversionError),
     #[error("{}", fmt_api_error(.0))]
     APIError(APIError<api_types::ErrorResponse>),
-    #[error("invalid ingress URI")]
-    InvalidIngressUri(#[source] url::ParseError),
 }
 
 fn fmt_api_error(api_error: &APIError<api_types::ErrorResponse>) -> String {
@@ -1043,6 +1031,14 @@ pub enum SearchError {
     InvalidSearchTerm(#[source] api_error::ConversionError),
     #[error("catalog error")]
     CatalogClientError(#[from] CatalogClientError),
+}
+
+#[derive(Debug, Error)]
+pub enum PublishError {
+    #[error("catalog error")]
+    CatalogClientError(#[from] CatalogClientError),
+    #[error("catalog does not have a store configured")]
+    UnconfiguredCatalog,
 }
 
 #[derive(Debug, Error)]
