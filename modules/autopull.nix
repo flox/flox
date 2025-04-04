@@ -6,19 +6,7 @@
 }:
 
 let
-  inherit (lib)
-    escapeShellArgs
-    literalExpression
-    mkBefore
-    mdDoc
-    mkDefault
-    mkEnableOption
-    mkForce
-    mkIf
-    mkMerge
-    mkOption
-    types
-    ;
+  inherit (lib) mkMerge;
 
   floxAutoPullModule = {
     config =

@@ -5,20 +5,13 @@ pkgsContext:
   pkgs,
   lib,
   system,
-  utils,
   ...
 }:
 
 let
-  inherit (utils.systemdUtils.lib) makeJobScript;
   inherit (lib)
-    escapeShellArgs
     literalExpression
-    mkBefore
-    mdDoc
-    mkDefault
     mkEnableOption
-    mkForce
     mkIf
     mkMerge
     mkOption
@@ -26,7 +19,6 @@ let
     ;
 
   programsCfg = config.programs.flox;
-  serviceCfg = config.services.flox;
 
   # Module for installing and configuring Flox system-wide.
   floxProgramsModule =

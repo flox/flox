@@ -11,11 +11,7 @@ let
   inherit (utils.systemdUtils.lib) makeJobScript;
   inherit (lib)
     escapeShellArgs
-    literalExpression
-    mkBefore
     mdDoc
-    mkDefault
-    mkEnableOption
     mkForce
     mkIf
     mkMerge
