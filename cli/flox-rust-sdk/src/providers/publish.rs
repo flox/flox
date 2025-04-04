@@ -18,9 +18,10 @@ use crate::models::environment::path_environment::PathEnvironment;
 use crate::models::environment::{Environment, EnvironmentError, PathPointer};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::Inner;
-use crate::providers::build;
+use crate::providers::catalog::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
+use crate::providers::{build, catalog};
 use crate::utils::CommandExt;
 
 #[derive(Debug, Error)]
@@ -184,6 +185,7 @@ impl Publisher for PublishProvider {
         key_file: Option<PathBuf>,
         metadata_only: bool,
     ) -> Result<(), PublishError> {
+        // Step 1 hit /packages
         // The create package service call will create the user's own catalog
         // if not already created, and then create (or return) the package noted
         // returning either a 200 or 201.  Either is ok here, as long as it's not an error.
@@ -197,14 +199,48 @@ impl Publisher for PublishProvider {
             .await
             .map_err(|e| PublishError::CatalogError(Box::new(e)))?;
 
-        let ingress_uri = match (metadata_only, &ingress_uri_override) {
-            (true, _) => None,
-            (false, Some(_)) => ingress_uri_override,
-            (false, None) => client
-                .get_ingress_uri(catalog_name)
-                .await
-                .map_err(|e| PublishError::CatalogError(Box::new(e)))?,
-        };
+        // Step 2 hit /publish
+        // For now calling publish just gets information about cache,
+        // but in the future it will get information about a publisher
+        tracing::debug!("Beginning publish of package...");
+        let publish_response = client
+                    .publish(catalog_name, &self.env_metadata.package)
+                    .await
+                    .map_err(|e| match e {
+                        catalog::PublishError::UnconfiguredCatalog => {
+                            PublishError::Catchall(formatdoc! { "
+                               Catalog '{0}' must be configured for whether to upload build artifacts.
+
+                               To configure the catalog to skip uploading artifacts, run:
+                                 $ catalog-util store --catalog {0} set meta-only
+
+                               To configure the catalog to upload artifacts, run:
+                                 $ catalog-util store --catalog {0} set nixcopy --ingress-uri <uri> --egress-uri <uri>
+                            ", catalog_name})
+                        },
+                        _ => PublishError::CatalogError(Box::new(e)),
+                    })?;
+
+        let cache = determine_cache(
+            metadata_only,
+            ingress_uri_override,
+            key_file,
+            publish_response.catalog_store_config,
+        )?;
+
+        // Step 3: optionally upload to cache
+        if let Some(cache) = &cache {
+            for output in self.build_metadata.outputs.iter() {
+                tracing::debug!(
+                    "Uploading output {} ({}) to cache...",
+                    output.name,
+                    output.store_path
+                );
+                cache.upload(&output.store_path)?
+            }
+        } else {
+            tracing::debug!("No cache configured so skipping upload");
+        }
 
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
@@ -225,21 +261,11 @@ impl Publisher for PublishProvider {
             rev: self.env_metadata.build_repo_ref.rev.clone(),
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
             rev_date: self.env_metadata.build_repo_ref.rev_date,
-            cache_uri: ingress_uri.as_ref().map(|url| url.to_string()),
+            cache_uri: cache.map(|cache| cache.url.to_string()),
             narinfos: None,
         };
 
-        if let Some(cache) = determine_cache(metadata_only, ingress_uri, key_file)? {
-            for output in self.build_metadata.outputs.iter() {
-                tracing::debug!(
-                    "Uploading {}:{} to cache...",
-                    output.name,
-                    output.store_path
-                );
-                cache.upload(&output.store_path)?
-            }
-        }
-
+        // Step 4: tell the catalog the publish is complete
         tracing::debug!("Publishing build in catalog...");
         client
             .publish_build(&catalog_name, &self.env_metadata.package, &build_info)
@@ -252,22 +278,43 @@ impl Publisher for PublishProvider {
 
 /// Construct a cache if one should be used.
 ///
-/// Errors if there's an ingress URI, no signing key, and metadata_only is
-/// false.
+/// ingress_uri_override is used regardless of what [CatalogStoreConfig] is set
+/// to.
+/// If an ingress_uri is provided either by way of an override or the
+/// [CatalogStoreConfig], a key_file must be provided as well, unless
+/// metadata_only is true.
 fn determine_cache(
     metadata_only: bool,
-    ingress_uri: Option<Url>,
+    ingress_uri_override: Option<Url>,
     key_file: Option<PathBuf>,
+    store_config: CatalogStoreConfig,
 ) -> Result<Option<NixCopyCache>, PublishError> {
     if metadata_only {
         return Ok(None);
     }
-    match (ingress_uri, key_file) {
-        (Some(ingress_uri), Some(key_file)) => Ok(Some(NixCopyCache {
+    let ingress_uri = match (ingress_uri_override, store_config) {
+        (Some(ingress_uri), _) => ingress_uri,
+        (None, CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy { ingress_uri, .. })) => {
+            Url::parse(&ingress_uri)
+                .map_err(|e| PublishError::Catchall(format!("failed to parse ingress URI: {e}")))?
+        },
+        (None, CatalogStoreConfig::Null) => {
+            unreachable!("publish endpoint should error for CatalogStoreConfig::Null")
+        },
+        // No cache for CatalogStoreConfig::MetaOnly
+        (None, CatalogStoreConfig::MetaOnly) => return Ok(None),
+        (None, CatalogStoreConfig::Publisher) => {
+            unimplemented!("publisher store type is not implemented")
+        },
+    };
+
+    if let Some(key_file) = key_file {
+        Ok(Some(NixCopyCache {
             url: ingress_uri,
             key_file,
-        })),
-        (Some(_), None) => Err(PublishError::Catchall(
+        }))
+    } else {
+        Err(PublishError::Catchall(
             indoc! { "
                A signing key is required to upload artifacts.
 
@@ -278,8 +325,7 @@ fn determine_cache(
                Or you can publish without uploading artifacts via the '--metadata-only' option.
             "}
             .to_string(),
-        )),
-        (None, _) => Ok(None),
+        ))
     }
 }
 
@@ -850,7 +896,10 @@ pub mod tests {
         };
 
         reset_mocks(&mut flox.catalog_client, vec![Response::Publish(
-            PublishResponse { ingress_uri: None },
+            PublishResponse {
+                ingress_uri: None,
+                catalog_store_config: CatalogStoreConfig::MetaOnly(None),
+            },
         )]);
 
         let res = publish_provider

@@ -36,7 +36,7 @@ pub struct Publish {
     /// itself.
     ///
     /// With this option present, a signing key is not required.
-    #[bpaf(long)]
+    #[bpaf(long, hide)]
     metadata_only: bool,
 
     #[bpaf(external(publish_target), optional)]
