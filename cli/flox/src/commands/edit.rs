@@ -331,7 +331,7 @@ impl Edit {
         }
 
         let (path, editor) = env::split_paths(&path_var)
-            .cartesian_product(["vim", "vi", "nano", "emacs"])
+            .cartesian_product(["nano", "vim", "vi", "emacs"])
             .find(|(path, editor)| path.join(editor).is_file())
             .context("no known editor found in $PATH")?;
 
