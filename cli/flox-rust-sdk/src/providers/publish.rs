@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
+use indoc::indoc;
 use thiserror::Error;
 use tracing::instrument;
 use url::Url;
@@ -49,6 +50,9 @@ pub enum PublishError {
 
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
+
+    #[error("{0}")]
+    Catchall(String),
 }
 
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
@@ -56,7 +60,14 @@ pub enum PublishError {
 /// Modeling the behavior as a trait allows us to swap out the provider, e.g. a mock for testing.
 #[allow(async_fn_in_trait)]
 pub trait Publisher {
-    async fn publish(&self, client: &Client, catalog_name: &str) -> Result<(), PublishError>;
+    async fn publish(
+        &self,
+        client: &Client,
+        catalog_name: &str,
+        ingress_uri_override: Option<Url>,
+        key_file: Option<PathBuf>,
+        metadata_only: bool,
+    ) -> Result<(), PublishError>;
 }
 
 /// Simple struct to hold the information of a locked URL.
@@ -188,18 +199,21 @@ impl BinaryCache for MockCache {
 ///
 /// The `PublishProvider` is a generic struct, parameterized by a `Builder` type,
 /// to build packages before publishing.
-pub struct PublishProvider<Cache> {
+pub struct PublishProvider {
     pub env_metadata: CheckedEnvironmentMetadata,
     pub build_metadata: CheckedBuildMetadata,
-    pub cache: Option<Cache>,
 }
 
 /// (default) implementation of the `Publish` trait, i.e. the publish interface to publish.
-impl<Cache> Publisher for PublishProvider<&Cache>
-where
-    Cache: BinaryCache,
-{
-    async fn publish(&self, client: &Client, catalog_name: &str) -> Result<(), PublishError> {
+impl Publisher for PublishProvider {
+    async fn publish(
+        &self,
+        client: &Client,
+        catalog_name: &str,
+        ingress_uri_override: Option<Url>,
+        key_file: Option<PathBuf>,
+        metadata_only: bool,
+    ) -> Result<(), PublishError> {
         // The create package service call will create the user's own catalog
         // if not already created, and then create (or return) the package noted
         // returning either a 200 or 201.  Either is ok here, as long as it's not an error.
@@ -212,6 +226,15 @@ where
             )
             .await
             .map_err(|e| PublishError::CatalogError(Box::new(e)))?;
+
+        let ingress_uri = match (metadata_only, &ingress_uri_override) {
+            (true, _) => None,
+            (false, Some(_)) => ingress_uri_override,
+            (false, None) => client
+                .get_ingress_uri(catalog_name)
+                .await
+                .map_err(|e| PublishError::CatalogError(Box::new(e)))?,
+        };
 
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
@@ -232,11 +255,11 @@ where
             rev: self.env_metadata.build_repo_ref.rev.clone(),
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
             rev_date: self.env_metadata.build_repo_ref.rev_date,
-            cache_uri: self.cache.map(|c| c.cache_url().to_string()),
+            cache_uri: ingress_uri.as_ref().map(|url| url.to_string()),
             narinfos: None,
         };
 
-        if let Some(cache) = self.cache {
+        if let Some(cache) = determine_cache(metadata_only, ingress_uri, key_file)? {
             for output in self.build_metadata.outputs.iter() {
                 tracing::debug!(
                     "Uploading {}:{} to cache...",
@@ -254,6 +277,39 @@ where
             .map_err(|e| PublishError::CatalogError(Box::new(e)))?;
 
         Ok(())
+    }
+}
+
+/// Construct a cache if one should be used.
+///
+/// Errors if there's an ingress URI, no signing key, and metadata_only is
+/// false.
+fn determine_cache(
+    metadata_only: bool,
+    ingress_uri: Option<Url>,
+    key_file: Option<PathBuf>,
+) -> Result<Option<NixCopyCache>, PublishError> {
+    if metadata_only {
+        return Ok(None);
+    }
+    match (ingress_uri, key_file) {
+        (Some(ingress_uri), Some(key_file)) => Ok(Some(NixCopyCache {
+            url: ingress_uri,
+            key_file,
+        })),
+        (Some(_), None) => Err(PublishError::Catchall(
+            indoc! { "
+               A signing key is required to upload artifacts.
+
+               You can supply a signing key by either:
+               - Providing a path to a key with the '--signing-private-key' option.
+               - Setting it in the config via 'flox config --set publish.signing-key <path>'
+
+               Or you can publish without uploading artifacts via the '--metadata-only' option.
+            "}
+            .to_string(),
+        )),
+        (None, _) => Ok(None),
     }
 }
 
@@ -514,7 +570,8 @@ pub mod tests {
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::lockfile::Lockfile;
     use crate::providers::build::FloxBuildMk;
-    use crate::providers::catalog::{GENERATED_DATA, MockClient};
+    use crate::providers::catalog::test_helpers::reset_mocks;
+    use crate::providers::catalog::{GENERATED_DATA, MockClient, PublishResponse, Response};
 
     fn example_remote() -> (tempfile::TempDir, GitCommandProvider, String) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -696,13 +753,12 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn test_publish() {
+    async fn publish_meta_only() {
         let builder = FloxBuildMk;
-        let (flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) = flox_instance();
         let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
-        let client = Client::Mock(MockClient::new(None::<String>).unwrap());
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
 
@@ -711,61 +767,107 @@ pub mod tests {
             check_build_metadata(&flox, &env_metadata, &env, &builder, EXAMPLE_PACKAGE_NAME)
                 .unwrap();
 
-        let publish_provider = PublishProvider::<&MockCache> {
+        let publish_provider = PublishProvider {
             build_metadata,
             env_metadata,
-            cache: None,
         };
 
-        let res = publish_provider.publish(&client, &catalog_name).await;
+        reset_mocks(&mut flox.catalog_client, vec![Response::Publish(
+            PublishResponse { ingress_uri: None },
+        )]);
+
+        let res = publish_provider
+            .publish(&flox.catalog_client, &catalog_name, None, None, false)
+            .await;
 
         assert!(res.is_ok());
     }
 
-    #[tokio::test]
-    async fn test_upload_to_cache_failed() {
-        let builder = FloxBuildMk;
-        let (flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
-        let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
+    /// Generate dummy CheckedBuildMetadata and CheckedEnvironmentMetadata that
+    /// can be passed to publish()
+    ///
+    /// It is dummy in the sense that no human thought about it ;)
+    fn dummy_publish_metadata() -> (CheckedBuildMetadata, CheckedEnvironmentMetadata) {
+        let build_metadata = CheckedBuildMetadata {
+            name: "dummy".to_string(),
+            pname: "dummy".to_string(),
+            outputs: Outputs(vec![]),
+            outputs_to_install: vec![],
+            drv_path: "dummy".to_string(),
+            system: SystemEnum::X8664Linux,
+            version: Some("1.0.0".to_string()),
+            _private: (),
+        };
 
-        let client = Client::Mock(MockClient::new(None::<String>).unwrap());
+        let env_metadata = CheckedEnvironmentMetadata {
+            repo_root_path: PathBuf::new(),
+            rel_dotflox_path: PathBuf::new(),
+            base_catalog_ref: LockedUrlInfo {
+                url: "dummy".to_string(),
+                rev: "dummy".to_string(),
+                rev_count: 0,
+                rev_date: Utc::now(),
+            },
+            build_repo_ref: LockedUrlInfo {
+                url: "dummy".to_string(),
+                rev: "dummy".to_string(),
+                rev_count: 0,
+                rev_date: Utc::now(),
+            },
+            package: "dummy".to_string(),
+            description: "dummy".to_string(),
+            _private: (),
+        };
+
+        (build_metadata, env_metadata)
+    }
+
+    #[tokio::test]
+    async fn publish_errors_without_key() {
+        let mut client = Client::Mock(MockClient::new(None::<String>).unwrap());
+
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
 
-        let env_metadata = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME).unwrap();
-        let build_metadata =
-            check_build_metadata(&flox, &env_metadata, &env, &builder, EXAMPLE_PACKAGE_NAME)
-                .unwrap();
+        // Don't do a build because it's slow
+        let (build_metadata, env_metadata) = dummy_publish_metadata();
 
-        // Test an expected failure from the Mock
-        let cache = Some(MockCache {
-            url: Url::parse("s3://my-cool-cache").unwrap(),
-            error_msg: Some("Something went wrong".to_string()),
-        });
-
-        let publish_provider = PublishProvider::<&MockCache> {
+        let publish_provider = PublishProvider {
             build_metadata,
             env_metadata,
-            cache: cache.as_ref(),
         };
 
-        let res = publish_provider.publish(&client, &catalog_name).await;
-        let err = res.expect_err("Should fail due to cache error");
+        reset_mocks(&mut client, vec![Response::Publish(PublishResponse {
+            ingress_uri: Some("https://example.com".to_string()),
+        })]);
+
+        let result = publish_provider
+            .publish(&client, &catalog_name, None, None, false)
+            .await;
+
+        let err = result.unwrap_err();
         assert_eq!(
             err.to_string(),
-            "Failed to upload to cache: Something went wrong"
+            indoc! { "
+                A signing key is required to upload artifacts.
+
+                You can supply a signing key by either:
+                - Providing a path to a key with the '--signing-private-key' option.
+                - Setting it in the config via 'flox config --set publish.signing-key <path>'
+
+                Or you can publish without uploading artifacts via the '--metadata-only' option.
+            " }
+            .to_string()
         );
     }
 
     #[tokio::test]
-    async fn test_upload_to_local_cache() {
+    async fn upload_to_local_cache() {
         let builder = FloxBuildMk;
-        let (flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) = flox_instance();
         let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
-        let client = Client::Mock(MockClient::new(None::<String>).unwrap());
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
 
@@ -775,18 +877,31 @@ pub mod tests {
                 .unwrap();
 
         let (_key_file, cache) = local_nix_cache();
-        let publish_provider = PublishProvider::<&NixCopyCache> {
+        let publish_provider = PublishProvider {
             build_metadata,
             env_metadata,
-            cache: Some(&cache),
         };
 
         // the 'cache' should be non existent before the publish
         let cache_path = cache.url.to_file_path().unwrap();
         assert!(std::fs::read_dir(&cache_path).is_err());
 
-        let res = publish_provider.publish(&client, &catalog_name).await;
-        assert!(res.is_ok());
+        reset_mocks(&mut flox.catalog_client, vec![Response::Publish(
+            PublishResponse {
+                ingress_uri: Some(cache.url.to_string()),
+            },
+        )]);
+
+        publish_provider
+            .publish(
+                &flox.catalog_client,
+                &catalog_name,
+                None,
+                Some(cache.key_file),
+                false,
+            )
+            .await
+            .unwrap();
 
         // The 'cache' should be non-empty after the publish
         let entries = std::fs::read_dir(&cache_path).unwrap();
