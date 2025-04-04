@@ -3558,7 +3558,7 @@ EOF
   project_setup
 
   # Set in isolated config.
-  "$FLOX_BIN" config --set-bool disable_metrics true
+  "$FLOX_BIN" config --set disable_metrics true
   # Unset from test suite.
   unset FLOX_DISABLE_METRICS
 

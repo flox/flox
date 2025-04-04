@@ -722,7 +722,7 @@ impl Lockfile {
         if !flox.features.compose() {
             return Err(RecoverableMergeError::Catchall(
                 indoc! {"Cannot handle [include] when compose feature flag is disabled.
-                Use 'flox config --set-bool features.compose true' to enable composition."}
+                Use 'flox config --set features.compose true' to enable composition."}
                 .to_string(),
             ));
         }
