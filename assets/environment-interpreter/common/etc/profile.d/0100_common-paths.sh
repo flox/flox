@@ -35,6 +35,23 @@ if [ -n "${FLOX_ENV_DIRS:-}" ]; then
       if [ -z "${FLOX_NOSET_LD_AUDIT:-}" ] && [ -e "$LD_FLOXLIB" ]; then
         LD_AUDIT="$LD_FLOXLIB"
         export LD_AUDIT
+        # The runtime loader reserves a static amount of memory for thread local
+        # storage (TLS).
+        # When using LD_AUDIT in combination with libraries such as jemalloc that use TLS,
+        # the default reservation is exceeded and the program fails to start.
+        # Use GLIBC_TUNABLES to increase the reservation.
+        # The default reservation is 512.
+        # Requirements for some programs we've run into the issue with:
+        # On x86_64-linux:
+        # redis-server: 1441
+        # biome: 1417
+        # fd: 1417
+        # On aarch64-linux:
+        # redis-server: 1777
+        # biome: 1553
+        # fd: 1561
+        # See https://sourceware.org/bugzilla/show_bug.cgi?id=31991
+        export GLIBC_TUNABLES=glibc.rtld.optional_static_tls=2500
       fi
       ;;
     Darwin*)
