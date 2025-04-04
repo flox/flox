@@ -74,10 +74,6 @@ pub enum ConfigArgs {
     Reset,
     /// Set a config value
     Set(#[bpaf(external(config_set))] ConfigSet),
-    /// Set a numeric config value
-    SetNumber(#[bpaf(external(config_set_number))] ConfigSetNumber),
-    /// Set a boolean config value
-    SetBool(#[bpaf(external(config_set_bool))] ConfigSetBool),
     /// Delete a config value
     Delete(#[bpaf(external(config_delete))] ConfigDelete),
 }
@@ -100,12 +96,6 @@ impl ConfigArgs {
             ConfigArgs::Set(ConfigSet { key, value, .. }) => {
                 update_config(&flox.config_dir, &flox.temp_dir, key, Some(value))?
             },
-            ConfigArgs::SetNumber(ConfigSetNumber { key, value, .. }) => {
-                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value))?
-            },
-            ConfigArgs::SetBool(ConfigSetBool { key, value, .. }) => {
-                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value))?
-            },
             ConfigArgs::Delete(ConfigDelete { key, .. }) => {
                 update_config::<()>(&flox.config_dir, &flox.temp_dir, key, None)?
             },
@@ -123,39 +113,9 @@ pub struct ConfigSet {
     /// Configuration key
     #[bpaf(positional("key"))]
     key: String,
-    /// Configuration value (string)
-    #[bpaf(positional("string"))]
+    /// Configuration value
+    #[bpaf(positional("value"))]
     value: String,
-}
-
-#[derive(Debug, Clone, Bpaf)]
-#[bpaf(adjacent)]
-#[allow(unused)]
-pub struct ConfigSetNumber {
-    /// Set <key> to <number>
-    #[bpaf(long("set-number"))]
-    set_number: (),
-    /// Configuration key
-    #[bpaf(positional("key"))]
-    key: String,
-    /// Configuration value (i32)
-    #[bpaf(positional("number"))]
-    value: i32,
-}
-
-#[derive(Debug, Clone, Bpaf)]
-#[bpaf(adjacent)]
-#[allow(unused)]
-pub struct ConfigSetBool {
-    /// Set <key> to <bool>
-    #[bpaf(long("set-bool"))]
-    set_bool: (),
-    /// Configuration key
-    #[bpaf(positional("key"))]
-    key: String,
-    /// Configuration value (bool)
-    #[bpaf(positional("bool"))]
-    value: bool,
 }
 
 #[derive(Debug, Clone, Bpaf)]
