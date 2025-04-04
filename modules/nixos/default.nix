@@ -1,34 +1,24 @@
 pkgsContext:
 {
   config,
-  options,
-  pkgs,
   lib,
-  system,
   ...
 }:
 
 let
-  inherit (lib)
-    literalExpression
-    mkEnableOption
-    mkIf
-    mkMerge
-    mkOption
-    types
-    ;
-
-  programsCfg = config.programs.flox;
+  cfg = config.programs.flox;
 
 in
 {
-  # Module for installing and configuring Flox system-wide.
   imports = [
+    # Module for installing and configuring Flox system-wide.
+    (import ../flox.nix pkgsContext)
+
     /*
       The following submodules offer two ways of configuring systemd
       services to run from Flox environments:
 
-      1. floxServiceModule: configures systemd to activate environments
+      1. floxServicesModule: configures systemd to activate environments
          with `flox activate --start-services`, delegating all process
          management thereafter to the Flox subsystem.
 
@@ -73,30 +63,7 @@ in
     ./autopull.nix
   ];
 
-  options.programs.flox = {
-    enable = mkEnableOption "Flox CLI - Harness the power of Nix";
-    package = mkOption {
-      type = types.package;
-      description = "Flox CLI package";
-      default = pkgsContext.${system}.flox;
-      defaultText = literalExpression "pkgs.flox";
-      example = literalExpression "pkgs.flox";
-    };
+  config = lib.mkIf cfg.enable {
+    environment.systemPackages = [ cfg.package ];
   };
-  # Flox system-wide configuration
-  config = mkMerge [
-    {
-      nix.settings = {
-        trusted-public-keys = [
-          "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
-        ];
-        substituters = [
-          "https://cache.flox.dev"
-        ];
-      };
-    }
-    (mkIf programsCfg.enable {
-      environment.systemPackages = [ programsCfg.package ];
-    })
-  ];
 }
