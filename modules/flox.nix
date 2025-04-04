@@ -25,8 +25,7 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    environment.systemPackages = [ cfg.package ];
+  config = {
     nix.settings = {
       trusted-public-keys = lib.mkAfter [
         "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
@@ -35,6 +34,6 @@ in
         "https://cache.flox.dev"
       ];
     };
-
   };
+
 }
