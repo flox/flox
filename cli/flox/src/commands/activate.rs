@@ -173,6 +173,10 @@ impl Activate {
         };
         let manifest = &lockfile.manifest;
 
+        // breadcrumb metric to estimate use of composition
+        let has_includes = lockfile.compose.is_some();
+        subcommand_metric!("activate", "has_includes" = has_includes);
+
         let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         let interactive = !in_place && self.run_args.is_empty();
 
