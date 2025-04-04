@@ -88,7 +88,7 @@ that defines the package.
 To use it the `build` feature flag has to be enabled:
 
 ```shell
-$ flox config --set-bool features.build true
+$ flox config --set features.build true
 # OR
 $ export FLOX_FEATURES_BUILD=true
 ```

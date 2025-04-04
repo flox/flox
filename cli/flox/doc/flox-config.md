@@ -16,8 +16,6 @@ flox [<general-options>] config
      [-l |
       -r |
       --set <key> <string> |
-      --set-number <key> <number> |
-      --set-bool <key> <bool> |
       --delete=<key>]
 ```
 
@@ -60,13 +58,7 @@ flox config --set 'trusted_environments."owner/name"' trust
 :   Reset all options to their default values without confirmation.
 
 `--set <key> <string>`
-:  Set `<key> = <string>` for string values
-
-`--set-number <key> <number>`
-:  Set `<key> = <number>` for number values
-
-`--set-bool <key> <bool>`
-:  Set `<key> = <bool>` for boolean values
+:  Set `<key> = <string>` for a config key
 
 `--delete <key>`
 :   Delete config key
