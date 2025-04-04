@@ -7,6 +7,7 @@ use flox_rust_sdk::flox::Flox;
 use fslock::LockFile;
 use indoc::indoc;
 use serde::Serialize;
+use serde_json::Value;
 use tokio::fs;
 use toml_edit::Key;
 use tracing::instrument;
@@ -94,7 +95,17 @@ impl ConfigArgs {
                 }
             },
             ConfigArgs::Set(ConfigSet { key, value, .. }) => {
-                update_config(&flox.config_dir, &flox.temp_dir, key, Some(value))?
+                let coerced_value = if value.eq_ignore_ascii_case("true") {
+                    Some(Value::Bool(true))
+                } else if value.eq_ignore_ascii_case("false") {
+                    Some(Value::Bool(false))
+                } else if let Ok(num) = value.parse::<i32>() {
+                    Some(Value::Number(num.into()))
+                } else {
+                    Some(Value::String(value.clone()))
+                };
+
+                update_config(&flox.config_dir, &flox.temp_dir, key, coerced_value)?
             },
             ConfigArgs::Delete(ConfigDelete { key, .. }) => {
                 update_config::<()>(&flox.config_dir, &flox.temp_dir, key, None)?
