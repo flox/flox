@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::EnvironmentError;
@@ -9,9 +9,9 @@ use tracing::{debug, info_span, instrument};
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::{EnvironmentSelectError, ensure_floxhub_token, environment_description};
-use crate::environment_subcommand_metric;
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Uninstall installed packages from an environment
 #[derive(Bpaf, Clone)]
@@ -91,6 +91,16 @@ impl Uninstall {
         });
 
         warn_manifest_changes_for_services(&flox, environment.as_ref());
+
+        let lockfile = environment.existing_lockfile(&flox)?.ok_or(anyhow!(
+            "Expected lockfile to exist after successful uninstall"
+        ))?;
+
+        let has_includes = lockfile
+            .compose
+            .as_ref()
+            .is_some_and(|compose| !compose.include.is_empty());
+        subcommand_metric!("uninstall", "has_includes" = has_includes);
 
         Ok(())
     }

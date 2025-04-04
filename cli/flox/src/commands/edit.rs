@@ -4,7 +4,7 @@ use std::io::stdin;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
@@ -32,10 +32,10 @@ use super::{
     environment_select,
 };
 use crate::commands::{EnvironmentSelectError, ensure_floxhub_token};
-use crate::environment_subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
 use crate::utils::message;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
@@ -103,7 +103,7 @@ impl Edit {
             EditAction::Rename { name } => {
                 let span = tracing::info_span!("rename");
                 let _guard = span.enter();
-                if let ConcreteEnvironment::Path(mut environment) = detected_environment {
+                if let ConcreteEnvironment::Path(ref mut environment) = detected_environment {
                     let old_name = environment.name();
                     if name == old_name {
                         bail!("environment already named '{name}'");
@@ -122,7 +122,7 @@ impl Edit {
                     progress = "Syncing environment to a new generation"
                 );
                 let _guard = span.enter();
-                let ConcreteEnvironment::Managed(mut environment) = detected_environment else {
+                let ConcreteEnvironment::Managed(ref mut environment) = detected_environment else {
                     bail!("Cannot sync local or remote environments.");
                 };
 
@@ -141,7 +141,7 @@ impl Edit {
                     progress = "Resetting environment to current generation"
                 );
                 let _guard = span.enter();
-                let ConcreteEnvironment::Managed(mut environment) = detected_environment else {
+                let ConcreteEnvironment::Managed(ref mut environment) = detected_environment else {
                     bail!("Cannot reset local or remote environments.");
                 };
 
@@ -154,7 +154,17 @@ impl Edit {
 
                 message::updated("Environment changes reset to current generation.");
             },
-        }
+        };
+
+        let lockfile = detected_environment
+            .existing_lockfile(&flox)?
+            .ok_or(anyhow!("Expected lockfile to exist after successful edit"))?;
+
+        let has_includes = lockfile
+            .compose
+            .as_ref()
+            .is_some_and(|compose| !compose.include.is_empty());
+        subcommand_metric!("edit", "has_includes" = has_includes);
 
         Ok(())
     }

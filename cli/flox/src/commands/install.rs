@@ -278,6 +278,12 @@ impl Install {
             "Expected lockfile to exist after successful install"
         ))?;
 
+        let has_includes = lockfile
+            .compose
+            .as_ref()
+            .is_some_and(|compose| !compose.include.is_empty());
+        subcommand_metric!("install", "has_includes" = has_includes);
+
         // Get the new set of composer overrides
         let new_composer_package_overrides = lockfile
             .compose
