@@ -11,6 +11,9 @@ serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 regress.workspace = true
+httpmock.workspace = true
+regex.workspace = true
+tokio.workspace = true
 
 [build-dependencies]
 prettyplease.workspace = true

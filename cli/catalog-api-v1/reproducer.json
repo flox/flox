@@ -1,0 +1,91 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "title",
+    "version": "version"
+  },
+  "paths": {
+    "/users/{id}": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Gets a user by ID.",
+        "description": "A detailed description of the operation. Use markdown for rich text representation, such as **bold**, *italic*, and [links](https://swagger.io).\n",
+        "operationId": "getUserById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        },
+        "externalDocs": {
+          "description": "Learn more about user operations provided by this API.",
+          "url": "http://api.example.com/docs/user-operations/"
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Variant1": {
+        "properties": {
+          "variant": {
+            "const": "variant1",
+            "title": "Variant",
+            "default": "variant1"
+          }
+        },
+        "type": "object",
+        "title": "variant1"
+      },
+      "Variant2": {
+        "properties": {
+          "variant": {
+            "const": "variant2",
+            "title": "Variant",
+            "default": "variant2"
+          }
+        },
+        "type": "object",
+        "title": "Variant2"
+      },
+      "User": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/Variant1"
+          },
+          {
+            "$ref": "#/components/schemas/Variant2"
+          }
+        ],
+        "title": "User",
+        "discriminator": {
+          "propertyName": "variant",
+          "mapping": {
+            "variant1": "#/components/schemas/Variant1",
+            "variant2": "#/components/schemas/Variant2"
+          }
+        }
+      }
+    }
+  }
+}

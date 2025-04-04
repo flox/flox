@@ -392,7 +392,7 @@ impl MockClient {
     }
 }
 
-pub type PublishResponse = api_types::PublishResponse;
+pub type PublishResponse = api_types::PublishResponseInput;
 pub type UserBuildInfo = api_types::UserBuildInput;
 pub type UserBuildPublish = api_types::UserBuildPublish;
 pub type UserDerivationInfo = api_types::UserDerivationInput;
