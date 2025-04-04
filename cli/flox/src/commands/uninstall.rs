@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::EnvironmentError;
+use flox_rust_sdk::models::environment::{Environment, EnvironmentError};
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, info_span, instrument};
@@ -67,14 +67,14 @@ impl Uninstall {
         };
 
         let description = environment_description(&concrete_environment)?;
-        let mut environment = concrete_environment.into_dyn_environment();
+        let mut env = Box::new(concrete_environment);
 
         let span = info_span!(
             "uninstall",
-            environment = %description,
+            env = %description,
             progress = format!("Uninstalling {} packages", self.packages.len()));
 
-        let attempt = span.in_scope(|| environment.uninstall(self.packages.clone(), &flox))?;
+        let attempt = span.in_scope(|| env.uninstall(self.packages.clone(), &flox))?;
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.
@@ -90,7 +90,7 @@ impl Uninstall {
             }
         });
 
-        warn_manifest_changes_for_services(&flox, environment.as_ref());
+        warn_manifest_changes_for_services(&flox, env.as_ref());
 
         Ok(())
     }
