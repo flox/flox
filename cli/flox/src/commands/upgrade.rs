@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::SingleSystemUpgradeDiff;
+use flox_rust_sdk::models::environment::{Environment, SingleSystemUpgradeDiff};
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{info_span, instrument};
@@ -46,7 +46,7 @@ impl Upgrade {
 
         let description = environment_description(&concrete_environment)?;
 
-        let mut environment = concrete_environment.into_dyn_environment();
+        let mut env = Box::new(concrete_environment);
 
         let progress_message = {
             let num_upgrades = if self.groups_or_iids.is_empty() {
@@ -62,7 +62,7 @@ impl Upgrade {
 
         let span = info_span!(
             "upgrade",
-            environment = %description,
+            env = %description,
             progress = %progress_message
         );
         let result = span.in_scope(|| {
@@ -73,9 +73,9 @@ impl Upgrade {
                 .collect::<Vec<_>>();
 
             if self.dry_run {
-                environment.dry_upgrade(&flox, groups_or_iids)
+                env.dry_upgrade(&flox, groups_or_iids)
             } else {
-                environment.upgrade(&flox, groups_or_iids)
+                env.upgrade(&flox, groups_or_iids)
             }
         })?;
 
@@ -134,7 +134,7 @@ impl Upgrade {
             "});
         }
 
-        warn_manifest_changes_for_services(&flox, environment.as_ref());
+        warn_manifest_changes_for_services(&flox, env.as_ref());
 
         Ok(())
     }

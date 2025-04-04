@@ -223,10 +223,10 @@ impl Install {
         };
         let description = environment_description(&concrete_environment)?;
 
-        let mut environment = concrete_environment.into_dyn_environment();
+        let mut env = Box::new(concrete_environment);
 
         // Get a list of the packages that this environment is already overriding via composition.
-        let maybe_lockfile = environment.existing_lockfile(&flox)?;
+        let maybe_lockfile = env.existing_lockfile(&flox)?;
         let existing_composer_package_overrides = if let Some(lockfile) = maybe_lockfile {
             lockfile
                 .compose
@@ -250,7 +250,7 @@ impl Install {
                 packages_to_install.len()
             )
         );
-        let installation = span.in_scope(|| environment.install(&packages_to_install, &flox));
+        let installation = span.in_scope(|| env.install(&packages_to_install, &flox));
 
         let (packages_retried, installation) = match installation {
             Ok(installation) => (None, installation),
@@ -260,7 +260,7 @@ impl Install {
                 {
                     let res = Self::retry_install_for_valid_systems(
                         &flox,
-                        environment.as_mut(),
+                        env.as_mut(),
                         failures,
                         &packages_retry,
                     );
@@ -274,7 +274,7 @@ impl Install {
             },
         };
 
-        let lockfile = environment.existing_lockfile(&flox)?.ok_or(anyhow!(
+        let lockfile = env.existing_lockfile(&flox)?.ok_or(anyhow!(
             "Expected lockfile to exist after successful install"
         ))?;
 
@@ -319,7 +319,7 @@ impl Install {
         message::packages_newly_overridden_by_composer(&new_package_overrides);
 
         if installation.new_manifest.is_some() {
-            warn_manifest_changes_for_services(&flox, environment.as_ref());
+            warn_manifest_changes_for_services(&flox, env.as_ref());
         }
 
         Ok(())

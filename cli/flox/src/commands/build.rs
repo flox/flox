@@ -86,7 +86,7 @@ impl Build {
             bail!("Cannot build from a remote environment");
         };
 
-        let mut env = env.into_dyn_environment();
+        let mut env = Box::new(env);
 
         let base_dir = env.parent_path()?;
         let flox_env = env.rendered_env_links(&flox)?;

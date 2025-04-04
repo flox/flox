@@ -254,14 +254,6 @@ pub enum ConcreteEnvironment {
 }
 
 impl ConcreteEnvironment {
-    pub fn into_dyn_environment(self) -> Box<dyn Environment> {
-        match self {
-            ConcreteEnvironment::Path(path_env) => Box::new(path_env),
-            ConcreteEnvironment::Managed(managed_env) => Box::new(managed_env),
-            ConcreteEnvironment::Remote(remote_env) => Box::new(remote_env),
-        }
-    }
-
     pub fn dyn_environment_ref(&self) -> &dyn Environment {
         match self {
             ConcreteEnvironment::Path(path_env) => path_env,
