@@ -76,7 +76,7 @@ nixos-rebuild switch
 
 ### Enable Flox
 
-With the Flox flake installed
+With the Flox flake included in your system configuration
 you can now download pre-built binaries from cache.flox.dev,
 which makes it much faster to enable Flox
 by adding the following line to `/etc/nixos/configuration.nix`:
@@ -97,81 +97,108 @@ modeling configuration options for services,
 setting required environment variables
 and communicating various settings to related services.
 
-The Flox NixOS module taps into this functionality
+The Flox NixOS module uses this functionality
 to invoke services from applications provided by Flox environments,
 with facilities for
 automatically updating environments at service startup
 and refreshing environments at periodic intervals.
 
-### Flox NixOS module configuration args
+There are two ways of configuring systemd services to run from Flox environments:
 
-Following are the configuration options supported by the Flox module:
+1. **Flox Services**.
+    This method configures systemd to activate environments with the
+    `flox activate --start-services` command,
+    delegating all process management thereafter
+    to the Flox services subsystem.
 
-Mandatory attributes:
+    Example:
+    ```nix
+      services.flox = {
+        enable = true;
+        activations = {
+          myechoip = {
+            environment = "flox/echoip";
+            trustEnvironment = true;
+            autoPull = true;
+            floxHubTokenFile = "/run/keys/echoip.token";
+            dynamicUser = true;
+          };
+        };
+      };
+    ```
 
-* `environment`
+2. **Flox Overrides**.
+    This method leverages existing NixOS modules by providing the ability to
+    override the `ExecStart` option as required to run the service
+    from the activated Flox environment.
+
+    Example:
+    ```nix
+      systemd.services.echoip.flox = {
+        environment = "flox/echoip";
+        trustEnvironment = true;
+        autoPull = true;
+        execStart = "echoip -l 127.0.0.1:8080 -H X-Real-IP";
+      };
+    ```
+
+While the Services method presents the easiest/most intuitive interface
+from a Flox perspective, the overrides approach makes it possible to leverage the
+full capabilities of the NixOS module subsystem, as well as the hundreds
+of existing NixOS modules maintained by the Nix community.
+
+## Appendix: Flox NixOS module configuration attributes
+
+### Common configuration attributes
+
+The following configuration attributes are supported by both
+of the Services and Overrides methods described above:
+
+* `environment` (mandatory)
     The Flox environment to use for the service.
 
     - _Type_: string
     - _Example_: "flox/default"
 
-Optional attributes:
+* `trustEnvironment`
+    Whether to trust the environment using invocation option.
 
-* `execStart`
-    The command to override the unit's ExecStart with.
-
-    - _Type_: null or string
-    - _Default_: `null`
-    - _Example_: "flox/default"
-
-* `script`
-    The command to override the unit's script with.
-
-    - _Type_: null or string
-    - _Default_: string
-    - _Example_: "flox/default"
+    - _Type_: boolean
+    - _Default_: `false`
 
 * `floxHubTokenFile`
     Full path to the FloxHub token file.
 
     - _Type_: null or path
     - _Default_: `null`
-    - _Example_: "flox/default"
+    - _Example_: "/run/secrets/floxhub/secret.token"
 
 * `extraFloxArgs`
     Additional arguments to pass to `flox`.
 
     - _Type_: list of strings
     - _Default_: [ ]
-    - _Example_: "-v -v"
+    - _Example_: [ "-v" "-v" ]
 
 * `extraFloxActivateArgs`
     Additional arguments to pass to `flox activate`.
 
     - _Type_: list of strings
     - _Default_: [ ]
-    - _Example_: "--mode dev"
+    - _Example_: [ "--mode" "dev" ]
 
 * `extraFloxPullArgs`
     Additional arguments to pass to `flox pull`.
 
     - _Type_: list of strings
     - _Default_: [ ]
-    - _Example_: "flox/default"
+    - _Example_: [ "--force" ]
 
 * `pullAtServiceStart`
     Whether to pull the Flox environment at service start.
 
-    - _Type_: string
-    - _Default_: `null`
-    - _Example_: "flox/default"
-
-* `floxServiceManager`
-    Whether to use the internal Flox service management.
-
-    - _Type_: string
-    - _Default_: `null`
-    - _Example_: "flox/default"
+    - _Type_: boolean
+    - _Default_: `false`
 
 * `autoPull.enable`
     Whether to automatically pull the Flox environment.
@@ -192,84 +219,21 @@ Optional attributes:
     - _Type_: boolean
     - _Default_: `false`
 
-## Overriding a service
+### Flox Overrides configuration attributes
 
-Enabling Flox by setting `programs.flox.enable = true;` will add an attribute to `systemd.services.*` called `flox`.
-This allows you to override systemd services to use Flox environments.
+The following configuration attributes are supported by
+the Overrides method only:
 
-## Examples
+* `execStart` (mandatory)
+    The command to override the unit's ExecStart with.
 
-### Directly overriding a service not defined by a NixOS module
+    - _Type_: null or string
+    - _Default_: `null`
+    - _Example_: "flox/default"
 
-```nix
-{
-  pkgs,
-  flox,
-  floxServiceAttrs,
-  ...
-}:
-{
-    programs.flox = {
-        enable = true;
-        package = flox.packages.${pkgs.system}.flox;
-    };
+* `script`
+    The command to override the unit's script with.
 
-    systemd.services.floxEM = {
-      wantedBy = ["multi-user.target"];
-      requires = ["floxEM-setup.service"];
-      after = ["floxEM-setup.service"];
-      serviceConfig =
-        {
-          SyslogIdentifier = "floxEM";
-          EnvironmentFile = cfg.environmentFile;
-          User = cfg.user;
-          WorkingDirectory = cfg.dataDir;
-          ExecStart = "${pkgs.floxEM}/bin/floxEM --bind ${cfg.host}:${toString cfg.port}"; # (1)
-          Restart = "on-failure";
-        }
-      environment = env;
-    }
-    // lib.optionalAttrs (cfg.envName == "production") {
-      flox = { # (2)
-        inherit (floxServiceAttrs) environment floxHubTokenFile; # (3)
-        execStart = "floxEM --bind ${cfg.host}:${toString cfg.port}"; # (4)
-      };
-    };
-}
-```
-
-1. Note that we are still defining an `ExecStart` attribute. This is the part we'll be overriding later.
-1. Since we enabled Flox with `programs.flox.enable = true;`, we can now use the `flox` attribute within the `systemd.services.*` attributes.
-1. We get the Flox environment and a floxHubTokenFile from elsewhere. The `environment` attribute has the format of Flox environments. The `floxHubTokenFile` attribute—at the time of writing—is the path to a GitHub access token.
-1. Here, we override the `ExecStart` attribute to use another command than previously defined.
-
-### Overriding a service defined by a NixOS module
-
-```nix
-{
-  flox,
-  ...
-}: {
-  programs.flox = {
-    enable = true; # (1)
-    package = flox.packages.${pkgs.system}.flox;
-  };
-  services.cowsay = {
-    enable = true; # (2)
-    interval = "*-*-* *:*:00,10";
-    message = "Moo2!";
-  };
-  systemd.services.cowsay.flox = { # (3)
-    environment = "foobar/cowsay"; # (4)
-    execStart = "cowsay ${config.services.cowsay.message}"; # (5)
-    floxHubTokenFile = "/run/secrets/cowsay/github.token";
-  };
-}
-```
-
-1. We enable Flox, this installs Flox system-wide.
-1. We enable the cowsay NixOS service, which creates the `systemd.services.cowsay` attribute.
-1. We now override the necessary attributes to start using Flox environments.
-1. The Flox environment to use.
-1. The command to run.
-
+    - _Type_: null or string
+    - _Default_: string
+    - _Example_: "flox/default"

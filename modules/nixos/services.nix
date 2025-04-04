@@ -34,26 +34,6 @@ let
     let
       activationCfg = serviceCfg.activations.${name};
 
-      jobScripts = makeJobScript {
-        name = "${name}-start";
-        text =
-          if (config.flox.script != "") then
-            config.flox.script
-          else if (config.script != "") then
-            config.script
-          else
-            "";
-        inherit (config) enableStrictShellChecks;
-      };
-      # Prefer config.flox.execStart over config{,.flox}.script.
-      scriptAndArgs =
-        if (config.flox.execStart != "") then
-          config.flox.execStart
-        else if (config.flox.script != "" || config.script != "") then
-          "${jobScripts} ${config.scriptArgs}"
-        else
-          null;
-
       floxAuthLoginWithToken =
         tokenFilePath:
         escapeShellArgs [

@@ -24,13 +24,13 @@ let
     extraFloxArgs = mkOption {
       type = types.listOf types.str;
       default = [ ];
-      example = "-v -v";
+      example = [ "-v -v" ];
       description = mdDoc "Additional arguments to pass to `flox`";
     };
     extraFloxActivateArgs = mkOption {
       type = types.listOf types.str;
       default = [ ];
-      example = "--mode dev";
+      example = [ "--mode dev" ];
       description = mdDoc "Additional arguments to pass to `flox activate`";
     };
     extraFloxPullArgs = mkOption {
