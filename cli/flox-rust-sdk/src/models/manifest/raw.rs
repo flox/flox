@@ -234,6 +234,7 @@ impl RawManifest {
             } => {
                 profile_table.decor_mut().set_suffix(indoc! {r#"
 
+                    ## Set your aliases and stuff here, too.
                     # common = '''
                     #   gum style \
                     #   --foreground 212 --border-foreground 212 --border double \
@@ -1107,6 +1108,7 @@ pub(super) mod test {
             ## ... sourced by _your shell_ when you run 'flox activate'.
             ## -------------------------------------------------------------------
             [profile]
+            ## Set your aliases and stuff here, too.
             # common = '''
             #   gum style \
             #   --foreground 212 --border-foreground 212 --border double \
@@ -1216,6 +1218,7 @@ pub(super) mod test {
             ## ... sourced by _your shell_ when you run 'flox activate'.
             ## -------------------------------------------------------------------
             [profile]
+            ## Set your aliases and stuff here, too.
             # common = '''
             #   gum style \
             #   --foreground 212 --border-foreground 212 --border double \
@@ -1328,6 +1331,7 @@ pub(super) mod test {
             ## ... sourced by _your shell_ when you run 'flox activate'.
             ## -------------------------------------------------------------------
             [profile]
+            ## Set your aliases and stuff here, too.
             # common = '''
             #   gum style \
             #   --foreground 212 --border-foreground 212 --border double \
@@ -1530,6 +1534,7 @@ pub(super) mod test {
             ## ... sourced by _your shell_ when you run 'flox activate'.
             ## -------------------------------------------------------------------
             [profile]
+            ## Set your aliases and stuff here, too.
             # common = '''
             #   gum style \
             #   --foreground 212 --border-foreground 212 --border double \
