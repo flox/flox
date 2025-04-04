@@ -18,7 +18,6 @@ use flox_rust_sdk::models::environment::{
     Environment,
     EnvironmentError,
 };
-use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
 use flox_rust_sdk::providers::services::ServiceError;
 use itertools::Itertools;
@@ -32,10 +31,10 @@ use super::{
     environment_select,
 };
 use crate::commands::{EnvironmentSelectError, ensure_floxhub_token};
-use crate::environment_subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
 use crate::utils::message;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
@@ -103,7 +102,7 @@ impl Edit {
             EditAction::Rename { name } => {
                 let span = tracing::info_span!("rename");
                 let _guard = span.enter();
-                if let ConcreteEnvironment::Path(mut environment) = detected_environment {
+                if let ConcreteEnvironment::Path(ref mut environment) = detected_environment {
                     let old_name = environment.name();
                     if name == old_name {
                         bail!("environment already named '{name}'");
@@ -122,7 +121,7 @@ impl Edit {
                     progress = "Syncing environment to a new generation"
                 );
                 let _guard = span.enter();
-                let ConcreteEnvironment::Managed(mut environment) = detected_environment else {
+                let ConcreteEnvironment::Managed(ref mut environment) = detected_environment else {
                     bail!("Cannot sync local or remote environments.");
                 };
 
@@ -141,7 +140,7 @@ impl Edit {
                     progress = "Resetting environment to current generation"
                 );
                 let _guard = span.enter();
-                let ConcreteEnvironment::Managed(mut environment) = detected_environment else {
+                let ConcreteEnvironment::Managed(ref mut environment) = detected_environment else {
                     bail!("Cannot reset local or remote environments.");
                 };
 
@@ -154,7 +153,7 @@ impl Edit {
 
                 message::updated("Environment changes reset to current generation.");
             },
-        }
+        };
 
         Ok(())
     }
@@ -192,7 +191,11 @@ impl Edit {
             EditResult::Unchanged => {
                 message::warning("No changes made to environment.");
             },
-            EditResult::Changed { .. } => {
+            EditResult::Changed {
+                ref old_lockfile,
+                ref new_lockfile,
+                ..
+            } => {
                 if result.reactivate_required()
                     && activated_environments().is_active(&active_environment)
                 {
@@ -203,11 +206,22 @@ impl Edit {
 
                 warn_manifest_changes_for_services(flox, environment);
 
-                let lockfile: Lockfile = environment.lockfile(flox)?.into();
-                if lockfile.compose.is_some() {
-                    message::print_overridden_manifest_fields(&lockfile);
+                if new_lockfile.compose.is_some() {
+                    message::print_overridden_manifest_fields(new_lockfile);
                     message::info("Run 'flox list -c' to see merged manifest.");
                 }
+
+                // breadcrumb metric to estimate use of composition
+                let old_includes = old_lockfile
+                    .as_ref()
+                    .and_then(|lf| lf.compose.as_ref())
+                    .map(|compose| &compose.include);
+                let new_includes = new_lockfile
+                    .compose
+                    .as_ref()
+                    .map(|compose| &compose.include);
+                let edited_includes = old_includes != new_includes;
+                subcommand_metric!("edit", "edited_includes" = edited_includes);
             },
         }
 
