@@ -95,17 +95,16 @@ impl ConfigArgs {
                 }
             },
             ConfigArgs::Set(ConfigSet { key, value, .. }) => {
-                let coerced_value = if value.eq_ignore_ascii_case("true") {
-                    Some(Value::Bool(true))
-                } else if value.eq_ignore_ascii_case("false") {
-                    Some(Value::Bool(false))
-                } else if let Ok(num) = value.parse::<i32>() {
-                    Some(Value::Number(num.into()))
-                } else {
-                    Some(Value::String(value.clone()))
+                let parsed_value = match value.to_lowercase().as_str() {
+                    "true" => Value::Bool(true),
+                    "false" => Value::Bool(false),
+                    _ => match value.parse::<i32>() {
+                        Ok(n) => Value::Number(n.into()),
+                        Err(_) => Value::String(value.clone()),
+                    },
                 };
 
-                update_config(&flox.config_dir, &flox.temp_dir, key, coerced_value)?
+                update_config(&flox.config_dir, &flox.temp_dir, key, Some(parsed_value))?
             },
             ConfigArgs::Delete(ConfigDelete { key, .. }) => {
                 update_config::<()>(&flox.config_dir, &flox.temp_dir, key, None)?
