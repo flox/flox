@@ -110,6 +110,11 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     fn set_origin(&self, branch: &str, origin_name: &str) -> Result<(), Self::SetOriginError>;
 
     fn get_origin(&self) -> Result<OriginInfo, Self::GetOriginError>;
+    fn get_remote_revision(
+        &self,
+        remote: &str,
+        branch: &str,
+    ) -> Result<Option<String>, GitCommandError>;
 
     fn workdir(&self) -> Option<&Path>;
     fn path(&self) -> &Path;
@@ -908,6 +913,22 @@ impl GitProvider for GitCommandProvider {
             reference: remote_branch,
             revision: remote_revision,
         })
+    }
+
+    fn get_remote_revision(
+        &self,
+        remote: &str,
+        branch: &str,
+    ) -> Result<Option<String>, GitCommandError> {
+        let remote_revision = GitCommandProvider::run_command(
+            self.new_command().arg("ls-remote").arg(remote).arg(branch),
+        )?;
+
+        if remote_revision.len() < 40 {
+            Ok(None)
+        } else {
+            Ok(Some(remote_revision.to_string_lossy()[..40].to_string()))
+        }
     }
 
     fn mv(&self, from: &Path, to: &Path) -> Result<(), Self::MvError> {
