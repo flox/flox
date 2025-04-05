@@ -164,8 +164,7 @@ impl Activate {
     ) -> Result<()> {
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
 
-        let environment = concrete_environment.dyn_environment_ref_mut();
-        let lockfile = match environment.lockfile(&flox)? {
+        let lockfile = match concrete_environment.lockfile(&flox)? {
             LockResult::Changed(lockfile) => {
                 message::print_overridden_manifest_fields(&lockfile);
                 lockfile
@@ -178,7 +177,7 @@ impl Activate {
         let interactive = !in_place && self.run_args.is_empty();
 
         // Don't spin in bashrcs and similar contexts
-        let rendered_env_path_result = environment.rendered_env_links(&flox);
+        let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
 
         let rendered_env_path = match rendered_env_path_result {
             Err(EnvironmentError::Core(err)) if err.is_incompatible_system_error() => {
@@ -302,7 +301,10 @@ impl Activate {
             ),
             (
                 FLOX_ENV_LOG_DIR_VAR,
-                environment.log_path()?.to_string_lossy().to_string(),
+                concrete_environment
+                    .log_path()?
+                    .to_string_lossy()
+                    .to_string(),
             ),
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
@@ -332,7 +334,7 @@ impl Activate {
             );
         }
 
-        let socket_path = environment.services_socket_path(&flox)?;
+        let socket_path = concrete_environment.services_socket_path(&flox)?;
         exports.insert(
             "_FLOX_ENV_CUDA_DETECTION",
             match manifest.options.cuda_detection {
@@ -401,12 +403,18 @@ impl Activate {
         command
             .arg("--env")
             .arg(mode_link_path.to_string_lossy().to_string());
-        command
-            .arg("--env-project")
-            .arg(environment.project_path()?.to_string_lossy().to_string());
-        command
-            .arg("--env-cache")
-            .arg(environment.cache_path()?.to_string_lossy().to_string());
+        command.arg("--env-project").arg(
+            concrete_environment
+                .project_path()?
+                .to_string_lossy()
+                .to_string(),
+        );
+        command.arg("--env-cache").arg(
+            concrete_environment
+                .cache_path()?
+                .to_string_lossy()
+                .to_string(),
+        );
         command
             .arg("--env-description")
             .arg(now_active.bare_description());
