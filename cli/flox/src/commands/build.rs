@@ -81,12 +81,10 @@ impl Build {
     }
 
     #[instrument(name = "build::clean", skip_all)]
-    async fn clean(flox: Flox, env: ConcreteEnvironment, packages: Vec<String>) -> Result<()> {
+    async fn clean(flox: Flox, mut env: ConcreteEnvironment, packages: Vec<String>) -> Result<()> {
         if let ConcreteEnvironment::Remote(_) = &env {
             bail!("Cannot build from a remote environment");
         };
-
-        let mut env = Box::new(env);
 
         let base_dir = env.parent_path()?;
         let flox_env = env.rendered_env_links(&flox)?;

@@ -40,13 +40,11 @@ impl Upgrade {
             ensure_floxhub_token(&mut flox).await?;
         };
 
-        let concrete_environment = self
+        let mut concrete_environment = self
             .environment
             .detect_concrete_environment(&flox, "Upgrade")?;
 
         let description = environment_description(&concrete_environment)?;
-
-        let mut env = Box::new(concrete_environment);
 
         let progress_message = {
             let num_upgrades = if self.groups_or_iids.is_empty() {
@@ -62,7 +60,7 @@ impl Upgrade {
 
         let span = info_span!(
             "upgrade",
-            env = %description,
+            concrete_environment = %description,
             progress = %progress_message
         );
         let result = span.in_scope(|| {
@@ -73,9 +71,9 @@ impl Upgrade {
                 .collect::<Vec<_>>();
 
             if self.dry_run {
-                env.dry_upgrade(&flox, groups_or_iids)
+                concrete_environment.dry_upgrade(&flox, groups_or_iids)
             } else {
-                env.upgrade(&flox, groups_or_iids)
+                concrete_environment.upgrade(&flox, groups_or_iids)
             }
         })?;
 
@@ -134,7 +132,7 @@ impl Upgrade {
             "});
         }
 
-        warn_manifest_changes_for_services(&flox, env.as_ref());
+        warn_manifest_changes_for_services(&flox, &concrete_environment);
 
         Ok(())
     }
