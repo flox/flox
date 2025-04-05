@@ -77,7 +77,7 @@ impl Push {
                     EnvironmentOwner::from_str(
                         flox.floxhub_token
                             .as_ref()
-                            .context("Need to be loggedin")?
+                            .context("Need to be logged in")?
                             .handle(),
                     )?
                 };
