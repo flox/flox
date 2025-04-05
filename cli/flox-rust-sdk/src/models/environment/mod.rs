@@ -253,16 +253,6 @@ pub enum ConcreteEnvironment {
     Remote(RemoteEnvironment),
 }
 
-impl ConcreteEnvironment {
-    pub fn dyn_environment_ref(&self) -> &dyn Environment {
-        match self {
-            ConcreteEnvironment::Path(path_env) => path_env,
-            ConcreteEnvironment::Managed(managed_env) => managed_env,
-            ConcreteEnvironment::Remote(remote_env) => remote_env,
-        }
-    }
-}
-
 /// A link to a built environment in the Nix store.
 ///
 /// The path may not exist if the environment has never been built and linked.
