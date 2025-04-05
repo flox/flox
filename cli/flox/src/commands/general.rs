@@ -1,5 +1,6 @@
 use std::io;
 use std::path::Path;
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
@@ -10,7 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio::fs;
 use toml_edit::Key;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::config::{Config, FLOX_CONFIG_FILE, ReadWriteError};
 use crate::subcommand_metric;
@@ -95,12 +96,18 @@ impl ConfigArgs {
                 }
             },
             ConfigArgs::Set(ConfigSet { key, value, .. }) => {
-                let parsed_value = match value.to_lowercase().as_str() {
-                    "true" => Value::Bool(true),
-                    "false" => Value::Bool(false),
-                    _ => match value.parse::<i32>() {
-                        Ok(n) => Value::Number(n.into()),
-                        Err(_) => Value::String(value.clone()),
+                let parsed_value = match Value::from_str(value) {
+                    Ok(parsed) => {
+                        debug!(supplied = value, ?parsed, "parsed config value");
+                        parsed
+                    },
+                    Err(error) => {
+                        debug!(
+                            supplied = value,
+                            ?error,
+                            "failed to parse as JSON value, treating as unquoted string"
+                        );
+                        Value::String(value.clone())
                     },
                 };
 
