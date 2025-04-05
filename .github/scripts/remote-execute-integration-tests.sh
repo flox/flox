@@ -31,6 +31,9 @@ function upload_report_to_buildkite() {
     -F "run_env[commit_sha]=$GITHUB_SHA" \
     -F "run_env[message]=$git_commit_message" \
     -F "run_env[url]=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+    -F "tags[architecture]=$MATRIX_SYSTEM" \
+    -F "tags[nix_flakeref]=github:flox/flox/$GITHUB_SHA" \
+    -F "tags[nix_attribute]=packages.$MATRIX_SYSTEM.flox-cli-tests" \
     https://analytics-api.buildkite.com/v1/uploads
 }
 
