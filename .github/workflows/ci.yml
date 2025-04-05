@@ -172,6 +172,9 @@ jobs:
             -F "run_env[commit_sha]=$GITHUB_SHA" \
             -F "run_env[message]=$(git log -1 --pretty=format:"%s")" \
             -F "run_env[url]=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            -F "tags[architecture]=$MATRIX_SYSTEM" \
+            -F "tags[nix_flakeref]=github:flox/flox/$GITHUB_SHA" \
+            -F "tags[nix_attribute]=devShells.$MATRIX_SYSTEM.default" \
             https://analytics-api.buildkite.com/v1/uploads
 
 
