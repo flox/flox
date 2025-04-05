@@ -135,6 +135,8 @@ pub enum ManagedEnvironmentError {
     Push(#[source] GitRemoteCommandError),
     #[error("cannot push environment that includes local environments")]
     PushWithLocalIncludes,
+    #[error("no updates to push; remote branch is already up-to-date")]
+    NoUpdatesToPush,
     #[error("failed to delete local environment branch")]
     DeleteBranch(#[source] GitCommandError),
     #[error("failed to delete environment directory {0:?}")]
@@ -1482,6 +1484,9 @@ impl ManagedEnvironment {
                 Err(ManagedEnvironmentError::Diverged)?;
             }
         }
+
+        let prior_remote_hash = self.floxmeta.git.get_origin().unwrap().revision;
+
         self.floxmeta
             .git
             .push_ref(
@@ -1493,6 +1498,12 @@ impl ManagedEnvironment {
                 GitRemoteCommandError::AccessDenied => ManagedEnvironmentError::AccessDenied,
                 _ => ManagedEnvironmentError::Push(err),
             })?;
+
+        let subsequnt_remote_hash = self.floxmeta.git.get_origin().unwrap().revision;
+
+        if prior_remote_hash == subsequnt_remote_hash && prior_remote_hash != None {
+            Err(ManagedEnvironmentError::NoUpdatesToPush)?
+        }
 
         // update local environment branch, should be fast-forward and a noop if the branches didn't diverge
         self.pull(flox, force)?;
