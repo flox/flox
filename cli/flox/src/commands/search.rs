@@ -6,7 +6,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::search::SearchResults;
 use flox_rust_sdk::providers::catalog::{ClientTrait, SearchTerm};
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
 
 use crate::config::Config;
@@ -18,6 +18,14 @@ use crate::utils::tracing::sentry_set_tag;
 
 pub(crate) const DEFAULT_SEARCH_LIMIT: Option<NonZeroU8> = NonZeroU8::new(10);
 const FLOX_SHOW_HINT: &str = "Use 'flox show <package>' to see available versions";
+
+fn missing_search_term<T>() -> Result<T> {
+    bail!(indoc! {"
+        No search term provided.
+
+        Try searching with a search term. For example, 'flox search curl'
+    "});
+}
 
 // Search for packages to install
 #[derive(Debug, Bpaf, Clone)]
@@ -33,19 +41,21 @@ pub struct Search {
     /// The package to search for in the format '<pkg-path>'.
     ///
     /// ex. python310Packages.pip
-    #[bpaf(positional("search-term"))]
+    #[bpaf(positional("search-term"), fallback_with(missing_search_term))]
     pub search_term: String,
 }
 
 impl Search {
     #[instrument(name = "search", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        let search_term = &self.search_term;
+
         sentry_set_tag("json", self.json);
         sentry_set_tag("show_all", self.all);
-        sentry_set_tag("search_term", &self.search_term);
-        subcommand_metric!("search", search_term = &self.search_term);
+        sentry_set_tag("search_term", search_term);
+        subcommand_metric!("search", search_term = search_term);
 
-        debug!("performing search for term: {}", self.search_term);
+        debug!("performing search for term: {}", search_term);
 
         let limit = if self.all {
             None
@@ -55,7 +65,7 @@ impl Search {
 
         let results = {
             tracing::debug!("using catalog client for search");
-            let parsed_search = match SearchTerm::from_arg(&self.search_term) {
+            let parsed_search = match SearchTerm::from_arg(search_term) {
                 SearchTerm::Clean(term) => term,
                 SearchTerm::VersionStripped(term) => {
                     message::warning(indoc::indoc! {"
@@ -78,17 +88,12 @@ impl Search {
         } else {
             debug!("printing search results as user facing");
 
-            let suggestion = DidYouMean::<SearchSuggestion>::new(
-                &self.search_term,
-                &flox.catalog_client,
-                flox.system,
-            );
+            let suggestion =
+                DidYouMean::<SearchSuggestion>::new(search_term, &flox.catalog_client, flox.system);
 
             if results.results.is_empty() {
-                let mut message = format!(
-                    "No packages matched this search term: '{}'",
-                    self.search_term
-                );
+                let mut message =
+                    format!("No packages matched this search term: '{}'", search_term);
                 if suggestion.has_suggestions() {
                     message = formatdoc! {"
                         {message}
@@ -101,7 +106,7 @@ impl Search {
                 bail!(message);
             }
 
-            let results = DisplaySearchResults::from_search_results(&self.search_term, results)?;
+            let results = DisplaySearchResults::from_search_results(search_term, results)?;
             println!("{results}");
 
             let mut hints = String::new();
