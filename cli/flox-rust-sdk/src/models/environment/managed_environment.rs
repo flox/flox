@@ -1485,7 +1485,11 @@ impl ManagedEnvironment {
             }
         }
 
-        let prior_remote_hash = self.floxmeta.git.get_origin().unwrap().revision;
+        let prior_remote_hash = self
+            .floxmeta
+            .git
+            .get_remote_revision("dynamicorigin", &sync_branch)
+            .map_err(ManagedEnvironmentError::Git)?;
 
         self.floxmeta
             .git
@@ -1499,9 +1503,13 @@ impl ManagedEnvironment {
                 _ => ManagedEnvironmentError::Push(err),
             })?;
 
-        let subsequnt_remote_hash = self.floxmeta.git.get_origin().unwrap().revision;
+        let subsequnt_remote_hash = self
+            .floxmeta
+            .git
+            .get_remote_revision("dynamicorigin", &sync_branch)
+            .map_err(ManagedEnvironmentError::Git)?;
 
-        if prior_remote_hash == subsequnt_remote_hash && prior_remote_hash != None {
+        if prior_remote_hash == subsequnt_remote_hash && prior_remote_hash.is_some() {
             Err(ManagedEnvironmentError::NoUpdatesToPush)?
         }
 
