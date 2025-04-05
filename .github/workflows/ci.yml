@@ -159,6 +159,7 @@ jobs:
         env:
           BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_RUST_UNIT_TESTS_TOKEN }}
         run: |
+          system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
           curl \
             -X POST \
             --fail-with-body \
@@ -172,6 +173,9 @@ jobs:
             -F "run_env[commit_sha]=$GITHUB_SHA" \
             -F "run_env[message]=$(git log -1 --pretty=format:"%s")" \
             -F "run_env[url]=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            -F "tags[architecture]=$system" \
+            -F "tags[nix_flakeref]=github:flox/flox/$GITHUB_SHA" \
+            -F "tags[nix_attribute]=devShells.$system.default" \
             https://analytics-api.buildkite.com/v1/uploads
 
 
