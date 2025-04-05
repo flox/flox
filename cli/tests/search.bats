@@ -67,6 +67,11 @@ setup_file() {
 @test "'flox search' error with no search term" {
   run "$FLOX_BIN" search
   assert_failure
+  assert_output <<EOF
+❌  No search term provided.
+
+Try searching with a search term. For example, 'flox search curl'
+EOF
 }
 
 # ---------------------------------------------------------------------------- #
