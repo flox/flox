@@ -171,7 +171,6 @@ impl Edit {
         };
 
         let active_environment = UninitializedEnvironment::from_concrete_environment(environment);
-        let environment = environment.dyn_environment_ref_mut();
 
         let result = match contents {
             // If provided with the contents of a manifest file, either via a path to a file or via

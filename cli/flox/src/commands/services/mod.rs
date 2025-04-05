@@ -285,8 +285,7 @@ pub async fn start_services_with_new_process_compose(
     mut concrete_environment: ConcreteEnvironment,
     names: &[String],
 ) -> Result<Vec<String>> {
-    let environment = concrete_environment.dyn_environment_ref_mut();
-    let lockfile: Lockfile = environment.lockfile(&flox)?.into();
+    let lockfile: Lockfile = concrete_environment.lockfile(&flox)?.into();
     let system = flox.system.clone();
 
     for name in names {
