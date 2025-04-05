@@ -6,7 +6,7 @@ use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::search::{PackageBuild, PackageDetails};
 use flox_rust_sdk::providers::catalog::{ClientTrait, VersionsError};
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::subcommand_metric;
 use crate::utils::search::DEFAULT_DESCRIPTION;
@@ -27,7 +27,8 @@ impl Show {
         subcommand_metric!("show");
         sentry_set_tag("pkg_path", &self.pkg_path);
 
-        tracing::debug!("using catalog client for show");
+        debug!("using catalog client for show");
+
         let results = match flox.catalog_client.package_versions(&self.pkg_path).await {
             Ok(results) => results,
             // Below, results.is_empty() is used to mean the search_term
