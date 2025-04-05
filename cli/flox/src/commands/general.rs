@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio::fs;
 use toml_edit::Key;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 use crate::config::{Config, FLOX_CONFIG_FILE, ReadWriteError};
 use crate::subcommand_metric;
@@ -118,9 +118,17 @@ impl ConfigArgs {
                 update_config(&flox.config_dir, &flox.temp_dir, key, Some(parsed_value))?
             },
             ConfigArgs::SetNumber(ConfigSetNumber { key, value, .. }) => {
+                // TODO: delete deprecation notice later
+                warn!(
+                    "Warning: '--set-number' is deprecated. Please use --set in the future instead."
+                );
                 update_config(&flox.config_dir, &flox.temp_dir, key, Some(value))?
             },
             ConfigArgs::SetBool(ConfigSetBool { key, value, .. }) => {
+                // TODO: delete deprecation notice later
+                warn!(
+                    "Warning: '--set-bool' is deprecated. Please use --set in the future instead."
+                );
                 update_config(&flox.config_dir, &flox.temp_dir, key, Some(value))?
             },
             ConfigArgs::Delete(ConfigDelete { key, .. }) => {
