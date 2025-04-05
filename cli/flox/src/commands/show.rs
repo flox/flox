@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::collections::{BTreeMap, HashSet};
 
 use anyhow::{Result, bail};
@@ -68,6 +69,7 @@ fn render_show_catalog(
         // set of results is non-empty.
         bail!("no packages found");
     }
+
     let pkg_path = search_results[0].pkg_path.clone();
     let description = search_results[0]
         .description
@@ -87,40 +89,54 @@ fn render_show_catalog(
         }
         map
     };
+
+    let version_width = max(
+        10,
+        version_to_systems
+            .keys()
+            .map(|version| version.len())
+            .max()
+            .unwrap_or(0),
+    );
+
+    let systems_width = version_to_systems
+        .values()
+        .map(|systems| {
+            let mut intersection = expected_systems
+                .intersection(systems)
+                .cloned()
+                .collect::<Vec<_>>();
+            intersection.sort();
+            intersection.join(", ").len()
+        })
+        .max()
+        .unwrap_or(10);
+
     let mut seen_versions = HashSet::new();
-    // We iterate over the search results again instead of just the `version_to_systems` map since
-    // although the keys (and therefore the versions) in the map are sorted (BTreeMap is a sorted map),
-    // they are sorted lexically. This may be a different order than how the versions *should* be sorted,
-    // so we defer to the order in which the server returns results to us.
     for pkg in search_results {
         if seen_versions.contains(&pkg.version) {
-            // We print everything in one go for each version, so if we've seen it once
-            // we don't need to do anything else.
             continue;
         }
         let Some(systems) = version_to_systems.get(&pkg.version) else {
-            // This should be unreachable since we've already iterated over the search results.
             continue;
         };
+
         let available_systems = {
             let mut intersection = expected_systems
                 .intersection(systems)
                 .cloned()
                 .collect::<Vec<_>>();
             intersection.sort();
-            intersection
+            intersection.join(", ")
         };
-        if available_systems.len() != expected_systems.len() {
-            println!(
-                "    {pkg_path}@{} ({} only)",
-                pkg.version,
-                available_systems.join(", ")
-            );
-        } else {
-            println!("    {pkg_path}@{}", pkg.version);
-        }
+
+        println!(
+            "    {pkg_path}@{:<version_width$} {:<systems_width$}",
+            pkg.version, available_systems
+        );
         seen_versions.insert(&pkg.version);
     }
+
     Ok(())
 }
 
