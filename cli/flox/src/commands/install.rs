@@ -153,7 +153,7 @@ impl Install {
             bail!("Must specify at least one package");
         }
 
-        let concrete_environment = match self
+        let mut concrete_environment = match self
             .environment
             .detect_concrete_environment(&flox, "Install to")
         {
@@ -223,10 +223,8 @@ impl Install {
         };
         let description = environment_description(&concrete_environment)?;
 
-        let mut env = Box::new(concrete_environment);
-
         // Get a list of the packages that this environment is already overriding via composition.
-        let maybe_lockfile = env.existing_lockfile(&flox)?;
+        let maybe_lockfile = concrete_environment.existing_lockfile(&flox)?;
         let existing_composer_package_overrides = if let Some(lockfile) = maybe_lockfile {
             lockfile
                 .compose
@@ -250,7 +248,8 @@ impl Install {
                 packages_to_install.len()
             )
         );
-        let installation = span.in_scope(|| env.install(&packages_to_install, &flox));
+        let installation =
+            span.in_scope(|| concrete_environment.install(&packages_to_install, &flox));
 
         let (packages_retried, installation) = match installation {
             Ok(installation) => (None, installation),
@@ -260,7 +259,7 @@ impl Install {
                 {
                     let res = Self::retry_install_for_valid_systems(
                         &flox,
-                        env.as_mut(),
+                        &mut concrete_environment,
                         failures,
                         &packages_retry,
                     );
@@ -274,9 +273,11 @@ impl Install {
             },
         };
 
-        let lockfile = env.existing_lockfile(&flox)?.ok_or(anyhow!(
-            "Expected lockfile to exist after successful install"
-        ))?;
+        let lockfile = concrete_environment
+            .existing_lockfile(&flox)?
+            .ok_or(anyhow!(
+                "Expected lockfile to exist after successful install"
+            ))?;
 
         // Get the new set of composer overrides
         let new_composer_package_overrides = lockfile
@@ -319,7 +320,7 @@ impl Install {
         message::packages_newly_overridden_by_composer(&new_package_overrides);
 
         if installation.new_manifest.is_some() {
-            warn_manifest_changes_for_services(&flox, env.as_ref());
+            warn_manifest_changes_for_services(&flox, &concrete_environment);
         }
 
         Ok(())

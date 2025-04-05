@@ -41,7 +41,7 @@ impl Uninstall {
             ensure_floxhub_token(&mut flox).await?;
         };
 
-        let concrete_environment = match self
+        let mut concrete_environment = match self
             .environment
             .detect_concrete_environment(&flox, "Uninstall from")
         {
@@ -67,14 +67,14 @@ impl Uninstall {
         };
 
         let description = environment_description(&concrete_environment)?;
-        let mut env = Box::new(concrete_environment);
 
         let span = info_span!(
             "uninstall",
-            env = %description,
+            concrete_environment = %description,
             progress = format!("Uninstalling {} packages", self.packages.len()));
 
-        let attempt = span.in_scope(|| env.uninstall(self.packages.clone(), &flox))?;
+        let attempt =
+            span.in_scope(|| concrete_environment.uninstall(self.packages.clone(), &flox))?;
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.
@@ -90,7 +90,7 @@ impl Uninstall {
             }
         });
 
-        warn_manifest_changes_for_services(&flox, env.as_ref());
+        warn_manifest_changes_for_services(&flox, &concrete_environment);
 
         Ok(())
     }
