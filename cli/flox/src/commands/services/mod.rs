@@ -115,11 +115,8 @@ impl ServicesEnvironment {
         flox: &Flox,
         environment: ConcreteEnvironment,
     ) -> Result<Self> {
-        let socket = environment
-            .dyn_environment_ref()
-            .services_socket_path(flox)?;
-
-        let manifest = environment.dyn_environment_ref().manifest(flox)?;
+        let socket = environment.services_socket_path(flox)?;
+        let manifest = environment.manifest(flox)?;
 
         Ok(Self {
             environment,
