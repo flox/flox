@@ -537,6 +537,12 @@ impl PathEnvironment {
             "})
         .map_err(EnvironmentError::WriteGitignore)?;
 
+        // Write (configure) Git attributes to ./flox/.gitattributes
+        fs::write(dot_flox_path.join(".gitattributes"), formatdoc! {"
+            manifest.lock linguist-generated=true linguist-language=JSON
+            "})
+        .map_err(EnvironmentError::WriteGitattributes)?;
+
         let dot_flox_path = CanonicalPath::new(dot_flox_path).expect("the directory just created");
 
         Self::open(flox, pointer, dot_flox_path)
