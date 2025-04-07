@@ -21,6 +21,7 @@ use super::{EnvironmentSelect, environment_select};
 use crate::commands::ensure_floxhub_token;
 use crate::config::Config;
 use crate::environment_subcommand_metric;
+use crate::utils::errors::display_chain;
 use crate::utils::message;
 
 #[derive(Bpaf, Clone)]
@@ -178,7 +179,7 @@ impl Publish {
 
                 Use 'flox install {catalog_name}/{package}' to install it.
                 "}),
-            Err(e) => bail!("Failed to publish package: {}", e.to_string()),
+            Err(e) => bail!("Failed to publish package: {}", display_chain(&e)),
         }
 
         Ok(())
