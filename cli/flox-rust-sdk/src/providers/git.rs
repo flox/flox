@@ -75,6 +75,7 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     type RevListError: std::error::Error;
     type ShowDateError: std::error::Error;
     type StatusError: std::error::Error;
+    type RemoteRevError: std::error::Error;
 
     fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError>;
     fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<Self, Self::InitError>;
@@ -99,6 +100,11 @@ pub trait GitProvider: Sized + std::fmt::Debug {
         }
         parts[0] == remote_name
     }
+    fn rev_exists_on_remote(
+        &self,
+        rev: &str,
+        remote_name: &str,
+    ) -> Result<bool, Self::RemoteRevError>;
 
     fn remotes(&self) -> Result<Vec<String>, GitCommandError>;
     fn remote_url(&self, name: &str) -> Result<String, GitCommandError>;
@@ -717,6 +723,7 @@ impl GitProvider for GitCommandProvider {
     type ListBranchesError = GitCommandError;
     type MvError = GitCommandError;
     type PushError = GitRemoteCommandError;
+    type RemoteRevError = GitCommandError;
     type RenameError = GitCommandError;
     type RevListError = GitCommandError;
     type RmError = GitCommandError;
@@ -1172,6 +1179,29 @@ impl GitProvider for GitCommandProvider {
             .collect::<Vec<_>>();
         Ok(branches)
     }
+
+    fn rev_exists_on_remote(
+        &self,
+        rev: &str,
+        remote_name: &str,
+    ) -> Result<bool, Self::RemoteRevError> {
+        let mut command = self.new_command();
+        // This git command returns ancestor revisions that we have in common
+        // with the remote.
+        command.args([
+            "fetch",
+            "--negotiate-only",
+            format!("--negotiation-tip={rev}").as_str(),
+            remote_name,
+        ]);
+        Self::run_command(&mut command).map(|output| {
+            // The command output is a revision, but it's not always
+            // the revision you expect so you need to double check
+            // that you got back the revision you were looking for.
+            let output = output.to_string_lossy();
+            rev == output.trim()
+        })
+    }
 }
 
 pub mod test_helpers {
@@ -1191,9 +1221,11 @@ pub mod test_helpers {
 #[cfg(test)]
 pub mod tests {
 
+    use std::collections::HashMap;
     use std::fs;
 
     use pretty_assertions::assert_eq;
+    use tempfile::TempDir;
 
     use super::*;
 
@@ -1204,11 +1236,44 @@ pub mod tests {
         (git_command_provider, tempdir_handle)
     }
 
+    pub fn init_temp_repo_with_name(
+        name: &str,
+        bare: bool,
+    ) -> (GitCommandProvider, tempfile::TempDir) {
+        let tempdir_handle =
+            tempfile::TempDir::with_prefix_in(format!("{name}-"), std::env::temp_dir()).unwrap();
+
+        let git_command_provider = GitCommandProvider::init(tempdir_handle.path(), bare).unwrap();
+        (git_command_provider, tempdir_handle)
+    }
+
     pub fn commit_file(repo: &GitCommandProvider, filename: &str) {
         let file = repo.path.join(filename);
         fs::write(&file, filename).unwrap();
         repo.add(&[&file]).unwrap();
         repo.commit(filename).unwrap();
+    }
+
+    pub fn repo_local_url(repo: &impl GitProvider) -> String {
+        format!("file://{}", repo.path().display())
+    }
+
+    pub fn get_remote_url(remotes: &RemoteMap, name: &str) -> String {
+        repo_local_url(&remotes.get(name).unwrap().0)
+    }
+
+    pub type RemoteMap = HashMap<String, (GitCommandProvider, TempDir)>;
+
+    pub fn create_remotes(local_repo: &impl GitProvider, remote_names: &[&str]) -> RemoteMap {
+        let mut remotes = HashMap::new();
+        for remote_name in remote_names.iter() {
+            let (repo, tempdir) = init_temp_repo_with_name(remote_name, true);
+            local_repo
+                .add_remote(remote_name, &repo_local_url(&repo))
+                .unwrap();
+            remotes.insert(remote_name.to_string(), (repo, tempdir));
+        }
+        remotes
     }
 
     #[test]
@@ -1692,5 +1757,43 @@ pub mod tests {
         .unwrap_err();
 
         assert!(matches!(dbg!(err), GitRemoteCommandError::AccessDenied));
+    }
+
+    #[test]
+    fn identifies_local_commit_on_remote() {
+        let branch_name = "some_branch";
+        let (build_repo, _tempdir) = init_temp_repo(false);
+        commit_file(&build_repo, "foo");
+        let status = build_repo.status().unwrap();
+        build_repo.create_branch(branch_name, &status.rev).unwrap();
+        let _remotes = create_remotes(&build_repo, &["some_remote"]);
+        build_repo
+            .push_ref("some_remote", branch_name, false)
+            .unwrap();
+        assert!(
+            build_repo
+                .rev_exists_on_remote(&status.rev, "some_remote")
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn identifies_local_commit_not_on_remote() {
+        let branch_name = "some_branch";
+        let (build_repo, _tempdir) = init_temp_repo(false);
+        commit_file(&build_repo, "foo");
+        let status = build_repo.status().unwrap();
+        build_repo.create_branch(branch_name, &status.rev).unwrap();
+        let _remotes = create_remotes(&build_repo, &["some_remote"]);
+        build_repo
+            .push_ref("some_remote", branch_name, false)
+            .unwrap();
+        commit_file(&build_repo, "bar");
+        let status = build_repo.status().unwrap();
+        assert!(
+            !build_repo
+                .rev_exists_on_remote(&status.rev, "some_remote")
+                .unwrap()
+        );
     }
 }

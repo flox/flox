@@ -458,21 +458,25 @@ fn url_for_remote_containing_current_rev(
 ) -> Result<String, PublishError> {
     match git.get_current_branch_remote_info() {
         Ok(tracked_remote_info) => {
-            // Ensure that the current rev is actually on the remote, not just
-            // that the current branch is tracking a remote branch. We do this
-            // by ensuring that the list of remote branches containing this rev
-            // includes the branch that the build repo is tracking.
-            let expected_branch = format!(
-                "{}/{}",
-                tracked_remote_info.name, tracked_remote_info.reference
-            );
-            let branches_containing_rev = git.remote_branches_containing_revision(&status.rev)?;
-            if !branches_containing_rev.contains(&expected_branch) {
-                Err(build_repo_err(
-                    "Current revision not found on remote branch, try 'git fetch' to ensure your repository is up to date.",
-                ))
-            } else {
-                Ok(tracked_remote_info.url)
+            match git.rev_exists_on_remote(&status.rev, &tracked_remote_info.name) {
+                Ok(exists) => {
+                    // Note: strictly speaking this checks that there is a tracked
+                    //       remote branch, and that the revision exists on the
+                    //       remote that the tracked branch is on, but does not check
+                    //       that the revision is on the tracked branch.
+                    if exists {
+                        git.remote_url(&tracked_remote_info.name)
+                            .map_err(|_| build_repo_err("Failed to get URL for remote."))
+                    } else {
+                        Err(build_repo_err(
+                            "Current revision not found on tracked remote branch.",
+                        ))
+                    }
+                },
+                // Something failed while trying to talk to the remote.
+                Err(_) => Err(build_repo_err(
+                    "Failed while trying to locate current revision on remote repository.",
+                )),
             }
         },
         Err(_) => {
@@ -487,16 +491,24 @@ fn url_for_remote_containing_current_rev(
                 )),
                 // If there's only a single remote configured, use that.
                 1 => {
-                    let branches = git.remote_branches_containing_revision(&status.rev)?;
-                    if !branches
-                        .iter()
-                        .any(|branch_name| git.branch_is_from_remote(branch_name, &remote_names[0]))
-                    {
-                        Err(build_repo_err(
-                            "Could not find current revision on a remote.",
-                        ))
-                    } else {
-                        Ok(git.remote_url(&remote_names[0])?.to_string())
+                    let only_remote = remote_names
+                        .first()
+                        .expect("already check that at least one remote exists");
+                    match git.rev_exists_on_remote(&status.rev, only_remote) {
+                        Ok(exists) => {
+                            if exists {
+                                git.remote_url(only_remote)
+                                    .map_err(|_| build_repo_err("Failed to get URL for remote."))
+                            } else {
+                                Err(build_repo_err(
+                                    "Current revision not found on remote repository.",
+                                ))
+                            }
+                        },
+                        // Something failed while trying to talk to the remote.
+                        Err(_) => Err(build_repo_err(
+                            "Failed while trying to locate current revision on remote.",
+                        )),
                     }
                 },
                 // Otherwise, we need to inspect the remotes and apply some heuristics
@@ -505,14 +517,9 @@ fn url_for_remote_containing_current_rev(
                 // those are more likely to be what the canonical repository is.
                 _ => {
                     const PREFERRED_REMOTE_NAMES: [&str; 2] = ["upstream", "origin"];
-                    let branches_containing_rev =
-                        git.remote_branches_containing_revision(&status.rev)?;
                     let mut chosen_remote = None;
                     for remote_name in PREFERRED_REMOTE_NAMES.iter() {
-                        if branches_containing_rev
-                            .iter()
-                            .any(|b| git.branch_is_from_remote(b, remote_name))
-                        {
+                        if let Ok(true) = git.rev_exists_on_remote(&status.rev, remote_name) {
                             chosen_remote = Some(remote_name);
                             break;
                         }
@@ -627,11 +634,9 @@ pub mod tests {
     const EXAMPLE_PACKAGE_NAME: &str = "mypkg";
     const EXAMPLE_MANIFEST: &str = "envs/publish-simple";
 
-    use std::collections::HashMap;
     use std::io::Write;
 
     use pretty_assertions::assert_eq;
-    use tempfile::TempDir;
 
     use super::*;
     use crate::data::CanonicalPath;
@@ -642,9 +647,14 @@ pub mod tests {
     use crate::providers::build::FloxBuildMk;
     use crate::providers::catalog::test_helpers::reset_mocks;
     use crate::providers::catalog::{GENERATED_DATA, MockClient, PublishResponse, Response};
-    use crate::providers::git::tests::{commit_file, init_temp_repo};
+    use crate::providers::git::tests::{
+        commit_file,
+        create_remotes,
+        get_remote_url,
+        init_temp_repo,
+    };
 
-    fn example_remote() -> (tempfile::TempDir, GitCommandProvider, String) {
+    fn example_git_remote_repo() -> (tempfile::TempDir, GitCommandProvider, String) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
         let repo = GitCommandProvider::init(tempdir_handle.path(), true).unwrap();
@@ -724,7 +734,7 @@ pub mod tests {
     #[test]
     fn test_check_env_meta_dirty() {
         let (flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, _git) = example_path_environment(&flox, Some(&remote_uri));
 
         let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
@@ -743,7 +753,7 @@ pub mod tests {
     #[test]
     fn test_check_env_meta_not_in_remote() {
         let (flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, git) = example_path_environment(&flox, Some(&remote_uri));
 
         let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
@@ -752,8 +762,11 @@ pub mod tests {
         let manifest_path = env
             .manifest_path(&flox)
             .expect("to be able to get manifest path");
-        std::fs::write(&manifest_path, "dirty content")
-            .expect("to write some additional text to the .flox");
+        std::fs::write(
+            &manifest_path,
+            format!("{}\n", env.manifest_contents(&flox).unwrap()),
+        )
+        .expect("to write some additional text to the .flox");
         git.add(&[manifest_path.as_path()])
             .expect("adding flox files");
         git.commit("dirty comment").expect("be able to commit");
@@ -768,7 +781,7 @@ pub mod tests {
     #[test]
     fn test_check_env_meta_nominal() {
         let (flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
         let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME).unwrap();
@@ -802,7 +815,7 @@ pub mod tests {
     fn test_check_build_meta_nominal() {
         let builder = FloxBuildMk;
         let (flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
 
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
@@ -827,7 +840,7 @@ pub mod tests {
     async fn publish_meta_only() {
         let builder = FloxBuildMk;
         let (mut flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
         let token = create_test_token("test");
@@ -936,7 +949,7 @@ pub mod tests {
     async fn upload_to_local_cache() {
         let builder = FloxBuildMk;
         let (mut flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_remote();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
         let token = create_test_token("test");
@@ -977,28 +990,6 @@ pub mod tests {
         // The 'cache' should be non-empty after the publish
         let entries = std::fs::read_dir(&cache_path).unwrap();
         assert!(entries.count() != 0);
-    }
-
-    fn repo_local_url(repo: &impl GitProvider) -> String {
-        format!("file://{}", repo.path().display())
-    }
-
-    type RemoteMap = HashMap<String, (GitCommandProvider, TempDir)>;
-
-    fn create_remotes(local_repo: &impl GitProvider, remote_names: &[&str]) -> RemoteMap {
-        let mut remotes = HashMap::new();
-        for remote_name in remote_names.iter() {
-            let (repo, tempdir) = init_temp_repo(true);
-            local_repo
-                .add_remote(remote_name, &repo_local_url(&repo))
-                .unwrap();
-            remotes.insert(remote_name.to_string(), (repo, tempdir));
-        }
-        remotes
-    }
-
-    fn get_remote_url(remotes: &RemoteMap, name: &str) -> String {
-        repo_local_url(&remotes.get(name).unwrap().0)
     }
 
     #[test]
@@ -1067,21 +1058,24 @@ pub mod tests {
 
     #[test]
     fn prefers_upstream_to_origin() {
-        let remote_name = "upstream";
+        let preferred_remote_name = "upstream";
         let branch_name = "some_branch";
         let (build_repo, _tempdir) = init_temp_repo(false);
         commit_file(&build_repo, "foo");
         let status = build_repo.status().unwrap();
         build_repo.create_branch(branch_name, &status.rev).unwrap();
-        let remotes = create_remotes(&build_repo, &[remote_name, "origin"]);
+        let remotes = create_remotes(&build_repo, &[preferred_remote_name, "origin"]);
         build_repo
-            .push_ref(remote_name, branch_name, false)
+            .push_ref(preferred_remote_name, branch_name, false)
             .unwrap();
         build_repo.push_ref("origin", branch_name, false).unwrap();
-        let remote_url =
+        let retrieved_remote_url =
             url_for_remote_containing_current_rev(&build_repo, &build_repo.status().unwrap())
                 .unwrap();
-        assert_eq!(remote_url, get_remote_url(&remotes, remote_name));
+        assert_eq!(
+            retrieved_remote_url,
+            get_remote_url(&remotes, preferred_remote_name)
+        );
     }
 
     #[test]
