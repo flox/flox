@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use thiserror::Error;
 use tracing::instrument;
 use url::Url;
@@ -404,6 +404,24 @@ pub fn check_build_metadata(
     Ok(metadata)
 }
 
+/// Creates the error message for a build repo that's in an invalid state
+/// by filling out a template with a provided specific error message.
+fn build_repo_err_msg(msg: &str) -> String {
+    formatdoc! {"
+        \n{msg}
+
+        The build repository must satisfy a few requirements in order to use the 'flox publish' command:
+        - It must be a git repository.
+        - All of the tracked files must be in a clean state.
+        - A remote must be configured.
+        - The current revision must be pushed to a remote.
+    "}
+}
+
+fn build_repo_err(msg: &str) -> PublishError {
+    PublishError::UnsupportedEnvironmentState(build_repo_err_msg(msg))
+}
+
 /// Check the local repo that the build source is in to make sure that it's in
 /// a state amenable to publishing an artifact built from it.
 ///
@@ -412,13 +430,13 @@ pub fn check_build_metadata(
 /// - The tracked source files are clean.
 /// - The current revision is the latest one on the remote.
 fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, PublishError> {
-    let status = git.status().map_err(|_e| {
-        PublishError::UnsupportedEnvironmentState("Unable to get respository status.".to_string())
-    })?;
+    let status = git
+        .status()
+        .map_err(|_e| build_repo_err("Unable to get repository status."))?;
 
     if status.is_dirty {
-        return Err(PublishError::UnsupportedEnvironmentState(
-            "Build repository must be clean, but has dirty tracked files.".to_string(),
+        return Err(build_repo_err(
+            "Build repository must be clean, but has dirty tracked files.",
         ));
     }
 
@@ -450,9 +468,9 @@ fn url_for_remote_containing_current_rev(
             );
             let branches_containing_rev = git.remote_branches_containing_revision(&status.rev)?;
             if !branches_containing_rev.contains(&expected_branch) {
-                Err(PublishError::UnsupportedEnvironmentState(
-                     "Unable to identify repository origin info. Checkout a branch with 'git checkout -b' and set upstream with 'git branch --set-upstream-to origin/branch'".to_string(),
-                 ))
+                Err(build_repo_err(
+                    "Current revision not found on remote branch, try 'git fetch' to ensure your repository is up to date.",
+                ))
             } else {
                 Ok(tracked_remote_info.url)
             }
@@ -464,8 +482,8 @@ fn url_for_remote_containing_current_rev(
             match remote_names.len() {
                 // If there are no remotes configured, that's an error we want the
                 // user to address.
-                0 => Err(PublishError::UnsupportedEnvironmentState(
-                    "The repository must have at least one remote configured.".to_string(),
+                0 => Err(build_repo_err(
+                    "The repository must have at least one remote configured.",
                 )),
                 // If there's only a single remote configured, use that.
                 1 => {
@@ -474,8 +492,8 @@ fn url_for_remote_containing_current_rev(
                         .iter()
                         .any(|branch_name| git.branch_is_from_remote(branch_name, &remote_names[0]))
                     {
-                        Err(PublishError::UnsupportedEnvironmentState(
-                            "Could not find revision on remote.".to_string(),
+                        Err(build_repo_err(
+                            "Could not find current revision on a remote.",
                         ))
                     } else {
                         Ok(git.remote_url(&remote_names[0])?.to_string())
