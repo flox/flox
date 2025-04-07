@@ -6,7 +6,7 @@ function render_remote_cmd() {
   local -r flake_ref="github:flox/flox/$GITHUB_SHA#packages.$MATRIX_SYSTEM.flox-cli-tests"
   local -r nix_args=(--accept-flake-config --extra-experimental-features '"nix-command flakes"' "$flake_ref")
   local -r ci_args=(--ci-runner "flox-$MATRIX_SYSTEM")
-  local -r bats_args=(--filter-tags "$MATRIX_TEST_TAGS" --report-formatter junit)
+  local -r bats_args=(--filter-tags "$MATRIX_TEST_TAGS" --report-formatter junit uninstall.bats)
 
   # Don't actually run the command, just render it. We want the environment
   # variables from this machine, not the remote builder.
@@ -15,9 +15,6 @@ function render_remote_cmd() {
 export -f render_remote_cmd
 
 function upload_report_to_buildkite() {
-  # Don't do anything if we're not in the merge queue
-  [[ 'merge_group' != "$GITHUB_EVENT_NAME" ]] && return 0
-
   local -r git_commit_message="$(git log -1 --pretty=format:"%s")"
   local -r report_path_on_remote="$(awk '{ if ($1 == "TESTS_DIR:") { print $2 } }' output.txt)/report.xml"
 

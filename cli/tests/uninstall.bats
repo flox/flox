@@ -224,7 +224,7 @@ EOF
   run "$FLOX_BIN" uninstall -d composer hello
   assert_success
   assert_output - << EOF
-🗑️  'hello' uninstalled from environment 'composer'
+🗑️  'hello' uninstalled from environment 'FAIL'
 ℹ️ 'hello' is still installed by environment 'included'
 EOF
 }
