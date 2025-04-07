@@ -15,8 +15,20 @@ function render_remote_cmd() {
 export -f render_remote_cmd
 
 function upload_report_to_buildkite() {
-  local -r report_path="$1"
+  # Don't do anything if we're not in the merge queue
+  [[ 'merge_group' != "$GITHUB_EVENT_NAME" ]] && return 0
+
   local -r git_commit_message="$(git log -1 --pretty=format:"%s")"
+  local -r report_path_on_remote="$(awk '{ if ($1 == "TESTS_DIR:") { print $2 } }' output.txt)/report.xml"
+
+  # Square bracket due to IPv6 being used to address the remote builderes via TailScale.
+  scp \
+    -6 \
+    -o "UserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" \
+    "github@[$REMOTE_SERVER_ADDRESS]:$report_path_on_remote" \
+    ./report.xml
+
+  local -r report_path="$PWD/report.xml"
 
   curl \
     -X POST \
@@ -33,6 +45,7 @@ function upload_report_to_buildkite() {
     -F "run_env[url]=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
     https://analytics-api.buildkite.com/v1/uploads
 }
+trap 'upload_report_to_buildkite' EXIT
 
 function main() {
   git clean -xfd
@@ -46,17 +59,5 @@ function main() {
     -o "UserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" \
     "$(render_remote_cmd)" \
     | tee output.txt
-
-  # Upload the JUnit report if we're in the merge queue
-  if [[ 'merge_group' == "$GITHUB_EVENT_NAME" ]]; then
-    local -r report_path_on_remote="$(awk '{ if ($1 == "TESTS_DIR:") { print $2 } }' output.txt)/report.xml"
-    # Square bracket due to IPv6 being used to address the remote builderes via TailScale.
-    scp \
-      -6 \
-      -o "UserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" \
-      "github@[$REMOTE_SERVER_ADDRESS]:$report_path_on_remote" \
-      .
-    upload_report_to_buildkite "$(realpath ./report.xml)"
-  fi
 }
 main "$@"
