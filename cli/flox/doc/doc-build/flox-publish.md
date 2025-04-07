@@ -100,7 +100,7 @@ in the Flox config:
 
 ``` bash
 flox config --set publish.store_url "s3://my-bucket-name"
-flox config --set publish.signing_key "/home/<name>/.config/my-flox-catalog.key"
+flox config --set publish.signing_private_key "/home/<name>/.config/my-flox-catalog.key"
 ```
 
 ## Signing key
