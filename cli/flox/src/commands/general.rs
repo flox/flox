@@ -76,9 +76,9 @@ pub enum ConfigArgs {
     Reset,
     /// Set a config value
     Set(#[bpaf(external(config_set))] ConfigSet),
-    /// Set a numeric config value
+    /// Set a numeric config value (deprecated)
     SetNumber(#[bpaf(external(config_set_number))] ConfigSetNumber),
-    /// Set a boolean config value
+    /// Set a boolean config value (deprecated)
     SetBool(#[bpaf(external(config_set_bool))] ConfigSetBool),
     /// Delete a config value
     Delete(#[bpaf(external(config_delete))] ConfigDelete),
@@ -154,7 +154,7 @@ pub struct ConfigSet {
 }
 
 #[derive(Debug, Clone, Bpaf)]
-#[bpaf(adjacent)]
+#[bpaf(adjacent, hide)]
 #[allow(unused)]
 pub struct ConfigSetNumber {
     /// Set <key> to <number>
@@ -169,7 +169,7 @@ pub struct ConfigSetNumber {
 }
 
 #[derive(Debug, Clone, Bpaf)]
-#[bpaf(adjacent)]
+#[bpaf(adjacent, hide)]
 #[allow(unused)]
 pub struct ConfigSetBool {
     /// Set <key> to <bool>
