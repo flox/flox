@@ -3,7 +3,6 @@
   # this is overridden to point to the nixpkgs used to build flox by the caller
   nixpkgs-url ? "github:flox/nixpkgs/stable",
   pkgs ? (builtins.getFlake nixpkgs-url).legacyPackages.${builtins.currentSystem},
-  t3 ? "@t3@",
   pname,
   version,
   flox-env, # environment from which package is built
@@ -26,7 +25,6 @@ let
     build-wrapper-env-package
     flox-env-package
   ] ++ (map (d: builtins.storePath d) buildDeps);
-  t3-package = builtins.storePath t3;
   install-prefix-contents = /. + install-prefix;
   buildScript-contents = /. + buildScript;
   buildCache-tar-contents = if (buildCache == null) then null else (/. + buildCache);
@@ -64,8 +62,8 @@ pkgs.runCommandNoCC name
         gnutar
         gnused
         makeWrapper
+        t3
       ]
-      ++ [ t3-package ]
       ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ darwin.autoSignDarwinBinariesHook ];
     outputs =
       [
@@ -166,7 +164,7 @@ pkgs.runCommandNoCC name
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --env ${flox-env-package} --mode run --turbo -- \
                     ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
-                      ${t3-package}/bin/t3 --relative $log -- bash -e ${buildScript-contents}
+                      t3 --relative $log -- bash -e ${buildScript-contents}
               ''
             else
               ''
@@ -180,7 +178,7 @@ pkgs.runCommandNoCC name
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --env ${flox-env-package} --mode run --turbo -- \
                     ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
-                      ${t3-package}/bin/t3 --relative $log -- bash -e ${buildScript-contents} || \
+                      t3 --relative $log -- bash -e ${buildScript-contents} || \
                 ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
           }
