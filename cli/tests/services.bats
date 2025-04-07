@@ -126,7 +126,7 @@ setup_start_counter_services() {
 @test "can call process-compose" {
   run "$PROCESS_COMPOSE_BIN" version
   assert_success
-  assert_output --partial "v1.40.1"
+  assert_output --partial "v1.46.0"
 }
 
 @test "process-compose can run generated config file" {
