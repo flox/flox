@@ -16,7 +16,6 @@ let
   build-manifest-nix = substituteAll {
     name = "build-manifest.nix";
     src = ../../package-builder/build-manifest.nix;
-    inherit t3;
   };
   flox-build-mk = substituteAll {
     name = "flox-build.mk";
