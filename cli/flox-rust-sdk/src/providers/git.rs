@@ -1254,8 +1254,12 @@ pub mod tests {
     fn test_open_subdirectory_bare() {
         let (_, tempdir_handle) = init_temp_repo(true);
 
+        // Consider the existance of the "hooks" subdirectory as confirmation
+        // of having successfully created a bare repository. We previously
+        // tested for the existence of "branches", but that directory stopped
+        // being created in a recent update of the GitCommandProvider.
         assert!(matches!(
-            GitCommandProvider::open(tempdir_handle.path().join("branches")),
+            GitCommandProvider::open(tempdir_handle.path().join("hooks")),
             Err(GitCommandOpenError::Subdirectory),
         ));
     }
