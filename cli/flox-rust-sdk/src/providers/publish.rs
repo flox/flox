@@ -275,7 +275,7 @@ fn determine_cache(
 
                You can supply a signing key by either:
                - Providing a path to a key with the '--signing-private-key' option.
-               - Setting it in the config via 'flox config --set publish.signing-key <path>'
+               - Setting it in the config via 'flox config --set publish.signing_private_key <path>'
 
                Or you can publish without uploading artifacts via the '--metadata-only' option.
             "}
@@ -825,7 +825,7 @@ pub mod tests {
 
                 You can supply a signing key by either:
                 - Providing a path to a key with the '--signing-private-key' option.
-                - Setting it in the config via 'flox config --set publish.signing-key <path>'
+                - Setting it in the config via 'flox config --set publish.signing_private_key <path>'
 
                 Or you can publish without uploading artifacts via the '--metadata-only' option.
             " }
