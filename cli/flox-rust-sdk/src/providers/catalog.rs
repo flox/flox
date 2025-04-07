@@ -1018,10 +1018,6 @@ pub enum CatalogClientError {
     UnsupportedSystem(#[source] api_error::ConversionError),
     #[error("{}", fmt_api_error(.0))]
     APIError(APIError<api_types::ErrorResponse>),
-    #[error("negative number of results")]
-    NegativeNumberOfResults,
-    #[error("resolution message error: {0}")]
-    ResolutionMessage(String),
     #[error("invalid ingress URI")]
     InvalidIngressUri(#[source] url::ParseError),
 }
@@ -1045,12 +1041,8 @@ fn fmt_api_error(api_error: &APIError<api_types::ErrorResponse>) -> String {
 pub enum SearchError {
     #[error("invalid search term")]
     InvalidSearchTerm(#[source] api_error::ConversionError),
-    #[error("encountered attribute path with less than 3 elements: {0}")]
-    ShortAttributePath(String),
     #[error("catalog error")]
     CatalogClientError(#[from] CatalogClientError),
-    #[error("did not provide total result count")]
-    NoTotalCount,
 }
 
 #[derive(Debug, Error)]
