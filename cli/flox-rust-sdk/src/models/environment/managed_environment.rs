@@ -1503,13 +1503,13 @@ impl ManagedEnvironment {
                 _ => ManagedEnvironmentError::Push(err),
             })?;
 
-        let subsequnt_remote_hash = self
+        let subsequent_remote_hash = self
             .floxmeta
             .git
             .get_remote_revision("dynamicorigin", &sync_branch)
             .map_err(ManagedEnvironmentError::Git)?;
 
-        if prior_remote_hash == subsequnt_remote_hash && prior_remote_hash.is_some() {
+        if prior_remote_hash == subsequent_remote_hash && prior_remote_hash.is_some() {
             Err(ManagedEnvironmentError::NoUpdatesToPush)?
         }
 
