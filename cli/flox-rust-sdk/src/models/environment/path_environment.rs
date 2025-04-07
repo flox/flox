@@ -539,7 +539,7 @@ impl PathEnvironment {
 
         // Write (configure) Git attributes to ./flox/.gitattributes
         fs::write(dot_flox_path.join(".gitattributes"), formatdoc! {"
-            manifest.lock linguist-generated=true linguist-language=JSON
+            {ENV_DIR_NAME}/{LOCKFILE_FILENAME} linguist-generated=true linguist-language=JSON
             "})
         .map_err(EnvironmentError::WriteGitattributes)?;
 
