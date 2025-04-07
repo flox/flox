@@ -27,6 +27,16 @@ fn generate_client(spec: &OpenAPI) -> String {
         "crate::error::MessageType",
         ["Default".parse().unwrap()].into_iter(),
     );
+    settings.with_replacement(
+        "CatalogStoreConfig",
+        "crate::types::CatalogStoreConfig",
+        vec![].into_iter(),
+    );
+    settings.with_replacement(
+        "CatalogStoreConfigNixCopy",
+        "crate::types::CatalogStoreConfigNixCopy",
+        vec![].into_iter(),
+    );
     let mut generator = progenitor::Generator::new(&settings);
     let tokens = generator.generate_tokens(spec).unwrap();
     let ast = syn::parse2(tokens).unwrap();

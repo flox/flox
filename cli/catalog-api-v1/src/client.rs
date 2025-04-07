@@ -351,63 +351,6 @@ pub mod types {
             value.clone()
         }
     }
-    ///CatalogStoreConfig
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "CatalogStoreConfig",
-    ///  "oneOf": [
-    ///    {
-    ///      "$ref": "#/components/schemas/CatalogStoreConfigNull"
-    ///    },
-    ///    {
-    ///      "$ref": "#/components/schemas/CatalogStoreConfigMetaOnly"
-    ///    },
-    ///    {
-    ///      "$ref": "#/components/schemas/CatalogStoreConfigNixCopy"
-    ///    },
-    ///    {
-    ///      "$ref": "#/components/schemas/CatalogStoreConfigPublisher"
-    ///    }
-    ///  ]
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    #[serde(untagged)]
-    pub enum CatalogStoreConfig {
-        Null(CatalogStoreConfigNull),
-        MetaOnly(CatalogStoreConfigMetaOnly),
-        NixCopy(CatalogStoreConfigNixCopy),
-        Publisher(CatalogStoreConfigPublisher),
-    }
-    impl From<&CatalogStoreConfig> for CatalogStoreConfig {
-        fn from(value: &CatalogStoreConfig) -> Self {
-            value.clone()
-        }
-    }
-    impl From<CatalogStoreConfigNull> for CatalogStoreConfig {
-        fn from(value: CatalogStoreConfigNull) -> Self {
-            Self::Null(value)
-        }
-    }
-    impl From<CatalogStoreConfigMetaOnly> for CatalogStoreConfig {
-        fn from(value: CatalogStoreConfigMetaOnly) -> Self {
-            Self::MetaOnly(value)
-        }
-    }
-    impl From<CatalogStoreConfigNixCopy> for CatalogStoreConfig {
-        fn from(value: CatalogStoreConfigNixCopy) -> Self {
-            Self::NixCopy(value)
-        }
-    }
-    impl From<CatalogStoreConfigPublisher> for CatalogStoreConfig {
-        fn from(value: CatalogStoreConfigPublisher) -> Self {
-            Self::Publisher(value)
-        }
-    }
     ///CatalogStoreConfigMetaOnly
     ///
     /// <details><summary>JSON schema</summary>
@@ -433,48 +376,6 @@ pub mod types {
     }
     impl From<&CatalogStoreConfigMetaOnly> for CatalogStoreConfigMetaOnly {
         fn from(value: &CatalogStoreConfigMetaOnly) -> Self {
-            value.clone()
-        }
-    }
-    ///CatalogStoreConfigNixCopy
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "CatalogStoreConfigNixCopy",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "egress_uri",
-    ///    "ingress_uri"
-    ///  ],
-    ///  "properties": {
-    ///    "egress_uri": {
-    ///      "title": "Egress Uri",
-    ///      "type": "string"
-    ///    },
-    ///    "ingress_uri": {
-    ///      "title": "Ingress Uri",
-    ///      "type": "string"
-    ///    },
-    ///    "store_type": {
-    ///      "title": "Store Type",
-    ///      "default": "nix-copy",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct CatalogStoreConfigNixCopy {
-        pub egress_uri: String,
-        pub ingress_uri: String,
-        #[serde(default = "defaults::catalog_store_config_nix_copy_store_type")]
-        pub store_type: String,
-    }
-    impl From<&CatalogStoreConfigNixCopy> for CatalogStoreConfigNixCopy {
-        fn from(value: &CatalogStoreConfigNixCopy) -> Self {
             value.clone()
         }
     }
@@ -1760,7 +1661,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PublishResponse {
-        pub catalog_store_config: CatalogStoreConfig,
+        pub catalog_store_config: crate::types::CatalogStoreConfig,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub ingress_uri: Option<String>,
     }
@@ -3114,9 +3015,6 @@ pub mod types {
         pub(super) fn catalog_store_config_meta_only_store_type() -> String {
             "meta-only".to_string()
         }
-        pub(super) fn catalog_store_config_nix_copy_store_type() -> String {
-            "nix-copy".to_string()
-        }
         pub(super) fn catalog_store_config_null_store_type() -> String {
             "null".to_string()
         }
@@ -4174,7 +4072,10 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
     >(
         &'a self,
         catalog_name: &'a types::CatalogName,
-    ) -> Result<ResponseValue<types::CatalogStoreConfig>, Error<types::ErrorResponse>> {
+    ) -> Result<
+        ResponseValue<crate::types::CatalogStoreConfig>,
+        Error<types::ErrorResponse>,
+    > {
         let url = format!(
             "{}/api/v1/catalog/catalogs/{}/store/config", self.baseurl, encode_path(&
             catalog_name.to_string()),
@@ -4213,8 +4114,11 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
     >(
         &'a self,
         catalog_name: &'a types::CatalogName,
-        body: &'a types::CatalogStoreConfig,
-    ) -> Result<ResponseValue<types::CatalogStoreConfig>, Error<types::ErrorResponse>> {
+        body: &'a crate::types::CatalogStoreConfig,
+    ) -> Result<
+        ResponseValue<crate::types::CatalogStoreConfig>,
+        Error<types::ErrorResponse>,
+    > {
         let url = format!(
             "{}/api/v1/catalog/catalogs/{}/store/config", self.baseurl, encode_path(&
             catalog_name.to_string()),
