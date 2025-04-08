@@ -11,6 +11,8 @@ serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 regress.workspace = true
+regex = { workspace = true, optional = true }
+httpmock = { workspace = true, optional = true }
 
 [build-dependencies]
 prettyplease.workspace = true
@@ -18,3 +20,11 @@ progenitor.workspace = true
 serde_json.workspace = true
 syn.workspace = true
 openapiv3.workspace = true
+
+[dev-dependencies]
+httpmock.workspace = true
+regex.workspace = true
+
+[features]
+# allow exporting test helpers in dev mode only
+tests = ["httpmock", "regex"]
