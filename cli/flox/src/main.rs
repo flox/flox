@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use anyhow::{Context, Result};
 use bpaf::{Args, Parser};
 use commands::{EnvironmentSelectError, FloxArgs, FloxCli, Prefix, Version};
-use flox_rust_sdk::flox::{FLOX_VERSION, FLOX_VERSION_STRING};
+use flox_rust_sdk::flox::{FLOX_VERSION, FLOX_VERSION_STRING, FLOX_VERSION_VAR};
 use flox_rust_sdk::models::environment::EnvironmentError;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
@@ -56,7 +56,7 @@ fn main() -> ExitCode {
     // not to look up the env concurrently,
     // because at this point the program is still single threaded.
     unsafe {
-        env::remove_var("FLOX_VERSION");
+        env::remove_var(FLOX_VERSION_VAR);
     }
 
     // Quit early if `--prefix` is present
