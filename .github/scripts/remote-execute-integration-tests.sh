@@ -28,7 +28,12 @@ function upload_report_to_buildkite() {
     "github@[$REMOTE_SERVER_ADDRESS]:$report_path_on_remote" \
     ./report.xml
 
-  local -r report_path="$PWD/report.xml"
+  # Strip control characters from report to make sure it's a valid XML file.
+  # Stolen from here:
+  # https://github.com/bats-core/bats-core/issues/311#issuecomment-627807346
+  sed "s,\x1B\[[0-9;]*[a-zA-Z],,g" ./report.xml > report-stripped.xml
+
+  local -r report_path="$PWD/report-stripped.xml"
 
   curl \
     -X POST \
