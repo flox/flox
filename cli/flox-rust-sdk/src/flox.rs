@@ -12,6 +12,8 @@ use crate::data::FloxVersion;
 pub use crate::models::environment_ref::{self, *};
 use crate::providers::{catalog, flake_installable_locker};
 
+pub const FLOX_VERSION_VAR: &str = "FLOX_VERSION";
+
 /// The Flox version, this is crate is part of.
 /// This is _also_ used to determine the version of the CLI.
 /// The version is determined by the following rules:
@@ -26,11 +28,12 @@ use crate::providers::{catalog, flake_installable_locker};
 pub static FLOX_VERSION_STRING: LazyLock<String> = LazyLock::new(|| {
     // Runtime provided version,
     // i.e. the flox cli wrapper of the nix built production flox package.
-    if let Ok(version) = std::env::var("FLOX_VERSION") {
+    if let Ok(version) = std::env::var(FLOX_VERSION_VAR) {
         return version;
     };
 
     // Buildtime provided version, i.e. `just build-flox`.
+    // Macro requires string literal rather than const.
     if let Some(version) = option_env!("FLOX_VERSION") {
         return version.to_string();
     }
