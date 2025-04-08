@@ -7,7 +7,7 @@ use std::time::SystemTime;
 use anyhow::{Context, Result, bail};
 use bpaf::{Bpaf, Parser};
 use flox_core::log_file_format_upgrade_check;
-use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::flox::{FLOX_VERSION_STRING, FLOX_VERSION_VAR, Flox};
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::providers::catalog::{self, CatalogQoS};
 use flox_rust_sdk::providers::upgrade_checks::{UpgradeInformation, UpgradeInformationGuard};
@@ -172,8 +172,12 @@ pub fn spawn_detached_check_for_upgrades_process(
     };
 
     let environment_json = serde_json::to_string(&environment)?;
-
     let mut command = Command::new(self_executable);
+
+    // Propagate the version which is set by the bypassed wrapper script and
+    // then gets unset when the CLI starts.
+    command.env(FLOX_VERSION_VAR, &*FLOX_VERSION_STRING);
+
     command.arg("check-for-upgrades");
     command.arg(environment_json);
 
