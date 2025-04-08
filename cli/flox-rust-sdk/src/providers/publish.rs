@@ -675,6 +675,9 @@ pub mod tests {
 
     use std::io::Write;
 
+    use catalog_api_v1::mock::MockServerExt;
+    use catalog_api_v1::types::{ErrorResponse, Name, UserPackage};
+    use httpmock::prelude::*;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -685,7 +688,16 @@ pub mod tests {
     use crate::models::lockfile::Lockfile;
     use crate::providers::build::FloxBuildMk;
     use crate::providers::catalog::test_helpers::reset_mocks;
-    use crate::providers::catalog::{GENERATED_DATA, MockClient, PublishResponse, Response};
+    use crate::providers::catalog::{
+        CatalogClient,
+        CatalogClientConfig,
+        GENERATED_DATA,
+        MockClient,
+        PublishResponse,
+        Response,
+        str_to_catalog_name,
+        str_to_package_name,
+    };
     use crate::providers::git::tests::{
         commit_file,
         create_remotes,
@@ -898,7 +910,7 @@ pub mod tests {
         reset_mocks(&mut flox.catalog_client, vec![Response::Publish(
             PublishResponse {
                 ingress_uri: None,
-                catalog_store_config: CatalogStoreConfig::MetaOnly(None),
+                catalog_store_config: CatalogStoreConfig::MetaOnly,
             },
         )]);
 
@@ -965,6 +977,10 @@ pub mod tests {
 
         reset_mocks(&mut client, vec![Response::Publish(PublishResponse {
             ingress_uri: Some("https://example.com".to_string()),
+            catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
+                ingress_uri: "https://example.com".to_string(),
+                egress_uri: "https://example.com".to_string(),
+            }),
         })]);
 
         let result = publish_provider
@@ -984,6 +1000,80 @@ pub mod tests {
                 Or you can publish without uploading artifacts via the '--metadata-only' option.
             " }
             .to_string()
+        );
+    }
+
+    /// publish() errors for an unconfigured catalog
+    #[tokio::test]
+    async fn publish_errors_for_unconfigured_catalog() {
+        let server = MockServer::start();
+
+        let token = create_test_token("test");
+        let catalog_name = token.handle().to_string();
+
+        // Don't do a build because it's slow
+        let (build_metadata, env_metadata) = dummy_publish_metadata();
+        let package_name = &env_metadata.package;
+        let original_url = &env_metadata.build_repo_ref.url;
+
+        let packages_mock = server
+            .create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post(
+                |when, then| {
+                    when.catalog_name(&str_to_catalog_name(&catalog_name).unwrap())
+                        .name(&Name::from_str(package_name).unwrap());
+                    then.ok(&UserPackage {
+                        catalog: catalog_name.clone(),
+                        name: package_name.clone(),
+                        original_url: Some(original_url.clone()),
+                    });
+                },
+            );
+
+        let publish_mock = server.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(|when, then| {
+            when.catalog_name(&str_to_catalog_name(&catalog_name).unwrap())
+                .package_name(&str_to_package_name(package_name).unwrap());
+            then.bad_request(&ErrorResponse { detail: "unconfigured store".to_string() });
+        });
+
+        let client = Client::Catalog(CatalogClient::new(CatalogClientConfig {
+            catalog_url: server.base_url(),
+            floxhub_token: Some(token.secret().to_string()),
+            extra_headers: Default::default(),
+        }));
+
+        let publish_provider = PublishProvider {
+            build_metadata,
+            env_metadata,
+        };
+
+        // We should error even if metadata_only is true and ingress_uri_override is set
+        let result = publish_provider
+            .publish(
+                &client,
+                &catalog_name,
+                Some("https://example.com".parse().unwrap()),
+                None,
+                true,
+            )
+            .await;
+
+        packages_mock.assert();
+        publish_mock.assert();
+
+        let err = result.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            formatdoc! {"
+                Catalog '{0}' must be configured for whether to upload build artifacts.
+
+                To configure the catalog to skip uploading artifacts, run:
+                  $ catalog-util store --catalog {0} set meta-only
+
+                To configure the catalog to upload artifacts, run:
+                  $ catalog-util store --catalog {0} set nixcopy --ingress-uri <uri> --egress-uri <uri>
+            ", &catalog_name }
+            .to_string()
+
         );
     }
 
@@ -1015,6 +1105,10 @@ pub mod tests {
         reset_mocks(&mut flox.catalog_client, vec![Response::Publish(
             PublishResponse {
                 ingress_uri: Some(cache.url.to_string()),
+                catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
+                    ingress_uri: cache.url.to_string(),
+                    egress_uri: cache.url.to_string(),
+                }),
             },
         )]);
 
