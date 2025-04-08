@@ -3110,369 +3110,6 @@ impl Client {
 }
 #[allow(clippy::all)]
 impl Client {
-    /**Search for packages
-
-Search the catalog(s) under the given criteria for matching packages.
-
-Required Query Parameters:
-- **search_term**: The search term to search on.
-- **system**: This is returned but does not affect results
-
-Optional Query Parameters:
-- **catalogs**: Comma separated list of catalog names to search
-- **page**: Optional page number for pagination (def = 0)
-- **pageSize**: Optional page size for pagination (def = 10)
-
-Returns:
-- **PackageSearchResult**: A list of PackageInfo and the total result count
-
-Sends a `GET` request to `/api/v1/catalog/search`
-
-*/
-    pub async fn search_api_v1_catalog_search_get<'a>(
-        &'a self,
-        catalogs: Option<&'a str>,
-        page: Option<i64>,
-        page_size: Option<i64>,
-        search_term: &'a types::SearchTerm,
-        system: types::SystemEnum,
-    ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
-        let url = format!("{}/api/v1/catalog/search", self.baseurl,);
-        let mut query = Vec::with_capacity(5usize);
-        if let Some(v) = &catalogs {
-            query.push(("catalogs", v.to_string()));
-        }
-        if let Some(v) = &page {
-            query.push(("page", v.to_string()));
-        }
-        if let Some(v) = &page_size {
-            query.push(("pageSize", v.to_string()));
-        }
-        query.push(("search_term", search_term.to_string()));
-        query.push(("system", system.to_string()));
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .get(url)
-            .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .query(&query)
-            .build()?;
-        let result = self.client.execute(request).await;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Shows available packages of a specific package
-
-Returns a list of versions for a given attr_path
-
-Required Query Parameters:
-- **attr_path**: The attr_path, must be valid.
-
-Optional Query Parameters:
-- **page**: Optional page number for pagination (def = 0)
-- **pageSize**: Optional page size for pagination (def = 10)
-
-Returns:
-- **PackagesResult**: A list of PackageResolutionInfo and the total result count
-
-Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
-
-*/
-    pub async fn packages_api_v1_catalog_packages_attr_path_get<'a>(
-        &'a self,
-        attr_path: &'a str,
-        page: Option<i64>,
-        page_size: Option<i64>,
-    ) -> Result<ResponseValue<types::PackagesResult>, Error<types::ErrorResponse>> {
-        let url = format!(
-            "{}/api/v1/catalog/packages/{}", self.baseurl, encode_path(& attr_path
-            .to_string()),
-        );
-        let mut query = Vec::with_capacity(2usize);
-        if let Some(v) = &page {
-            query.push(("page", v.to_string()));
-        }
-        if let Some(v) = &page_size {
-            query.push(("pageSize", v.to_string()));
-        }
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .get(url)
-            .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .query(&query)
-            .build()?;
-        let result = self.client.execute(request).await;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            404u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Resolve a list of Package Groups
-
-Resolves a list of package groups, each being a list of package descriptors.
-
-Required Body:
-- **groups**: An object with an `items` array of PackageGroups to resolve.
-
-Optional Query Parameters:
-- **none**
-
-Returns:
-- **ResolvedPackageGroups**: A object with an `items` array of
-    `ResolvedPackageGroup` items.
-
-Resolution Rules:
-- Each `PackageGroup` is resolved independently.
-- Each page that has a package that meets each of the descriptors in that group is returned in the results
-- The latest page will include details for each package in the group from that page
-- The remainder pages are returned without details (to get those details... TBD)
-
-A Package Descriptor match:
-- **name**: [required] - is not used in matching, only for reference (TBD is
-            there a uniqueness constraint?)
-- **attr_path**: [required] - this must match the nix attribute path exactly and in full
-- **version**: [optional] - Either a literal version to match or a **semver** constraint.
-    This will be treated as a **semver** IFF TBD, otherwise it will be treated as
-    a literal string match to the nix `version` field.  If this is detected as a **semver**,
-    packages whose `version` field cannot be parsed as a **semver** will be excluded.
-- **allow_pre_release**: [optional] - Defaults to False.  Only applies
-    when a **semver** constraint is given.  If true, a `version` that can
-    be parsed as a valid semver, that includes a pre-release suffix will
-    be included as a candidate.  Otherwise, they will be excluded.
-- **allow_broken**: [optional] - Defaults to False.  A package
-    marked as broken = True will be excluded unless this is set to True.
-- **allow_unfree**: [optional] - Defaults to True.  A package
-    marked as unfree = True will be excluded unless this is set to True.
-- **allow_insecure**: [optional] - Defaults to False.  A package
-    marked as insecure = True will be excluded unless this is set to True.
-- **allow_missing_builds**: [optional] - Defaults to
-    False.  A package is expected to have been built if it
-    is not marked as broken, unfree, or insecure.  A package
-    that is expected to have been built, but none of it's outputs have been
-    observed to build, will attempt to be excluded unless this is set to
-    True.  This constraint may be softened if the group can not be resolved
-    with it enforced.  If this occurs, the ressponse will note this by
-    including a warning level message.
-
-Sends a `POST` request to `/api/v1/catalog/resolve`
-
-*/
-    pub async fn resolve_api_v1_catalog_resolve_post<'a>(
-        &'a self,
-        body: &'a types::PackageGroups,
-    ) -> Result<
-        ResponseValue<types::ResolvedPackageGroups>,
-        Error<types::ErrorResponse>,
-    > {
-        let url = format!("{}/api/v1/catalog/resolve", self.baseurl,);
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .post(url)
-            .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .json(&body)
-            .build()?;
-        let result = self.client.execute(request).await;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Adjust various settings
-
-Adjusts various settings on the catalog service.
-
-Query Parameters:
-- **key**: The the key to adjust.
-    - "plan" - Enables the logging of the DB query plan for queries for
-    **value** seconds.  It will be scheduled to turn off automatically after
-    that.
-
-Sends a `POST` request to `/api/v1/catalog/settings/{key}`
-
-*/
-    pub async fn settings_api_v1_catalog_settings_key_post<'a>(
-        &'a self,
-        key: &'a str,
-        value: &'a str,
-    ) -> Result<ResponseValue<serde_json::Value>, Error<types::ErrorResponse>> {
-        let url = format!(
-            "{}/api/v1/catalog/settings/{}", self.baseurl, encode_path(& key
-            .to_string()),
-        );
-        let mut query = Vec::with_capacity(1usize);
-        query.push(("value", value.to_string()));
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .post(url)
-            .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .query(&query)
-            .build()?;
-        let result = self.client.execute(request).await;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Perform basic catalog health check
-
-Run some basic health checks on the catalog service.
-
-Returns:
-- **HealthCheck**: A dictionary of various health check values.
-
-Sends a `GET` request to `/api/v1/catalog/status/healthcheck`
-
-*/
-    pub async fn get_catalog_health_check_api_v1_catalog_status_healthcheck_get<'a>(
-        &'a self,
-    ) -> Result<ResponseValue<types::HealthCheck>, Error<types::ErrorResponse>> {
-        let url = format!("{}/api/v1/catalog/status/healthcheck", self.baseurl,);
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .get(url)
-            .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .build()?;
-        let result = self.client.execute(request).await;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            500u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Get basic catalog database status
-
-Gather some basic status values from the database.
-
-Returns:
-- **CatalogStatus**: A dictionary of various status values.
-
-Sends a `GET` request to `/api/v1/catalog/status/catalog`
-
-*/
-    pub async fn get_catalog_status_api_v1_catalog_status_catalog_get<'a>(
-        &'a self,
-    ) -> Result<ResponseValue<types::CatalogStatus>, Error<types::ErrorResponse>> {
-        let url = format!("{}/api/v1/catalog/status/catalog", self.baseurl,);
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .get(url)
-            .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .build()?;
-        let result = self.client.execute(request).await;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            500u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Get basic service status
-
-Returns basic service status
-
-Returns:
-- **ServiceStatus**: A dictionary of various status values.
-
-Sends a `GET` request to `/api/v1/catalog/status/service`
-
-*/
-    pub async fn get_service_status_api_v1_catalog_status_service_get<'a>(
-        &'a self,
-    ) -> Result<ResponseValue<types::ServiceStatus>, Error<types::ErrorResponse>> {
-        let url = format!("{}/api/v1/catalog/status/service", self.baseurl,);
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .get(url)
-            .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .build()?;
-        let result = self.client.execute(request).await;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            500u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Trigger Error
-
-Sends a `GET` request to `/api/v1/catalog/status/sentry-debug`
-
-*/
-    pub async fn trigger_error_api_v1_catalog_status_sentry_debug_get<'a>(
-        &'a self,
-    ) -> Result<ResponseValue<serde_json::Value>, Error<()>> {
-        let url = format!("{}/api/v1/catalog/status/sentry-debug", self.baseurl,);
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .get(url)
-            .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .build()?;
-        let result = self.client.execute(request).await;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
     /**Create a new user catalog
 
 Create a new user catalog
@@ -3755,59 +3392,6 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
-    /**Request access and info to publish a package
-
-Request access and informatin to publish a package to this catalog.
-Path Parameters:
-- **catalog_name**: The name of the catalog
-- **package_name**: The name of the package
-Body Content:
-- **PublishRequest**: The information needed to publish to the catalog
-Returns:
-- **PublishRequestResponse**
-
-Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/publish`
-
-*/
-    pub async fn publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post<
-        'a,
-    >(
-        &'a self,
-        catalog_name: &'a types::CatalogName,
-        package_name: &'a types::PackageName,
-        body: &'a types::PublishRequest,
-    ) -> Result<ResponseValue<types::PublishResponse>, Error<types::ErrorResponse>> {
-        let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/packages/{}/publish", self.baseurl,
-            encode_path(& catalog_name.to_string()), encode_path(& package_name
-            .to_string()),
-        );
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .post(url)
-            .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .json(&body)
-            .build()?;
-        let result = self.client.execute(request).await;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            400u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            404u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
     /**Get a list of builds for a given package
 
 Get the list of builds for a given package
@@ -3903,6 +3487,59 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
             201u16 => ResponseValue::from_response(response).await,
+            400u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Request access and info to publish a package
+
+Request access and informatin to publish a package to this catalog.
+Path Parameters:
+- **catalog_name**: The name of the catalog
+- **package_name**: The name of the package
+Body Content:
+- **PublishRequest**: The information needed to publish to the catalog
+Returns:
+- **PublishRequestResponse**
+
+Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/publish`
+
+*/
+    pub async fn publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        package_name: &'a types::PackageName,
+        body: &'a types::PublishRequest,
+    ) -> Result<ResponseValue<types::PublishResponse>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/publish", self.baseurl,
+            encode_path(& catalog_name.to_string()), encode_path(& package_name
+            .to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
             400u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
@@ -4186,6 +3823,369 @@ Sends a `GET` request to `/api/v1/catalog/info/pkg-paths`
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
+    /**Shows available packages of a specific package
+
+Returns a list of versions for a given attr_path
+
+Required Query Parameters:
+- **attr_path**: The attr_path, must be valid.
+
+Optional Query Parameters:
+- **page**: Optional page number for pagination (def = 0)
+- **pageSize**: Optional page size for pagination (def = 10)
+
+Returns:
+- **PackagesResult**: A list of PackageResolutionInfo and the total result count
+
+Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
+
+*/
+    pub async fn packages_api_v1_catalog_packages_attr_path_get<'a>(
+        &'a self,
+        attr_path: &'a str,
+        page: Option<i64>,
+        page_size: Option<i64>,
+    ) -> Result<ResponseValue<types::PackagesResult>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/packages/{}", self.baseurl, encode_path(& attr_path
+            .to_string()),
+        );
+        let mut query = Vec::with_capacity(2usize);
+        if let Some(v) = &page {
+            query.push(("page", v.to_string()));
+        }
+        if let Some(v) = &page_size {
+            query.push(("pageSize", v.to_string()));
+        }
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&query)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Resolve a list of Package Groups
+
+Resolves a list of package groups, each being a list of package descriptors.
+
+Required Body:
+- **groups**: An object with an `items` array of PackageGroups to resolve.
+
+Optional Query Parameters:
+- **none**
+
+Returns:
+- **ResolvedPackageGroups**: A object with an `items` array of
+    `ResolvedPackageGroup` items.
+
+Resolution Rules:
+- Each `PackageGroup` is resolved independently.
+- Each page that has a package that meets each of the descriptors in that group is returned in the results
+- The latest page will include details for each package in the group from that page
+- The remainder pages are returned without details (to get those details... TBD)
+
+A Package Descriptor match:
+- **name**: [required] - is not used in matching, only for reference (TBD is
+            there a uniqueness constraint?)
+- **attr_path**: [required] - this must match the nix attribute path exactly and in full
+- **version**: [optional] - Either a literal version to match or a **semver** constraint.
+    This will be treated as a **semver** IFF TBD, otherwise it will be treated as
+    a literal string match to the nix `version` field.  If this is detected as a **semver**,
+    packages whose `version` field cannot be parsed as a **semver** will be excluded.
+- **allow_pre_release**: [optional] - Defaults to False.  Only applies
+    when a **semver** constraint is given.  If true, a `version` that can
+    be parsed as a valid semver, that includes a pre-release suffix will
+    be included as a candidate.  Otherwise, they will be excluded.
+- **allow_broken**: [optional] - Defaults to False.  A package
+    marked as broken = True will be excluded unless this is set to True.
+- **allow_unfree**: [optional] - Defaults to True.  A package
+    marked as unfree = True will be excluded unless this is set to True.
+- **allow_insecure**: [optional] - Defaults to False.  A package
+    marked as insecure = True will be excluded unless this is set to True.
+- **allow_missing_builds**: [optional] - Defaults to
+    False.  A package is expected to have been built if it
+    is not marked as broken, unfree, or insecure.  A package
+    that is expected to have been built, but none of it's outputs have been
+    observed to build, will attempt to be excluded unless this is set to
+    True.  This constraint may be softened if the group can not be resolved
+    with it enforced.  If this occurs, the ressponse will note this by
+    including a warning level message.
+
+Sends a `POST` request to `/api/v1/catalog/resolve`
+
+*/
+    pub async fn resolve_api_v1_catalog_resolve_post<'a>(
+        &'a self,
+        body: &'a types::PackageGroups,
+    ) -> Result<
+        ResponseValue<types::ResolvedPackageGroups>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!("{}/api/v1/catalog/resolve", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Search for packages
+
+Search the catalog(s) under the given criteria for matching packages.
+
+Required Query Parameters:
+- **search_term**: The search term to search on.
+- **system**: This is returned but does not affect results
+
+Optional Query Parameters:
+- **catalogs**: Comma separated list of catalog names to search
+- **page**: Optional page number for pagination (def = 0)
+- **pageSize**: Optional page size for pagination (def = 10)
+
+Returns:
+- **PackageSearchResult**: A list of PackageInfo and the total result count
+
+Sends a `GET` request to `/api/v1/catalog/search`
+
+*/
+    pub async fn search_api_v1_catalog_search_get<'a>(
+        &'a self,
+        catalogs: Option<&'a str>,
+        page: Option<i64>,
+        page_size: Option<i64>,
+        search_term: &'a types::SearchTerm,
+        system: types::SystemEnum,
+    ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/search", self.baseurl,);
+        let mut query = Vec::with_capacity(5usize);
+        if let Some(v) = &catalogs {
+            query.push(("catalogs", v.to_string()));
+        }
+        if let Some(v) = &page {
+            query.push(("page", v.to_string()));
+        }
+        if let Some(v) = &page_size {
+            query.push(("pageSize", v.to_string()));
+        }
+        query.push(("search_term", search_term.to_string()));
+        query.push(("system", system.to_string()));
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&query)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Adjust various settings
+
+Adjusts various settings on the catalog service.
+
+Query Parameters:
+- **key**: The the key to adjust.
+    - "plan" - Enables the logging of the DB query plan for queries for
+    **value** seconds.  It will be scheduled to turn off automatically after
+    that.
+
+Sends a `POST` request to `/api/v1/catalog/settings/{key}`
+
+*/
+    pub async fn settings_api_v1_catalog_settings_key_post<'a>(
+        &'a self,
+        key: &'a str,
+        value: &'a str,
+    ) -> Result<ResponseValue<serde_json::Value>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/settings/{}", self.baseurl, encode_path(& key
+            .to_string()),
+        );
+        let mut query = Vec::with_capacity(1usize);
+        query.push(("value", value.to_string()));
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&query)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get basic catalog database status
+
+Gather some basic status values from the database.
+
+Returns:
+- **CatalogStatus**: A dictionary of various status values.
+
+Sends a `GET` request to `/api/v1/catalog/status/catalog`
+
+*/
+    pub async fn get_catalog_status_api_v1_catalog_status_catalog_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<types::CatalogStatus>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/status/catalog", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            500u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Perform basic catalog health check
+
+Run some basic health checks on the catalog service.
+
+Returns:
+- **HealthCheck**: A dictionary of various health check values.
+
+Sends a `GET` request to `/api/v1/catalog/status/healthcheck`
+
+*/
+    pub async fn get_catalog_health_check_api_v1_catalog_status_healthcheck_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<types::HealthCheck>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/status/healthcheck", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            500u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Trigger Error
+
+Sends a `GET` request to `/api/v1/catalog/status/sentry-debug`
+
+*/
+    pub async fn trigger_error_api_v1_catalog_status_sentry_debug_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<serde_json::Value>, Error<()>> {
+        let url = format!("{}/api/v1/catalog/status/sentry-debug", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get basic service status
+
+Returns basic service status
+
+Returns:
+- **ServiceStatus**: A dictionary of various status values.
+
+Sends a `GET` request to `/api/v1/catalog/status/service`
+
+*/
+    pub async fn get_service_status_api_v1_catalog_status_service_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<types::ServiceStatus>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/status/service", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            500u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**Get store info for a list of derivations
 
 Get store info for a list of derivations
@@ -4213,34 +4213,6 @@ Sends a `POST` request to `/api/v1/catalog/store`
                 reqwest::header::HeaderValue::from_static("application/json"),
             )
             .json(&body)
-            .build()?;
-        let result = self.client.execute(request).await;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Handle Metrics
-
-Sends a `GET` request to `/metrics/`
-
-*/
-    pub async fn handle_metrics_metrics_get<'a>(
-        &'a self,
-    ) -> Result<ResponseValue<String>, Error<types::ErrorResponse>> {
-        let url = format!("{}/metrics/", self.baseurl,);
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .get(url)
-            .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
-            )
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
