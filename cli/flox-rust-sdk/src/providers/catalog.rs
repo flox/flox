@@ -729,7 +729,7 @@ impl ClientTrait for CatalogClient {
 
 /// Converts a catalog name to a semantic type and performs validation that it
 /// meets the expected format.
-fn str_to_catalog_name(
+pub fn str_to_catalog_name(
     name: impl AsRef<str>,
 ) -> Result<api_types::CatalogName, CatalogClientError> {
     api_types::CatalogName::from_str(name.as_ref()).map_err(|_e| {
@@ -745,7 +745,7 @@ fn str_to_catalog_name(
 
 /// Converts a package name to a semantic type and performs validation that it
 /// meets the expected format.
-fn str_to_package_name(
+pub fn str_to_package_name(
     name: impl AsRef<str>,
 ) -> Result<api_types::PackageName, CatalogClientError> {
     api_types::PackageName::from_str(name.as_ref()).map_err(|_e| {
