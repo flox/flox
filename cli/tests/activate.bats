@@ -2836,6 +2836,47 @@ EOF
   assert_output --partial "3.2.2"
 }
 
+@test "in-place activate works with bash 3" {
+  if ! /bin/bash --version | grep -q "GNU bash, version 3"; then
+    skip "No bash 3 at /bin/bash"
+  fi
+  project_setup
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [install]
+    hello.pkg-path = "hello"
+
+    [profile]
+    common = """
+      echo "profile.common"
+    """
+    bash = """
+      echo "profile.bash"
+    """
+    [hook]
+    on-activate = """
+      echo "hook.on-activate"
+    """
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" edit -f -
+
+  hello_path="$(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin/hello"
+  run /bin/bash -c "eval \"\$(\"$FLOX_BIN\" activate)\" && which hello"
+  assert_success
+  assert_output - <<EOF
+hook.on-activate
+Sourcing .bashrc
+Setting PATH from .bashrc
+profile.common
+profile.bash
+$hello_path
+EOF
+}
+
 @test "no unset variables in bash" {
   project_setup
   run bash <(cat <<'EOF'
