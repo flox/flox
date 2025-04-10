@@ -1,6 +1,6 @@
 [
   {
-    "count": 68,
+    "count": 69,
     "results": [
       {
         "attr_path": "hello",
@@ -36,6 +36,17 @@
         "version": "hello-go"
       },
       {
+        "attr_path": "hello-go",
+        "catalog": "garbas",
+        "description": "Best hello example",
+        "name": "hello-go-1000.0.0",
+        "pkg_path": "garbas/hello-go",
+        "pname": "hello-go",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "1000.0.0"
+      },
+      {
         "attr_path": "libcello",
         "catalog": null,
         "description": "Higher level programming in C",
@@ -61,12 +72,12 @@
         "attr_path": "nwg-hello",
         "catalog": null,
         "description": "GTK3-based greeter for the greetd daemon, written in python",
-        "name": "nwg-hello-0.3.0",
+        "name": "nwg-hello-0.3.1",
         "pkg_path": "nwg-hello",
         "pname": "nwg-hello",
         "stabilities": [],
         "system": "aarch64-darwin",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       {
         "attr_path": "cannelloni",

@@ -28,12 +28,12 @@
         "attr_path": "nodejs_18",
         "catalog": null,
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
-        "name": "nodejs-18.20.7",
+        "name": "nodejs-18.20.8",
         "pkg_path": "nodejs_18",
         "pname": "nodejs_18",
         "stabilities": [],
         "system": "aarch64-darwin",
-        "version": "18.20.7"
+        "version": "18.20.8"
       },
       {
         "attr_path": "nodejs_19",
@@ -83,23 +83,23 @@
         "attr_path": "nodejs_23",
         "catalog": null,
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
-        "name": "nodejs-23.10.0",
+        "name": "nodejs-23.11.0",
         "pkg_path": "nodejs_23",
         "pname": "nodejs_23",
         "stabilities": [],
         "system": "aarch64-darwin",
-        "version": "23.10.0"
+        "version": "23.11.0"
       },
       {
         "attr_path": "nodejs_latest",
         "catalog": null,
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
-        "name": "nodejs-23.10.0",
+        "name": "nodejs-23.11.0",
         "pkg_path": "nodejs_latest",
         "pname": "nodejs_latest",
         "stabilities": [],
         "system": "aarch64-darwin",
-        "version": "23.10.0"
+        "version": "23.11.0"
       },
       {
         "attr_path": "haxePackages.hxnodejs_4",

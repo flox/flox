@@ -28,12 +28,12 @@
         "attr_path": "nodejs_18",
         "catalog": null,
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
-        "name": "nodejs-18.20.7",
+        "name": "nodejs-18.20.8",
         "pkg_path": "nodejs_18",
         "pname": "nodejs_18",
         "stabilities": [],
         "system": "aarch64-darwin",
-        "version": "18.20.7"
+        "version": "18.20.8"
       },
       {
         "attr_path": "nodejs_19",
@@ -83,23 +83,23 @@
         "attr_path": "nodejs_23",
         "catalog": null,
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
-        "name": "nodejs-23.10.0",
+        "name": "nodejs-23.11.0",
         "pkg_path": "nodejs_23",
         "pname": "nodejs_23",
         "stabilities": [],
         "system": "aarch64-darwin",
-        "version": "23.10.0"
+        "version": "23.11.0"
       },
       {
         "attr_path": "nodejs_latest",
         "catalog": null,
         "description": "Event-driven I/O framework for the V8 JavaScript engine",
-        "name": "nodejs-23.10.0",
+        "name": "nodejs-23.11.0",
         "pkg_path": "nodejs_latest",
         "pname": "nodejs_latest",
         "stabilities": [],
         "system": "aarch64-darwin",
-        "version": "23.10.0"
+        "version": "23.11.0"
       },
       {
         "attr_path": "haxePackages.hxnodejs_4",
@@ -137,12 +137,12 @@
             "attr_path": "nodejs",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/4bl62dvqxj7m1c9jf0h6i7dj8kvmfph3-nodejs-22.14.0.drv",
+            "derivation": "/nix/store/v4xdr255vdcghnqyvk7ih2ppvx0lapfk-nodejs-22.14.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
             "missing_builds": false,
             "name": "nodejs-22.14.0",
             "outputs": [
@@ -160,10 +160,10 @@
             ],
             "pkg_path": "nodejs",
             "pname": "nodejs",
-            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
-            "rev_count": 773904,
-            "rev_date": "2025-03-25T07:53:30Z",
-            "scrape_date": "2025-03-27T01:10:00.064594Z",
+            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "rev_count": 780821,
+            "rev_date": "2025-04-08T07:41:42Z",
+            "scrape_date": "2025-04-10T01:10:58.100193Z",
             "stabilities": [
               "unstable"
             ],
@@ -172,7 +172,7 @@
             "version": "22.14.0"
           }
         ],
-        "page": 773904,
+        "page": 780821,
         "url": ""
       }
     }
@@ -189,18 +189,18 @@
             "attr_path": "yarn-berry",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/9kwlp0zc6dszlixq71s4d3ff086zml2w-yarn-berry-4.7.0.drv",
+            "derivation": "/nix/store/amfb58q0a0rrc2nj0nb6n2si4sbf8amj-yarn-berry-4.8.0.drv",
             "description": "Fast, reliable, and secure dependency management",
             "insecure": false,
             "install_id": "yarn-berry",
             "license": "BSD-2-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
             "missing_builds": false,
-            "name": "yarn-berry-4.7.0",
+            "name": "yarn-berry-4.8.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/nrxjj865x8ljy3afqsnzdqiidvrp5cbf-yarn-berry-4.7.0"
+                "store_path": "/nix/store/1y03s32n9pjmr9yj0ywsyd1qp9sbfcc6-yarn-berry-4.8.0"
               }
             ],
             "outputs_to_install": [
@@ -208,19 +208,19 @@
             ],
             "pkg_path": "yarn-berry",
             "pname": "yarn-berry",
-            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
-            "rev_count": 773904,
-            "rev_date": "2025-03-25T07:53:30Z",
-            "scrape_date": "2025-03-27T01:10:53.839877Z",
+            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "rev_count": 780821,
+            "rev_date": "2025-04-08T07:41:42Z",
+            "scrape_date": "2025-04-10T01:11:51.559282Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "4.7.0"
+            "version": "4.8.0"
           }
         ],
-        "page": 773904,
+        "page": 780821,
         "url": ""
       }
     },
@@ -249,18 +249,18 @@
             "attr_path": "yarn-berry",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/9kwlp0zc6dszlixq71s4d3ff086zml2w-yarn-berry-4.7.0.drv",
+            "derivation": "/nix/store/amfb58q0a0rrc2nj0nb6n2si4sbf8amj-yarn-berry-4.8.0.drv",
             "description": "Fast, reliable, and secure dependency management",
             "insecure": false,
             "install_id": "yarn",
             "license": "BSD-2-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
             "missing_builds": false,
-            "name": "yarn-berry-4.7.0",
+            "name": "yarn-berry-4.8.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/nrxjj865x8ljy3afqsnzdqiidvrp5cbf-yarn-berry-4.7.0"
+                "store_path": "/nix/store/1y03s32n9pjmr9yj0ywsyd1qp9sbfcc6-yarn-berry-4.8.0"
               }
             ],
             "outputs_to_install": [
@@ -268,33 +268,33 @@
             ],
             "pkg_path": "yarn-berry",
             "pname": "yarn-berry",
-            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
-            "rev_count": 773904,
-            "rev_date": "2025-03-25T07:53:30Z",
-            "scrape_date": "2025-03-27T01:10:53.839877Z",
+            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "rev_count": 780821,
+            "rev_date": "2025-04-08T07:41:42Z",
+            "scrape_date": "2025-04-10T01:11:51.559282Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "4.7.0"
+            "version": "4.8.0"
           },
           {
             "attr_path": "yarn-berry",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/iqc96pwyx20lbprm4ln2030f7w94zghp-yarn-berry-4.7.0.drv",
+            "derivation": "/nix/store/gf426kf9kp71pmbg5ny0wbwrr8i0xc40-yarn-berry-4.8.0.drv",
             "description": "Fast, reliable, and secure dependency management",
             "insecure": false,
             "install_id": "yarn",
             "license": "BSD-2-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
             "missing_builds": false,
-            "name": "yarn-berry-4.7.0",
+            "name": "yarn-berry-4.8.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/fjdmmm1qq49c7zz9kdjgdjp2l2rlizyq-yarn-berry-4.7.0"
+                "store_path": "/nix/store/l8zmpc1zyk5c7gabp1z38805qzdi2f2l-yarn-berry-4.8.0"
               }
             ],
             "outputs_to_install": [
@@ -302,33 +302,33 @@
             ],
             "pkg_path": "yarn-berry",
             "pname": "yarn-berry",
-            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
-            "rev_count": 773904,
-            "rev_date": "2025-03-25T07:53:30Z",
-            "scrape_date": "2025-03-27T01:28:39.768309Z",
+            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "rev_count": 780821,
+            "rev_date": "2025-04-08T07:41:42Z",
+            "scrape_date": "2025-04-10T01:29:07.712201Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "4.7.0"
+            "version": "4.8.0"
           },
           {
             "attr_path": "yarn-berry",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/zmrxizwhr0vx8ndkjni3s7ndhm59szsp-yarn-berry-4.7.0.drv",
+            "derivation": "/nix/store/yyz3xfgg9vfdkahz5m8jm085a50bnxil-yarn-berry-4.8.0.drv",
             "description": "Fast, reliable, and secure dependency management",
             "insecure": false,
             "install_id": "yarn",
             "license": "BSD-2-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
             "missing_builds": false,
-            "name": "yarn-berry-4.7.0",
+            "name": "yarn-berry-4.8.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/0pi294w2v7926alc3ligzlwrm7k1d6p6-yarn-berry-4.7.0"
+                "store_path": "/nix/store/bc1fr9ygjv2mwkkxi1h3wrpjx5bavypg-yarn-berry-4.8.0"
               }
             ],
             "outputs_to_install": [
@@ -336,33 +336,33 @@
             ],
             "pkg_path": "yarn-berry",
             "pname": "yarn-berry",
-            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
-            "rev_count": 773904,
-            "rev_date": "2025-03-25T07:53:30Z",
-            "scrape_date": "2025-03-27T01:43:52.366389Z",
+            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "rev_count": 780821,
+            "rev_date": "2025-04-08T07:41:42Z",
+            "scrape_date": "2025-04-10T01:44:00.921608Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "4.7.0"
+            "version": "4.8.0"
           },
           {
             "attr_path": "yarn-berry",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/2jy0gl71vnpqjavbq2ck03i0imgfwm3z-yarn-berry-4.7.0.drv",
+            "derivation": "/nix/store/qrbpshcq9p7xikldw2g4kzqdjvd7s3sh-yarn-berry-4.8.0.drv",
             "description": "Fast, reliable, and secure dependency management",
             "insecure": false,
             "install_id": "yarn",
             "license": "BSD-2-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
             "missing_builds": false,
-            "name": "yarn-berry-4.7.0",
+            "name": "yarn-berry-4.8.0",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/m4k4apj1ykgj9rmry23nz1b43vwd1zkd-yarn-berry-4.7.0"
+                "store_path": "/nix/store/wrz5fsf5cfjpnzgik1biyl5dwmrz4k6l-yarn-berry-4.8.0"
               }
             ],
             "outputs_to_install": [
@@ -370,19 +370,19 @@
             ],
             "pkg_path": "yarn-berry",
             "pname": "yarn-berry",
-            "rev": "698214a32beb4f4c8e3942372c694f40848b360d",
-            "rev_count": 773904,
-            "rev_date": "2025-03-25T07:53:30Z",
-            "scrape_date": "2025-03-27T02:03:16.049118Z",
+            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "rev_count": 780821,
+            "rev_date": "2025-04-08T07:41:42Z",
+            "scrape_date": "2025-04-10T02:02:53.835841Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "4.7.0"
+            "version": "4.8.0"
           }
         ],
-        "page": 773904,
+        "page": 780821,
         "url": ""
       }
     }
