@@ -4,7 +4,9 @@ use indoc::formatdoc;
 
 use super::{ConcreteEnvironment, EnvironmentError, open_path};
 use crate::flox::Flox;
-use crate::models::environment::Environment;
+use crate::models::environment::remote_environment::RemoteEnvironment;
+use crate::models::environment::{Environment, ManagedPointer};
+use crate::models::environment_ref::EnvironmentRef;
 use crate::models::lockfile::{LockedInclude, RecoverableMergeError};
 use crate::models::manifest::typed::{IncludeDescriptor, Manifest};
 
@@ -28,6 +30,7 @@ impl IncludeFetcher {
 
         let (manifest, name) = match include_environment {
             IncludeDescriptor::Local { dir, name } => self.fetch_local(flox, dir, name),
+            IncludeDescriptor::Remote { remote, name } => self.fetch_remote(flox, remote, name),
         }?;
 
         Ok(LockedInclude {
@@ -87,6 +90,29 @@ impl IncludeFetcher {
         Ok((manifest, name))
     }
 
+    /// Fetch a remote environment.
+    fn fetch_remote(
+        &self,
+        flox: &Flox,
+        remote: &EnvironmentRef,
+        name: &Option<String>,
+    ) -> Result<(Manifest, String), EnvironmentError> {
+        let pointer =
+            ManagedPointer::new(remote.owner().clone(), remote.name().clone(), &flox.floxhub);
+
+        // Don't affect existing open remotes but still uses the same floxmeta.
+        let tempdir =
+            tempfile::tempdir_in(&flox.temp_dir).map_err(EnvironmentError::CreateTempDir)?;
+        let environment = RemoteEnvironment::new_in(flox, tempdir.path(), pointer)?;
+
+        let manifest = environment.manifest(flox)?;
+        let name = name
+            .clone()
+            .unwrap_or_else(|| environment.name().to_string());
+
+        Ok((manifest, name))
+    }
+
     /// For directories that aren't absolute, join them to the base_directory
     /// for this IncludeFetcher
     pub fn expand_include_dir(
@@ -128,6 +154,8 @@ mod test {
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
+
     #[test]
     fn fetch_path_relative_path() {
         let (flox, tempdir) = flox_instance();
@@ -295,5 +323,67 @@ mod test {
         assert!(err.to_string().contains(
             "cannot include environment since it has changes not yet synced to a generation"
         ));
+    }
+
+    #[test]
+    fn fetch_remote() {
+        let env_ref = EnvironmentRef::new("owner", "name").unwrap();
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(env_ref.owner()));
+
+        let mut remote_env = mock_remote_environment(
+            &flox,
+            "version = 1",
+            env_ref.owner().clone(),
+            Some(&env_ref.name().to_string()),
+        );
+
+        // Open the remote environment in the default location to simulate an existing activation.
+        let open_env = RemoteEnvironment::new(
+            &flox,
+            ManagedPointer::new(
+                env_ref.owner().clone(),
+                env_ref.name().clone(),
+                &flox.floxhub,
+            ),
+        )
+        .unwrap();
+        let open_env_manifest_previous = open_env.manifest(&flox).unwrap();
+
+        // Modify the remote environment with a new generation.
+        let manifest_contents = indoc! {r#"
+            version = 1
+
+            [vars]
+            foo = "bar"
+        "#};
+        let manifest = toml_edit::de::from_str(manifest_contents).unwrap();
+        remote_env
+            .edit(&flox, manifest_contents.to_string())
+            .unwrap();
+
+        // Fetch and lock the remote environment.
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+        let include_descriptor = IncludeDescriptor::Remote {
+            remote: "owner/name".parse().unwrap(),
+            name: None,
+        };
+        let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
+        assert_eq!(
+            fetched,
+            LockedInclude {
+                manifest,
+                name: "name".to_string(),
+                descriptor: include_descriptor,
+            },
+            "fetch should get the new generation"
+        );
+
+        assert_eq!(
+            open_env.manifest(&flox).unwrap(),
+            open_env_manifest_previous,
+            "fetch should not affect the generation of an already open environment"
+        );
     }
 }
