@@ -8,7 +8,7 @@ use tracing::{info_span, instrument};
 use super::EnvironmentSelect;
 use crate::commands::{display_help, environment_description, environment_select};
 use crate::environment_subcommand_metric;
-use crate::utils::message;
+use crate::utils::message::{self, print_overridden_manifest_fields};
 
 /// Include Commands.
 #[derive(Debug, Clone, Bpaf)]
@@ -90,6 +90,8 @@ impl Upgrade {
                 message.push_str(&format!("\n- '{upgraded}'"));
             }
             message::updated(message);
+            print_overridden_manifest_fields(&result.new_lockfile);
+
             for name in self.to_upgrade {
                 if !include_diff.contains(&name) {
                     message::info(format!("Included environment '{name}' has no changes."));
