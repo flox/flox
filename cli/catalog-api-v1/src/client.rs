@@ -115,7 +115,7 @@ pub mod types {
                 })
         }
     }
-    ///CatalogPageInput
+    ///CatalogPage
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -186,7 +186,7 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct CatalogPageInput {
+    pub struct CatalogPage {
         pub complete: bool,
         pub messages: Vec<ResolutionMessageGeneral>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -194,92 +194,8 @@ pub mod types {
         pub page: i64,
         pub url: String,
     }
-    impl From<&CatalogPageInput> for CatalogPageInput {
-        fn from(value: &CatalogPageInput) -> Self {
-            value.clone()
-        }
-    }
-    ///CatalogPageOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "CatalogPage",
-    ///  "examples": [
-    ///    {
-    ///      "attr_path": "foo.bar.curl",
-    ///      "description": "A very nice Item",
-    ///      "license": "foo",
-    ///      "locked_url": "git:git?rev=xyz",
-    ///      "name": "curl",
-    ///      "outputs": "{}",
-    ///      "outputs_to_install": "{}",
-    ///      "pkg_path": "foo.bar.curl",
-    ///      "pname": "curl",
-    ///      "rev": "xyz",
-    ///      "rev_count": 4,
-    ///      "rev_date": 0,
-    ///      "stabilities": [
-    ///        "stable",
-    ///        "unstable"
-    ///      ],
-    ///      "system": "x86_64-linux",
-    ///      "version": "1.0"
-    ///    }
-    ///  ],
-    ///  "type": "object",
-    ///  "required": [
-    ///    "complete",
-    ///    "messages",
-    ///    "page",
-    ///    "url"
-    ///  ],
-    ///  "properties": {
-    ///    "complete": {
-    ///      "title": "Complete",
-    ///      "type": "boolean"
-    ///    },
-    ///    "messages": {
-    ///      "title": "Messages",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/ResolutionMessageGeneral"
-    ///      }
-    ///    },
-    ///    "packages": {
-    ///      "title": "Packages",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/ResolvedPackageDescriptor"
-    ///      }
-    ///    },
-    ///    "page": {
-    ///      "title": "Page",
-    ///      "type": "integer"
-    ///    },
-    ///    "url": {
-    ///      "title": "Url",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct CatalogPageOutput {
-        pub complete: bool,
-        pub messages: Vec<ResolutionMessageGeneral>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub packages: Option<Vec<ResolvedPackageDescriptor>>,
-        pub page: i64,
-        pub url: String,
-    }
-    impl From<&CatalogPageOutput> for CatalogPageOutput {
-        fn from(value: &CatalogPageOutput) -> Self {
+    impl From<&CatalogPage> for CatalogPage {
+        fn from(value: &CatalogPage) -> Self {
             value.clone()
         }
     }
@@ -435,6 +351,34 @@ pub mod types {
             value.clone()
         }
     }
+    ///CatalogStoreConfigMetaOnly
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CatalogStoreConfigMetaOnly",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "store_type": {
+    ///      "title": "Store Type",
+    ///      "default": "meta-only",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct CatalogStoreConfigMetaOnly {
+        #[serde(default = "defaults::catalog_store_config_meta_only_store_type")]
+        pub store_type: String,
+    }
+    impl From<&CatalogStoreConfigMetaOnly> for CatalogStoreConfigMetaOnly {
+        fn from(value: &CatalogStoreConfigMetaOnly) -> Self {
+            value.clone()
+        }
+    }
     ///CatalogStoreConfigNixCopy
     ///
     /// <details><summary>JSON schema</summary>
@@ -458,7 +402,8 @@ pub mod types {
     ///    },
     ///    "store_type": {
     ///      "title": "Store Type",
-    ///      "default": "nix-copy"
+    ///      "default": "nix-copy",
+    ///      "type": "string"
     ///    }
     ///  }
     ///}
@@ -469,7 +414,7 @@ pub mod types {
         pub egress_uri: String,
         pub ingress_uri: String,
         #[serde(default = "defaults::catalog_store_config_nix_copy_store_type")]
-        pub store_type: serde_json::Value,
+        pub store_type: String,
     }
     impl From<&CatalogStoreConfigNixCopy> for CatalogStoreConfigNixCopy {
         fn from(value: &CatalogStoreConfigNixCopy) -> Self {
@@ -487,7 +432,8 @@ pub mod types {
     ///  "properties": {
     ///    "store_type": {
     ///      "title": "Store Type",
-    ///      "default": "null"
+    ///      "default": "null",
+    ///      "type": "string"
     ///    }
     ///  }
     ///}
@@ -496,7 +442,7 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct CatalogStoreConfigNull {
         #[serde(default = "defaults::catalog_store_config_null_store_type")]
-        pub store_type: serde_json::Value,
+        pub store_type: String,
     }
     impl From<&CatalogStoreConfigNull> for CatalogStoreConfigNull {
         fn from(value: &CatalogStoreConfigNull) -> Self {
@@ -514,7 +460,8 @@ pub mod types {
     ///  "properties": {
     ///    "store_type": {
     ///      "title": "Store Type",
-    ///      "default": "publisher"
+    ///      "default": "publisher",
+    ///      "type": "string"
     ///    }
     ///  }
     ///}
@@ -523,7 +470,7 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct CatalogStoreConfigPublisher {
         #[serde(default = "defaults::catalog_store_config_publisher_store_type")]
-        pub store_type: serde_json::Value,
+        pub store_type: String,
     }
     impl From<&CatalogStoreConfigPublisher> for CatalogStoreConfigPublisher {
         fn from(value: &CatalogStoreConfigPublisher) -> Self {
@@ -559,7 +506,7 @@ pub mod types {
             value.clone()
         }
     }
-    ///HealthCheckInput
+    ///HealthCheck
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -577,20 +524,7 @@ pub mod types {
     ///  ],
     ///  "properties": {
     ///    "check_parameters": {
-    ///      "default": {
-    ///        "resolve_package": "cowsay",
-    ///        "resolve_systems": [
-    ///          "x86_64-linux"
-    ///        ],
-    ///        "search_system": "x86_64-linux",
-    ///        "search_term": "in Go",
-    ///        "show_term": "hello"
-    ///      },
-    ///      "allOf": [
-    ///        {
-    ///          "$ref": "#/components/schemas/params"
-    ///        }
-    ///      ]
+    ///      "$ref": "#/components/schemas/params"
     ///    },
     ///    "resolve_elapsed_ms": {
     ///      "title": "Resolve Elapsed Ms",
@@ -621,9 +555,9 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct HealthCheckInput {
-        #[serde(default = "defaults::health_check_input_check_parameters")]
-        pub check_parameters: Params,
+    pub struct HealthCheck {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub check_parameters: Option<Params>,
         pub resolve_elapsed_ms: i64,
         pub resolve_ok: bool,
         pub search_elapsed_ms: i64,
@@ -631,85 +565,8 @@ pub mod types {
         pub show_elapsed_ms: i64,
         pub show_ok: bool,
     }
-    impl From<&HealthCheckInput> for HealthCheckInput {
-        fn from(value: &HealthCheckInput) -> Self {
-            value.clone()
-        }
-    }
-    ///HealthCheckOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "HealthCheck",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "resolve_elapsed_ms",
-    ///    "resolve_ok",
-    ///    "search_elapsed_ms",
-    ///    "search_ok",
-    ///    "show_elapsed_ms",
-    ///    "show_ok"
-    ///  ],
-    ///  "properties": {
-    ///    "check_parameters": {
-    ///      "default": {
-    ///        "resolve_package": "cowsay",
-    ///        "resolve_systems": [
-    ///          "x86_64-linux"
-    ///        ],
-    ///        "search_system": "x86_64-linux",
-    ///        "search_term": "in Go",
-    ///        "show_term": "hello"
-    ///      },
-    ///      "allOf": [
-    ///        {
-    ///          "$ref": "#/components/schemas/params"
-    ///        }
-    ///      ]
-    ///    },
-    ///    "resolve_elapsed_ms": {
-    ///      "title": "Resolve Elapsed Ms",
-    ///      "type": "integer"
-    ///    },
-    ///    "resolve_ok": {
-    ///      "title": "Resolve Ok",
-    ///      "type": "boolean"
-    ///    },
-    ///    "search_elapsed_ms": {
-    ///      "title": "Search Elapsed Ms",
-    ///      "type": "integer"
-    ///    },
-    ///    "search_ok": {
-    ///      "title": "Search Ok",
-    ///      "type": "boolean"
-    ///    },
-    ///    "show_elapsed_ms": {
-    ///      "title": "Show Elapsed Ms",
-    ///      "type": "integer"
-    ///    },
-    ///    "show_ok": {
-    ///      "title": "Show Ok",
-    ///      "type": "boolean"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct HealthCheckOutput {
-        #[serde(default = "defaults::health_check_output_check_parameters")]
-        pub check_parameters: Params,
-        pub resolve_elapsed_ms: i64,
-        pub resolve_ok: bool,
-        pub search_elapsed_ms: i64,
-        pub search_ok: bool,
-        pub show_elapsed_ms: i64,
-        pub show_ok: bool,
-    }
-    impl From<&HealthCheckOutput> for HealthCheckOutput {
-        fn from(value: &HealthCheckOutput) -> Self {
+    impl From<&HealthCheck> for HealthCheck {
+        fn from(value: &HealthCheck) -> Self {
             value.clone()
         }
     }
@@ -1595,7 +1452,7 @@ pub mod types {
             value.clone()
         }
     }
-    ///PackageSearchResultInput
+    ///PackageSearchResult
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1640,70 +1497,16 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PackageSearchResultInput {
+    pub struct PackageSearchResult {
         pub items: Vec<PackageInfoSearch>,
         pub total_count: i64,
     }
-    impl From<&PackageSearchResultInput> for PackageSearchResultInput {
-        fn from(value: &PackageSearchResultInput) -> Self {
+    impl From<&PackageSearchResult> for PackageSearchResult {
+        fn from(value: &PackageSearchResult) -> Self {
             value.clone()
         }
     }
-    ///PackageSearchResultOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackageSearchResult",
-    ///  "examples": [
-    ///    [
-    ///      {
-    ///        "attr_path": "foo.bar.curl",
-    ///        "description": "A very nice Item",
-    ///        "name": "curl",
-    ///        "pkg_path": "foo.bar.curl",
-    ///        "pname": "curl",
-    ///        "stabilities": [
-    ///          "stable",
-    ///          "unstable"
-    ///        ],
-    ///        "system": "x86_64-linux"
-    ///      }
-    ///    ]
-    ///  ],
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items",
-    ///    "total_count"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoSearch"
-    ///      }
-    ///    },
-    ///    "total_count": {
-    ///      "title": "Total Count",
-    ///      "type": "integer"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PackageSearchResultOutput {
-        pub items: Vec<PackageInfoSearch>,
-        pub total_count: i64,
-    }
-    impl From<&PackageSearchResultOutput> for PackageSearchResultOutput {
-        fn from(value: &PackageSearchResultOutput) -> Self {
-            value.clone()
-        }
-    }
-    ///PackagesResultInput
+    ///PackagesResult
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1732,50 +1535,12 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PackagesResultInput {
+    pub struct PackagesResult {
         pub items: Vec<PackageResolutionInfo>,
         pub total_count: i64,
     }
-    impl From<&PackagesResultInput> for PackagesResultInput {
-        fn from(value: &PackagesResultInput) -> Self {
-            value.clone()
-        }
-    }
-    ///PackagesResultOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackagesResult",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items",
-    ///    "total_count"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageResolutionInfo"
-    ///      }
-    ///    },
-    ///    "total_count": {
-    ///      "title": "Total Count",
-    ///      "type": "integer"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PackagesResultOutput {
-        pub items: Vec<PackageResolutionInfo>,
-        pub total_count: i64,
-    }
-    impl From<&PackagesResultOutput> for PackagesResultOutput {
-        fn from(value: &PackagesResultOutput) -> Self {
+    impl From<&PackagesResult> for PackagesResult {
+        fn from(value: &PackagesResult) -> Self {
             value.clone()
         }
     }
@@ -1804,12 +1569,7 @@ pub mod types {
     ///      }
     ///    },
     ///    "search_system": {
-    ///      "default": "x86_64-linux",
-    ///      "allOf": [
-    ///        {
-    ///          "$ref": "#/components/schemas/SystemEnum"
-    ///        }
-    ///      ]
+    ///      "$ref": "#/components/schemas/SystemEnum"
     ///    },
     ///    "search_term": {
     ///      "title": "Search Term",
@@ -1831,8 +1591,8 @@ pub mod types {
         pub resolve_package: String,
         #[serde(default = "defaults::params_resolve_systems")]
         pub resolve_systems: Vec<SystemEnum>,
-        #[serde(default = "defaults::params_search_system")]
-        pub search_system: SystemEnum,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub search_system: Option<SystemEnum>,
         #[serde(default = "defaults::params_search_term")]
         pub search_term: String,
         #[serde(default = "defaults::params_show_term")]
@@ -1840,6 +1600,44 @@ pub mod types {
     }
     impl From<&Params> for Params {
         fn from(value: &Params) -> Self {
+            value.clone()
+        }
+    }
+    ///PkgPathsResult
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PkgPathsResult",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items",
+    ///    "total_count"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "total_count": {
+    ///      "title": "Total Count",
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct PkgPathsResult {
+        pub items: Vec<String>,
+        pub total_count: i64,
+    }
+    impl From<&PkgPathsResult> for PkgPathsResult {
+        fn from(value: &PkgPathsResult) -> Self {
             value.clone()
         }
     }
@@ -2166,7 +1964,7 @@ pub mod types {
             value.clone()
         }
     }
-    ///ResolvedPackageGroupInput
+    ///ResolvedPackageGroup
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2213,90 +2011,25 @@ pub mod types {
     ///      "type": "string"
     ///    },
     ///    "page": {
-    ///      "$ref": "#/components/schemas/CatalogPage-Input"
+    ///      "$ref": "#/components/schemas/CatalogPage"
     ///    }
     ///  }
     ///}
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ResolvedPackageGroupInput {
+    pub struct ResolvedPackageGroup {
         pub messages: Vec<ResolutionMessageGeneral>,
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub page: Option<CatalogPageInput>,
+        pub page: Option<CatalogPage>,
     }
-    impl From<&ResolvedPackageGroupInput> for ResolvedPackageGroupInput {
-        fn from(value: &ResolvedPackageGroupInput) -> Self {
+    impl From<&ResolvedPackageGroup> for ResolvedPackageGroup {
+        fn from(value: &ResolvedPackageGroup) -> Self {
             value.clone()
         }
     }
-    ///ResolvedPackageGroupOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "ResolvedPackageGroup",
-    ///  "examples": [
-    ///    {
-    ///      "attr_path": "foo.bar.curl",
-    ///      "description": "A very nice Item",
-    ///      "license": "foo",
-    ///      "locked_url": "git:git?rev=xyz",
-    ///      "name": "curl",
-    ///      "outputs": "{}",
-    ///      "outputs_to_install": "{}",
-    ///      "pkg_path": "foo.bar.curl",
-    ///      "pname": "curl",
-    ///      "rev": "xyz",
-    ///      "rev_count": 4,
-    ///      "rev_date": 0,
-    ///      "stabilities": [
-    ///        "stable",
-    ///        "unstable"
-    ///      ],
-    ///      "system": "x86_64-linux",
-    ///      "version": "1.0"
-    ///    }
-    ///  ],
-    ///  "type": "object",
-    ///  "required": [
-    ///    "messages",
-    ///    "name"
-    ///  ],
-    ///  "properties": {
-    ///    "messages": {
-    ///      "title": "Messages",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/ResolutionMessageGeneral"
-    ///      }
-    ///    },
-    ///    "name": {
-    ///      "title": "Name",
-    ///      "type": "string"
-    ///    },
-    ///    "page": {
-    ///      "$ref": "#/components/schemas/CatalogPage-Output"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ResolvedPackageGroupOutput {
-        pub messages: Vec<ResolutionMessageGeneral>,
-        pub name: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub page: Option<CatalogPageOutput>,
-    }
-    impl From<&ResolvedPackageGroupOutput> for ResolvedPackageGroupOutput {
-        fn from(value: &ResolvedPackageGroupOutput) -> Self {
-            value.clone()
-        }
-    }
-    ///ResolvedPackageGroupsInput
+    ///ResolvedPackageGroups
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2312,7 +2045,7 @@ pub mod types {
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/ResolvedPackageGroup-Input"
+    ///        "$ref": "#/components/schemas/ResolvedPackageGroup"
     ///      }
     ///    }
     ///  }
@@ -2320,56 +2053,27 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ResolvedPackageGroupsInput {
-        pub items: Vec<ResolvedPackageGroupInput>,
+    pub struct ResolvedPackageGroups {
+        pub items: Vec<ResolvedPackageGroup>,
     }
-    impl From<&ResolvedPackageGroupsInput> for ResolvedPackageGroupsInput {
-        fn from(value: &ResolvedPackageGroupsInput) -> Self {
+    impl From<&ResolvedPackageGroups> for ResolvedPackageGroups {
+        fn from(value: &ResolvedPackageGroups) -> Self {
             value.clone()
         }
     }
-    ///ResolvedPackageGroupsOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "ResolvedPackageGroups",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/ResolvedPackageGroup-Output"
-    ///      }
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ResolvedPackageGroupsOutput {
-        pub items: Vec<ResolvedPackageGroupOutput>,
-    }
-    impl From<&ResolvedPackageGroupsOutput> for ResolvedPackageGroupsOutput {
-        fn from(value: &ResolvedPackageGroupsOutput) -> Self {
-            value.clone()
-        }
-    }
-    ///RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator
+    ///RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
     ///  "title": "CatalogStoreConfig",
-    ///  "anyOf": [
+    ///  "oneOf": [
     ///    {
     ///      "$ref": "#/components/schemas/CatalogStoreConfigNull"
+    ///    },
+    ///    {
+    ///      "$ref": "#/components/schemas/CatalogStoreConfigMetaOnly"
     ///    },
     ///    {
     ///      "$ref": "#/components/schemas/CatalogStoreConfigNixCopy"
@@ -2382,22 +2086,45 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
-        #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
-        pub subtype_0: Option<CatalogStoreConfigNull>,
-        #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
-        pub subtype_1: Option<CatalogStoreConfigNixCopy>,
-        #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
-        pub subtype_2: Option<CatalogStoreConfigPublisher>,
+    #[serde(untagged)]
+    pub enum RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
+        Null(CatalogStoreConfigNull),
+        MetaOnly(CatalogStoreConfigMetaOnly),
+        NixCopy(CatalogStoreConfigNixCopy),
+        Publisher(CatalogStoreConfigPublisher),
     }
     impl From<
-        &RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
+        &RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
     >
-    for RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
+    for RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
         fn from(
-            value: &RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
+            value: &RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
         ) -> Self {
             value.clone()
+        }
+    }
+    impl From<CatalogStoreConfigNull>
+    for RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
+        fn from(value: CatalogStoreConfigNull) -> Self {
+            Self::Null(value)
+        }
+    }
+    impl From<CatalogStoreConfigMetaOnly>
+    for RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
+        fn from(value: CatalogStoreConfigMetaOnly) -> Self {
+            Self::MetaOnly(value)
+        }
+    }
+    impl From<CatalogStoreConfigNixCopy>
+    for RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
+        fn from(value: CatalogStoreConfigNixCopy) -> Self {
+            Self::NixCopy(value)
+        }
+    }
+    impl From<CatalogStoreConfigPublisher>
+    for RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator {
+        fn from(value: CatalogStoreConfigPublisher) -> Self {
+            Self::Publisher(value)
         }
     }
     ///SearchTerm
@@ -2475,43 +2202,7 @@ pub mod types {
                 })
         }
     }
-    ///ServiceStatusInput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "ServiceStatus",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "service_version",
-    ///    "start_tm"
-    ///  ],
-    ///  "properties": {
-    ///    "service_version": {
-    ///      "title": "Service Version",
-    ///      "type": "string"
-    ///    },
-    ///    "start_tm": {
-    ///      "title": "Start Tm",
-    ///      "type": "string",
-    ///      "format": "date-time"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ServiceStatusInput {
-        pub service_version: String,
-        pub start_tm: chrono::DateTime<chrono::offset::Utc>,
-    }
-    impl From<&ServiceStatusInput> for ServiceStatusInput {
-        fn from(value: &ServiceStatusInput) -> Self {
-            value.clone()
-        }
-    }
-    ///ServiceStatusOutput
+    ///ServiceStatus
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2550,14 +2241,14 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ServiceStatusOutput {
+    pub struct ServiceStatus {
         pub service_version: String,
         pub start_tm: chrono::DateTime<chrono::offset::Utc>,
         pub uptime_pretty: String,
         pub uptime_seconds: f64,
     }
-    impl From<&ServiceStatusOutput> for ServiceStatusOutput {
-        fn from(value: &ServiceStatusOutput) -> Self {
+    impl From<&ServiceStatus> for ServiceStatus {
+        fn from(value: &ServiceStatus) -> Self {
             value.clone()
         }
     }
@@ -2746,192 +2437,7 @@ pub mod types {
             value.parse()
         }
     }
-    ///UserBuildCreationResponse
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "UserBuildCreationResponse",
-    ///  "type": "object",
-    ///  "properties": {
-    ///    "store": {
-    ///      "$ref": "#/components/schemas/StoreInfo"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct UserBuildCreationResponse {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub store: Option<StoreInfo>,
-    }
-    impl From<&UserBuildCreationResponse> for UserBuildCreationResponse {
-        fn from(value: &UserBuildCreationResponse) -> Self {
-            value.clone()
-        }
-    }
-    ///UserBuildInput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "UserBuild",
-    ///  "examples": [
-    ///    {
-    ///      "derivation": {
-    ///        "description": "A very nice derivation",
-    ///        "drv_path": "foo.bar.curl",
-    ///        "license": "GnuFoo",
-    ///        "name": "mydrv",
-    ///        "outputs": {
-    ///          "bin": "/nix/store/foo"
-    ///        },
-    ///        "outputs_to_install": [
-    ///          "bin"
-    ///        ],
-    ///        "pname": "mydrv",
-    ///        "system": "x86_64-linux",
-    ///        "version": "1.0"
-    ///      },
-    ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-    ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-    ///      "rev_count": 12345,
-    ///      "rev_date": "2021-09-01T00:00:00Z",
-    ///      "url": "https://github.com/org/example"
-    ///    }
-    ///  ],
-    ///  "type": "object",
-    ///  "required": [
-    ///    "derivation",
-    ///    "rev",
-    ///    "rev_count",
-    ///    "rev_date",
-    ///    "url"
-    ///  ],
-    ///  "properties": {
-    ///    "cache_uri": {
-    ///      "title": "Cache Uri",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "derivation": {
-    ///      "$ref": "#/components/schemas/UserDerivation-Input"
-    ///    },
-    ///    "locked_base_catalog_url": {
-    ///      "title": "Locked Base Catalog Url",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "rev": {
-    ///      "title": "Rev",
-    ///      "type": "string"
-    ///    },
-    ///    "rev_count": {
-    ///      "title": "Rev Count",
-    ///      "type": "integer"
-    ///    },
-    ///    "rev_date": {
-    ///      "title": "Rev Date",
-    ///      "type": "string",
-    ///      "format": "date-time"
-    ///    },
-    ///    "url": {
-    ///      "title": "Url",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct UserBuildInput {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub cache_uri: Option<String>,
-        pub derivation: UserDerivationInput,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub locked_base_catalog_url: Option<String>,
-        pub rev: String,
-        pub rev_count: i64,
-        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-        pub url: String,
-    }
-    impl From<&UserBuildInput> for UserBuildInput {
-        fn from(value: &UserBuildInput) -> Self {
-            value.clone()
-        }
-    }
-    ///UserBuildListInput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "UserBuildList",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/UserBuild-Input"
-    ///      }
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct UserBuildListInput {
-        pub items: Vec<UserBuildInput>,
-    }
-    impl From<&UserBuildListInput> for UserBuildListInput {
-        fn from(value: &UserBuildListInput) -> Self {
-            value.clone()
-        }
-    }
-    ///UserBuildListOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "UserBuildList",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/UserBuild-Output"
-    ///      }
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct UserBuildListOutput {
-        pub items: Vec<UserBuildOutput>,
-    }
-    impl From<&UserBuildListOutput> for UserBuildListOutput {
-        fn from(value: &UserBuildListOutput) -> Self {
-            value.clone()
-        }
-    }
-    ///UserBuildOutput
+    ///UserBuild
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -3010,7 +2516,7 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct UserBuildOutput {
+    pub struct UserBuild {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub cache_uri: Option<String>,
         pub derivation: UserDerivationOutput,
@@ -3021,8 +2527,66 @@ pub mod types {
         pub rev_date: chrono::DateTime<chrono::offset::Utc>,
         pub url: String,
     }
-    impl From<&UserBuildOutput> for UserBuildOutput {
-        fn from(value: &UserBuildOutput) -> Self {
+    impl From<&UserBuild> for UserBuild {
+        fn from(value: &UserBuild) -> Self {
+            value.clone()
+        }
+    }
+    ///UserBuildCreationResponse
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserBuildCreationResponse",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "store": {
+    ///      "$ref": "#/components/schemas/StoreInfo"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserBuildCreationResponse {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub store: Option<StoreInfo>,
+    }
+    impl From<&UserBuildCreationResponse> for UserBuildCreationResponse {
+        fn from(value: &UserBuildCreationResponse) -> Self {
+            value.clone()
+        }
+    }
+    ///UserBuildList
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserBuildList",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/UserBuild"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserBuildList {
+        pub items: Vec<UserBuild>,
+    }
+    impl From<&UserBuildList> for UserBuildList {
+        fn from(value: &UserBuildList) -> Self {
             value.clone()
         }
     }
@@ -3549,32 +3113,17 @@ pub mod types {
         pub(super) fn catalog_share_info_allow_read_users() -> Option<Vec<String>> {
             Some(vec![])
         }
-        pub(super) fn catalog_store_config_nix_copy_store_type() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"nix-copy\"").unwrap()
+        pub(super) fn catalog_store_config_meta_only_store_type() -> String {
+            "meta-only".to_string()
         }
-        pub(super) fn catalog_store_config_null_store_type() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"null\"").unwrap()
+        pub(super) fn catalog_store_config_nix_copy_store_type() -> String {
+            "nix-copy".to_string()
         }
-        pub(super) fn catalog_store_config_publisher_store_type() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"publisher\"").unwrap()
+        pub(super) fn catalog_store_config_null_store_type() -> String {
+            "null".to_string()
         }
-        pub(super) fn health_check_input_check_parameters() -> super::Params {
-            super::Params {
-                resolve_package: "cowsay".to_string(),
-                resolve_systems: vec![super::SystemEnum::X8664Linux],
-                search_system: super::SystemEnum::X8664Linux,
-                search_term: "in Go".to_string(),
-                show_term: "hello".to_string(),
-            }
-        }
-        pub(super) fn health_check_output_check_parameters() -> super::Params {
-            super::Params {
-                resolve_package: "cowsay".to_string(),
-                resolve_systems: vec![super::SystemEnum::X8664Linux],
-                search_system: super::SystemEnum::X8664Linux,
-                search_term: "in Go".to_string(),
-                show_term: "hello".to_string(),
-            }
+        pub(super) fn catalog_store_config_publisher_store_type() -> String {
+            "publisher".to_string()
         }
         pub(super) fn package_descriptor_allow_broken() -> Option<bool> {
             Some(false)
@@ -3596,9 +3145,6 @@ pub mod types {
         }
         pub(super) fn params_resolve_systems() -> Vec<super::SystemEnum> {
             vec![super::SystemEnum::X8664Linux]
-        }
-        pub(super) fn params_search_system() -> super::SystemEnum {
-            super::SystemEnum::X8664Linux
         }
         pub(super) fn params_search_term() -> String {
             "in Go".to_string()
@@ -3694,10 +3240,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
         page_size: Option<i64>,
         search_term: &'a types::SearchTerm,
         system: types::SystemEnum,
-    ) -> Result<
-        ResponseValue<types::PackageSearchResultInput>,
-        Error<types::ErrorResponse>,
-    > {
+    ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/search", self.baseurl,);
         let mut query = Vec::with_capacity(5usize);
         if let Some(v) = &catalogs {
@@ -3753,7 +3296,7 @@ Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
         attr_path: &'a str,
         page: Option<i64>,
         page_size: Option<i64>,
-    ) -> Result<ResponseValue<types::PackagesResultInput>, Error<types::ErrorResponse>> {
+    ) -> Result<ResponseValue<types::PackagesResult>, Error<types::ErrorResponse>> {
         let url = format!(
             "{}/api/v1/catalog/packages/{}", self.baseurl, encode_path(& attr_path
             .to_string()),
@@ -3842,7 +3385,7 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
         &'a self,
         body: &'a types::PackageGroups,
     ) -> Result<
-        ResponseValue<types::ResolvedPackageGroupsInput>,
+        ResponseValue<types::ResolvedPackageGroups>,
         Error<types::ErrorResponse>,
     > {
         let url = format!("{}/api/v1/catalog/resolve", self.baseurl,);
@@ -3922,7 +3465,7 @@ Sends a `GET` request to `/api/v1/catalog/status/healthcheck`
 */
     pub async fn get_catalog_health_check_api_v1_catalog_status_healthcheck_get<'a>(
         &'a self,
-    ) -> Result<ResponseValue<types::HealthCheckInput>, Error<types::ErrorResponse>> {
+    ) -> Result<ResponseValue<types::HealthCheck>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/status/healthcheck", self.baseurl,);
         #[allow(unused_mut)]
         let mut request = self
@@ -3988,7 +3531,7 @@ Sends a `GET` request to `/api/v1/catalog/status/service`
 */
     pub async fn get_service_status_api_v1_catalog_status_service_get<'a>(
         &'a self,
-    ) -> Result<ResponseValue<types::ServiceStatusInput>, Error<types::ErrorResponse>> {
+    ) -> Result<ResponseValue<types::ServiceStatus>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/status/service", self.baseurl,);
         #[allow(unused_mut)]
         let mut request = self
@@ -4389,7 +3932,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         &'a self,
         catalog_name: &'a types::CatalogName,
         package_name: &'a types::PackageName,
-    ) -> Result<ResponseValue<types::UserBuildListInput>, Error<types::ErrorResponse>> {
+    ) -> Result<ResponseValue<types::UserBuildList>, Error<types::ErrorResponse>> {
         let url = format!(
             "{}/api/v1/catalog/catalogs/{}/packages/{}/builds", self.baseurl,
             encode_path(& catalog_name.to_string()), encode_path(& package_name
@@ -4635,7 +4178,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
         catalog_name: &'a types::CatalogName,
     ) -> Result<
         ResponseValue<
-            types::RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
+            types::RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
         >,
         Error<types::ErrorResponse>,
     > {
@@ -4677,10 +4220,10 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
     >(
         &'a self,
         catalog_name: &'a types::CatalogName,
-        body: &'a types::RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
+        body: &'a types::RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
     ) -> Result<
         ResponseValue<
-            types::RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
+            types::RootModelAnnotatedUnionCatalogStoreConfigNullCatalogStoreConfigMetaOnlyCatalogStoreConfigNixCopyCatalogStoreConfigPublisherFieldInfoAnnotationNoneTypeRequiredTrueTitleCatalogStoreConfigDiscriminatorStoreTypeBeforeValidator,
         >,
         Error<types::ErrorResponse>,
     > {
@@ -4705,6 +4248,46 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
             404u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**List of valid pkg paths
+
+Get the list of valid pkg paths for base catalog packages.
+
+Sends a `GET` request to `/api/v1/catalog/info/pkg-paths`
+
+*/
+    pub async fn get_pkg_paths_api_v1_catalog_info_pkg_paths_get<'a>(
+        &'a self,
+        page: Option<i64>,
+        page_size: Option<i64>,
+    ) -> Result<ResponseValue<types::PkgPathsResult>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/info/pkg-paths", self.baseurl,);
+        let mut query = Vec::with_capacity(2usize);
+        if let Some(v) = &page {
+            query.push(("page", v.to_string()));
+        }
+        if let Some(v) = &page_size {
+            query.push(("pageSize", v.to_string()));
+        }
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&query)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
             422u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
