@@ -79,7 +79,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PackageSearchResult-Input"
+                  "$ref": "#/components/schemas/PackageSearchResult"
                 }
               }
             }
@@ -147,7 +147,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PackagesResult-Input"
+                  "$ref": "#/components/schemas/PackagesResult"
                 }
               }
             }
@@ -199,7 +199,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResolvedPackageGroups-Input"
+                  "$ref": "#/components/schemas/ResolvedPackageGroups"
                 }
               }
             }
@@ -286,7 +286,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthCheck-Input"
+                  "$ref": "#/components/schemas/HealthCheck"
                 }
               }
             }
@@ -350,7 +350,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServiceStatus-Input"
+                  "$ref": "#/components/schemas/ServiceStatus"
                 }
               }
             }
@@ -1012,7 +1012,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserBuildList-Input"
+                  "$ref": "#/components/schemas/UserBuildList"
                 }
               }
             }
@@ -1268,7 +1268,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__"
+                  "$ref": "#/components/schemas/RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigMetaOnly__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__"
                 }
               }
             }
@@ -1324,7 +1324,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__"
+                "$ref": "#/components/schemas/RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigMetaOnly__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__"
               }
             }
           }
@@ -1335,7 +1335,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__"
+                  "$ref": "#/components/schemas/RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigMetaOnly__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__"
                 }
               }
             }
@@ -1352,6 +1352,60 @@
           },
           "422": {
             "description": "The catalog name is invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/info/pkg-paths": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "List of valid pkg paths",
+        "description": "Get the list of valid pkg paths for base catalog packages.",
+        "operationId": "getPkgPaths_api_v1_catalog_info_pkg_paths_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "title": "Page",
+              "nullable": true,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "title": "Pagesize",
+              "nullable": true,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of valid pkg paths",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PkgPathsResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request could not be processed",
             "content": {
               "application/json": {
                 "schema": {
@@ -1442,66 +1496,7 @@
   },
   "components": {
     "schemas": {
-      "CatalogPage-Input": {
-        "properties": {
-          "page": {
-            "type": "integer",
-            "title": "Page"
-          },
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "packages": {
-            "title": "Packages",
-            "nullable": true,
-            "items": {
-              "$ref": "#/components/schemas/ResolvedPackageDescriptor"
-            },
-            "type": "array"
-          },
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/ResolutionMessageGeneral"
-            },
-            "type": "array",
-            "title": "Messages"
-          },
-          "complete": {
-            "type": "boolean",
-            "title": "Complete"
-          }
-        },
-        "type": "object",
-        "required": [
-          "page",
-          "url",
-          "messages",
-          "complete"
-        ],
-        "title": "CatalogPage",
-        "example": {
-          "attr_path": "foo.bar.curl",
-          "description": "A very nice Item",
-          "license": "foo",
-          "locked_url": "git:git?rev=xyz",
-          "name": "curl",
-          "outputs": "{}",
-          "outputs_to_install": "{}",
-          "pkg_path": "foo.bar.curl",
-          "pname": "curl",
-          "rev": "xyz",
-          "rev_count": 4,
-          "rev_date": 0,
-          "stabilities": [
-            "stable",
-            "unstable"
-          ],
-          "system": "x86_64-linux",
-          "version": "1.0"
-        }
-      },
-      "CatalogPage-Output": {
+      "CatalogPage": {
         "properties": {
           "page": {
             "type": "integer",
@@ -1657,9 +1652,22 @@
         ],
         "title": "CatalogStatus"
       },
+      "CatalogStoreConfigMetaOnly": {
+        "properties": {
+          "store_type": {
+            "type": "string",
+            "const": "meta-only",
+            "title": "Store Type",
+            "default": "meta-only"
+          }
+        },
+        "type": "object",
+        "title": "CatalogStoreConfigMetaOnly"
+      },
       "CatalogStoreConfigNixCopy": {
         "properties": {
           "store_type": {
+            "type": "string",
             "const": "nix-copy",
             "title": "Store Type",
             "default": "nix-copy"
@@ -1683,6 +1691,7 @@
       "CatalogStoreConfigNull": {
         "properties": {
           "store_type": {
+            "type": "string",
             "const": "null",
             "title": "Store Type",
             "default": "null"
@@ -1694,6 +1703,7 @@
       "CatalogStoreConfigPublisher": {
         "properties": {
           "store_type": {
+            "type": "string",
             "const": "publisher",
             "title": "Store Type",
             "default": "publisher"
@@ -1715,68 +1725,10 @@
         ],
         "title": "ErrorResponse"
       },
-      "HealthCheck-Input": {
+      "HealthCheck": {
         "properties": {
           "check_parameters": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/params"
-              }
-            ],
-            "default": {
-              "show_term": "hello",
-              "search_term": "in Go",
-              "search_system": "x86_64-linux",
-              "resolve_package": "cowsay",
-              "resolve_systems": [
-                "x86_64-linux"
-              ]
-            }
-          },
-          "search_ok": {
-            "type": "boolean",
-            "title": "Search Ok"
-          },
-          "search_elapsed_ms": {
-            "type": "integer",
-            "title": "Search Elapsed Ms"
-          },
-          "resolve_ok": {
-            "type": "boolean",
-            "title": "Resolve Ok"
-          },
-          "resolve_elapsed_ms": {
-            "type": "integer",
-            "title": "Resolve Elapsed Ms"
-          },
-          "show_ok": {
-            "type": "boolean",
-            "title": "Show Ok"
-          },
-          "show_elapsed_ms": {
-            "type": "integer",
-            "title": "Show Elapsed Ms"
-          }
-        },
-        "type": "object",
-        "required": [
-          "search_ok",
-          "search_elapsed_ms",
-          "resolve_ok",
-          "resolve_elapsed_ms",
-          "show_ok",
-          "show_elapsed_ms"
-        ],
-        "title": "HealthCheck"
-      },
-      "HealthCheck-Output": {
-        "properties": {
-          "check_parameters": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/params"
-              }
-            ],
+            "$ref": "#/components/schemas/params",
             "default": {
               "show_term": "hello",
               "search_term": "in Go",
@@ -2266,7 +2218,7 @@
         ],
         "title": "PackageResolutionInfo"
       },
-      "PackageSearchResult-Input": {
+      "PackageSearchResult": {
         "properties": {
           "items": {
             "items": {
@@ -2301,42 +2253,7 @@
           }
         ]
       },
-      "PackageSearchResult-Output": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/PackageInfoSearch"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total_count": {
-            "type": "integer",
-            "title": "Total Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total_count"
-        ],
-        "title": "PackageSearchResult",
-        "example": [
-          {
-            "attr_path": "foo.bar.curl",
-            "description": "A very nice Item",
-            "name": "curl",
-            "pkg_path": "foo.bar.curl",
-            "pname": "curl",
-            "stabilities": [
-              "stable",
-              "unstable"
-            ],
-            "system": "x86_64-linux"
-          }
-        ]
-      },
-      "PackagesResult-Input": {
+      "PackagesResult": {
         "properties": {
           "items": {
             "items": {
@@ -2357,11 +2274,11 @@
         ],
         "title": "PackagesResult"
       },
-      "PackagesResult-Output": {
+      "PkgPathsResult": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/PackageResolutionInfo"
+              "type": "string"
             },
             "type": "array",
             "title": "Items"
@@ -2376,7 +2293,7 @@
           "items",
           "total_count"
         ],
-        "title": "PackagesResult"
+        "title": "PkgPathsResult"
       },
       "PublishRequest": {
         "properties": {},
@@ -2570,7 +2487,7 @@
         ],
         "title": "ResolvedPackageDescriptor"
       },
-      "ResolvedPackageGroup-Input": {
+      "ResolvedPackageGroup": {
         "properties": {
           "name": {
             "type": "string",
@@ -2578,7 +2495,7 @@
           },
           "page": {
             "nullable": true,
-            "$ref": "#/components/schemas/CatalogPage-Input"
+            "$ref": "#/components/schemas/CatalogPage"
           },
           "messages": {
             "items": {
@@ -2615,56 +2532,11 @@
           "version": "1.0"
         }
       },
-      "ResolvedPackageGroup-Output": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "page": {
-            "nullable": true,
-            "$ref": "#/components/schemas/CatalogPage-Output"
-          },
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/ResolutionMessageGeneral"
-            },
-            "type": "array",
-            "title": "Messages"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "messages"
-        ],
-        "title": "ResolvedPackageGroup",
-        "example": {
-          "attr_path": "foo.bar.curl",
-          "description": "A very nice Item",
-          "license": "foo",
-          "locked_url": "git:git?rev=xyz",
-          "name": "curl",
-          "outputs": "{}",
-          "outputs_to_install": "{}",
-          "pkg_path": "foo.bar.curl",
-          "pname": "curl",
-          "rev": "xyz",
-          "rev_count": 4,
-          "rev_date": 0,
-          "stabilities": [
-            "stable",
-            "unstable"
-          ],
-          "system": "x86_64-linux",
-          "version": "1.0"
-        }
-      },
-      "ResolvedPackageGroups-Input": {
+      "ResolvedPackageGroups": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/ResolvedPackageGroup-Input"
+              "$ref": "#/components/schemas/ResolvedPackageGroup"
             },
             "type": "array",
             "title": "Items"
@@ -2676,26 +2548,13 @@
         ],
         "title": "ResolvedPackageGroups"
       },
-      "ResolvedPackageGroups-Output": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ResolvedPackageGroup-Output"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "ResolvedPackageGroups"
-      },
-      "RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__": {
-        "anyOf": [
+      "RootModel_Annotated_Union_CatalogStoreConfigNull__CatalogStoreConfigMetaOnly__CatalogStoreConfigNixCopy__CatalogStoreConfigPublisher___FieldInfo_annotation_NoneType__required_True__title__CatalogStoreConfig___discriminator__store_type____BeforeValidator__": {
+        "oneOf": [
           {
             "$ref": "#/components/schemas/CatalogStoreConfigNull"
+          },
+          {
+            "$ref": "#/components/schemas/CatalogStoreConfigMetaOnly"
           },
           {
             "$ref": "#/components/schemas/CatalogStoreConfigNixCopy"
@@ -2704,28 +2563,18 @@
             "$ref": "#/components/schemas/CatalogStoreConfigPublisher"
           }
         ],
-        "title": "CatalogStoreConfig"
-      },
-      "ServiceStatus-Input": {
-        "properties": {
-          "service_version": {
-            "type": "string",
-            "title": "Service Version"
-          },
-          "start_tm": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Start Tm"
+        "title": "CatalogStoreConfig",
+        "discriminator": {
+          "propertyName": "store_type",
+          "mapping": {
+            "meta-only": "#/components/schemas/CatalogStoreConfigMetaOnly",
+            "nix-copy": "#/components/schemas/CatalogStoreConfigNixCopy",
+            "null": "#/components/schemas/CatalogStoreConfigNull",
+            "publisher": "#/components/schemas/CatalogStoreConfigPublisher"
           }
-        },
-        "type": "object",
-        "required": [
-          "service_version",
-          "start_tm"
-        ],
-        "title": "ServiceStatus"
+        }
       },
-      "ServiceStatus-Output": {
+      "ServiceStatus": {
         "properties": {
           "service_version": {
             "type": "string",
@@ -2815,72 +2664,7 @@
         ],
         "title": "SystemEnum"
       },
-      "UserBuild-Input": {
-        "properties": {
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "rev": {
-            "type": "string",
-            "title": "Rev"
-          },
-          "rev_count": {
-            "type": "integer",
-            "title": "Rev Count"
-          },
-          "rev_date": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Rev Date"
-          },
-          "locked_base_catalog_url": {
-            "title": "Locked Base Catalog Url",
-            "nullable": true,
-            "type": "string"
-          },
-          "derivation": {
-            "$ref": "#/components/schemas/UserDerivation-Input"
-          },
-          "cache_uri": {
-            "title": "Cache Uri",
-            "nullable": true,
-            "type": "string"
-          }
-        },
-        "type": "object",
-        "required": [
-          "url",
-          "rev",
-          "rev_count",
-          "rev_date",
-          "derivation"
-        ],
-        "title": "UserBuild",
-        "example": {
-          "derivation": {
-            "description": "A very nice derivation",
-            "drv_path": "foo.bar.curl",
-            "license": "GnuFoo",
-            "name": "mydrv",
-            "outputs": {
-              "bin": "/nix/store/foo"
-            },
-            "outputs_to_install": [
-              "bin"
-            ],
-            "pname": "mydrv",
-            "system": "x86_64-linux",
-            "version": "1.0"
-          },
-          "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-          "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-          "rev_count": 12345,
-          "rev_date": "2021-09-01T00:00:00Z",
-          "url": "https://github.com/org/example"
-        }
-      },
-      "UserBuild-Output": {
+      "UserBuild": {
         "properties": {
           "url": {
             "type": "string",
@@ -2956,27 +2740,11 @@
         "type": "object",
         "title": "UserBuildCreationResponse"
       },
-      "UserBuildList-Input": {
+      "UserBuildList": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/UserBuild-Input"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "UserBuildList"
-      },
-      "UserBuildList-Output": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/UserBuild-Output"
+              "$ref": "#/components/schemas/UserBuild"
             },
             "type": "array",
             "title": "Items"
@@ -3313,11 +3081,7 @@
             "default": "in Go"
           },
           "search_system": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/SystemEnum"
-              }
-            ],
+            "$ref": "#/components/schemas/SystemEnum",
             "default": "x86_64-linux"
           },
           "resolve_package": {
