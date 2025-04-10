@@ -1,6 +1,6 @@
 [
   {
-    "count": 881,
+    "count": 876,
     "results": [
       {
         "attr_path": "javacc",
@@ -94,12 +94,12 @@
         "attr_path": "yourkit-java",
         "catalog": null,
         "description": "Award winning, fully featured low overhead profiler for Java EE and Java SE platforms",
-        "name": "yourkit-java-2024.9-b164",
+        "name": "yourkit-java-2025.3-b134",
         "pkg_path": "yourkit-java",
         "pname": "yourkit-java",
         "stabilities": [],
         "system": "aarch64-darwin",
-        "version": "2024.9-b164"
+        "version": "2025.3-b134"
       },
       {
         "attr_path": "java-hamcrest",
@@ -115,7 +115,7 @@
     ]
   },
   {
-    "count": 135,
+    "count": 138,
     "results": [
       {
         "attr_path": "jdk",
@@ -132,23 +132,23 @@
         "attr_path": "jdk8",
         "catalog": null,
         "description": "Open-source Java Development Kit",
-        "name": "openjdk-8u432-b06",
+        "name": "openjdk-8u442-b06",
         "pkg_path": "jdk8",
         "pname": "jdk8",
         "stabilities": [],
         "system": "aarch64-darwin",
-        "version": "8u432-b06"
+        "version": "8u442-b06"
       },
       {
         "attr_path": "jdk11",
         "catalog": null,
-        "description": "Open-source Java Development Kit",
-        "name": "openjdk-11.0.25+9",
+        "description": "Certified builds of OpenJDK",
+        "name": "zulu-ca-jdk-11.0.24",
         "pkg_path": "jdk11",
         "pname": "jdk11",
         "stabilities": [],
         "system": "aarch64-darwin",
-        "version": "11.0.25+9"
+        "version": "11.0.24"
       }
     ]
   }
