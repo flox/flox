@@ -159,6 +159,15 @@ pub fn spawn_detached_check_for_upgrades_process(
     log_dir: &Path,
     check_timeout: Option<u64>,
 ) -> Result<()> {
+    // Avoid race copnditions in integration tests
+    if let Ok(true) = std::env::var("_FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS")
+        .unwrap_or_default()
+        .parse()
+    {
+        debug!("Skipping background job for tests");
+        return Ok(());
+    }
+
     // Get the path to the current executable
     let self_executable = match self_executable {
         Some(path) => path,

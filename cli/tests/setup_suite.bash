@@ -184,6 +184,7 @@ misc_vars_setup() {
 flox_cli_vars_setup() {
   unset FLOX_PROMPT_ENVIRONMENTS _FLOX_ACTIVE_ENVIRONMENTS
   export FLOX_DISABLE_METRICS='true'
+  export _FLOX_TESTING_DISABLE_BG_SIDE_EFFECTS='true'
 }
 
 # ---------------------------------------------------------------------------- #
