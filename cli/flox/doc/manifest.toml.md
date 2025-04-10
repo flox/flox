@@ -490,17 +490,28 @@ of tables in the `include.environments` array. The schema for these "include
 descriptors" is shown below:
 
 ```
-IncludeDescriptor ::= {
+IncludeDescriptor ::= LocalIncludeDescriptor | RemoteIncludeDescriptor
+
+LocalIncludeDescriptor :: = {
   dir  = STRING
 , name = null | STRING
 }
+
+RemoteIncludeDescriptor :: = {
+  remote = STRING
+, name   = null | STRING
+}
 ```
 
-The fields in the include descriptor are as follows:
+The fields in these include descriptors are as follows:
 
 `dir`
-: The path to the environment to include. This has the same semantics as the
-  `--dir` flag passed to many Flox commands.
+: The local path to the environment to include. This has the same semantics as
+  the `--dir` flag passed to many Flox commands.
+
+`remote`
+: The remote name of an environment to include. This has the same semantics as
+  the `--remote` flag passed to many Flox commands.
 
 `name`
 : An optional override to the name of the included environment. This is useful
@@ -510,8 +521,6 @@ The fields in the include descriptor are as follows:
 Changes to the included environments aren't automatically reflected in the
 composing environment. You control when updates are pulled in by using
 [`flox include upgrade`](./flox-include-upgrade.md).
-
-Remote environments are not currently supported as includes.
 
 ### Merge semantics
 

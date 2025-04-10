@@ -23,6 +23,7 @@ use serde_with::skip_serializing_none;
 
 use super::raw::RawManifest;
 use crate::data::System;
+use crate::models::environment_ref::EnvironmentRef;
 use crate::providers::services::ServiceError;
 
 pub(crate) const DEFAULT_GROUP_NAME: &str = "toplevel";
@@ -1005,6 +1006,16 @@ pub enum IncludeDescriptor {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
     },
+    Remote {
+        /// The remote environment reference in the form `owner/name`.
+        remote: EnvironmentRef,
+        /// A name similar to an install ID that a user could use to specify
+        /// the environment on the command line e.g. for upgrades, or in an
+        /// error message.
+        #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+    },
 }
 
 impl Display for IncludeDescriptor {
@@ -1012,6 +1023,9 @@ impl Display for IncludeDescriptor {
         match self {
             IncludeDescriptor::Local { dir, name } => {
                 write!(f, "{}", name.as_deref().unwrap_or(&dir.to_string_lossy()))
+            },
+            IncludeDescriptor::Remote { remote, name } => {
+                write!(f, "{}", name.as_deref().unwrap_or(&remote.to_string()))
             },
         }
     }
@@ -1250,15 +1264,21 @@ pub mod test {
             [include]
             environments = [
                 { dir = "../foo", name = "bar" },
+                { remote = "owner/repo", name = "baz" },
             ]
         "#};
         let parsed = toml_edit::de::from_str::<Manifest>(manifest).unwrap();
 
-        assert_eq!(parsed.include.environments.len(), 1);
-        let included = parsed.include.environments[0].clone();
-        let IncludeDescriptor::Local { dir, name } = included;
-        assert_eq!(dir, PathBuf::from("../foo"));
-        assert_eq!(name.unwrap().as_str(), "bar");
+        assert_eq!(parsed.include.environments, vec![
+            IncludeDescriptor::Local {
+                dir: PathBuf::from("../foo"),
+                name: Some("bar".to_string()),
+            },
+            IncludeDescriptor::Remote {
+                remote: EnvironmentRef::new("owner", "repo").unwrap(),
+                name: Some("baz".to_string()),
+            },
+        ]);
     }
 
     /// Generates a mock `TypedManifest` for testing purposes.

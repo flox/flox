@@ -203,3 +203,74 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+function setup_composer_with_remote_include() {
+  floxhub_setup owner
+
+  # Setup owner/remote environment
+  "$FLOX_BIN" init -d remote
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [vars]
+    remote = "v1"
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f - -d remote
+  "$FLOX_BIN" push -d remote --owner "$OWNER"
+  rm -rf remote
+
+  # Setup composer
+  "$FLOX_BIN" init -d composer
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [include]
+    environments = [
+      { remote = "owner/remote" },
+    ]
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f - -d composer
+}
+
+function edit_remote() {
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [vars]
+    remote = "v2"
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f - -r owner/remote
+}
+
+@test "include upgrade reports no changes for remote environments" {
+  setup_composer_with_remote_include
+  run "$FLOX_BIN" include upgrade -d composer
+  assert_success
+  assert_output - <<EOF
+⚠️  Using file://${FLOX_FLOXHUB_PATH} as FloxHub host
+'\$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
+alternative FloxHub hosts are not yet supported!
+
+ℹ️  No included environments have changes.
+EOF
+}
+
+@test "include upgrade reports which remote environments have changes" {
+  setup_composer_with_remote_include
+  edit_remote
+  run "$FLOX_BIN" include upgrade -d composer
+  assert_success
+  assert_output - <<EOF
+⚠️  Using file://${FLOX_FLOXHUB_PATH} as FloxHub host
+'\$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
+alternative FloxHub hosts are not yet supported!
+
+✅ Upgraded 'composer' with latest changes to:
+- 'remote'
+EOF
+}
+
+# ---------------------------------------------------------------------------- #
