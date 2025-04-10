@@ -6,7 +6,7 @@ use super::{ConcreteEnvironment, EnvironmentError, open_path};
 use crate::flox::Flox;
 use crate::models::environment::Environment;
 use crate::models::lockfile::{LockedInclude, RecoverableMergeError};
-use crate::models::manifest::typed::IncludeDescriptor;
+use crate::models::manifest::typed::{IncludeDescriptor, Manifest};
 
 /// Context required to fetch an environment include
 #[derive(Clone, Debug)]
@@ -25,13 +25,28 @@ impl IncludeFetcher {
                 RecoverableMergeError::CannotIncludeInRemote,
             ));
         };
-        let (name, path) = match include_environment {
-            IncludeDescriptor::Local { dir, name } => (
-                name,
-                self.expand_include_dir(dir)
-                    .map_err(EnvironmentError::Recoverable)?,
-            ),
-        };
+
+        let (manifest, name) = match include_environment {
+            IncludeDescriptor::Local { dir, name } => self.fetch_local(flox, dir, name),
+        }?;
+
+        Ok(LockedInclude {
+            manifest,
+            name,
+            descriptor: include_environment.clone(),
+        })
+    }
+
+    /// Fetch a local (path or managed) environment, only if it's already locked.
+    fn fetch_local(
+        &self,
+        flox: &Flox,
+        dir: impl AsRef<Path>,
+        name: &Option<String>,
+    ) -> Result<(Manifest, String), EnvironmentError> {
+        let path = self
+            .expand_include_dir(dir)
+            .map_err(EnvironmentError::Recoverable)?;
         let environment = open_path(flox, &path)?;
 
         match &environment {
@@ -64,13 +79,12 @@ impl IncludeFetcher {
             },
         }
 
-        Ok(LockedInclude {
-            manifest: environment.manifest(flox)?,
-            name: name
-                .clone()
-                .unwrap_or_else(|| environment.name().to_string()),
-            descriptor: include_environment.clone(),
-        })
+        let manifest = environment.manifest(flox)?;
+        let name = name
+            .clone()
+            .unwrap_or_else(|| environment.name().to_string());
+
+        Ok((manifest, name))
     }
 
     /// For directories that aren't absolute, join them to the base_directory
@@ -115,7 +129,7 @@ mod test {
     use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
     #[test]
-    fn fetch_relative_path() {
+    fn fetch_path_relative_path() {
         let (flox, tempdir) = flox_instance();
 
         let environment_path = tempdir.path().join("environment");
@@ -147,7 +161,7 @@ mod test {
     }
 
     #[test]
-    fn fetch_absolute_path() {
+    fn fetch_path_absolute_path() {
         let (flox, tempdir) = flox_instance();
 
         let environment_path = tempdir.path().join("environment");
