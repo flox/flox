@@ -16,7 +16,7 @@
   shfmt,
   stdenv,
   substituteAllFiles,
-  util-linux,
+  util-linuxMinimal,
 }:
 # We need to ensure that the flox-activations package is available.
 # If it's not, we'll use the binary from the environment.
@@ -48,7 +48,7 @@ let
         "${flox-activations}/bin/flox-activations"
       else
         "${builtins.path { path = builtins.getEnv "FLOX_ACTIVATIONS_BIN"; }}";
-    util_linux = util-linux;
+    util_linux = util-linuxMinimal;
     # Make clear when packages are not available on Darwin.
     ld_floxlib = if stdenv.isLinux then ld-floxlib else "__LINUX_ONLY__";
     iconv = if stdenv.isLinux then iconv else "__LINUX_ONLY__";
