@@ -330,9 +330,12 @@ impl Edit {
             return Ok((PathBuf::from(editor), args));
         }
 
-        let (path, editor) = env::split_paths(&path_var)
-            .cartesian_product(["nano", "vim", "vi", "emacs"])
-            .find(|(path, editor)| path.join(editor).is_file())
+        let path_entries = env::split_paths(&path_var).collect::<Vec<_>>();
+
+        let (editor, path) = ["nano", "vim", "vi", "emacs"]
+            .iter()
+            .cartesian_product(path_entries)
+            .find(|(editor, path)| path.join(editor).is_file())
             .context("no known editor found in $PATH")?;
 
         debug!("Using default editor {:?} from {:?}", editor, path);
