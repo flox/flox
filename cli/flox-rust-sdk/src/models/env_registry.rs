@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use flox_core::{SerializeError, Version, serialize_atomically};
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use super::environment::{EnvironmentPointer, path_hash};
 use super::floxmeta::{FloxMeta, FloxMetaError};
@@ -333,6 +333,7 @@ pub fn deregister(
 /// Garbage collect non-existent environments from the registry. Writes to the
 /// registry file, in addition to returning the updated registry to avoid a
 /// second read by any consumers.
+#[instrument(skip_all, fields(progress = "Garbage collecting stale environments"))]
 pub fn garbage_collect(flox: &Flox) -> Result<EnvRegistry, EnvRegistryError> {
     let reg_path = env_registry_path(flox);
     let lock = acquire_env_registry_lock(&reg_path)?;
