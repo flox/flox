@@ -15,8 +15,8 @@ function render_remote_cmd() {
 export -f render_remote_cmd
 
 function upload_report_to_buildkite() {
-  # Don't do anything if we're not in the merge queue
-  [[ 'merge_group' != "$GITHUB_EVENT_NAME" ]] && return 0
+  # Don't do anything if we're not in the merge queue or on main
+  ! [[ 'merge_group' == "$GITHUB_EVENT_NAME" || 'main' == "$GITHUB_REF_NAME" ]] && return 0
 
   local -r git_commit_message="$(git log -1 --pretty=format:"%s")"
   local -r report_path_on_remote="$(awk '{ if ($1 == "TESTS_DIR:") { print $2 } }' output.txt)/report.xml"
