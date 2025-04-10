@@ -393,7 +393,7 @@ impl MockClient {
 }
 
 pub type PublishResponse = api_types::PublishResponse;
-pub type UserBuildInfo = api_types::UserBuildInput;
+pub type UserBuildInfo = api_types::UserBuild;
 pub type UserBuildPublish = api_types::UserBuildPublish;
 pub type UserDerivationInfo = api_types::UserDerivationInput;
 pub type StoreInfoRequest = api_types::StoreInfoRequest;
@@ -1345,8 +1345,8 @@ impl ResolvedPackageGroup {
     }
 }
 
-impl From<api_types::ResolvedPackageGroupInput> for ResolvedPackageGroup {
-    fn from(resolved_package_group: api_types::ResolvedPackageGroupInput) -> Self {
+impl From<api_types::ResolvedPackageGroup> for ResolvedPackageGroup {
+    fn from(resolved_package_group: api_types::ResolvedPackageGroup) -> Self {
         Self {
             name: resolved_package_group.name,
             page: resolved_package_group.page.map(CatalogPage::from),
@@ -1371,8 +1371,8 @@ pub struct CatalogPage {
     pub msgs: Vec<ResolutionMessage>,
 }
 
-impl From<api_types::CatalogPageInput> for CatalogPage {
-    fn from(catalog_page: api_types::CatalogPageInput) -> Self {
+impl From<api_types::CatalogPage> for CatalogPage {
+    fn from(catalog_page: api_types::CatalogPage) -> Self {
         Self {
             complete: catalog_page.complete,
             packages: catalog_page.packages,
@@ -1588,7 +1588,7 @@ mod tests {
     #[tokio::test]
     async fn user_agent_set_on_all_requests() {
         let expected_agent = format!("flox-cli/{}", &*FLOX_VERSION);
-        let empty_response = &api_types::PackageSearchResultOutput {
+        let empty_response = &api_types::PackageSearchResult {
             items: vec![],
             total_count: 0,
         };
@@ -1610,7 +1610,7 @@ mod tests {
         extra_headers.insert("flox-test".to_string(), "test-value".to_string());
         extra_headers.insert("flox-test2".to_string(), "test-value2".to_string());
 
-        let empty_response = &api_types::PackageSearchResultOutput {
+        let empty_response = &api_types::PackageSearchResult {
             items: vec![],
             total_count: 0,
         };
