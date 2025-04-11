@@ -1,4 +1,3 @@
-use std::error;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -10,7 +9,13 @@ use tracing::instrument;
 use url::Url;
 
 use super::build::{BuildResult, BuildResults, ManifestBuilder};
-use super::catalog::{Client, ClientTrait, UserBuildPublish, UserDerivationInfo};
+use super::catalog::{
+    CatalogClientError,
+    Client,
+    ClientTrait,
+    UserBuildPublish,
+    UserDerivationInfo,
+};
 use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
@@ -18,10 +23,10 @@ use crate::models::environment::path_environment::PathEnvironment;
 use crate::models::environment::{Environment, EnvironmentError, PathPointer};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::Inner;
+use crate::providers::build;
 use crate::providers::catalog::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
-use crate::providers::{build, catalog};
 use crate::utils::CommandExt;
 
 #[derive(Debug, Error)]
@@ -35,8 +40,8 @@ pub enum PublishError {
     #[error("The package could not be built: {0}")]
     BuildError(String),
 
-    #[error("There was an error communicating with the catalog")]
-    CatalogError(#[source] Box<dyn error::Error + Send + Sync>),
+    #[error(transparent)]
+    CatalogError(CatalogClientError),
 
     #[error("Could not identify user from authentication info")]
     Unauthenticated,
@@ -197,29 +202,16 @@ impl Publisher for PublishProvider {
                 &self.env_metadata.build_repo_ref.url,
             )
             .await
-            .map_err(|e| PublishError::CatalogError(Box::new(e)))?;
+            .map_err(PublishError::CatalogError)?;
 
         // Step 2 hit /publish
         // For now calling publish just gets information about cache,
         // but in the future it will get information about a publisher
         tracing::debug!("Beginning publish of package...");
         let publish_response = client
-                    .publish(catalog_name, &self.env_metadata.package)
-                    .await
-                    .map_err(|e| match e {
-                        catalog::PublishError::UnconfiguredCatalog => {
-                            PublishError::Catchall(formatdoc! { "
-                               Catalog '{0}' must be configured for whether to upload build artifacts.
-
-                               To configure the catalog to skip uploading artifacts, run:
-                                 $ catalog-util store --catalog {0} set meta-only
-
-                               To configure the catalog to upload artifacts, run:
-                                 $ catalog-util store --catalog {0} set nixcopy --ingress-uri <uri> --egress-uri <uri>
-                            ", catalog_name})
-                        },
-                        _ => PublishError::CatalogError(Box::new(e)),
-                    })?;
+            .publish(catalog_name, &self.env_metadata.package)
+            .await
+            .map_err(PublishError::CatalogError)?;
 
         let cache = determine_cache(
             metadata_only,
@@ -270,7 +262,7 @@ impl Publisher for PublishProvider {
         client
             .publish_build(&catalog_name, &self.env_metadata.package, &build_info)
             .await
-            .map_err(|e| PublishError::CatalogError(Box::new(e)))?;
+            .map_err(PublishError::CatalogError)?;
 
         Ok(())
     }

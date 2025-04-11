@@ -1925,7 +1925,7 @@ pub(crate) mod tests {
     use crate::models::manifest::raw::RawManifest;
     use crate::models::manifest::typed::{Include, Manifest, Vars};
     use crate::models::search::{PackageDetails, SearchLimit, SearchResults};
-    use crate::providers::catalog::{Client, PublishError};
+    use crate::providers::catalog::Client;
     use crate::providers::flake_installable_locker::{
         FlakeInstallableError,
         InstallableLockerMock,
@@ -1970,7 +1970,7 @@ pub(crate) mod tests {
             &self,
             _catalog_name: impl AsRef<str> + Send + Sync,
             _package_name: impl AsRef<str> + Send + Sync,
-        ) -> Result<PublishResponse, PublishError> {
+        ) -> Result<PublishResponse, CatalogClientError> {
             unreachable!("publish should not be called");
         }
 
