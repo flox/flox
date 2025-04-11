@@ -138,7 +138,7 @@ EOF
   setup_composer_and_two_includes
   run "$FLOX_BIN" include upgrade -d composer
   assert_success
-  assert_output "ℹ️ No included environments have changes."
+  assert_output "ℹ️  No included environments have changes."
 }
 
 @test "include upgrade reports no changes when non-upgraded environment changes" {
@@ -146,7 +146,7 @@ EOF
   edit_included1
   run "$FLOX_BIN" include upgrade -d composer included2
   assert_success
-  assert_output "ℹ️ Included environment 'included2' has no changes."
+  assert_output "ℹ️  Included environment 'included2' has no changes."
 }
 
 @test "include upgrade defaults to upgrading all" {
@@ -193,7 +193,7 @@ EOF
   assert_output - <<EOF
 ✅ Upgraded 'composer' with latest changes to:
 - 'included1'
-ℹ️ Included environment 'included2' has no changes.
+ℹ️  Included environment 'included2' has no changes.
 EOF
 
   run "$FLOX_BIN" list -c -d composer

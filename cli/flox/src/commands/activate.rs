@@ -686,11 +686,11 @@ fn notify_upgrade_if_available(flox: &Flox, environment: &mut ConcreteEnvironmen
 
     // Update this message in flox-config.md if you change it here
     let message = formatdoc! {"
-        ℹ️  Upgrades are available for packages in {description}.
+        Upgrades are available for packages in {description}.
         Use 'flox upgrade --dry-run' for details.
     "};
 
-    message::plain(message);
+    message::info(message);
 
     Ok(())
 }

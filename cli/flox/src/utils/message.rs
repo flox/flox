@@ -43,8 +43,9 @@ pub(crate) fn deleted(v: impl Display) {
 pub(crate) fn updated(v: impl Display) {
     print_message(std::format_args!("✅ {v}"));
 }
+/// double width character, add an additional space for alignment
 pub(crate) fn info(v: impl Display) {
-    print_message(std::format_args!("ℹ️ {v}"));
+    print_message(std::format_args!("ℹ️  {v}"));
 }
 /// double width character, add an additional space for alignment
 pub(crate) fn warning(v: impl Display) {
@@ -269,7 +270,7 @@ mod tests {
         // - composer environment is listed last
         // - environment `dep_one` doesn't appear because its fields are overridden later
         assert_eq!(writer.to_string(), indoc! {"
-            ℹ️ The following manifest fields were overridden during merging:
+            ℹ️  The following manifest fields were overridden during merging:
             - Environment 'dep_two' set:
               - vars.overridden_by_dep2
             - This environment set:

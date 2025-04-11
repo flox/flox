@@ -4798,7 +4798,7 @@ EOF
 
   run --separate-stderr "$FLOX_BIN" activate -d composer -- echo "locking"
   assert_success
-  assert_equal "$stderr" "ℹ️ The following manifest fields were overridden during merging:
+  assert_equal "$stderr" "ℹ️  The following manifest fields were overridden during merging:
 - This environment set:
   - vars.foo
 Sourcing .bashrc
