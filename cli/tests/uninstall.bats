@@ -225,6 +225,6 @@ EOF
   assert_success
   assert_output - << EOF
 🗑️  'hello' uninstalled from environment 'composer'
-ℹ️ 'hello' is still installed by environment 'included'
+ℹ️  'hello' is still installed by environment 'included'
 EOF
 }

@@ -860,7 +860,7 @@ mod tests {
 
         assert_eq!(writer.to_string(), indoc! {"
             ✅ Environment successfully updated.
-            ℹ️ Run 'flox list -c' to see merged manifest.
+            ℹ️  Run 'flox list -c' to see merged manifest.
             "});
     }
 
@@ -915,10 +915,10 @@ mod tests {
         // - hint to see the merged manifest is shown.
         assert_eq!(writer.to_string(), indoc! {"
             ✅ Environment successfully updated.
-            ℹ️ The following manifest fields were overridden during merging:
+            ℹ️  The following manifest fields were overridden during merging:
             - This environment set:
               - vars.foo
-            ℹ️ Run 'flox list -c' to see merged manifest.
+            ℹ️  Run 'flox list -c' to see merged manifest.
             "});
     }
 }
