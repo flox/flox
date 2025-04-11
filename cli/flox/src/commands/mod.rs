@@ -110,7 +110,7 @@ static FLOX_DESCRIPTION: &'_ str = indoc! {"
 
 /// Manually documented commands that are to keep the help text short
 const ADDITIONAL_COMMANDS: &str = indoc! {"
-    auth, config, envs, gc, upgrade
+    auth, config, envs, gc, include, upgrade
 "};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
@@ -943,7 +943,13 @@ enum AdditionalCommands {
 
     /// Interact with included environments
     #[bpaf(command, hide)]
-    Include(#[bpaf(external(include::include_commands))] include::IncludeCommands),
+    Include(
+        #[bpaf(
+            external(include::include_commands),
+            fallback(include::IncludeCommands::Help)
+        )]
+        include::IncludeCommands,
+    ),
 }
 
 impl AdditionalCommands {
