@@ -194,6 +194,7 @@ impl Publisher for PublishProvider {
         // The create package service call will create the user's own catalog
         // if not already created, and then create (or return) the package noted
         // returning either a 200 or 201.  Either is ok here, as long as it's not an error.
+        // "Creating a package" is just registering a "attr_path" with the catalog, nothing more.
         tracing::debug!("Creating package in catalog...");
         client
             .create_package(
@@ -205,8 +206,12 @@ impl Publisher for PublishProvider {
             .map_err(PublishError::CatalogError)?;
 
         // Step 2 hit /publish
+        // Catalogs are configured with their "store".
+        // We must request upload information for _this_ catalog to know where
+        // to upload store paths.
         // For now calling publish just gets information about cache,
-        // but in the future it will get information about a publisher
+        // but in the future this will also provide access tokens and other info
+        // needed.
         tracing::debug!("Beginning publish of package...");
         let publish_response = client
             .publish(catalog_name, &self.env_metadata.package)
@@ -257,7 +262,11 @@ impl Publisher for PublishProvider {
             narinfos: None,
         };
 
-        // Step 4: tell the catalog the publish is complete
+        // Step 4: send the metadata for the built derivation to the catalog.
+        // TODO - Using nix path-info on the _egress-uri_ for the catalog to
+        // download the narinfos for each output of the derivation.  This
+        // should then be included in the subsequent publish API call.
+        // This will be skipped for metadata only store (or override).
         tracing::debug!("Publishing build in catalog...");
         client
             .publish_build(&catalog_name, &self.env_metadata.package, &build_info)
