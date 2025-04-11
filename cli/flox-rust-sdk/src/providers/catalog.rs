@@ -441,7 +441,7 @@ pub trait ClientTrait {
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<PublishResponse, PublishError>;
+    ) -> Result<PublishResponse, CatalogClientError>;
 
     /// Create a package within a user catalog
     async fn create_package(
@@ -622,22 +622,14 @@ impl ClientTrait for CatalogClient {
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<PublishResponse, PublishError> {
+    ) -> Result<PublishResponse, CatalogClientError> {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
         // Body contents aren't important for this request.
         let body = api_types::PublishRequest(serde_json::Map::new());
-        self.client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(&catalog, &package, &body).await.map_err(|e| match e {
-                APIError::ErrorResponse(e) => {
-                    debug!("publish error response: {:?}", e);
-                    if e.status() == 400 && e.detail == "unconfigured store" {
-                        PublishError::UnconfiguredCatalog
-                    } else {
-                        PublishError::CatalogClientError(CatalogClientError::APIError(APIError::ErrorResponse(e)))
-                    }
-                },
-                _ => PublishError::CatalogClientError(CatalogClientError::APIError(e)),
-            }).map(|resp| resp.into_inner())
+        self.client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(&catalog, &package, &body)
+            .await
+            .map_err( CatalogClientError::APIError).map(|resp| resp.into_inner())
     }
 
     async fn create_package(
@@ -938,7 +930,7 @@ impl ClientTrait for MockClient {
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,
-    ) -> Result<PublishResponse, PublishError> {
+    ) -> Result<PublishResponse, CatalogClientError> {
         let mock_resp = self
             .mock_responses
             .lock()
