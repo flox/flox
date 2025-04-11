@@ -974,6 +974,7 @@ pub enum ManifestError {
 /// The section where users can declare dependencies on other environments.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
 pub struct Include {
     #[serde(default)]
     pub environments: Vec<IncludeDescriptor>,
@@ -988,6 +989,7 @@ impl SkipSerializing for Include {
 /// The structure for how a user is able to declare a dependency on an environment.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
 #[serde(
     untagged,
     expecting = "Expected either a local or remote include descriptor."
