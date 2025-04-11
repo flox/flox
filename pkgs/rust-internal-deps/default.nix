@@ -40,7 +40,7 @@ let
       # they should be
       # a) bundled at buildtime if possible (binaries/packages)
       # b) use this version of nixpkgs i.e. (nix library utils such as `lib` and `runCommand`)
-      COMMON_NIXPKGS_URL = "path:${inputs.nixpkgs.outPath}";
+      COMMON_NIXPKGS_URL = "github:flox/nixpkgs/${inputs.nixpkgs.rev}?narHash=${inputs.nixpkgs.narHash}";
 
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
