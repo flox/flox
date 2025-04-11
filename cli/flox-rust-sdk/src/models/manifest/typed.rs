@@ -992,7 +992,7 @@ impl SkipSerializing for Include {
 #[serde(deny_unknown_fields)]
 #[serde(
     untagged,
-    expecting = "Expected either a local or remote include descriptor."
+    expecting = "Must specify included environment as { dir = <dir>, [name = <name>] }"
 )]
 pub enum IncludeDescriptor {
     Local {
