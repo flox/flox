@@ -22,12 +22,6 @@ impl IncludeFetcher {
         flox: &Flox,
         include_environment: &IncludeDescriptor,
     ) -> Result<LockedInclude, EnvironmentError> {
-        if self.base_directory.is_none() {
-            return Err(EnvironmentError::Recoverable(
-                RecoverableMergeError::CannotIncludeInRemote,
-            ));
-        };
-
         let (manifest, name) = match include_environment {
             IncludeDescriptor::Local { dir, name } => self.fetch_local(flox, dir, name),
             IncludeDescriptor::Remote { remote, name } => self.fetch_remote(flox, remote, name),
@@ -47,6 +41,12 @@ impl IncludeFetcher {
         dir: impl AsRef<Path>,
         name: &Option<String>,
     ) -> Result<(Manifest, String), EnvironmentError> {
+        if self.base_directory.is_none() {
+            return Err(EnvironmentError::Recoverable(
+                RecoverableMergeError::RemoteCannotIncludeLocal,
+            ));
+        };
+
         let path = self
             .expand_include_dir(dir)
             .map_err(EnvironmentError::Recoverable)?;
@@ -120,7 +120,7 @@ impl IncludeFetcher {
         dir: impl AsRef<Path>,
     ) -> Result<PathBuf, RecoverableMergeError> {
         let Some(base_directory) = &self.base_directory else {
-            return Err(RecoverableMergeError::CannotIncludeInRemote);
+            return Err(RecoverableMergeError::RemoteCannotIncludeLocal);
         };
 
         let dir = dir.as_ref();
