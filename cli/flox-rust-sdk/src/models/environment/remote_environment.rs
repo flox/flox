@@ -411,23 +411,14 @@ impl Environment for RemoteEnvironment {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::os::unix::fs::symlink;
-
-    use indoc::indoc;
+#[cfg(any(test, feature = "tests"))]
+pub mod test_helpers {
     use tempfile::tempdir_in;
 
     use super::*;
-    use crate::flox::test_helpers::flox_instance_with_optional_floxhub;
-    use crate::models::environment::managed_environment::test_helpers::{
-        mock_managed_environment_from_env_files,
-        mock_managed_environment_in,
-    };
-    use crate::models::lockfile::RecoverableMergeError;
-    use crate::providers::catalog::GENERATED_DATA;
+    use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
 
-    fn mock_remote_environment(
+    pub fn mock_remote_environment(
         flox: &Flox,
         contents: &str,
         owner: EnvironmentOwner,
@@ -447,6 +438,20 @@ mod tests {
         )
         .unwrap()
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::fs::symlink;
+
+    use indoc::indoc;
+
+    use super::test_helpers::mock_remote_environment;
+    use super::*;
+    use crate::flox::test_helpers::flox_instance_with_optional_floxhub;
+    use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_from_env_files;
+    use crate::models::lockfile::RecoverableMergeError;
+    use crate::providers::catalog::GENERATED_DATA;
 
     #[test]
     fn migrate_remote_gcroot_link_to_dir() {
@@ -515,7 +520,7 @@ mod tests {
         let EnvironmentError::Recoverable(RecoverableMergeError::Fetch { err, .. }) = err else {
             panic!("expected Fetch error, got: {err:?}");
         };
-        let EnvironmentError::Recoverable(RecoverableMergeError::CannotIncludeInRemote) = *err
+        let EnvironmentError::Recoverable(RecoverableMergeError::RemoteCannotIncludeLocal) = *err
         else {
             panic!("expected CannotIncludeInRemote error, got: {err:?}");
         };

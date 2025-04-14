@@ -445,8 +445,14 @@ pub struct LockedInclude {
     #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub name: String,
     pub descriptor: IncludeDescriptor,
-    // TODO: once we consider remote environments, add this field
-    // pub remote: Option<RemoteSource>
+    // TODO: Record generation if/when:
+    // 1. We have a need for it in presentation, e.g.
+    //   - https://github.com/flox/flox/issues/2948
+    // 2. Generations work has settled:
+    //   - https://github.com/flox/product/pull/881
+    //   - https://github.com/flox/product/pull/891
+    // 3. We've exposed it from `RemoteEnvironment`/`ManagedEnvironment`
+    // pub remote: Option<Generation>,
 }
 
 /// All the resolution failures for a single resolution request
@@ -1703,8 +1709,8 @@ pub enum RecoverableMergeError {
     #[error("{0}")]
     Catchall(String),
 
-    #[error("cannot include environments in remote environments")]
-    CannotIncludeInRemote,
+    #[error("remote environments cannot include local environments")]
+    RemoteCannotIncludeLocal,
 }
 
 pub mod test_helpers {
