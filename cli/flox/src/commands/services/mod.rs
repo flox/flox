@@ -110,13 +110,16 @@ pub struct ServicesEnvironment {
 impl ServicesEnvironment {
     /// Create a [ServicesEnvironment] from a [ConcreteEnvironment].
     ///
+    /// Will lock the environment if it's not already locked.
+    ///
     /// Returns an error if the environment doesn't support services.
     pub fn from_concrete_environment(
         flox: &Flox,
-        environment: ConcreteEnvironment,
+        mut environment: ConcreteEnvironment,
     ) -> Result<Self> {
         let socket = environment.services_socket_path(flox)?;
-        let manifest = environment.manifest(flox)?;
+        let lockfile: Lockfile = environment.lockfile(flox)?.into();
+        let manifest = lockfile.manifest;
 
         Ok(Self {
             environment,
