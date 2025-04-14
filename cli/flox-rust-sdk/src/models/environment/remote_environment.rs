@@ -520,7 +520,7 @@ mod tests {
         let EnvironmentError::Recoverable(RecoverableMergeError::Fetch { err, .. }) = err else {
             panic!("expected Fetch error, got: {err:?}");
         };
-        let EnvironmentError::Recoverable(RecoverableMergeError::CannotIncludeInRemote) = *err
+        let EnvironmentError::Recoverable(RecoverableMergeError::RemoteCannotIncludeLocal) = *err
         else {
             panic!("expected CannotIncludeInRemote error, got: {err:?}");
         };

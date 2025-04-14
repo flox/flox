@@ -1709,8 +1709,8 @@ pub enum RecoverableMergeError {
     #[error("{0}")]
     Catchall(String),
 
-    #[error("cannot include environments in remote environments")]
-    CannotIncludeInRemote,
+    #[error("remote environments cannot include local environments")]
+    RemoteCannotIncludeLocal,
 }
 
 pub mod test_helpers {
