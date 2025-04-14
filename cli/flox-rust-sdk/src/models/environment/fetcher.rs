@@ -1,7 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use indoc::formatdoc;
-
 use super::{ConcreteEnvironment, EnvironmentError, open_path};
 use crate::flox::Flox;
 use crate::models::environment::remote_environment::RemoteEnvironment;
@@ -51,41 +49,41 @@ impl IncludeFetcher {
             .expand_include_dir(dir)
             .map_err(EnvironmentError::Recoverable)?;
         let environment = open_path(flox, &path)?;
+        let name = name
+            .clone()
+            .unwrap_or_else(|| environment.name().to_string());
 
-        match &environment {
+        let lockfile = match environment {
             ConcreteEnvironment::Path(environment) => {
-                if !environment.lockfile_up_to_date()? {
+                let core_environment = environment.into_core_environment()?;
+                if let Some(lockfile) = core_environment.lockfile_if_up_to_date()? {
+                    lockfile
+                } else {
                     return Err(EnvironmentError::Recoverable(
-                        RecoverableMergeError::Catchall(formatdoc! {"
-                            cannot include environment since its manifest and lockfile are out of sync
-
-                            To resolve this issue run 'flox edit -d {}' and retry
-                        ", path.to_string_lossy()}.to_string()
-                        ),
+                        RecoverableMergeError::PathOutOfSync(path),
                     ));
                 }
             },
             ConcreteEnvironment::Managed(environment) => {
-                if environment.has_local_changes(flox)? {
+                let Some(lockfile) = environment.existing_lockfile(flox)? else {
                     return Err(EnvironmentError::Recoverable(
-                        RecoverableMergeError::Catchall(formatdoc! {"
-                            cannot include environment since it has changes not yet synced to a generation.
-
-                            To resolve this issue, run either
-                            * 'flox edit -d {} --sync' to commit your local changes to a new generation
-                            * 'flox edit -d {} --reset' to discard your local changes and reset to the latest generation
-                        ", path.to_string_lossy(), path.to_string_lossy()}.to_string())));
+                        RecoverableMergeError::ManagedOutOfSync(path),
+                    ));
+                };
+                if !environment.has_local_changes(flox)? {
+                    lockfile
+                } else {
+                    return Err(EnvironmentError::Recoverable(
+                        RecoverableMergeError::ManagedOutOfSync(path),
+                    ));
                 }
             },
             ConcreteEnvironment::Remote(_) => {
                 unreachable!("opening a path cannot result in a remote environment");
             },
-        }
+        };
 
-        let manifest = environment.manifest(flox)?;
-        let name = name
-            .clone()
-            .unwrap_or_else(|| environment.name().to_string());
+        let manifest = lockfile.manifest;
 
         Ok((manifest, name))
     }
@@ -105,7 +103,10 @@ impl IncludeFetcher {
             tempfile::tempdir_in(&flox.temp_dir).map_err(EnvironmentError::CreateTempDir)?;
         let environment = RemoteEnvironment::new_in(flox, tempdir.path(), pointer)?;
 
-        let manifest = environment.manifest(flox)?;
+        let lockfile = environment
+            .existing_lockfile(flox)?
+            .expect("remote environments should always be locked");
+        let manifest = lockfile.manifest;
         let name = name
             .clone()
             .unwrap_or_else(|| environment.name().to_string());
@@ -148,7 +149,7 @@ pub mod test_helpers {
 mod test {
     use std::fs;
 
-    use indoc::indoc;
+    use indoc::{formatdoc, indoc};
 
     use super::*;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};

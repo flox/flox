@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::LazyLock;
 
 use catalog_api_v1::types::{MessageLevel, SystemEnum};
@@ -1705,6 +1706,22 @@ pub enum RecoverableMergeError {
         err: Box<EnvironmentError>,
     },
 
+    #[error(
+        "cannot include environment since its manifest and lockfile are out of sync\n\
+         \n\
+         To resolve this issue run 'flox edit -d {0}' and retry\n"
+    )]
+    PathOutOfSync(PathBuf),
+
+    #[error(
+        "cannot include environment since it has changes not yet synced to a generation.\n\
+         \n\
+         To resolve this issue, run either\n\
+         * 'flox edit -d {0} --sync' to commit your local changes to a new generation\n\
+         * 'flox edit -d {0} --reset' to discard your local changes and reset to the latest generation\n"
+    )]
+    ManagedOutOfSync(PathBuf),
+
     /// Use this error when we don't need an error type to reuse in multiple places
     #[error("{0}")]
     Catchall(String),
@@ -1895,14 +1912,17 @@ pub(crate) mod tests {
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
-    use crate::flox::test_helpers::flox_instance;
+    use crate::flox::EnvironmentRef;
+    use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use crate::models::environment::Environment;
     use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
     use crate::models::environment::path_environment::test_helpers::{
         new_named_path_environment_in,
+        new_path_environment,
         new_path_environment_in,
     };
     use crate::models::environment::path_environment::tests::generate_path_environments_without_install_or_include;
+    use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
     use crate::models::manifest::raw::RawManifest;
     use crate::models::manifest::typed::{Include, Manifest, Vars};
     use crate::models::search::{PackageDetails, SearchLimit, SearchResults};
@@ -4535,5 +4555,75 @@ pub(crate) mod tests {
             indoc! {"multiple environments in include.environments have the name 'dep'
             A unique name can be provided with the 'name' field."}
         );
+    }
+
+    #[test]
+    fn merge_manifest_uses_the_merged_manifests_of_includes() {
+        let env_ref = EnvironmentRef::new("owner", "name").unwrap();
+        let (flox, _tempdir) = flox_instance_with_optional_floxhub(Some(env_ref.owner()));
+
+        // Create two "child" environments, local and remote.
+        let mut dep_child_local = new_path_environment(&flox, indoc! {r#"
+                version = 1
+
+                [vars]
+                child_local = "hi"
+            "#});
+        dep_child_local.lockfile(&flox).unwrap();
+
+        let _dep_child_remote = mock_remote_environment(
+            &flox,
+            indoc! {r#"
+                version = 1
+
+                [vars]
+                child_remote = "hi"
+            "#},
+            env_ref.owner().clone(),
+            Some(&env_ref.name().to_string()),
+        );
+
+        // Create a "parent" environment that includes the local and remote "children".
+        let mut dep_parent = new_path_environment(&flox, &formatdoc! {r#"
+                version = 1
+
+                [vars]
+                parent = "hi"
+
+                [include]
+                environments = [
+                    {{ dir = "{include_path}" }},
+                    {{ remote = "owner/name" }},
+                ]
+            "#, include_path = dep_child_local.parent_path().unwrap().to_string_lossy() });
+        dep_parent.lockfile(&flox).unwrap();
+
+        // Create a composer environment that indirectly includes the "children".
+        let mut composer = new_path_environment(&flox, &formatdoc! {r#"
+                version = 1
+
+                [vars]
+                composer = "hi"
+
+                [include]
+                environments = [
+                    {{ dir = "{include_path}" }},
+                ]
+            "#, include_path = &dep_parent.parent_path().unwrap().to_string_lossy() });
+
+        let lockfile: Lockfile = composer.lockfile(&flox).unwrap().into();
+        assert_eq!(
+            lockfile.manifest,
+            Manifest {
+                vars: Vars(BTreeMap::from([
+                    ("child_local".to_string(), "hi".to_string()),
+                    ("child_remote".to_string(), "hi".to_string()),
+                    ("parent".to_string(), "hi".to_string()),
+                    ("composer".to_string(), "hi".to_string()),
+                ])),
+                ..Default::default()
+            },
+            "composer should include fields from both indirect child includes"
+        )
     }
 }
