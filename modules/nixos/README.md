@@ -1,3 +1,29 @@
+### Testing [PR2873](https://github.com/flox/flox/pull/2873)
+
+Be sure to use the `brantley/systemd-nixosModule` branch
+when testing the Flox NixOS module:
+
+#### Without flake
+
+Update the remote for the clone found in `/etc/nixos/flox`,
+pull the latest changes and rebuild:
+```bash
+git -C /etc/nixos/flox remote set-url origin 'https://github.com/flox/flox?ref=brantley/systemd-nixosModule'
+git -C /etc/nixos/flox pull
+nixos-rebuild switch
+```
+
+#### Without flake
+
+Update the `flox` flake input and rebuild:
+```bash
+sed -i 's%"github:flox/flox"%"github:flox/flox/brantley/systemd-nixosModule"%' /etc/nixos/flake.nix
+nixos-rebuild switch
+```
+
+This is temporary until the Flox NixOS module is merged into the main branch.
+Once merged, you can revert to the use of `flox.url = "github:flox/flox"` instead.
+
 # Flox NixOS module
 
 NixOS modules provides a rich interface for
