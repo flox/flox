@@ -19,7 +19,7 @@ use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::{LockResult, LockedInclude, Lockfile, RecoverableMergeError, ResolveError};
 use super::manifest::raw::PackageToInstall;
-use super::manifest::typed::{ActivateMode, Manifest, ManifestError};
+use super::manifest::typed::{ActivateMode, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
 use crate::providers::buildenv::BuildEnvOutputs;
@@ -154,9 +154,6 @@ pub trait Environment: Send {
     /// Implementations may use process context from [Flox]
     /// to determine the current content of the manifest.
     fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError>;
-
-    /// Return the deserialized manifest
-    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError>;
 
     /// Return the path to rendered environment in the Nix store.
     ///

@@ -117,7 +117,7 @@ impl<State> CoreEnvironment<State> {
         }
     }
 
-    pub fn manifest(&self) -> Result<Manifest, CoreEnvironmentError> {
+    fn manifest(&self) -> Result<Manifest, CoreEnvironmentError> {
         toml::from_str(&self.manifest_contents()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)
     }
