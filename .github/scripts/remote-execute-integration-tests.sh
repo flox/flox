@@ -50,7 +50,8 @@ function upload_report_to_buildkite() {
     -F "tags[architecture]=$MATRIX_SYSTEM" \
     -F "tags[nix_flakeref]=github:flox/flox/$GITHUB_SHA" \
     -F "tags[nix_attribute]=packages.$MATRIX_SYSTEM.flox-cli-tests" \
-    https://analytics-api.buildkite.com/v1/uploads
+    https://analytics-api.buildkite.com/v1/uploads \
+    || true
 }
 trap 'upload_report_to_buildkite' EXIT
 
