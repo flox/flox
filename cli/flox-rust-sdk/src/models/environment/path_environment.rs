@@ -308,7 +308,11 @@ impl Environment for PathEnvironment {
         Ok(result)
     }
 
-    /// Read the environment definition file as a string
+    /// Extract the current content of the manifest
+    ///
+    /// This may differ from the locked manifest, which should typically be used unless you need to:
+    /// - provide the latest editable contents to the user
+    /// - avoid double-locking
     fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
         fs::read_to_string(self.manifest_path(flox)?).map_err(EnvironmentError::ReadManifest)
     }
