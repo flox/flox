@@ -44,7 +44,7 @@ use crate::models::floxmeta::{
 };
 use crate::models::lockfile::{LockResult, Lockfile};
 use crate::models::manifest::raw::PackageToInstall;
-use crate::models::manifest::typed::{IncludeDescriptor, Manifest};
+use crate::models::manifest::typed::IncludeDescriptor;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
     GitCommandBranchHashError,
@@ -1312,7 +1312,7 @@ impl ManagedEnvironment {
         // if the environment was modified primarily through editing the manifest manually.
         // Call `ensure_locked` to avoid locking of v0 manifests,
         // but permit pushing old manifests that are already locked.
-        core_environment.ensure_locked(flox)?;
+        let lockfile: Lockfile = core_environment.ensure_locked(flox)?.into();
 
         // Ensure the environment builds before we push it
         core_environment
@@ -1320,11 +1320,7 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::Build)?;
 
         // Ensure that the environment does not include other local ennvironments
-        check_for_local_includes(
-            &core_environment
-                .manifest()
-                .map_err(ManagedEnvironmentError::ReadLocalManifest)?,
-        )?;
+        check_for_local_includes(&lockfile)?;
 
         Self::push_new_without_building(flox, owner, name, force, dot_flox_path, core_environment)
     }
@@ -1442,17 +1438,17 @@ impl ManagedEnvironment {
                 Err(ManagedEnvironmentError::CheckoutOutOfSync)?
             }
 
-            // [sic] We do not _lock_ the environment here,
+            // we should already be locked here,
             // as a valid lockfile is a precondition for creating a generation.
+            let lockfile: Lockfile = local_checkout
+                .ensure_locked(flox)
+                .map_err(|_| ManagedEnvironmentError::CheckoutOutOfSync)?
+                .into();
             local_checkout
                 .build(flox)
                 .map_err(ManagedEnvironmentError::Build)?;
 
-            check_for_local_includes(
-                &local_checkout
-                    .manifest()
-                    .map_err(ManagedEnvironmentError::ReadLocalManifest)?,
-            )?;
+            check_for_local_includes(&lockfile)?;
         }
 
         // Fetch the remote branch into sync branch
@@ -1636,7 +1632,8 @@ impl ManagedEnvironment {
 }
 
 /// Ensure that the environment does not include local includes before pushing it to FloxHub
-fn check_for_local_includes(manifest: &Manifest) -> Result<(), ManagedEnvironmentError> {
+fn check_for_local_includes(lockfile: &Lockfile) -> Result<(), ManagedEnvironmentError> {
+    let manifest = lockfile.user_manifest();
     let has_local_include = manifest
         .include
         .environments
