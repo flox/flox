@@ -11,7 +11,7 @@ use flox_core::canonical_path::CanonicalPath;
 use pollster::FutureExt as _;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::{debug, info_span, instrument};
+use tracing::{debug, info_span, instrument, trace};
 
 use super::catalog::ClientTrait;
 use super::nix::{self, nix_base_command};
@@ -846,6 +846,73 @@ fn check_store_paths(
     })
 }
 
+/// Create GC roots for the given store paths.
+/// All provided paths must exist and be valid.
+/// It's recommended to run [check_store_paths] to verify the validity of the paths.
+/// If a gc process may be runnin in the background there is a short time
+/// in which paths returned as valid by [check_store_paths] are deleted
+/// before a temproot can be set.
+/// In that case checking and setting gc-roots can be retried safely
+/// until setting gc roots succeeds.
+///
+/// Gc roots are created in the provided `gc_root_base_dir`
+/// with a unique prefix _per call_ to this function:
+///
+/// ```text
+/// <basedir>/
+///     gc-root.rqw2rr3-1
+///     gc-root.rqw2rr3-2
+///     gc-root.rqw2rr3-3
+///     gc-root.i1343ca-1   # separate call to create_gc_root_in()
+/// ```
+///
+/// as they would otherwise override exiting roots.
+/// It is advisable to place the <basedir> under `/tmp`
+/// to allow paths to be GC'd eventually if they are otherwise unused.
+pub(crate) fn create_gc_root_in(
+    paths: impl IntoIterator<Item = impl AsRef<Path>>,
+    gc_root_prefix: impl AsRef<Path>,
+) -> Result<(), BuildEnvError> {
+    let mut command = nix::nix_base_command();
+    command.stdin(Stdio::piped());
+    command.stderr(Stdio::null());
+    command.stdout(Stdio::piped());
+    command.args(["build", "--stdin"]);
+    // avoid substitution or builds
+    command.args(["--offline", "-j", "0"]);
+    command.arg("--out-link");
+    command.arg(gc_root_prefix.as_ref());
+
+    debug!(cmd=%command.display(), "bulk setting gc roots for store_paths (paths passed to stdin)");
+
+    let mut child = command.spawn().map_err(BuildEnvError::CallNixBuild)?;
+    let stdin = child.stdin.as_mut().unwrap();
+
+    let paths = paths
+        .into_iter()
+        .map(|p| p.as_ref().to_string_lossy().into_owned())
+        .collect::<HashSet<_>>();
+
+    for path in paths.iter() {
+        trace!(%path, "setting gc root for store path");
+        stdin.write_all(path.as_bytes()).unwrap();
+        stdin.write_all(b"\n").unwrap();
+    }
+
+    stdin.flush().unwrap();
+
+    let output = child
+        .wait_with_output()
+        .map_err(BuildEnvError::CallNixBuild)?;
+
+    if !output.status.success() {
+        return Err(BuildEnvError::Link(
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        ));
+    }
+
+    Ok(())
+}
 #[cfg(test)]
 mod realise_nixpkgs_tests {
 
