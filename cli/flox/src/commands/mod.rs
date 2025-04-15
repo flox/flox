@@ -1373,11 +1373,10 @@ fn activated_environments() -> ActiveEnvironments {
 pub(super) async fn ensure_environment_trust(
     config: &mut Config,
     flox: &Flox,
-    environment: &RemoteEnvironment,
+    env_ref: &EnvironmentRef,
+    manifest_contents: &String,
 ) -> Result<()> {
-    let env_ref = EnvironmentRef::new_from_parts(environment.owner().clone(), environment.name());
-
-    let trust = config.flox.trusted_environments.get(&env_ref);
+    let trust = config.flox.trusted_environments.get(env_ref);
 
     // Official Flox environments are trusted by default
     // Only applies to the current flox owned FloxHub,
@@ -1493,7 +1492,7 @@ pub(super) async fn ensure_environment_trust(
                 return Ok(());
             },
             Choices::Abort => bail!("Denied {env_ref} (temporary)"),
-            Choices::ShowConfig => eprintln!("{}", environment.manifest_contents(flox)?),
+            Choices::ShowConfig => eprintln!("{}", manifest_contents),
         }
     }
 }

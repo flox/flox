@@ -118,7 +118,13 @@ impl Activate {
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
             if !self.trust {
-                ensure_environment_trust(&mut config, &flox, env).await?;
+                ensure_environment_trust(
+                    &mut config,
+                    &flox,
+                    &env.env_ref(),
+                    &env.manifest_contents(&flox)?,
+                )
+                .await?;
             }
         }
 
