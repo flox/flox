@@ -176,7 +176,8 @@ jobs:
             -F "tags[architecture]=$system" \
             -F "tags[nix_flakeref]=github:flox/flox/$GITHUB_SHA" \
             -F "tags[nix_attribute]=devShells.$system.default" \
-            https://analytics-api.buildkite.com/v1/uploads
+            https://analytics-api.buildkite.com/v1/uploads \
+            || true
 
 
       # This differs from `nix-build-bats-tests` in that:
