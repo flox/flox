@@ -39,6 +39,7 @@ use crate::models::manifest::raw::{
 };
 use crate::models::manifest::typed::{Manifest, ManifestError};
 use crate::providers::buildenv::{
+    self,
     BuildEnv,
     BuildEnvError,
     BuildEnvNix,
@@ -274,7 +275,7 @@ impl CoreEnvironment<()> {
         out_link_path: impl AsRef<Path>,
         store_path: &BuiltStorePath,
     ) -> Result<(), CoreEnvironmentError> {
-        BuildEnvNix.link(out_link_path, store_path)?;
+        buildenv::create_gc_root_in([store_path.as_path()], out_link_path)?;
 
         Ok(())
     }

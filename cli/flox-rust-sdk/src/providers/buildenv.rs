@@ -138,11 +138,6 @@ pub trait BuildEnv {
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError>;
 
-    fn link(
-        &self,
-        store_path: impl AsRef<Path>,
-        destination: &BuiltStorePath,
-    ) -> Result<(), BuildEnvError>;
 }
 
 pub struct BuildEnvNix;
@@ -725,35 +720,6 @@ impl BuildEnv for BuildEnvNix {
         let outputs = self.call_buildenv_nix(lockfile_path, service_config_path)?;
 
         Ok(outputs)
-    }
-
-    fn link(
-        &self,
-        destination: impl AsRef<Path>,
-        store_path: &BuiltStorePath,
-    ) -> Result<(), BuildEnvError> {
-        let mut nix_build_command = self.base_command();
-
-        nix_build_command.arg("build").arg(store_path.as_ref());
-        nix_build_command
-            .arg("--out-link")
-            .arg(destination.as_ref());
-
-        // avoid trying to substitute
-        nix_build_command.arg("--offline");
-
-        debug!(cmd=%nix_build_command.display(), "linking store path");
-
-        let output = nix_build_command
-            .output()
-            .map_err(BuildEnvError::CallNixBuild)?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(BuildEnvError::Link(stderr.to_string()));
-        }
-
-        Ok(())
     }
 }
 
