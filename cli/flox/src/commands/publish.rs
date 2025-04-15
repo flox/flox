@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -76,14 +76,11 @@ impl Publish {
         }
 
         environment_subcommand_metric!("publish", self.environment);
-        let env = self
+        let mut env = self
             .environment
             .detect_concrete_environment(&flox, "Publish")?;
-        let target = Self::get_publish_target(
-            &env.manifest(&flox)
-                .context("failed to get environment manifest")?,
-            &self.publish_target,
-        )?;
+        let lockfile: Lockfile = env.lockfile(&flox)?.into();
+        let target = Self::get_publish_target(&lockfile.manifest, &self.publish_target)?;
         Self::publish(config, flox, env, target, self.metadata_only, self.cache).await
     }
 
