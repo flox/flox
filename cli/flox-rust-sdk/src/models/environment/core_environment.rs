@@ -89,7 +89,11 @@ impl<State> CoreEnvironment<State> {
         self.env_dir.join(LOCKFILE_FILENAME)
     }
 
-    /// Read the manifest file
+    /// Extract the current content of the manifest from disk.
+    ///
+    /// This may differ from the locked manifest, which should typically be used unless you need to:
+    /// - provide the latest editable contents to the user
+    /// - avoid double-locking
     pub fn manifest_contents(&self) -> Result<String, CoreEnvironmentError> {
         fs::read_to_string(self.manifest_path()).map_err(CoreEnvironmentError::OpenManifest)
     }

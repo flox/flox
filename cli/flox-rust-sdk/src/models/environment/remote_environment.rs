@@ -336,6 +336,10 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Extract the current content of the manifest
+    ///
+    /// This may differ from the locked manifest, which should typically be used unless you need to:
+    /// - provide the latest editable contents to the user
+    /// - avoid double-locking
     fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
         self.inner.manifest_contents(flox)
     }

@@ -419,7 +419,11 @@ impl Environment for ManagedEnvironment {
         Ok(result)
     }
 
-    /// Extract the current content of the manifest
+    /// Extract the current content of the manifest from disk.
+    ///
+    /// This may differ from the locked manifest, which should typically be used unless you need to:
+    /// - provide the latest editable contents to the user
+    /// - avoid double-locking
     fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
         let local_checkout = self.local_env_or_copy_current_generation(flox)?;
         let manifest = local_checkout.manifest_contents()?;
