@@ -538,17 +538,7 @@ fn url_for_remote_containing_current_rev(
     }
 }
 
-fn gather_base_repo_meta(
-    flox: &Flox,
-    environment: &impl Environment,
-) -> Result<LockedUrlInfo, PublishError> {
-    // Gather locked base catalog page info
-    // We want to make sure we don't incur a lock operation, it must be locked and committed to the repo
-    // So we do so with an immutable Environment reference.
-    let lockfile_path = CanonicalPath::new(environment.lockfile_path(flox)?);
-    let lockfile = Lockfile::read_from_file(&lockfile_path.unwrap())
-        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
-
+fn gather_base_repo_meta(lockfile: &Lockfile) -> Result<LockedUrlInfo, PublishError> {
     let install_ids_in_toplevel_group = lockfile
         .manifest
         .pkg_descriptors_in_toplevel_group()
@@ -593,6 +583,15 @@ pub fn check_environment_metadata(
     environment: &impl Environment,
     pkg: &str,
 ) -> Result<CheckedEnvironmentMetadata, PublishError> {
+    // We want to make sure we don't incur a lock operation, it must be locked and committed to the repo
+    // So we do so with an immutable Environment reference.
+    let Some(lockfile) = environment
+        .existing_lockfile(flox)
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?
+    else {
+        return Err(build_repo_err("Environment must be locked."));
+    };
+
     // Gather build repo info
     let git = match environment.parent_path() {
         Ok(env_path) => GitCommandProvider::discover(env_path)
@@ -606,8 +605,7 @@ pub fn check_environment_metadata(
     })?;
 
     let build_repo_meta = gather_build_repo_meta(&git)?;
-
-    let base_repo_meta = gather_base_repo_meta(flox, environment)?;
+    let base_repo_meta = gather_base_repo_meta(&lockfile)?;
 
     let manifest = environment.manifest(flox)?;
     let description = manifest
