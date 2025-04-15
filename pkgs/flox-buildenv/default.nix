@@ -1,12 +1,12 @@
 {
   cacert,
-  darwin,
+  callPackage,
   coreutils,
+  darwin,
   flox-interpreter,
   glibcLocalesUtf8,
   lib,
   nix,
-  perl,
   runCommandNoCC,
   stdenv,
   writeText,
@@ -46,6 +46,10 @@ let
       # Static environment variables
     ''
   );
+  perl = callPackage ./flox-perl.nix {
+    # Script which determines the modules to keep.
+    perlScript = ../../buildenv/builder.pl;
+  };
 in
 runCommandNoCC "${pname}-${version}"
   {
