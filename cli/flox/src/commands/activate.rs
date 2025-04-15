@@ -20,7 +20,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_SERVICES_SOCKET_VAR,
 };
 use flox_rust_sdk::models::lockfile::LockResult;
-use flox_rust_sdk::models::manifest::typed::{ActivateMode, Inner};
+use flox_rust_sdk::models::manifest::typed::{ActivateMode, IncludeDescriptor, Inner};
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
@@ -42,6 +42,7 @@ use crate::commands::services::ServicesCommandsError;
 use crate::commands::{
     EnvironmentSelectError,
     ensure_environment_trust,
+    render_composition_manifest,
     uninitialized_environment_description,
 };
 use crate::config::{Config, EnvironmentPromptConfig};
@@ -68,7 +69,8 @@ pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     pub environment: EnvironmentSelect,
 
-    /// Trust a remote environment temporarily for this activation
+    /// Trust a remote environment temporarily for this activation.
+    /// This is not applied to includes of remote environments.
     #[bpaf(long, short)]
     pub trust: bool,
 
@@ -122,6 +124,7 @@ impl Activate {
                     &mut config,
                     &flox,
                     &env.env_ref(),
+                    false,
                     &env.manifest_contents(&flox)?,
                 )
                 .await?;
@@ -162,7 +165,7 @@ impl Activate {
     // but for now just hack through the is_ephemeral bool.
     pub async fn activate(
         self,
-        config: Config,
+        mut config: Config,
         flox: Flox,
         mut concrete_environment: ConcreteEnvironment,
         is_ephemeral: bool,
@@ -178,6 +181,21 @@ impl Activate {
             LockResult::Unchanged(lockfile) => lockfile,
         };
         let manifest = &lockfile.manifest;
+
+        if let Some(compose) = &lockfile.compose {
+            for include in &compose.include {
+                if let IncludeDescriptor::Remote { ref remote, .. } = include.descriptor {
+                    ensure_environment_trust(
+                        &mut config,
+                        &flox,
+                        remote,
+                        true,
+                        &render_composition_manifest(&include.manifest)?,
+                    )
+                    .await?;
+                }
+            }
+        }
 
         // breadcrumb metric to estimate use of composition
         let has_includes = lockfile.compose.is_some();
