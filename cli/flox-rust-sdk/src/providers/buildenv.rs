@@ -137,12 +137,26 @@ pub trait BuildEnv {
         lockfile: &Path,
         service_config_path: Option<PathBuf>,
     ) -> Result<BuildEnvOutputs, BuildEnvError>;
-
 }
 
-pub struct BuildEnvNix;
+pub struct BuildEnvNix<P> {
+    gc_root_base_path: P,
+}
 
-impl BuildEnvNix {
+impl<P> BuildEnvNix<P>
+where
+    P: AsRef<Path>,
+{
+    pub fn new(gc_root_base_path: P) -> BuildEnvNix<P> {
+        BuildEnvNix { gc_root_base_path }
+    }
+
+    /// Create a new gc root path in [Self::gc_root_base_path]
+    /// with a unique prefix.
+    fn new_gc_root_path(&self, prefix: impl AsRef<str>) -> PathBuf {
+        self.gc_root_base_path.as_ref().join(prefix.as_ref())
+    }
+
     fn base_command(&self) -> Command {
         let mut nix_build_command = nix_base_command();
         // allow impure language features such as `builtins.storePath`,
@@ -644,7 +658,10 @@ impl BuildEnvNix {
     }
 }
 
-impl BuildEnv for BuildEnvNix {
+impl<P> BuildEnv for BuildEnvNix<P>
+where
+    P: AsRef<Path>,
+{
     #[instrument(skip_all, fields(progress = "Building environment"))]
     fn build(
         &self,
@@ -881,8 +898,23 @@ pub(crate) fn create_gc_root_in(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod test_helpers {
+    use tempfile::TempDir;
+
+    use super::*;
+
+    pub(super) fn buildenv_instance() -> BuildEnvNix<TempDir> {
+        let tempdir = TempDir::new().unwrap();
+        BuildEnvNix::new(tempdir)
+    }
+}
+
 #[cfg(test)]
 mod realise_nixpkgs_tests {
+
+    use test_helpers::buildenv_instance;
 
     use super::*;
     use crate::models::lockfile;
@@ -946,7 +978,7 @@ mod realise_nixpkgs_tests {
         // especially if they are built by a previous run of the test suite.
         // hence we can't check if they are invalid before building.
 
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
 
         let result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
         assert!(result.is_ok());
@@ -965,7 +997,7 @@ mod realise_nixpkgs_tests {
         let client = MockClient::new(None::<String>).unwrap();
 
         // build the package to ensure it is in the store
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         buildenv
             .realise_nixpkgs(&client, &locked_package, &Default::default())
             .expect("'hello' package should build");
@@ -1001,7 +1033,7 @@ mod realise_nixpkgs_tests {
         // replace the attr_path with one that is known to fail to evaluate
         locked_package.attr_path = "AAAAAASomeThingsFailToEvaluate".to_string();
 
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
         let err = result.expect_err("realising nixpkgs#AAAAAASomeThingsFailToEvaluate should fail");
         assert!(matches!(err, BuildEnvError::Realise2 { .. }));
@@ -1029,7 +1061,7 @@ mod realise_nixpkgs_tests {
             invalid_store_path,
         );
 
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
         assert!(result.is_ok(), "{}", result.unwrap_err());
     }
@@ -1057,7 +1089,7 @@ mod realise_nixpkgs_tests {
             invalid_store_path,
         );
 
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
         assert!(result.is_ok(), "{}", result.unwrap_err());
     }
@@ -1076,7 +1108,7 @@ mod realise_nixpkgs_tests {
             }]);
         client.push_store_info_response(resp);
 
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let subst_resp = buildenv
             .try_substitute_published_pkg(&client, &locked_package)
             .unwrap();
@@ -1094,7 +1126,7 @@ mod realise_nixpkgs_tests {
         resp.items.insert(fake_store_path.clone(), vec![]);
         client.push_store_info_response(resp);
 
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let subst_resp = buildenv
             .try_substitute_published_pkg(&client, &locked_package)
             .unwrap();
@@ -1123,7 +1155,7 @@ mod realise_nixpkgs_tests {
         ]);
         client.push_store_info_response(resp);
 
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let subst_resp = buildenv
             .try_substitute_published_pkg(&client, &locked_package)
             .unwrap();
@@ -1151,7 +1183,7 @@ mod realise_nixpkgs_tests {
             ]);
         client.push_store_info_response(resp);
 
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
         assert!(matches!(result, Err(BuildEnvError::BuildPublishedPackage)));
     }
@@ -1178,6 +1210,7 @@ mod realise_flakes_tests {
 
     use indoc::formatdoc;
     use tempfile::TempDir;
+    use test_helpers::buildenv_instance;
 
     use super::*;
     use crate::models::manifest::typed::PackageDescriptorFlake;
@@ -1302,7 +1335,7 @@ mod realise_flakes_tests {
     #[test]
     fn flake_build_success() {
         let locked_package = MockedLockedPackageFlake::builder().unique(true).build();
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
 
         assert!(
             !buildenv
@@ -1330,7 +1363,7 @@ mod realise_flakes_tests {
         let locked_package = MockedLockedPackageFlake::builder()
             .succeed_build(false)
             .build();
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let result = buildenv.realise_flakes(&locked_package, &Default::default());
         let err = result.expect_err("realising flake should fail");
         assert!(matches!(err, BuildEnvError::Realise2 { .. }));
@@ -1344,7 +1377,7 @@ mod realise_flakes_tests {
             .unique(true)
             .build();
 
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         assert!(
             !buildenv
                 .check_store_path(locked_package.locked_installable.outputs.values())
@@ -1368,7 +1401,7 @@ mod realise_flakes_tests {
             *locked_path = env!("GIT_PKG").to_string();
         }
 
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         assert!(
             buildenv
                 .check_store_path(locked_package.locked_installable.outputs.values())
@@ -1383,6 +1416,8 @@ mod realise_flakes_tests {
 
 #[cfg(test)]
 mod realise_store_path_tests {
+    use test_helpers::buildenv_instance;
+
     use super::*;
     use crate::models::manifest::typed::DEFAULT_PRIORITY;
 
@@ -1401,7 +1436,7 @@ mod realise_store_path_tests {
 
     #[test]
     fn store_path_build_success_if_valid() {
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let locked = mock_store_path(true);
 
         // show that the store path is valid
@@ -1414,7 +1449,7 @@ mod realise_store_path_tests {
 
     #[test]
     fn store_path_build_failure_if_invalid() {
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let locked = mock_store_path(false);
 
         // show that the store path is invalid
@@ -1432,6 +1467,8 @@ mod buildenv_tests {
     use std::collections::HashSet;
     use std::os::unix::fs::PermissionsExt;
 
+    use test_helpers::buildenv_instance;
+
     use super::*;
     use crate::providers::catalog::{GENERATED_DATA, MANUALLY_GENERATED, MockClient};
 
@@ -1446,7 +1483,7 @@ mod buildenv_tests {
     }
 
     static BUILDENV_RESULT_SIMPLE_PACKAGE: LazyLock<BuildEnvOutputs> = LazyLock::new(|| {
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/hello/manifest.lock");
         let client = MockClient::new(None::<String>).unwrap();
         buildenv.build(&client, &lockfile_path, None).unwrap()
@@ -1489,7 +1526,7 @@ mod buildenv_tests {
     }
     #[test]
     fn build_contains_build_script_and_output() {
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-noop/manifest.lock");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
@@ -1505,7 +1542,7 @@ mod buildenv_tests {
 
     #[test]
     fn build_on_activate_lockfile() {
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/on-activate/manifest.lock");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
@@ -1553,7 +1590,7 @@ mod buildenv_tests {
 
     #[test]
     fn detects_conflicting_packages() {
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict.json");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None);
@@ -1576,7 +1613,7 @@ mod buildenv_tests {
 
     #[test]
     fn resolves_conflicting_packages_with_priority() {
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict-resolved.json");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None);
@@ -1597,7 +1634,7 @@ mod buildenv_tests {
     /// should be escaped and printed as   `\'baz` (literally)
     #[test]
     fn environment_escapes_variables() {
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/vars_escape/manifest.lock");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
@@ -1618,7 +1655,7 @@ mod buildenv_tests {
 
     #[test]
     fn verify_build_closure_contains_only_toplevel_packages() {
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-all-toplevel.json");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
@@ -1642,7 +1679,7 @@ mod buildenv_tests {
 
     #[test]
     fn verify_build_closure_contains_only_hello_with_runtime_packages_attribute() {
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-only-hello.json");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
@@ -1666,7 +1703,7 @@ mod buildenv_tests {
 
     #[test]
     fn verify_build_closure_can_only_select_toplevel_packages_from_runtime_packages_attribute() {
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-toplevel.json");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None);
@@ -1688,7 +1725,7 @@ mod buildenv_tests {
 
     #[test]
     fn verify_build_closure_cannot_select_nonexistent_packages_in_runtime_packages_attribute() {
-        let buildenv = BuildEnvNix;
+        let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-found.json");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None);
