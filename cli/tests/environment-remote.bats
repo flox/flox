@@ -59,6 +59,21 @@ function make_empty_remote_env() {
   rm -rf local
 }
 
+function make_composer_with_remote_include() {
+  REMOTE_NAME="test"
+  make_empty_remote_env "$REMOTE_NAME"
+
+  "$FLOX_BIN" init
+  "$FLOX_BIN" edit -f - <<EOF
+version = 1
+
+[include]
+environments = [
+  { remote = "${OWNER}/${REMOTE_NAME}" },
+]
+EOF
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=hermetic,remote,remote:hermetic
@@ -160,7 +175,15 @@ EOF
 
   run "$FLOX_BIN" activate --remote "$OWNER/test"
   assert_failure
-  assert_output --partial "Environment $OWNER/test is not trusted."
+  assert_output --partial "The environment $OWNER/test is not trusted."
+}
+
+@test "m10.0: 'activate' fails if included remote environment is not trusted" {
+  make_composer_with_remote_include
+
+  run "$FLOX_BIN" activate -- true
+  assert_failure
+  assert_output --partial "The included environment $OWNER/test is not trusted."
 }
 
 # We can use the `--trust` flag to trust the environment temporarily.
@@ -172,6 +195,14 @@ EOF
   assert_success
 }
 
+@test "m10.1: 'activate --trust' isn't supported for included remote environment" {
+  make_composer_with_remote_include
+
+  run "$FLOX_BIN" activate --trust -- true
+  assert_failure
+  assert_output --partial "The included environment $OWNER/test is not trusted."
+}
+
 # We can use the `config to trust a specific remote environment.
 # The `trust` flag is not required when activating a trusted environment.
 # bats test_tags=remote,activate,trust,remote:activate:trust-config
@@ -180,6 +211,14 @@ EOF
 
   run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/test'" "trust"
   run "$FLOX_BIN" activate --remote "$OWNER/test" -- true
+  assert_success
+}
+
+@test "m10.2: 'activate' succeeds if included remote environment is trusted by config" {
+  make_composer_with_remote_include
+
+  run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/test'" "trust"
+  run "$FLOX_BIN" activate -- true
   assert_success
 }
 
@@ -205,6 +244,15 @@ EOF
 
   run "$FLOX_BIN" activate --remote "$OWNER/test" --trust -- true
   assert_success
+}
+
+@test "m10.0: 'activate' fails if included remote environment is denied by config" {
+  make_composer_with_remote_include
+
+  run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/test'" "deny"
+  run "$FLOX_BIN" activate --trust -- true
+  assert_failure
+  assert_output --partial "The included environment $OWNER/test is not trusted."
 }
 
 # bats test_tags=remote,activate,trust,remote:activate:trust-current-user

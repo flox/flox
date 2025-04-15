@@ -1368,35 +1368,40 @@ pub(super) async fn ensure_environment_trust(
     config: &mut Config,
     flox: &Flox,
     env_ref: &EnvironmentRef,
+    env_included: bool,
     manifest_contents: &String,
 ) -> Result<()> {
     let trust = config.flox.trusted_environments.get(env_ref);
+    let environment_prefix = match env_included {
+        true => "included environment",
+        false => "environment",
+    };
 
     // Official Flox environments are trusted by default
     // Only applies to the current flox owned FloxHub,
     // so this rule might need to be revisited in the future.
     if env_ref.owner().as_str() == "flox" {
-        debug!("Official Flox environment {env_ref} is trusted by default");
+        debug!("Official Flox {environment_prefix} {env_ref} is trusted by default");
         return Ok(());
     }
 
     if let Some(ref token) = flox.floxhub_token {
         if token.handle() == env_ref.owner().as_str() {
-            debug!("environment {env_ref} is trusted by token");
+            debug!("{environment_prefix} {env_ref} is trusted by token");
             return Ok(());
         }
     }
 
     if matches!(trust, Some(EnvironmentTrust::Trust)) {
-        debug!("environment {env_ref} is trusted by config");
+        debug!("{environment_prefix} {env_ref} is trusted by config");
         return Ok(());
     }
 
     if matches!(trust, Some(EnvironmentTrust::Deny)) {
-        debug!("environment {env_ref} is denied by config");
+        debug!("{environment_prefix} {env_ref} is denied by config");
 
         let message = formatdoc! {"
-            Environment {env_ref} is not trusted.
+            The {environment_prefix} {env_ref} is not trusted.
 
             Run 'flox config --set trusted_environments.{env_ref} trust' to trust it."};
         bail!("{message}");
@@ -1425,7 +1430,7 @@ pub(super) async fn ensure_environment_trust(
     }
 
     let message = formatdoc! {"
-        Environment {env_ref} is not trusted.
+        The {environment_prefix} {env_ref} is not trusted.
 
         flox environments do not run in a sandbox.
         Activation hooks can run arbitrary code on your machine.
@@ -1438,7 +1443,7 @@ pub(super) async fn ensure_environment_trust(
     }
 
     loop {
-        let message = format!("Do you trust {env_ref}?");
+        let message = format!("Do you trust the {environment_prefix} {env_ref}?");
         let choice = Dialog {
             message: &message,
             help_message: None,
@@ -1467,7 +1472,7 @@ pub(super) async fn ensure_environment_trust(
                 )
                 .context("Could not write token to config")?;
                 let _ = mem::replace(config, Config::parse()?);
-                info!("Trusted environment {env_ref} (saved choice)",);
+                info!("Trusted {environment_prefix} {env_ref} (saved choice)",);
                 return Ok(());
             },
             Choices::Deny => {
@@ -1482,7 +1487,7 @@ pub(super) async fn ensure_environment_trust(
                 bail!("Denied {env_ref} (saved choice).");
             },
             Choices::TrustTemporarily => {
-                info!("Trusted environment {env_ref} (temporary)");
+                info!("Trusted {environment_prefix} {env_ref} (temporary)");
                 return Ok(());
             },
             Choices::Abort => bail!("Denied {env_ref} (temporary)"),
