@@ -51,7 +51,6 @@ use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     DOT_FLOX,
     DotFlox,
-    Environment,
     EnvironmentError,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
     ManagedPointer,
@@ -59,6 +58,7 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     open_path,
 };
+use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::models::{env_registry, environment_ref};
 use futures::Future;
 use indoc::{formatdoc, indoc};
@@ -67,7 +67,8 @@ use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use thiserror::Error;
 use time::{Duration, OffsetDateTime};
-use toml_edit::Key;
+use toml_edit::visit_mut::VisitMut;
+use toml_edit::{Item, Key, KeyMut, Value};
 use tracing::{debug, info};
 use url::Url;
 use xdg::BaseDirectories;
@@ -1563,6 +1564,41 @@ fn is_current_dir(environment: &UninitializedEnvironment) -> Result<bool> {
         },
         UninitializedEnvironment::Remote(_) => Ok(false),
     }
+}
+
+/// Render a merged or included `Manifest` to a string for displaying to the user.
+///
+/// `Environment::manifest_contents` should be used for non-composition
+/// manifests so that it matches what the user has on disk.
+fn render_composition_manifest(manifest: &Manifest) -> Result<String> {
+    // A visitor that converts inline tables to proper tables
+    // Nested tables are rendered as `dotted` tables.
+    // The default behavior when instantiating with `Visitor::new_for_document`,
+    // is to render toplevel tables as non-dotted, sections.
+    struct Visitor {
+        dotted: bool,
+    }
+    impl Visitor {
+        fn new_for_document() -> Self {
+            Visitor { dotted: false }
+        }
+    }
+    impl VisitMut for Visitor {
+        fn visit_table_like_kv_mut(&mut self, _key: KeyMut<'_>, node: &mut Item) {
+            if let toml_edit::Item::Value(Value::InlineTable(inline_table)) = node {
+                let mut table = std::mem::take(inline_table).into_table();
+                table.set_implicit(true);
+                table.set_dotted(self.dotted);
+                toml_edit::visit_mut::visit_table_mut(&mut Visitor { dotted: true }, &mut table);
+                *node = toml_edit::Item::Table(table);
+            }
+        }
+    }
+
+    let mut document = toml_edit::ser::to_document(manifest)?;
+    toml_edit::visit_mut::visit_document_mut(&mut Visitor::new_for_document(), &mut document);
+
+    Ok(document.to_string())
 }
 
 /// Check if the environment needs to be migrated to version 1.
