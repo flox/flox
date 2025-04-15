@@ -150,12 +150,14 @@ mod test {
     use std::fs;
 
     use indoc::{formatdoc, indoc};
+    use pretty_assertions::assert_eq;
 
     use super::*;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use crate::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_in;
     use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
+    use crate::models::lockfile::LockResult;
 
     #[test]
     fn fetch_path_relative_path() {
@@ -339,7 +341,7 @@ mod test {
         );
 
         // Open the remote environment in the default location to simulate an existing activation.
-        let open_env = RemoteEnvironment::new(
+        let mut open_env = RemoteEnvironment::new(
             &flox,
             ManagedPointer::new(
                 env_ref.owner().clone(),
@@ -348,7 +350,12 @@ mod test {
             ),
         )
         .unwrap();
-        let open_env_manifest_previous = open_env.manifest(&flox).unwrap();
+        let open_env_lockfile_previous = match open_env.lockfile(&flox).unwrap() {
+            LockResult::Unchanged(lockfile) => lockfile,
+            LockResult::Changed(_) => {
+                panic!("remote environments should already be locked")
+            },
+        };
 
         // Modify the remote environment with a new generation.
         let manifest_contents = indoc! {r#"
@@ -381,9 +388,14 @@ mod test {
             "fetch should get the new generation"
         );
 
+        let open_env_lockfile_now = match open_env.lockfile(&flox).unwrap() {
+            LockResult::Unchanged(lockfile) => lockfile,
+            LockResult::Changed(_) => {
+                panic!("remote environments should already be locked")
+            },
+        };
         assert_eq!(
-            open_env.manifest(&flox).unwrap(),
-            open_env_manifest_previous,
+            open_env_lockfile_now, open_env_lockfile_previous,
             "fetch should not affect the generation of an already open environment"
         );
     }
