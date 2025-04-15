@@ -13,11 +13,10 @@ use flox_rust_sdk::providers::flake_installable_locker::LockedInstallable;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use indoc::formatdoc;
 use itertools::Itertools;
-use toml_edit::visit_mut::VisitMut;
-use toml_edit::{Item, KeyMut, Value};
 use tracing::{debug, instrument};
 
 use super::{EnvironmentSelect, environment_select};
+use crate::commands::render_composition_manifest;
 use crate::environment_subcommand_metric;
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
@@ -114,44 +113,12 @@ impl List {
         lockfile: &Lockfile,
     ) -> Result<String> {
         let is_composed = lockfile.compose.is_some();
-
-        // A visitor that converts inline tables to proper tables
-        // Nested tables are rendered as `dotted` tables.
-        // The default behavior when instantiating with `Visitor::new_for_document`,
-        // is to render toplevel tables as non-dotted, sections.
-        struct Visitor {
-            dotted: bool,
-        }
-        impl Visitor {
-            fn new_for_document() -> Self {
-                Visitor { dotted: false }
-            }
-        }
-        impl VisitMut for Visitor {
-            fn visit_table_like_kv_mut(&mut self, _key: KeyMut<'_>, node: &mut Item) {
-                if let toml_edit::Item::Value(Value::InlineTable(inline_table)) = node {
-                    let mut table = std::mem::take(inline_table).into_table();
-                    table.set_implicit(true);
-                    table.set_dotted(self.dotted);
-                    toml_edit::visit_mut::visit_table_mut(
-                        &mut Visitor { dotted: true },
-                        &mut table,
-                    );
-                    *node = toml_edit::Item::Table(table);
-                }
-            }
-        }
-
         let manifest_contents = if is_composed {
-            let mut document = toml_edit::ser::to_document(&lockfile.manifest)?;
-            toml_edit::visit_mut::visit_document_mut(
-                &mut Visitor::new_for_document(),
-                &mut document,
-            );
-            document.to_string()
+            render_composition_manifest(&lockfile.manifest)?
         } else {
             env.manifest_contents(flox)?
         };
+
         Ok(manifest_contents)
     }
 
