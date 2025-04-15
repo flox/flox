@@ -607,8 +607,8 @@ pub fn check_environment_metadata(
     let build_repo_meta = gather_build_repo_meta(&git)?;
     let base_repo_meta = gather_base_repo_meta(&lockfile)?;
 
-    let manifest = environment.manifest(flox)?;
-    let description = manifest
+    let description = lockfile
+        .manifest
         .build
         .inner()
         .get(pkg)
