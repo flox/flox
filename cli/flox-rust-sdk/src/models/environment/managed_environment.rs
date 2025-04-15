@@ -426,12 +426,6 @@ impl Environment for ManagedEnvironment {
         Ok(manifest)
     }
 
-    /// Return the deserialized manifest
-    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
-        Ok(toml::from_str(&self.manifest_contents(flox)?)
-            .map_err(CoreEnvironmentError::DeserializeManifest)?)
-    }
-
     /// This will lock if there is an out of sync local checkout
     fn rendered_env_links(
         &mut self,

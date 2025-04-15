@@ -51,7 +51,7 @@ use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
-use crate::models::manifest::typed::{ActivateMode, Manifest};
+use crate::models::manifest::typed::ActivateMode;
 use crate::providers::buildenv::BuildEnvOutputs;
 
 /// Struct representing a local environment
@@ -311,12 +311,6 @@ impl Environment for PathEnvironment {
     /// Read the environment definition file as a string
     fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
         fs::read_to_string(self.manifest_path(flox)?).map_err(EnvironmentError::ReadManifest)
-    }
-
-    /// Return the deserialized manifest
-    fn manifest(&self, _flox: &Flox) -> Result<Manifest, EnvironmentError> {
-        let env_view = self.as_core_environment()?;
-        env_view.manifest().map_err(EnvironmentError::Core)
     }
 
     /// Returns the environment name
