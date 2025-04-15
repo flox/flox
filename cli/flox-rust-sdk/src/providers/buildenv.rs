@@ -181,6 +181,11 @@ where
         nix_build_command
     }
 
+    /// Check which storepaths of the environment to be built already exist
+    /// and create GC roots for them.
+    /// GC roots prevent those paths from being deleted by a concurrently running
+    /// nix GC job, before they can be used as a dependency
+    /// for the environment being built.
     fn pre_check_store_paths(
         &self,
         lockfile: &Lockfile,
@@ -201,7 +206,21 @@ where
             }
         }
 
-        check_store_paths(all_paths)
+        let checked_store_paths = loop {
+            let checked_store_paths = check_store_paths(&all_paths)?;
+            match create_gc_root_in(
+                &checked_store_paths.valid,
+                self.new_gc_root_path("pre-checked-paths"),
+            ) {
+                Ok(_) => break checked_store_paths,
+                Err(BuildEnvError::Link(err)) => {
+                    debug!(error = err, "failed to set one or more gc roots, retrying")
+                },
+                Err(e) => return Err(e),
+            }
+        };
+
+        Ok(checked_store_paths)
     }
 
     /// Realise all store paths of packages that are installed to the environment,
@@ -244,6 +263,8 @@ where
     /// Then attempt to download the package closure from each store in order,
     /// until successful.
     /// Returns `true` if all outputs were found and downloaded, `false` otherwise.
+    ///
+    /// If a path is found, we attempt to create a temproot for it in [Self::gc_root_base_path].
     fn try_substitute_published_pkg(
         &self,
         client: &impl ClientTrait,
@@ -289,6 +310,20 @@ where
                 } else {
                     // If we suceeded, then we can continue with the nex path
                     debug!(%path, %location.url, "Succesfully copied package from store");
+
+                    // TODO: there is a real but very short period between the successful copy
+                    // and setting the gc root in which the path _could_ be collected as garbage,
+                    // which we could guard against by wrapping the copy/link/check in a loop.
+                    // At this point its not clear whether that is worth the additional complexity.
+                    let filename = Path::new(path)
+                        .file_name()
+                        .ok_or_else(|| BuildEnvError::Link(format!("Invalid store path {path}")))?
+                        .to_string_lossy();
+                    create_gc_root_in(
+                        [path],
+                        self.new_gc_root_path(format!("by-store-path/{filename}")),
+                    )?;
+
                     continue 'path_loop;
                 }
             }
@@ -318,6 +353,7 @@ where
     ///    We set `--option pure-eval true` to improve reproducibility
     ///    of the locked outputs, and allow the use of the eval-cache
     ///    to avoid costly re-evaluations.
+    ///    When building or substituting sets GC temp roots for the _new_ paths.
     ///
     /// IMPORTANT/TODO: As custom catalogs, with non-nixpkgs packages are in development,
     /// this function is currently assumes that the package is from the nixpkgs base-catalog.
@@ -346,7 +382,9 @@ where
                 "substitute catalog package",
                 progress = format!("Downloading '{}'", locked.attr_path)
             );
-            span.in_scope(|| self.check_store_path_with_substituters(locked.outputs.values()))?
+            span.in_scope(|| {
+                self.check_store_path_with_substituters(&locked.install_id, locked.outputs.values())
+            })?
         };
 
         // If all store paths are valid after substitution, we can return early.
@@ -400,7 +438,8 @@ where
         nix_build_command.arg("--no-write-lock-file");
         nix_build_command.arg("--no-update-lock-file");
         nix_build_command.args(["--option", "pure-eval", "true"]);
-        nix_build_command.arg("--no-link");
+        nix_build_command.arg("--out-link");
+        nix_build_command.arg(self.new_gc_root_path(format!("by-iid/{}", locked.install_id)));
         nix_build_command.arg(&installable);
 
         debug!(%installable, cmd=%nix_build_command.display(), "building catalog package");
@@ -428,6 +467,7 @@ where
     /// and building the package with essentially `nix build <flake-url>#<attr-path>^*`.
     /// We set `--option pure-eval true` to avoid improve reproducibility,
     /// and allow the use of the eval-cache to avoid costly re-evaluations.
+    /// When building or substituting sets GC temp roots for the _new_ paths.
     #[instrument(skip(self), fields(progress = format!("Realising flake package '{}'", locked.install_id)))]
     fn realise_flakes(
         &self,
@@ -471,7 +511,8 @@ where
         nix_build_command.arg("--no-write-lock-file");
         nix_build_command.arg("--no-update-lock-file");
         nix_build_command.args(["--option", "pure-eval", "true"]);
-        nix_build_command.arg("--no-link");
+        nix_build_command.arg("--out-link");
+        nix_build_command.arg(self.new_gc_root_path(format!("by-iid/{}", locked.install_id)));
         nix_build_command.arg(&installable);
 
         debug!(%installable, cmd=%nix_build_command.display(), "building flake package:");
@@ -501,10 +542,19 @@ where
         locked: &LockedPackageStorePath,
         pre_checked_store_paths: &CheckedStorePaths,
     ) -> Result<(), BuildEnvError> {
-        let valid = pre_checked_store_paths
+        let pre_valid = pre_checked_store_paths
             .valid(&locked.store_path)
-            .unwrap_or_default()
-            || self.check_store_path([&locked.store_path])?;
+            .unwrap_or_default();
+
+        let valid = pre_valid || {
+            let span = info_span!(
+                "substitute store path",
+                progress = format!("Downloading '{}'", locked.store_path)
+            );
+            span.in_scope(|| {
+                self.check_store_path_with_substituters(&locked.install_id, [&locked.store_path])
+            })?
+        };
 
         if !valid {
             return Err(BuildEnvError::Realise2 {
@@ -515,30 +565,25 @@ where
         Ok(())
     }
 
-    /// Check if the given store paths _exists_ on the filesystem,
-    /// or in the configured nix store.
+    /// Check if the given store paths exists in the configured nix store.
     /// Substitute store paths if necessary and possible.
+    /// Sets a gc root in [Self::gc_root_base_path] on success.
     ///
-    /// If the store paths do not exist,
-    /// the function will fall back to querying the nix store for the store paths.
-    /// Formerly, this function checked the store paths with `nix build` immediately,
-    /// which would also ensure the integrity of the references of the store paths.
-    /// However, the runtime profile of the `nix build` command
-    /// has significant overhead for large environments.
-    /// 50ms to 100ms per package in an environment of 50 packages,
-    /// is very noticeable.
-    /// To address this we replace the nix call with a number of `stat`
-    /// calls for the paths that are checked, with the optimistic assumption
-    /// that if a path exists, it and its references are valid.
-    /// If they are not, we fall back to the nix call,
-    /// which checking against alternative stores and substitution from binary caches.
+    /// This methods is expected to be called _for all outputs of a derivation_
+    /// iff any output of the derivation has formerly been identified as invalid
+    /// by [Self::pre_check_store_paths].
+    ///
+    /// To avoid GC of substituted paths, pass an `--out-links` argument,
+    /// to create "temproots".
     fn check_store_path_with_substituters(
         &self,
+        install_id: &str,
         paths: impl IntoIterator<Item = impl AsRef<OsStr>>,
     ) -> Result<bool, BuildEnvError> {
         let mut cmd = self.base_command();
         cmd.arg("build");
-        cmd.arg("--no-link");
+        cmd.arg("--out-link");
+        cmd.arg(self.new_gc_root_path(format!("by-store-path/{install_id}")));
         cmd.args(paths);
 
         debug!(cmd=%cmd.display(), "checking store paths, including substituters");
@@ -802,6 +847,8 @@ fn check_store_paths(
     command.stdout(Stdio::piped());
     command.args(["path-info", "--offline", "--stdin"]);
 
+    debug!(cmd=%command.display(), "bulk checking validity of store_paths (paths passed to stdin)");
+
     let mut child = command.spawn().map_err(BuildEnvError::CallNixBuild)?;
     let stdin = child.stdin.as_mut().unwrap();
 
@@ -811,8 +858,8 @@ fn check_store_paths(
         .collect::<HashSet<_>>();
 
     for path in paths.iter() {
-        stdin.write_all(path.as_bytes()).unwrap();
-        stdin.write_all(b"\n").unwrap();
+        trace!(%path, "checking validity of store path");
+        writeln!(stdin, "{path}").map_err(BuildEnvError::WriteNixStdin)?;
     }
 
     stdin.flush().map_err(BuildEnvError::WriteNixStdin)?;
