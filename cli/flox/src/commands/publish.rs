@@ -10,6 +10,7 @@ use flox_rust_sdk::providers::build::FloxBuildMk;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
+    build_repo_err,
     check_build_metadata,
     check_environment_metadata,
 };
@@ -76,10 +77,15 @@ impl Publish {
         }
 
         environment_subcommand_metric!("publish", self.environment);
-        let mut env = self
+        let env = self
             .environment
             .detect_concrete_environment(&flox, "Publish")?;
-        let lockfile: Lockfile = env.lockfile(&flox)?.into();
+        // If the environment isn't locked, locking it will modify the lockfile,
+        // which will mean the repo will have uncommitted changes.
+        // Instead of locking and erroring later on, error now.
+        let Some(lockfile) = env.existing_lockfile(&flox)? else {
+            bail!(build_repo_err("Environment must be locked."));
+        };
         let target = Self::get_publish_target(&lockfile.manifest, &self.publish_target)?;
         Self::publish(config, flox, env, target, self.metadata_only, self.cache).await
     }

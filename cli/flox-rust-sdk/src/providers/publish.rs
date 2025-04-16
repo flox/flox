@@ -413,7 +413,7 @@ fn build_repo_err_msg(msg: &str) -> String {
     "}
 }
 
-fn build_repo_err(msg: &str) -> PublishError {
+pub fn build_repo_err(msg: &str) -> PublishError {
     PublishError::UnsupportedEnvironmentState(build_repo_err_msg(msg))
 }
 
@@ -584,7 +584,7 @@ pub fn check_environment_metadata(
         .existing_lockfile(flox)
         .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?
     else {
-        return Err(build_repo_err("Environment must be locked."));
+        unreachable!("It should have been verified the environment was locked");
     };
 
     // Gather build repo info
