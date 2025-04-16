@@ -25,11 +25,6 @@ use crate::utils::CommandExt;
 
 #[derive(Debug, Error)]
 pub enum PublishError {
-    #[error("This type of environment is not supported for publishing")]
-    UnsupportedEnvironment,
-    #[error("The environment must be locked to publish")]
-    UnlockedEnvironment,
-
     #[error("The outputs from the build do not exist: {0}")]
     NonexistentOutputs(String),
 
