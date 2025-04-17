@@ -4,6 +4,7 @@ use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
 pub use flox_core::{Version, path_hash};
+use indoc::formatdoc;
 use managed_environment::ManagedEnvironment;
 use path_environment::PathEnvironment;
 use remote_environment::RemoteEnvironment;
@@ -902,6 +903,23 @@ fn services_socket_path(id: &str, flox: &Flox) -> Result<PathBuf, EnvironmentErr
         .map_err(EnvironmentError::CreateServicesSocketDirectory)?;
 
     Ok(socket_path)
+}
+
+/// Creates the `.gitignore` file in the `.flox` directory that prevents logs and cache
+/// files from being tracked by git.
+pub fn create_dot_flox_gitignore(dot_flox_path: impl AsRef<Path>) -> Result<(), EnvironmentError> {
+    let dot_flox_path = dot_flox_path.as_ref();
+    let gitignore_path = dot_flox_path.join(".gitignore");
+    debug!(path = ?gitignore_path, "creating .flox/.gitignore");
+    fs::write(gitignore_path, formatdoc! {"
+        {GCROOTS_DIR_NAME}/
+        {CACHE_DIR_NAME}/
+        {LIB_DIR_NAME}/
+        {LOG_DIR_NAME}/
+        !{ENV_DIR_NAME}/
+        "})
+    .map_err(EnvironmentError::WriteGitignore)?;
+    Ok(())
 }
 
 #[cfg(test)]
