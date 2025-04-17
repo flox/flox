@@ -18,6 +18,8 @@ flox [<general options>] gc
 
 Garbage collects any data for deleted environments.
 
+This both deletes data managed by Flox and runs garbage collection on the Nix store.
+
 # OPTIONS
 
 ```{.include}
