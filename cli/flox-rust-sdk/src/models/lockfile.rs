@@ -1888,15 +1888,10 @@ pub(crate) mod tests {
 
     use catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use catalog::{
-        CatalogClientError,
         MsgAttrPathNotFoundSystemsNotOnSamePage,
         MsgGeneral,
         MsgUnknown,
-        PublishResponse,
         ResolutionMessage,
-        SearchError,
-        UserBuildPublish,
-        VersionsError,
     };
     use catalog_api_v1::types::{Output, ResolvedPackageDescriptor};
     use indoc::indoc;
@@ -1924,81 +1919,11 @@ pub(crate) mod tests {
     use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
     use crate::models::manifest::raw::RawManifest;
     use crate::models::manifest::typed::{Include, Manifest, Vars};
-    use crate::models::search::{PackageDetails, SearchLimit, SearchResults};
-    use crate::providers::catalog::Client;
+    use crate::providers::catalog::{Client, MockClient};
     use crate::providers::flake_installable_locker::{
         FlakeInstallableError,
         InstallableLockerMock,
     };
-
-    /// A mock client that panics if any of its methods are called
-    struct PanickingClient;
-    impl catalog::ClientTrait for PanickingClient {
-        async fn resolve(
-            &self,
-            _: Vec<PackageGroup>,
-        ) -> Result<Vec<ResolvedPackageGroup>, catalog::ResolveError> {
-            unreachable!("resolve should not be called");
-        }
-
-        async fn search_with_spinner(
-            &self,
-            _: impl AsRef<str> + Send + Sync,
-            _: System,
-            _: SearchLimit,
-        ) -> Result<SearchResults, SearchError> {
-            unreachable!("search should not be called");
-        }
-
-        async fn search(
-            &self,
-            _: impl AsRef<str> + Send + Sync,
-            _: System,
-            _: SearchLimit,
-        ) -> Result<SearchResults, SearchError> {
-            unreachable!("search should not be called");
-        }
-
-        async fn package_versions(
-            &self,
-            _: impl AsRef<str> + Send + Sync,
-        ) -> Result<PackageDetails, VersionsError> {
-            unreachable!("package_versions should not be called");
-        }
-
-        async fn publish(
-            &self,
-            _catalog_name: impl AsRef<str> + Send + Sync,
-            _package_name: impl AsRef<str> + Send + Sync,
-        ) -> Result<PublishResponse, CatalogClientError> {
-            unreachable!("publish should not be called");
-        }
-
-        async fn create_package(
-            &self,
-            _catalog_name: impl AsRef<str> + Send + Sync,
-            _package_name: impl AsRef<str> + Send + Sync,
-            _original_url: impl AsRef<str> + Send + Sync,
-        ) -> Result<(), CatalogClientError> {
-            unreachable!("create_package should not be called");
-        }
-
-        async fn publish_build(
-            &self,
-            _catalog_name: impl AsRef<str> + Send + Sync,
-            _package_name: impl AsRef<str> + Send + Sync,
-            _build_info: &UserBuildPublish,
-        ) -> Result<(), CatalogClientError> {
-            unreachable!("publish_build should not be called");
-        }
-
-        async fn get_store_info(
-            &self,
-            _derivations: Vec<String>,
-        ) -> Result<HashMap<String, Vec<catalog::StoreInfo>>, CatalogClientError> {
-            unreachable!("get_store_info should not be called");
-        }
-    }
 
     /// A mock locker that panics if any of its methods are called
     struct PanickingLocker;
@@ -3605,10 +3530,14 @@ pub(crate) mod tests {
         let locker_mock = InstallableLockerMock::new();
         locker_mock.push_lock_result(Ok(bar_locked.locked_installable));
 
-        let resolved_packages =
-            Lockfile::resolve_manifest(&manifest, Some(&locked), &PanickingClient, &locker_mock)
-                .await
-                .unwrap();
+        let resolved_packages = Lockfile::resolve_manifest(
+            &manifest,
+            Some(&locked),
+            &MockClient::default(),
+            &locker_mock,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(resolved_packages.len(), 2, "{:#?}", resolved_packages);
     }
@@ -3649,7 +3578,7 @@ pub(crate) mod tests {
         let resolved_packages = Lockfile::resolve_manifest(
             &manifest_pririty_after,
             Some(&locked),
-            &PanickingClient,
+            &MockClient::default(),
             &locker_mock,
         )
         .await
