@@ -937,8 +937,15 @@ enum AdditionalCommands {
     #[bpaf(command, hide, footer("Run 'man flox-envs' for more details."))]
     Envs(#[bpaf(external(envs::envs))] envs::Envs),
 
-    /// Garbage collect data for deleted environments
-    #[bpaf(command, hide, footer("Run 'man flox-gc' for more details."))]
+    /// Garbage collects any data for deleted environments.
+    #[bpaf(
+        command,
+        hide,
+        header(
+            "This both deletes data managed by Flox and runs garbage collection on the Nix store."
+        ),
+        footer("Run 'man flox-gc' for more details.")
+    )]
     Gc(#[bpaf(external(gc::gc))] gc::Gc),
 
     /// Interact with included environments
