@@ -908,12 +908,14 @@ pub mod tests {
             env_metadata,
         };
 
-        reset_mocks(&mut flox.catalog_client, vec![Response::Publish(
-            PublishResponse {
+        reset_mocks(&mut flox.catalog_client, vec![
+            Response::CreatePackage,
+            Response::Publish(PublishResponse {
                 ingress_uri: None,
                 catalog_store_config: CatalogStoreConfig::MetaOnly,
-            },
-        )]);
+            }),
+            Response::PublishBuild,
+        ]);
 
         let res = publish_provider
             .publish(&flox.catalog_client, &catalog_name, None, None, false)
@@ -976,13 +978,16 @@ pub mod tests {
             env_metadata,
         };
 
-        reset_mocks(&mut client, vec![Response::Publish(PublishResponse {
-            ingress_uri: Some("https://example.com".to_string()),
-            catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
-                ingress_uri: "https://example.com".to_string(),
-                egress_uri: "https://example.com".to_string(),
+        reset_mocks(&mut client, vec![
+            Response::CreatePackage,
+            Response::Publish(PublishResponse {
+                ingress_uri: Some("https://example.com".to_string()),
+                catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
+                    ingress_uri: "https://example.com".to_string(),
+                    egress_uri: "https://example.com".to_string(),
+                }),
             }),
-        })]);
+        ]);
 
         let result = publish_provider
             .publish(&client, &catalog_name, None, None, false)
@@ -1100,15 +1105,17 @@ pub mod tests {
         let cache_path = cache.url.to_file_path().unwrap();
         assert!(std::fs::read_dir(&cache_path).is_err());
 
-        reset_mocks(&mut flox.catalog_client, vec![Response::Publish(
-            PublishResponse {
+        reset_mocks(&mut flox.catalog_client, vec![
+            Response::CreatePackage,
+            Response::Publish(PublishResponse {
                 ingress_uri: Some(cache.url.to_string()),
                 catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
                     ingress_uri: cache.url.to_string(),
                     egress_uri: cache.url.to_string(),
                 }),
-            },
-        )]);
+            }),
+            Response::PublishBuild,
+        ]);
 
         publish_provider
             .publish(

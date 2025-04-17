@@ -83,6 +83,8 @@ pub enum Response {
     GetStoreInfo(StoreInfoResponse),
     Error(GenericResponse<ErrorResponse>),
     Publish(PublishResponse),
+    CreatePackage,
+    PublishBuild,
 }
 
 #[derive(Debug, Error)]
@@ -949,7 +951,16 @@ impl ClientTrait for MockClient {
         _package_name: impl AsRef<str> + Send + Sync,
         _original_url: impl AsRef<str> + Send + Sync,
     ) -> Result<(), CatalogClientError> {
-        Ok(())
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::CreatePackage) => Ok(()),
+            // We don't need to test errors at the moment
+            _ => panic!("expected create package response, found {:?}", &mock_resp),
+        }
     }
 
     async fn publish_build(
@@ -958,7 +969,16 @@ impl ClientTrait for MockClient {
         _package_name: impl AsRef<str> + Send + Sync,
         _build_info: &UserBuildPublish,
     ) -> Result<(), CatalogClientError> {
-        Ok(())
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::PublishBuild) => Ok(()),
+            // We don't need to test errors at the moment
+            _ => panic!("expected create package response, found {:?}", &mock_resp),
+        }
     }
 
     async fn get_store_info(
