@@ -18,6 +18,7 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError,
     EnvironmentPointer,
     ManagedPointer,
+    create_dot_flox_gitignore,
 };
 use flox_rust_sdk::models::manifest::raw::add_system;
 use flox_rust_sdk::providers::buildenv::BuildEnvError;
@@ -291,10 +292,15 @@ impl Pull {
 
         if copy {
             debug!("Converting environment to path environment");
-            if let Err(e) = env.into_path_environment(flox) {
-                fs::remove_dir_all(&dot_flox_path)
-                    .context("Could not clean up .flox/ directory")?;
-                bail!(e);
+            match env.into_path_environment(flox) {
+                Err(e) => {
+                    fs::remove_dir_all(&dot_flox_path)
+                        .context("Could not clean up .flox/ directory")?;
+                    bail!(e);
+                },
+                Ok(env) => {
+                    create_dot_flox_gitignore(env.dot_flox_path())?;
+                },
             }
         }
 

@@ -18,7 +18,6 @@ use std::fs::{self};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::debug;
 
@@ -35,7 +34,6 @@ use super::{
     EnvironmentPointer,
     GCROOTS_DIR_NAME,
     InstallationAttempt,
-    LIB_DIR_NAME,
     LOCKFILE_FILENAME,
     LOG_DIR_NAME,
     PathPointer,
@@ -47,7 +45,7 @@ use super::{
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
 use crate::models::env_registry::{deregister, ensure_registered};
-use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
+use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME, create_dot_flox_gitignore};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::{DEFAULT_SYSTEMS_STR, LockResult, Lockfile};
 use crate::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
@@ -526,14 +524,7 @@ impl PathEnvironment {
         }
 
         // Write stateful directories to .flox/.gitignore
-        fs::write(dot_flox_path.join(".gitignore"), formatdoc! {"
-            {GCROOTS_DIR_NAME}/
-            {CACHE_DIR_NAME}/
-            {LIB_DIR_NAME}/
-            {LOG_DIR_NAME}/
-            !{ENV_DIR_NAME}/
-            "})
-        .map_err(EnvironmentError::WriteGitignore)?;
+        create_dot_flox_gitignore(&dot_flox_path)?;
 
         let dot_flox_path = CanonicalPath::new(dot_flox_path).expect("the directory just created");
 

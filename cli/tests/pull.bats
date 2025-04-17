@@ -419,6 +419,7 @@ function add_incompatible_package() {
   assert [ ! -e ".flox/env.lock" ]
   assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
   assert [ $(cat .flox/env.json | jq -r '.owner') == "null" ]
+  assert [ -f .flox/.gitignore ]
   assert_output --partial "Created path environment from owner/name"
 }
 
