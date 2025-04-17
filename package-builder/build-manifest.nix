@@ -162,7 +162,7 @@ pkgs.runCommandNoCC name
                 # N.B. not using t3 --forcecolor option because Nix sandbox
                 # strips color codes from output anyway.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
-                  ${flox-env-package}/activate --env ${flox-env-package} --mode run --turbo -- \
+                  ${flox-env-package}/activate --env ${flox-env-package} --env-project $(pwd) --mode run --turbo -- \
                     ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
                       t3 --relative $log -- bash -e ${buildScript-contents}
               ''
@@ -192,7 +192,7 @@ pkgs.runCommandNoCC name
                 # and we're not using env -i like we are in the impure build
 
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
-                  ${flox-env-package}/activate --env ${flox-env-package} --mode run --turbo -- \
+                  ${flox-env-package}/activate --env ${flox-env-package} --env-project $(pwd) --mode run --turbo -- \
                     ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
                       t3 --relative $log -- bash -e ${buildScript-contents} || \
                 ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )

@@ -23,9 +23,11 @@ print( "{}.{}".format( sys.version_info[0], sys.version_info[1] ) )'
   export PYTHONPATH
 fi
 
-# Only run if `pip' is in `PATH'
-if [[ -x "$FLOX_ENV/bin/pip3" ]]; then
-  PIP_CONFIG_FILE="$("$_realpath" --no-symlinks "$FLOX_ENV/../../pip.ini")"
+# Only run if `pip' is in `PATH' for non-containerize activations.
+# FLOX_ENV_PROJECT is unset in `containerize`, but *is* set for builds and
+# other activations. We don't need a virtual environment inside a container.
+if [[ (-x "$FLOX_ENV/bin/pip3") && (-n "${FLOX_ENV_PROJECT:-}") ]]; then
+  PIP_CONFIG_FILE="$FLOX_ENV_PROJECT/.flox/pip.ini"
   export PIP_CONFIG_FILE
   "$_cat" > "$PIP_CONFIG_FILE" << EOF
 [global]
