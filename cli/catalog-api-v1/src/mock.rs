@@ -1307,8 +1307,26 @@ pub mod operations {
                 )
             }
         }
-        pub fn search_term(self, value: &types::SearchTerm) -> Self {
-            Self(self.0.query_param("search_term", value.to_string()))
+        pub fn search_term<'a, T>(self, value: T) -> Self
+        where
+            T: Into<Option<&'a types::SearchTerm>>,
+        {
+            if let Some(value) = value.into() {
+                Self(self.0.query_param("search_term", value.to_string()))
+            } else {
+                Self(
+                    self
+                        .0
+                        .matches(|req| {
+                            req.query_params
+                                .as_ref()
+                                .and_then(|qs| {
+                                    qs.iter().find(|(key, _)| key == "search_term")
+                                })
+                                .is_none()
+                        }),
+                )
+            }
         }
         pub fn system(self, value: types::SystemEnum) -> Self {
             Self(self.0.query_param("system", value.to_string()))

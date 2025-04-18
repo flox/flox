@@ -15,7 +15,7 @@
           "catalog"
         ],
         "summary": "Search for packages",
-        "description": "Search the catalog(s) under the given criteria for matching packages.\n\nRequired Query Parameters:\n- **search_term**: The search term to search on.\n- **system**: This is returned but does not affect results\n\nOptional Query Parameters:\n- **catalogs**: Comma separated list of catalog names to search\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
+        "description": "Search the catalog(s) under the given criteria for matching packages.\n\nRequired Query Parameters:\n- **search_term**: The search term to search on.\n- **system**: This is returned but does not affect results\n\nOptional Query Parameters:\n- **catalogs**: Comma separated list of catalog names to search; defaults to all catalogs\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
         "operationId": "search_api_v1_catalog_search_get",
         "security": [
           {
@@ -23,16 +23,6 @@
           }
         ],
         "parameters": [
-          {
-            "name": "search_term",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}",
-              "title": "Search Term"
-            }
-          },
           {
             "name": "system",
             "in": "query",
@@ -42,11 +32,21 @@
             }
           },
           {
+            "name": "search_term",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "title": "Search Term",
+              "nullable": true,
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}"
+            }
+          },
+          {
             "name": "catalogs",
             "in": "query",
             "required": false,
             "schema": {
-              "default": "nixpkgs",
               "title": "Catalogs",
               "nullable": true,
               "type": "string"
@@ -1827,6 +1827,96 @@
         ],
         "title": "MessageType"
       },
+      "NarInfo": {
+        "properties": {
+          "ca": {
+            "title": "Ca",
+            "nullable": true,
+            "type": "string"
+          },
+          "deriver": {
+            "title": "Deriver",
+            "nullable": true,
+            "type": "string"
+          },
+          "downloadHash": {
+            "title": "Downloadhash",
+            "nullable": true,
+            "type": "string"
+          },
+          "downloadSize": {
+            "title": "Downloadsize",
+            "nullable": true,
+            "type": "integer"
+          },
+          "narHash": {
+            "title": "Narhash",
+            "nullable": true,
+            "type": "string"
+          },
+          "narSize": {
+            "title": "Narsize",
+            "nullable": true,
+            "type": "integer"
+          },
+          "references": {
+            "title": "References",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "registrationTime": {
+            "title": "Registrationtime",
+            "nullable": true,
+            "type": "integer"
+          },
+          "signatures": {
+            "title": "Signatures",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "url": {
+            "title": "Url",
+            "nullable": true,
+            "type": "string"
+          },
+          "ultimate": {
+            "title": "Ultimate",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "closureDownloadSize": {
+            "title": "Closuredownloadsize",
+            "nullable": true,
+            "type": "integer"
+          },
+          "closureSize": {
+            "title": "Closuresize",
+            "nullable": true,
+            "type": "integer"
+          },
+          "compresssize": {
+            "title": "Compresssize",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "title": "NarInfo"
+      },
+      "NarInfos": {
+        "additionalProperties": {
+          "nullable": true,
+          "$ref": "#/components/schemas/NarInfo"
+        },
+        "type": "object",
+        "title": "NarInfos"
+      },
       "Output": {
         "properties": {
           "name": {
@@ -2795,12 +2885,8 @@
             "type": "string"
           },
           "narinfos": {
-            "title": "Narinfos",
             "nullable": true,
-            "additionalProperties": {
-              "type": "object"
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/NarInfos"
           }
         },
         "type": "object",
