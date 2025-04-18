@@ -214,7 +214,7 @@ impl Publisher for PublishProvider {
         // needed.
         tracing::debug!("Beginning publish of package...");
         let publish_response = client
-            .publish(catalog_name, &self.env_metadata.package)
+            .publish_info(catalog_name, &self.env_metadata.package)
             .await
             .map_err(PublishError::CatalogError)?;
 
@@ -1035,7 +1035,7 @@ pub mod tests {
                 },
             );
 
-        let publish_mock = server.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(|when, then| {
+        let publish_mock = server.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post(|when, then| {
             when.catalog_name(&str_to_catalog_name(&catalog_name).unwrap())
                 .package_name(&str_to_package_name(package_name).unwrap());
             then.unprocessable_entity(&ErrorResponse { detail: "Some\nlong\nresponse\nfrom\nthe\nserver".to_string() });

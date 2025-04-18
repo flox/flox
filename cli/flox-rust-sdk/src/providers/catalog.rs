@@ -438,7 +438,7 @@ pub trait ClientTrait {
     /// This begins the publish of a package.
     /// At the moment it just returns info about how the catalog's store is
     /// configured.
-    async fn publish(
+    async fn publish_info(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
@@ -557,8 +557,10 @@ impl ClientTrait for CatalogClient {
                         None,
                         Some(page_number),
                         Some(page_size),
-                        &api_types::SearchTerm::from_str(search_term)
-                            .map_err(SearchError::InvalidSearchTerm)?,
+                        Some(
+                            &api_types::SearchTerm::from_str(search_term)
+                                .map_err(SearchError::InvalidSearchTerm)?,
+                        ),
                         system,
                     )
                     .await
@@ -620,7 +622,7 @@ impl ClientTrait for CatalogClient {
         Ok(search_results)
     }
 
-    async fn publish(
+    async fn publish_info(
         &self,
         catalog_name: impl AsRef<str> + Send + Sync,
         package_name: impl AsRef<str> + Send + Sync,
@@ -629,7 +631,7 @@ impl ClientTrait for CatalogClient {
         let package = str_to_package_name(package_name)?;
         // Body contents aren't important for this request.
         let body = api_types::PublishRequest(serde_json::Map::new());
-        self.client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post(&catalog, &package, &body)
+        self.client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post(&catalog, &package, &body)
             .await
             .map_err( CatalogClientError::APIError).map(|resp| resp.into_inner())
     }
@@ -928,7 +930,7 @@ impl ClientTrait for MockClient {
         }
     }
 
-    async fn publish(
+    async fn publish_info(
         &self,
         _catalog_name: impl AsRef<str> + Send + Sync,
         _package_name: impl AsRef<str> + Send + Sync,

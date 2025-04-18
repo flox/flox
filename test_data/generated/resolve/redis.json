@@ -16,7 +16,7 @@
             "insecure": false,
             "install_id": "netcat",
             "license": "[ Public Domain, BSD-4-Clause, 0BSD, BSD-3-Clause, GPL-3.0, ISC, OpenSSL ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "libressl-4.0.0",
             "outputs": [
@@ -47,10 +47,10 @@
             ],
             "pkg_path": "netcat",
             "pname": "netcat",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:10:57.946190Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:11:27.392704Z",
             "stabilities": [
               "unstable"
             ],
@@ -67,7 +67,7 @@
             "insecure": false,
             "install_id": "netcat",
             "license": "[ Public Domain, BSD-4-Clause, 0BSD, BSD-3-Clause, GPL-3.0, ISC, OpenSSL ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "libressl-4.0.0",
             "outputs": [
@@ -98,10 +98,10 @@
             ],
             "pkg_path": "netcat",
             "pname": "netcat",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:27:47.602424Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:28:12.929320Z",
             "stabilities": [
               "unstable"
             ],
@@ -118,7 +118,7 @@
             "insecure": false,
             "install_id": "netcat",
             "license": "[ Public Domain, BSD-4-Clause, 0BSD, BSD-3-Clause, GPL-3.0, ISC, OpenSSL ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "libressl-4.0.0",
             "outputs": [
@@ -149,10 +149,10 @@
             ],
             "pkg_path": "netcat",
             "pname": "netcat",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:43:07.087615Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:43:38.526924Z",
             "stabilities": [
               "unstable"
             ],
@@ -169,7 +169,7 @@
             "insecure": false,
             "install_id": "netcat",
             "license": "[ Public Domain, BSD-4-Clause, 0BSD, BSD-3-Clause, GPL-3.0, ISC, OpenSSL ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "libressl-4.0.0",
             "outputs": [
@@ -200,10 +200,10 @@
             ],
             "pkg_path": "netcat",
             "pname": "netcat",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T02:01:28.486098Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T02:02:03.599565Z",
             "stabilities": [
               "unstable"
             ],
@@ -220,7 +220,7 @@
             "insecure": false,
             "install_id": "redis",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "redis-7.2.7",
             "outputs": [
@@ -234,10 +234,10 @@
             ],
             "pkg_path": "redis",
             "pname": "redis",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:11:22.943365Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:11:52.596484Z",
             "stabilities": [
               "unstable"
             ],
@@ -254,7 +254,7 @@
             "insecure": false,
             "install_id": "redis",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "redis-7.2.7",
             "outputs": [
@@ -268,10 +268,10 @@
             ],
             "pkg_path": "redis",
             "pname": "redis",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:28:26.868604Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:28:52.522939Z",
             "stabilities": [
               "unstable"
             ],
@@ -288,7 +288,7 @@
             "insecure": false,
             "install_id": "redis",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "redis-7.2.7",
             "outputs": [
@@ -302,10 +302,10 @@
             ],
             "pkg_path": "redis",
             "pname": "redis",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:43:32.118148Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:44:04.123335Z",
             "stabilities": [
               "unstable"
             ],
@@ -322,7 +322,7 @@
             "insecure": false,
             "install_id": "redis",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "redis-7.2.7",
             "outputs": [
@@ -336,10 +336,10 @@
             ],
             "pkg_path": "redis",
             "pname": "redis",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T02:02:10.413550Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T02:02:45.820658Z",
             "stabilities": [
               "unstable"
             ],
@@ -348,7 +348,7 @@
             "version": "7.2.7"
           }
         ],
-        "page": 780821,
+        "page": 782401,
         "url": ""
       }
     }
