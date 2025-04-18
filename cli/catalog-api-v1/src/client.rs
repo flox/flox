@@ -685,6 +685,216 @@ pub mod types {
                 })
         }
     }
+    ///NarInfo
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "NarInfo",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "ca": {
+    ///      "title": "Ca",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "closureDownloadSize": {
+    ///      "title": "Closuredownloadsize",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "closureSize": {
+    ///      "title": "Closuresize",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "compresssize": {
+    ///      "title": "Compresssize",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "deriver": {
+    ///      "title": "Deriver",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "downloadHash": {
+    ///      "title": "Downloadhash",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "downloadSize": {
+    ///      "title": "Downloadsize",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "narHash": {
+    ///      "title": "Narhash",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "narSize": {
+    ///      "title": "Narsize",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "references": {
+    ///      "title": "References",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "registrationTime": {
+    ///      "title": "Registrationtime",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "signatures": {
+    ///      "title": "Signatures",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "ultimate": {
+    ///      "title": "Ultimate",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "url": {
+    ///      "title": "Url",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct NarInfo {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub ca: Option<String>,
+        #[serde(
+            rename = "closureDownloadSize",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        pub closure_download_size: Option<i64>,
+        #[serde(
+            rename = "closureSize",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        pub closure_size: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub compresssize: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub deriver: Option<String>,
+        #[serde(
+            rename = "downloadHash",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        pub download_hash: Option<String>,
+        #[serde(
+            rename = "downloadSize",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        pub download_size: Option<i64>,
+        #[serde(rename = "narHash", default, skip_serializing_if = "Option::is_none")]
+        pub nar_hash: Option<String>,
+        #[serde(rename = "narSize", default, skip_serializing_if = "Option::is_none")]
+        pub nar_size: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub references: Option<Vec<String>>,
+        #[serde(
+            rename = "registrationTime",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        pub registration_time: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub signatures: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub ultimate: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub url: Option<String>,
+    }
+    impl From<&NarInfo> for NarInfo {
+        fn from(value: &NarInfo) -> Self {
+            value.clone()
+        }
+    }
+    ///NarInfos
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "NarInfos",
+    ///  "type": "object",
+    ///  "additionalProperties": {
+    ///    "$ref": "#/components/schemas/NarInfo"
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct NarInfos(pub std::collections::HashMap<String, NarInfo>);
+    impl std::ops::Deref for NarInfos {
+        type Target = std::collections::HashMap<String, NarInfo>;
+        fn deref(&self) -> &std::collections::HashMap<String, NarInfo> {
+            &self.0
+        }
+    }
+    impl From<NarInfos> for std::collections::HashMap<String, NarInfo> {
+        fn from(value: NarInfos) -> Self {
+            value.0
+        }
+    }
+    impl From<&NarInfos> for NarInfos {
+        fn from(value: &NarInfos) -> Self {
+            value.clone()
+        }
+    }
+    impl From<std::collections::HashMap<String, NarInfo>> for NarInfos {
+        fn from(value: std::collections::HashMap<String, NarInfo>) -> Self {
+            Self(value)
+        }
+    }
     ///Output
     ///
     /// <details><summary>JSON schema</summary>
@@ -2547,14 +2757,7 @@ pub mod types {
     ///      ]
     ///    },
     ///    "narinfos": {
-    ///      "title": "Narinfos",
-    ///      "type": [
-    ///        "object",
-    ///        "null"
-    ///      ],
-    ///      "additionalProperties": {
-    ///        "type": "object"
-    ///      }
+    ///      "$ref": "#/components/schemas/NarInfos"
     ///    },
     ///    "rev": {
     ///      "title": "Rev",
@@ -2585,9 +2788,7 @@ pub mod types {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub locked_base_catalog_url: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub narinfos: Option<
-            std::collections::HashMap<String, serde_json::Map<String, serde_json::Value>>,
-        >,
+        pub narinfos: Option<NarInfos>,
         pub rev: String,
         pub rev_count: i64,
         pub rev_date: chrono::DateTime<chrono::offset::Utc>,
@@ -3552,6 +3753,59 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
+    /**Request access and info to publish a package
+
+Request access and informatin to publish a package to this catalog.
+Path Parameters:
+- **catalog_name**: The name of the catalog
+- **package_name**: The name of the package
+Body Content:
+- **PublishRequest**: The information needed to publish to the catalog
+Returns:
+- **PublishRequestResponse**
+
+Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/publish/info`
+
+*/
+    pub async fn publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        package_name: &'a types::PackageName,
+        body: &'a types::PublishRequest,
+    ) -> Result<ResponseValue<types::PublishResponse>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/publish/info", self.baseurl,
+            encode_path(& catalog_name.to_string()), encode_path(& package_name
+            .to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            400u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**Get usernames that have read access to a catalog
 
 Get the list of usernames with read access to a catalog
@@ -3967,7 +4221,7 @@ Required Query Parameters:
 - **system**: This is returned but does not affect results
 
 Optional Query Parameters:
-- **catalogs**: Comma separated list of catalog names to search
+- **catalogs**: Comma separated list of catalog names to search; defaults to all catalogs
 - **page**: Optional page number for pagination (def = 0)
 - **pageSize**: Optional page size for pagination (def = 10)
 
@@ -3982,7 +4236,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
         catalogs: Option<&'a str>,
         page: Option<i64>,
         page_size: Option<i64>,
-        search_term: &'a types::SearchTerm,
+        search_term: Option<&'a types::SearchTerm>,
         system: types::SystemEnum,
     ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/search", self.baseurl,);
@@ -3996,7 +4250,9 @@ Sends a `GET` request to `/api/v1/catalog/search`
         if let Some(v) = &page_size {
             query.push(("pageSize", v.to_string()));
         }
-        query.push(("search_term", search_term.to_string()));
+        if let Some(v) = &search_term {
+            query.push(("search_term", v.to_string()));
+        }
         query.push(("system", system.to_string()));
         #[allow(unused_mut)]
         let mut request = self

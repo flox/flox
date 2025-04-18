@@ -667,6 +667,96 @@ pub mod operations {
             )
         }
     }
+    pub struct PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishInfoPostWhen(
+        httpmock::When,
+    );
+    impl PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishInfoPostWhen {
+        pub fn new(inner: httpmock::When) -> Self {
+            Self(
+                inner
+                    .method(httpmock::Method::POST)
+                    .path_matches(
+                        regex::Regex::new(
+                                "^/api/v1/catalog/catalogs/[^/]*/packages/[^/]*/publish/info$",
+                            )
+                            .unwrap(),
+                    ),
+            )
+        }
+        pub fn into_inner(self) -> httpmock::When {
+            self.0
+        }
+        pub fn catalog_name(self, value: &types::CatalogName) -> Self {
+            let re = regex::Regex::new(
+                    &format!(
+                        "^/api/v1/catalog/catalogs/{}/packages/.*/publish/info$", value
+                        .to_string()
+                    ),
+                )
+                .unwrap();
+            Self(self.0.path_matches(re))
+        }
+        pub fn package_name(self, value: &types::PackageName) -> Self {
+            let re = regex::Regex::new(
+                    &format!(
+                        "^/api/v1/catalog/catalogs/.*/packages/{}/publish/info$", value
+                        .to_string()
+                    ),
+                )
+                .unwrap();
+            Self(self.0.path_matches(re))
+        }
+        pub fn body(self, value: &types::PublishRequest) -> Self {
+            Self(self.0.json_body_obj(value))
+        }
+    }
+    pub struct PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishInfoPostThen(
+        httpmock::Then,
+    );
+    impl PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishInfoPostThen {
+        pub fn new(inner: httpmock::Then) -> Self {
+            Self(inner)
+        }
+        pub fn into_inner(self) -> httpmock::Then {
+            self.0
+        }
+        pub fn ok(self, value: &types::PublishResponse) -> Self {
+            Self(
+                self
+                    .0
+                    .status(200u16)
+                    .header("content-type", "application/json")
+                    .json_body_obj(value),
+            )
+        }
+        pub fn bad_request(self, value: &types::ErrorResponse) -> Self {
+            Self(
+                self
+                    .0
+                    .status(400u16)
+                    .header("content-type", "application/json")
+                    .json_body_obj(value),
+            )
+        }
+        pub fn not_found(self, value: &types::ErrorResponse) -> Self {
+            Self(
+                self
+                    .0
+                    .status(404u16)
+                    .header("content-type", "application/json")
+                    .json_body_obj(value),
+            )
+        }
+        pub fn unprocessable_entity(self, value: &types::ErrorResponse) -> Self {
+            Self(
+                self
+                    .0
+                    .status(422u16)
+                    .header("content-type", "application/json")
+                    .json_body_obj(value),
+            )
+        }
+    }
     pub struct GetCatalogSharingApiV1CatalogCatalogsCatalogNameSharingGetWhen(
         httpmock::When,
     );
@@ -1307,8 +1397,26 @@ pub mod operations {
                 )
             }
         }
-        pub fn search_term(self, value: &types::SearchTerm) -> Self {
-            Self(self.0.query_param("search_term", value.to_string()))
+        pub fn search_term<'a, T>(self, value: T) -> Self
+        where
+            T: Into<Option<&'a types::SearchTerm>>,
+        {
+            if let Some(value) = value.into() {
+                Self(self.0.query_param("search_term", value.to_string()))
+            } else {
+                Self(
+                    self
+                        .0
+                        .matches(|req| {
+                            req.query_params
+                                .as_ref()
+                                .and_then(|qs| {
+                                    qs.iter().find(|(key, _)| key == "search_term")
+                                })
+                                .is_none()
+                        }),
+                )
+            }
         }
         pub fn system(self, value: types::SystemEnum) -> Self {
             Self(self.0.query_param("system", value.to_string()))
@@ -1679,6 +1787,14 @@ pub trait MockServerExt {
             operations::PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishPostWhen,
             operations::PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishPostThen,
         );
+    fn publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post<
+        F,
+    >(&self, config_fn: F) -> httpmock::Mock
+    where
+        F: FnOnce(
+            operations::PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishInfoPostWhen,
+            operations::PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishInfoPostThen,
+        );
     fn get_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_get<F>(
         &self,
         config_fn: F,
@@ -1977,6 +2093,26 @@ impl MockServerExt for httpmock::MockServer {
                     when,
                 ),
                 operations::PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishPostThen::new(
+                    then,
+                ),
+            )
+        })
+    }
+    fn publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post<
+        F,
+    >(&self, config_fn: F) -> httpmock::Mock
+    where
+        F: FnOnce(
+            operations::PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishInfoPostWhen,
+            operations::PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishInfoPostThen,
+        ),
+    {
+        self.mock(|when, then| {
+            config_fn(
+                operations::PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishInfoPostWhen::new(
+                    when,
+                ),
+                operations::PublishRequestApiV1CatalogCatalogsCatalogNamePackagesPackageNamePublishInfoPostThen::new(
                     then,
                 ),
             )
