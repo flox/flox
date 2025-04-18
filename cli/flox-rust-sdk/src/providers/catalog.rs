@@ -35,7 +35,6 @@ use crate::flox::FLOX_VERSION;
 use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
 use crate::utils::logging::traceable_path;
 
-const NIXPKGS_CATALOG: &str = "nixpkgs";
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
 
@@ -552,7 +551,8 @@ impl ClientTrait for CatalogClient {
                 let response = self
                     .client
                     .search_api_v1_catalog_search_get(
-                        Some(NIXPKGS_CATALOG),
+                        // Default behavior for empty 'catalogs' is all catalogs.
+                        None,
                         Some(page_number),
                         Some(page_size),
                         &api_types::SearchTerm::from_str(search_term)
