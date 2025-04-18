@@ -39,6 +39,7 @@ use crate::models::manifest::raw::{
 };
 use crate::models::manifest::typed::{Manifest, ManifestError};
 use crate::providers::buildenv::{
+    self,
     BuildEnv,
     BuildEnvError,
     BuildEnvNix,
@@ -46,6 +47,8 @@ use crate::providers::buildenv::{
     BuiltStorePath,
 };
 use crate::providers::services::{ServiceError, maybe_make_service_config_file};
+
+const TEMPROOTS_DIR_NAME: &str = "temp-roots";
 
 pub struct ReadOnly {}
 struct ReadWrite {}
@@ -260,8 +263,11 @@ impl<State> CoreEnvironment<State> {
 
         let service_config_path = maybe_make_service_config_file(flox, &lockfile)?;
 
-        let outputs =
-            BuildEnvNix.build(&flox.catalog_client, &lockfile_path, service_config_path)?;
+        let outputs = BuildEnvNix::new(flox.temp_dir.join(TEMPROOTS_DIR_NAME)).build(
+            &flox.catalog_client,
+            &lockfile_path,
+            service_config_path,
+        )?;
         debug!(?outputs, "built environment");
         Ok(outputs)
     }
@@ -274,7 +280,7 @@ impl CoreEnvironment<()> {
         out_link_path: impl AsRef<Path>,
         store_path: &BuiltStorePath,
     ) -> Result<(), CoreEnvironmentError> {
-        BuildEnvNix.link(out_link_path, store_path)?;
+        buildenv::create_gc_root_in([store_path.as_path()], out_link_path)?;
 
         Ok(())
     }
@@ -501,7 +507,7 @@ impl CoreEnvironment<ReadOnly> {
 
             // We are not interested in the store path here, so we ignore the result
             // Neither do we depend on services, so we pass `None`
-            let _ = BuildEnvNix
+            let _ = BuildEnvNix::new(flox.temp_dir.join(TEMPROOTS_DIR_NAME))
                 .build(&flox.catalog_client, tmp_lockfile.path(), None)
                 .map_err(|e| EnvironmentError::Core(CoreEnvironmentError::BuildEnv(e)))?;
         }
