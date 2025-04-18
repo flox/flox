@@ -165,11 +165,18 @@ EOF
 }
 
 # bats test_tags=init:gitignore
-@test "c9: flox init adds .gitingore that ignores run/ directory" {
+@test "c9: flox init adds .gitignore that ignores run/ directory" {
   "$FLOX_BIN" init
   run cat .flox/.gitignore
   assert_success
   assert_line "run/"
+}
+
+@test "c9: flox init adds .gitattributes" {
+  "$FLOX_BIN" init
+  run cat .flox/.gitattributes
+  assert_success
+  assert_line "manifest.lock linguist-generated=true linguist-language=JSON"
 }
 
 # ---------------------------------------------------------------------------- #
