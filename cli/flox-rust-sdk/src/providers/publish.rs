@@ -214,7 +214,7 @@ impl Publisher for PublishProvider {
         // needed.
         tracing::debug!("Beginning publish of package...");
         let publish_response = client
-            .publish(catalog_name, &self.env_metadata.package)
+            .publish_info(catalog_name, &self.env_metadata.package)
             .await
             .map_err(PublishError::CatalogError)?;
 

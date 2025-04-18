@@ -16,7 +16,7 @@
             "insecure": false,
             "install_id": "curl",
             "license": "curl",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "curl-8.12.1",
             "outputs": [
@@ -47,10 +47,10 @@
             ],
             "pkg_path": "curl",
             "pname": "curl",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:10:55.297124Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:11:24.663658Z",
             "stabilities": [
               "unstable"
             ],
@@ -67,7 +67,7 @@
             "insecure": false,
             "install_id": "curl",
             "license": "curl",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "curl-8.12.1",
             "outputs": [
@@ -102,10 +102,10 @@
             ],
             "pkg_path": "curl",
             "pname": "curl",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:27:37.886184Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:28:03.149223Z",
             "stabilities": [
               "unstable"
             ],
@@ -122,7 +122,7 @@
             "insecure": false,
             "install_id": "curl",
             "license": "curl",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "curl-8.12.1",
             "outputs": [
@@ -153,10 +153,10 @@
             ],
             "pkg_path": "curl",
             "pname": "curl",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:43:04.348987Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:43:35.751170Z",
             "stabilities": [
               "unstable"
             ],
@@ -173,7 +173,7 @@
             "insecure": false,
             "install_id": "curl",
             "license": "curl",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "curl-8.12.1",
             "outputs": [
@@ -208,10 +208,10 @@
             ],
             "pkg_path": "curl",
             "pname": "curl",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T02:01:16.959078Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T02:01:52.013808Z",
             "stabilities": [
               "unstable"
             ],
@@ -228,7 +228,7 @@
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "hello-2.12.1",
             "outputs": [
@@ -242,10 +242,10 @@
             ],
             "pkg_path": "hello",
             "pname": "hello",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:10:55.970191Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:11:25.346599Z",
             "stabilities": [
               "unstable"
             ],
@@ -262,7 +262,7 @@
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "hello-2.12.1",
             "outputs": [
@@ -276,10 +276,10 @@
             ],
             "pkg_path": "hello",
             "pname": "hello",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:27:39.339134Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:28:04.609266Z",
             "stabilities": [
               "unstable"
             ],
@@ -296,7 +296,7 @@
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "hello-2.12.1",
             "outputs": [
@@ -310,10 +310,10 @@
             ],
             "pkg_path": "hello",
             "pname": "hello",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:43:05.065415Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:43:36.474478Z",
             "stabilities": [
               "unstable"
             ],
@@ -330,7 +330,7 @@
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "hello-2.12.1",
             "outputs": [
@@ -344,10 +344,10 @@
             ],
             "pkg_path": "hello",
             "pname": "hello",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T02:01:18.578701Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T02:01:53.644251Z",
             "stabilities": [
               "unstable"
             ],
@@ -356,7 +356,7 @@
             "version": "2.12.1"
           }
         ],
-        "page": 780821,
+        "page": 782401,
         "url": ""
       }
     }

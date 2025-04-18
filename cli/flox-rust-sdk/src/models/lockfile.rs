@@ -1966,7 +1966,7 @@ pub(crate) mod tests {
             unreachable!("package_versions should not be called");
         }
 
-        async fn publish(
+        async fn publish_info(
             &self,
             _catalog_name: impl AsRef<str> + Send + Sync,
             _package_name: impl AsRef<str> + Send + Sync,
