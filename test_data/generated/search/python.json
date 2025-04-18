@@ -1,6 +1,6 @@
 [
   {
-    "count": 21206,
+    "count": 20862,
     "results": [
       {
         "attr_path": "python",
@@ -10,7 +10,7 @@
         "pkg_path": "python",
         "pname": "python",
         "stabilities": [],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": "2.7.18.8"
       },
       {
@@ -21,7 +21,7 @@
         "pkg_path": "gpython",
         "pname": "gpython",
         "stabilities": [],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": "0.2.0"
       },
       {
@@ -32,7 +32,7 @@
         "pkg_path": "python2",
         "pname": "python2",
         "stabilities": [],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": "2.7.18.8"
       },
       {
@@ -43,7 +43,7 @@
         "pkg_path": "python3",
         "pname": "python3",
         "stabilities": [],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": "3.12.9"
       },
       {
@@ -54,7 +54,7 @@
         "pkg_path": "python27",
         "pname": "python27",
         "stabilities": [],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": "2.7.18.8"
       },
       {
@@ -65,7 +65,7 @@
         "pkg_path": "python36",
         "pname": "python36",
         "stabilities": [],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": "python3-3.6.14"
       },
       {
@@ -76,7 +76,7 @@
         "pkg_path": "python37",
         "pname": "python37",
         "stabilities": [],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": "python3-3.7.16"
       },
       {
@@ -87,7 +87,7 @@
         "pkg_path": "python38",
         "pname": "python38",
         "stabilities": [],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": "python3-3.8.18"
       },
       {
@@ -98,7 +98,7 @@
         "pkg_path": "python39",
         "pname": "python39",
         "stabilities": [],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": "python3-3.9.21"
       },
       {
@@ -109,7 +109,7 @@
         "pkg_path": "python-qt",
         "pname": "python-qt",
         "stabilities": [],
-        "system": "aarch64-darwin",
+        "system": "x86_64-linux",
         "version": "3.6.0"
       }
     ]

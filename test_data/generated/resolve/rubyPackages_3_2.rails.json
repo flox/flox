@@ -16,7 +16,7 @@
             "insecure": false,
             "install_id": "rails",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "ruby3.2-rails-8.0.2",
             "outputs": [
@@ -30,10 +30,10 @@
             ],
             "pkg_path": "rubyPackages_3_2.rails",
             "pname": "rails",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:11:24.876424Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:11:54.546248Z",
             "stabilities": [
               "unstable"
             ],
@@ -50,7 +50,7 @@
             "insecure": false,
             "install_id": "rails",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "ruby3.2-rails-8.0.2",
             "outputs": [
@@ -64,10 +64,10 @@
             ],
             "pkg_path": "rubyPackages_3_2.rails",
             "pname": "rails",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:28:30.029745Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:28:55.705925Z",
             "stabilities": [
               "unstable"
             ],
@@ -84,7 +84,7 @@
             "insecure": false,
             "install_id": "rails",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "ruby3.2-rails-8.0.2",
             "outputs": [
@@ -98,10 +98,10 @@
             ],
             "pkg_path": "rubyPackages_3_2.rails",
             "pname": "rails",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T01:43:34.058629Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T01:44:06.105941Z",
             "stabilities": [
               "unstable"
             ],
@@ -118,7 +118,7 @@
             "insecure": false,
             "install_id": "rails",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "ruby3.2-rails-8.0.2",
             "outputs": [
@@ -132,10 +132,10 @@
             ],
             "pkg_path": "rubyPackages_3_2.rails",
             "pname": "rails",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T02:02:13.808543Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T02:02:49.236367Z",
             "stabilities": [
               "unstable"
             ],
@@ -144,7 +144,7 @@
             "version": "8.0.2"
           }
         ],
-        "page": 780821,
+        "page": 782401,
         "url": ""
       }
     }

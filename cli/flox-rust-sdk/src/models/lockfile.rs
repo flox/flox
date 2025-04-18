@@ -1925,7 +1925,6 @@ pub(crate) mod tests {
         InstallableLockerMock,
     };
 
-    /// A mock locker that panics if any of its methods are called
     struct PanickingLocker;
     impl InstallableLocker for PanickingLocker {
         fn lock_flake_installable(
