@@ -16,7 +16,7 @@
             "insecure": false,
             "install_id": "glibc",
             "license": "LGPL-2.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
             "missing_builds": false,
             "name": "glibc-2.40-66",
             "outputs": [
@@ -50,10 +50,10 @@
             ],
             "pkg_path": "glibc",
             "pname": "glibc",
-            "rev": "c8cd81426f45942bb2906d5ed2fe21d2f19d95b7",
-            "rev_count": 780821,
-            "rev_date": "2025-04-08T07:41:42Z",
-            "scrape_date": "2025-04-10T02:01:17.851337Z",
+            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "rev_count": 782401,
+            "rev_date": "2025-04-12T13:19:24Z",
+            "scrape_date": "2025-04-14T02:01:52.912692Z",
             "stabilities": [
               "unstable"
             ],
@@ -62,7 +62,7 @@
             "version": "2.40-66"
           }
         ],
-        "page": 780821,
+        "page": 782401,
         "url": ""
       }
     }
