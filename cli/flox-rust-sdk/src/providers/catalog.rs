@@ -33,6 +33,7 @@ use tracing::{debug, instrument};
 use crate::data::System;
 use crate::flox::FLOX_VERSION;
 use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
+use crate::utils::IN_CI;
 use crate::utils::logging::traceable_path;
 
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
@@ -212,7 +213,7 @@ impl CatalogClient {
         let mut header_map = HeaderMap::new();
 
         // Pass in a bool if we are running in CI, so requests can reflect this in the headers
-        if std::env::var("CI").is_ok() {
+        if *IN_CI {
             header_map.insert(
                 header::HeaderName::from_static("flox-ci"),
                 header::HeaderValue::from_static("true"),

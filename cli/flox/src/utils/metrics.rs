@@ -9,6 +9,7 @@ use std::time::Duration as TimeoutDuration;
 
 use anyhow::{Context, Result, bail};
 use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_rust_sdk::utils::IN_CI;
 use fslock::LockFile;
 use indoc::indoc;
 use serde::{Deserialize, Serialize};
@@ -439,6 +440,8 @@ impl Connection for AWSDatalakeConnection {
                         // compat
                         "$os": entry.os_family,
                         "kernel_version": entry.os_family_release,
+
+                        "ci": *IN_CI,
 
                         "$set_once": {
                             "initial_flox_version": entry.flox_version,
