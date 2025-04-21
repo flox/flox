@@ -16,7 +16,6 @@ use flox_rust_sdk::providers::publish::{
 };
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
-use url::Url;
 
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::ensure_floxhub_token;
@@ -46,11 +45,6 @@ pub struct Publish {
 
 #[derive(Debug, Bpaf, Clone, Default)]
 struct CacheArgs {
-    /// URL of store to copy packages to.
-    /// Takes precedence over a value from 'flox config'.
-    #[bpaf(long, argument("URL"), hide)]
-    store_url: Option<Url>,
-
     /// Which catalog to publish to.
     /// Takes precedence over the default value of the user's GitHub handle.
     #[bpaf(short, long, argument("NAME"))]
@@ -168,13 +162,7 @@ impl Publish {
 
         debug!("publishing package: {}", &package);
         match publish_provider
-            .publish(
-                &flox.catalog_client,
-                &catalog_name,
-                cache_args.store_url,
-                key_file,
-                metadata_only,
-            )
+            .publish(&flox.catalog_client, &catalog_name, key_file, metadata_only)
             .await
         {
             Ok(_) => message::updated(formatdoc! {"

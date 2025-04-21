@@ -68,7 +68,6 @@ pub trait Publisher {
         &self,
         client: &Client,
         catalog_name: &str,
-        ingress_uri_override: Option<Url>,
         key_file: Option<PathBuf>,
         metadata_only: bool,
     ) -> Result<(), PublishError>;
@@ -186,7 +185,6 @@ impl Publisher for PublishProvider {
         &self,
         client: &Client,
         catalog_name: &str,
-        ingress_uri_override: Option<Url>,
         key_file: Option<PathBuf>,
         metadata_only: bool,
     ) -> Result<(), PublishError> {
@@ -220,7 +218,6 @@ impl Publisher for PublishProvider {
 
         let cache = determine_cache(
             metadata_only,
-            ingress_uri_override,
             key_file,
             publish_response.catalog_store_config,
         )?;
@@ -286,25 +283,23 @@ impl Publisher for PublishProvider {
 /// metadata_only is true.
 fn determine_cache(
     metadata_only: bool,
-    ingress_uri_override: Option<Url>,
     key_file: Option<PathBuf>,
     store_config: CatalogStoreConfig,
 ) -> Result<Option<NixCopyCache>, PublishError> {
     if metadata_only {
         return Ok(None);
     }
-    let ingress_uri = match (ingress_uri_override, store_config) {
-        (Some(ingress_uri), _) => ingress_uri,
-        (None, CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy { ingress_uri, .. })) => {
+    let ingress_uri = match store_config {
+        CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy { ingress_uri, .. }) => {
             Url::parse(&ingress_uri)
                 .map_err(|e| PublishError::Catchall(format!("failed to parse ingress URI: {e}")))?
         },
-        (None, CatalogStoreConfig::Null) => {
+        CatalogStoreConfig::Null => {
             unreachable!("publish endpoint should error for CatalogStoreConfig::Null")
         },
         // No cache for CatalogStoreConfig::MetaOnly
-        (None, CatalogStoreConfig::MetaOnly) => return Ok(None),
-        (None, CatalogStoreConfig::Publisher) => {
+        CatalogStoreConfig::MetaOnly => return Ok(None),
+        CatalogStoreConfig::Publisher => {
             unimplemented!("publisher store type is not implemented")
         },
     };
@@ -918,7 +913,7 @@ pub mod tests {
         ]);
 
         let res = publish_provider
-            .publish(&flox.catalog_client, &catalog_name, None, None, false)
+            .publish(&flox.catalog_client, &catalog_name, None, false)
             .await;
 
         assert!(res.is_ok());
@@ -990,7 +985,7 @@ pub mod tests {
         ]);
 
         let result = publish_provider
-            .publish(&client, &catalog_name, None, None, false)
+            .publish(&client, &catalog_name, None, false)
             .await;
 
         let err = result.unwrap_err();
@@ -1054,13 +1049,7 @@ pub mod tests {
 
         // We should error even if metadata_only is true and ingress_uri_override is set
         let result = publish_provider
-            .publish(
-                &client,
-                &catalog_name,
-                Some("https://example.com".parse().unwrap()),
-                None,
-                true,
-            )
+            .publish(&client, &catalog_name, None, true)
             .await;
 
         packages_mock.assert();
@@ -1121,7 +1110,6 @@ pub mod tests {
             .publish(
                 &flox.catalog_client,
                 &catalog_name,
-                None,
                 Some(cache.key_file),
                 false,
             )
