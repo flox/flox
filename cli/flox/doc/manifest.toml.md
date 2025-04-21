@@ -439,12 +439,18 @@ Shutdown ::= {
 `is-daemon`
 :   Whether this service spawns a daemon when it starts. Some commands start a
     background process and then terminate instead of themselves running for an
-    extended period of time. These programs need special handling when it comes
-    time to shut down the services, so you must mark them with the `is-daemon`
-    field. If this field is set to `true` you must also specify the
-    `shutdown.command` field, otherwise the process will continue to run after
-    calling `flox services stop` or after exiting the last activation of the
-    environment.
+    extended period of time. The underlying process manager cannot track the
+    PID of the daemon that is spawned, only the PID of the process that
+    *spawned* the daemon. For this reason you must set the `is-daemon` option
+    to `true`, otherwise `flox services status` will show that the service has
+    terminated even though the daemon may still be running. Furthermore, since
+    the process manager doesn't know the PID of the daemon itself, it cannot
+    deliver a shutdown signal to the daemon. For this reason you must *also*
+    provide the `shutdown.command` option so that the process manager knows
+    what command to run to shut down the daemon. Failure to set both
+    `is-daemon` and `shutdown.command` will allow the daemon to continue
+    running even after running `flox services stop` or exiting the last
+    activation of the environment.
 
 `shutdown.command`
 :   A command to run to shut down the service instead of delivering the SIGTERM
