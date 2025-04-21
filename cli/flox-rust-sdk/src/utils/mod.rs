@@ -6,9 +6,10 @@ pub mod logging;
 use std::fmt::{Display, Write};
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use std::thread::{self, JoinHandle};
 use std::time::SystemTime;
-use std::{fs, io};
+use std::{env, fs, io};
 
 pub use flox_core::traceable_path;
 use thiserror::Error;
@@ -16,6 +17,11 @@ use tracing::{debug, trace};
 use walkdir;
 
 use self::errors::IoError;
+
+/// Whether the CLI is being run in CI
+/// We could probably be more thorough about what we're checking,
+/// but for now just use the `CI` environment variable
+pub static IN_CI: LazyLock<bool> = LazyLock::new(|| env::var("CI").is_ok());
 
 #[derive(Error, Debug)]
 pub enum FindAndReplaceError {
