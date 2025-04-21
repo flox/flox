@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::str::FromStr;
 
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
@@ -48,6 +50,9 @@ pub enum PublishError {
 
     #[error("Failed to upload to cache: {0}")]
     CacheUploadError(String),
+
+    #[error("Failed to get additional artifact metadata: {0}")]
+    GetNarInfo(String),
 
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
@@ -183,10 +188,12 @@ impl ClientSideCatalogStoreConfig {
         match self {
             ClientSideCatalogStoreConfig::NixCopy {
                 ingress_uri,
-                egress_uri: _egress_uri,
+                egress_uri,
                 signing_private_key_path,
             } => {
                 Self::upload_build_outputs(ingress_uri, signing_private_key_path, build_outputs)?;
+                let _raw_narinfos =
+                    Self::get_build_output_raw_nar_infos(egress_uri, build_outputs)?;
                 Ok(())
             },
             ClientSideCatalogStoreConfig::MetadataOnly => {
@@ -267,6 +274,66 @@ impl ClientSideCatalogStoreConfig {
             let stderr = String::from_utf8_lossy(&output.stderr);
             Err(PublishError::CacheUploadError(stderr.to_string()))
         }
+    }
+
+    /// Constructs a `nix path-info` command that will get the NAR info for a
+    /// store path from the specified store, including the optional information
+    /// about the closure size of the store path.
+    fn nar_info_cmd(store_url: &Url, store_path: &str) -> Command {
+        let mut cmd = nix_base_command();
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+        cmd.args([
+            "path-info",
+            "--store",
+            store_url.as_str(),
+            "--closure-size",
+            "--json",
+            store_path,
+        ]);
+        cmd
+    }
+
+    /// Gets the raw JSON representation of the NAR info for the specified store path
+    /// in the specified store. Note that different versions of Nix will report the NAR
+    /// info in different formats. This function only handles the I/O to get the JSON
+    /// so that other functions can do the parsing and format navigation.
+    #[instrument(skip_all, fields(progress = format!("Collecting extra build metadata for '{store_path}'")))]
+    fn get_raw_nar_info(
+        source_url: &Url,
+        store_path: &str,
+    ) -> Result<serde_json::Value, PublishError> {
+        let mut cmd = Self::nar_info_cmd(source_url, store_path);
+        debug!(cmd = %cmd.display(), "running nix path-info command");
+        let output = cmd.output().map_err(|e| {
+            PublishError::Catchall(format!("failed to execute NAR info command: {e}"))
+        })?;
+        if !output.status.success() {
+            return Err(PublishError::GetNarInfo(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+        let json = serde_json::Value::from(output.stdout);
+        Ok(json)
+    }
+
+    /// Get the raw JSON NAR info for each output of the build.
+    fn get_build_output_raw_nar_infos(
+        source_url: &Url,
+        build_outputs: &[Output],
+    ) -> Result<HashMap<String, serde_json::Value>, PublishError> {
+        let mut raw_nar_infos = HashMap::new();
+        for output in build_outputs.iter() {
+            debug!(
+                output = output.name,
+                store_path = output.store_path,
+                store = source_url.as_str(),
+                "querying NAR info for build output"
+            );
+            let raw_nar_info = Self::get_raw_nar_info(source_url, &output.store_path)?;
+            raw_nar_infos.insert(output.name.clone(), raw_nar_info);
+        }
+        Ok(raw_nar_infos)
     }
 }
 
