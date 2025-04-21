@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::publish::NixCopyCache;
+use flox_rust_sdk::providers::publish::ClientSideCatalogStoreConfig;
 use tracing::instrument;
 use url::Url;
 
@@ -40,16 +40,14 @@ impl Upload {
 
         subcommand_metric!("upload");
 
-        let store_path = validate_store_path(self.store_path)?;
+        let store_path = validate_store_path(self.store_path.clone())?;
 
-        let cache = NixCopyCache {
-            url: self.cache.store_url,
-            key_file: self.cache.signing_key,
-        };
-
-        cache
-            .upload(&store_path.to_string_lossy())
-            .context("Failed to upload artifact")?;
+        ClientSideCatalogStoreConfig::upload_store_path(
+            &self.cache.store_url,
+            &self.cache.signing_key,
+            &store_path.to_string_lossy(),
+        )
+        .context("Failed to upload artifact")?;
 
         message::updated(format!(
             "Store path {} uploaded successfully.",
