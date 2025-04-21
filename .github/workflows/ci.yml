@@ -264,22 +264,16 @@ jobs:
                 --no-update-lock-file  \
                 --print-out-paths      \
                   "$package";
+              if [[ "$package" = *flox ]]; then
+                  CLOSURE_SIZE=$(nix path-info ./result -S | awk '{print $2}')
+                  echo "closure-size-${{ matrix.system }}=$CLOSURE_SIZE" >> "$GITHUB_OUTPUT"
+                  if [[ "$CLOSURE_SIZE" -gt 320000000 ]]; then # 320MB-ish
+                    echo "  -> $package is too large: $CLOSURE_SIZE";
+                    exit 1;
+                  fi
+              fi
             fi
           done
-
-      - name: "Get closure size"
-        id: "closure"
-        run: |
-          NIX="nix --accept-flake-config --experimental-features 'nix-command flakes'"
-          CLOSURE_SIZE=$(
-            ssh github@$REMOTE_SERVER \
-              -oLogLevel=ERROR \
-              -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
-                "$NIX build github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox &&" \
-                "$NIX path-info -r --json ./result" \
-            | jq '[.[].narSize]|add'
-          )
-          echo "closure-size-${{ matrix.system }}=$CLOSURE_SIZE" >> "$GITHUB_OUTPUT"
 
       - name: "Get Flox version"
         id: "version"
