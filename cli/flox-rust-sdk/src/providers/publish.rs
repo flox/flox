@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 
-use catalog_api_v1::types::{Output, Outputs, SystemEnum};
+use catalog_api_v1::types::{NarInfo, NarInfos, Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
@@ -53,6 +53,9 @@ pub enum PublishError {
 
     #[error("Failed to get additional artifact metadata: {0}")]
     GetNarInfo(String),
+
+    #[error("Failed to parse artifact metadata")]
+    ParseNarInfo(#[source] serde_json::Error),
 
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
@@ -184,7 +187,12 @@ impl ClientSideCatalogStoreConfig {
         }
     }
 
-    pub fn maybe_upload_artifacts(&self, build_outputs: &[Output]) -> Result<(), PublishError> {
+    /// Depending on whether the catalog store is configured to accept uploaded artifacts,
+    /// upload the build outputs and their NAR infos or skip the upload entirely.
+    pub fn maybe_upload_artifacts(
+        &self,
+        build_outputs: &[Output],
+    ) -> Result<Option<NarInfos>, PublishError> {
         match self {
             ClientSideCatalogStoreConfig::NixCopy {
                 ingress_uri,
@@ -192,31 +200,32 @@ impl ClientSideCatalogStoreConfig {
                 signing_private_key_path,
             } => {
                 Self::upload_build_outputs(ingress_uri, signing_private_key_path, build_outputs)?;
-                let _raw_narinfos =
-                    Self::get_build_output_raw_nar_infos(egress_uri, build_outputs)?;
-                Ok(())
+                let nar_infos = Self::get_build_output_nar_infos(egress_uri, build_outputs)?;
+                Ok(Some(nar_infos))
             },
             ClientSideCatalogStoreConfig::MetadataOnly => {
                 debug!(
                     reason = "metadata-only catalog store",
                     "skipping artifact upload"
                 );
-                Ok(())
+                Ok(None)
             },
             ClientSideCatalogStoreConfig::Null => {
                 debug!(reason = "null catalog store", "skipping artifact upload");
-                Ok(())
+                Ok(None)
             },
             ClientSideCatalogStoreConfig::Publisher => {
                 debug!(
                     reason = "publisher not implemented",
                     "skipping artifact upload"
                 );
-                Ok(())
+                Ok(None)
             },
         }
     }
 
+    /// Uploads the store paths corresponding to each build output. Note that
+    /// NAR info is uploaded in a different method.
     fn upload_build_outputs(
         destination_url: &Url,
         signing_key_path: &Path,
@@ -294,15 +303,11 @@ impl ClientSideCatalogStoreConfig {
         cmd
     }
 
-    /// Gets the raw JSON representation of the NAR info for the specified store path
-    /// in the specified store. Note that different versions of Nix will report the NAR
-    /// info in different formats. This function only handles the I/O to get the JSON
-    /// so that other functions can do the parsing and format navigation.
+    /// Gets the NAR info for a single store path and returns it in the format that the
+    /// catalog server expects e.g. one that is tolerant of the different NAR info formats
+    /// that the `nix` CLI can return.
     #[instrument(skip_all, fields(progress = format!("Collecting extra build metadata for '{store_path}'")))]
-    fn get_raw_nar_info(
-        source_url: &Url,
-        store_path: &str,
-    ) -> Result<serde_json::Value, PublishError> {
+    fn get_nar_info(source_url: &Url, store_path: &str) -> Result<NarInfo, PublishError> {
         let mut cmd = Self::nar_info_cmd(source_url, store_path);
         debug!(cmd = %cmd.display(), "running nix path-info command");
         let output = cmd.output().map_err(|e| {
@@ -313,16 +318,17 @@ impl ClientSideCatalogStoreConfig {
                 String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
-        let json = serde_json::Value::from(output.stdout);
-        Ok(json)
+        serde_json::from_slice(&output.stdout).map_err(PublishError::ParseNarInfo)
     }
 
-    /// Get the raw JSON NAR info for each output of the build.
-    fn get_build_output_raw_nar_infos(
+    /// Gets the NAR info for each build output and returns it in the format
+    /// that the catalog server expects e.g. one that is tolerant of the different
+    /// NAR info formats that the `nix` CLI can return.
+    fn get_build_output_nar_infos(
         source_url: &Url,
         build_outputs: &[Output],
-    ) -> Result<HashMap<String, serde_json::Value>, PublishError> {
-        let mut raw_nar_infos = HashMap::new();
+    ) -> Result<NarInfos, PublishError> {
+        let mut nar_infos = HashMap::new();
         for output in build_outputs.iter() {
             debug!(
                 output = output.name,
@@ -330,10 +336,10 @@ impl ClientSideCatalogStoreConfig {
                 store = source_url.as_str(),
                 "querying NAR info for build output"
             );
-            let raw_nar_info = Self::get_raw_nar_info(source_url, &output.store_path)?;
-            raw_nar_infos.insert(output.name.clone(), raw_nar_info);
+            let nar_info = Self::get_nar_info(source_url, &output.store_path)?;
+            nar_infos.insert(output.name.clone(), nar_info);
         }
-        Ok(raw_nar_infos)
+        Ok(nar_infos.into())
     }
 }
 
@@ -390,7 +396,7 @@ impl Publisher for PublishProvider {
             key_file,
             publish_response.catalog_store_config,
         )?;
-        catalog_store_config.maybe_upload_artifacts(&self.build_metadata.outputs)?;
+        let narinfos = catalog_store_config.maybe_upload_artifacts(&self.build_metadata.outputs)?;
 
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
@@ -412,14 +418,9 @@ impl Publisher for PublishProvider {
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
             rev_date: self.env_metadata.build_repo_ref.rev_date,
             cache_uri: catalog_store_config.upload_url().map(|url| url.to_string()),
-            narinfos: None,
+            narinfos,
         };
 
-        // Step 4: send the metadata for the built derivation to the catalog.
-        // TODO - Using nix path-info on the _egress-uri_ for the catalog to
-        // download the narinfos for each output of the derivation.  This
-        // should then be included in the subsequent publish API call.
-        // This will be skipped for metadata only store (or override).
         tracing::debug!("Publishing build in catalog...");
         client
             .publish_build(&catalog_name, &self.env_metadata.package, &build_info)
@@ -1205,7 +1206,7 @@ pub mod tests {
             env_metadata,
         };
 
-        // We should error even if metadata_only is true and ingress_uri_override is set
+        // We should error even if metadata_only is true
         let result = publish_provider
             .publish(&client, &catalog_name, None, true)
             .await;
