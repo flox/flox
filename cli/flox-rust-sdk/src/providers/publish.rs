@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use catalog_api_v1::types::{Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
-use tracing::instrument;
+use tracing::{debug, instrument};
 use url::Url;
 
 use super::build::{BuildResult, BuildResults, ManifestBuilder};
@@ -124,19 +124,121 @@ pub struct CheckedBuildMetadata {
     _private: (),
 }
 
+/// Configuration for uploading to or downloading from a catalog store.
 #[derive(Debug, Clone, PartialEq)]
-pub struct NixCopyCache {
-    pub url: Url,
-    pub key_file: PathBuf,
+pub enum ClientSideCatalogStoreConfig {
+    /// A `nix copy`-compatible Catalog Store (typically an S3 bucket).
+    NixCopy {
+        /// Where signed artifacts are uploaded to.
+        ingress_uri: Url,
+        /// Where artifacts are downloaded from.
+        egress_uri: Url,
+        /// The path to the key used to sign artifacts before uploading them.
+        signing_private_key_path: PathBuf,
+    },
+    /// A Catalog Store which only accepts metadata uploads.
+    MetadataOnly,
+    /// A Catalog with no Catalog Store configured.
+    Null,
+    /// A Catalog Store that doesn't require a signing key from the user doing
+    /// the upload.
+    Publisher,
 }
 
-impl NixCopyCache {
-    #[instrument(skip(self), fields(progress = format!("Uploading '{path}' to '{}'", self.url)))]
-    pub fn upload(&self, path: &str) -> Result<(), PublishError> {
-        let mut url = self.url.clone();
+impl ClientSideCatalogStoreConfig {
+    /// Returns the URL to which a client would upload new artifacts.
+    pub fn upload_url(&self) -> Option<Url> {
+        match self {
+            ClientSideCatalogStoreConfig::NixCopy { ingress_uri, .. } => Some(ingress_uri.clone()),
+            ClientSideCatalogStoreConfig::MetadataOnly => None,
+            ClientSideCatalogStoreConfig::Null => None,
+            ClientSideCatalogStoreConfig::Publisher => None,
+        }
+    }
+
+    /// Returns the URL from which a client would download artifacts.
+    pub fn download_url(&self) -> Option<Url> {
+        match self {
+            ClientSideCatalogStoreConfig::NixCopy { egress_uri, .. } => Some(egress_uri.clone()),
+            ClientSideCatalogStoreConfig::MetadataOnly => None,
+            ClientSideCatalogStoreConfig::Null => None,
+            ClientSideCatalogStoreConfig::Publisher => None,
+        }
+    }
+
+    /// Returns the path of the local signing key if one is configured.
+    pub fn local_signing_key_path(&self) -> Option<PathBuf> {
+        if let ClientSideCatalogStoreConfig::NixCopy {
+            signing_private_key_path,
+            ..
+        } = self
+        {
+            Some(signing_private_key_path.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn maybe_upload_artifacts(&self, build_outputs: &[Output]) -> Result<(), PublishError> {
+        match self {
+            ClientSideCatalogStoreConfig::NixCopy {
+                ingress_uri,
+                egress_uri: _egress_uri,
+                signing_private_key_path,
+            } => {
+                Self::upload_build_outputs(ingress_uri, signing_private_key_path, build_outputs)?;
+                Ok(())
+            },
+            ClientSideCatalogStoreConfig::MetadataOnly => {
+                debug!(
+                    reason = "metadata-only catalog store",
+                    "skipping artifact upload"
+                );
+                Ok(())
+            },
+            ClientSideCatalogStoreConfig::Null => {
+                debug!(reason = "null catalog store", "skipping artifact upload");
+                Ok(())
+            },
+            ClientSideCatalogStoreConfig::Publisher => {
+                debug!(
+                    reason = "publisher not implemented",
+                    "skipping artifact upload"
+                );
+                Ok(())
+            },
+        }
+    }
+
+    fn upload_build_outputs(
+        destination_url: &Url,
+        signing_key_path: &Path,
+        build_outputs: &[Output],
+    ) -> Result<(), PublishError> {
+        for output in build_outputs.iter() {
+            debug!(
+                "Uploading output {} ({}) to cache...",
+                output.name, output.store_path
+            );
+            Self::upload_store_path(destination_url, signing_key_path, &output.store_path)?;
+        }
+        Ok(())
+    }
+
+    /// Upload a single store path to a Catalog Store.
+    ///
+    /// Note: this is only public because it's used in the private `flox upload`
+    ///       command.
+    #[instrument(skip_all, fields(progress = format!("Uploading '{store_path}' to '{}'", destination_url)))]
+    pub fn upload_store_path(
+        destination_url: &Url,
+        signing_key_path: &Path,
+        store_path: &str,
+    ) -> Result<(), PublishError> {
+        let mut url = destination_url.clone();
         let url_with_key = url
             .query_pairs_mut()
-            .append_pair("secret-key", &self.key_file.to_string_lossy())
+            .append_pair("secret-key", signing_key_path.to_string_lossy().as_ref())
             .append_pair("ls-compression", "zstd")
             .append_pair("compression", "zstd")
             .append_pair("write-nar-listing", "true")
@@ -147,10 +249,10 @@ impl NixCopyCache {
             .arg("copy")
             .arg("--to")
             .arg(url_with_key.to_string())
-            .arg(path);
+            .arg(store_path);
 
-        tracing::debug!(
-            %path,
+        debug!(
+            %store_path,
             %url_with_key,
             cmd = %copy_command.display(),
             "Uploading store path to cache"
@@ -216,25 +318,12 @@ impl Publisher for PublishProvider {
             .await
             .map_err(PublishError::CatalogError)?;
 
-        let cache = determine_cache(
+        let catalog_store_config = get_client_side_catalog_store_config(
             metadata_only,
             key_file,
             publish_response.catalog_store_config,
         )?;
-
-        // Step 3: optionally upload to cache
-        if let Some(cache) = &cache {
-            for output in self.build_metadata.outputs.iter() {
-                tracing::debug!(
-                    "Uploading output {} ({}) to cache...",
-                    output.name,
-                    output.store_path
-                );
-                cache.upload(&output.store_path)?
-            }
-        } else {
-            tracing::debug!("No cache configured so skipping upload");
-        }
+        catalog_store_config.maybe_upload_artifacts(&self.build_metadata.outputs)?;
 
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
@@ -255,7 +344,7 @@ impl Publisher for PublishProvider {
             rev: self.env_metadata.build_repo_ref.rev.clone(),
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
             rev_date: self.env_metadata.build_repo_ref.rev_date,
-            cache_uri: cache.map(|cache| cache.url.to_string()),
+            cache_uri: catalog_store_config.upload_url().map(|url| url.to_string()),
             narinfos: None,
         };
 
@@ -274,55 +363,54 @@ impl Publisher for PublishProvider {
     }
 }
 
-/// Construct a cache if one should be used.
-///
-/// ingress_uri_override is used regardless of what [CatalogStoreConfig] is set
-/// to.
-/// If an ingress_uri is provided either by way of an override or the
-/// [CatalogStoreConfig], a key_file must be provided as well, unless
-/// metadata_only is true.
-fn determine_cache(
+/// Get the complete configuration for client-side interactions with the provided
+/// Catalog Store.
+fn get_client_side_catalog_store_config(
     metadata_only: bool,
     key_file: Option<PathBuf>,
-    store_config: CatalogStoreConfig,
-) -> Result<Option<NixCopyCache>, PublishError> {
+    server_side_catalog_config: CatalogStoreConfig,
+) -> Result<ClientSideCatalogStoreConfig, PublishError> {
     if metadata_only {
-        return Ok(None);
+        return Ok(ClientSideCatalogStoreConfig::MetadataOnly);
     }
-    let ingress_uri = match store_config {
-        CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy { ingress_uri, .. }) => {
-            Url::parse(&ingress_uri)
-                .map_err(|e| PublishError::Catchall(format!("failed to parse ingress URI: {e}")))?
+    let config = match server_side_catalog_config {
+        CatalogStoreConfig::Null => ClientSideCatalogStoreConfig::Null,
+        CatalogStoreConfig::MetaOnly => ClientSideCatalogStoreConfig::MetadataOnly,
+        CatalogStoreConfig::NixCopy(nix_copy_config) => {
+            let CatalogStoreConfigNixCopy {
+                ingress_uri,
+                egress_uri,
+            } = nix_copy_config;
+            if let Some(path) = key_file {
+                ClientSideCatalogStoreConfig::NixCopy {
+                    ingress_uri: Url::parse(&ingress_uri).map_err(|e| {
+                        PublishError::Catchall(format!("failed to parse ingress URI: {e}"))
+                    })?,
+                    egress_uri: Url::parse(&egress_uri).map_err(|e| {
+                        PublishError::Catchall(format!("failed to parse egress URI: {e}"))
+                    })?,
+                    signing_private_key_path: path,
+                }
+            } else {
+                return Err(PublishError::Catchall(
+                    indoc! { "
+                       A signing key is required to upload artifacts.
+
+                       You can supply a signing key by either:
+                       - Providing a path to a key with the '--signing-private-key' option.
+                       - Setting it in the config via 'flox config --set publish.signing_private_key <path>'
+
+                       Or you can publish without uploading artifacts via the '--metadata-only' option.
+                    "}
+                    .to_string(),
+                ));
+            }
         },
-        CatalogStoreConfig::Null => {
-            unreachable!("publish endpoint should error for CatalogStoreConfig::Null")
-        },
-        // No cache for CatalogStoreConfig::MetaOnly
-        CatalogStoreConfig::MetaOnly => return Ok(None),
         CatalogStoreConfig::Publisher => {
-            unimplemented!("publisher store type is not implemented")
+            unimplemented!("publisher catalog store type is not yet implemented")
         },
     };
-
-    if let Some(key_file) = key_file {
-        Ok(Some(NixCopyCache {
-            url: ingress_uri,
-            key_file,
-        }))
-    } else {
-        Err(PublishError::Catchall(
-            indoc! { "
-               A signing key is required to upload artifacts.
-
-               You can supply a signing key by either:
-               - Providing a path to a key with the '--signing-private-key' option.
-               - Setting it in the config via 'flox config --set publish.signing_private_key <path>'
-
-               Or you can publish without uploading artifacts via the '--metadata-only' option.
-            "}
-            .to_string(),
-        ))
-    }
+    Ok(config)
 }
 
 pub fn check_build_metadata_from_build_result(
@@ -711,7 +799,7 @@ pub mod tests {
         (tempdir_handle, repo, remote_uri)
     }
 
-    fn local_nix_cache() -> (tempfile::NamedTempFile, NixCopyCache) {
+    fn local_nix_cache() -> (tempfile::NamedTempFile, ClientSideCatalogStoreConfig) {
         // Returns a temp local cache and signing key file to use in testing publish
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
         let mut temp_key_file =
@@ -734,11 +822,14 @@ pub mod tests {
         temp_key_file.flush().expect("Should flush key file");
 
         let cache_url = format!("file://{}", tempdir_handle.path().display());
+        let parsed_cache_url = Url::parse(&cache_url).unwrap();
         let key_file_path = temp_key_file.path().to_path_buf();
-        (temp_key_file, NixCopyCache {
-            url: Url::parse(&cache_url).unwrap(),
-            key_file: key_file_path,
-        })
+        let catalog_store = ClientSideCatalogStoreConfig::NixCopy {
+            ingress_uri: parsed_cache_url.clone(),
+            egress_uri: parsed_cache_url.clone(),
+            signing_private_key_path: key_file_path,
+        };
+        (temp_key_file, catalog_store)
     }
 
     fn example_path_environment(
@@ -1091,16 +1182,17 @@ pub mod tests {
         };
 
         // the 'cache' should be non existent before the publish
-        let cache_path = cache.url.to_file_path().unwrap();
+        let cache_url = cache.upload_url().unwrap();
+        let cache_path = cache_url.to_file_path().unwrap();
         assert!(std::fs::read_dir(&cache_path).is_err());
 
         reset_mocks(&mut flox.catalog_client, vec![
             Response::CreatePackage,
             Response::Publish(PublishResponse {
-                ingress_uri: Some(cache.url.to_string()),
+                ingress_uri: Some(cache_url.to_string()),
                 catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
-                    ingress_uri: cache.url.to_string(),
-                    egress_uri: cache.url.to_string(),
+                    ingress_uri: cache_url.to_string(),
+                    egress_uri: cache_url.to_string(),
                 }),
             }),
             Response::PublishBuild,
@@ -1110,7 +1202,7 @@ pub mod tests {
             .publish(
                 &flox.catalog_client,
                 &catalog_name,
-                Some(cache.key_file),
+                cache.local_signing_key_path(),
                 false,
             )
             .await
