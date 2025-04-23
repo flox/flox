@@ -36,6 +36,7 @@ __jq := @jq@
 __nix := @nix@
 __t3 := @t3@
 
+
 # Access all required utilities by way of variables so that we don't depend
 # on anything from the user's PATH in the packaged version of flox. Note that
 # the __package_bin macro defined below will first test that the Nix package
@@ -66,11 +67,15 @@ _tar := $(call __package_bin,$(__gnutar),tar)
 _t3 := $(call __package_bin,$(__t3),t3) --relative $(if $(NO_COLOR),,--forcecolor)
 _uname := $(call __package_bin,$(__coreutils),uname)
 
+
 # Identify path to build-manifest.nix, in same directory as this Makefile.
 _libexec_dir := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 ifeq (,$(wildcard $(_libexec_dir)))
   $(error cannot identify flox-package-builder libexec directory)
 endif
+
+__nef := $(_libexec_dir)/nef
+
 
 # Invoke nix with the required experimental features enabled.
 _nix := $(_nix) --extra-experimental-features "flakes nix-command"
@@ -81,6 +86,10 @@ SHELL := $(_bash)
 # Identify target O/S.
 OS := $(shell $(_uname) -s)
 
+# Nix system
+# TODO(nef): we might be passing that around differntly (or call nef stuff with --impure)
+NIX_SYSTEM := $(shell $(_nix) config show system)
+
 # Set the default goal to be all builds if one is not specified.
 .DEFAULT_GOAL := usage
 
@@ -90,8 +99,16 @@ TMPDIR ?= /tmp
 # Use the wildcard operator to identify builds in the provided $FLOX_ENV.
 BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
 
+# TODO NIX_EXPRESSION_DIR may be absent
+ifeq (,$(NIX_EXPRESSION_DIR))
+  $(error NIX_EXPRESSION_DIR not defined)
+endif
+NIX_EXPRESSION_BUILDS := $(shell $(_nix) eval --argstr nixpkgs-url $(BUILDTIME_NIXPKGS_URL) --argstr system $(NIX_SYSTEM) --argstr pkgs-dir $(NIX_EXPRESSION_DIR) --file $(__nef) reflect.targets --raw)
+
 # Quick sanity check; if no BUILDS then what are we doing?
-$(if $(BUILDS),,$(error no packages found in $(FLOX_ENV)/package-builds.d))
+$(if $(BUILDS),,\
+  $(if $(NIX_EXPRESSION_BUILDS),,\
+    $(error no manifest or Nix expression builds found in $(FLOX_ENV))))
 
 # Set makefile verbosity based on the value of _FLOX_PKGDB_VERBOSITY [sic]
 # as set in the environment by the flox CLI. First set it to 0 if not defined.
@@ -413,6 +430,76 @@ define BUILD_nix_sandbox_template =
 
 endef
 
+# The following template renders targets for the sandbox build mode.
+define BUILD_nix_expression_template =
+
+  $(eval _pvarname = $(subst -,_,$(_pname)))
+
+ 	$(eval _result = result-$(_pname))
+  $(eval $(_pvarname)_tmpBasename = $(TMPDIR)/$($(_pvarname)_shortHash)-$(_pname))
+  $(eval $(_pvarname)_buildMetaJSON = $($(_pvarname)_tmpBasename)-build-meta.json)
+
+  .PHONY: $(_pvarname)_nix_sandbox_build
+  $(_pvarname)_nix_expression_build: $($(_pvarname)_buildScript) $($(_pvarname)_src_tar) \
+		$(if $(_do_buildCache),$($(_pvarname)_buildCache))
+	@echo "Building $(_pname) in Nix expression mode"
+
+	$(_V_) set -o pipefail && \
+	$(_nix) build -L --file $(__nef)                 \
+	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
+	  --argstr system $(NIX_SYSTEM)                   \
+	  --argstr pkgs-dir $(NIX_EXPRESSION_DIR)         \
+	  --out-link "result-$(_pname)"                       \
+	  --json                                              \
+	  pkgs.$(_pname)                                      \
+	  |                                                   \
+	  $(_jq)                                              \
+			--argjson eval_meta                               \
+			  "$$$$(set -o pipefail &&                 \
+			  $(_nix) eval -L --file $(__nef)                 \
+			  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
+			  --argstr system $(NIX_SYSTEM)                   \
+			  --argstr pkgs-dir $(NIX_EXPRESSION_DIR)         \
+			  --json                                          \
+			  --apply 'pkg: {                                 \
+			    version = pkg.version or "unknown";           \
+			    name = pkg.name;                              \
+			    pname = pkg.pname or pkg.name;                \
+			    meta = pkg.meta or null;                      \
+			  }'                                              \
+			  pkgs.$(_pname)                                  \
+			)" \
+	    '.[0] * { log:"/oops/no/logs" } * $$$$eval_meta' > $($(_pvarname)_buildMetaJSON)
+	@echo "Completed build of $(_name) in Nix expression mode" && echo ""
+
+
+  # Select the desired build mode as we declare the result symlink target.
+  $(_result): $(_pvarname)_nix_expression_build
+		@# Take this opportunity to fail the build if we spot fatal errors in the
+		@# build output. Recall that we force the Nix build to "succeed" in all
+		@# cases so that we can persist the buildCache, so when errors do happen
+		@# this is communicated by way of a $out that is 1) a file and 2) contains
+		@# the string "flox build failed (caching build dir)".
+		$(_VV_) if [ -f $(_result) ] && $(_grep) -q "flox build failed (caching build dir)" $(_result); then \
+		  echo "ERROR: flox build failed (see $(_result)-log)" 1>&2; \
+		  $(_rm) -f $$@; \
+		  exit 1; \
+		fi
+
+  # Note that the buildMetaJSON file is created as a side-effect of the build.
+  $($(_pvarname)_buildMetaJSON): $(_result)
+
+  # Create targets for cleaning up the result and log symlinks.
+  $(eval $(call CLEAN_result_link_template,$(_result)))
+  $(eval $(call CLEAN_result_link_template,$(_result)-log))
+
+  # Create a helper target for referring to the package by its name rather
+  # than the [real] result symlink we're looking to create.
+  .PHONY: build/$(_pname)
+  build/$(_pname): $(_result)
+endef
+
+
 # Verify certain prerequisites before kicking off the build DAG.
 .PHONY: check_BUILD_PREREQUISITES
 check_BUILD_PREREQUISITES: FORCE
@@ -510,7 +597,6 @@ define BUILD_template =
   # than the [real] result symlink we're looking to create.
   .PHONY: build/$(_pname)
   build/$(_pname): $(_result)
-
 endef
 
 # Glean various values from locked manifest as we call the template.
@@ -523,6 +609,10 @@ $(foreach build,$(BUILDS), \
   $(if $(filter null off,$(_sandbox)), \
     $(eval $(call BUILD_template,local)), \
     $(eval $(call BUILD_template,nix_sandbox))))
+
+$(foreach build,$(NIX_EXPRESSION_BUILDS), \
+  $(eval _pname = $(build)) \
+  $(eval $(call BUILD_nix_expression_template)))
 
 # Combine JSON build data for each build and write to BUILD_RESULT_FILE.
 # Mark it as phony to force it to be evaluated every time.
