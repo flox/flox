@@ -218,8 +218,25 @@ endef
 # to the inner "build wrapper" environment in the in-situ build mode in support
 # of the tools and compilers found in the outer environment, and for Flox to
 # otherwise function properly.
-ALLOW_OUTER_ENV_VARS := FLOX_RUNTIME_DIR HOME PATH \
-  $(filter NIX_CFLAGS% NIX_CC%,$(.VARIABLES))
+#
+# Vars required for flox functionality.
+ALLOW_OUTER_ENV_VARS := \
+  FLOX_ACTIVATE_TRACE FLOX_ENV_DIRS FLOX_RUNTIME_DIR HOME PATH
+# Vars exported by 0100_common-paths.sh. Not included:
+# - LIBRARY_PATH : embedded in runpath of executables
+ALLOW_OUTER_ENV_VARS += \
+  INFOPATH CPATH PKG_CONFIG_PATH ACLOCAL_PATH XDG_DATA_DIRS \
+  LD_AUDIT GLIBC_TUNABLES DYLD_FALLBACK_LIBRARY_PATH
+# Vars exported by 0500_python.sh.
+ALLOW_OUTER_ENV_VARS += PYTHONPATH PIP_CONFIG_FILE
+# Vars exported by 0501_rust.sh.
+ALLOW_OUTER_ENV_VARS += RUST_SRC_PATH
+# Vars exported by 0502_jupyter.sh.
+ALLOW_OUTER_ENV_VARS += JUPYTER_PATH
+# Vars exported by 0800_cuda.sh.
+ALLOW_OUTER_ENV_VARS += LD_FLOXLIB_FILES_PATH
+# Vars set by Nix stdenv hooks.
+ALLOW_OUTER_ENV_VARS += $(filter NIX_CFLAGS% NIX_CC%,$(.VARIABLES))
 
 # The following template renders targets for the in-situ build mode.
 define BUILD_local_template =
@@ -264,8 +281,8 @@ define BUILD_local_template =
 
   # The final result is approximately the following:
   #   $(FLOX_INTERPRETER)/activate ... -- \
-  #     env -i $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
-  #       $(_build_wrapper_env)/wrapper ... -- bash -e buildScript
+  #     $(_build_wrapper_env)/wrapper --keep-env-vars \
+  #       "$(ALLOW_OUTER_ENV_VARS)" ... -- bash -e buildScript
   .INTERMEDIATE: $(_pvarname)_local_build
   $(_pvarname)_local_build: $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
@@ -273,10 +290,10 @@ define BUILD_local_template =
 	$(_VV_) $(_rm) -rf $(_out)
 	$(_V_) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
-	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode dev --turbo --env-project $$$$($(_pwd)) -- \
-	    $(_env) -i out=$(_out) $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
-	      $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars -- \
-	        $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $($(_pvarname)_buildScript)
+	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode build --env-project $$$$($(_pwd)) -- \
+	    $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars \
+	      --keep-env-vars "$(ALLOW_OUTER_ENV_VARS)" -- \
+	        $(_t3) $($(_pvarname)_logfile) -- $(_env) out=$(_out) $(_bash) -e $($(_pvarname)_buildScript)
 	$(_V_) $(_nix) build -L `$(_nix) store add-file "$(shell $(_realpath) "$($(_pvarname)_logfile)")"` \
 	  --out-link "result-$(_pname)-log"
 	$(_V_) set -o pipefail && \

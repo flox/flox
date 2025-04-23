@@ -8,6 +8,11 @@
 export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
 [ "$_flox_activate_tracelevel" -eq 0 ] || set -x
 
+function wrapperDebug {
+  [ -n "${FLOX_ACTIVATE_TRACE-}" ] || return 0
+  echo "[DEBUG] $*" >&2
+}
+
 # Ensure that $_flox_activate_tracer is defined as an executable.
 if [ -z "${FLOX_ACTIVATE_TRACE-}" ]; then
   # If FLOX_ACTIVATE_TRACE is empty or not set, set _flox_activate_tracer to
@@ -25,6 +30,7 @@ fi
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" START
 
 _dirname="@coreutils@/bin/dirname"
+_env="@coreutils@/bin/env"
 _getopt="@getopt@/bin/getopt"
 _readlink="@coreutils@/bin/readlink"
 
@@ -43,8 +49,14 @@ source "${_activate_d}/source-profile-d.bash"
 
 # Parse command-line arguments.
 OPTIONS="e:c:"
-LONGOPTS="set-vars,env:,command:"
-USAGE="Usage: $0 [--set-vars] [(-e|--env) <env>] [-c \"<cmd> <args>\"] "
+LONGOPTS="command:,\
+set-vars,\
+env:,\
+keep-env-vars:"
+USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
+[--set-vars] \
+[(-e|--env) <env>] \
+[--keep-env-vars \"<v1> <v2> .. <vN>\"]"
 
 PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@")
 # shellcheck disable=SC2181
@@ -58,6 +70,7 @@ eval set -- "$PARSED"
 
 # Set default values for options.
 FLOX_CMD=""
+_flox_keep_env_vars=""
 while true; do
   case "$1" in
     -c | --command)
@@ -84,6 +97,16 @@ while true; do
       shift
       SET_VARS="1"
       ;;
+    --keep-env-vars)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --keep-env-vars requires a list of variable names as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _flox_keep_env_vars="$1"
+      shift
+      ;;
     --)
       shift
       break
@@ -98,7 +121,7 @@ done
 
 # Convert the provided command string into an array of arguments in "$@".
 # Henceforth in the script it is assumed that these are the arguments to be
-# invoked either by this shell (with FLOX_TURBO) or with the chosen userShell.
+# invoked by this shell.
 if [ -n "$FLOX_CMD" ]; then
   # Throw an error if passed additional arguments along with the -c arg.
   if [ $# -gt 0 ]; then
@@ -115,6 +138,26 @@ if [ -z "${FLOX_ENV-}" ]; then
   echo "No environment specified." >&2
   echo "$USAGE" >&2
   exit 1
+fi
+
+# If invoked with the --keep-env-vars option, then clear the environment of
+# all variables _not_ found in this list.
+# shellcheck disable=SC2034
+if [ -n "${_flox_keep_env_vars:-}" ]; then
+  while IFS='=' read -r -d '' n v; do
+    # Keep env vars starting with "_".
+    if [[ "$n" == _* ]]; then
+      wrapperDebug "Keeping env var: $n=$v"
+    else
+      # Discard env vars not mentioned in the list.
+      case " FLOX_ENV ${_flox_keep_env_vars:-} " in
+      *" $n "*) wrapperDebug "Keeping env var: $n=$v";;
+      *) wrapperDebug "Discarding env var: $n=$v";
+         unset "$n"
+         ;;
+      esac
+    fi
+  done < <("$_env" -0)
 fi
 
 # prepend path

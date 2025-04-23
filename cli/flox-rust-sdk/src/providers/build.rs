@@ -1746,4 +1746,51 @@ mod tests {
             assert_derivation_metadata_propagated(&["env", "version"], &version, &realpath);
         }
     }
+
+    fn build_does_not_run_profile(sandbox: bool) {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let file_content = String::from("some content");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+            [profile]
+            common = """
+                export FOO=profile
+                exit 1
+            """
+
+            [build.{package_name}]
+            command = """
+                mkdir $out
+                if [ -n "$FOO" ]; then
+                    echo "profile should not have run"
+                    exit 1
+                fi
+                echo -n "{file_content}" > $out/{file_name}
+            """
+            sandbox = "{}"
+        "#, if sandbox { "pure" } else { "off" }};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        if sandbox {
+            let _git = GitCommandProvider::init(&env_path, false).unwrap();
+        }
+
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+        assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    #[test]
+    fn build_does_not_run_profile_sandbox_off() {
+        build_does_not_run_profile(false);
+    }
+
+    #[test]
+    fn build_does_not_run_profile_sandbox_pure() {
+        build_does_not_run_profile(true);
+    }
 }
