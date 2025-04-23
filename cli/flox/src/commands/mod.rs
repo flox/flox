@@ -1379,6 +1379,7 @@ pub(super) async fn ensure_environment_trust(
     manifest_contents: &String,
 ) -> Result<()> {
     let trust = config.flox.trusted_environments.get(env_ref);
+    let env_config_key = format!("trusted_environments.{env_ref}");
     let env_prefixed_name = match env_included {
         true => format!("included environment {env_ref}"),
         false => format!("environment {env_ref}"),
@@ -1410,7 +1411,7 @@ pub(super) async fn ensure_environment_trust(
         let message = formatdoc! {"
             The {env_prefixed_name} is not trusted.
 
-            Run 'flox config --set trusted_environments.{env_ref} trust' to trust it."};
+            Run 'flox config --set {env_config_key} trust' to trust it."};
         bail!("{message}");
     }
 
@@ -1474,7 +1475,7 @@ pub(super) async fn ensure_environment_trust(
                 update_config(
                     &flox.config_dir,
                     &flox.temp_dir,
-                    format!("trusted_environments.'{env_ref}'"),
+                    &env_config_key,
                     Some(EnvironmentTrust::Trust),
                 )
                 .context("Could not write token to config")?;
@@ -1486,7 +1487,7 @@ pub(super) async fn ensure_environment_trust(
                 update_config(
                     &flox.config_dir,
                     &flox.temp_dir,
-                    format!("trusted_environments.'{env_ref}'"),
+                    &env_config_key,
                     Some(EnvironmentTrust::Deny),
                 )
                 .context("Could not write token to config")?;
