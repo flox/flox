@@ -4,19 +4,6 @@
 #   a. defeat the shell's normal startup scripts
 #   b. source the relevant activation script
 #   c. invoke the command in one of "stdin" or "-c" modes
-if [ -n "$FLOX_TURBO" ]; then
-  # "turbo command" mode: simply invoke the provided command and args
-  # from *this shell* without paying the cost of invoking the userShell.
-  if [ -n "${FLOX_SET_ARG0:-}" ]; then
-    # Wrapped binary from `flox build`.
-    exec -a "$FLOX_SET_ARG0" "$@"
-  else
-    # We cannot exec here because we support bash shell internal commands.
-    "$@"
-    exit $?
-  fi
-fi
-
 # "-c" command mode: pass both [2] arguments unaltered to shell invocation
 case "$_flox_shell" in
   *bash)

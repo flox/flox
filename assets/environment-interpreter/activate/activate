@@ -72,15 +72,13 @@ env-project:,\
 env-description:,\
 mode:,\
 watchdog:,\
-noprofile,\
-turbo"
+noprofile"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [--shell <shell>] \
 [(-e|--env) <env>] \
 [--env-cache <path>] \
 [--env-project <path>] \
 [--env-description <name>] \
-[--turbo] \
 [--noprofile] \
 [(-m|--mode) (dev|run)] \
 [--watchdog <path>]"
@@ -96,7 +94,6 @@ eval set -- "$PARSED"
 
 # Set default values for options.
 FLOX_CMD=""
-FLOX_TURBO="${FLOX_TURBO:-}"
 FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
 # The rust CLI contains sophisticated logic to detect the shell based on
 # $FLOX_SHELL or the process listening on STDOUT, but that won't happen when
@@ -170,8 +167,8 @@ while true; do
       ;;
     -m | --mode)
       shift
-      if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ]; }; then
-        echo "Option --mode requires 'dev' or 'run' as an argument." >&2
+      if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ] || [ "$1" == "build" ] || [ "$1" == "build-sandbox" ]; }; then
+        echo "Option --mode requires 'dev', 'run', 'build', or 'build-sandbox' as an argument." >&2
         echo "$USAGE" >&2
         exit 1
       fi
@@ -186,10 +183,6 @@ while true; do
         exit 1
       fi
       _FLOX_WATCHDOG_BIN="$1"
-      shift
-      ;;
-    --turbo)
-      FLOX_TURBO="true"
       shift
       ;;
     --noprofile)
@@ -210,7 +203,7 @@ done
 
 # Convert the provided command string into an array of arguments in "$@".
 # Henceforth in the script it is assumed that these are the arguments to be
-# invoked either by this shell (with FLOX_TURBO) or with the chosen userShell.
+# invoked either by this shell (when in build mode) or with the chosen userShell.
 if [ -n "$FLOX_CMD" ]; then
   # Throw an error if passed additional arguments along with the -c arg.
   if [ $# -gt 0 ]; then
@@ -264,6 +257,18 @@ case "$_flox_shell" in
     exit 1
     ;;
 esac
+
+if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ] || [ "$_FLOX_ENV_ACTIVATION_MODE" = "build-sandbox" ]; then
+  if [ ! $# -gt 0 ]; then
+    echo "build mode is only supported for running a command" >&2
+    exit 1
+  fi
+  # We want to run hooks without a state dir, since we'll never attach to this
+  # activation
+  start ""
+
+  exec "$@"
+fi
 
 # The CLI is responsible for erroring if the environment is already active.
 # We can start-or-attach no matter what
