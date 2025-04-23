@@ -27,6 +27,11 @@ install: $(ALL)
 	mkdir -p $(PREFIX)/libexec
 	cp $^ $(PREFIX)/libexec
 
+	# this is not how you do it
+	mkdir -p $(PREFIX)/libexec/nef/lib
+	cp nef/default.nix $(PREFIX)/libexec/nef
+	cp -r nef/lib $(PREFIX)/libexec/nef
+
 .PHONY: tests
 tests:
 	@echo TODO: create sandbox tests
