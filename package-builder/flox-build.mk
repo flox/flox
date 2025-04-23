@@ -254,14 +254,14 @@ define BUILD_local_template =
   # environment can leak into the resulting build. For example, each of these
   # activations can prepend to a PYTHONPATH that gets embedded in the
   # build, which has the effect of pulling both environments into the closure.
-  
+
   # We can use `env -i` to prevent that leakage of the "develop" environment
   # path into the inner activation, but then that causes problems for compilers
   # that rely on NIX_CC* environment variables set in the outer activation. To
   # address this problem we maintain a list of ALLOW_OUTER_ENV_VARS allowed
   # to be propagated from the outer to the inner activation, and again use the
   # `env` command to let those through.
-  
+
   # The final result is approximately the following:
   #   $(FLOX_INTERPRETER)/activate ... -- \
   #     env -i $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
@@ -274,9 +274,8 @@ define BUILD_local_template =
 	$(_V_) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode dev --turbo --env-project $$$$($(_pwd)) -- \
-	    $(_env) -i out=$(_out) $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
-	      $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars -- \
-	        $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $($(_pvarname)_buildScript)
+	    env out=$(_out) $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars -- \
+	      $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $($(_pvarname)_buildScript)
 	$(_V_) $(_nix) build -L `$(_nix) store add-file "$(shell $(_realpath) "$($(_pvarname)_logfile)")"` \
 	  --out-link "result-$(_pname)-log"
 	$(_V_) set -o pipefail && \
