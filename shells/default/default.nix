@@ -137,7 +137,8 @@ mkShell (
         define_dev_env_var FLOX_BUILDENV "''${REPO_ROOT}/build/flox-buildenv";
         define_dev_env_var FLOX_BUILDENV_NIX "''${FLOX_BUILDENV}/lib/buildenv.nix";
         define_dev_env_var FLOX_PACKAGE_BUILDER "''${REPO_ROOT}/build/flox-package-builder";
-        define_dev_env_var FLOX_BUILD_MK "''$FLOX_PACKAGE_BUILDER/libexec/flox-build.mk";
+        define_dev_env_var FLOX_BUILD_MK "''${FLOX_PACKAGE_BUILDER}/libexec/flox-build.mk";
+        define_dev_env_var FLOX_EXPRESSION_BUILD_NIX  "''${FLOX_PACKAGE_BUILDER}/libexec/nef/default.nix"
         define_dev_env_var FLOX_MANPAGES "''${REPO_ROOT}/build/flox-manpages";
 
         # test data
