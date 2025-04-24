@@ -15,6 +15,7 @@
   podman,
   mitmproxy,
   cargo-nextest,
+  daemonize,
   flox-cli,
   flox-cli-tests,
   flox-activations,
@@ -42,6 +43,7 @@ let
       procps
       pstree
       podman
+      daemonize
       flox-cli-tests
     ]
     ++ lib.optionals stdenv.isLinux [
