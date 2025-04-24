@@ -7,14 +7,22 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::Inner;
-use flox_rust_sdk::providers::build::{FloxBuildMk, ManifestBuilder, Output, build_symlink_path};
+use flox_rust_sdk::providers::build::{
+    FloxBuildMk,
+    ManifestBuilder,
+    Output,
+    build_symlink_path,
+    get_nix_expression_targets,
+    nix_expression_dir,
+};
 use indoc::{formatdoc, indoc};
-use tracing::instrument;
+use itertools::Itertools;
+use tracing::{debug, instrument};
 
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::activate::FLOX_INTERPRETER;
 use crate::environment_subcommand_metric;
-use crate::utils::message;
+use crate::utils::message::{self, warning};
 
 #[allow(unused)] // remove when we implement the command
 #[derive(Bpaf, Clone)]
@@ -87,13 +95,20 @@ impl Build {
         };
 
         let base_dir = env.parent_path()?;
+        let expression_dir = nix_expression_dir(&env); // TODO: decouple from env
         let flox_env = env.rendered_env_links(&flox)?;
         let lockfile = env.lockfile(&flox)?.into();
 
-        let packages_to_clean = available_packages(&lockfile, packages)?;
+        let packages_to_clean = available_packages(&lockfile, &expression_dir, packages)?;
 
         let builder = FloxBuildMk;
-        builder.clean(&flox, &base_dir, &flox_env.development, &packages_to_clean)?;
+        builder.clean(
+            &flox,
+            &base_dir,
+            &flox_env.development,
+            Some(&expression_dir),
+            &packages_to_clean,
+        )?;
 
         message::created("Clean completed successfully");
 
@@ -108,15 +123,18 @@ impl Build {
 
         let base_dir = env.parent_path()?;
         let built_environments = env.build(&flox)?;
+        let expression_dir = nix_expression_dir(&env); // TODO: decouple from env
+
         let lockfile = env.lockfile(&flox)?.into();
 
-        let packages_to_build = available_packages(&lockfile, packages)?;
+        let packages_to_build = available_packages(&lockfile, &expression_dir, packages)?;
 
         let builder = FloxBuildMk;
         let output = builder.build(
             &flox,
             &base_dir,
             &built_environments,
+            Some(&expression_dir),
             &FLOX_INTERPRETER,
             &packages_to_build,
             None,
@@ -195,10 +213,16 @@ impl Build {
     }
 }
 
-fn available_packages(lockfile: &Lockfile, packages: Vec<String>) -> Result<Vec<String>> {
+fn available_packages(
+    lockfile: &Lockfile,
+    expression_dir: &Path,
+    packages: Vec<String>,
+) -> Result<Vec<String>> {
     let environment_packages = &lockfile.manifest.build;
+    let nix_expression_packages =
+        get_nix_expression_targets(expression_dir).map_err(anyhow::Error::msg)?;
 
-    if environment_packages.inner().is_empty() {
+    if environment_packages.inner().is_empty() && nix_expression_packages.is_empty() {
         bail!(indoc! {"
         No builds found.
 
@@ -207,14 +231,30 @@ fn available_packages(lockfile: &Lockfile, packages: Vec<String>) -> Result<Vec<
     }
 
     let packages_to_build = if packages.is_empty() {
-        environment_packages.inner().keys().cloned().collect()
+        environment_packages
+            .inner()
+            .keys()
+            .chain(nix_expression_packages.iter())
+            .cloned()
+            .dedup()
+            .collect()
     } else {
         packages
     };
 
     for package in &packages_to_build {
-        if !environment_packages.inner().contains_key(package) {
-            bail!("Package '{}' not found in environment", package);
+        let is_nix_expression = nix_expression_packages.contains(package);
+        let is_manifest_build = environment_packages.inner().contains_key(package);
+
+        match (is_nix_expression, is_manifest_build) {
+            (true, true) => {
+                warning(format!(
+                    "Package '{package}' is defined in manifest and as a nix expression. Using nix expression"
+                ));
+            },
+            (true, false) => debug!(%package, "found nix expression"),
+            (false, true) => debug!(%package, "found manifest_build"),
+            (false, false) => bail!("Package '{}' not found in environment", package),
         }
     }
 

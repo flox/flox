@@ -52,6 +52,7 @@ let
     }
     // lib.optionalAttrs (flox-package-builder != null) {
       FLOX_BUILD_MK = "${flox-package-builder}/libexec/flox-build.mk";
+      FLOX_EXPRESSION_BUILD_NIX = "${flox-package-builder}/libexec/nef/default.nix";
     }
     // lib.optionalAttrs (flox-nix-plugins != null) {
       NIX_PLUGINS = "${flox-nix-plugins}/bin/flox-nix-plugins";
