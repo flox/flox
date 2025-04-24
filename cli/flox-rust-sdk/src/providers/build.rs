@@ -12,6 +12,7 @@ use thiserror::Error;
 use tracing::{debug, error, warn};
 
 use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
+use super::nix::nix_base_command;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
 use crate::utils::CommandExt;
@@ -21,6 +22,12 @@ pub const FLOX_RUNTIME_DIR_VAR: &str = "FLOX_RUNTIME_DIR";
 static FLOX_BUILD_MK: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("FLOX_BUILD_MK")
         .unwrap_or_else(|_| env!("FLOX_BUILD_MK").to_string())
+        .into()
+});
+
+static FLOX_EXPRESSION_BUILD_NIX: LazyLock<PathBuf> = LazyLock::new(|| {
+    std::env::var("FLOX_EXPRESSION_BUILD_NIX")
+        .unwrap_or_else(|_| env!("FLOX_EXPRESSION_BUILD_NIX").to_string())
         .into()
 });
 
@@ -44,6 +51,7 @@ pub trait ManifestBuilder {
         flox: &Flox,
         base_dir: &Path,
         built_environments: &BuildEnvOutputs,
+        expression_dir: Option<&Path>,
         flox_interpreter: &Path,
         package: &[String],
         build_cache: Option<bool>,
@@ -54,6 +62,7 @@ pub trait ManifestBuilder {
         flox: &Flox,
         base_dir: &Path,
         flox_env: &Path,
+        expression_dir: Option<&Path>,
         package: &[String],
     ) -> Result<(), ManifestBuilderError>;
 }
@@ -65,6 +74,12 @@ pub enum ManifestBuilderError {
 
     #[error("failed to create file for build results")]
     CreateBuildResultFile(#[source] std::io::Error),
+
+    #[error("failed to call nix to eval NEF")]
+    CallNef(#[source] std::io::Error),
+
+    #[error("failed to list available nix expressions to build: {0}")]
+    ListNixExpressions(String),
 
     #[error("failed to clean up build artifacts: {stderr}")]
     RunClean {
@@ -165,6 +180,7 @@ impl ManifestBuilder for FloxBuildMk {
         flox: &Flox,
         base_dir: &Path,
         built_environments: &BuildEnvOutputs,
+        expression_dir: Option<&Path>,
         flox_interpreter: &Path,
         packages: &[String],
         build_cache: Option<bool>,
@@ -177,6 +193,13 @@ impl ManifestBuilder for FloxBuildMk {
             "FLOX_ENV_OUTPUTS={}",
             serde_json::json!(built_environments)
         ));
+
+        // TODO: modify flox-build.mk to allow missing expression dirs
+        let expression_dir = match expression_dir {
+            Some(dir) => &*dir.to_string_lossy(),
+            None => "/absolutely/nowhere",
+        };
+        command.arg(format!("NIX_EXPRESSION_DIR={expression_dir}"));
         command.arg(format!("FLOX_INTERPRETER={}", flox_interpreter.display()));
 
         // Add the list of packages to be built by passing a space-delimited list
@@ -284,11 +307,20 @@ impl ManifestBuilder for FloxBuildMk {
         flox: &Flox,
         base_dir: &Path,
         flox_env: &Path,
+        expression_dir: Option<&Path>,
         packages: &[String],
     ) -> Result<(), ManifestBuilderError> {
         let mut command = self.base_command(flox, base_dir);
         // TODO: is this even necessary, or can we detect build outputs instead?
         command.arg(format!("FLOX_ENV={}", flox_env.display()));
+
+        // TODO: is this even necessary, or can we detect build outputs instead?
+        // TODO: modify flox-build.mk to allow missing expression dirs
+        let expression_dir = match expression_dir {
+            Some(dir) => &*dir.to_string_lossy(),
+            None => "/absolutely/nowhere",
+        };
+        command.arg(format!("NIX_EXPRESSION_DIR={expression_dir}"));
 
         // Add clean target arguments by prefixing the package names with "clean/".
         // If no packages are specified, clean all packages.
@@ -347,11 +379,47 @@ fn read_output_to_channel(
     }
 }
 
+/// The canonical path for nix expressions when associated with an environment:
+pub fn nix_expression_dir(environment: &impl Environment) -> PathBuf {
+    environment.dot_flox_path().join("pkgs")
+}
+
 pub fn build_symlink_path(
     environment: &impl Environment,
     package: &str,
 ) -> Result<PathBuf, EnvironmentError> {
     Ok(environment.parent_path()?.join(format!("result-{package}")))
+}
+
+/// Use our NEF nix susbsystem to query expressions provided in a given expression dir.
+/// We need this to verify arguments early rather than running into `make` or `nix` errors,
+/// that while correct are have a bad signal/noise ratio.
+pub fn get_nix_expression_targets(
+    expression_dir: &Path,
+) -> Result<Vec<String>, ManifestBuilderError> {
+    let output = nix_base_command()
+        .arg("eval")
+        .args(["--argstr", "nixpkgs-url", &*BUILDTIME_NIXPKGS_URL])
+        .args(["--argstr", "pkgs-dir", &*expression_dir.to_string_lossy()])
+        .args([
+            "--file",
+            &*FLOX_EXPRESSION_BUILD_NIX.to_string_lossy(),
+            "reflect.attrPaths",
+        ])
+        .arg("--json")
+        .output()
+        .map_err(ManifestBuilderError::CallNef)?;
+
+    if !output.status.success() {
+        Err(ManifestBuilderError::ListNixExpressions(
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        ))?
+    }
+
+    let attr_paths = serde_json::from_slice(&output.stdout)
+        .map_err(|e| ManifestBuilderError::ListNixExpressions(e.to_string()))?;
+    
+    Ok(attr_paths)
 }
 
 pub mod test_helpers {
@@ -393,6 +461,7 @@ pub mod test_helpers {
                 flox,
                 &env.parent_path().unwrap(),
                 &env.build(flox).unwrap(),
+                None,
                 &env.rendered_env_links(flox).unwrap().development,
                 &[package_name.to_owned()],
                 build_cache,
@@ -438,6 +507,7 @@ pub mod test_helpers {
                 flox,
                 &env.parent_path().unwrap(),
                 &env.rendered_env_links(flox).unwrap().development,
+                None,
                 &package_names
                     .iter()
                     .map(|s| s.to_string())

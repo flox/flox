@@ -11,7 +11,7 @@ use tracing::{debug, instrument};
 use url::Url;
 
 use super::auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
-use super::build::{BuildResult, BuildResults, ManifestBuilder};
+use super::build::{BuildResult, BuildResults, ManifestBuilder, nix_expression_dir};
 use super::catalog::{
     CatalogClientError,
     Client,
@@ -653,6 +653,7 @@ pub fn check_build_metadata(
             flox,
             &clean_build_env.parent_path()?,
             &clean_build_env.build(flox)?,
+            Some(&nix_expression_dir(&clean_build_env)),
             &clean_build_env
                 .rendered_env_links(flox)
                 .unwrap()
