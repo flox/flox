@@ -6,11 +6,6 @@
 {
   description = "flox - Harness the power of Nix";
 
-  nixConfig.extra-substituters = [ "https://cache.flox.dev" ];
-  nixConfig.extra-trusted-public-keys = [
-    "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
-  ];
-
   # Roll forward monthly as **our** stable branch advances. Note that we also
   # build against the staging branch in CI to detect regressions before they
   # reach stable.
