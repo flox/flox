@@ -532,7 +532,6 @@ mod tests {
     #[test]
     fn build_no_dollar_out_sandbox_off() {
         let pname = String::from("foo");
-        let name = String::from("foo-unknown");
 
         let manifest = formatdoc! {r#"
             version = 1
@@ -548,11 +547,11 @@ mod tests {
         let output = assert_build_status(&flox, &mut env, &pname, None, false);
 
         let expected_output = formatdoc! {r#"
-            {name}> ❌  ERROR: Build command did not copy outputs to '$out'.
-            {name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
-            {name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
-            {name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
-            {name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
+            {pname}> ❌  ERROR: Build command did not copy outputs to '$out'.
+            {pname}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
+            {pname}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
+            {pname}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
+            {pname}>   - copy files from an Autotools project with 'make install PREFIX=$out'
         "#};
         assert!(
             output.stderr.contains(&expected_output),
@@ -563,7 +562,6 @@ mod tests {
     #[test]
     fn build_no_dollar_out_sandbox_pure() {
         let pname = String::from("foo");
-        let name = String::from("foo-unknown");
 
         let manifest = formatdoc! {r#"
             version = 1
@@ -582,11 +580,11 @@ mod tests {
         let output = assert_build_status(&flox, &mut env, &pname, None, false);
 
         let expected_output = formatdoc! {r#"
-            {name}> ❌  ERROR: Build command did not copy outputs to '$out'.
-            {name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
-            {name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
-            {name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
-            {name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
+            {pname}> ❌  ERROR: Build command did not copy outputs to '$out'.
+            {pname}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
+            {pname}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
+            {pname}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
+            {pname}>   - copy files from an Autotools project with 'make install PREFIX=$out'
         "#};
         assert!(
             output.stderr.contains(&expected_output),
@@ -606,7 +604,6 @@ mod tests {
     ///   including subdirectories of {bin,sbin,libexec}
     fn build_verify_sane_out(mode: &str) {
         let pname = String::from("foo");
-        let name = String::from("foo-unknown");
 
         let manifest = formatdoc! {r#"
             version = 1
@@ -639,18 +636,18 @@ mod tests {
         // [sic] newline before 'HINT: ...' ignored in 'nix build -L' output:
         // <https://github.com/NixOS/nix/issues/11991>
         let expected_output = formatdoc! {r#"
-            {name}> ⚠️  WARNING: $out/bin/not-executable is not executable.
-            {name}> ⚠️  WARNING: $out/bin/subdir is not a file.
-            {name}> ⚠️  WARNING: No executables found in '$out/bin'.
-            {name}> Only executables in '$out/bin' will be available on the PATH.
-            {name}> If your build produces executables, make sure they are copied to '$out/bin'.
-            {name}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
-            {name}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
-            {name}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
-            {name}>   - copy files from an Autotools project with 'make install PREFIX=$out'
-            {name}> HINT: The following executables were found outside of '$out/bin':
-            {name}>   - not-bin/hello
-            {name}>   - bin/subdir/executable-in-subdir
+            {pname}> ⚠️  WARNING: $out/bin/not-executable is not executable.
+            {pname}> ⚠️  WARNING: $out/bin/subdir is not a file.
+            {pname}> ⚠️  WARNING: No executables found in '$out/bin'.
+            {pname}> Only executables in '$out/bin' will be available on the PATH.
+            {pname}> If your build produces executables, make sure they are copied to '$out/bin'.
+            {pname}>   - copy a single file with 'mkdir -p $out/bin && cp file $out/bin'
+            {pname}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
+            {pname}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
+            {pname}>   - copy files from an Autotools project with 'make install PREFIX=$out'
+            {pname}> HINT: The following executables were found outside of '$out/bin':
+            {pname}>   - not-bin/hello
+            {pname}>   - bin/subdir/executable-in-subdir
         "#};
         assert!(
             output.stderr.contains(&expected_output),

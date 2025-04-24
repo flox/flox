@@ -254,14 +254,14 @@ define BUILD_local_template =
   # environment can leak into the resulting build. For example, each of these
   # activations can prepend to a PYTHONPATH that gets embedded in the
   # build, which has the effect of pulling both environments into the closure.
-  
+
   # We can use `env -i` to prevent that leakage of the "develop" environment
   # path into the inner activation, but then that causes problems for compilers
   # that rely on NIX_CC* environment variables set in the outer activation. To
   # address this problem we maintain a list of ALLOW_OUTER_ENV_VARS allowed
   # to be propagated from the outer to the inner activation, and again use the
   # `env` command to let those through.
-  
+
   # The final result is approximately the following:
   #   $(FLOX_INTERPRETER)/activate ... -- \
   #     env -i $(foreach i,$(ALLOW_OUTER_ENV_VARS),$(i)="$$$$$(i)") \
@@ -483,7 +483,7 @@ $(foreach build,$(BUILDS), \
   $(eval _sandbox = $(shell \
     $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK))) \
   $(eval _version = $(shell \
-    $(_jq) -r '.manifest.build."$(_pname)".version // "unknown"' $(MANIFEST_LOCK))) \
+    $(_jq) -r '.manifest.build."$(_pname)".version // "0.0.0"' $(MANIFEST_LOCK))) \
   $(if $(filter null off,$(_sandbox)), \
     $(eval $(call BUILD_template,local)), \
     $(eval $(call BUILD_template,nix_sandbox))))
