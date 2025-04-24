@@ -1398,35 +1398,25 @@ EOF
     version = 1
 
     [install]
-    overmind.pkg-path = "overmind"
+    daemonize.pkg-path = "daemonize"
 
-    [services.overmind]
-    command = "overmind start -D"
+    [services.daemonized_sleep]
+    command = '''
+      daemonize -p "$FLOX_ENV_PROJECT/pidfile" "$(which sleep)" 999999
+    '''
     is-daemon = true
-    shutdown.command = "overmind quit"
+    shutdown.command = '''
+      kill -9 "$(cat $(pwd)/pidfile)"
+    '''
 EOF
 )"
 
   "$FLOX_BIN" init
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/overmind.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/daemonize.json"
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
-  echo "sleep: sleep 999999" > ./Procfile
 
-  SCRIPT="$(cat << "EOF"
-    # The timeout below has timed out,
-    # but it is hard to reproduce,
-    # so add set -x for more info in the future.
-    set -euxo pipefail
-
-    timeout 2 bash -c "set -x; while ! overmind status; do sleep .1; done"
-
-    "$FLOX_BIN" services status
-    "$FLOX_BIN" services stop
-EOF
-  )"
-
-  "$FLOX_BIN" activate -s -- bash -c "$SCRIPT"
-  timeout 2 bash -c "while [ -e "$PWD/overmind.sock" ]; do sleep .1; done"
+  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/check_daemon_process.sh"
+  assert_success
 }
 
 @test "activate: picks up changes after environment modification when all services have stopped" {

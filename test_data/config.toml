@@ -91,6 +91,10 @@ ignore_cmd_errors = true # build will fail on macos, that's fine
 pre_cmd = "flox init"
 cmd = "flox install influxdb2"
 
+[resolve.daemonize]
+pre_cmd = "flox init"
+cmd = "flox install daemonize"
+
 # This is used to trigger the "only install for some systems" code path
 [resolve.darwin_ps_all]
 pre_cmd = '''
@@ -201,10 +205,6 @@ post_cmd = '''
 pre_cmd = "flox init"
 cmd = "flox install nodejs@14.16.1"
 ignore_cmd_errors = true
-
-[resolve.overmind]
-pre_cmd = "flox init"
-cmd = "flox install overmind"
 
 # Try to install a package that doesn't exist, but that *does* have suggestions
 [resolve.package_suggestions]
