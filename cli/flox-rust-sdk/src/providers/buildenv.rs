@@ -206,21 +206,30 @@ where
             }
         }
 
-        let checked_store_paths = loop {
+        let n_iters = 10;
+        let sleep_duration = std::time::Duration::from_millis(100);
+        let mut gc_root_err =
+            BuildEnvError::Link("failed to create gc roots during build".to_string());
+        for _ in 0..n_iters {
             let checked_store_paths = check_store_paths(&all_paths)?;
             match create_gc_root_in(
                 &checked_store_paths.valid,
                 self.new_gc_root_path("pre-checked-paths"),
             ) {
-                Ok(_) => break checked_store_paths,
-                Err(BuildEnvError::Link(err)) => {
-                    debug!(error = err, "failed to set one or more gc roots, retrying")
+                Ok(_) => {
+                    return Ok(checked_store_paths);
                 },
-                Err(e) => return Err(e),
+                Err(BuildEnvError::Link(err)) => {
+                    debug!(error = err, "failed to set one or more gc roots, retrying");
+                    gc_root_err = BuildEnvError::Link(err.clone());
+                },
+                Err(e) => {
+                    return Err(e);
+                },
             }
-        };
-
-        Ok(checked_store_paths)
+            std::thread::sleep(sleep_duration);
+        }
+        Err(gc_root_err)
     }
 
     /// Realise all store paths of packages that are installed to the environment,
