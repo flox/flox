@@ -10,7 +10,7 @@ use indoc::indoc;
 use serde::Serialize;
 use serde_json::Value;
 use tokio::fs;
-use toml_edit::Key;
+use toml_edit::{Key, TomlError};
 use tracing::{debug, instrument};
 
 use crate::config::{Config, FLOX_CONFIG_FILE, ReadWriteError};
@@ -198,7 +198,7 @@ pub(super) fn update_config<V: Serialize>(
     key: impl AsRef<str>,
     value: Option<V>,
 ) -> Result<()> {
-    let query = Key::parse(key.as_ref()).context("Could not parse key")?;
+    let query = parse_toml_key(key.as_ref()).context("Could not parse key")?;
 
     let config_file_path = config_dir.join(FLOX_CONFIG_FILE);
 
@@ -208,4 +208,95 @@ pub(super) fn update_config<V: Serialize>(
                 Ok(()) => ()
             }
     Ok(())
+}
+
+/// Parse a TOML key from a string, quoting any segments where necessary, so
+/// that a user doesn't need to understand the intricacies of TOML.
+fn parse_toml_key(key: &str) -> Result<Vec<Key>, TomlError> {
+    let normalized_key = key
+        .split('.')
+        .map(|segment| {
+            let quoting_not_needed = segment
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-');
+            let contains_some_quotes = segment.contains('"') || segment.contains('\'');
+
+            if quoting_not_needed || contains_some_quotes {
+                segment.to_string()
+            } else {
+                format!("'{}'", segment)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(".");
+
+    Key::parse(&normalized_key)
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn parse_toml_key_no_quoting_needed() {
+        let key = "trusted_environments.foo.bar";
+        let parsed = parse_toml_key(key).unwrap();
+        assert_eq!(parsed, vec!["trusted_environments", "foo", "bar"]);
+    }
+
+    #[test]
+    fn parse_toml_key_adds_quoting() {
+        let key = "trusted_environments.foo/bar";
+        let parsed = parse_toml_key(key).unwrap();
+        assert_eq!(parsed, vec!["trusted_environments", "foo/bar"]);
+    }
+
+    #[test]
+    fn parse_toml_key_already_single_quoted() {
+        let key = "trusted_environments.'foo/bar'";
+        let parsed = parse_toml_key(key).unwrap();
+        assert_eq!(parsed, vec!["trusted_environments", "foo/bar"]);
+    }
+
+    #[test]
+    fn parse_toml_key_already_double_quoted() {
+        let key = r#"trusted_environments."foo/bar""#;
+        let parsed = parse_toml_key(key).unwrap();
+        assert_eq!(parsed, vec!["trusted_environments", "foo/bar"]);
+    }
+
+    #[test]
+    fn parse_toml_key_already_double_quoted_dotted() {
+        let key = r#"trusted_environments."foo.bar""#;
+        let parsed = parse_toml_key(key).unwrap();
+        assert_eq!(parsed, vec!["trusted_environments", "foo.bar"]);
+    }
+
+    #[test]
+    fn parse_toml_key_stray_single_quote() {
+        let key = "trusted_environments.foo'bar";
+        let err = parse_toml_key(key).unwrap_err();
+        assert_eq!(err.to_string(), indoc! {r#"
+            TOML parse error at line 1, column 25
+              |
+            1 | trusted_environments.foo'bar
+              |                         ^
+
+        "#});
+    }
+
+    #[test]
+    fn parse_toml_key_stray_double_quote() {
+        let key = r#"trusted_environments.foo"bar"#;
+        let err = parse_toml_key(key).unwrap_err();
+        assert_eq!(err.to_string(), indoc! {r#"
+            TOML parse error at line 1, column 25
+              |
+            1 | trusted_environments.foo"bar
+              |                         ^
+
+        "#});
+    }
 }
