@@ -48,6 +48,8 @@ use crate::providers::buildenv::{
     BuiltStorePath,
 };
 use crate::providers::services::{ServiceError, maybe_make_service_config_file};
+use crate::utils::errors::IoError;
+use crate::utils::{make_file_match_perms, make_file_readonly};
 
 const TEMPROOTS_DIR_NAME: &str = "temp-roots";
 
@@ -227,9 +229,17 @@ impl<State> CoreEnvironment<State> {
             .write_all(lockfile_contents.as_bytes())
             .map_err(CoreEnvironmentError::WriteLockfile)?;
 
+        if environment_lockfile_path.exists() {
+            debug!(path = %environment_lockfile_path.display(), "making lockfile writable");
+            make_file_match_perms(&environment_lockfile_path, &self.manifest_path())?;
+        }
+
         temp_lockfile
             .persist(&environment_lockfile_path)
             .map_err(|persist_error| CoreEnvironmentError::WriteLockfile(persist_error.error))?;
+
+        debug!("making lockfile read-only");
+        make_file_readonly(&environment_lockfile_path)?;
 
         Ok(LockResult::Changed(lockfile))
     }
@@ -774,6 +784,7 @@ impl CoreEnvironment<ReadOnly> {
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
+
         Ok((store_path, lockfile))
     }
 
@@ -806,6 +817,7 @@ impl CoreEnvironment<ReadOnly> {
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
+
         Ok(store_path)
     }
 }
@@ -830,10 +842,20 @@ impl CoreEnvironment<ReadWrite> {
     }
 
     /// Updates the environment lockfile with the provided contents
+    #[inline(never)]
     fn update_lockfile(&mut self, contents: impl AsRef<str>) -> Result<(), CoreEnvironmentError> {
-        debug!("writing lockfile to {}", self.lockfile_path().display());
-        std::fs::write(self.lockfile_path(), contents.as_ref())
+        let lockfile_path = self.lockfile_path();
+        if lockfile_path.exists() {
+            debug!(path = %lockfile_path.display(), "making lockfile writable");
+            make_file_match_perms(&lockfile_path, &self.manifest_path())?;
+        }
+
+        debug!("writing lockfile to {}", lockfile_path.display());
+        std::fs::write(&lockfile_path, contents.as_ref())
             .map_err(CoreEnvironmentError::WriteLockfile)?;
+
+        debug!(path = %lockfile_path.display(), "making lockfile read-only");
+        make_file_readonly(&lockfile_path)?;
         Ok(())
     }
 }
@@ -1085,7 +1107,12 @@ pub enum CoreEnvironmentError {
     ParseLockfile(#[source] serde_json::Error),
 
     #[error("failed to create temporary directory")]
-    CreateTempdir(#[source] std::io::Error), // endregion
+    CreateTempdir(#[source] std::io::Error),
+
+    /// An I/O error
+    #[error(transparent)]
+    Io(#[from] IoError),
+    // endregion
 }
 
 impl CoreEnvironmentError {
@@ -1190,6 +1217,8 @@ mod tests {
     use self::test_helpers::new_core_environment;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::Environment;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment;
     use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::manifest::typed::{DEFAULT_GROUP_NAME, Inner};
@@ -1228,6 +1257,35 @@ mod tests {
 
         assert_eq!(env_view.manifest_contents().unwrap(), new_env_str);
         assert!(env_view.env_dir.join(LOCKFILE_FILENAME).exists());
+    }
+
+    #[test]
+    fn creates_readonly_lockfile() {
+        let (mut flox, _tempdir) = flox_instance();
+
+        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
+        let manifest_contents = r#"
+        version = 1
+
+        [install]
+        hello.pkg-path = "hello"
+        "#;
+        let mut env = new_path_environment(&flox, manifest_contents);
+        env.lockfile(&flox).unwrap();
+
+        let permissions = std::fs::metadata(env.lockfile_path(&flox).unwrap())
+            .unwrap()
+            .permissions();
+        assert!(permissions.readonly());
+
+        std::fs::remove_file(env.lockfile_path(&flox).unwrap()).unwrap();
+        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
+        env.lockfile(&flox).unwrap();
+
+        let permissions = std::fs::metadata(env.lockfile_path(&flox).unwrap())
+            .unwrap()
+            .permissions();
+        assert!(permissions.readonly());
     }
 
     /// A no-op with edit against a locked environment returns EditResult::Unchanged

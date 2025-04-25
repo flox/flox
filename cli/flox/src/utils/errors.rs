@@ -314,6 +314,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         "},
 
         CoreEnvironmentError::CreateTempdir(_) => display_chain(err),
+        CoreEnvironmentError::Io(err) => display_chain(err),
     }
 }
 

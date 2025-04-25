@@ -5,6 +5,7 @@ pub mod logging;
 
 use std::fmt::{Display, Write};
 use std::io::{BufRead, BufReader, Read};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::thread::{self, JoinHandle};
@@ -58,6 +59,50 @@ pub fn copy_file_without_permissions(
     io::copy(&mut from_file, &mut to_file).map_err(|io_err| IoError::Copy {
         file: from.as_ref().to_path_buf(),
         err: io_err,
+    })?;
+    Ok(())
+}
+
+/// Makes the file read-only
+pub fn make_file_readonly(path: &Path) -> Result<(), IoError> {
+    let metadata = std::fs::metadata(path).map_err(|e| IoError::GetMetadata {
+        file: path.to_path_buf(),
+        err: e,
+    })?;
+    let mut permissions = metadata.permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(path, permissions).map_err(|e| IoError::MakeReadonly {
+        file: path.to_path_buf(),
+        err: e,
+    })?;
+    Ok(())
+}
+
+/// Makes the file match the permissions of another file.
+///
+/// This is used to make the lockfile writable again after previously setting it
+/// to be read-only.
+///
+/// Just setting `permissions.set_readonly(false)` makes the file world-writable,
+/// better to make it match the permissions of another file we know has the permissions
+/// we know are fine.
+pub fn make_file_match_perms(path: &Path, match_perms_of: &Path) -> Result<(), IoError> {
+    let metadata_of_file_to_match =
+        std::fs::metadata(match_perms_of).map_err(|e| IoError::GetMetadata {
+            file: path.to_path_buf(),
+            err: e,
+        })?;
+    let perms_to_match = metadata_of_file_to_match.permissions();
+
+    let metadata = std::fs::metadata(path).map_err(|e| IoError::GetMetadata {
+        file: path.to_path_buf(),
+        err: e,
+    })?;
+    let mut permissions = metadata.permissions();
+    permissions.set_mode(perms_to_match.mode());
+    std::fs::set_permissions(path, permissions).map_err(|e| IoError::MakeWritable {
+        file: path.to_path_buf(),
+        err: e,
     })?;
     Ok(())
 }
