@@ -7,6 +7,7 @@ use std::str::FromStr;
 use itertools::Itertools;
 use pollster::FutureExt;
 use serde::{Deserialize, Serialize};
+use tempfile::TempDir;
 use thiserror::Error;
 use tracing::debug;
 
@@ -263,7 +264,8 @@ impl<State> CoreEnvironment<State> {
 
         let service_config_path = maybe_make_service_config_file(flox, &lockfile)?;
 
-        let outputs = BuildEnvNix::new("/tmp/flox-temp-roots/").build(
+        let tempdir = TempDir::new().map_err(CoreEnvironmentError::CreateTempdir)?;
+        let outputs = BuildEnvNix::new(tempdir).build(
             &flox.catalog_client,
             &lockfile_path,
             service_config_path,
@@ -1081,7 +1083,9 @@ pub enum CoreEnvironmentError {
     /// when parsing the contents of a lockfile into a [LockedManifest]
     #[error("could not parse lockfile")]
     ParseLockfile(#[source] serde_json::Error),
-    // endregion
+
+    #[error("failed to create temporary directory")]
+    CreateTempdir(#[source] std::io::Error), // endregion
 }
 
 impl CoreEnvironmentError {
