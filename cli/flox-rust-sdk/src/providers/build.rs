@@ -14,7 +14,7 @@ use tracing::{debug, error, warn};
 use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
-use crate::utils::CommandExt;
+use crate::utils::{CommandExt, WATCHDOG_BIN};
 
 pub const FLOX_RUNTIME_DIR_VAR: &str = "FLOX_RUNTIME_DIR";
 
@@ -194,6 +194,15 @@ impl ManifestBuilder for FloxBuildMk {
             .expect("failed to keep build result fifo");
 
         command.arg(format!("BUILD_RESULT_FILE={}", build_result_path.display()));
+
+        // We should probably pass this via the Nix build of package-builder,
+        // but flox-watchdog currently depends on package-builder because we set
+        // the same env vars when building flox-rust-sdk (which needs
+        // package-builder) and flox-watchdog for rust-internal-deps.
+        // So passing flox-watchdog via the Nix build creates a circular
+        // dependency.
+        // I don't feel like untangling that at the moment.
+        command.arg(format!("WATCHDOG_BIN={}", WATCHDOG_BIN.to_string_lossy()));
 
         let build_cache = build_cache.unwrap_or(true);
         if !build_cache {

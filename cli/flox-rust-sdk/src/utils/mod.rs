@@ -23,6 +23,10 @@ use self::errors::IoError;
 /// but for now just use the `CI` environment variable
 pub static IN_CI: LazyLock<bool> = LazyLock::new(|| env::var("CI").is_ok());
 
+pub static WATCHDOG_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
+    PathBuf::from(env::var("WATCHDOG_BIN").unwrap_or(env!("WATCHDOG_BIN").to_string()))
+});
+
 #[derive(Error, Debug)]
 pub enum FindAndReplaceError {
     #[error("walkdir error: {0}")]

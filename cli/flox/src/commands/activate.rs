@@ -24,6 +24,7 @@ use flox_rust_sdk::models::manifest::typed::{ActivateMode, IncludeDescriptor, In
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
+use flox_rust_sdk::utils::WATCHDOG_BIN;
 use flox_rust_sdk::utils::logging::traceable_path;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
@@ -57,9 +58,6 @@ pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
 });
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
-pub static WATCHDOG_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
-    PathBuf::from(env::var("WATCHDOG_BIN").unwrap_or(env!("WATCHDOG_BIN").to_string()))
-});
 pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
 });

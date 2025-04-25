@@ -273,7 +273,7 @@ define BUILD_local_template =
 	$(_VV_) $(_rm) -rf $(_out)
 	$(_V_) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
-	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode dev --turbo --env-project $$$$($(_pwd)) -- \
+	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode dev --turbo --env-project $$$$($(_pwd)) --watchdog $(WATCHDOG_BIN) -- \
 	    env -u LIBRARY_PATH out=$(_out) $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars -- \
 	      $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $($(_pvarname)_buildScript)
 	$(_V_) $(_nix) build -L `$(_nix) store add-file "$(shell $(_realpath) "$($(_pvarname)_logfile)")"` \
