@@ -209,7 +209,7 @@ EOF
 @test "m10.2: 'activate --remote' succeeds if trusted by config" {
   make_empty_remote_env
 
-  run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/test'" "trust"
+  run "$FLOX_BIN" config --set "trusted_environments.$OWNER/test" "trust"
   run "$FLOX_BIN" activate --remote "$OWNER/test" -- true
   assert_success
 }
@@ -217,7 +217,7 @@ EOF
 @test "m10.2: 'activate' succeeds if included remote environment is trusted by config" {
   make_composer_with_remote_include
 
-  run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/test'" "trust"
+  run "$FLOX_BIN" config --set "trusted_environments.$OWNER/test" "trust"
   run "$FLOX_BIN" activate -- true
   assert_success
 }
@@ -226,7 +226,7 @@ EOF
 @test "m10.2: 'activate --remote' succeeds if trusted by config (case-sensitive)" {
   make_empty_remote_env CaseSensitive
 
-  run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/CaseSensitive'" "trust"
+  run "$FLOX_BIN" config --set "trusted_environments.$OWNER/CaseSensitive" "trust"
   run "$FLOX_BIN" activate --remote "$OWNER/CaseSensitive" -- true
   assert_success
 }
@@ -237,7 +237,7 @@ EOF
 @test "m10.3: 'activate --remote' fails if denied by config, --trust overrides" {
   make_empty_remote_env
 
-  run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/test'" "deny"
+  run "$FLOX_BIN" config --set "trusted_environments.$OWNER/test" "deny"
 
   run "$FLOX_BIN" activate --remote "$OWNER/test" -- true
   assert_failure
@@ -249,7 +249,7 @@ EOF
 @test "m10.0: 'activate' fails if included remote environment is denied by config" {
   make_composer_with_remote_include
 
-  run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/test'" "deny"
+  run "$FLOX_BIN" config --set "trusted_environments.$OWNER/test" "deny"
   run "$FLOX_BIN" activate --trust -- true
   assert_failure
   assert_output --partial "The included environment $OWNER/test is not trusted."
