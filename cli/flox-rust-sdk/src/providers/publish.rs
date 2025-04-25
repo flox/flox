@@ -147,6 +147,7 @@ pub struct CheckedBuildMetadata {
 }
 
 /// Configuration for uploading to or downloading from a catalog store.
+#[allow(clippy::large_enum_variant)] // TODO: Remove after implementing `Publisher`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClientSideCatalogStoreConfig {
     /// A `nix copy`-compatible Catalog Store (typically an S3 bucket).
