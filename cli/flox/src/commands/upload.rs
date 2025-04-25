@@ -3,10 +3,11 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::publish::ClientSideCatalogStoreConfig;
+use flox_rust_sdk::providers::publish::{ClientSideCatalogStoreConfig, write_floxhub_netrc};
 use tracing::instrument;
 use url::Url;
 
+use crate::commands::ensure_floxhub_token;
 use crate::subcommand_metric;
 use crate::utils::message;
 
@@ -32,7 +33,7 @@ struct CacheArgs {
 
 impl Upload {
     #[instrument(name = "upload", skip_all)]
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         if !flox.features.upload {
             message::plain("🚧 👷 heja, a new command is in construction here, stay tuned!");
             bail!("'upload' feature is not enabled.");
@@ -41,10 +42,13 @@ impl Upload {
         subcommand_metric!("upload");
 
         let store_path = validate_store_path(self.store_path.clone())?;
+        let token = ensure_floxhub_token(&mut flox).await?.clone();
+        let auth_file = write_floxhub_netrc(flox.temp_dir, &token)?;
 
         ClientSideCatalogStoreConfig::upload_store_path(
             &self.cache.store_url,
             &self.cache.signing_key,
+            auth_file.as_ref(),
             &store_path.to_string_lossy(),
         )
         .context("Failed to upload artifact")?;

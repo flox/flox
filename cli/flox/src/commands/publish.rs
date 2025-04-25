@@ -13,6 +13,7 @@ use flox_rust_sdk::providers::publish::{
     build_repo_err,
     check_build_metadata,
     check_environment_metadata,
+    write_floxhub_netrc,
 };
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
@@ -131,7 +132,7 @@ impl Publish {
 
         // Fail as early as possible if the user isn't authenticated or doesn't
         // belong to an org with a catalog.
-        let token = ensure_floxhub_token(&mut flox).await?;
+        let token = ensure_floxhub_token(&mut flox).await?.clone();
         let catalog_name = cache_args
             .catalog
             .clone()
@@ -155,6 +156,8 @@ impl Publish {
             .as_ref()
             .and_then(|cfg| cfg.signing_private_key.clone()));
 
+        let auth_file = write_floxhub_netrc(flox.temp_dir, &token)?;
+
         let publish_provider = PublishProvider {
             env_metadata,
             build_metadata,
@@ -162,7 +165,13 @@ impl Publish {
 
         debug!("publishing package: {}", &package);
         match publish_provider
-            .publish(&flox.catalog_client, &catalog_name, key_file, metadata_only)
+            .publish(
+                &flox.catalog_client,
+                &catalog_name,
+                key_file,
+                auth_file.to_path_buf(),
+                metadata_only,
+            )
             .await
         {
             Ok(_) => message::updated(formatdoc! {"

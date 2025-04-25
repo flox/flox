@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
@@ -6,6 +7,7 @@ use std::str::FromStr;
 use catalog_api_v1::types::{NarInfo, NarInfos, Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
 use indoc::{formatdoc, indoc};
+use tempfile::{NamedTempFile, TempPath};
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
@@ -20,7 +22,7 @@ use super::catalog::{
 };
 use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
-use crate::flox::Flox;
+use crate::flox::{Flox, FloxhubToken};
 use crate::models::environment::path_environment::PathEnvironment;
 use crate::models::environment::{Environment, EnvironmentError, PathPointer};
 use crate::models::lockfile::Lockfile;
@@ -30,6 +32,17 @@ use crate::providers::catalog::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
 use crate::utils::CommandExt;
+
+/// Hostnames that are authenticated with FloxHub credentials.
+const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 6] = [
+    "publisher.flox.dev",
+    "publisher.preview.flox.dev",
+    // The following should be removed after infra migrations.
+    "experimental-publisher.flox.dev",
+    "experimental-publisher.preview.flox.dev",
+    "experimental-publisher.preview2.flox.dev", // deltaops
+    "cache.floxware.com",                       // Tom
+];
 
 #[derive(Debug, Error)]
 pub enum PublishError {
@@ -77,6 +90,7 @@ pub trait Publisher {
         client: &Client,
         catalog_name: &str,
         key_file: Option<PathBuf>,
+        auth_netrc_path: PathBuf,
         metadata_only: bool,
     ) -> Result<(), PublishError>;
 }
@@ -143,6 +157,8 @@ pub enum ClientSideCatalogStoreConfig {
         egress_uri: Url,
         /// The path to the key used to sign artifacts before uploading them.
         signing_private_key_path: PathBuf,
+        /// Authentication file used when interacting with the store.
+        auth_netrc_path: PathBuf,
     },
     /// A Catalog Store which only accepts metadata uploads.
     MetadataOnly,
@@ -198,8 +214,14 @@ impl ClientSideCatalogStoreConfig {
                 ingress_uri,
                 egress_uri,
                 signing_private_key_path,
+                auth_netrc_path,
             } => {
-                Self::upload_build_outputs(ingress_uri, signing_private_key_path, build_outputs)?;
+                Self::upload_build_outputs(
+                    ingress_uri,
+                    signing_private_key_path,
+                    auth_netrc_path,
+                    build_outputs,
+                )?;
                 let nar_infos = Self::get_build_output_nar_infos(egress_uri, build_outputs)?;
                 Ok(Some(nar_infos))
             },
@@ -229,6 +251,7 @@ impl ClientSideCatalogStoreConfig {
     fn upload_build_outputs(
         destination_url: &Url,
         signing_key_path: &Path,
+        auth_netrc_path: &Path,
         build_outputs: &[Output],
     ) -> Result<(), PublishError> {
         for output in build_outputs.iter() {
@@ -236,7 +259,12 @@ impl ClientSideCatalogStoreConfig {
                 "Uploading output {} ({}) to cache...",
                 output.name, output.store_path
             );
-            Self::upload_store_path(destination_url, signing_key_path, &output.store_path)?;
+            Self::upload_store_path(
+                destination_url,
+                signing_key_path,
+                auth_netrc_path,
+                &output.store_path,
+            )?;
         }
         Ok(())
     }
@@ -249,6 +277,7 @@ impl ClientSideCatalogStoreConfig {
     pub fn upload_store_path(
         destination_url: &Url,
         signing_key_path: &Path,
+        auth_netrc_path: &Path,
         store_path: &str,
     ) -> Result<(), PublishError> {
         let mut url_with_query = destination_url.clone();
@@ -263,6 +292,7 @@ impl ClientSideCatalogStoreConfig {
         drop(query);
 
         let mut copy_command = nix_base_command();
+        copy_command.arg("--netrc-file").arg(auth_netrc_path);
         copy_command
             .arg("copy")
             .arg("--to")
@@ -363,6 +393,7 @@ impl Publisher for PublishProvider {
         client: &Client,
         catalog_name: &str,
         key_file: Option<PathBuf>,
+        auth_netrc_path: PathBuf,
         metadata_only: bool,
     ) -> Result<(), PublishError> {
         // Step 1 hit /packages
@@ -396,6 +427,7 @@ impl Publisher for PublishProvider {
         let catalog_store_config = get_client_side_catalog_store_config(
             metadata_only,
             key_file,
+            auth_netrc_path.to_path_buf(),
             publish_response.catalog_store_config,
         )?;
         let narinfos = catalog_store_config.maybe_upload_artifacts(&self.build_metadata.outputs)?;
@@ -438,6 +470,7 @@ impl Publisher for PublishProvider {
 fn get_client_side_catalog_store_config(
     metadata_only: bool,
     key_file: Option<PathBuf>,
+    auth_netrc_path: PathBuf,
     server_side_catalog_config: CatalogStoreConfig,
 ) -> Result<ClientSideCatalogStoreConfig, PublishError> {
     if metadata_only {
@@ -460,6 +493,7 @@ fn get_client_side_catalog_store_config(
                         PublishError::Catchall(format!("failed to parse egress URI: {e}"))
                     })?,
                     signing_private_key_path: path,
+                    auth_netrc_path,
                 }
             } else {
                 return Err(PublishError::Catchall(
@@ -820,6 +854,34 @@ pub fn check_environment_metadata(
     })
 }
 
+/// Write a `netrc` temporary file for providing FloxHub auth.
+pub fn write_floxhub_netrc(
+    temp_dir: impl AsRef<Path>,
+    token: &FloxhubToken,
+) -> std::io::Result<TempPath> {
+    let token_secret = token.secret();
+    // Restrict to known hostnamess so that we don't accidentally leak FloxHub
+    // credentials to third-party ingress URIs.
+    let netrc_contents = FLOXHUB_AUTHENTICATED_HOSTNAMES
+        .iter()
+        .map(|hostname| {
+            // Our auth proxy only uses the "password" field from BasicAuth.
+            formatdoc! {"
+                machine {hostname}
+                login unused
+                password {token_secret}
+            "}
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    let mut netrc_file = NamedTempFile::new_in(temp_dir)?;
+    netrc_file.write_all(netrc_contents.as_bytes())?;
+    netrc_file.flush()?;
+
+    Ok(netrc_file.into_temp_path())
+}
+
 #[cfg(test)]
 pub mod tests {
 
@@ -830,7 +892,7 @@ pub mod tests {
     use std::io::Write;
 
     use catalog_api_v1::mock::MockServerExt;
-    use catalog_api_v1::types::{ErrorResponse, Name, UserPackage};
+    use catalog_api_v1::types::{CatalogStoreConfigNixCopy, ErrorResponse, Name, UserPackage};
     use httpmock::prelude::*;
     use pretty_assertions::assert_eq;
 
@@ -869,9 +931,11 @@ pub mod tests {
         (tempdir_handle, repo, remote_uri)
     }
 
-    fn local_nix_cache() -> (tempfile::NamedTempFile, ClientSideCatalogStoreConfig) {
+    fn local_nix_cache(
+        token: &FloxhubToken,
+    ) -> (tempfile::NamedTempFile, ClientSideCatalogStoreConfig) {
         // Returns a temp local cache and signing key file to use in testing publish
-        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+        let temp_dir = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
         let mut temp_key_file =
             tempfile::NamedTempFile::new().expect("Should create named temp file");
 
@@ -891,12 +955,14 @@ pub mod tests {
             .expect("Should write key to file");
         temp_key_file.flush().expect("Should flush key file");
 
-        let cache_url = format!("file://{}", tempdir_handle.path().display());
+        let cache_url = format!("file://{}", temp_dir.path().display());
         let parsed_cache_url = Url::parse(&cache_url).unwrap();
         let key_file_path = temp_key_file.path().to_path_buf();
+        let auth_file = write_floxhub_netrc(temp_dir.path(), token).unwrap();
         let catalog_store = ClientSideCatalogStoreConfig::NixCopy {
             ingress_uri: parsed_cache_url.clone(),
             egress_uri: parsed_cache_url.clone(),
+            auth_netrc_path: auth_file.to_path_buf(),
             signing_private_key_path: key_file_path,
         };
         (temp_key_file, catalog_store)
@@ -1053,6 +1119,7 @@ pub mod tests {
 
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
+        let auth_file = write_floxhub_netrc(&flox.temp_dir, &token).unwrap();
 
         let env_metadata = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME).unwrap();
         let build_metadata =
@@ -1074,7 +1141,13 @@ pub mod tests {
         ]);
 
         let res = publish_provider
-            .publish(&flox.catalog_client, &catalog_name, None, false)
+            .publish(
+                &flox.catalog_client,
+                &catalog_name,
+                None,
+                auth_file.to_path_buf(),
+                false,
+            )
             .await;
 
         assert!(res.is_ok());
@@ -1125,6 +1198,7 @@ pub mod tests {
 
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
+        let empty_auth_file = NamedTempFile::new().unwrap();
 
         // Don't do a build because it's slow
         let (build_metadata, env_metadata) = dummy_publish_metadata();
@@ -1146,7 +1220,13 @@ pub mod tests {
         ]);
 
         let result = publish_provider
-            .publish(&client, &catalog_name, None, false)
+            .publish(
+                &client,
+                &catalog_name,
+                None,
+                empty_auth_file.path().to_path_buf(),
+                false,
+            )
             .await;
 
         let err = result.unwrap_err();
@@ -1172,6 +1252,7 @@ pub mod tests {
 
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
+        let empty_auth_file = NamedTempFile::new().unwrap();
 
         // Don't do a build because it's slow
         let (build_metadata, env_metadata) = dummy_publish_metadata();
@@ -1210,7 +1291,13 @@ pub mod tests {
 
         // We should error even if metadata_only is true
         let result = publish_provider
-            .publish(&client, &catalog_name, None, true)
+            .publish(
+                &client,
+                &catalog_name,
+                None,
+                empty_auth_file.path().to_path_buf(),
+                true,
+            )
             .await;
 
         packages_mock.assert();
@@ -1245,7 +1332,7 @@ pub mod tests {
             check_build_metadata(&flox, &env_metadata, &env, &builder, EXAMPLE_PACKAGE_NAME)
                 .unwrap();
 
-        let (_key_file, cache) = local_nix_cache();
+        let (_key_file, cache) = local_nix_cache(&token);
         let publish_provider = PublishProvider {
             build_metadata,
             env_metadata,
@@ -1268,11 +1355,20 @@ pub mod tests {
             Response::PublishBuild,
         ]);
 
+        let ClientSideCatalogStoreConfig::NixCopy {
+            ref auth_netrc_path,
+            ..
+        } = cache
+        else {
+            panic!("unexpected ClientSideCatalogStoreConfig variant");
+        };
+
         publish_provider
             .publish(
                 &flox.catalog_client,
                 &catalog_name,
                 cache.local_signing_key_path(),
+                auth_netrc_path.to_path_buf(),
                 false,
             )
             .await
