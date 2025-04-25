@@ -19,6 +19,15 @@ let
   # Extend nixpkgs, with collectedPackages.
   # `attrPath` and `currentScope` remain empty as this is the toplevel attrset.
   extendedNixpkgs = lib.nef.extendAttrSet [ ] { } nixpkgs collectedPackages;
+
+  # different forms of identifiers for the collected packages
+  # including Make `targets`
+  collectedAttrPaths = lib.nef.reflect.collectAttrPaths [ ] collectedPackages;
+  reflect = {
+    attrPaths = lib.nef.reflect.attrPathStrings collectedAttrPaths;
+    targets = lib.nef.reflect.makeTargets collectedAttrPaths;
+  };
+
 in
 {
   # debugging stuff ignore for now
@@ -29,6 +38,12 @@ in
     collectedPackages
     extendedNixpkgs
     ;
+
+  # get make targets
+  #
+  # nix eval -f <nef> --argstr pkgs-dir <PATH> reflect.targets
+  # nix eval -f <nef> --argstr pkgs-dir <PATH> reflect.attrPaths
+  inherit reflect;
 
   # get all the packages
   #
