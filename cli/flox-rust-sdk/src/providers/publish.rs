@@ -251,25 +251,27 @@ impl ClientSideCatalogStoreConfig {
         signing_key_path: &Path,
         store_path: &str,
     ) -> Result<(), PublishError> {
-        let mut url = destination_url.clone();
-        let url_with_key = url
-            .query_pairs_mut()
-            .append_pair("secret-key", signing_key_path.to_string_lossy().as_ref())
-            .append_pair("ls-compression", "zstd")
-            .append_pair("compression", "zstd")
-            .append_pair("write-nar-listing", "true")
-            .finish();
+        let mut url_with_query = destination_url.clone();
+        let mut query = url_with_query.query_pairs_mut();
+        query.append_pair("secret-key", signing_key_path.to_string_lossy().as_ref());
+        query.append_pair("compression", "zstd");
+        query.append_pair("write-nar-listing", "true");
+        if destination_url.scheme() == "s3" {
+            // https://nix.dev/manual/nix/2.24/command-ref/new-cli/nix3-help-stores#store-s3-binary-cache-store-ls-compression
+            query.append_pair("ls-compression", "zstd");
+        }
+        drop(query);
 
         let mut copy_command = nix_base_command();
         copy_command
             .arg("copy")
             .arg("--to")
-            .arg(url_with_key.to_string())
+            .arg(url_with_query.to_string())
             .arg(store_path);
 
         debug!(
             %store_path,
-            %url_with_key,
+            %url_with_query,
             cmd = %copy_command.display(),
             "Uploading store path to cache"
         );
