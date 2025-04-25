@@ -222,7 +222,8 @@ impl ClientSideCatalogStoreConfig {
                     auth_netrc_path,
                     build_outputs,
                 )?;
-                let nar_infos = Self::get_build_output_nar_infos(egress_uri, build_outputs)?;
+                let nar_infos =
+                    Self::get_build_output_nar_infos(egress_uri, auth_netrc_path, build_outputs)?;
                 Ok(Some(nar_infos))
             },
             ClientSideCatalogStoreConfig::MetadataOnly => {
@@ -320,10 +321,11 @@ impl ClientSideCatalogStoreConfig {
     /// Constructs a `nix path-info` command that will get the NAR info for a
     /// store path from the specified store, including the optional information
     /// about the closure size of the store path.
-    fn nar_info_cmd(store_url: &Url, store_path: &str) -> Command {
+    fn nar_info_cmd(store_url: &Url, store_path: &str, auth_netrc_path: &Path) -> Command {
         let mut cmd = nix_base_command();
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
+        cmd.arg("--netrc-file").arg(auth_netrc_path);
         cmd.args([
             "path-info",
             "--store",
@@ -339,8 +341,12 @@ impl ClientSideCatalogStoreConfig {
     /// catalog server expects e.g. one that is tolerant of the different NAR info formats
     /// that the `nix` CLI can return.
     #[instrument(skip_all, fields(progress = format!("Collecting extra build metadata for '{store_path}'")))]
-    fn get_nar_info(source_url: &Url, store_path: &str) -> Result<NarInfo, PublishError> {
-        let mut cmd = Self::nar_info_cmd(source_url, store_path);
+    fn get_nar_info(
+        source_url: &Url,
+        store_path: &str,
+        auth_netrc_path: &Path,
+    ) -> Result<NarInfo, PublishError> {
+        let mut cmd = Self::nar_info_cmd(source_url, store_path, auth_netrc_path);
         debug!(cmd = %cmd.display(), "running nix path-info command");
         let output = cmd.output().map_err(|e| {
             PublishError::Catchall(format!("failed to execute NAR info command: {e}"))
@@ -358,6 +364,7 @@ impl ClientSideCatalogStoreConfig {
     /// NAR info formats that the `nix` CLI can return.
     fn get_build_output_nar_infos(
         source_url: &Url,
+        auth_netrc_path: &Path,
         build_outputs: &[Output],
     ) -> Result<NarInfos, PublishError> {
         let mut nar_infos = HashMap::new();
@@ -368,7 +375,7 @@ impl ClientSideCatalogStoreConfig {
                 store = source_url.as_str(),
                 "querying NAR info for build output"
             );
-            let nar_info = Self::get_nar_info(source_url, &output.store_path)?;
+            let nar_info = Self::get_nar_info(source_url, &output.store_path, auth_netrc_path)?;
             nar_infos.insert(output.name.clone(), nar_info);
         }
         Ok(nar_infos.into())
