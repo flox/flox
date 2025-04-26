@@ -13,6 +13,7 @@ mod init;
 mod install;
 mod list;
 mod lock_manifest;
+mod mcp;
 mod publish;
 mod pull;
 mod push;
@@ -1017,6 +1018,9 @@ enum InternalCommands {
         #[bpaf(external(check_for_upgrades::check_for_upgrades))]
         check_for_upgrades::CheckForUpgrades,
     ),
+
+    #[bpaf(command, hide)]
+    Mcp(#[bpaf(external(mcp::mcp))] mcp::Mcp),
 }
 
 impl InternalCommands {
@@ -1029,6 +1033,7 @@ impl InternalCommands {
             InternalCommands::Upload(args) => args.handle(flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
+            InternalCommands::Mcp(args) => args.handle(flox).await?,
         }
         Ok(())
     }

@@ -204,7 +204,7 @@ impl List {
     }
 
     /// print package ids, as well as extended detailed information
-    fn print_detail(
+    pub fn print_detail(
         mut out: impl Write,
         packages: &[PackageToList],
         upgrades: Option<SingleSystemUpgradeDiff>,
@@ -322,7 +322,7 @@ impl List {
         Ok(())
     }
 
-    fn get_cached_upgrades_for_current_system(
+    pub fn get_cached_upgrades_for_current_system(
         flox: &Flox,
         environment: &mut ConcreteEnvironment,
     ) -> Result<Option<SingleSystemUpgradeDiff>> {

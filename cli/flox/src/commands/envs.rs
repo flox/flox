@@ -182,7 +182,7 @@ fn format_path(path: Option<&Path>) -> Cow<'_, str> {
         .unwrap_or_else(|| "(remote)".into())
 }
 
-fn get_registered_environments(
+pub fn get_registered_environments(
     registry: &EnvRegistry,
 ) -> impl Iterator<Item = UninitializedEnvironment> + '_ {
     registry.entries.iter().filter_map(|entry| {
@@ -194,7 +194,7 @@ fn get_registered_environments(
 }
 
 /// Get the list of environments that are not active
-fn get_inactive_environments<'a>(
+pub fn get_inactive_environments<'a>(
     available: impl IntoIterator<Item = UninitializedEnvironment>,
     active: impl IntoIterator<Item = &'a UninitializedEnvironment>,
 ) -> Result<BTreeSet<UninitializedEnvironment>> {

@@ -1,4 +1,6 @@
 [workspace]
+default-members = ["flox", "flox-watchdog", "flox-activations"]
+
 members = [
     "flox",
     "flox-rust-sdk",
@@ -7,10 +9,8 @@ members = [
     "flox-watchdog",
     "flox-activations",
     "flox-core",
-    "flox-test-utils"
+    "flox-test-utils",
 ]
-default-members = ["flox", "flox-watchdog", "flox-activations"]
-
 resolver = "2"
 
 [workspace.dependencies]
@@ -24,7 +24,7 @@ clap = { version = "4.5.37", features = ["derive"] }
 clap_derive = "4.5.4"
 close_fds = "0.3"
 # Pinned due to bug: https://github.com/rust-cli/config-rs/issues/531
-config = { version = "0.13.4", default-features = false, features = ["toml"]}
+config = { version = "0.13.4", default-features = false, features = ["toml"] }
 crossterm = "0.27"
 derive_more = "0.99.19"
 dirs = "5.0.0"

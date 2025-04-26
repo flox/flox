@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashSet};
+use std::fmt::Write;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
@@ -52,16 +53,18 @@ impl Show {
         .iter()
         .map(|s| s.to_string())
         .collect::<HashSet<_>>();
-        render_show_catalog(&results.results, &expected_systems)?;
-
+        let rendered = render_show_catalog(&results.results, &expected_systems)?;
+        println!("{rendered}");
         Ok(())
     }
 }
 
-fn render_show_catalog(
+pub fn render_show_catalog(
     search_results: &[PackageBuild],
     expected_systems: &HashSet<System>,
-) -> Result<()> {
+) -> Result<String> {
+    let mut rendered = String::new();
+
     if search_results.is_empty() {
         // This should never happen since we've already checked that the
         // set of results is non-empty.
@@ -74,7 +77,7 @@ fn render_show_catalog(
         .map(|d| d.replace('\n', " "))
         .filter(|d| !d.trim().is_empty())
         .unwrap_or(DEFAULT_DESCRIPTION.into());
-    println!("{pkg_path} - {description}");
+    writeln!(&mut rendered, "{pkg_path} - {description}");
 
     // Organize the versions to be queried and printed
     let version_to_systems = {
@@ -110,17 +113,18 @@ fn render_show_catalog(
             intersection
         };
         if available_systems.len() != expected_systems.len() {
-            println!(
+            writeln!(
+                &mut rendered,
                 "    {pkg_path}@{} ({} only)",
                 pkg.version,
                 available_systems.join(", ")
             );
         } else {
-            println!("    {pkg_path}@{}", pkg.version);
+            writeln!(&mut rendered, "    {pkg_path}@{}", pkg.version);
         }
         seen_versions.insert(&pkg.version);
     }
-    Ok(())
+    Ok(rendered)
 }
 
 #[cfg(test)]

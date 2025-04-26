@@ -56,6 +56,10 @@ uuid.workspace = true
 xdg.workspace = true
 flox-core.workspace = true
 
+rmcp = { version = "0.1.5", features = ["server", "transport-io"] }
+schemars = { version = "=0.8" }
+
+
 [dev-dependencies]
 pretty_assertions.workspace = true
 proptest.workspace = true
