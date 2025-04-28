@@ -7,9 +7,10 @@ use tempfile::{NamedTempFile, TempDir, TempPath, tempdir_in};
 use crate::flox::{Flox, FloxhubToken};
 
 /// Hostnames that are authenticated with FloxHub credentials.
-const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 6] = [
+const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 7] = [
     "publisher.flox.dev",
     "publisher.preview.flox.dev",
+    "api.preview2.flox.dev",
     // The following should be removed after infra migrations.
     "experimental-publisher.flox.dev",
     "experimental-publisher.preview.flox.dev",
@@ -19,13 +20,21 @@ const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 6] = [
 
 pub trait AuthProvider {
     fn token(&self) -> Option<&FloxhubToken>;
-    fn tempdir_path(&self) -> &Path;
+    fn create_netrc(&self) -> Result<TempPath, AuthError>;
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
     #[error("failed to create temporary directory")]
     CreateTempDir(#[source] std::io::Error),
+
+    #[error("failed to create netrc")]
+    CreateNetrc(#[source] std::io::Error),
+
+    // It's intended that this error will be caught so that we can present the
+    // typical friendly "you probably need to re-auth" message.
+    #[error("authentication token not found")]
+    NoToken,
 
     #[error("{0}")]
     CatchAll(String),
@@ -64,10 +73,15 @@ impl AuthProvider for Auth {
         self.floxhub_token.as_ref()
     }
 
-    /// Get the location of the tempdir in which an ad-hoc netrc
-    /// can be created.
-    fn tempdir_path(&self) -> &Path {
-        self.netrc_tempdir.path()
+    /// Creates a temporary netrc file with authentication credentials
+    /// and returns the path.
+    fn create_netrc(&self) -> Result<TempPath, AuthError> {
+        match self.floxhub_token.as_ref() {
+            Some(token) => {
+                write_floxhub_netrc(&self.netrc_tempdir, token).map_err(AuthError::CreateNetrc)
+            },
+            None => Err(AuthError::NoToken),
+        }
     }
 }
 
@@ -97,4 +111,11 @@ pub fn write_floxhub_netrc(
     netrc_file.flush()?;
 
     Ok(netrc_file.into_temp_path())
+}
+
+/// Returns true if we determine that the store URL requires an authentication
+/// token. Note that this is a best guess for now and *really* means that we
+/// can't tell that we *don't* need a token.
+pub(crate) fn store_needs_auth(url: &str) -> bool {
+    !(url.starts_with("https://cache.nixos.org") || url == "daemon")
 }
