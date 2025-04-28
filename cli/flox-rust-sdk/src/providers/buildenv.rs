@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, info_span, instrument, trace};
 
+use super::auth::AuthProvider;
 use super::catalog::ClientTrait;
 use super::nix::{self, nix_base_command};
 use crate::data::System;
@@ -139,16 +140,21 @@ pub trait BuildEnv {
     ) -> Result<BuildEnvOutputs, BuildEnvError>;
 }
 
-pub struct BuildEnvNix<P> {
+pub struct BuildEnvNix<P, A> {
     gc_root_base_path: P,
+    _auth: A,
 }
 
-impl<P> BuildEnvNix<P>
+impl<P, A> BuildEnvNix<P, A>
 where
     P: AsRef<Path>,
+    A: AuthProvider,
 {
-    pub fn new(gc_root_base_path: P) -> BuildEnvNix<P> {
-        BuildEnvNix { gc_root_base_path }
+    pub fn new(gc_root_base_path: P, auth: A) -> BuildEnvNix<P, A> {
+        BuildEnvNix {
+            gc_root_base_path,
+            _auth: auth,
+        }
     }
 
     /// Create a new gc root path in [Self::gc_root_base_path]
@@ -712,9 +718,10 @@ where
     }
 }
 
-impl<P> BuildEnv for BuildEnvNix<P>
+impl<P, A> BuildEnv for BuildEnvNix<P, A>
 where
     P: AsRef<Path>,
+    A: AuthProvider,
 {
     #[instrument(skip_all, fields(progress = "Building environment"))]
     fn build(
@@ -960,10 +967,12 @@ mod test_helpers {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::providers::auth::Auth;
 
-    pub(super) fn buildenv_instance() -> BuildEnvNix<TempDir> {
+    pub(super) fn buildenv_instance() -> BuildEnvNix<TempDir, Auth> {
         let tempdir = TempDir::new().unwrap();
-        BuildEnvNix::new(tempdir)
+        let auth = Auth::from_tempdir_and_token(TempDir::new().unwrap(), None);
+        BuildEnvNix::new(tempdir, auth)
     }
 }
 

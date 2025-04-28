@@ -23,6 +23,7 @@ use super::manifest::raw::PackageToInstall;
 use super::manifest::typed::{ActivateMode, ManifestError};
 use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::flox::{Flox, Floxhub};
+use crate::providers::auth::AuthError;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
     GitCommandDiscoverError,
@@ -734,6 +735,9 @@ pub enum EnvironmentError {
     /// An error flox edit can recover from
     #[error(transparent)]
     Recoverable(RecoverableMergeError),
+
+    #[error("authentication error")]
+    Auth(#[source] AuthError),
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -1,8 +1,22 @@
 use std::path::Path;
 
-use tempfile::TempDir;
+use tempfile::{TempDir, tempdir_in};
 
-use crate::flox::FloxhubToken;
+use crate::flox::{Flox, FloxhubToken};
+
+pub trait AuthProvider {
+    fn token(&self) -> Option<&FloxhubToken>;
+    fn tempdir_path(&self) -> &Path;
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AuthError {
+    #[error("failed to create temporary directory")]
+    CreateTempDir(#[source] std::io::Error),
+
+    #[error("{0}")]
+    CatchAll(String),
+}
 
 /// Handles authentication with catalog stores during build and publish.
 #[derive(Debug)]
@@ -14,14 +28,32 @@ pub struct Auth {
 }
 
 impl Auth {
+    /// Construct a new auth provider from a Flox instance
+    pub fn from_flox(flox: &Flox) -> Result<Self, AuthError> {
+        Ok(Self {
+            floxhub_token: flox.floxhub_token.clone(),
+            netrc_tempdir: tempdir_in(&flox.temp_dir).map_err(AuthError::CreateTempDir)?,
+        })
+    }
+
+    /// Construct a new auth provider from a tempdir and a token.
+    pub fn from_tempdir_and_token(tempdir: TempDir, token: Option<FloxhubToken>) -> Self {
+        Self {
+            netrc_tempdir: tempdir,
+            floxhub_token: token,
+        }
+    }
+}
+
+impl AuthProvider for Auth {
     /// Get a reference to the user's token (which may be expired).
-    pub fn token(&self) -> Option<&FloxhubToken> {
+    fn token(&self) -> Option<&FloxhubToken> {
         self.floxhub_token.as_ref()
     }
 
     /// Get the location of the tempdir in which an ad-hoc netrc
     /// can be created.
-    pub fn tempdir_path(&self) -> &Path {
+    fn tempdir_path(&self) -> &Path {
         self.netrc_tempdir.path()
     }
 }
