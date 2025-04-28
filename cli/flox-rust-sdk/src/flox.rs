@@ -114,15 +114,20 @@ pub struct Features {
 pub static DEFAULT_FLOXHUB_URL: LazyLock<Url> =
     LazyLock::new(|| Url::parse("https://hub.flox.dev").unwrap());
 
+/// Assertions about the owner of this token
 #[derive(Debug, Clone, Deserialize)]
 struct FloxTokenClaims {
+    /// The FloxHub handle of the user this token belongs to
     #[serde(rename = "https://flox.dev/handle")]
     handle: String,
 }
 
+/// A token authenticating a user with FloxHub
 #[derive(Debug, Clone, DeserializeFromStr)]
 pub struct FloxhubToken {
+    /// The entire token as a string
     token: String,
+    /// Assertions about the identity of the token's owner
     token_data: FloxTokenClaims,
 }
 
