@@ -6,6 +6,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::{Inner, Manifest};
+use flox_rust_sdk::providers::auth::write_floxhub_netrc;
 use flox_rust_sdk::providers::build::FloxBuildMk;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
@@ -13,7 +14,6 @@ use flox_rust_sdk::providers::publish::{
     build_repo_err,
     check_build_metadata,
     check_environment_metadata,
-    write_floxhub_netrc,
 };
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};

@@ -1,8 +1,21 @@
+use std::io::Write;
 use std::path::Path;
 
-use tempfile::{TempDir, tempdir_in};
+use indoc::formatdoc;
+use tempfile::{NamedTempFile, TempDir, TempPath, tempdir_in};
 
 use crate::flox::{Flox, FloxhubToken};
+
+/// Hostnames that are authenticated with FloxHub credentials.
+const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 6] = [
+    "publisher.flox.dev",
+    "publisher.preview.flox.dev",
+    // The following should be removed after infra migrations.
+    "experimental-publisher.flox.dev",
+    "experimental-publisher.preview.flox.dev",
+    "experimental-publisher.preview2.flox.dev", // deltaops
+    "cache.floxware.com",                       // Tom
+];
 
 pub trait AuthProvider {
     fn token(&self) -> Option<&FloxhubToken>;
@@ -56,4 +69,32 @@ impl AuthProvider for Auth {
     fn tempdir_path(&self) -> &Path {
         self.netrc_tempdir.path()
     }
+}
+
+/// Write a `netrc` temporary file for providing FloxHub auth.
+pub fn write_floxhub_netrc(
+    temp_dir: impl AsRef<Path>,
+    token: &FloxhubToken,
+) -> std::io::Result<TempPath> {
+    let token_secret = token.secret();
+    // Restrict to known hostnamess so that we don't accidentally leak FloxHub
+    // credentials to third-party ingress URIs.
+    let netrc_contents = FLOXHUB_AUTHENTICATED_HOSTNAMES
+        .iter()
+        .map(|hostname| {
+            // Our auth proxy only uses the "password" field from BasicAuth.
+            formatdoc! {"
+                machine {hostname}
+                login unused
+                password {token_secret}
+            "}
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    let mut netrc_file = NamedTempFile::new_in(temp_dir)?;
+    netrc_file.write_all(netrc_contents.as_bytes())?;
+    netrc_file.flush()?;
+
+    Ok(netrc_file.into_temp_path())
 }
