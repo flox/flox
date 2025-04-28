@@ -10,6 +10,7 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
 
+use super::auth::{AuthError, AuthProvider};
 use super::build::{BuildResult, BuildResults, ManifestBuilder};
 use super::catalog::{
     CatalogClientError,
@@ -65,6 +66,9 @@ pub enum PublishError {
 
     #[error(transparent)]
     Git(#[from] GitCommandError),
+
+    #[error(transparent)]
+    Auth(#[from] AuthError),
 }
 
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
@@ -77,7 +81,6 @@ pub trait Publisher {
         client: &Client,
         catalog_name: &str,
         key_file: Option<PathBuf>,
-        auth_netrc_path: PathBuf,
         metadata_only: bool,
     ) -> Result<(), PublishError>;
 }
@@ -376,19 +379,36 @@ impl ClientSideCatalogStoreConfig {
 ///
 /// The `PublishProvider` is a generic struct, parameterized by a `Builder` type,
 /// to build packages before publishing.
-pub struct PublishProvider {
+pub struct PublishProvider<A> {
     pub env_metadata: CheckedEnvironmentMetadata,
     pub build_metadata: CheckedBuildMetadata,
+    auth: A,
+}
+
+impl<A> PublishProvider<A> {
+    pub fn new(
+        env_metadata: CheckedEnvironmentMetadata,
+        build_metadata: CheckedBuildMetadata,
+        auth: A,
+    ) -> Self {
+        Self {
+            env_metadata,
+            build_metadata,
+            auth,
+        }
+    }
 }
 
 /// (default) implementation of the `Publish` trait, i.e. the publish interface to publish.
-impl Publisher for PublishProvider {
+impl<A> Publisher for PublishProvider<A>
+where
+    A: AuthProvider,
+{
     async fn publish(
         &self,
         client: &Client,
         catalog_name: &str,
         key_file: Option<PathBuf>,
-        auth_netrc_path: PathBuf,
         metadata_only: bool,
     ) -> Result<(), PublishError> {
         // Step 1 hit /packages
@@ -419,10 +439,11 @@ impl Publisher for PublishProvider {
             .await
             .map_err(PublishError::CatalogError)?;
 
+        let netrc_path = self.auth.create_netrc().map_err(PublishError::Auth)?;
         let catalog_store_config = get_client_side_catalog_store_config(
             metadata_only,
             key_file,
-            auth_netrc_path.to_path_buf(),
+            &netrc_path,
             publish_response.catalog_store_config,
         )?;
         let narinfos = catalog_store_config.maybe_upload_artifacts(&self.build_metadata.outputs)?;
@@ -465,7 +486,7 @@ impl Publisher for PublishProvider {
 fn get_client_side_catalog_store_config(
     metadata_only: bool,
     key_file: Option<PathBuf>,
-    auth_netrc_path: PathBuf,
+    auth_netrc_path: impl AsRef<Path>,
     server_side_catalog_config: CatalogStoreConfig,
 ) -> Result<ClientSideCatalogStoreConfig, PublishError> {
     if metadata_only {
@@ -488,7 +509,7 @@ fn get_client_side_catalog_store_config(
                         PublishError::Catchall(format!("failed to parse egress URI: {e}"))
                     })?,
                     signing_private_key_path: path,
-                    auth_netrc_path,
+                    auth_netrc_path: auth_netrc_path.as_ref().to_path_buf(),
                 }
             } else {
                 return Err(PublishError::Catchall(
@@ -862,7 +883,6 @@ pub mod tests {
     use catalog_api_v1::types::{CatalogStoreConfigNixCopy, ErrorResponse, Name, UserPackage};
     use httpmock::prelude::*;
     use pretty_assertions::assert_eq;
-    use tempfile::NamedTempFile;
 
     use super::*;
     use crate::data::CanonicalPath;
@@ -871,7 +891,7 @@ pub mod tests {
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::lockfile::Lockfile;
-    use crate::providers::auth::write_floxhub_netrc;
+    use crate::providers::auth::{Auth, write_floxhub_netrc};
     use crate::providers::build::FloxBuildMk;
     use crate::providers::catalog::test_helpers::reset_mocks;
     use crate::providers::catalog::{
@@ -1089,17 +1109,15 @@ pub mod tests {
 
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
-        let auth_file = write_floxhub_netrc(&flox.temp_dir, &token).unwrap();
+        flox.floxhub_token = Some(token);
 
         let env_metadata = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME).unwrap();
         let build_metadata =
             check_build_metadata(&flox, &env_metadata, &env, &builder, EXAMPLE_PACKAGE_NAME)
                 .unwrap();
 
-        let publish_provider = PublishProvider {
-            build_metadata,
-            env_metadata,
-        };
+        let auth = Auth::from_flox(&flox).unwrap();
+        let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
 
         reset_mocks(&mut flox.catalog_client, vec![
             Response::CreatePackage,
@@ -1111,13 +1129,7 @@ pub mod tests {
         ]);
 
         let res = publish_provider
-            .publish(
-                &flox.catalog_client,
-                &catalog_name,
-                None,
-                auth_file.to_path_buf(),
-                false,
-            )
+            .publish(&flox.catalog_client, &catalog_name, None, false)
             .await;
 
         assert!(res.is_ok());
@@ -1164,19 +1176,18 @@ pub mod tests {
 
     #[tokio::test]
     async fn publish_errors_without_key() {
+        let (mut flox, _tempdir) = flox_instance();
         let mut client = Client::Mock(MockClient::new(None::<String>).unwrap());
 
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
-        let empty_auth_file = NamedTempFile::new().unwrap();
+        flox.floxhub_token = Some(token);
 
         // Don't do a build because it's slow
         let (build_metadata, env_metadata) = dummy_publish_metadata();
 
-        let publish_provider = PublishProvider {
-            build_metadata,
-            env_metadata,
-        };
+        let auth = Auth::from_flox(&flox).unwrap();
+        let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
 
         reset_mocks(&mut client, vec![
             Response::CreatePackage,
@@ -1190,13 +1201,7 @@ pub mod tests {
         ]);
 
         let result = publish_provider
-            .publish(
-                &client,
-                &catalog_name,
-                None,
-                empty_auth_file.path().to_path_buf(),
-                false,
-            )
+            .publish(&client, &catalog_name, None, false)
             .await;
 
         let err = result.unwrap_err();
@@ -1218,11 +1223,12 @@ pub mod tests {
     /// publish() passes the error details from the server through
     #[tokio::test]
     async fn publish_passes_error_details_through() {
+        let (mut flox, _tempdir) = flox_instance();
         let server = MockServer::start();
 
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
-        let empty_auth_file = NamedTempFile::new().unwrap();
+        flox.floxhub_token = Some(token.clone());
 
         // Don't do a build because it's slow
         let (build_metadata, env_metadata) = dummy_publish_metadata();
@@ -1254,20 +1260,12 @@ pub mod tests {
             extra_headers: Default::default(),
         }));
 
-        let publish_provider = PublishProvider {
-            build_metadata,
-            env_metadata,
-        };
+        let auth = Auth::from_flox(&flox).unwrap();
+        let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
 
         // We should error even if metadata_only is true
         let result = publish_provider
-            .publish(
-                &client,
-                &catalog_name,
-                None,
-                empty_auth_file.path().to_path_buf(),
-                true,
-            )
+            .publish(&client, &catalog_name, None, true)
             .await;
 
         packages_mock.assert();
@@ -1296,6 +1294,7 @@ pub mod tests {
 
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
+        flox.floxhub_token = Some(token.clone());
 
         let env_metadata = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME).unwrap();
         let build_metadata =
@@ -1303,10 +1302,8 @@ pub mod tests {
                 .unwrap();
 
         let (_key_file, cache) = local_nix_cache(&token);
-        let publish_provider = PublishProvider {
-            build_metadata,
-            env_metadata,
-        };
+        let auth = Auth::from_flox(&flox).unwrap();
+        let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
 
         // the 'cache' should be non existent before the publish
         let cache_url = cache.upload_url().unwrap();
@@ -1325,20 +1322,11 @@ pub mod tests {
             Response::PublishBuild,
         ]);
 
-        let ClientSideCatalogStoreConfig::NixCopy {
-            ref auth_netrc_path,
-            ..
-        } = cache
-        else {
-            panic!("unexpected ClientSideCatalogStoreConfig variant");
-        };
-
         publish_provider
             .publish(
                 &flox.catalog_client,
                 &catalog_name,
                 cache.local_signing_key_path(),
-                auth_netrc_path.to_path_buf(),
                 false,
             )
             .await

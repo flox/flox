@@ -6,7 +6,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::{Inner, Manifest};
-use flox_rust_sdk::providers::auth::write_floxhub_netrc;
+use flox_rust_sdk::providers::auth::Auth;
 use flox_rust_sdk::providers::build::FloxBuildMk;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
@@ -156,22 +156,12 @@ impl Publish {
             .as_ref()
             .and_then(|cfg| cfg.signing_private_key.clone()));
 
-        let auth_file = write_floxhub_netrc(flox.temp_dir, &token)?;
-
-        let publish_provider = PublishProvider {
-            env_metadata,
-            build_metadata,
-        };
+        let auth = Auth::from_flox(&flox)?;
+        let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
 
         debug!("publishing package: {}", &package);
         match publish_provider
-            .publish(
-                &flox.catalog_client,
-                &catalog_name,
-                key_file,
-                auth_file.to_path_buf(),
-                metadata_only,
-            )
+            .publish(&flox.catalog_client, &catalog_name, key_file, metadata_only)
             .await
         {
             Ok(_) => message::updated(formatdoc! {"
