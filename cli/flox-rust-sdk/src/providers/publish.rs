@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
@@ -7,7 +6,6 @@ use std::str::FromStr;
 use catalog_api_v1::types::{NarInfo, NarInfos, Output, Outputs, SystemEnum};
 use chrono::{DateTime, Utc};
 use indoc::{formatdoc, indoc};
-use tempfile::{NamedTempFile, TempPath};
 use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
@@ -22,7 +20,7 @@ use super::catalog::{
 };
 use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
-use crate::flox::{Flox, FloxhubToken};
+use crate::flox::Flox;
 use crate::models::environment::path_environment::PathEnvironment;
 use crate::models::environment::{Environment, EnvironmentError, PathPointer};
 use crate::models::lockfile::Lockfile;
@@ -32,17 +30,6 @@ use crate::providers::catalog::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
 use crate::utils::CommandExt;
-
-/// Hostnames that are authenticated with FloxHub credentials.
-const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 6] = [
-    "publisher.flox.dev",
-    "publisher.preview.flox.dev",
-    // The following should be removed after infra migrations.
-    "experimental-publisher.flox.dev",
-    "experimental-publisher.preview.flox.dev",
-    "experimental-publisher.preview2.flox.dev", // deltaops
-    "cache.floxware.com",                       // Tom
-];
 
 #[derive(Debug, Error)]
 pub enum PublishError {
@@ -862,34 +849,6 @@ pub fn check_environment_metadata(
     })
 }
 
-/// Write a `netrc` temporary file for providing FloxHub auth.
-pub fn write_floxhub_netrc(
-    temp_dir: impl AsRef<Path>,
-    token: &FloxhubToken,
-) -> std::io::Result<TempPath> {
-    let token_secret = token.secret();
-    // Restrict to known hostnamess so that we don't accidentally leak FloxHub
-    // credentials to third-party ingress URIs.
-    let netrc_contents = FLOXHUB_AUTHENTICATED_HOSTNAMES
-        .iter()
-        .map(|hostname| {
-            // Our auth proxy only uses the "password" field from BasicAuth.
-            formatdoc! {"
-                machine {hostname}
-                login unused
-                password {token_secret}
-            "}
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n");
-
-    let mut netrc_file = NamedTempFile::new_in(temp_dir)?;
-    netrc_file.write_all(netrc_contents.as_bytes())?;
-    netrc_file.flush()?;
-
-    Ok(netrc_file.into_temp_path())
-}
-
 #[cfg(test)]
 pub mod tests {
 
@@ -903,13 +862,16 @@ pub mod tests {
     use catalog_api_v1::types::{CatalogStoreConfigNixCopy, ErrorResponse, Name, UserPackage};
     use httpmock::prelude::*;
     use pretty_assertions::assert_eq;
+    use tempfile::NamedTempFile;
 
     use super::*;
     use crate::data::CanonicalPath;
+    use crate::flox::FloxhubToken;
     use crate::flox::test_helpers::{create_test_token, flox_instance};
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::lockfile::Lockfile;
+    use crate::providers::auth::write_floxhub_netrc;
     use crate::providers::build::FloxBuildMk;
     use crate::providers::catalog::test_helpers::reset_mocks;
     use crate::providers::catalog::{
