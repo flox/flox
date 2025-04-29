@@ -650,7 +650,6 @@ pub fn check_build_metadata(
     // Build the package and collect the outputs
     let output_stream = builder
         .build(
-            flox,
             &clean_build_env.parent_path()?,
             &clean_build_env.build(flox)?,
             Some(&nix_expression_dir(&clean_build_env)),
@@ -1117,8 +1116,8 @@ pub mod tests {
 
     #[test]
     fn test_check_build_meta_nominal() {
-        let builder = FloxBuildMk;
         let (flox, _temp_dir_handle) = flox_instance();
+        let builder = FloxBuildMk::new(&flox);
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
 
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
@@ -1142,8 +1141,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn publish_meta_only() {
-        let builder = FloxBuildMk;
         let (mut flox, _temp_dir_handle) = flox_instance();
+        let builder = FloxBuildMk::new(&flox);
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
@@ -1330,8 +1329,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn upload_to_local_cache() {
-        let builder = FloxBuildMk;
         let (mut flox, _temp_dir_handle) = flox_instance();
+        let builder = FloxBuildMk::new(&flox);
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 

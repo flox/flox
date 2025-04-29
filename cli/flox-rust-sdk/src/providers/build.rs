@@ -48,7 +48,6 @@ pub trait ManifestBuilder {
     /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
     fn build(
         &self,
-        flox: &Flox,
         base_dir: &Path,
         built_environments: &BuildEnvOutputs,
         expression_dir: Option<&Path>,
@@ -59,7 +58,6 @@ pub trait ManifestBuilder {
 
     fn clean(
         &self,
-        flox: &Flox,
         base_dir: &Path,
         flox_env: &Path,
         expression_dir: Option<&Path>,
@@ -140,16 +138,29 @@ impl Iterator for BuildOutput {
 }
 
 /// A manifest builder that uses the [FLOX_BUILD_MK] makefile to build packages.
-pub struct FloxBuildMk;
+pub struct FloxBuildMk {
+    verbosity: i32,
+    // should these be borrows?
+    temp_dir: PathBuf,
+    runtime_dir: PathBuf,
+}
 
 impl FloxBuildMk {
-    fn base_command(&self, flox: &Flox, base_dir: &Path) -> Command {
+    pub fn new(flox: &Flox) -> Self {
+        FloxBuildMk {
+            verbosity: flox.verbosity,
+            temp_dir: flox.temp_dir.clone(),
+            runtime_dir: flox.runtime_dir.clone(),
+        }
+    }
+
+    fn base_command(&self, base_dir: &Path) -> Command {
         // todo: extra makeflags, eventually
         let mut command = Command::new(&*GNUMAKE_BIN);
         command.env_remove("MAKEFLAGS");
         command.arg("--file").arg(&*FLOX_BUILD_MK);
         command.arg("--directory").arg(base_dir); // Change dir before reading makefile.
-        if flox.verbosity <= 0 {
+        if self.verbosity <= 0 {
             command.arg("--no-print-directory"); // Only print directory with -v.
         }
 
@@ -177,7 +188,6 @@ impl ManifestBuilder for FloxBuildMk {
     /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
     fn build(
         &self,
-        flox: &Flox,
         base_dir: &Path,
         built_environments: &BuildEnvOutputs,
         expression_dir: Option<&Path>,
@@ -185,7 +195,7 @@ impl ManifestBuilder for FloxBuildMk {
         packages: &[String],
         build_cache: Option<bool>,
     ) -> Result<BuildOutput, ManifestBuilderError> {
-        let mut command = self.base_command(flox, base_dir);
+        let mut command = self.base_command(base_dir);
         command.arg("build");
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*BUILDTIME_NIXPKGS_URL));
         command.arg(format!("FLOX_ENV={}", built_environments.develop.display()));
@@ -207,7 +217,7 @@ impl ManifestBuilder for FloxBuildMk {
         // the makefile will build all packages by default.
         command.arg(format!("PACKAGES={}", packages.join(" ")));
 
-        let build_result_path = NamedTempFile::new_in(&flox.temp_dir)
+        let build_result_path = NamedTempFile::new_in(&self.temp_dir)
             .map_err(ManifestBuilderError::CreateBuildResultFile)?
             .into_temp_path();
 
@@ -226,7 +236,7 @@ impl ManifestBuilder for FloxBuildMk {
         // activate needs this var
         // TODO: we should probably figure out a more consistent way to pass
         // this since it's also passed for `flox activate`
-        command.env(FLOX_RUNTIME_DIR_VAR, &flox.runtime_dir);
+        command.env(FLOX_RUNTIME_DIR_VAR, &self.runtime_dir);
 
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
@@ -304,13 +314,12 @@ impl ManifestBuilder for FloxBuildMk {
     /// * the temporary build directories for the specified packages
     fn clean(
         &self,
-        flox: &Flox,
         base_dir: &Path,
         flox_env: &Path,
         expression_dir: Option<&Path>,
         packages: &[String],
     ) -> Result<(), ManifestBuilderError> {
-        let mut command = self.base_command(flox, base_dir);
+        let mut command = self.base_command(base_dir);
         // TODO: is this even necessary, or can we detect build outputs instead?
         command.arg(format!("FLOX_ENV={}", flox_env.display()));
 
@@ -418,7 +427,7 @@ pub fn get_nix_expression_targets(
 
     let attr_paths = serde_json::from_slice(&output.stdout)
         .map_err(|e| ManifestBuilderError::ListNixExpressions(e.to_string()))?;
-    
+
     Ok(attr_paths)
 }
 
@@ -455,10 +464,10 @@ pub mod test_helpers {
         build_cache: Option<bool>,
         expect_success: bool,
     ) -> CollectedOutput {
-        let builder = FloxBuildMk;
+        let builder = FloxBuildMk::new(flox);
         let output_stream = builder
             .build(
-                flox,
+                
                 &env.parent_path().unwrap(),
                 &env.build(flox).unwrap(),
                 None,
@@ -501,10 +510,9 @@ pub mod test_helpers {
     }
 
     pub fn assert_clean_success(flox: &Flox, env: &mut PathEnvironment, package_names: &[&str]) {
-        let builder = FloxBuildMk;
+        let builder = FloxBuildMk::new(flox);
         let err = builder
             .clean(
-                flox,
                 &env.parent_path().unwrap(),
                 &env.rendered_env_links(flox).unwrap().development,
                 None,
