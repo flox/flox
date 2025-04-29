@@ -101,9 +101,8 @@ impl Build {
 
         let packages_to_clean = available_packages(&lockfile, &expression_dir, packages)?;
 
-        let builder = FloxBuildMk;
+        let builder = FloxBuildMk::new(&flox);
         builder.clean(
-            &flox,
             &base_dir,
             &flox_env.development,
             Some(&expression_dir),
@@ -129,9 +128,8 @@ impl Build {
 
         let packages_to_build = available_packages(&lockfile, &expression_dir, packages)?;
 
-        let builder = FloxBuildMk;
+        let builder = FloxBuildMk::new(&flox);
         let output = builder.build(
-            &flox,
             &base_dir,
             &built_environments,
             Some(&expression_dir),
