@@ -434,6 +434,8 @@ pub fn get_nix_expression_targets(
 pub mod test_helpers {
     use std::fs::{self};
 
+    use tempfile::tempdir_in;
+
     use super::*;
     use crate::flox::Flox;
     use crate::models::environment::Environment;
@@ -454,12 +456,10 @@ pub mod test_helpers {
         pub stderr: String,
     }
 
-    /// Runs a build and asserts that the `ExitStatus` matches `expect_status`.
-    /// STDOUT and STDERR are returned if you wish to make additional
-    /// assertions on the output of the build.
-    pub fn assert_build_status(
+    pub fn assert_build_status_with_nix_expr(
         flox: &Flox,
         env: &mut PathEnvironment,
+        expression_dir: Option<&Path>,
         package_name: &str,
         build_cache: Option<bool>,
         expect_success: bool,
@@ -467,10 +467,9 @@ pub mod test_helpers {
         let builder = FloxBuildMk::new(flox);
         let output_stream = builder
             .build(
-                
                 &env.parent_path().unwrap(),
                 &env.build(flox).unwrap(),
-                None,
+                expression_dir,
                 &env.rendered_env_links(flox).unwrap().development,
                 &[package_name.to_owned()],
                 build_cache,
@@ -509,6 +508,26 @@ pub mod test_helpers {
         }
     }
 
+    /// Runs a build and asserts that the `ExitStatus` matches `expect_status`.
+    /// STDOUT and STDERR are returned if you wish to make additional
+    /// assertions on the output of the build.
+    pub fn assert_build_status(
+        flox: &Flox,
+        env: &mut PathEnvironment,
+        package_name: &str,
+        build_cache: Option<bool>,
+        expect_success: bool,
+    ) -> CollectedOutput {
+        assert_build_status_with_nix_expr(
+            flox,
+            env,
+            None,
+            package_name,
+            build_cache,
+            expect_success,
+        )
+    }
+
     pub fn assert_clean_success(flox: &Flox, env: &mut PathEnvironment, package_names: &[&str]) {
         let builder = FloxBuildMk::new(flox);
         let err = builder
@@ -544,6 +563,26 @@ pub mod test_helpers {
         let dir = result_dir(parent, package);
         let file = dir.join(file_name);
         fs::read_to_string(file).unwrap()
+    }
+
+    /// For a list tuples `(AttrPath, NixExpr)`,
+    /// create a file stucture compatible with nef loading,
+    /// within a provided tempdir.
+    /// Places the file structure within _a new directory_ within the provided path.
+    pub fn prepare_nix_expressions_in(
+        tempdir: impl AsRef<Path>,
+        expressions: &[(&[&str], &str)],
+    ) -> PathBuf {
+        let all_expressions_base_dir = tempdir_in(&tempdir).unwrap().keep();
+
+        for (attr_path, expr) in expressions {
+            let expression_dir =
+                all_expressions_base_dir.join(attr_path.iter().collect::<PathBuf>());
+            fs::create_dir_all(&expression_dir).unwrap();
+            fs::write(expression_dir.join("default.nix"), expr).unwrap();
+        }
+
+        all_expressions_base_dir.canonicalize().unwrap()
     }
 }
 
@@ -2034,5 +2073,102 @@ mod tests {
     #[test]
     fn build_does_not_run_profile_sandbox_pure() {
         build_does_not_run_profile(true);
+    }
+}
+
+#[cfg(test)]
+#[serial_test::file_serial(build)]
+mod nef_tests {
+    use std::fs;
+
+    use indoc::{formatdoc, indoc};
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment;
+    use crate::providers::build::test_helpers::{
+        assert_build_status_with_nix_expr,
+        prepare_nix_expressions_in,
+    };
+
+    #[test]
+    fn nef_build_creates_out_link() {
+        let pname = "foo".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        // Create a manifest (may be empty)
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        // Create expressions
+        let expressions_dir = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
+            {runCommand}: runCommand "{pname}" {} ''
+                echo -n "Hello, World!" >> $out
+            ''
+            "#})]);
+
+        // build
+        let collected = assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            Some(&expressions_dir),
+            &pname,
+            None,
+            true,
+        );
+
+        // assert results
+        let result_path = env_path.join(format!("result-{pname}"));
+        let build_results = collected.build_results.unwrap();
+        assert_eq!(build_results.len(), 1);
+
+        let content = fs::read_to_string(result_path).unwrap();
+        assert_eq!(content, "Hello, World!");
+    }
+
+    #[test]
+    fn nef_build_results_contain_common_metadata() {
+        let pname = "foo".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        // Create a manifest (may be empty)
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // Create expressions
+        let expressions_dir =
+            prepare_nix_expressions_in(&tempdir, &[(&[&pname], &formatdoc! {r#"
+            {{runCommand}}: runCommand "{pname}" {{
+                version = "1.0.1";
+                pname = "not-{pname}";
+            }} ''
+                echo -n "Hello, World!" >> $out
+            ''
+            "#})]);
+
+        // build
+        let collected = assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            Some(&expressions_dir),
+            &pname,
+            None,
+            true,
+        );
+
+        // assert results
+        let build_results = collected.build_results.unwrap();
+        assert_eq!(build_results.len(), 1);
+        assert_eq!(build_results[0].name, pname);
+        assert_eq!(build_results[0].pname, format!("not-{pname}"));
+        assert_eq!(build_results[0].version, "1.0.1");
     }
 }
