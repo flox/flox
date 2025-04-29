@@ -17,4 +17,10 @@ pub enum IoError {
     Canonicalize { dir: PathBuf, err: io::Error },
     #[error("Couldn't create directory {dir}: {err}")]
     CreateDir { dir: PathBuf, err: io::Error },
+    #[error("Couldn't make file '{file}' read-only: {err}")]
+    MakeReadonly { file: PathBuf, err: io::Error },
+    #[error("Couldn't make file '{file}' writable: {err}")]
+    MakeWritable { file: PathBuf, err: io::Error },
+    #[error("Couldn't get metadata for '{file}': {err}")]
+    GetMetadata { file: PathBuf, err: io::Error },
 }

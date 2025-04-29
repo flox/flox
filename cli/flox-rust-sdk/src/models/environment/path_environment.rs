@@ -712,6 +712,7 @@ pub mod tests {
     };
     use crate::models::lockfile::{Lockfile, RecoverableMergeError};
     use crate::models::manifest::typed::test::manifest_without_install_or_include;
+    use crate::utils::make_file_match_perms;
 
     /// Returns (flox, tempdir, Vec<(dir relative to tempdir, PathEnvironment)>)
     /// This is a list of relative paths to environments that can be included in
@@ -810,6 +811,11 @@ pub mod tests {
 
         // "modify" the lockfile by changing its formatting -> rebuild necessary
         let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
+        make_file_match_perms(
+            &env.lockfile_path(&flox).unwrap(),
+            &env.manifest_path(&flox).unwrap(),
+        )
+        .unwrap();
         let file = fs::write(env.lockfile_path(&flox).unwrap(), lockfile.to_string());
         drop(file);
         assert!(env.needs_rebuild().unwrap());

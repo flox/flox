@@ -31,6 +31,7 @@ use crate::providers::git::{
     GitProvider,
 };
 use crate::utils::copy_file_without_permissions;
+use crate::utils::errors::IoError;
 
 mod core_environment;
 pub use core_environment::{
@@ -730,6 +731,9 @@ pub enum EnvironmentError {
 
     #[error("corrupt environment; environment does not have a lockfile")]
     MissingLockfile,
+
+    #[error(transparent)]
+    Io(#[from] IoError),
 
     /// An error flox edit can recover from
     #[error(transparent)]
