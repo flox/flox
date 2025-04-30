@@ -708,7 +708,7 @@ impl Lockfile {
     /// re-fetched.
     /// If to_upgrade is None, only included environments not in the seed lockfile
     /// are fetched.
-    #[instrument(skip_all, fields(progress = "Merging environment includes"))]
+    #[instrument(skip_all, fields(progress = "Composing environments"))]
     fn merge_manifest(
         flox: &Flox,
         manifest: &Manifest,
