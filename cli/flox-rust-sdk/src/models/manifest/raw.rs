@@ -1315,13 +1315,13 @@ pub(super) mod test {
             ##  ... run by _bash_ shell when you run 'flox activate'.
             ## -------------------------------------------------------------------
             [hook]
-            on-activate = '''
+            on-activate = """
               # Print something
               echo "hello world"
 
               # Set a environment variable
               $FOO="bar"
-            '''
+            """
 
 
             ## Profile script ----------------------------------------------------
@@ -1435,9 +1435,9 @@ pub(super) mod test {
             ## ... sourced by _your shell_ when you run 'flox activate'.
             ## -------------------------------------------------------------------
             [profile]
-            common = '''
+            common = """
               echo "Hello from Flox"
-            '''
+            """
 
 
             ## Services ----------------------------------------------------------
