@@ -1059,8 +1059,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn build_uses_var_from_manifest() {
+    fn build_uses_var_from_manifest(sandbox: bool) {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
         let file_content = String::from("some content");
@@ -1076,6 +1075,53 @@ mod tests {
                 mkdir $out
                 echo -n "$FOO" > $out/{file_name}
             """
+            sandbox = "{}"
+        "#, if sandbox { "pure" } else { "off" }};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        if sandbox {
+            let _git = GitCommandProvider::init(&env_path, false).unwrap();
+        }
+
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+        assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    #[test]
+    fn build_uses_var_from_manifest_sandbox_off() {
+        build_uses_var_from_manifest(false);
+    }
+
+    #[test]
+    fn build_uses_var_from_manifest_pure() {
+        build_uses_var_from_manifest(true);
+    }
+
+    #[test]
+    fn vars_not_set_at_runtime() {
+        let package_name = String::from("foo");
+        let file_path = String::from("bin/print_var");
+        let inner_var_value = String::from("some content");
+        let var = "FOO";
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [vars]
+            {var} = "{inner_var_value}"
+
+            [build.{package_name}]
+            command = """
+            mkdir -p $out/bin
+            cat > $out/{file_path} <<'EOF'
+                #!/usr/bin/env bash
+                echo "${var}"
+            EOF
+                chmod +x $out/{file_path}
+            """
         "#};
 
         let (flox, _temp_dir_handle) = flox_instance();
@@ -1083,7 +1129,18 @@ mod tests {
         let env_path = env.parent_path().unwrap();
 
         assert_build_status(&flox, &mut env, &package_name, None, true);
-        assert_build_file(&env_path, &package_name, &file_name, &file_content);
+
+        let package_bin = result_dir(&env_path, &package_name).join(file_path);
+        let outer_var_value = "outer";
+        let output = Command::new(&package_bin)
+            .env(var, outer_var_value)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            outer_var_value,
+        );
     }
 
     #[test]
