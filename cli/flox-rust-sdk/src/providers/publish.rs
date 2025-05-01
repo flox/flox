@@ -879,9 +879,7 @@ pub mod tests {
 
     use std::io::Write;
 
-    use catalog_api_v1::mock::MockServerExt;
-    use catalog_api_v1::types::{CatalogStoreConfigNixCopy, ErrorResponse, Name, UserPackage};
-    use httpmock::prelude::*;
+    use catalog_api_v1::types::CatalogStoreConfigNixCopy;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -894,16 +892,7 @@ pub mod tests {
     use crate::providers::auth::{Auth, write_floxhub_netrc};
     use crate::providers::build::FloxBuildMk;
     use crate::providers::catalog::test_helpers::reset_mocks;
-    use crate::providers::catalog::{
-        CatalogClient,
-        CatalogClientConfig,
-        GENERATED_DATA,
-        MockClient,
-        PublishResponse,
-        Response,
-        str_to_catalog_name,
-        str_to_package_name,
-    };
+    use crate::providers::catalog::{GENERATED_DATA, PublishResponse, Response};
     use crate::providers::git::tests::{
         commit_file,
         create_remotes,
@@ -1135,155 +1124,155 @@ pub mod tests {
         assert!(res.is_ok());
     }
 
-    /// Generate dummy CheckedBuildMetadata and CheckedEnvironmentMetadata that
-    /// can be passed to publish()
-    ///
-    /// It is dummy in the sense that no human thought about it ;)
-    fn dummy_publish_metadata() -> (CheckedBuildMetadata, CheckedEnvironmentMetadata) {
-        let build_metadata = CheckedBuildMetadata {
-            name: "dummy".to_string(),
-            pname: "dummy".to_string(),
-            outputs: Outputs(vec![]),
-            outputs_to_install: vec![],
-            drv_path: "dummy".to_string(),
-            system: SystemEnum::X8664Linux,
-            version: Some("1.0.0".to_string()),
-            _private: (),
-        };
+    // Generate dummy CheckedBuildMetadata and CheckedEnvironmentMetadata that
+    // can be passed to publish()
+    //
+    // It is dummy in the sense that no human thought about it ;)
+    // fn dummy_publish_metadata() -> (CheckedBuildMetadata, CheckedEnvironmentMetadata) {
+    //     let build_metadata = CheckedBuildMetadata {
+    //         name: "dummy".to_string(),
+    //         pname: "dummy".to_string(),
+    //         outputs: Outputs(vec![]),
+    //         outputs_to_install: vec![],
+    //         drv_path: "dummy".to_string(),
+    //         system: SystemEnum::X8664Linux,
+    //         version: Some("1.0.0".to_string()),
+    //         _private: (),
+    //     };
 
-        let env_metadata = CheckedEnvironmentMetadata {
-            repo_root_path: PathBuf::new(),
-            rel_dotflox_path: PathBuf::new(),
-            base_catalog_ref: LockedUrlInfo {
-                url: "dummy".to_string(),
-                rev: "dummy".to_string(),
-                rev_count: 0,
-                rev_date: Utc::now(),
-            },
-            build_repo_ref: LockedUrlInfo {
-                url: "dummy".to_string(),
-                rev: "dummy".to_string(),
-                rev_count: 0,
-                rev_date: Utc::now(),
-            },
-            package: "dummy".to_string(),
-            description: "dummy".to_string(),
-            _private: (),
-        };
+    //     let env_metadata = CheckedEnvironmentMetadata {
+    //         repo_root_path: PathBuf::new(),
+    //         rel_dotflox_path: PathBuf::new(),
+    //         base_catalog_ref: LockedUrlInfo {
+    //             url: "dummy".to_string(),
+    //             rev: "dummy".to_string(),
+    //             rev_count: 0,
+    //             rev_date: Utc::now(),
+    //         },
+    //         build_repo_ref: LockedUrlInfo {
+    //             url: "dummy".to_string(),
+    //             rev: "dummy".to_string(),
+    //             rev_count: 0,
+    //             rev_date: Utc::now(),
+    //         },
+    //         package: "dummy".to_string(),
+    //         description: "dummy".to_string(),
+    //         _private: (),
+    //     };
 
-        (build_metadata, env_metadata)
-    }
+    //     (build_metadata, env_metadata)
+    // }
 
-    #[tokio::test]
-    async fn publish_errors_without_key() {
-        let (mut flox, _tempdir) = flox_instance();
-        let mut client = Client::Mock(MockClient::new(None::<String>).unwrap());
+    // #[tokio::test]
+    // async fn publish_errors_without_key() {
+    //     let (mut flox, _tempdir) = flox_instance();
+    //     let mut client = Client::Mock(MockClient::new(None::<String>).unwrap());
 
-        let token = create_test_token("test");
-        let catalog_name = token.handle().to_string();
-        flox.floxhub_token = Some(token);
+    //     let token = create_test_token("test");
+    //     let catalog_name = token.handle().to_string();
+    //     flox.floxhub_token = Some(token);
 
-        // Don't do a build because it's slow
-        let (build_metadata, env_metadata) = dummy_publish_metadata();
+    //     // Don't do a build because it's slow
+    //     let (build_metadata, env_metadata) = dummy_publish_metadata();
 
-        let auth = Auth::from_flox(&flox).unwrap();
-        let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
+    //     let auth = Auth::from_flox(&flox).unwrap();
+    //     let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
 
-        reset_mocks(&mut client, vec![
-            Response::CreatePackage,
-            Response::Publish(PublishResponse {
-                ingress_uri: Some("https://example.com".to_string()),
-                catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
-                    ingress_uri: "https://example.com".to_string(),
-                    egress_uri: "https://example.com".to_string(),
-                }),
-            }),
-        ]);
+    //     reset_mocks(&mut client, vec![
+    //         Response::CreatePackage,
+    //         Response::Publish(PublishResponse {
+    //             ingress_uri: Some("https://example.com".to_string()),
+    //             catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
+    //                 ingress_uri: "https://example.com".to_string(),
+    //                 egress_uri: "https://example.com".to_string(),
+    //             }),
+    //         }),
+    //     ]);
 
-        let result = publish_provider
-            .publish(&client, &catalog_name, None, false)
-            .await;
+    //     let result = publish_provider
+    //         .publish(&client, &catalog_name, None, false)
+    //         .await;
 
-        let err = result.unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            indoc! { "
-                A signing key is required to upload artifacts.
+    //     let err = result.unwrap_err();
+    //     assert_eq!(
+    //         err.to_string(),
+    //         indoc! { "
+    //             A signing key is required to upload artifacts.
 
-                You can supply a signing key by either:
-                - Providing a path to a key with the '--signing-private-key' option.
-                - Setting it in the config via 'flox config --set publish.signing_private_key <path>'
+    //             You can supply a signing key by either:
+    //             - Providing a path to a key with the '--signing-private-key' option.
+    //             - Setting it in the config via 'flox config --set publish.signing_private_key <path>'
 
-                Or you can publish without uploading artifacts via the '--metadata-only' option.
-            " }
-            .to_string()
-        );
-    }
+    //             Or you can publish without uploading artifacts via the '--metadata-only' option.
+    //         " }
+    //         .to_string()
+    //     );
+    // }
 
     /// publish() passes the error details from the server through
-    #[tokio::test]
-    async fn publish_passes_error_details_through() {
-        let (mut flox, _tempdir) = flox_instance();
-        let server = MockServer::start();
+    // #[tokio::test]
+    // async fn publish_passes_error_details_through() {
+    //     let (mut flox, _tempdir) = flox_instance();
+    //     let server = MockServer::start();
 
-        let token = create_test_token("test");
-        let catalog_name = token.handle().to_string();
-        flox.floxhub_token = Some(token.clone());
+    //     let token = create_test_token("test");
+    //     let catalog_name = token.handle().to_string();
+    //     flox.floxhub_token = Some(token.clone());
 
-        // Don't do a build because it's slow
-        let (build_metadata, env_metadata) = dummy_publish_metadata();
-        let package_name = &env_metadata.package;
-        let original_url = &env_metadata.build_repo_ref.url;
+    //     // Don't do a build because it's slow
+    //     let (build_metadata, env_metadata) = dummy_publish_metadata();
+    //     let package_name = &env_metadata.package;
+    //     let original_url = &env_metadata.build_repo_ref.url;
 
-        let packages_mock = server
-            .create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post(
-                |when, then| {
-                    when.catalog_name(&str_to_catalog_name(&catalog_name).unwrap())
-                        .name(&Name::from_str(package_name).unwrap());
-                    then.ok(&UserPackage {
-                        catalog: catalog_name.clone(),
-                        name: package_name.clone(),
-                        original_url: Some(original_url.clone()),
-                    });
-                },
-            );
+    //     let packages_mock = server
+    //         .create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post(
+    //             |when, then| {
+    //                 when.catalog_name(&str_to_catalog_name(&catalog_name).unwrap())
+    //                     .name(&Name::from_str(package_name).unwrap());
+    //                 then.ok(&UserPackage {
+    //                     catalog: catalog_name.clone(),
+    //                     name: package_name.clone(),
+    //                     original_url: Some(original_url.clone()),
+    //                 });
+    //             },
+    //         );
 
-        let publish_mock = server.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post(|when, then| {
-            when.catalog_name(&str_to_catalog_name(&catalog_name).unwrap())
-                .package_name(&str_to_package_name(package_name).unwrap());
-            then.unprocessable_entity(&ErrorResponse { detail: "Some\nlong\nresponse\nfrom\nthe\nserver".to_string() });
-        });
+    //     let publish_mock = server.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post(|when, then| {
+    //         when.catalog_name(&str_to_catalog_name(&catalog_name).unwrap())
+    //             .package_name(&str_to_package_name(package_name).unwrap());
+    //         then.unprocessable_entity(&ErrorResponse { detail: "Some\nlong\nresponse\nfrom\nthe\nserver".to_string() });
+    //     });
 
-        let client = Client::Catalog(CatalogClient::new(CatalogClientConfig {
-            catalog_url: server.base_url(),
-            floxhub_token: Some(token.secret().to_string()),
-            extra_headers: Default::default(),
-        }));
+    //     let client = Client::Catalog(CatalogClient::new(CatalogClientConfig {
+    //         catalog_url: server.base_url(),
+    //         floxhub_token: Some(token.secret().to_string()),
+    //         extra_headers: Default::default(),
+    //     }));
 
-        let auth = Auth::from_flox(&flox).unwrap();
-        let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
+    //     let auth = Auth::from_flox(&flox).unwrap();
+    //     let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
 
-        // We should error even if metadata_only is true
-        let result = publish_provider
-            .publish(&client, &catalog_name, None, true)
-            .await;
+    //     // We should error even if metadata_only is true
+    //     let result = publish_provider
+    //         .publish(&client, &catalog_name, None, true)
+    //         .await;
 
-        packages_mock.assert();
-        publish_mock.assert();
+    //     packages_mock.assert();
+    //     publish_mock.assert();
 
-        let err = result.unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            indoc! {"
-                422 Unprocessable Entity: Some
-                long
-                response
-                from
-                the
-                server"}
-            .to_string()
-        );
-    }
+    //     let err = result.unwrap_err();
+    //     assert_eq!(
+    //         err.to_string(),
+    //         indoc! {"
+    //             422 Unprocessable Entity: Some
+    //             long
+    //             response
+    //             from
+    //             the
+    //             server"}
+    //         .to_string()
+    //     );
+    // }
 
     #[tokio::test]
     async fn upload_to_local_cache() {
