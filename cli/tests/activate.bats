@@ -4680,3 +4680,90 @@ Setting PATH from .bashrc"
     assert_success
     assert_output false # lockfile content should differ due to upgrade
 }
+
+activate_repairs_PATH_for_prior_activations() {
+  local shell="${1?}"
+  project_setup
+
+  "$FLOX_BIN" init -d default
+
+  case "$shell" in
+    bash)
+      echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" >"$HOME/.bashrc.extra"
+      echo "export PATH=\"$BADPATH\"" >>"$HOME/.bashrc.extra"
+      expected_rc_lines="$(cat <<EOF
+Sourcing .bashrc
+Setting PATH from .bashrc
+Sourcing .bashrc
+Setting PATH from .bashrc
+Sourcing .bashrc
+Setting PATH from .bashrc
+EOF
+)"
+      ;;
+    fish)
+      echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" >"$HOME/.config/fish/config.fish.extra"
+      echo "set -gx PATH \"$BADPATH\"" >>"$HOME/.config/fish/config.fish.extra"
+      expected_rc_lines="$(cat <<EOF
+Sourcing config.fish
+Setting PATH from config.fish
+Sourcing config.fish
+Setting PATH from config.fish
+EOF
+)"
+      ;;
+    tcsh)
+      echo "eval \"\`$FLOX_BIN activate -d '$PROJECT_DIR/default'\`\"" >"$HOME/.tcshrc.extra"
+      echo "setenv PATH \"$BADPATH\"" >>"$HOME/.tcshrc.extra"
+      expected_rc_lines="$(cat <<EOF
+Sourcing .tcshrc
+Setting PATH from .tcshrc
+Sourcing .tcshrc
+Setting PATH from .tcshrc
+EOF
+)"
+      ;;
+    zsh)
+      echo "eval \"\$(\"$FLOX_BIN\" activate -d '$PROJECT_DIR/default')\"" >"$HOME/.zshenv.extra"
+      echo "export PATH=\"$BADPATH\"" >>"$HOME/.zshenv.extra"
+      expected_rc_lines="$(cat <<EOF
+Sourcing .zshenv
+Setting PATH from .zshenv
+Sourcing .zshrc
+Setting PATH from .zshrc
+Sourcing .zshenv
+Setting PATH from .zshenv
+EOF
+)"
+      ;;
+  esac
+
+  # Our quoting for an activate command is a bit messed up, so workaround by
+  # sourcing a command
+  echo 'echo "$PATH"' > "$PROJECT_DIR/echo_path"
+
+  real_project_dir="$(realpath "$PROJECT_DIR")"
+  REAL_SHELL="$(which "$shell")"
+  FLOX_SHELL="$REAL_SHELL" run "$shell" -ic "\"$FLOX_BIN\" activate -- source \"$PROJECT_DIR/echo_path\""
+  assert_success
+  assert_output - <<EOF
+$expected_rc_lines
+$real_project_dir/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/bin:$real_project_dir/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/sbin:$real_project_dir/default/.flox/run/$NIX_SYSTEM.default.dev/bin:$real_project_dir/default/.flox/run/$NIX_SYSTEM.default.dev/sbin:$BADPATH
+EOF
+}
+
+@test "bash: activate repairs PATH for prior activations" {
+  activate_repairs_PATH_for_prior_activations bash
+}
+
+@test "zsh: activate repairs PATH for prior activations" {
+  activate_repairs_PATH_for_prior_activations zsh
+}
+
+@test "fish: activate repairs PATH for prior activations" {
+  activate_repairs_PATH_for_prior_activations fish
+}
+
+@test "tcsh: activate repairs PATH for prior activations" {
+  activate_repairs_PATH_for_prior_activations tcsh
+}
