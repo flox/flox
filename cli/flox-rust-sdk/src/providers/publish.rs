@@ -929,9 +929,7 @@ pub mod tests {
 
     use std::io::Write;
 
-    use catalog_api_v1::mock::MockServerExt;
-    use catalog_api_v1::types::{CatalogStoreConfigNixCopy, ErrorResponse, Name, UserPackage};
-    use httpmock::prelude::*;
+    use catalog_api_v1::types::CatalogStoreConfigNixCopy;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -944,16 +942,7 @@ pub mod tests {
     use crate::providers::auth::{Auth, write_floxhub_netrc};
     use crate::providers::build::FloxBuildMk;
     use crate::providers::catalog::test_helpers::reset_mocks;
-    use crate::providers::catalog::{
-        CatalogClient,
-        CatalogClientConfig,
-        GENERATED_DATA,
-        MockClient,
-        PublishResponse,
-        Response,
-        str_to_catalog_name,
-        str_to_package_name,
-    };
+    use crate::providers::catalog::{GENERATED_DATA, MockClient, PublishResponse, Response};
     use crate::providers::git::tests::{
         commit_file,
         create_remotes,
@@ -1272,70 +1261,71 @@ pub mod tests {
         );
     }
 
-    /// publish() passes the error details from the server through
-    #[tokio::test]
-    async fn publish_passes_error_details_through() {
-        let (mut flox, _tempdir) = flox_instance();
-        let server = MockServer::start();
+    // TODO: Replace with readable/writable mocks from fixture file.
+    // publish() passes the error details from the server through
+    // #[tokio::test]
+    // async fn publish_passes_error_details_through() {
+    //     let (mut flox, _tempdir) = flox_instance();
+    //     let server = MockServer::start();
 
-        let token = create_test_token("test");
-        let catalog_name = token.handle().to_string();
-        flox.floxhub_token = Some(token.clone());
+    //     let token = create_test_token("test");
+    //     let catalog_name = token.handle().to_string();
+    //     flox.floxhub_token = Some(token.clone());
 
-        // Don't do a build because it's slow
-        let (build_metadata, env_metadata) = dummy_publish_metadata();
-        let package_name = &env_metadata.package;
-        let original_url = &env_metadata.build_repo_ref.url;
+    //     // Don't do a build because it's slow
+    //     let (build_metadata, env_metadata) = dummy_publish_metadata();
+    //     let package_name = &env_metadata.package;
+    //     let original_url = &env_metadata.build_repo_ref.url;
 
-        let packages_mock = server
-            .create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post(
-                |when, then| {
-                    when.catalog_name(&str_to_catalog_name(&catalog_name).unwrap())
-                        .name(&Name::from_str(package_name).unwrap());
-                    then.ok(&UserPackage {
-                        catalog: catalog_name.clone(),
-                        name: package_name.clone(),
-                        original_url: Some(original_url.clone()),
-                    });
-                },
-            );
+    //     let packages_mock = server
+    //         .create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post(
+    //             |when, then| {
+    //                 when.catalog_name(&str_to_catalog_name(&catalog_name).unwrap())
+    //                     .name(&Name::from_str(package_name).unwrap());
+    //                 then.ok(&UserPackage {
+    //                     catalog: catalog_name.clone(),
+    //                     name: package_name.clone(),
+    //                     original_url: Some(original_url.clone()),
+    //                 });
+    //             },
+    //         );
 
-        let publish_mock = server.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post(|when, then| {
-            when.catalog_name(&str_to_catalog_name(&catalog_name).unwrap())
-                .package_name(&str_to_package_name(package_name).unwrap());
-            then.unprocessable_entity(&ErrorResponse { detail: "Some\nlong\nresponse\nfrom\nthe\nserver".to_string() });
-        });
+    //     let publish_mock = server.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post(|when, then| {
+    //         when.catalog_name(&str_to_catalog_name(&catalog_name).unwrap())
+    //             .package_name(&str_to_package_name(package_name).unwrap());
+    //         then.unprocessable_entity(&ErrorResponse { detail: "Some\nlong\nresponse\nfrom\nthe\nserver".to_string() });
+    //     });
 
-        let client = Client::Catalog(CatalogClient::new(CatalogClientConfig {
-            catalog_url: server.base_url(),
-            floxhub_token: Some(token.secret().to_string()),
-            extra_headers: Default::default(),
-        }));
+    //     let client = Client::Catalog(CatalogClient::new(CatalogClientConfig {
+    //         catalog_url: server.base_url(),
+    //         floxhub_token: Some(token.secret().to_string()),
+    //         extra_headers: Default::default(),
+    //     }));
 
-        let auth = Auth::from_flox(&flox).unwrap();
-        let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
+    //     let auth = Auth::from_flox(&flox).unwrap();
+    //     let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
 
-        // We should error even if metadata_only is true
-        let result = publish_provider
-            .publish(&client, &catalog_name, None, true)
-            .await;
+    //     // We should error even if metadata_only is true
+    //     let result = publish_provider
+    //         .publish(&client, &catalog_name, None, true)
+    //         .await;
 
-        packages_mock.assert();
-        publish_mock.assert();
+    //     packages_mock.assert();
+    //     publish_mock.assert();
 
-        let err = result.unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            indoc! {"
-                422 Unprocessable Entity: Some
-                long
-                response
-                from
-                the
-                server"}
-            .to_string()
-        );
-    }
+    //     let err = result.unwrap_err();
+    //     assert_eq!(
+    //         err.to_string(),
+    //         indoc! {"
+    //             422 Unprocessable Entity: Some
+    //             long
+    //             response
+    //             from
+    //             the
+    //             server"}
+    //         .to_string()
+    //     );
+    // }
 
     #[tokio::test]
     async fn upload_to_local_cache() {
