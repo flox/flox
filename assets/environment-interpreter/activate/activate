@@ -48,6 +48,8 @@ source "${_activate_d}/generate-fish-startup-commands.bash"
 source "${_activate_d}/generate-tcsh-startup-commands.bash"
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/source-profile-d.bash"
+# shellcheck source-path=SCRIPTDIR/activate.d
+source "${_activate_d}/start.bash"
 
 # Top-level Flox environment activation script.
 
@@ -285,16 +287,14 @@ if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" == true ]; then
   # path since the last activation, in which case we need to mark that new
   # activation as ready.
   if [ "$_FLOX_ATTACH" == false ]; then
-    # shellcheck source-path=SCRIPTDIR/activate.d
-    source "${_activate_d}/start.bash"
+    start "$_FLOX_ACTIVATION_STATE_DIR"
   fi
 else # This is the standard path when the current shell is NOT re-activating.
   if [ "$_FLOX_ATTACH" == true ]; then
     # shellcheck source-path=SCRIPTDIR/activate.d
     source "${_activate_d}/attach.bash"
   else
-    # shellcheck source-path=SCRIPTDIR/activate.d
-    source "${_activate_d}/start.bash"
+    start "$_FLOX_ACTIVATION_STATE_DIR"
   fi
 
   # Start services before the shell or command is invoked
