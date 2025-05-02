@@ -406,7 +406,7 @@ where
 {
     async fn publish(
         &self,
-        client: &Client,
+        client: &Client<'_>,
         catalog_name: &str,
         key_file: Option<PathBuf>,
         metadata_only: bool,

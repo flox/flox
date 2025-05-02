@@ -66,7 +66,7 @@ pub static FLOX_SENTRY_ENV: LazyLock<Option<String>> =
 /// By default this nix API uses the nix CLI.
 /// Preconfiguration includes environment variables and flox specific arguments.
 #[derive(Debug)]
-pub struct Flox {
+pub struct Flox<'server> {
     /// The directory pointing to the users flox configuration
     ///
     /// TODO: set a default in the lib or CLI?
@@ -88,7 +88,7 @@ pub struct Flox {
     /// Checking for [None] can be used to check if the use is logged in.
     pub floxhub_token: Option<FloxhubToken>,
 
-    pub catalog_client: catalog::Client,
+    pub catalog_client: catalog::Client<'server>,
     pub installable_locker: flake_installable_locker::InstallableLockerImpl,
 
     /// Feature flags
@@ -97,7 +97,7 @@ pub struct Flox {
     pub verbosity: i32,
 }
 
-impl Flox {}
+impl Flox<'_> {}
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Default)]
 pub struct Features {
