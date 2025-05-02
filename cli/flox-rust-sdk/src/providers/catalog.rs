@@ -402,6 +402,7 @@ pub type StoreInfoResponse = api_types::StoreInfoResponse;
 pub type StoreInfo = api_types::StoreInfo;
 pub type CatalogStoreConfig = api_types::CatalogStoreConfig;
 pub type CatalogStoreConfigNixCopy = api_types::CatalogStoreConfigNixCopy;
+pub type CatalogStoreConfigPublisher = api_types::CatalogStoreConfigPublisher;
 
 #[enum_dispatch]
 #[allow(async_fn_in_trait)]
