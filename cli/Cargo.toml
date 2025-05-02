@@ -36,8 +36,10 @@ flox-test-utils = { path = "flox-test-utils" }
 fslock = "0.2.1"
 fs_extra = "1.3.0"
 futures = "0.3"
-# git pending: https://github.com/alexliesenfeld/httpmock/issues/127
-httpmock = { git = "https://github.com/alexliesenfeld/httpmock.git", default-features = false , features = ["proxy", "record"] }
+# git pending:
+# - https://github.com/alexliesenfeld/httpmock/issues/127
+# - https://github.com/alexliesenfeld/httpmock/pull/131
+httpmock = { git = "https://github.com/flox/httpmock.git", branch = "flox/remove_recording_struct", default-features = false , features = ["proxy", "record"] }
 indent = "0.1.1"
 indexmap = { version = "2.9.0", features = ["serde"] }
 indoc = "2.0.6"
