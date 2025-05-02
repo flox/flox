@@ -30,6 +30,7 @@ nixVersions."${nixVersion}".overrideAttrs (prev: {
   # Apply patch files.
   patches = prev.patches ++ [
     (builtins.path { path = ./patches/multiple-github-tokens.2.24.9.patch; })
+    (builtins.path { path = ./patches/seekable_http.patch; })
     # Backport of upstream PR targeting nix >= 2.27
     # <https://github.com/NixOS/nix/pull/12580>
     (builtins.path {
