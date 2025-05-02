@@ -1,11 +1,8 @@
 use std::cmp::min;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::fmt::Debug;
-use std::fs::{File, OpenOptions};
 use std::future::ready;
-use std::io::Read;
 use std::num::NonZeroU32;
-use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock, Mutex};
@@ -23,10 +20,10 @@ use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
+use httpmock::MockServer;
 use reqwest::StatusCode;
 use reqwest::header::{self, HeaderMap};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use thiserror::Error;
 use tracing::{debug, instrument};
 
@@ -34,7 +31,6 @@ use crate::data::System;
 use crate::flox::FLOX_VERSION;
 use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
 use crate::utils::IN_CI;
-use crate::utils::logging::traceable_path;
 
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
@@ -127,6 +123,47 @@ pub struct CatalogClientConfig {
     pub catalog_url: String,
     pub floxhub_token: Option<String>,
     pub extra_headers: BTreeMap<String, String>,
+    pub mock_mode: CatalogMockMode,
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub enum CatalogMockMode {
+    #[default]
+    None,
+    Record(PathBuf),
+    Replay(PathBuf),
+}
+
+#[allow(dead_code)]
+enum MockGuard {
+    None,
+    Record(MockRecorder),
+    Replay(MockServer),
+}
+impl Debug for MockGuard {
+    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Ok(()) // TODO
+    }
+}
+
+struct MockRecorder {
+    path: PathBuf,
+    _server: MockServer,
+    // recording: Recording<'a>,
+}
+impl Drop for MockRecorder {
+    fn drop(&mut self) {
+        // let recorded = self
+        //     .recording
+        //     .save_to(&self.path, "some_scenario")
+        //     .expect("failed to save httpmock recording");
+        // // TODO: write to tempfile and rename to remove timestamp
+        // debug!(
+        //     path = ?recorded,
+        //     "recorded httpmock",
+        // );
+        debug!(?self.path, "would have recorded httpmock");
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, derive_more::Display, PartialEq)]
@@ -170,6 +207,7 @@ impl CatalogQoS {
 pub struct CatalogClient {
     client: APIClient,
     config: CatalogClientConfig,
+    _mock_guard: MockGuard,
 }
 
 impl CatalogClient {
@@ -181,9 +219,54 @@ impl CatalogClient {
             let _ = std::fs::remove_file(path);
         }
 
+        let (mock_guard, modified_config) = Self::configure_mocks(&config);
+        debug!(
+            ?modified_config.catalog_url,
+            "modified catalog url",
+        );
+
         Self {
             client: Self::create_client(&config),
-            config,
+            config: modified_config,
+            _mock_guard: mock_guard,
+        }
+    }
+
+    fn configure_mocks(config: &CatalogClientConfig) -> (MockGuard, CatalogClientConfig) {
+        match &config.mock_mode {
+            CatalogMockMode::None => (MockGuard::None, config.clone()),
+            CatalogMockMode::Record(path) => {
+                let server = MockServer::start();
+                let mut config = config.clone();
+                config.catalog_url = server.base_url().clone();
+
+                server.forward_to(&config.catalog_url, |rule| {
+                    rule.filter(|when| {
+                        when.any_request();
+                    });
+                });
+                // TODO: `record` borrows `server` and prevents move outside fn
+                // let recording = server.record(|rule| {
+                //     rule.record_request_header("User-Agent").filter(|when| {
+                //         when.any_request();
+                //     });
+                // });
+
+                let guard = MockGuard::Record(MockRecorder {
+                    path: path.to_path_buf(),
+                    _server: server,
+                    // recording,
+                });
+                (guard, config)
+            },
+            CatalogMockMode::Replay(path) => {
+                let server = MockServer::start();
+                let mut config = config.clone();
+                config.catalog_url = server.base_url().clone();
+                server.playback(path);
+                let guard = MockGuard::Replay(server);
+                (guard, config)
+            },
         }
     }
 
@@ -236,65 +319,6 @@ impl CatalogClient {
         }
 
         header_map
-    }
-
-    /// Serialize data to the file pointed to by FLOX_CATALOG_DUMP_DATA_VAR if
-    /// it is set
-    fn maybe_dump_shim_response<T>(response: &T)
-    where
-        T: ?Sized + Serialize + Debug,
-    {
-        if let Ok(path_str) = std::env::var(FLOX_CATALOG_DUMP_DATA_VAR) {
-            let path = Path::new(&path_str);
-            let (file, mut json) = CatalogClient::read_dump_file(path);
-            CatalogClient::append_dumped_response(&mut json, response);
-            CatalogClient::write_dump_file(json, file, path);
-        }
-    }
-
-    fn read_dump_file(path: impl AsRef<Path>) -> (File, Value) {
-        tracing::debug!(path = traceable_path(&path), "reading dumped response file");
-        let mut options = OpenOptions::new();
-        let mut file = options
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path)
-            .expect("couldn't open dumped response file");
-        let mut contents = String::new();
-        let bytes_read = file
-            .read_to_string(&mut contents)
-            .expect("couldn't read dumped response file contents");
-        tracing::debug!(was_empty = bytes_read == 0, "read response file");
-        let json: Value = serde_json::from_str(contents.as_ref())
-            .or::<serde_json::Error>(Ok(Value::Array(vec![])))
-            .expect("couldn't convert file contents to json");
-        (file, json)
-    }
-
-    fn append_dumped_response<T>(json: &mut Value, response: &T)
-    where
-        T: ?Sized + Serialize + Debug,
-    {
-        let new_response =
-            serde_json::to_value(response).expect("couldn't convert response to json");
-        if let Value::Array(responses) = json {
-            responses.push(new_response);
-        } else {
-            panic!("expected file to contain a json array, found something else");
-        }
-    }
-
-    fn write_dump_file(json: Value, file: File, path: impl AsRef<Path>) {
-        let contents = serde_json::to_string_pretty(&json)
-            .expect("couldn't serialize responses to json")
-            + "\n";
-        tracing::debug!(
-            path = traceable_path(&path),
-            "writing response to dumped response file"
-        );
-        file.write_all_at(contents.as_bytes(), 0)
-            .expect("failed writing dumped response file");
     }
 }
 
@@ -503,8 +527,6 @@ impl ClientTrait for CatalogClient {
             "received resolved package groups"
         );
 
-        Self::maybe_dump_shim_response(&resolved_package_groups);
-
         Ok(resolved_package_groups)
     }
 
@@ -577,8 +599,6 @@ impl ClientTrait for CatalogClient {
         let (count, results) = collect_search_results(stream, limit).await?;
         let search_results = SearchResults { results, count };
 
-        Self::maybe_dump_shim_response(&search_results);
-
         Ok(search_results)
     }
 
@@ -617,8 +637,6 @@ impl ClientTrait for CatalogClient {
 
         let (count, results) = collect_search_results(stream, None).await?;
         let search_results = PackageDetails { results, count };
-
-        Self::maybe_dump_shim_response(&search_results);
 
         Ok(search_results)
     }
@@ -1549,6 +1567,7 @@ mod tests {
             catalog_url: url.to_string(),
             floxhub_token: None,
             extra_headers: Default::default(),
+            mock_mode: Default::default(),
         }
     }
 
@@ -1637,6 +1656,7 @@ mod tests {
             catalog_url: server.base_url().to_string(),
             floxhub_token: None,
             extra_headers,
+            mock_mode: Default::default(),
         };
 
         let client = CatalogClient::new(config);
@@ -1885,14 +1905,6 @@ mod tests {
         let client = MockClient::new(Some(&tmp)).unwrap();
         let resp = client.resolve(vec![]).block_on().unwrap();
         assert!(resp.is_empty());
-    }
-
-    #[test]
-    fn nonexistent_dump_file_makes_empty_array() {
-        let tmp = NamedTempFile::new().expect("failed to create tempfile");
-        // Empty file will fail to deserialize, so we should get the default (an empty array)
-        let (_, json) = CatalogClient::read_dump_file(tmp.path());
-        assert!(matches!(json, Value::Array(_)));
     }
 
     #[test]
