@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 
-use catalog_api_v1::types::{NarInfo, NarInfos, Output, Outputs, SystemEnum};
+use catalog_api_v1::types::{NarInfo, NarInfos, Output, Outputs, PublishResponse, SystemEnum};
 use chrono::{DateTime, Utc};
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
@@ -27,7 +27,11 @@ use crate::models::environment::{Environment, EnvironmentError, PathPointer};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::Inner;
 use crate::providers::build;
-use crate::providers::catalog::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
+use crate::providers::catalog::{
+    CatalogStoreConfig,
+    CatalogStoreConfigNixCopy,
+    CatalogStoreConfigPublisher,
+};
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
 use crate::utils::CommandExt;
@@ -157,7 +161,14 @@ pub enum ClientSideCatalogStoreConfig {
     Null,
     /// A Catalog Store that doesn't require a signing key from the user doing
     /// the upload.
-    Publisher,
+    Publisher {
+        /// Where signed artifacts are uploaded to.
+        ingress_uri: Url,
+        /// The path to the key used to sign artifacts before uploading them.  Optional here.
+        signing_private_key_path: Option<PathBuf>,
+        /// Authentication file used when interacting with the store.
+        auth_netrc_path: PathBuf,
+    },
 }
 
 impl ClientSideCatalogStoreConfig {
@@ -167,7 +178,9 @@ impl ClientSideCatalogStoreConfig {
             ClientSideCatalogStoreConfig::NixCopy { ingress_uri, .. } => Some(ingress_uri.clone()),
             ClientSideCatalogStoreConfig::MetadataOnly => None,
             ClientSideCatalogStoreConfig::Null => None,
-            ClientSideCatalogStoreConfig::Publisher => None,
+            ClientSideCatalogStoreConfig::Publisher { ingress_uri, .. } => {
+                Some(ingress_uri.clone())
+            },
         }
     }
 
@@ -177,7 +190,7 @@ impl ClientSideCatalogStoreConfig {
             ClientSideCatalogStoreConfig::NixCopy { egress_uri, .. } => Some(egress_uri.clone()),
             ClientSideCatalogStoreConfig::MetadataOnly => None,
             ClientSideCatalogStoreConfig::Null => None,
-            ClientSideCatalogStoreConfig::Publisher => None,
+            ClientSideCatalogStoreConfig::Publisher { .. } => None,
         }
     }
 
@@ -189,6 +202,12 @@ impl ClientSideCatalogStoreConfig {
         } = self
         {
             Some(signing_private_key_path.clone())
+        } else if let ClientSideCatalogStoreConfig::Publisher {
+            signing_private_key_path,
+            ..
+        } = self
+        {
+            signing_private_key_path.clone()
         } else {
             None
         }
@@ -209,7 +228,7 @@ impl ClientSideCatalogStoreConfig {
             } => {
                 Self::upload_build_outputs(
                     ingress_uri,
-                    signing_private_key_path,
+                    Some(signing_private_key_path.as_path()),
                     auth_netrc_path,
                     build_outputs,
                 )?;
@@ -228,11 +247,18 @@ impl ClientSideCatalogStoreConfig {
                 debug!(reason = "null catalog store", "skipping artifact upload");
                 Ok(None)
             },
-            ClientSideCatalogStoreConfig::Publisher => {
-                debug!(
-                    reason = "publisher not implemented",
-                    "skipping artifact upload"
-                );
+            ClientSideCatalogStoreConfig::Publisher {
+                ingress_uri,
+                signing_private_key_path,
+                auth_netrc_path,
+            } => {
+                Self::upload_build_outputs(
+                    ingress_uri,
+                    signing_private_key_path.as_deref(),
+                    auth_netrc_path,
+                    build_outputs,
+                )?;
+                // No narinfos for publisher type
                 Ok(None)
             },
         }
@@ -242,7 +268,7 @@ impl ClientSideCatalogStoreConfig {
     /// NAR info is uploaded in a different method.
     fn upload_build_outputs(
         destination_url: &Url,
-        signing_key_path: &Path,
+        signing_key_path: Option<&Path>,
         auth_netrc_path: &Path,
         build_outputs: &[Output],
     ) -> Result<(), PublishError> {
@@ -268,13 +294,16 @@ impl ClientSideCatalogStoreConfig {
     #[instrument(skip_all, fields(progress = format!("Uploading '{store_path}' to '{}'", destination_url)))]
     pub fn upload_store_path(
         destination_url: &Url,
-        signing_key_path: &Path,
+        signing_key_path: Option<&Path>,
         auth_netrc_path: &Path,
         store_path: &str,
     ) -> Result<(), PublishError> {
         let mut url_with_query = destination_url.clone();
         let mut query = url_with_query.query_pairs_mut();
-        query.append_pair("secret-key", signing_key_path.to_string_lossy().as_ref());
+        if let Some(key_path) = signing_key_path {
+            // If the signing key is None, we don't want to add it to the URL.
+            query.append_pair("secret-key", key_path.to_string_lossy().as_ref());
+        }
         query.append_pair("compression", "zstd");
         query.append_pair("write-nar-listing", "true");
         if destination_url.scheme() == "s3" {
@@ -444,7 +473,7 @@ where
             metadata_only,
             key_file,
             &netrc_path,
-            publish_response.catalog_store_config,
+            publish_response,
         )?;
         let narinfos = catalog_store_config.maybe_upload_artifacts(&self.build_metadata.outputs)?;
 
@@ -494,12 +523,12 @@ fn get_client_side_catalog_store_config(
     metadata_only: bool,
     key_file: Option<PathBuf>,
     auth_netrc_path: impl AsRef<Path>,
-    server_side_catalog_config: CatalogStoreConfig,
+    publish_response: PublishResponse,
 ) -> Result<ClientSideCatalogStoreConfig, PublishError> {
     if metadata_only {
         return Ok(ClientSideCatalogStoreConfig::MetadataOnly);
     }
-    let config = match server_side_catalog_config {
+    let config = match publish_response.catalog_store_config {
         CatalogStoreConfig::Null => ClientSideCatalogStoreConfig::Null,
         CatalogStoreConfig::MetaOnly => ClientSideCatalogStoreConfig::MetadataOnly,
         CatalogStoreConfig::NixCopy(nix_copy_config) => {
@@ -533,8 +562,18 @@ fn get_client_side_catalog_store_config(
                 ));
             }
         },
-        CatalogStoreConfig::Publisher => {
-            unimplemented!("publisher catalog store type is not yet implemented")
+        CatalogStoreConfig::Publisher(publisher_config) => {
+            let CatalogStoreConfigPublisher { .. } = publisher_config;
+            ClientSideCatalogStoreConfig::Publisher {
+                ingress_uri: Url::parse(
+                    publish_response.ingress_uri.as_deref().ok_or_else(|| {
+                        PublishError::Catchall("ingress URI is missing".to_string())
+                    })?,
+                )
+                .map_err(|e| PublishError::Catchall(format!("failed to parse ingress URI: {e}")))?,
+                signing_private_key_path: key_file,
+                auth_netrc_path: auth_netrc_path.as_ref().to_path_buf(),
+            }
         },
     };
     Ok(config)

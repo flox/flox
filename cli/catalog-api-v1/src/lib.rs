@@ -28,7 +28,7 @@ pub mod types {
         /// Store to copy to with `nix copy`
         NixCopy(CatalogStoreConfigNixCopy),
         /// Not yet supported
-        Publisher,
+        Publisher(CatalogStoreConfigPublisher),
     }
 
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -36,11 +36,16 @@ pub mod types {
         pub egress_uri: String,
         pub ingress_uri: String,
     }
+
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct CatalogStoreConfigPublisher {
+        pub publisher_url: String,
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
+    use crate::types::{CatalogStoreConfig, CatalogStoreConfigNixCopy, CatalogStoreConfigPublisher};
 
     #[test]
     fn deserialize_catalog_store_config_null() {
@@ -83,10 +88,15 @@ mod tests {
     #[test]
     fn deserialize_catalog_store_config_publisher() {
         let response_string = r#"{
-           "store_type": "publisher"
+           "store_type": "publisher",
+           "publisher_url": "s3://example"
         }"#;
 
         let store_config = serde_json::from_str::<CatalogStoreConfig>(response_string).unwrap();
-        assert_eq!(store_config, CatalogStoreConfig::Publisher)
+        assert_eq!(store_config, 
+            CatalogStoreConfig::Publisher( CatalogStoreConfigPublisher {
+                 publisher_url: "s3://example".into(),
+                })
+            )
     }
 }

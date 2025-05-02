@@ -48,7 +48,7 @@ impl Upload {
 
         ClientSideCatalogStoreConfig::upload_store_path(
             &self.cache.store_url,
-            &self.cache.signing_key,
+            Some(self.cache.signing_key.as_path()),
             auth_file.as_ref(),
             &store_path.to_string_lossy(),
         )
