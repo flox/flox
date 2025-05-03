@@ -64,6 +64,7 @@ pkgs.runCommandNoCC name
         makeWrapper
         t3
       ]
+      ++ pkgs.stdenv.defaultNativeBuildInputs
       ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ darwin.autoSignDarwinBinariesHook ];
     outputs =
       [
