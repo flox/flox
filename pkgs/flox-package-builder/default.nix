@@ -2,6 +2,7 @@
   bashInteractive,
   coreutils,
   daemonize,
+  getopt,
   gitMinimal,
   gnugrep,
   gnused,
@@ -11,8 +12,17 @@
   stdenv,
   substituteAll,
   t3,
+  writeShellScript,
 }:
 let
+  envFilter = writeShellScript "env-filter" (
+    builtins.readFile (substituteAll {
+      src = ../../package-builder/env-filter.bash;
+      env = {
+        inherit coreutils getopt;
+      };
+    })
+  );
   build-manifest-nix = substituteAll {
     name = "build-manifest.nix";
     src = ../../package-builder/build-manifest.nix;
@@ -24,6 +34,7 @@ let
       bashInteractive
       coreutils
       daemonize
+      envFilter
       gitMinimal
       gnugrep
       gnused
