@@ -48,6 +48,7 @@ _cp := $(call __package_bin,$(__coreutils),cp)
 _cut := $(call __package_bin,$(__coreutils),cut)
 _daemonize := $(call __package_bin,$(__daemonize),daemonize)
 _env := $(call __package_bin,$(__coreutils),env)
+_envFilter := @envFilter@
 _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
 _head := $(call __package_bin,$(__coreutils),head)
@@ -281,8 +282,8 @@ define BUILD_local_template =
 
   # The final result is approximately the following:
   #   $(FLOX_INTERPRETER)/activate ... -- \
-  #     $(_build_wrapper_env)/wrapper --keep-env-vars \
-  #       "$(ALLOW_OUTER_ENV_VARS)" ... -- bash -e buildScript
+  #     $(_envFilter) --allow-prefix _ $(foreach v,$(ALLOW_OUTER_ENV_VARS),--allow $(v)) -- \
+  #       $(_build_wrapper_env)/wrapper ... -- bash -e buildScript
   .INTERMEDIATE: $(_pvarname)_local_build
   $(_pvarname)_local_build: $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
@@ -291,8 +292,8 @@ define BUILD_local_template =
 	$(_V_) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode build --env-project $$$$($(_pwd)) -- \
-	    $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars \
-	      --keep-env-vars "$(ALLOW_OUTER_ENV_VARS)" -- \
+	    $(_envFilter) --allow-prefix _ $(foreach v,$(ALLOW_OUTER_ENV_VARS),--allow $(v)) -- \
+	      $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars -- \
 	        $(_t3) $($(_pvarname)_logfile) -- $(_env) out=$(_out) $(_bash) -e $($(_pvarname)_buildScript)
 	$(_V_) $(_nix) build -L `$(_nix) store add-file "$(shell $(_realpath) "$($(_pvarname)_logfile)")"` \
 	  --out-link "result-$(_pname)-log"

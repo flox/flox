@@ -259,7 +259,7 @@ case "$_flox_shell" in
 esac
 
 if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ] || [ "$_FLOX_ENV_ACTIVATION_MODE" = "build-sandbox" ]; then
-  if [ ! $# -gt 0 ]; then
+  if [ $# -eq 0 ]; then
     echo "build mode is only supported for running a command" >&2
     exit 1
   fi
