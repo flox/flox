@@ -1411,7 +1411,7 @@ mod tests {
         let bin_name = String::from("links-against-libc");
         let source_name = String::from("main.go");
 
-        let (mut flox, _temp_dir_handle) = flox_instance();
+        let (flox, _temp_dir_handle) = flox_instance();
         let mut env =
             new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/go_gcc"));
         let env_path = env.parent_path().unwrap();
@@ -1454,7 +1454,6 @@ mod tests {
         "#};
         fs::write(env_path.join(source_name), source_code).unwrap();
 
-        reset_mocks_from_file(&mut flox.catalog_client, "envs/go_gcc.json");
         assert_build_status(&flox, &mut env, &package_name, None, true);
 
         let result_path = result_dir(&env_path, &package_name)
