@@ -969,7 +969,7 @@
           "catalogs"
         ],
         "summary": "Submit a build of a particular package",
-        "description": "Create a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **UserBuildPublish**: The build info to submit\n\nReturns:\n- **UserBuildCreationResponse**",
+        "description": "Create or update a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **UserBuildPublish**: The build info to submit\n\nReturns:\n- **UserBuildCreationResponse**",
         "operationId": "create_package_build_api_v1_catalog_catalogs__catalog_name__packages__package_name__builds_post",
         "security": [
           {
@@ -1011,6 +1011,103 @@
         "responses": {
           "201": {
             "description": "The build was submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserBuildCreationResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The build already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserBuildCreationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The build cannot be published as requested",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog or package could not be found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request parameters are invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "catalogs"
+        ],
+        "summary": "Update a build of a particular package",
+        "description": "Create or update a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **UserBuildPublish**: The build info to submit\n\nReturns:\n- **UserBuildCreationResponse**",
+        "operationId": "create_package_build_api_v1_catalog_catalogs__catalog_name__packages__package_name__builds_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          },
+          {
+            "name": "package_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}",
+              "title": "Package Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserBuildPublish"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
@@ -1822,9 +1919,16 @@
             "const": "publisher",
             "title": "Store Type",
             "default": "publisher"
+          },
+          "publisher_url": {
+            "type": "string",
+            "title": "Publisher Url"
           }
         },
         "type": "object",
+        "required": [
+          "publisher_url"
+        ],
         "title": "CatalogStoreConfigPublisher"
       },
       "ErrorResponse": {
@@ -1991,6 +2095,11 @@
           },
           "compresssize": {
             "title": "Compresssize",
+            "nullable": true,
+            "type": "string"
+          },
+          "compression": {
+            "title": "Compression",
             "nullable": true,
             "type": "string"
           }
@@ -2512,6 +2621,14 @@
             "nullable": true,
             "type": "string"
           },
+          "ingress_auth": {
+            "title": "Ingress Auth",
+            "nullable": true,
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
           "catalog_store_config": {
             "$ref": "#/components/schemas/CatalogStoreConfig"
           }
@@ -2795,6 +2912,14 @@
           "url": {
             "type": "string",
             "title": "Url"
+          },
+          "auth": {
+            "title": "Auth",
+            "nullable": true,
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
           }
         },
         "type": "object",
@@ -2806,16 +2931,25 @@
       "StoreInfoRequest": {
         "properties": {
           "drv_paths": {
+            "title": "Drv Paths",
+            "deprecated": true,
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "outpaths": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Drv Paths"
+            "title": "Outpaths"
           }
         },
         "type": "object",
         "required": [
-          "drv_paths"
+          "outpaths"
         ],
         "title": "StoreInfoRequest"
       },
@@ -2976,6 +3110,16 @@
           "narinfos": {
             "nullable": true,
             "$ref": "#/components/schemas/NarInfos"
+          },
+          "narinfos_source_url": {
+            "title": "Narinfos Source Url",
+            "nullable": true,
+            "type": "string"
+          },
+          "narinfos_source_version": {
+            "title": "Narinfos Source Version",
+            "nullable": true,
+            "type": "integer"
           }
         },
         "type": "object",

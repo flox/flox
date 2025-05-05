@@ -478,6 +478,105 @@ pub mod operations {
             )
         }
     }
+    pub struct CreatePackageBuildApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsPutWhen(
+        httpmock::When,
+    );
+    impl CreatePackageBuildApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsPutWhen {
+        pub fn new(inner: httpmock::When) -> Self {
+            Self(
+                inner
+                    .method(httpmock::Method::PUT)
+                    .path_matches(
+                        regex::Regex::new(
+                                "^/api/v1/catalog/catalogs/[^/]*/packages/[^/]*/builds$",
+                            )
+                            .unwrap(),
+                    ),
+            )
+        }
+        pub fn into_inner(self) -> httpmock::When {
+            self.0
+        }
+        pub fn catalog_name(self, value: &types::CatalogName) -> Self {
+            let re = regex::Regex::new(
+                    &format!(
+                        "^/api/v1/catalog/catalogs/{}/packages/.*/builds$", value
+                        .to_string()
+                    ),
+                )
+                .unwrap();
+            Self(self.0.path_matches(re))
+        }
+        pub fn package_name(self, value: &types::PackageName) -> Self {
+            let re = regex::Regex::new(
+                    &format!(
+                        "^/api/v1/catalog/catalogs/.*/packages/{}/builds$", value
+                        .to_string()
+                    ),
+                )
+                .unwrap();
+            Self(self.0.path_matches(re))
+        }
+        pub fn body(self, value: &types::UserBuildPublish) -> Self {
+            Self(self.0.json_body_obj(value))
+        }
+    }
+    pub struct CreatePackageBuildApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsPutThen(
+        httpmock::Then,
+    );
+    impl CreatePackageBuildApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsPutThen {
+        pub fn new(inner: httpmock::Then) -> Self {
+            Self(inner)
+        }
+        pub fn into_inner(self) -> httpmock::Then {
+            self.0
+        }
+        pub fn ok(self, value: &types::UserBuildCreationResponse) -> Self {
+            Self(
+                self
+                    .0
+                    .status(200u16)
+                    .header("content-type", "application/json")
+                    .json_body_obj(value),
+            )
+        }
+        pub fn created(self, value: &types::UserBuildCreationResponse) -> Self {
+            Self(
+                self
+                    .0
+                    .status(201u16)
+                    .header("content-type", "application/json")
+                    .json_body_obj(value),
+            )
+        }
+        pub fn bad_request(self, value: &types::ErrorResponse) -> Self {
+            Self(
+                self
+                    .0
+                    .status(400u16)
+                    .header("content-type", "application/json")
+                    .json_body_obj(value),
+            )
+        }
+        pub fn not_found(self, value: &types::ErrorResponse) -> Self {
+            Self(
+                self
+                    .0
+                    .status(404u16)
+                    .header("content-type", "application/json")
+                    .json_body_obj(value),
+            )
+        }
+        pub fn unprocessable_entity(self, value: &types::ErrorResponse) -> Self {
+            Self(
+                self
+                    .0
+                    .status(422u16)
+                    .header("content-type", "application/json")
+                    .json_body_obj(value),
+            )
+        }
+    }
     pub struct CreatePackageBuildApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsPostWhen(
         httpmock::When,
     );
@@ -1771,6 +1870,14 @@ pub trait MockServerExt {
             operations::GetPackageBuildsApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsGetWhen,
             operations::GetPackageBuildsApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsGetThen,
         );
+    fn create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_put<
+        F,
+    >(&self, config_fn: F) -> httpmock::Mock
+    where
+        F: FnOnce(
+            operations::CreatePackageBuildApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsPutWhen,
+            operations::CreatePackageBuildApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsPutThen,
+        );
     fn create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_post<
         F,
     >(&self, config_fn: F) -> httpmock::Mock
@@ -2053,6 +2160,26 @@ impl MockServerExt for httpmock::MockServer {
                     when,
                 ),
                 operations::GetPackageBuildsApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsGetThen::new(
+                    then,
+                ),
+            )
+        })
+    }
+    fn create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_put<
+        F,
+    >(&self, config_fn: F) -> httpmock::Mock
+    where
+        F: FnOnce(
+            operations::CreatePackageBuildApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsPutWhen,
+            operations::CreatePackageBuildApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsPutThen,
+        ),
+    {
+        self.mock(|when, then| {
+            config_fn(
+                operations::CreatePackageBuildApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsPutWhen::new(
+                    when,
+                ),
+                operations::CreatePackageBuildApiV1CatalogCatalogsCatalogNamePackagesPackageNameBuildsPutThen::new(
                     then,
                 ),
             )

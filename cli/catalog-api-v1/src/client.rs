@@ -415,7 +415,14 @@ pub mod types {
     ///{
     ///  "title": "CatalogStoreConfigPublisher",
     ///  "type": "object",
+    ///  "required": [
+    ///    "publisher_url"
+    ///  ],
     ///  "properties": {
+    ///    "publisher_url": {
+    ///      "title": "Publisher Url",
+    ///      "type": "string"
+    ///    },
     ///    "store_type": {
     ///      "title": "Store Type",
     ///      "default": "publisher",
@@ -427,6 +434,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct CatalogStoreConfigPublisher {
+        pub publisher_url: String,
         #[serde(default = "defaults::catalog_store_config_publisher_store_type")]
         pub store_type: String,
     }
@@ -715,6 +723,13 @@ pub mod types {
     ///        "null"
     ///      ]
     ///    },
+    ///    "compression": {
+    ///      "title": "Compression",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "compresssize": {
     ///      "title": "Compresssize",
     ///      "type": [
@@ -818,6 +833,8 @@ pub mod types {
             skip_serializing_if = "Option::is_none"
         )]
         pub closure_size: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub compression: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub compresssize: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1858,6 +1875,16 @@ pub mod types {
     ///    "catalog_store_config": {
     ///      "$ref": "#/components/schemas/CatalogStoreConfig"
     ///    },
+    ///    "ingress_auth": {
+    ///      "title": "Ingress Auth",
+    ///      "type": [
+    ///        "object",
+    ///        "null"
+    ///      ],
+    ///      "additionalProperties": {
+    ///        "type": "string"
+    ///      }
+    ///    },
     ///    "ingress_uri": {
     ///      "title": "Ingress Uri",
     ///      "type": [
@@ -1872,6 +1899,8 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PublishResponse {
         pub catalog_store_config: crate::types::CatalogStoreConfig,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub ingress_auth: Option<std::collections::HashMap<String, String>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub ingress_uri: Option<String>,
     }
@@ -2373,6 +2402,16 @@ pub mod types {
     ///    "url"
     ///  ],
     ///  "properties": {
+    ///    "auth": {
+    ///      "title": "Auth",
+    ///      "type": [
+    ///        "object",
+    ///        "null"
+    ///      ],
+    ///      "additionalProperties": {
+    ///        "type": "string"
+    ///      }
+    ///    },
     ///    "url": {
     ///      "title": "Url",
     ///      "type": "string"
@@ -2383,6 +2422,8 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct StoreInfo {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub auth: Option<std::collections::HashMap<String, String>>,
         pub url: String,
     }
     impl From<&StoreInfo> for StoreInfo {
@@ -2399,11 +2440,22 @@ pub mod types {
     ///  "title": "StoreInfoRequest",
     ///  "type": "object",
     ///  "required": [
-    ///    "drv_paths"
+    ///    "outpaths"
     ///  ],
     ///  "properties": {
     ///    "drv_paths": {
     ///      "title": "Drv Paths",
+    ///      "deprecated": true,
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "outpaths": {
+    ///      "title": "Outpaths",
     ///      "type": "array",
     ///      "items": {
     ///        "type": "string"
@@ -2415,7 +2467,9 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct StoreInfoRequest {
-        pub drv_paths: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub drv_paths: Option<Vec<String>>,
+        pub outpaths: Vec<String>,
     }
     impl From<&StoreInfoRequest> for StoreInfoRequest {
         fn from(value: &StoreInfoRequest) -> Self {
@@ -2759,6 +2813,20 @@ pub mod types {
     ///    "narinfos": {
     ///      "$ref": "#/components/schemas/NarInfos"
     ///    },
+    ///    "narinfos_source_url": {
+    ///      "title": "Narinfos Source Url",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "narinfos_source_version": {
+    ///      "title": "Narinfos Source Version",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "rev": {
     ///      "title": "Rev",
     ///      "type": "string"
@@ -2789,6 +2857,10 @@ pub mod types {
         pub locked_base_catalog_url: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub narinfos: Option<NarInfos>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub narinfos_source_url: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub narinfos_source_version: Option<i64>,
         pub rev: String,
         pub rev_count: i64,
         pub rev_date: chrono::DateTime<chrono::offset::Utc>,
@@ -3641,9 +3713,68 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
+    /**Update a build of a particular package
+
+Create or update a build of a package
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+- **package_name**: The name of the package
+Body Content:
+- **UserBuildPublish**: The build info to submit
+
+Returns:
+- **UserBuildCreationResponse**
+
+Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/builds`
+
+*/
+    pub async fn create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_put<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        package_name: &'a types::PackageName,
+        body: &'a types::UserBuildPublish,
+    ) -> Result<
+        ResponseValue<types::UserBuildCreationResponse>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/builds", self.baseurl,
+            encode_path(& catalog_name.to_string()), encode_path(& package_name
+            .to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .put(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            201u16 => ResponseValue::from_response(response).await,
+            400u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**Submit a build of a particular package
 
-Create a build of a package
+Create or update a build of a package
 
 Path Parameters:
 - **catalog_name**: The name of the catalog
