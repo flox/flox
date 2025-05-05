@@ -4,6 +4,11 @@ _flox_activations="@flox_activations@"
 _sed="@gnused@/bin/sed"
 _sort="@coreutils@/bin/sort"
 
+# Run activate hook
+# If $1 is an empty string, the environment is not captured,
+# and the activation is not added to the activation registry.
+# If $1 is not empty, it is used to capture the environment changes made by the
+# hook.
 start() {
   _flox_activation_state_dir="${1?}"
   shift
