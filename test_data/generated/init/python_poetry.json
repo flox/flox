@@ -11,22 +11,22 @@
             "attr_path": "python3",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/xw08jjh95zyqrmanqwkdcyd97rg4wsxp-python3-3.12.9.drv",
+            "derivation": "/nix/store/49xsrmwiipbwry9lwqrr5z23bf4zaqbf-python3-3.12.9.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "python3-3.12.9",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/f2krmq3iv5nibcvn4rw7nrnrciqprdkh-python3-3.12.9"
+                "store_path": "/nix/store/fqm9bqqlmaqqr02qbalm1bazp810qfiw-python3-3.12.9"
               },
               {
                 "name": "debug",
-                "store_path": "/nix/store/1kjknndig10774mkf6b2b95kn17q4rm5-python3-3.12.9-debug"
+                "store_path": "/nix/store/m09w6hj3mciijfvaf2icqvc777kjd05f-python3-3.12.9-debug"
               }
             ],
             "outputs_to_install": [
@@ -34,10 +34,10 @@
             ],
             "pkg_path": "python3",
             "pname": "python3",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T02:02:16.073720Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T05:16:20.017042Z",
             "stabilities": [
               "unstable"
             ],
@@ -46,7 +46,7 @@
             "version": "3.12.9"
           }
         ],
-        "page": 782401,
+        "page": 793735,
         "url": ""
       }
     }
@@ -63,22 +63,22 @@
             "attr_path": "poetry",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/h3h6q7finfqdcy4drx92z18n4g8gkwiy-python3.12-poetry-2.1.2.drv",
+            "derivation": "/nix/store/zczajl7p7h54g9scqwy9r1pzz8c2y3yf-python3.12-poetry-2.1.2.drv",
             "description": "Python dependency management and packaging made easy",
             "insecure": false,
             "install_id": "poetry",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=f771eb401a46846c1aebd20552521b233dd7e18b",
             "missing_builds": false,
             "name": "poetry-2.1.2",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/grh2yh63i5z2k3055ip12lvxa8kw2fhm-python3.12-poetry-2.1.2"
+                "store_path": "/nix/store/n9xr05v822jgg1wzsypalg7ahr1viypr-python3.12-poetry-2.1.2"
               },
               {
                 "name": "dist",
-                "store_path": "/nix/store/rl4v9kcf9027sw8vl7fl6d4g61fppcii-python3.12-poetry-2.1.2-dist"
+                "store_path": "/nix/store/175pi3yvax9p1z7af9155fndhjljb2wc-python3.12-poetry-2.1.2-dist"
               }
             ],
             "outputs_to_install": [
@@ -86,10 +86,10 @@
             ],
             "pkg_path": "poetry",
             "pname": "poetry",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T02:02:14.342838Z",
+            "rev": "f771eb401a46846c1aebd20552521b233dd7e18b",
+            "rev_count": 789333,
+            "rev_date": "2025-04-24T20:20:57Z",
+            "scrape_date": "2025-04-27T05:14:40.145676Z",
             "stabilities": [
               "unstable"
             ],
@@ -98,7 +98,7 @@
             "version": "2.1.2"
           }
         ],
-        "page": 782401,
+        "page": 789333,
         "url": ""
       }
     }
@@ -115,22 +115,22 @@
             "attr_path": "python3",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/xw08jjh95zyqrmanqwkdcyd97rg4wsxp-python3-3.12.9.drv",
+            "derivation": "/nix/store/49xsrmwiipbwry9lwqrr5z23bf4zaqbf-python3-3.12.9.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "python3-3.12.9",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/f2krmq3iv5nibcvn4rw7nrnrciqprdkh-python3-3.12.9"
+                "store_path": "/nix/store/fqm9bqqlmaqqr02qbalm1bazp810qfiw-python3-3.12.9"
               },
               {
                 "name": "debug",
-                "store_path": "/nix/store/1kjknndig10774mkf6b2b95kn17q4rm5-python3-3.12.9-debug"
+                "store_path": "/nix/store/m09w6hj3mciijfvaf2icqvc777kjd05f-python3-3.12.9-debug"
               }
             ],
             "outputs_to_install": [
@@ -138,10 +138,10 @@
             ],
             "pkg_path": "python3",
             "pname": "python3",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T02:02:16.073720Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T05:16:20.017042Z",
             "stabilities": [
               "unstable"
             ],
@@ -150,7 +150,7 @@
             "version": "3.12.9"
           }
         ],
-        "page": 782401,
+        "page": 793735,
         "url": ""
       }
     }

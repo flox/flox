@@ -16,13 +16,13 @@
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "hello-2.12.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/zh4ha2m108qnkzib36mxchngqj4j13hn-hello-2.12.1"
+                "store_path": "/nix/store/rx1fzrw5bzj2cys6xk5av1v5c6ibh3cr-hello-2.12.1"
               }
             ],
             "outputs_to_install": [
@@ -30,10 +30,10 @@
             ],
             "pkg_path": "hello",
             "pname": "hello",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T01:11:25.346599Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T04:19:29.412765Z",
             "stabilities": [
               "unstable"
             ],
@@ -45,18 +45,18 @@
             "attr_path": "hello",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/ww4y0gws0h8qxgi640dwq6aralp8q6bh-hello-2.12.1.drv",
+            "derivation": "/nix/store/8ki4hqm7x69bw9inlfjblbx66zmh0m4m-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "hello-2.12.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/kfhcq0i3ls63ac09lil23ni6l9a2rqrv-hello-2.12.1"
+                "store_path": "/nix/store/76plgdn1gbaxh0br5xbc6c7pmc3j6rmk-hello-2.12.1"
               }
             ],
             "outputs_to_install": [
@@ -64,10 +64,10 @@
             ],
             "pkg_path": "hello",
             "pname": "hello",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T01:28:04.609266Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T04:37:21.264717Z",
             "stabilities": [
               "unstable"
             ],
@@ -84,13 +84,13 @@
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "hello-2.12.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/n902l28i9qnd5wryqv94swvgvq8b8n28-hello-2.12.1"
+                "store_path": "/nix/store/pmvrzc5w8wv71j1d2m74qfnjg81py437-hello-2.12.1"
               }
             ],
             "outputs_to_install": [
@@ -98,10 +98,10 @@
             ],
             "pkg_path": "hello",
             "pname": "hello",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T01:43:36.474478Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T04:54:30.077562Z",
             "stabilities": [
               "unstable"
             ],
@@ -113,18 +113,18 @@
             "attr_path": "hello",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/jd83l3jn2mkn530lgcg0y523jq5qji85-hello-2.12.1.drv",
+            "derivation": "/nix/store/iqbwkm8mjjjlmw6x6ry9rhzin2cp9372-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "hello-2.12.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/y4qpcibkj767szhjb58i2sidmz8m24hb-hello-2.12.1"
+                "store_path": "/nix/store/9bwryidal9q3g91cjm6xschfn4ikd82q-hello-2.12.1"
               }
             ],
             "outputs_to_install": [
@@ -132,10 +132,10 @@
             ],
             "pkg_path": "hello",
             "pname": "hello",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T02:01:53.644251Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T05:15:56.287354Z",
             "stabilities": [
               "unstable"
             ],
@@ -144,7 +144,7 @@
             "version": "2.12.1"
           }
         ],
-        "page": 782401,
+        "page": 793735,
         "url": ""
       }
     }
