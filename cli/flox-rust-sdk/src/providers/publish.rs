@@ -469,6 +469,13 @@ where
             rev_date: self.env_metadata.build_repo_ref.rev_date,
             cache_uri: catalog_store_config.upload_url().map(|url| url.to_string()),
             narinfos,
+            // The URL where the narinfos were downloaded from.
+            narinfos_source_url: catalog_store_config
+                .download_url()
+                .map(|url| url.to_string()),
+            // This is the version of the narinfo being submitted.  Until we
+            // define changes, we'll use the service defaults.
+            narinfos_source_version: None,
         };
 
         tracing::debug!("Publishing build in catalog...");
@@ -1123,6 +1130,7 @@ pub mod tests {
             Response::CreatePackage,
             Response::Publish(PublishResponse {
                 ingress_uri: None,
+                ingress_auth: None,
                 catalog_store_config: CatalogStoreConfig::MetaOnly,
             }),
             Response::PublishBuild,
@@ -1193,6 +1201,7 @@ pub mod tests {
             Response::CreatePackage,
             Response::Publish(PublishResponse {
                 ingress_uri: Some("https://example.com".to_string()),
+                ingress_auth: None,
                 catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
                     ingress_uri: "https://example.com".to_string(),
                     egress_uri: "https://example.com".to_string(),
@@ -1314,6 +1323,7 @@ pub mod tests {
             Response::CreatePackage,
             Response::Publish(PublishResponse {
                 ingress_uri: Some(cache_url.to_string()),
+                ingress_auth: None,
                 catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
                     ingress_uri: cache_url.to_string(),
                     egress_uri: cache_url.to_string(),
