@@ -707,7 +707,10 @@ impl ClientTrait for CatalogClient {
         derivations: Vec<String>,
     ) -> Result<HashMap<String, Vec<StoreInfo>>, CatalogClientError> {
         let body = StoreInfoRequest {
-            drv_paths: derivations.iter().map(|s| s.to_string()).collect(),
+            outpaths: derivations.iter().map(|s| s.to_string()).collect(),
+            // drv_paths is deprecated, renamed to outpaths.  We'll drop it from
+            // the model eventually.
+            drv_paths: None,
         };
         let response = self
             .client

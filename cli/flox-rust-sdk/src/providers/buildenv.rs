@@ -1250,9 +1250,11 @@ mod realise_nixpkgs_tests {
             // Put something invalid first, to test that we try all locations
             StoreInfo {
                 url: "blasphemy*".to_string(),
+                auth: None,
             },
             StoreInfo {
                 url: "daemon".to_string(),
+                auth: None,
             },
         ]);
         client.push_store_info_response(resp);
@@ -1283,6 +1285,7 @@ mod realise_nixpkgs_tests {
                 // },
                 StoreInfo {
                     url: "daemon".to_string(),
+                    auth: None,
                 },
             ]);
         client.push_store_info_response(resp);
