@@ -1,0 +1,5 @@
+version = 1
+
+[install]
+gcc.pkg-path = "gcc"
+boost.pkg-path = "boost"
