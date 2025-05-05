@@ -1481,6 +1481,169 @@ mod tests {
         );
     }
 
+    /// Test that Flox provided boost can be included at build time and linked
+    /// against when boost is in runtime-packages.
+    /// but if linking isn't needed, runtime-packages can be empty.
+    /// Use boost::system::error_code so we have to link against boost_system.
+    fn boost_runtime(sandbox: bool) {
+        let package_name = String::from("test_boost");
+        let source_name = String::from("test_boost.cpp");
+        let bin_name = String::from("test_boost");
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/gcc_boost"));
+        let env_path = env.parent_path().unwrap();
+
+        let base_manifest = env.manifest_contents(&flox).unwrap();
+        let build_manifest = formatdoc! {r#"
+            {base_manifest}
+
+            [build.{package_name}]
+            command = """
+                g++ -o {bin_name} {source_name} -lboost_system
+                mkdir -p $out/bin
+                cp {bin_name} $out/bin/{bin_name}
+            """
+            runtime-packages = [ "boost" ]
+            sandbox = "{}"
+            "#, if sandbox { "pure" } else { "off" }};
+        env.edit(&flox, build_manifest).unwrap();
+
+        let source_code = indoc! {r#"
+            #include <iostream>
+            #include <boost/system/error_code.hpp>
+
+            int main() {
+                // Create an error code representing a generic "invalid argument"
+                boost::system::error_code ec(boost::system::errc::invalid_argument,
+                                             boost::system::generic_category());
+
+                std::cout << ec.value() << std::endl;
+
+                return 0;
+            }
+            "#};
+        fs::write(env_path.join(&source_name), source_code).unwrap();
+
+        if sandbox {
+            let git = GitCommandProvider::init(&env_path, false).unwrap();
+            git.add(&[&PathBuf::from(source_name)]).unwrap();
+        }
+
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&bin_name);
+        let output = Command::new(&result_path).output().unwrap();
+
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim_end(), "22",);
+    }
+
+    #[test]
+    fn boost_runtime_sandbox_off() {
+        boost_runtime(false);
+    }
+
+    // TODO: currently failing on Linux since the built artifact depends on the
+    // environment store path
+    // If I comment out disallowedReferences in order to see why the artifact
+    // depends on the environment store path, I'm seeing:
+    // $ ldd result-test_boost/bin/.test_boost-wrapped
+    // ...
+    // libboost_system.so.1.87.0 => /nix/store/rfrdr79nk2l0s01zzpfzczjlscimawvl-environment-develop/lib/libboost_system.so.1.87.0 (0x00007fafcf2ed000)
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn boost_runtime_sandbox_pure() {
+        boost_runtime(true);
+    }
+
+    /// Test that Flox provided boost can be included at build time,
+    /// but if linking isn't needed, runtime-packages can be empty.
+    /// Use lexical_cast from boost which does require linking against boost.
+    fn boost_include_only(sandbox: bool) {
+        let package_name = String::from("test_boost");
+        let source_name = String::from("test_boost.cpp");
+        let bin_name = String::from("test_boost");
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/gcc_boost"));
+        let env_path = env.parent_path().unwrap();
+
+        let base_manifest = env.manifest_contents(&flox).unwrap();
+        let build_manifest = formatdoc! {r#"
+            {base_manifest}
+
+            [build.{package_name}]
+            command = """
+                g++ -o {bin_name} {source_name}
+                mkdir -p $out/bin
+                cp {bin_name} $out/bin/{bin_name}
+            """
+            runtime-packages = []
+            sandbox = "{}"
+            "#, if sandbox { "pure" } else { "off" }};
+        env.edit(&flox, build_manifest).unwrap();
+
+        let source_code = indoc! {r#"
+            #include <iostream>
+            #include <string>
+            #include <boost/lexical_cast.hpp>
+
+            int main() {
+                try {
+                    std::string str = "123";
+                    int num = boost::lexical_cast<int>(str);
+                    std::cout << num << std::endl;
+                }
+                catch (const boost::bad_lexical_cast& e) {
+                    std::cerr << "Lexical cast error: " << e.what() << std::endl;
+                }
+
+                return 0;
+            }
+            "#};
+        fs::write(env_path.join(&source_name), source_code).unwrap();
+
+        if sandbox {
+            let git = GitCommandProvider::init(&env_path, false).unwrap();
+            git.add(&[&PathBuf::from(source_name)]).unwrap();
+        }
+
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&bin_name);
+        let output = Command::new(&result_path).output().unwrap();
+
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim_end(), "123",);
+    }
+
+    #[test]
+    fn boost_include_only_sandbox_off() {
+        boost_include_only(false);
+    }
+
+    // TODO: currently failing since build-sandbox mode doesn't run etc-profiles
+    // for the outer activation
+    // #[test]
+    // fn boost_include_only_sandbox_pure() {
+    //     boost_include_only(true);
+    // }
+
     #[test]
     fn cleans_up_data_sandbox() {
         let package_name = String::from("foo");

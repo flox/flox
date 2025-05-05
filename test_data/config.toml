@@ -414,6 +414,19 @@ post_cmd = '''
     cp .flox/env/manifest.lock "$env_dir/manifest.lock"
 '''
 
+[envs.gcc_boost]
+skip_if_output_exists = "envs/gcc_boost"
+files = ["envs/gcc_boost/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/gcc_boost"
+    mkdir -p "$env_dir"
+    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+'''
+
 [envs.kitchen_sink]
 skip_if_output_exists = "envs/kitchen_sink"
 files = ["envs/kitchen_sink/manifest.toml"]
