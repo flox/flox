@@ -320,6 +320,8 @@ impl ManifestBuilder for FloxBuildMk {
         packages: &[String],
     ) -> Result<(), ManifestBuilderError> {
         let mut command = self.base_command(base_dir);
+        // Required to identify NEF builds.
+        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*BUILDTIME_NIXPKGS_URL));
         // TODO: is this even necessary, or can we detect build outputs instead?
         command.arg(format!("FLOX_ENV={}", flox_env.display()));
 

@@ -65,7 +65,9 @@ let
   */
   attrPathStrings =
     # list of attrpaths e.g. result from `lib.nef.reflect.collectAttrPaths
-    collectAttrPaths: map (lib.showAttrPath) collectAttrPaths;
+    # collectAttrPaths: map (lib.showAttrPath) collectAttrPaths;
+    # HACK: Yannik to fix
+    collectAttrPaths: map (x: (lib.showAttrPath x) + ":bin,dev,out,man,devdoc") collectAttrPaths;
 
   /*
     This function converts a list of attrPaths to a space separated string,
