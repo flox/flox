@@ -7,7 +7,7 @@ use tempfile::{NamedTempFile, TempDir, TempPath, tempdir_in};
 use crate::flox::{Flox, FloxhubToken};
 
 /// Hostnames that are authenticated with FloxHub credentials.
-const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 7] = [
+const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 8] = [
     "publisher.flox.dev",
     "publisher.preview.flox.dev",
     "api.preview2.flox.dev",
@@ -16,6 +16,7 @@ const FLOXHUB_AUTHENTICATED_HOSTNAMES: [&str; 7] = [
     "experimental-publisher.preview.flox.dev",
     "experimental-publisher.preview2.flox.dev", // deltaops
     "cache.floxware.com",                       // Tom
+    "localhost",
 ];
 
 pub trait AuthProvider {
