@@ -1,6 +1,6 @@
 [
   {
-    "count": 67,
+    "count": 68,
     "results": [
       {
         "attr_path": "hello",
@@ -149,12 +149,12 @@
         "attr_path": "kdePackages.umbrello",
         "catalog": null,
         "description": "GUI for diagramming Unified Modelling Language (UML)",
-        "name": "umbrello-24.12.3",
+        "name": "umbrello-25.04.0",
         "pkg_path": "kdePackages.umbrello",
         "pname": "umbrello",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "24.12.3"
+        "version": "25.04.0"
       },
       {
         "attr_path": "libsForQt512.umbrello",
@@ -380,12 +380,12 @@
         "attr_path": "python312Packages.bellows",
         "catalog": null,
         "description": "Python module to implement EZSP for EmberZNet devices",
-        "name": "python3.12-bellows-0.43.0",
+        "name": "python3.12-bellows-0.44.1",
         "pkg_path": "python312Packages.bellows",
         "pname": "bellows",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "0.43.0"
+        "version": "0.44.1"
       },
       {
         "attr_path": "python312Packages.pynello",
@@ -402,12 +402,12 @@
         "attr_path": "python313Packages.bellows",
         "catalog": null,
         "description": "Python module to implement EZSP for EmberZNet devices",
-        "name": "python3.13-bellows-0.43.0",
+        "name": "python3.13-bellows-0.44.1",
         "pkg_path": "python313Packages.bellows",
         "pname": "bellows",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "0.43.0"
+        "version": "0.44.1"
       },
       {
         "attr_path": "python313Packages.pynello",
@@ -564,6 +564,17 @@
         "version": "0.19.1"
       },
       {
+        "attr_path": "wordpressPackages.plugins.hello-dolly",
+        "catalog": null,
+        "description": null,
+        "name": "wordpress-plugin-hello-dolly-1.7.2",
+        "pkg_path": "wordpressPackages.plugins.hello-dolly",
+        "pname": "hello-dolly",
+        "stabilities": [],
+        "system": "x86_64-linux",
+        "version": "1.7.2"
+      },
+      {
         "attr_path": "apacheHttpdPackages_2_4.mod_auth_mellon",
         "catalog": null,
         "description": "Apache module with a simple SAML 2.0 service provider",
@@ -622,12 +633,12 @@
         "attr_path": "home-assistant-component-tests.homeassistant_yellow",
         "catalog": null,
         "description": "Open source home automation that puts local control and privacy first",
-        "name": "homeassistant-test-homeassistant_yellow-2025.3.4",
+        "name": "homeassistant-test-homeassistant_yellow-2025.4.4",
         "pkg_path": "home-assistant-component-tests.homeassistant_yellow",
         "pname": "homeassistant_yellow",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "2025.3.4"
+        "version": "2025.4.4"
       },
       {
         "attr_path": "lispPackages_new.sbclPackages.cl-mw_dot_examples_dot_hello-world",

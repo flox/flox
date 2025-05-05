@@ -11,18 +11,18 @@
             "attr_path": "rubyPackages_3_2.rails",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/39wy0bik15vly0lsl6xhavkd92y88ln1-ruby3.2-rails-8.0.2.drv",
+            "derivation": "/nix/store/7m2z5rp1jy0mjfmcjzg3qf7pjjp566j3-ruby3.2-rails-7.2.2.1.drv",
             "description": null,
             "insecure": false,
             "install_id": "rails",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
-            "name": "ruby3.2-rails-8.0.2",
+            "name": "ruby3.2-rails-7.2.2.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/9z1lspxkwq09v35wswdrpp3gyk4d0pvg-ruby3.2-rails-8.0.2"
+                "store_path": "/nix/store/4272vycnpr30p2a8l7fcr26frn32pmwk-ruby3.2-rails-7.2.2.1"
               }
             ],
             "outputs_to_install": [
@@ -30,33 +30,33 @@
             ],
             "pkg_path": "rubyPackages_3_2.rails",
             "pname": "rails",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T01:11:54.546248Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T04:19:59.939969Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "8.0.2"
+            "version": "7.2.2.1"
           },
           {
             "attr_path": "rubyPackages_3_2.rails",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/6q2fj322iy0rbz0fryyc9bbarr9m7qcz-ruby3.2-rails-8.0.2.drv",
+            "derivation": "/nix/store/ifvf72psg2wx37znwnzlb6p27mwpp6vw-ruby3.2-rails-7.2.2.1.drv",
             "description": null,
             "insecure": false,
             "install_id": "rails",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
-            "name": "ruby3.2-rails-8.0.2",
+            "name": "ruby3.2-rails-7.2.2.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/37brj8ps6cy4pzcy9bi3daz8saz5vpyx-ruby3.2-rails-8.0.2"
+                "store_path": "/nix/store/0ay736s1k5pn97imzkjmlyszfy9rb7d7-ruby3.2-rails-7.2.2.1"
               }
             ],
             "outputs_to_install": [
@@ -64,33 +64,33 @@
             ],
             "pkg_path": "rubyPackages_3_2.rails",
             "pname": "rails",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T01:28:55.705925Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T04:38:16.253039Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "8.0.2"
+            "version": "7.2.2.1"
           },
           {
             "attr_path": "rubyPackages_3_2.rails",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/3i51njd9rl88qvhw9ff1qjkg2f49dqhd-ruby3.2-rails-8.0.2.drv",
+            "derivation": "/nix/store/x1gna0gz4plidqgxz8qdmxmnafvq3xli-ruby3.2-rails-7.2.2.1.drv",
             "description": null,
             "insecure": false,
             "install_id": "rails",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
-            "name": "ruby3.2-rails-8.0.2",
+            "name": "ruby3.2-rails-7.2.2.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/j2632afw0xnwjmdg507w668vg02sdlm4-ruby3.2-rails-8.0.2"
+                "store_path": "/nix/store/b5khaly1cbkdk8p5q6a9pc118la7gzm6-ruby3.2-rails-7.2.2.1"
               }
             ],
             "outputs_to_install": [
@@ -98,33 +98,33 @@
             ],
             "pkg_path": "rubyPackages_3_2.rails",
             "pname": "rails",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T01:44:06.105941Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T04:55:00.610938Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "8.0.2"
+            "version": "7.2.2.1"
           },
           {
             "attr_path": "rubyPackages_3_2.rails",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/7cany1y03rqs003azcn7kni8gficfw0s-ruby3.2-rails-8.0.2.drv",
+            "derivation": "/nix/store/qzv4y0fv50nfkzh5iashafnhh8rda1d7-ruby3.2-rails-7.2.2.1.drv",
             "description": null,
             "insecure": false,
             "install_id": "rails",
             "license": null,
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
-            "name": "ruby3.2-rails-8.0.2",
+            "name": "ruby3.2-rails-7.2.2.1",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/yr2h4l0j1pdc9z1gxagjj9nj2iiq6b0i-ruby3.2-rails-8.0.2"
+                "store_path": "/nix/store/c46yidzb57p8p001dx9f5ghsgp2gf1b9-ruby3.2-rails-7.2.2.1"
               }
             ],
             "outputs_to_install": [
@@ -132,19 +132,19 @@
             ],
             "pkg_path": "rubyPackages_3_2.rails",
             "pname": "rails",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T02:02:49.236367Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T05:16:56.014389Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "8.0.2"
+            "version": "7.2.2.1"
           }
         ],
-        "page": 782401,
+        "page": 793735,
         "url": ""
       }
     }

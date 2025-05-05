@@ -1,6 +1,6 @@
 [
   {
-    "count": 869,
+    "count": 889,
     "results": [
       {
         "attr_path": "javacc",
@@ -94,12 +94,12 @@
         "attr_path": "yourkit-java",
         "catalog": null,
         "description": "Award winning, fully featured low overhead profiler for Java EE and Java SE platforms",
-        "name": "yourkit-java-2025.3-b134",
+        "name": "yourkit-java-2025.3-b135",
         "pkg_path": "yourkit-java",
         "pname": "yourkit-java",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "2025.3-b134"
+        "version": "2025.3-b135"
       },
       {
         "attr_path": "java-hamcrest",
@@ -120,13 +120,13 @@
       {
         "attr_path": "jdk",
         "catalog": null,
-        "description": "Open-source Java Development Kit",
-        "name": "openjdk-21.0.5+11",
+        "description": "Certified builds of OpenJDK",
+        "name": "zulu-ca-jdk-21.0.4",
         "pkg_path": "jdk",
         "pname": "jdk",
         "stabilities": [],
         "system": "x86_64-linux",
-        "version": "21.0.5+11"
+        "version": "21.0.4"
       },
       {
         "attr_path": "jdk8",

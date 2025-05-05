@@ -173,22 +173,26 @@
             "attr_path": "nodejs_20",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/r6lm8abx3644wbzq2la1y8lxzz3x5j18-nodejs-20.19.0.drv",
+            "derivation": "/nix/store/d2vpc1aqk6iw3yzg1abk6jmqw7pfla58-nodejs-20.19.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs_20",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "nodejs-20.19.0",
             "outputs": [
               {
+                "name": "dev",
+                "store_path": "/nix/store/rdhhmrq1qdzrpz7chg94la5xj8p88izq-nodejs-20.19.0-dev"
+              },
+              {
                 "name": "out",
-                "store_path": "/nix/store/0spgg02awhcqn989vyn40w8yjna681gh-nodejs-20.19.0"
+                "store_path": "/nix/store/g9i71gd4wm11a5hp4k5mimvsl8vx7jdw-nodejs-20.19.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/58xkwxwvns2cxzdn1aipwnm8x599j7yy-nodejs-20.19.0-libv8"
+                "store_path": "/nix/store/avrrs9q3qh75cd0n2skpx4kp3sx9cnb7-nodejs-20.19.0-libv8"
               }
             ],
             "outputs_to_install": [
@@ -196,10 +200,10 @@
             ],
             "pkg_path": "nodejs_20",
             "pname": "nodejs_20",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T02:02:03.955532Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T05:16:07.167006Z",
             "stabilities": [
               "unstable"
             ],
@@ -208,7 +212,7 @@
             "version": "20.19.0"
           }
         ],
-        "page": 782401,
+        "page": 793735,
         "url": ""
       }
     },
@@ -325,22 +329,26 @@
             "attr_path": "nodejs_20",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/d2n6kbqz27bwmd2a3c6k8jcr1sig11z5-nodejs-20.19.0.drv",
+            "derivation": "/nix/store/33i0rhflplwdjaxky0l9sqr1wcgks4qc-nodejs-20.19.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "nodejs-20.19.0",
             "outputs": [
               {
+                "name": "dev",
+                "store_path": "/nix/store/kslx73g14dmb5srlypnqapnlqqklv2pi-nodejs-20.19.0-dev"
+              },
+              {
                 "name": "out",
-                "store_path": "/nix/store/mnpp9czqfgwisyr7ikfyp39lx3xxrdwg-nodejs-20.19.0"
+                "store_path": "/nix/store/fy4baj2727cz7yiaw51zyd8a0dkkdi5f-nodejs-20.19.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/sdqv13b8qfmj0k6rg2ix14bxyd22abcr-nodejs-20.19.0-libv8"
+                "store_path": "/nix/store/gcflh0g2rqmnvzb1njcx8zc5m78h8w8k-nodejs-20.19.0-libv8"
               }
             ],
             "outputs_to_install": [
@@ -348,10 +356,10 @@
             ],
             "pkg_path": "nodejs_20",
             "pname": "nodejs_20",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T01:11:27.532594Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T04:19:31.612979Z",
             "stabilities": [
               "unstable"
             ],
@@ -363,22 +371,26 @@
             "attr_path": "nodejs_20",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/v71pb5rrlvzjsdxf1f1cs223hyhdmir8-nodejs-20.19.0.drv",
+            "derivation": "/nix/store/73c87bq1ik41izcfsbf03q8zgkdvz5c0-nodejs-20.19.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "nodejs-20.19.0",
             "outputs": [
               {
+                "name": "dev",
+                "store_path": "/nix/store/lj6r7swa87h6cfw56m73wkafrhykmh0w-nodejs-20.19.0-dev"
+              },
+              {
                 "name": "out",
-                "store_path": "/nix/store/qz522zmsx441py29xy69sf5671bkhpj2-nodejs-20.19.0"
+                "store_path": "/nix/store/0xvxx27jlbrfw9srpyiij342z4xs1fra-nodejs-20.19.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/7i02830b2pxlapzav6yyggymqmp6rk02-nodejs-20.19.0-libv8"
+                "store_path": "/nix/store/mbx51s44i73qnj9q29mvvda0h2v97php-nodejs-20.19.0-libv8"
               }
             ],
             "outputs_to_install": [
@@ -386,10 +398,10 @@
             ],
             "pkg_path": "nodejs_20",
             "pname": "nodejs_20",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T01:28:13.251014Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T04:37:30.421730Z",
             "stabilities": [
               "unstable"
             ],
@@ -401,22 +413,26 @@
             "attr_path": "nodejs_20",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/i9bqxy36dyivi9nlli4fj9fbj49bia9z-nodejs-20.19.0.drv",
+            "derivation": "/nix/store/7ri3rxarcirgj26gq58lvac0zhlpqfzp-nodejs-20.19.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "nodejs-20.19.0",
             "outputs": [
               {
+                "name": "dev",
+                "store_path": "/nix/store/wf62vcjacd7ln0kqv094d2vsibr3haj2-nodejs-20.19.0-dev"
+              },
+              {
                 "name": "out",
-                "store_path": "/nix/store/4k73p2z9h5rnfv9gal8n6m4srx5sggs8-nodejs-20.19.0"
+                "store_path": "/nix/store/zhb8l2knnifdda5ksrvjqjhykd36s59q-nodejs-20.19.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/px89hqr3wcfk0w6146hf4171bvj4chgp-nodejs-20.19.0-libv8"
+                "store_path": "/nix/store/2hnj6pa6xm53zjdjzw10l4qbd4yjliwy-nodejs-20.19.0-libv8"
               }
             ],
             "outputs_to_install": [
@@ -424,10 +440,10 @@
             ],
             "pkg_path": "nodejs_20",
             "pname": "nodejs_20",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T01:43:38.670612Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T04:54:32.311881Z",
             "stabilities": [
               "unstable"
             ],
@@ -439,22 +455,26 @@
             "attr_path": "nodejs_20",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/r6lm8abx3644wbzq2la1y8lxzz3x5j18-nodejs-20.19.0.drv",
+            "derivation": "/nix/store/d2vpc1aqk6iw3yzg1abk6jmqw7pfla58-nodejs-20.19.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=2631b0b7abcea6e640ce31cd78ea58910d31e650",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "nodejs-20.19.0",
             "outputs": [
               {
+                "name": "dev",
+                "store_path": "/nix/store/rdhhmrq1qdzrpz7chg94la5xj8p88izq-nodejs-20.19.0-dev"
+              },
+              {
                 "name": "out",
-                "store_path": "/nix/store/0spgg02awhcqn989vyn40w8yjna681gh-nodejs-20.19.0"
+                "store_path": "/nix/store/g9i71gd4wm11a5hp4k5mimvsl8vx7jdw-nodejs-20.19.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/58xkwxwvns2cxzdn1aipwnm8x599j7yy-nodejs-20.19.0-libv8"
+                "store_path": "/nix/store/avrrs9q3qh75cd0n2skpx4kp3sx9cnb7-nodejs-20.19.0-libv8"
               }
             ],
             "outputs_to_install": [
@@ -462,10 +482,10 @@
             ],
             "pkg_path": "nodejs_20",
             "pname": "nodejs_20",
-            "rev": "2631b0b7abcea6e640ce31cd78ea58910d31e650",
-            "rev_count": 782401,
-            "rev_date": "2025-04-12T13:19:24Z",
-            "scrape_date": "2025-04-14T02:02:03.955532Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T05:16:07.167006Z",
             "stabilities": [
               "unstable"
             ],
@@ -474,7 +494,7 @@
             "version": "20.19.0"
           }
         ],
-        "page": 782401,
+        "page": 793735,
         "url": ""
       }
     }

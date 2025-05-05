@@ -16,7 +16,7 @@
             "insecure": false,
             "install_id": "daemonize",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c11863f1e964833214b767f4a369c6e6a7aba141",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "daemonize-1.7.8",
             "outputs": [
@@ -30,10 +30,10 @@
             ],
             "pkg_path": "daemonize",
             "pname": "daemonize",
-            "rev": "c11863f1e964833214b767f4a369c6e6a7aba141",
-            "rev_count": 787278,
-            "rev_date": "2025-04-21T11:18:05Z",
-            "scrape_date": "2025-04-23T04:18:47.489612Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T04:19:28.734056Z",
             "stabilities": [
               "unstable"
             ],
@@ -50,7 +50,7 @@
             "insecure": false,
             "install_id": "daemonize",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c11863f1e964833214b767f4a369c6e6a7aba141",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "daemonize-1.7.8",
             "outputs": [
@@ -64,10 +64,10 @@
             ],
             "pkg_path": "daemonize",
             "pname": "daemonize",
-            "rev": "c11863f1e964833214b767f4a369c6e6a7aba141",
-            "rev_count": 787278,
-            "rev_date": "2025-04-21T11:18:05Z",
-            "scrape_date": "2025-04-23T04:36:52.376633Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T04:37:19.745328Z",
             "stabilities": [
               "unstable"
             ],
@@ -84,7 +84,7 @@
             "insecure": false,
             "install_id": "daemonize",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c11863f1e964833214b767f4a369c6e6a7aba141",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "daemonize-1.7.8",
             "outputs": [
@@ -98,10 +98,10 @@
             ],
             "pkg_path": "daemonize",
             "pname": "daemonize",
-            "rev": "c11863f1e964833214b767f4a369c6e6a7aba141",
-            "rev_count": 787278,
-            "rev_date": "2025-04-21T11:18:05Z",
-            "scrape_date": "2025-04-23T04:54:04.177957Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T04:54:29.354561Z",
             "stabilities": [
               "unstable"
             ],
@@ -118,7 +118,7 @@
             "insecure": false,
             "install_id": "daemonize",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=c11863f1e964833214b767f4a369c6e6a7aba141",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "missing_builds": false,
             "name": "daemonize-1.7.8",
             "outputs": [
@@ -132,10 +132,10 @@
             ],
             "pkg_path": "daemonize",
             "pname": "daemonize",
-            "rev": "c11863f1e964833214b767f4a369c6e6a7aba141",
-            "rev_count": 787278,
-            "rev_date": "2025-04-21T11:18:05Z",
-            "scrape_date": "2025-04-23T05:15:24.938331Z",
+            "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+            "rev_count": 793735,
+            "rev_date": "2025-05-04T03:14:55Z",
+            "scrape_date": "2025-05-05T05:15:54.589288Z",
             "stabilities": [
               "unstable"
             ],
@@ -144,7 +144,7 @@
             "version": "1.7.8"
           }
         ],
-        "page": 787278,
+        "page": 793735,
         "url": ""
       }
     }
