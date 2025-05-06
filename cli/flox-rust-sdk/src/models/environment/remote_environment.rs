@@ -109,12 +109,14 @@ impl RemoteEnvironment {
             // `.flox/run` used to be a link until flox versions 1.3.3!
             // If we find a symlink, we need to delete it to create a directory
             // with symlinked files in the following step.
-            if gcroots_dir.exists() && gcroots_dir.is_symlink() {
+            if gcroots_dir.is_symlink() {
+                // returns true if the file exists and is a symlink
                 debug!(gcroot=?gcroots_dir, "removing symlink");
                 fs::remove_file(&gcroots_dir).map_err(RemoteEnvironmentError::CreateGcRootDir)?;
             }
 
             if !gcroots_dir.exists() {
+                debug!(path = %gcroots_dir.display(), "creating gc roots directory");
                 std::fs::create_dir_all(&gcroots_dir)
                     .map_err(RemoteEnvironmentError::CreateGcRootDir)?;
             }
