@@ -11,7 +11,7 @@
             "attr_path": "go",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/2vf3k8270h2781z477r88vswqvw8ykp0-go-1.24.2.drv",
+            "derivation": "/nix/store/rx127ahvvf4z52cla8v36vqkhxrj8ph7-go-1.24.2.drv",
             "description": "Go Programming language",
             "insecure": false,
             "install_id": "go",
@@ -22,7 +22,7 @@
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/rv9g1p18w52vip6652svdgy138wgx7dj-go-1.24.2"
+                "store_path": "/nix/store/fd2s1z3why92qn8w7j6r0xlarikpv27v-go-1.24.2"
               }
             ],
             "outputs_to_install": [
@@ -33,11 +33,11 @@
             "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "rev_count": 793735,
             "rev_date": "2025-05-04T03:14:55Z",
-            "scrape_date": "2025-05-05T05:15:55.910259Z",
+            "scrape_date": "2025-05-05T04:19:29.232417Z",
             "stabilities": [
               "unstable"
             ],
-            "system": "x86_64-linux",
+            "system": "aarch64-darwin",
             "unfree": false,
             "version": "1.24.2"
           }

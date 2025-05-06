@@ -11,7 +11,7 @@
             "attr_path": "python3",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/49xsrmwiipbwry9lwqrr5z23bf4zaqbf-python3-3.12.9.drv",
+            "derivation": "/nix/store/swlxpgwqf6aj57kfhnanv5fvfsjl61w5-python3-3.12.9.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
@@ -22,11 +22,7 @@
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/fqm9bqqlmaqqr02qbalm1bazp810qfiw-python3-3.12.9"
-              },
-              {
-                "name": "debug",
-                "store_path": "/nix/store/m09w6hj3mciijfvaf2icqvc777kjd05f-python3-3.12.9-debug"
+                "store_path": "/nix/store/xzjghvsg4fhr2vv6h4scihsdrgk4i76w-python3-3.12.9"
               }
             ],
             "outputs_to_install": [
@@ -37,11 +33,11 @@
             "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "rev_count": 793735,
             "rev_date": "2025-05-04T03:14:55Z",
-            "scrape_date": "2025-05-05T05:16:20.017042Z",
+            "scrape_date": "2025-05-05T04:19:37.754154Z",
             "stabilities": [
               "unstable"
             ],
-            "system": "x86_64-linux",
+            "system": "aarch64-darwin",
             "unfree": false,
             "version": "3.12.9"
           }
