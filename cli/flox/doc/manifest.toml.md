@@ -30,6 +30,7 @@ tables:
 - [`[hook]`](#hook)
 - [`[profile]`](#profile)
 - [`[services]`](#services)
+- [`[include]`](#include)
 - [`[options]`](#options)
 - [`containerize`] - see [`flox-containerize(1)`](./flox-containerize.md)
 
