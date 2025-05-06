@@ -10,7 +10,7 @@
         "pkg_path": "nodejs_14",
         "pname": "nodejs_14",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "14.21.3"
       },
       {
@@ -21,7 +21,7 @@
         "pkg_path": "nodejs_16",
         "pname": "nodejs_16",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "16.20.2"
       },
       {
@@ -32,7 +32,7 @@
         "pkg_path": "nodejs_18",
         "pname": "nodejs_18",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "18.20.8"
       },
       {
@@ -43,7 +43,7 @@
         "pkg_path": "nodejs_19",
         "pname": "nodejs_19",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "19.9.0"
       },
       {
@@ -54,7 +54,7 @@
         "pkg_path": "nodejs_20",
         "pname": "nodejs_20",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20.19.0"
       },
       {
@@ -65,7 +65,7 @@
         "pkg_path": "nodejs_21",
         "pname": "nodejs_21",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "21.7.3"
       },
       {
@@ -76,7 +76,7 @@
         "pkg_path": "nodejs_22",
         "pname": "nodejs_22",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "22.14.0"
       },
       {
@@ -87,7 +87,7 @@
         "pkg_path": "nodejs_23",
         "pname": "nodejs_23",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "23.11.0"
       },
       {
@@ -98,7 +98,7 @@
         "pkg_path": "nodejs_latest",
         "pname": "nodejs_latest",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "23.11.0"
       },
       {
@@ -109,7 +109,7 @@
         "pkg_path": "haxePackages.hxnodejs_4",
         "pname": "hxnodejs_4",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "4.0.9"
       },
       {
@@ -120,7 +120,7 @@
         "pkg_path": "haxePackages.hxnodejs_6",
         "pname": "hxnodejs_6",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "6.9.0"
       }
     ]
@@ -137,7 +137,7 @@
             "attr_path": "nodejs_23",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/fmnz6133qxshnwm35j4hhbx8my3883n5-nodejs-23.11.0.drv",
+            "derivation": "/nix/store/1bppizga8azifl94c2ib9qr4s6w162qm-nodejs-23.11.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs_23",
@@ -148,15 +148,15 @@
             "outputs": [
               {
                 "name": "dev",
-                "store_path": "/nix/store/37nmva83fc0idfd0xk7rq61zgxg0ywab-nodejs-23.11.0-dev"
+                "store_path": "/nix/store/g1c4jg5r4x6jg3zpirgmw9na2swv94sw-nodejs-23.11.0-dev"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/farnym67jl2brs97ihsvziz7gm0yq26l-nodejs-23.11.0"
+                "store_path": "/nix/store/gdh7lnl6ksw2s9j65ah0jnr93cypq0zr-nodejs-23.11.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/3kx3gj5ix8nsp63kh3nkvxzbqcic85wx-nodejs-23.11.0-libv8"
+                "store_path": "/nix/store/yf4hi5pps1ciplvlrfdvmzdyv0z24l2x-nodejs-23.11.0-libv8"
               }
             ],
             "outputs_to_install": [
@@ -167,11 +167,11 @@
             "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "rev_count": 793735,
             "rev_date": "2025-05-04T03:14:55Z",
-            "scrape_date": "2025-05-05T05:16:07.168846Z",
+            "scrape_date": "2025-05-05T04:19:31.613884Z",
             "stabilities": [
               "unstable"
             ],
-            "system": "x86_64-linux",
+            "system": "aarch64-darwin",
             "unfree": false,
             "version": "23.11.0"
           }
@@ -191,7 +191,7 @@
             "attr_path": "nodejs_22",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/lvmx1yi282jmc8y01zz05vac8h554h34-nodejs-22.14.0.drv",
+            "derivation": "/nix/store/5cwk9l1iwpwcisih5ll7mc2i6w42y05m-nodejs-22.14.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs_22",
@@ -202,15 +202,15 @@
             "outputs": [
               {
                 "name": "dev",
-                "store_path": "/nix/store/pyhz87g4xnb88rh372p7xxls49hivh57-nodejs-22.14.0-dev"
+                "store_path": "/nix/store/zbr4fi11j897pa9jikqpviz57kagvizv-nodejs-22.14.0-dev"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/5z0wi8qwah6y9cv3na0fgjzbk9ihh1pz-nodejs-22.14.0"
+                "store_path": "/nix/store/2ribxb3gi87gj4331m6k0ydn0z90zfi7-nodejs-22.14.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/ac2187x84ggp1vpxnw4y81xy3caqz77s-nodejs-22.14.0-libv8"
+                "store_path": "/nix/store/9rp5sb2nb5549qqax4v6ly4glixjm6d5-nodejs-22.14.0-libv8"
               }
             ],
             "outputs_to_install": [
@@ -221,11 +221,11 @@
             "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "rev_count": 793735,
             "rev_date": "2025-05-04T03:14:55Z",
-            "scrape_date": "2025-05-05T05:16:07.167922Z",
+            "scrape_date": "2025-05-05T04:19:31.613428Z",
             "stabilities": [
               "unstable"
             ],
-            "system": "x86_64-linux",
+            "system": "aarch64-darwin",
             "unfree": false,
             "version": "22.14.0"
           }
@@ -245,7 +245,7 @@
             "attr_path": "nodejs_21",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/2vza1j6chgmfa1s77ws7c0li9cnzl0jq-nodejs-21.7.3.drv",
+            "derivation": "/nix/store/ndcy9jlzxviid8yxb4k7afcacsdbppq7-nodejs-21.7.3.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs_21",
@@ -256,11 +256,11 @@
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/dfs59hwhc4mb4hdk77nc5dd39k2v2qs2-nodejs-21.7.3"
+                "store_path": "/nix/store/hxr5ziwxn72wxcrhxasdy542h6z0r9hg-nodejs-21.7.3"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/iq38acw88hl92vpwamfkzgk3pk3dsr0x-nodejs-21.7.3-libv8"
+                "store_path": "/nix/store/y6xj0m2n7mlzgx5mc62m0lb4h02dzklr-nodejs-21.7.3-libv8"
               }
             ],
             "outputs_to_install": [
@@ -277,7 +277,7 @@
               "staging",
               "unstable"
             ],
-            "system": "x86_64-linux",
+            "system": "aarch64-darwin",
             "unfree": false,
             "version": "21.7.3"
           }
@@ -297,7 +297,7 @@
             "attr_path": "nodejs_20",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/d2vpc1aqk6iw3yzg1abk6jmqw7pfla58-nodejs-20.19.0.drv",
+            "derivation": "/nix/store/33i0rhflplwdjaxky0l9sqr1wcgks4qc-nodejs-20.19.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs_20",
@@ -308,15 +308,15 @@
             "outputs": [
               {
                 "name": "dev",
-                "store_path": "/nix/store/rdhhmrq1qdzrpz7chg94la5xj8p88izq-nodejs-20.19.0-dev"
+                "store_path": "/nix/store/kslx73g14dmb5srlypnqapnlqqklv2pi-nodejs-20.19.0-dev"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/g9i71gd4wm11a5hp4k5mimvsl8vx7jdw-nodejs-20.19.0"
+                "store_path": "/nix/store/fy4baj2727cz7yiaw51zyd8a0dkkdi5f-nodejs-20.19.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/avrrs9q3qh75cd0n2skpx4kp3sx9cnb7-nodejs-20.19.0-libv8"
+                "store_path": "/nix/store/gcflh0g2rqmnvzb1njcx8zc5m78h8w8k-nodejs-20.19.0-libv8"
               }
             ],
             "outputs_to_install": [
@@ -327,11 +327,11 @@
             "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "rev_count": 793735,
             "rev_date": "2025-05-04T03:14:55Z",
-            "scrape_date": "2025-05-05T05:16:07.167006Z",
+            "scrape_date": "2025-05-05T04:19:31.612979Z",
             "stabilities": [
               "unstable"
             ],
-            "system": "x86_64-linux",
+            "system": "aarch64-darwin",
             "unfree": false,
             "version": "20.19.0"
           }
@@ -399,7 +399,7 @@
             "attr_path": "nodejs",
             "broken": false,
             "catalog": "nixpkgs",
-            "derivation": "/nix/store/lvmx1yi282jmc8y01zz05vac8h554h34-nodejs-22.14.0.drv",
+            "derivation": "/nix/store/5cwk9l1iwpwcisih5ll7mc2i6w42y05m-nodejs-22.14.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs",
@@ -410,15 +410,15 @@
             "outputs": [
               {
                 "name": "dev",
-                "store_path": "/nix/store/pyhz87g4xnb88rh372p7xxls49hivh57-nodejs-22.14.0-dev"
+                "store_path": "/nix/store/zbr4fi11j897pa9jikqpviz57kagvizv-nodejs-22.14.0-dev"
               },
               {
                 "name": "out",
-                "store_path": "/nix/store/5z0wi8qwah6y9cv3na0fgjzbk9ihh1pz-nodejs-22.14.0"
+                "store_path": "/nix/store/2ribxb3gi87gj4331m6k0ydn0z90zfi7-nodejs-22.14.0"
               },
               {
                 "name": "libv8",
-                "store_path": "/nix/store/ac2187x84ggp1vpxnw4y81xy3caqz77s-nodejs-22.14.0-libv8"
+                "store_path": "/nix/store/9rp5sb2nb5549qqax4v6ly4glixjm6d5-nodejs-22.14.0-libv8"
               }
             ],
             "outputs_to_install": [
@@ -429,11 +429,11 @@
             "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
             "rev_count": 793735,
             "rev_date": "2025-05-04T03:14:55Z",
-            "scrape_date": "2025-05-05T05:16:07.159642Z",
+            "scrape_date": "2025-05-05T04:19:31.609371Z",
             "stabilities": [
               "unstable"
             ],
-            "system": "x86_64-linux",
+            "system": "aarch64-darwin",
             "unfree": false,
             "version": "22.14.0"
           }

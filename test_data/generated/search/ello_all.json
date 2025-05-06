@@ -1,7 +1,18 @@
 [
   {
-    "count": 68,
+    "count": 69,
     "results": [
+      {
+        "attr_path": "hello",
+        "catalog": "mkenigs",
+        "description": "Not Provided",
+        "name": "hello-0.0.0",
+        "pkg_path": "mkenigs/hello",
+        "pname": "hello",
+        "stabilities": [],
+        "system": "aarch64-darwin",
+        "version": "0.0.0"
+      },
       {
         "attr_path": "hello",
         "catalog": null,
@@ -10,7 +21,7 @@
         "pkg_path": "hello",
         "pname": "hello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "2.12.1"
       },
       {
@@ -21,7 +32,7 @@
         "pkg_path": "jello",
         "pname": "jello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.6.0"
       },
       {
@@ -32,7 +43,7 @@
         "pkg_path": "hello-go",
         "pname": "hello-go",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "hello-go"
       },
       {
@@ -43,7 +54,7 @@
         "pkg_path": "libcello",
         "pname": "libcello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "2.1.0"
       },
       {
@@ -54,7 +65,7 @@
         "pkg_path": "hello-cpp",
         "pname": "hello-cpp",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "hello-cpp"
       },
       {
@@ -65,7 +76,7 @@
         "pkg_path": "nwg-hello",
         "pname": "nwg-hello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.3.1"
       },
       {
@@ -76,7 +87,7 @@
         "pkg_path": "cannelloni",
         "pname": "cannelloni",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.2.1"
       },
       {
@@ -87,7 +98,7 @@
         "pkg_path": "hello-unfree",
         "pname": "hello-unfree",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.0"
       },
       {
@@ -98,7 +109,7 @@
         "pkg_path": "mellowplayer",
         "pname": "mellowplayer",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "3.6.8"
       },
       {
@@ -109,7 +120,7 @@
         "pkg_path": "hello-wayland",
         "pname": "hello-wayland",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "2024-03-04"
       },
       {
@@ -120,7 +131,7 @@
         "pkg_path": "marwaita-yellow",
         "pname": "marwaita-yellow",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "23"
       },
       {
@@ -131,7 +142,7 @@
         "pkg_path": "libsForQt5.umbrello",
         "pname": "umbrello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "23.08.5"
       },
       {
@@ -142,7 +153,7 @@
         "pkg_path": "fcitx5-mellow-themes",
         "pname": "fcitx5-mellow-themes",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "2024-11-11"
       },
       {
@@ -153,7 +164,7 @@
         "pkg_path": "kdePackages.umbrello",
         "pname": "umbrello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "25.04.0"
       },
       {
@@ -164,7 +175,7 @@
         "pkg_path": "libsForQt512.umbrello",
         "pname": "umbrello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "22.08.3"
       },
       {
@@ -175,7 +186,7 @@
         "pkg_path": "libsForQt514.umbrello",
         "pname": "umbrello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "22.08.3"
       },
       {
@@ -186,7 +197,7 @@
         "pkg_path": "libsForQt515.umbrello",
         "pname": "umbrello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "22.08.3"
       },
       {
@@ -197,7 +208,7 @@
         "pkg_path": "emacsPackages.ellocate",
         "pname": "ellocate",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20200112.1931"
       },
       {
@@ -208,7 +219,7 @@
         "pkg_path": "python310Packages.jello",
         "pname": "jello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.6.0"
       },
       {
@@ -219,7 +230,7 @@
         "pkg_path": "python311Packages.jello",
         "pname": "jello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.6.0"
       },
       {
@@ -230,7 +241,7 @@
         "pkg_path": "python312Packages.jello",
         "pname": "jello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.6.0"
       },
       {
@@ -241,7 +252,7 @@
         "pkg_path": "python313Packages.jello",
         "pname": "jello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.6.0"
       },
       {
@@ -252,7 +263,7 @@
         "pkg_path": "sbclPackages.hello-clog",
         "pname": "hello-clog",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20241012-git"
       },
       {
@@ -263,7 +274,7 @@
         "pkg_path": "texlivePackages.othello",
         "pname": "othello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "15878"
       },
       {
@@ -274,7 +285,7 @@
         "pkg_path": "emacsPackages.org-trello",
         "pname": "org-trello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20210314.1901"
       },
       {
@@ -285,7 +296,7 @@
         "pkg_path": "plasma5Packages.umbrello",
         "pname": "umbrello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "23.08.5"
       },
       {
@@ -296,7 +307,7 @@
         "pkg_path": "python37Packages.bellows",
         "pname": "bellows",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.21.0"
       },
       {
@@ -307,7 +318,7 @@
         "pkg_path": "python38Packages.bellows",
         "pname": "bellows",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.26.0"
       },
       {
@@ -318,7 +329,7 @@
         "pkg_path": "python39Packages.bellows",
         "pname": "bellows",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.34.5"
       },
       {
@@ -329,7 +340,7 @@
         "pkg_path": "python39Packages.pynello",
         "pname": "pynello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "2.0.3"
       },
       {
@@ -340,7 +351,7 @@
         "pkg_path": "python310Packages.bellows",
         "pname": "bellows",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.37.6"
       },
       {
@@ -351,7 +362,7 @@
         "pkg_path": "python310Packages.pynello",
         "pname": "pynello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "2.0.3"
       },
       {
@@ -362,7 +373,7 @@
         "pkg_path": "python311Packages.bellows",
         "pname": "bellows",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.42.0"
       },
       {
@@ -373,7 +384,7 @@
         "pkg_path": "python311Packages.pynello",
         "pname": "pynello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "2.0.3"
       },
       {
@@ -384,7 +395,7 @@
         "pkg_path": "python312Packages.bellows",
         "pname": "bellows",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.44.1"
       },
       {
@@ -395,7 +406,7 @@
         "pkg_path": "python312Packages.pynello",
         "pname": "pynello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "2.0.3"
       },
       {
@@ -406,7 +417,7 @@
         "pkg_path": "python313Packages.bellows",
         "pname": "bellows",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.44.1"
       },
       {
@@ -417,7 +428,7 @@
         "pkg_path": "python313Packages.pynello",
         "pname": "pynello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "2.0.3"
       },
       {
@@ -428,7 +439,7 @@
         "pkg_path": "emacsPackages.mellow-theme",
         "pname": "mellow-theme",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20170808.1317"
       },
       {
@@ -439,7 +450,7 @@
         "pkg_path": "perlPackages.ParallelLoops",
         "pname": "ParallelLoops",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.12"
       },
       {
@@ -450,7 +461,7 @@
         "pkg_path": "sbclPackages.hello-builder",
         "pname": "hello-builder",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20241012-git"
       },
       {
@@ -461,7 +472,7 @@
         "pkg_path": "javaPackages.mavenHello_1_0",
         "pname": "mavenHello_1_0",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.0"
       },
       {
@@ -472,7 +483,7 @@
         "pkg_path": "javaPackages.mavenHello_1_1",
         "pname": "mavenHello_1_1",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.1"
       },
       {
@@ -483,7 +494,7 @@
         "pkg_path": "texlivePackages.othelloboard",
         "pname": "othelloboard",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.2"
       },
       {
@@ -494,7 +505,7 @@
         "pkg_path": "emacsPackages.sly-hello-world",
         "pname": "sly-hello-world",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20200225.1755"
       },
       {
@@ -505,7 +516,7 @@
         "pkg_path": "perl536Packages.ParallelLoops",
         "pname": "ParallelLoops",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.12"
       },
       {
@@ -516,7 +527,7 @@
         "pkg_path": "perl538Packages.ParallelLoops",
         "pname": "ParallelLoops",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.12"
       },
       {
@@ -527,7 +538,7 @@
         "pkg_path": "perl540Packages.ParallelLoops",
         "pname": "ParallelLoops",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.12"
       },
       {
@@ -538,7 +549,7 @@
         "pkg_path": "sbclPackages.qtools-helloworld",
         "pname": "qtools-helloworld",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20230214-git"
       },
       {
@@ -549,7 +560,7 @@
         "pkg_path": "libsForQt5_openssl_1_1.umbrello",
         "pname": "umbrello",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "22.08.1"
       },
       {
@@ -560,7 +571,7 @@
         "pkg_path": "apacheHttpdPackages.mod_auth_mellon",
         "pname": "mod_auth_mellon",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.19.1"
       },
       {
@@ -571,7 +582,7 @@
         "pkg_path": "wordpressPackages.plugins.hello-dolly",
         "pname": "hello-dolly",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.7.2"
       },
       {
@@ -582,7 +593,7 @@
         "pkg_path": "apacheHttpdPackages_2_4.mod_auth_mellon",
         "pname": "mod_auth_mellon",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "0.19.1"
       },
       {
@@ -593,7 +604,7 @@
         "pkg_path": "lispPackages_new.sbclPackages.hello-clog",
         "pname": "hello-clog",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20221106-git"
       },
       {
@@ -604,7 +615,7 @@
         "pkg_path": "lispPackages_new.sbclPackages.hello-builder",
         "pname": "hello-builder",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20221106-git"
       },
       {
@@ -615,7 +626,7 @@
         "pkg_path": "lispPackages_new.sbclPackages.qtools-helloworld",
         "pname": "qtools-helloworld",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20200427-git"
       },
       {
@@ -626,7 +637,7 @@
         "pkg_path": "sbclPackages.cl-mw_dot_examples_dot_hello-world",
         "pname": "cl-mw_dot_examples_dot_hello-world",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20150407-git"
       },
       {
@@ -637,7 +648,7 @@
         "pkg_path": "home-assistant-component-tests.homeassistant_yellow",
         "pname": "homeassistant_yellow",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "2025.4.4"
       },
       {
@@ -648,7 +659,7 @@
         "pkg_path": "lispPackages_new.sbclPackages.cl-mw_dot_examples_dot_hello-world",
         "pname": "cl-mw_dot_examples_dot_hello-world",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "20150407-git"
       },
       {
@@ -659,7 +670,7 @@
         "pkg_path": "_3llo",
         "pname": "_3llo",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.3.1"
       },
       {
@@ -670,7 +681,7 @@
         "pkg_path": "iagno",
         "pname": "iagno",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "3.38.1"
       },
       {
@@ -681,7 +692,7 @@
         "pkg_path": "gerbolyze",
         "pname": "gerbolyze",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "3.1.9"
       },
       {
@@ -692,7 +703,7 @@
         "pkg_path": "gnome.iagno",
         "pname": "iagno",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "3.38.1"
       },
       {
@@ -703,7 +714,7 @@
         "pkg_path": "gnome3.iagno",
         "pname": "iagno",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "3.38.1"
       },
       {
@@ -714,7 +725,7 @@
         "pkg_path": "texlivePackages.songs",
         "pname": "songs",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "3.1"
       },
       {
@@ -725,7 +736,7 @@
         "pkg_path": "python311Packages.gerbonara",
         "pname": "gerbonara",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.4.0"
       },
       {
@@ -736,7 +747,7 @@
         "pkg_path": "python312Packages.gerbonara",
         "pname": "gerbonara",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.4.0"
       },
       {
@@ -747,7 +758,7 @@
         "pkg_path": "python313Packages.gerbonara",
         "pname": "gerbonara",
         "stabilities": [],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "1.4.0"
       }
     ]
