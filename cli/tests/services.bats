@@ -64,7 +64,7 @@ setup() {
   setup_isolated_flox
   project_setup
 
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
 
 teardown() {
@@ -145,7 +145,7 @@ EOF
   run "$FLOX_BIN" init
   assert_success
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/redis.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/redis.yaml" \
     run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/redis.toml"
   assert_success
 
@@ -218,7 +218,7 @@ EOF
 # bats test_tags=services:manifest-changes
 @test "install: warns about restarting services" {
   setup_sleeping_services
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     "$FLOX_BIN" install hello
@@ -231,7 +231,7 @@ EOF
 # bats test_tags=services:manifest-changes
 @test "uninstall: warns about restarting services" {
   setup_sleeping_services
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" install hello
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -245,11 +245,11 @@ EOF
 # bats test_tags=services:manifest-changes
 @test "upgrade: warns about restarting services" {
   setup_sleeping_services
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" \
     run "$FLOX_BIN" install hello
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
       "$FLOX_BIN" upgrade
 EOF
 )
@@ -283,7 +283,7 @@ EOF
   run "$FLOX_BIN" push --owner "$OWNER"
   assert_success
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello --remote "$OWNER/$PROJECT_NAME"
   assert_success
 
@@ -1412,7 +1412,7 @@ EOF
 )"
 
   "$FLOX_BIN" init
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/daemonize.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/daemonize.yaml"
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/check_daemon_process.sh"

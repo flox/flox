@@ -928,7 +928,7 @@ fn path_to_generated_env(name: &str) -> PathBuf {
 //         shell
 //             .set_var(
 //                 "_FLOX_USE_CATALOG_MOCK",
-//                 "$GENERATED_DATA/resolve/hello.json",
+//                 "$GENERATED_DATA/resolve/hello.yaml",
 //             )
 //             .unwrap();
 //         print_elapsed(start, "set var");

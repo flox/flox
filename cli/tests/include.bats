@@ -24,7 +24,7 @@ setup() {
   setup_isolated_flox
   project_setup
 
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
 
 teardown() {

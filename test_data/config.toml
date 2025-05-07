@@ -1,13 +1,13 @@
 [vars]
 [resolve.empty]
 # Not actually a resolve response, just have to put it somewhere
-skip_if_output_exists = "empty.json"
+skip_if_output_exists = "empty.yaml"
 cmd = '''
     echo "[]" > empty.json
 '''
 post_cmd = '''
     main_output_dir="$(dirname $(dirname $RESPONSE_FILE))"
-    mv empty.json "$main_output_dir/empty.json"
+    mv empty.yaml "$main_output_dir/empty.yaml"
 '''
 
 [resolve.failed_resolution]

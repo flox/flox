@@ -26,7 +26,7 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
 
 project_teardown() {
@@ -56,7 +56,7 @@ teardown() {
   # Files copied from the store are read-only
   chmod -R +w .
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/node_npm.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/node_npm.yaml" \
     run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'nodejs' installed"
   run "$FLOX_BIN" activate -- npm run start
@@ -69,7 +69,7 @@ teardown() {
   # Files copied from the store are read-only
   chmod -R +w .
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/yarn_1x.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/yarn_1x.yaml" \
     run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'yarn' installed"
   refute_output "nodejs"
@@ -85,7 +85,7 @@ teardown() {
   chmod -R +w .
   # This test ensures that when a package.json has a version requirement,
   # in this case "20", we give them the corresponding nodejs_* package.
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/nodejs_20.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/nodejs_20.yaml" \
     run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'nodejs' installed"
   run "$FLOX_BIN" list
@@ -99,7 +99,7 @@ teardown() {
   # This test ensures that when a package.json has a version requirment,
   # in this case ">=20", we give them the nodejs_* package corresponding
   # to the latest version.
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/nodejs_gt_20.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/nodejs_gt_20.yaml" \
     run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'nodejs' installed"
   run "$FLOX_BIN" list
@@ -112,7 +112,7 @@ teardown() {
   chmod -R +w .
   # We specify yarn 4 in `package.json` but this is also equivalent to the
   # default case if there is a `yarn.lock` and no version specified.
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/yarn_berry.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/yarn_berry.yaml" \
     run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'yarn' installed"
   run "$FLOX_BIN" list
@@ -123,7 +123,7 @@ teardown() {
 @test "install krb5 with node" {
   "$FLOX_BIN" init
 
-  cat "$GENERATED_DATA/envs/krb5_prereqs/manifest.toml" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/krb5_prereqs/krb5_prereqs.json" "$FLOX_BIN" edit -f -
+  cat "$GENERATED_DATA/envs/krb5_prereqs/manifest.toml" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/krb5_prereqs/krb5_prereqs.yaml" "$FLOX_BIN" edit -f -
 
   # With dependencies installed, we can now install krb5 and run system-specific
   # checks.
@@ -138,7 +138,7 @@ teardown() {
         assert_failure
       fi
 
-      _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/krb5_after_prereqs_installed.json" \
+      _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/krb5_after_prereqs_installed.yaml" \
         run "$FLOX_BIN" install krb5
       assert_success
 
@@ -155,7 +155,7 @@ teardown() {
         assert_failure
       fi
 
-      _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/krb5_after_prereqs_installed.json" \
+      _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/krb5_after_prereqs_installed.yaml" \
         run "$FLOX_BIN" install krb5
       assert_success
 

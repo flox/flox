@@ -13,7 +13,7 @@ load test_support.bash
 
 setup_file() {
   common_file_setup
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
 
 teardown_file() {
@@ -88,7 +88,7 @@ version = 1
 hello.pkg-path = "hello"
 EOF
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
   assert_output "✅ Environment successfully updated."
@@ -101,7 +101,7 @@ EOF
   NEW_MANIFEST_CONTENTS="$(cat "$EXTERNAL_MANIFEST_PATH")"
   "$FLOX_BIN" init
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$EXTERNAL_MANIFEST_PATH"
   assert_success
 
@@ -116,7 +116,7 @@ EOF
   NEW_MANIFEST_CONTENTS="$(cat "$EXTERNAL_MANIFEST_PATH")"
   "$FLOX_BIN" init
 
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run sh -c "cat ${EXTERNAL_MANIFEST_PATH} | ${FLOX_BIN} edit -f -"
   assert_success
   # Get the contents as they appear in the actual manifest after the operation
@@ -203,7 +203,7 @@ EOF
 @test "'flox edit' returns if it does not detect changes" {
   "$FLOX_BIN" init
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   assert_success
 
@@ -219,11 +219,11 @@ EOF
   "$FLOX_BIN" init
 
   # Lock once and delete the lock.
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   rm .flox/env/manifest.lock
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   assert_success
   assert_output "✅ Environment successfully updated."
@@ -251,7 +251,7 @@ vim-full.pkg-path = "vim-full"
 vim-full.priority = 4
 EOF
 )
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim-vim-full-conflict.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim-vim-full-conflict.yaml"
   run "$FLOX_BIN" edit -f <(echo "$WITHOUT_PRIORITY")
   assert_failure
 

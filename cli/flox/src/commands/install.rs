@@ -895,9 +895,9 @@ mod tests {
         let (mut flox, tempdir) = flox_instance();
         let is_linux = flox.system.ends_with("linux");
         let response_path = if is_linux {
-            GENERATED_DATA.join("resolve/darwin_ps_all.json")
+            GENERATED_DATA.join("resolve/darwin_ps_all.yaml")
         } else {
-            GENERATED_DATA.join("resolve/bpftrace.json")
+            GENERATED_DATA.join("resolve/bpftrace.yaml")
         };
         let pkg_path = if is_linux { "darwin.ps" } else { "bpftrace" };
         let install_id = if is_linux { "ps" } else { "bpftrace" };
