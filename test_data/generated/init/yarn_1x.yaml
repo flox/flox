@@ -1,0 +1,74 @@
+when:
+  path: /api/v1/catalog/search
+  method: GET
+then:
+  status: 200
+  header:
+  - name: date
+    value: Mon, 12 May 2025 14:46:48 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '2960'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: KdZ53gkmIAMESwQ=
+  body: '{"items":[{"attr_path":"nodejs_14","catalog":null,"pkg_path":"nodejs_14","name":"nodejs-14.21.3","pname":"nodejs_14","version":"14.21.3","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_16","catalog":null,"pkg_path":"nodejs_16","name":"nodejs-16.20.2","pname":"nodejs_16","version":"16.20.2","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_18","catalog":null,"pkg_path":"nodejs_18","name":"nodejs-18.20.8","pname":"nodejs_18","version":"18.20.8","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_19","catalog":null,"pkg_path":"nodejs_19","name":"nodejs-19.9.0","pname":"nodejs_19","version":"19.9.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_20","catalog":null,"pkg_path":"nodejs_20","name":"nodejs-20.19.0","pname":"nodejs_20","version":"20.19.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_21","catalog":null,"pkg_path":"nodejs_21","name":"nodejs-21.7.3","pname":"nodejs_21","version":"21.7.3","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_22","catalog":null,"pkg_path":"nodejs_22","name":"nodejs-22.14.0","pname":"nodejs_22","version":"22.14.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_23","catalog":null,"pkg_path":"nodejs_23","name":"nodejs-23.11.0","pname":"nodejs_23","version":"23.11.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_24","catalog":null,"pkg_path":"nodejs_24","name":"nodejs-24.0.0","pname":"nodejs_24","version":"24.0.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_latest","catalog":null,"pkg_path":"nodejs_latest","name":"nodejs-24.0.0","pname":"nodejs_latest","version":"24.0.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"haxePackages.hxnodejs_4","catalog":null,"pkg_path":"haxePackages.hxnodejs_4","name":"hxnodejs-4.0.9","pname":"hxnodejs_4","version":"4.0.9","description":"Extern definitions for node.js 4.x","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"haxePackages.hxnodejs_6","catalog":null,"pkg_path":"haxePackages.hxnodejs_6","name":"hxnodejs-6.9.0","pname":"hxnodejs_6","version":"6.9.0","description":"Extern definitions for node.js 6.9","stabilities":[],"system":"aarch64-darwin"}],"total_count":12}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"nodejs","install_id":"nodejs","systems":["aarch64-darwin"]}],"name":"nodejs"}]}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Mon, 12 May 2025 14:46:48 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '1128'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: KdZ56iXvIAMESgA=
+  body: '{"items":[{"name":"nodejs","page":{"page":796699,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"nodejs","pkg_path":"nodejs","derivation":"/nix/store/gpv1xn038gkfvbkbnrcasx4fd35hj05m-nodejs-22.14.0.drv","name":"nodejs-22.14.0","pname":"nodejs","version":"22.14.0","system":"aarch64-darwin","outputs":[{"name":"dev","store_path":"/nix/store/9xaa4qy83dpy95d1ffibkfzzgyyrp7hk-nodejs-22.14.0-dev"},{"name":"out","store_path":"/nix/store/j2rsxk1lxlapi903kxkvnsdlb0pfbnl1-nodejs-22.14.0"},{"name":"libv8","store_path":"/nix/store/dcjrxq66pzqjvabbkz596sfbwlzgy1gm-nodejs-22.14.0-libv8"}],"outputs_to_install":["out"],"description":"Event-driven I/O framework for the V8 JavaScript engine","license":"MIT","locked_url":"https://github.com/flox/nixpkgs?rev=dda3dcd3fe03e991015e9a74b22d35950f264a54","rev":"dda3dcd3fe03e991015e9a74b22d35950f264a54","rev_count":796699,"rev_date":"2025-05-08T00:12:27Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-05-10T04:25:13.788064Z","cache_uri":null,"install_id":"nodejs"}],"messages":[],"complete":true},"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"yarn-berry","install_id":"yarn-berry","systems":["aarch64-darwin"],"version":"1"}],"name":"yarn-berry"},{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"yarn","install_id":"yarn","systems":["aarch64-darwin"],"version":"1"}],"name":"yarn"}]}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Mon, 12 May 2025 14:46:49 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '1098'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: KdZ58jgYoAMEaZQ=
+  body: '{"items":[{"name":"yarn-berry","page":null,"messages":[{"level":"error","type":"constraints_too_tight","message":"Resolution constraints are too tight.","context":{}}]},{"name":"yarn","page":{"page":796699,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"yarn","pkg_path":"yarn","derivation":"/nix/store/xa6qyxjn0n2avy0pp0ajlhplx5drd386-yarn-1.22.22.drv","name":"yarn-1.22.22","pname":"yarn","version":"1.22.22","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/3n7r34w9bfzf99c2miwvxp2h191qs5a5-yarn-1.22.22"}],"outputs_to_install":["out"],"description":"Fast, reliable, and secure dependency management for javascript","license":"BSD-2-Clause","locked_url":"https://github.com/flox/nixpkgs?rev=dda3dcd3fe03e991015e9a74b22d35950f264a54","rev":"dda3dcd3fe03e991015e9a74b22d35950f264a54","rev_count":796699,"rev_date":"2025-05-08T00:12:27Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-05-10T04:26:13.328901Z","cache_uri":null,"install_id":"yarn"}],"messages":[],"complete":true},"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"yarn","install_id":"yarn","systems":["aarch64-darwin"],"version":"1.22.22"},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"yarn","install_id":"yarn","systems":["aarch64-linux"],"version":"1.22.22"},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"yarn","install_id":"yarn","systems":["x86_64-darwin"],"version":"1.22.22"},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"yarn","install_id":"yarn","systems":["x86_64-linux"],"version":"1.22.22"}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Mon, 12 May 2025 14:46:49 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '3448'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: KdZ6Bj0RoAMEa-w=
+  body: '{"items":[{"name":"toplevel","page":{"page":793735,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"yarn","pkg_path":"yarn","derivation":"/nix/store/waqkpmm4r7l0gc6ndmyibyzvsjpzhlx8-yarn-1.22.22.drv","name":"yarn-1.22.22","pname":"yarn","version":"1.22.22","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/2ii4afii0xlaljyzd8lm5y5n7xdj836j-yarn-1.22.22"}],"outputs_to_install":["out"],"description":"Fast, reliable, and secure dependency management for javascript","license":"BSD-2-Clause","locked_url":"https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e","rev":"979daf34c8cacebcd917d540070b52a3c2b9b16e","rev_count":793735,"rev_date":"2025-05-04T03:14:55Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-05-05T04:20:32.785737Z","cache_uri":null,"install_id":"yarn"},{"catalog":"nixpkgs","attr_path":"yarn","pkg_path":"yarn","derivation":"/nix/store/lklp4xahc08inal44v2g7vgnizvv3ryv-yarn-1.22.22.drv","name":"yarn-1.22.22","pname":"yarn","version":"1.22.22","system":"aarch64-linux","outputs":[{"name":"out","store_path":"/nix/store/x939x2jlaq371szz4fyrd9dj7i1j6zlm-yarn-1.22.22"}],"outputs_to_install":["out"],"description":"Fast, reliable, and secure dependency management for javascript","license":"BSD-2-Clause","locked_url":"https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e","rev":"979daf34c8cacebcd917d540070b52a3c2b9b16e","rev_count":793735,"rev_date":"2025-05-04T03:14:55Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-05-05T04:39:03.224879Z","cache_uri":null,"install_id":"yarn"},{"catalog":"nixpkgs","attr_path":"yarn","pkg_path":"yarn","derivation":"/nix/store/77sckw5mzq117wbj4ac4iq6dqhan3rkr-yarn-1.22.22.drv","name":"yarn-1.22.22","pname":"yarn","version":"1.22.22","system":"x86_64-darwin","outputs":[{"name":"out","store_path":"/nix/store/jrfdk6wgmvkwj0hrmy6knm8dlz51xhdn-yarn-1.22.22"}],"outputs_to_install":["out"],"description":"Fast, reliable, and secure dependency management for javascript","license":"BSD-2-Clause","locked_url":"https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e","rev":"979daf34c8cacebcd917d540070b52a3c2b9b16e","rev_count":793735,"rev_date":"2025-05-04T03:14:55Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-05-05T04:55:33.322561Z","cache_uri":null,"install_id":"yarn"},{"catalog":"nixpkgs","attr_path":"yarn","pkg_path":"yarn","derivation":"/nix/store/5g4mcmy6hq1j7nx43dnzajqysimg5xp2-yarn-1.22.22.drv","name":"yarn-1.22.22","pname":"yarn","version":"1.22.22","system":"x86_64-linux","outputs":[{"name":"out","store_path":"/nix/store/bn868hy4v171i58jx25bls555jspbhl9-yarn-1.22.22"}],"outputs_to_install":["out"],"description":"Fast, reliable, and secure dependency management for javascript","license":"BSD-2-Clause","locked_url":"https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e","rev":"979daf34c8cacebcd917d540070b52a3c2b9b16e","rev_count":793735,"rev_date":"2025-05-04T03:14:55Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-05-05T05:17:45.439836Z","cache_uri":null,"install_id":"yarn"}],"messages":[],"complete":true},"messages":[]}]}'

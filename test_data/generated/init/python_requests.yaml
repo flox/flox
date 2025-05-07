@@ -1,0 +1,37 @@
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"python3","install_id":"python3","systems":["aarch64-darwin"]}],"name":"python3"}]}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Mon, 12 May 2025 14:46:57 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '947'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: KdZ7ShpioAMEaog=
+  body: '{"items":[{"name":"python3","page":{"page":796699,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"python3","pkg_path":"python3","derivation":"/nix/store/qy0900mrs14903x0rhqbgn68da8w0ic0-python3-3.12.10.drv","name":"python3-3.12.10","pname":"python3","version":"3.12.10","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/vfdk6q81hdjqjfiqz8f92hibdck3kmn6-python3-3.12.10"}],"outputs_to_install":["out"],"description":"High-level dynamically-typed programming language","license":"Python-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=dda3dcd3fe03e991015e9a74b22d35950f264a54","rev":"dda3dcd3fe03e991015e9a74b22d35950f264a54","rev_count":796699,"rev_date":"2025-05-08T00:12:27Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-05-10T04:25:19.579934Z","cache_uri":null,"install_id":"python3"}],"messages":[],"complete":true},"messages":[]}]}'
+---
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"python3","install_id":"python3","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"python3","install_id":"python3","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"python3","install_id":"python3","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"python3","install_id":"python3","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Mon, 12 May 2025 14:46:58 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '3646'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: KdZ7Yj4TIAMEaZQ=
+  body: '{"items":[{"name":"toplevel","page":{"page":793735,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"python3","pkg_path":"python3","derivation":"/nix/store/swlxpgwqf6aj57kfhnanv5fvfsjl61w5-python3-3.12.9.drv","name":"python3-3.12.9","pname":"python3","version":"3.12.9","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/xzjghvsg4fhr2vv6h4scihsdrgk4i76w-python3-3.12.9"}],"outputs_to_install":["out"],"description":"High-level dynamically-typed programming language","license":"Python-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e","rev":"979daf34c8cacebcd917d540070b52a3c2b9b16e","rev_count":793735,"rev_date":"2025-05-04T03:14:55Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-05-05T04:19:37.754154Z","cache_uri":null,"install_id":"python3"},{"catalog":"nixpkgs","attr_path":"python3","pkg_path":"python3","derivation":"/nix/store/z6wszswz7x1xdf50ml9n9sf8hv6g2iph-python3-3.12.9.drv","name":"python3-3.12.9","pname":"python3","version":"3.12.9","system":"aarch64-linux","outputs":[{"name":"out","store_path":"/nix/store/ic0fd07z8wg57idmw7q7iy7dc7md6x72-python3-3.12.9"},{"name":"debug","store_path":"/nix/store/ifg6y36lrbgqw74skyh6061shc8ll092-python3-3.12.9-debug"}],"outputs_to_install":["out"],"description":"High-level dynamically-typed programming language","license":"Python-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e","rev":"979daf34c8cacebcd917d540070b52a3c2b9b16e","rev_count":793735,"rev_date":"2025-05-04T03:14:55Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-05-05T04:37:42.264879Z","cache_uri":null,"install_id":"python3"},{"catalog":"nixpkgs","attr_path":"python3","pkg_path":"python3","derivation":"/nix/store/cccdfg9ipq9w99bml2d9v35r9727qdvf-python3-3.12.9.drv","name":"python3-3.12.9","pname":"python3","version":"3.12.9","system":"x86_64-darwin","outputs":[{"name":"out","store_path":"/nix/store/xfpcpjzf3n22qqg2cd05i29x9mkk9ax3-python3-3.12.9"}],"outputs_to_install":["out"],"description":"High-level dynamically-typed programming language","license":"Python-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e","rev":"979daf34c8cacebcd917d540070b52a3c2b9b16e","rev_count":793735,"rev_date":"2025-05-04T03:14:55Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-05-05T04:54:38.515132Z","cache_uri":null,"install_id":"python3"},{"catalog":"nixpkgs","attr_path":"python3","pkg_path":"python3","derivation":"/nix/store/49xsrmwiipbwry9lwqrr5z23bf4zaqbf-python3-3.12.9.drv","name":"python3-3.12.9","pname":"python3","version":"3.12.9","system":"x86_64-linux","outputs":[{"name":"out","store_path":"/nix/store/fqm9bqqlmaqqr02qbalm1bazp810qfiw-python3-3.12.9"},{"name":"debug","store_path":"/nix/store/m09w6hj3mciijfvaf2icqvc777kjd05f-python3-3.12.9-debug"}],"outputs_to_install":["out"],"description":"High-level dynamically-typed programming language","license":"Python-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e","rev":"979daf34c8cacebcd917d540070b52a3c2b9b16e","rev_count":793735,"rev_date":"2025-05-04T03:14:55Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-05-05T05:16:20.017042Z","cache_uri":null,"install_id":"python3"}],"messages":[],"complete":true},"messages":[]}]}'
