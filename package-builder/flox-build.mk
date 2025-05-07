@@ -192,7 +192,7 @@ endif
 
 # Define a template target for cleaning up result symlinks and their
 # associated storePaths, if they exist.
-define CLEAN_result_link_template =
+define CLEAN_result_store_path_template =
   # Note that this template is evaluated at Makefile compilation time,
   # but is only called for the clean target, for which that's
   # a fine time to test for the existence of symlinks and storepaths,
@@ -213,6 +213,24 @@ define CLEAN_result_link_template =
 
   clean/$(_pname): clean_result_link/$(1) \
     $(if $(_storePath),clean_result_storepath/$(1))
+endef
+
+# Define a template target for cleaning up result symlinks
+# NOTE: this is a temporary fix for flox#3017 where daemonized
+#       `nix store delete` calls trigger a Nix bug and cause the `flox build`
+#       command to fail.
+define CLEAN_result_link_template =
+  # Note that this template is evaluated at Makefile compilation time,
+  # but is only called for the clean target, for which that's
+  # a fine time to test for the existence of symlinks and storepaths,
+  # so we can use GNU make functions to interrogate the filesystem
+  # and create nicely formatted targets customized for each result link.
+
+  .PHONY: clean_result_link/$(1)
+  clean_result_link/$(1):
+	-$(_rm) -f $(1)
+
+  clean/$(_pname): clean_result_link/$(1)
 endef
 
 # The following env vars need to be passed from the outer "develop" environment
@@ -350,8 +368,8 @@ define BUILD_nix_sandbox_template =
 	  $(_rm) -rf $$$$tmpdir; \
 	fi
 
-  # Create a target for cleaning up the buildCache result symlink.
-  $(eval $(call CLEAN_result_link_template,$(_result)-buildCache))
+  # Create a target for cleaning up the buildCache result symlink and store path.
+  $(eval $(call CLEAN_result_store_path_template,$(_result)-buildCache))
 
   .PHONY: $(_pvarname)_nix_sandbox_build
   $(_pvarname)_nix_sandbox_build: $($(_pvarname)_buildScript) $($(_pvarname)_src_tar) \
