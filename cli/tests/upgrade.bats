@@ -52,19 +52,23 @@ teardown() {
 # catalog tests
 
 function hello_response_derivation() {
-  jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.yaml"
+  yq -r '.then.body' "$GENERATED_DATA/resolve/hello.yaml" | \
+    jq -r '.items[].page.packages[0].derivation'
 }
 
 function old_hello_response_derivation() {
-  jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/old_hello.yaml"
+  yq -r '.then.body' "$GENERATED_DATA/resolve/old_hello.yaml" | \
+    jq -r '.items[].page.packages[0].derivation'
 }
 
 function hello_response_version() {
-  jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/hello.yaml"
+  yq -r '.then.body' "$GENERATED_DATA/resolve/hello.yaml" | \
+    jq -r '.items[].page.packages[0].version'
 }
 
 function old_hello_response_version() {
-  jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/old_hello.yaml"
+  yq -r '.then.body' "$GENERATED_DATA/resolve/old_hello.yaml" | \
+    jq -r '.items[].page.packages[0].version'
 }
 
 # bats test_tags=upgrade:hello
@@ -176,21 +180,7 @@ function old_hello_response_version() {
     "$FLOX_BIN" install curl hello
   prev_lock=$(jq --sort-keys . "$LOCK_PATH")
 
-  # Update the page and revision but keep the same derivations.
-  # This would fail to rebuild because the revs are faked.
-  BUMPED_REVS_RESPONE="curl_hello_bumped_revs.yaml"
-  jq '.[0][0].page |= (
-    (.page | .+ 123) as $newpage |
-    .page = $newpage |
-    .packages |= map(
-      (.rev | .[0:-8] + "deadbeef") as $newrev |
-      .rev_count = $newpage |
-      .rev = $newrev |
-      .locked_url |= sub("rev=.*"; "rev=" + $newrev)
-    ))' \
-    "$GENERATED_DATA/resolve/curl_hello.yaml" \
-    > "$BUMPED_REVS_RESPONE"
-  _FLOX_USE_CATALOG_MOCK="$BUMPED_REVS_RESPONE" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello_bumped_revs.yaml" \
     run "$FLOX_BIN" upgrade
   assert_success
   assert_output "No upgrades available for packages in 'test'."

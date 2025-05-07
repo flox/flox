@@ -59,6 +59,32 @@ ignore_cmd_errors = true
 pre_cmd = "flox init"
 cmd = "flox install curl hello"
 
+[resolve.curl_hello_bumped_revs]
+pre_cmd = "flox init"
+cmd = "flox install curl hello"
+post_cmd = '''
+    yq -r '.then.body' "$RESPONSE_FILE" > body.json
+    # Update the page and revision but keep the same derivations.
+    # This would fail to rebuild because the revs are faked.
+    jq -c '
+        .items[].page |= (
+            (.page | .+ 123) as $newpage |
+            .page = $newpage |
+            .packages |= map(
+                (.rev | .[0:-8] + "deadbeef") as $newrev |
+                .rev_count = $newpage |
+                .rev = $newrev |
+                .locked_url |= sub("rev=.*"; "rev=" + $newrev)
+            )
+        )
+    ' body.json > patched_body.json
+    yq -y \
+        --arg body "$(cat patched_body.json)" \
+        'del(.then.header[] | select(.name == "content-length")) | .then.body = $body' \
+        "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
+
 [resolve.emacs]
 pre_cmd = "flox init"
 cmd = "flox install emacs"
@@ -169,37 +195,57 @@ ignore_cmd_errors = true
 pre_cmd = "flox init"
 cmd = "flox install hello"
 post_cmd = '''
-    cat "$RESPONSE_FILE" | jq \
-    | sed 's/"derivation": .*$/"derivation": "\/nix\/store\/AAA-hello-2.10.1.drv",/g' \
-    | sed 's/"version": .*$/"version": "2.10.1"/g' \
-    > tmp.json
-    mv tmp.json "$RESPONSE_FILE"
+    yq -r '.then.body' "$RESPONSE_FILE" | \
+        jq -c '
+            .items[].page.packages |= map(
+                .derivation = "/nix/store/AAA-hello-2.10.1.drv"
+                | .version = "2.10.1"
+            )
+        ' \
+        > patched_body.json
+    yq -y \
+        --arg body "$(cat patched_body.json)" \
+        'del(.then.header[] | select(.name == "content-length")) | .then.body = $body' \
+        "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
 '''
 
 [resolve.old_linux_hello]
 pre_cmd = "flox init"
 cmd = "flox install hello"
 post_cmd = '''
-    cat "$RESPONSE_FILE" | jq \
-    '.[].[].page.packages |= map(if .system | contains("linux")
-      then .version = "2.10.1" | .derivation = "/nix/store/AAA-hello-2.10.1.drv"
-      else .
-      end)' \
-    > tmp.json
-    mv tmp.json "$RESPONSE_FILE"
+    yq -r '.then.body' "$RESPONSE_FILE" | \
+        jq -c '
+            .items[].page.packages |= map(if .system | contains("linux")
+            then .version = "2.10.1" | .derivation = "/nix/store/AAA-hello-2.10.1.drv"
+            else .
+            end)
+        ' \
+        > patched_body.json
+    yq -y \
+        --arg body "$(cat patched_body.json)" \
+        'del(.then.header[] | select(.name == "content-length")) | .then.body = $body' \
+        "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
 '''
 
 [resolve.old_darwin_hello]
 pre_cmd = "flox init"
 cmd = "flox install hello"
 post_cmd = '''
-    cat "$RESPONSE_FILE" | jq \
-    '.[].[].page.packages |= map(if .system | contains("darwin")
-      then .version = "2.10.1" | .derivation = "/nix/store/AAA-hello-2.10.1.drv"
-      else .
-      end)' \
-    > tmp.json
-    mv tmp.json "$RESPONSE_FILE"
+    yq -r '.then.body' "$RESPONSE_FILE" | \
+        jq -c '
+            .items[].page.packages |= map(if .system | contains("darwin")
+            then .version = "2.10.1" | .derivation = "/nix/store/AAA-hello-2.10.1.drv"
+            else .
+            end)
+        ' \
+        > patched_body.json
+    yq -y \
+        --arg body "$(cat patched_body.json)" \
+        'del(.then.header[] | select(.name == "content-length")) | .then.body = $body' \
+        "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
 '''
 
 # Install a specific version of Node that doesn't exist on x86_64-darwin
@@ -295,8 +341,16 @@ cmd = "flox search ello --all"
 [search.exactly_ten]
 cmd = "flox search python"
 post_cmd = '''
-    cat "$RESPONSE_FILE" | jq '[{"count": 10, "results": .[0].results[:10]}]' > tmp.json
-    mv tmp.json "$RESPONSE_FILE"
+    yq -r '.then.body' "$RESPONSE_FILE" | \
+        jq -c '
+            {"total_count": 10, "items": .items[:10]}
+        ' \
+        > patched_body.json
+    yq -y \
+        --arg body "$(cat patched_body.json)" \
+        'del(.then.header[] | select(.name == "content-length")) | .then.body = $body' \
+        "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
 '''
 
 [search.java_suggestions]
