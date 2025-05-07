@@ -330,7 +330,7 @@ where
                         None => {
                             let maybe_path = self.auth.create_netrc().map_err(BuildEnvError::Auth);
                             if let Ok(ref path) = maybe_path {
-                                copy_command.arg("--netrc-path").arg(path);
+                                copy_command.arg("--netrc-file").arg(path);
                             }
                             netrc_path = Some(maybe_path);
                         },
