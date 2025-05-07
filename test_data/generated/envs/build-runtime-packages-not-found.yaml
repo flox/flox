@@ -5,19 +5,17 @@
     "install": {
       "hello": {
         "pkg-path": "hello"
-      },
-      "htop": {
-        "pkg-path": "htop",
-        "systems": []
       }
     },
-    "options": {
-      "systems": [
-        "aarch64-darwin",
-        "x86_64-darwin",
-        "aarch64-linux",
-        "x86_64-linux"
-      ]
+    "options": {},
+    "build": {
+      "myhello": {
+        "command": "  mkdir -p $out/bin\n  echo echo hello foo > $out/bin/hello\n  echo exec hello >> $out/bin/hello\n  chmod +x $out/bin/hello\n",
+        "runtime-packages": [
+          "hello",
+          "goodbye"
+        ]
+      }
     }
   },
   "packages": [
@@ -54,36 +52,6 @@
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/8zbk0zbw7whv42h3qsbx7c0bqhfy8q5z-hello-2.12.1.drv",
-      "description": "Program that produces a familiar, friendly greeting",
-      "install_id": "hello",
-      "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
-      "name": "hello-2.12.1",
-      "pname": "hello",
-      "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
-      "rev_count": 793735,
-      "rev_date": "2025-05-04T03:14:55Z",
-      "scrape_date": "2025-05-05T04:54:30.077562Z",
-      "stabilities": [
-        "staging",
-        "unstable"
-      ],
-      "unfree": false,
-      "version": "2.12.1",
-      "outputs_to_install": [
-        "out"
-      ],
-      "outputs": {
-        "out": "/nix/store/pmvrzc5w8wv71j1d2m74qfnjg81py437-hello-2.12.1"
-      },
-      "system": "x86_64-darwin",
-      "group": "toplevel",
-      "priority": 5
-    },
-    {
-      "attr_path": "hello",
-      "broken": false,
       "derivation": "/nix/store/8ki4hqm7x69bw9inlfjblbx66zmh0m4m-hello-2.12.1.drv",
       "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
@@ -108,6 +76,36 @@
         "out": "/nix/store/76plgdn1gbaxh0br5xbc6c7pmc3j6rmk-hello-2.12.1"
       },
       "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "hello",
+      "broken": false,
+      "derivation": "/nix/store/8zbk0zbw7whv42h3qsbx7c0bqhfy8q5z-hello-2.12.1.drv",
+      "description": "Program that produces a familiar, friendly greeting",
+      "install_id": "hello",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
+      "name": "hello-2.12.1",
+      "pname": "hello",
+      "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
+      "rev_count": 793735,
+      "rev_date": "2025-05-04T03:14:55Z",
+      "scrape_date": "2025-05-05T04:54:30.077562Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.12.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/pmvrzc5w8wv71j1d2m74qfnjg81py437-hello-2.12.1"
+      },
+      "system": "x86_64-darwin",
       "group": "toplevel",
       "priority": 5
     },

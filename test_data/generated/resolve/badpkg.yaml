@@ -1,0 +1,36 @@
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg","install_id":"badpkg","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg","install_id":"badpkg","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg","install_id":"badpkg","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg","install_id":"badpkg","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Mon, 12 May 2025 14:47:06 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '235'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: KdZ8rh0VoAMESiA=
+  body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The attr_path badpkg is not found in the catalog.","context":{"attr_path":"badpkg","install_id":"badpkg"}}]}]}'
+---
+when:
+  path: /api/v1/catalog/search
+  method: GET
+then:
+  status: 200
+  header:
+  - name: date
+    value: Mon, 12 May 2025 14:47:06 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '28'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: KdZ8tgysIAMEa3g=
+  body: '{"items":[],"total_count":0}'
