@@ -19,7 +19,7 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
 
 project_teardown() {
@@ -181,9 +181,9 @@ EOF
 
   echo "requests" > requirements.txt
 
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.yaml"
   "$FLOX_BIN" init --auto-setup --name "$NAME"
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 
   FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
   FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"

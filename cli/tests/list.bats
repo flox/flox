@@ -20,7 +20,7 @@ project_setup() {
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
 
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
 
 project_teardown() {
@@ -124,7 +124,7 @@ EOF
 # bats test_tags=list
 @test "'flox list' lists packages of environment in the current dir; One package from nixpkgs" {
   "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello
 
   run "$FLOX_BIN" list
@@ -172,10 +172,10 @@ environments = [
 EOF
 
   # Trigger a lock of included
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" list -d included
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run --separate-stderr "$FLOX_BIN" list -c -d composer
   assert_success
   # TODO: Unspecified tables and empty vecs should be omitted.

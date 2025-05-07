@@ -195,7 +195,7 @@ pub fn generate_category_jobs<'a>(
 ) -> Result<Vec<Job>, Error> {
     let mut jobs: Vec<Job> = vec![];
     for (name, raw_spec) in raw_specs {
-        let filename = output_dir.join(category).join(format!("{}.json", name));
+        let filename = output_dir.join(category).join(format!("{}.yaml", name));
         if !force && filename.exists() {
             continue;
         }

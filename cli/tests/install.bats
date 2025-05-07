@@ -37,7 +37,7 @@ setup() {
   common_test_setup
   setup_isolated_flox
   project_setup
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
 teardown() {
   project_teardown
@@ -45,7 +45,7 @@ teardown() {
 }
 
 @test "'flox install' displays confirmation message" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -54,10 +54,10 @@ teardown() {
 
 @test "'flox install' warns (preserving order) for already installed packages" {
   "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" install hello
   assert_success
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" \
     run "$FLOX_BIN" install hello curl
   assert_success
   assert_output <<EOF
@@ -67,7 +67,7 @@ EOF
 }
 
 @test "'flox install' edits manifest" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -78,7 +78,7 @@ EOF
 @test "'flox install' provides suggestions when package not found" {
   "$FLOX_BIN" init
   # This package doesn't exist but *does* have suggestions
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/package_suggestions.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/package_suggestions.yaml" \
     run "$FLOX_BIN" install package
   assert_failure
   assert_output --partial "Here are a few other similar options:"
@@ -120,7 +120,7 @@ EOF
 }
 
 @test "'flox install' creates link to installed binary" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -131,7 +131,7 @@ EOF
 }
 
 @test "'flox install' installs by path" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install hello
@@ -142,7 +142,7 @@ EOF
 }
 
 @test "'flox install' infers install ID" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rubyPackages_3_2.rails.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rubyPackages_3_2.rails.yaml"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install rubyPackages_3_2.rails
@@ -153,7 +153,7 @@ EOF
 }
 
 @test "'flox install' overrides install ID with '-i'" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install -i foo hello
@@ -163,7 +163,7 @@ EOF
 }
 
 @test "'flox install' overrides install ID with '--id'" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install --id foo hello
@@ -173,7 +173,7 @@ EOF
 }
 
 @test "'flox install' accepts mix of inferred and supplied install IDs" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/webmention_ripgrep_rails.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/webmention_ripgrep_rails.yaml"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails
@@ -185,7 +185,7 @@ EOF
 }
 
 @test "'flox i' aliases to 'install'" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" i hello
@@ -197,7 +197,7 @@ EOF
 # This is also checking we can build an unfree package
 @test "'flox install' warns about unfree packages" {
   "$FLOX_BIN" init
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello_unfree.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello_unfree.yaml"
   run "$FLOX_BIN" install hello-unfree
   assert_success
   assert_line --partial "The package 'hello-unfree' has an unfree license"
@@ -208,7 +208,7 @@ EOF
   skip "TODO: discuss catalog-service behaviour in this case"
 
   "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/tabula.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/tabula.yaml" \
     run "$FLOX_BIN" install tabula
   assert_failure
   assert_line --partial "The package 'tabula' is marked as broken"
@@ -225,7 +225,7 @@ EOF
   )"
 
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/tabula_allowed.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/tabula_allowed.yaml" \
     run "$FLOX_BIN" install tabula
   assert_success
   assert_line --partial "The package 'tabula' is marked as broken, it may not behave as expected during runtime"
@@ -237,7 +237,7 @@ EOF
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg.yaml" \
     run "$FLOX_BIN" install badpkg
 
   assert_failure
@@ -255,7 +255,7 @@ EOF
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg1_badpkg2.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg1_badpkg2.yaml" \
     run "$FLOX_BIN" install badpkg1 badpkg2
 
   assert_failure
@@ -275,7 +275,7 @@ EOF
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/node_suggestions.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/node_suggestions.yaml" \
     run "$FLOX_BIN" install node
 
   assert_failure
@@ -295,7 +295,7 @@ EOF
 @test "resolution fixup: package not available on all systems installs with looser constraints" {
   "$FLOX_BIN" init
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace.yaml" \
     run "$FLOX_BIN" install bpftrace
 
   assert_success
@@ -310,7 +310,7 @@ EOF
 @test "resolution fixub: multiple packages not available on all systems install with looser constraints" {
   "$FLOX_BIN" init
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace_systemd.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace_systemd.yaml" \
     run "$FLOX_BIN" install bpftrace systemd
 
   assert_success
@@ -332,7 +332,7 @@ EOF
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg_bpftrace.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg_bpftrace.yaml" \
     run "$FLOX_BIN" install badpkg bpftrace
 
   assert_failure
@@ -359,7 +359,7 @@ EOF
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_node.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_node.yaml" \
     run "$FLOX_BIN" install nodejs@14.16.1
 
   assert_failure
@@ -378,7 +378,7 @@ EOF
 
   # disable backtrace; we expect this to fail and assert output
   RUST_BACKTRACE=0 \
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/torchvision-bin.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/torchvision-bin.yaml" \
     run "$FLOX_BIN" install python311Packages.torchvision-bin
 
   assert_failure
@@ -455,14 +455,14 @@ EOF
   "$FLOX_BIN" init -d included
 
   # Install a package that will be overridden by the composer later
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install -d included hello
 
   # Create the composing environment
   "$FLOX_BIN" init -n "composer"
 
   # Add the include to the manifest
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
   "$FLOX_BIN" edit -f - <<- EOF
 version = 1
 
@@ -476,7 +476,7 @@ systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
 EOF
 
   # Install the overriding package to the composer
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" install hello
 
   assert_output --partial "This environment now overrides package with id 'hello'"

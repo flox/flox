@@ -1149,7 +1149,7 @@ mod realise_nixpkgs_tests {
     #[test]
     fn nixpkgs_build_unfree() {
         let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello-unfree-lock.json"));
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello-unfree-lock.yaml"));
         let client = MockClient::new(None::<String>).unwrap();
 
         // replace the store path with a known invalid one, to trigger a rebuild
@@ -1177,7 +1177,7 @@ mod realise_nixpkgs_tests {
     #[test]
     fn nixpkgs_build_broken() {
         let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/tabula-lock.json"));
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/tabula-lock.yaml"));
         let client = MockClient::new(None::<String>).unwrap();
 
         // replace the store path with a known invalid one, to trigger a rebuild
@@ -1698,7 +1698,7 @@ mod buildenv_tests {
     #[test]
     fn detects_conflicting_packages() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict.json");
+        let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict.yaml");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("conflicting packages should fail to build");
@@ -1721,7 +1721,7 @@ mod buildenv_tests {
     #[test]
     fn resolves_conflicting_packages_with_priority() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict-resolved.json");
+        let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict-resolved.yaml");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None);
         assert!(
@@ -1763,7 +1763,7 @@ mod buildenv_tests {
     #[test]
     fn verify_build_closure_contains_only_toplevel_packages() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-all-toplevel.json");
+        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-all-toplevel.yaml");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
@@ -1787,7 +1787,7 @@ mod buildenv_tests {
     #[test]
     fn verify_build_closure_contains_only_hello_with_runtime_packages_attribute() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-only-hello.json");
+        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-only-hello.yaml");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
@@ -1811,7 +1811,7 @@ mod buildenv_tests {
     #[test]
     fn verify_build_closure_can_only_select_toplevel_packages_from_runtime_packages_attribute() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-toplevel.json");
+        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-toplevel.yaml");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("build should fail if non-toplevel packages are selected");
@@ -1833,7 +1833,7 @@ mod buildenv_tests {
     #[test]
     fn verify_build_closure_cannot_select_nonexistent_packages_in_runtime_packages_attribute() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-found.json");
+        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-found.yaml");
         let client = MockClient::new(None::<String>).unwrap();
         let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("build should fail if nonexistent packages are selected");
