@@ -37,7 +37,7 @@ setup() {
   common_test_setup
   setup_isolated_flox
   project_setup
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
 teardown() {
   project_teardown
@@ -45,7 +45,7 @@ teardown() {
 }
 
 @test "uninstall: confirmation message" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -58,7 +58,7 @@ teardown() {
 }
 
 @test "uninstall: errors (without proceeding) for already uninstalled packages" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -70,7 +70,7 @@ teardown() {
 }
 
 @test "uninstall: edits manifest" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -88,7 +88,7 @@ teardown() {
 }
 
 @test "uninstall: removes link to installed binary" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -102,7 +102,7 @@ teardown() {
 }
 
 @test "uninstall: has helpful error message with no packages installed" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   # If the [install] table is missing entirely we don't want to report a TOML
   # parse error, we want to report that there's nothing to uninstall.
   "$FLOX_BIN" init
@@ -113,7 +113,7 @@ teardown() {
 }
 
 @test "uninstall: can uninstall packages with dotted att_paths" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rubyPackages_3_2.rails.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rubyPackages_3_2.rails.yaml"
   run "$FLOX_BIN" init
   assert_success
   # Install a dotted package
@@ -140,7 +140,7 @@ version = 1
 EOF
 
   "$FLOX_BIN" init -d composer
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit -d composer -f - <<- EOF
 version = 1
 
@@ -168,7 +168,7 @@ EOF
 
 @test "uninstall: refuses to remove a package from an included environment" {
   "$FLOX_BIN" init -d included
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit -d included -f - <<- EOF
 version = 1
 
@@ -177,7 +177,7 @@ hello.pkg-path = "hello"
 EOF
 
   "$FLOX_BIN" init -d composer
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit -d composer -f - <<- EOF
 version = 1
 
@@ -199,7 +199,7 @@ EOF
 
 @test "uninstall: warns when removing a package that is still provided by an include" {
   "$FLOX_BIN" init -d included
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit -d included -f - <<- EOF
 version = 1
 
@@ -208,7 +208,7 @@ hello.pkg-path = "hello"
 EOF
 
   "$FLOX_BIN" init -d composer
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit -d composer -f - <<- EOF
 version = 1
 

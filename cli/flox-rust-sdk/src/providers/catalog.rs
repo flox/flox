@@ -1549,7 +1549,7 @@ pub mod test_helpers {
         }
     }
 
-    /// Name = path under test_data/generated e.g. "resolve/hello.json"
+    /// Name = path under test_data/generated e.g. "resolve/hello.yaml"
     pub fn read_named_mock_responses(name: &str) -> Result<VecDeque<Response>, MockDataError> {
         let data_dir =
             std::env::var("GENERATED_DATA").map_err(|_| MockDataError::GeneratedDataVar)?;
@@ -1557,7 +1557,7 @@ pub mod test_helpers {
         read_mock_responses(response_path)
     }
 
-    /// Name = filename under test_data/generated/search e.g. "ello_all.json"
+    /// Name = filename under test_data/generated/search e.g. "ello_all.yaml"
     pub fn read_search_response(name: &str) -> SearchResults {
         let name = format!("search/{name}");
         let mut responses = read_named_mock_responses(&name).unwrap();

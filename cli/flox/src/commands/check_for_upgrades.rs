@@ -345,7 +345,7 @@ mod tests {
         // in this case an older [sic] version of the hello package,
         // which should trigger an upgrade.
         flox.catalog_client = Client::Mock(
-            MockClient::new(Some(GENERATED_DATA.join("resolve/old_hello.json"))).unwrap(),
+            MockClient::new(Some(GENERATED_DATA.join("resolve/old_hello.yaml"))).unwrap(),
         );
 
         let exit_branch = command.check_for_upgrades(&flox).unwrap();
