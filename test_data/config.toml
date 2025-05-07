@@ -3,7 +3,10 @@
 # Not actually a resolve response, just have to put it somewhere
 skip_if_output_exists = "empty.yaml"
 cmd = '''
-    echo "[]" > empty.json
+cat > empty.yaml <<EOF
+when:
+then:
+EOF
 '''
 post_cmd = '''
     main_output_dir="$(dirname $(dirname $RESPONSE_FILE))"
