@@ -51,29 +51,41 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 # catalog tests
 
+
+function hello_response_derivation() {
+  jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json"
+}
+
+function old_hello_response_derivation() {
+  jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/old_hello.json"
+}
+
+function hello_response_version() {
+  jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/hello.json"
+}
+
+function old_hello_response_version() {
+  jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/old_hello.json"
+}
+
 # bats test_tags=upgrade:hello
 @test "upgrade hello" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
 
-  old_hello_response_drv="$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/old_hello.json")"
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
 
-  assert_equal "$old_hello_locked_drv" "$old_hello_response_drv"
-
-  old_hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/old_hello.json")"
-  hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/hello.json")"
+  assert_equal "$old_hello_locked_drv" "$(old_hello_response_derivation)"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade
   assert_success
   assert_output \
 "✅  Upgraded 1 package(s) in 'test':
-- hello: $old_hello_response_version -> $hello_response_version"
+- hello: $(old_hello_response_version) -> $(hello_response_version)"
 
-  hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
-  assert_equal "$hello_locked_drv" "$hello_response_drv"
+  assert_equal "$hello_locked_drv" "$(hello_response_derivation)"
 
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
@@ -85,14 +97,14 @@ teardown() {
   tomlq -i -t '.install.hello."pkg-group" = "blue"' "$TMP_MANIFEST_PATH"
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
 
-  old_hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/old_hello.json")
+  old_hello_response_drv="$(old_hello_response_derivation)"
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$old_hello_locked_drv" "$old_hello_response_drv"
 
   # add the package group
 
-  old_hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/old_hello.json")"
-  hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/hello.json")"
+  old_hello_response_version="$(old_hello_response_version)"
+  hello_response_version="$(hello_response_version)"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade blue
@@ -101,7 +113,7 @@ teardown() {
 "✅  Upgraded 1 package(s) in 'test':
 - hello: $old_hello_response_version -> $hello_response_version"
 
-  hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
+  hello_response_drv="$(hello_response_derivation)"
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$hello_locked_drv" "$hello_response_drv"
 
@@ -112,23 +124,18 @@ teardown() {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
 
-  old_hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/old_hello.json")
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
-  assert_equal "$old_hello_locked_drv" "$old_hello_response_drv"
-
-  old_hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/old_hello.json")"
-  hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/hello.json")"
+  assert_equal "$old_hello_locked_drv" "$(old_hello_response_derivation)"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade toplevel
   assert_success
   assert_output \
 "✅  Upgraded 1 package(s) in 'test':
-- hello: $old_hello_response_version -> $hello_response_version"
+- hello: $(old_hello_response_version) -> $(hello_response_version)"
 
-  hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
-  assert_equal "$hello_locked_drv" "$hello_response_drv"
+  assert_equal "$hello_locked_drv" "$(hello_response_derivation)"
 
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
@@ -137,23 +144,18 @@ teardown() {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
 
-  old_hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/old_hello.json")
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
-  assert_equal "$old_hello_locked_drv" "$old_hello_response_drv"
-
-  old_hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/old_hello.json")"
-  hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/hello.json")"
+  assert_equal "$old_hello_locked_drv" "$(old_hello_response_derivation)"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade hello
   assert_success
   assert_output \
 "✅  Upgraded 1 package(s) in 'test':
-- hello: $old_hello_response_version -> $hello_response_version"
+- hello: $(old_hello_response_version) -> $(hello_response_version)"
 
-  hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
-  assert_equal "$hello_locked_drv" "$hello_response_drv"
+  assert_equal "$hello_locked_drv" "$(hello_response_derivation)"
 
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
@@ -205,20 +207,16 @@ teardown() {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
 
-  old_hello_response_drv="$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/old_hello.json")"
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
 
-  assert_equal "$old_hello_locked_drv" "$old_hello_response_drv"
-
-  old_hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/old_hello.json")"
-  hello_response_version="$(jq -r '.[0].[0].page.packages[0].version' "$GENERATED_DATA/resolve/hello.json")"
+  assert_equal "$old_hello_locked_drv" "$(old_hello_response_derivation)"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade --dry-run
   assert_success
   assert_output \
 "Dry run: Upgrades available for 1 package(s) in 'test':
-- hello: $old_hello_response_version -> $hello_response_version
+- hello: $(old_hello_response_version) -> $(hello_response_version)
 
 To apply these changes, run upgrade without the '--dry-run' flag."
 
