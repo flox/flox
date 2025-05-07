@@ -2636,9 +2636,6 @@ EOF
   # PROJECT_DIR to look for
   project_setup_common
 
-  # Mock contains both extensions but only one is used in each install.
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/jupyter_with_extensions.yaml"
-
   PACKAGES_OUTER="jupyter python312Packages.jupyterlab-widgets"
   PACKAGES_INNER="jupyter python312Packages.jupyterlab-git"
 
@@ -2648,7 +2645,8 @@ EOF
 
   # Test outer project by itself.
   "$FLOX_BIN" init --dir=outer
-  run "$FLOX_BIN" install --dir=outer $PACKAGES_OUTER
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/jupyterlabs_widgets.yaml" \
+    run "$FLOX_BIN" install --dir=outer $PACKAGES_OUTER
   assert_success
 
   run "$FLOX_BIN" activate --dir=outer -- \
@@ -2660,7 +2658,8 @@ EOF
 
   # Test outer and inner project combined.
   "$FLOX_BIN" init --dir=inner
-  run "$FLOX_BIN" install --dir=inner $PACKAGES_INNER
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/jupyterlabs_git.yaml" \
+    run "$FLOX_BIN" install --dir=inner $PACKAGES_INNER
   assert_success
 
   run "$FLOX_BIN" activate --dir=outer -- \

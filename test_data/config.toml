@@ -162,9 +162,13 @@ cmd = "flox install hello"
 pre_cmd = "flox init"
 cmd = "flox install hello-unfree"
 
-[resolve.jupyter_with_extensions]
+[resolve.jupyterlabs_widgets]
 pre_cmd = "flox init"
-cmd = "flox install jupyter python312Packages.jupyterlab-widgets python312Packages.jupyterlab-git"
+cmd = "flox install jupyter python312Packages.jupyterlab-widgets"
+
+[resolve.jupyterlabs_git]
+pre_cmd = "flox init"
+cmd = "flox install jupyter python312Packages.jupyterlab-git"
 
 [resolve.go]
 pre_cmd = "flox init"
