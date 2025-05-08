@@ -840,10 +840,13 @@ mod tests {
 
         let toml_str = format_customization(&customization)?;
 
-        let parsed_toml = toml_str.parse::<toml_edit::Document>()?;
+        let parsed_toml = toml_str.parse::<toml_edit::DocumentMut>()?;
 
         assert!(parsed_toml.contains_key("version"));
-        assert_eq!(parsed_toml["version"], toml_edit::value(1));
+        assert_eq!(
+            parsed_toml["version"].as_str(),
+            toml_edit::value(1).as_str()
+        );
 
         // Verify hook
         assert!(parsed_toml.contains_key("hook"));
