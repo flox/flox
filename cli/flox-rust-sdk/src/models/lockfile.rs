@@ -43,6 +43,7 @@ use crate::flox::Flox;
 use crate::models::manifest::composite::CompositeManifest;
 use crate::providers::catalog::{
     self,
+    ALL_SYSTEMS,
     CatalogPage,
     MsgAttrPathNotFoundNotFoundForAllSystems,
     MsgAttrPathNotFoundNotInCatalog,
@@ -59,14 +60,8 @@ use crate::providers::flake_installable_locker::{
     LockedInstallable,
 };
 
-pub(crate) static DEFAULT_SYSTEMS_STR: LazyLock<[String; 4]> = LazyLock::new(|| {
-    [
-        "aarch64-darwin".to_string(),
-        "aarch64-linux".to_string(),
-        "x86_64-darwin".to_string(),
-        "x86_64-linux".to_string(),
-    ]
-});
+pub(crate) static DEFAULT_SYSTEMS_STR: LazyLock<[String; 4]> =
+    LazyLock::new(|| ALL_SYSTEMS.map(|system| system.to_string()));
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Input {
