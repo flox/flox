@@ -307,16 +307,24 @@ trait InitHook {
 /// Create a temporary TOML document containing just the contents of the passed
 /// [InitCustomization], and return it as a string.
 fn format_customization(customization: &InitCustomization) -> Result<String> {
-    let mut toml = if let Some(packages) = &customization.packages {
+    // Create a basic manifest
+    let mut toml = DocumentMut::new();
+    
+    // Add manifest version (which was missing before)
+    toml.insert("version", toml_edit::value(1));
+    
+    // Add packages if any
+    if let Some(packages) = &customization.packages {
         let packages = packages
             .iter()
             .map(|p| PackageToInstall::Catalog(p.clone()))
             .collect::<Vec<_>>();
-        let with_packages = insert_packages("", &packages)?;
-        with_packages.new_toml.unwrap_or(DocumentMut::new())
-    } else {
-        DocumentMut::new()
-    };
+        let with_packages = insert_packages(&toml.to_string(), &packages)
+            .context("Failed to insert packages into TOML document")?;
+        if let Some(new_toml) = with_packages.new_toml {
+            toml = new_toml;
+        }
+    }
 
     // Add the "hook" section to the toml document.
     let hook_table = {
@@ -808,5 +816,65 @@ mod tests {
             ]),
             activate_mode: None,
         });
+    }
+
+    /// format_customization() correctly converts InitCustomization to TOML
+    #[test]
+    fn test_format_customization() -> Result<()> {
+        // Create a test InitCustomization with various fields populated
+        let customization = InitCustomization {
+            hook_on_activate: Some("echo 'Activating environment'".to_string()),
+            profile_common: Some("export COMMON_VAR=value".to_string()),
+            profile_bash: Some("export BASH_VAR=value".to_string()),
+            profile_fish: Some("set -x FISH_VAR value".to_string()),
+            profile_tcsh: Some("setenv TCSH_VAR value".to_string()),
+            profile_zsh: Some("export ZSH_VAR=value".to_string()),
+            packages: Some(vec![
+                CatalogPackage {
+                    id: "test-package".to_string(),
+                    pkg_path: "test.package".to_string(),
+                    version: Some("1.0.0".to_string()),
+                    systems: None,
+                }
+            ]),
+            activate_mode: None,
+        };
+
+        let toml_str = format_customization(&customization)?;
+        
+        let parsed_toml = toml_str.parse::<toml_edit::Document>()?;
+        
+        assert!(parsed_toml.contains_key("version"));
+        assert_eq!(parsed_toml["version"], toml_edit::value(1));
+        
+        // Verify hook
+        assert!(parsed_toml.contains_key("hook"));
+        assert!(parsed_toml["hook"].as_table().unwrap().contains_key("on-activate"));
+        let hook_activate = parsed_toml["hook"]["on-activate"].as_str().unwrap();
+        assert!(hook_activate.contains("echo 'Activating environment'"));
+        
+        // Verify profile
+        assert!(parsed_toml.contains_key("profile"));
+        let profile_table = parsed_toml["profile"].as_table().unwrap();
+        
+        assert!(profile_table.contains_key("common"));
+        assert!(profile_table["common"].as_str().unwrap().contains("export COMMON_VAR=value"));
+        
+        assert!(profile_table.contains_key("bash"));
+        assert!(profile_table["bash"].as_str().unwrap().contains("export BASH_VAR=value"));
+        
+        assert!(profile_table.contains_key("fish"));
+        assert!(profile_table["fish"].as_str().unwrap().contains("set -x FISH_VAR value"));
+        
+        assert!(profile_table.contains_key("tcsh"));
+        assert!(profile_table["tcsh"].as_str().unwrap().contains("setenv TCSH_VAR value"));
+        
+        assert!(profile_table.contains_key("zsh"));
+        assert!(profile_table["zsh"].as_str().unwrap().contains("export ZSH_VAR=value"));
+        
+        // Verify packages
+        assert!(parsed_toml.contains_key("packages"));
+        
+        Ok(())
     }
 }
