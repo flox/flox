@@ -307,16 +307,24 @@ trait InitHook {
 /// Create a temporary TOML document containing just the contents of the passed
 /// [InitCustomization], and return it as a string.
 fn format_customization(customization: &InitCustomization) -> Result<String> {
-    let mut toml = if let Some(packages) = &customization.packages {
+    // Create a basic manifest
+    let mut toml = DocumentMut::new();
+
+    // Add manifest version (which was missing before)
+    toml.insert("version", toml_edit::value(1));
+
+    // Add packages if any
+    if let Some(packages) = &customization.packages {
         let packages = packages
             .iter()
             .map(|p| PackageToInstall::Catalog(p.clone()))
             .collect::<Vec<_>>();
-        let with_packages = insert_packages("", &packages)?;
-        with_packages.new_toml.unwrap_or(DocumentMut::new())
-    } else {
-        DocumentMut::new()
-    };
+        let with_packages = insert_packages(&toml.to_string(), &packages)
+            .context("Failed to insert packages into TOML document")?;
+        if let Some(new_toml) = with_packages.new_toml {
+            toml = new_toml;
+        }
+    }
 
     // Add the "hook" section to the toml document.
     let hook_table = {
@@ -808,5 +816,61 @@ mod tests {
             ]),
             activate_mode: None,
         });
+    }
+
+    /// Verify that format_customization() correctly converts InitCustomization to TOML.
+    #[test]
+    fn test_format_customization() {
+        // Create a test InitCustomization with various fields populated
+        let customization = InitCustomization {
+            hook_on_activate: Some("echo 'Activating environment'".to_string()),
+            profile_common: Some("export COMMON_VAR=value".to_string()),
+            profile_bash: Some("export BASH_VAR=value".to_string()),
+            profile_fish: Some("set -x FISH_VAR value".to_string()),
+            profile_tcsh: Some("setenv TCSH_VAR value".to_string()),
+            profile_zsh: Some("export ZSH_VAR=value".to_string()),
+            packages: Some(vec![CatalogPackage {
+                id: "test-package".to_string(),
+                pkg_path: "test.package".to_string(),
+                version: Some("1.0.0".to_string()),
+                systems: None,
+            }]),
+            activate_mode: None,
+        };
+
+        let toml_str = format_customization(&customization).unwrap();
+        // Use indoc to create the expected TOML with proper indentation
+        let expected_toml = indoc! {r#"
+            version = 1
+
+            [install]
+            test-package.pkg-path = "test.package"
+            test-package.version = "1.0.0"
+
+            [hook]
+            on-activate = """
+              echo 'Activating environment'
+            """
+
+            [profile]
+            common = """
+              export COMMON_VAR=value
+            """
+            bash = """
+              export BASH_VAR=value
+            """
+            fish = """
+              set -x FISH_VAR value
+            """
+            tcsh = """
+              setenv TCSH_VAR value
+            """
+            zsh = """
+              export ZSH_VAR=value
+            """
+        "#};
+
+        // Compare the generated TOML string with our expected output
+        assert_eq!(toml_str, expected_toml);
     }
 }
