@@ -309,10 +309,10 @@ trait InitHook {
 fn format_customization(customization: &InitCustomization) -> Result<String> {
     // Create a basic manifest
     let mut toml = DocumentMut::new();
-    
+
     // Add manifest version (which was missing before)
     toml.insert("version", toml_edit::value(1));
-    
+
     // Add packages if any
     if let Some(packages) = &customization.packages {
         let packages = packages
@@ -829,52 +829,80 @@ mod tests {
             profile_fish: Some("set -x FISH_VAR value".to_string()),
             profile_tcsh: Some("setenv TCSH_VAR value".to_string()),
             profile_zsh: Some("export ZSH_VAR=value".to_string()),
-            packages: Some(vec![
-                CatalogPackage {
-                    id: "test-package".to_string(),
-                    pkg_path: "test.package".to_string(),
-                    version: Some("1.0.0".to_string()),
-                    systems: None,
-                }
-            ]),
+            packages: Some(vec![CatalogPackage {
+                id: "test-package".to_string(),
+                pkg_path: "test.package".to_string(),
+                version: Some("1.0.0".to_string()),
+                systems: None,
+            }]),
             activate_mode: None,
         };
 
         let toml_str = format_customization(&customization)?;
-        
+
         let parsed_toml = toml_str.parse::<toml_edit::Document>()?;
-        
+
         assert!(parsed_toml.contains_key("version"));
         assert_eq!(parsed_toml["version"], toml_edit::value(1));
-        
+
         // Verify hook
         assert!(parsed_toml.contains_key("hook"));
-        assert!(parsed_toml["hook"].as_table().unwrap().contains_key("on-activate"));
+        assert!(
+            parsed_toml["hook"]
+                .as_table()
+                .unwrap()
+                .contains_key("on-activate")
+        );
         let hook_activate = parsed_toml["hook"]["on-activate"].as_str().unwrap();
         assert!(hook_activate.contains("echo 'Activating environment'"));
-        
+
         // Verify profile
         assert!(parsed_toml.contains_key("profile"));
         let profile_table = parsed_toml["profile"].as_table().unwrap();
-        
+
         assert!(profile_table.contains_key("common"));
-        assert!(profile_table["common"].as_str().unwrap().contains("export COMMON_VAR=value"));
-        
+        assert!(
+            profile_table["common"]
+                .as_str()
+                .unwrap()
+                .contains("export COMMON_VAR=value")
+        );
+
         assert!(profile_table.contains_key("bash"));
-        assert!(profile_table["bash"].as_str().unwrap().contains("export BASH_VAR=value"));
-        
+        assert!(
+            profile_table["bash"]
+                .as_str()
+                .unwrap()
+                .contains("export BASH_VAR=value")
+        );
+
         assert!(profile_table.contains_key("fish"));
-        assert!(profile_table["fish"].as_str().unwrap().contains("set -x FISH_VAR value"));
-        
+        assert!(
+            profile_table["fish"]
+                .as_str()
+                .unwrap()
+                .contains("set -x FISH_VAR value")
+        );
+
         assert!(profile_table.contains_key("tcsh"));
-        assert!(profile_table["tcsh"].as_str().unwrap().contains("setenv TCSH_VAR value"));
-        
+        assert!(
+            profile_table["tcsh"]
+                .as_str()
+                .unwrap()
+                .contains("setenv TCSH_VAR value")
+        );
+
         assert!(profile_table.contains_key("zsh"));
-        assert!(profile_table["zsh"].as_str().unwrap().contains("export ZSH_VAR=value"));
-        
+        assert!(
+            profile_table["zsh"]
+                .as_str()
+                .unwrap()
+                .contains("export ZSH_VAR=value")
+        );
+
         // Verify packages
         assert!(parsed_toml.contains_key("packages"));
-        
+
         Ok(())
     }
 }
