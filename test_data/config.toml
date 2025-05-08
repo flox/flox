@@ -299,9 +299,6 @@ post_cmd = '''
 [search.java_suggestions]
 cmd = "flox search java"
 
-[search.nodejs_all]
-cmd = "flox search nodejs_ --all"
-
 [show.hello]
 cmd = "flox show hello"
 

@@ -763,19 +763,57 @@ impl InitHook for Node {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use flox_rust_sdk::data::System;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::models::search::{SearchResult, SearchResults};
     use flox_rust_sdk::providers::catalog::test_helpers::{
         constraints_too_tight_dummy_response,
-        read_search_response,
         resolved_pkg_group_with_dummy_package,
     };
-    use flox_rust_sdk::providers::catalog::{Client, Response};
+    use flox_rust_sdk::providers::catalog::{Client, Response, SystemEnum};
     use pretty_assertions::assert_eq;
     use serde::Serialize;
     use serde_with::skip_serializing_none;
 
     use super::*;
+
+    // TODO: Replace with httpmock generated fixture.
+    fn search_response_nodejs_all() -> Response {
+        let packages_versions = HashMap::from([
+            ("nodejs_14", "14.21.3"),
+            ("nodejs_16", "16.20.2"),
+            ("nodejs_18", "18.20.8"),
+            ("nodejs_19", "19.9.0"),
+            ("nodejs_20", "20.19.0"),
+            ("nodejs_21", "21.7.3"),
+            ("nodejs_22", "22.14.0"),
+            ("nodejs_23", "23.11.0"),
+            ("nodejs_24", "24.0.0"),
+            ("nodejs_latest", "24.0.0"),
+        ]);
+
+        Response::Search(SearchResults {
+            count: Some(packages_versions.len() as u64),
+            results: packages_versions
+                .iter()
+                .map(|(name, version)| SearchResult {
+                    attr_path: name.to_string(),
+                    catalog: None,
+                    description: Some(
+                        "Event-driven I/O framework for the V8 JavaScript engine".to_string(),
+                    ),
+                    name: format!("nodejs-{}", version),
+                    pkg_path: name.to_string(),
+                    pname: name.to_string(),
+                    stabilities: vec![],
+                    system: SystemEnum::Aarch64Darwin,
+                    version: Some(version.to_string()),
+                })
+                .collect(),
+        })
+    }
 
     #[tokio::test]
     async fn new_detection() {
@@ -864,7 +902,7 @@ mod tests {
                     },
                 ],
                 catalog_responses: vec![
-                    Response::Search(read_search_response("nodejs_all.json")),
+                    search_response_nodejs_all(),
                     dummy_pkg_to_resolved_pkg_group_response(&node_package),
                     dummy_pkg_to_resolved_pkg_group_response(&yarn_package),
                 ],
@@ -897,7 +935,7 @@ mod tests {
                     .unwrap(),
                 }],
                 catalog_responses: vec![
-                    Response::Search(read_search_response("nodejs_all.json")),
+                    search_response_nodejs_all(),
                     dummy_pkg_to_resolved_pkg_group_response(&node_package),
                 ],
                 expected: Some(Node {
@@ -935,7 +973,7 @@ mod tests {
                     content: serde_json::to_string(&PackageJSON { engines: None }).unwrap(),
                 }],
                 catalog_responses: vec![
-                    Response::Search(read_search_response("nodejs_all.json")),
+                    search_response_nodejs_all(),
                     dummy_pkg_to_resolved_pkg_group_response(&node_package),
                     Response::Resolve(vec![constraints_too_tight_dummy_response("yarn")]),
                 ],
@@ -974,10 +1012,10 @@ mod tests {
                     },
                 ],
                 catalog_responses: vec![
-                    Response::Search(read_search_response("nodejs_all.json")),
+                    search_response_nodejs_all(),
                     dummy_pkg_to_resolved_pkg_group_response(&node_package),
                     dummy_pkg_to_resolved_pkg_group_response(&yarn_package),
-                    Response::Search(read_search_response("nodejs_all.json")),
+                    search_response_nodejs_all(),
                     dummy_pkg_to_resolved_pkg_group_response(&node_package),
                 ],
                 expected: Some(Node {
@@ -1019,7 +1057,7 @@ mod tests {
                     .unwrap(),
                 }],
                 catalog_responses: vec![
-                    Response::Search(read_search_response("nodejs_all.json")),
+                    search_response_nodejs_all(),
                     Response::Resolve(vec![constraints_too_tight_dummy_response("nodejs_XX")]),
                 ],
                 expected: None,
@@ -1219,7 +1257,7 @@ mod tests {
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response to query available node versions
-            client.push_search_response(read_search_response("nodejs_all.json"));
+            client.push_response(search_response_nodejs_all());
             // Response for unconstrained nodejs version
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "nodejs_group",
@@ -1256,7 +1294,7 @@ mod tests {
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response to query available node versions
-            client.push_search_response(read_search_response("nodejs_all.json"));
+            client.push_response(search_response_nodejs_all());
             // Response when nodejs 18 is requested
             client.push_resolve_response(vec![
                 // Here rather than writing out all N node versions we support,
@@ -1308,7 +1346,7 @@ mod tests {
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response to query available node versions
-            client.push_search_response(read_search_response("nodejs_all.json"));
+            client.push_response(search_response_nodejs_all());
             // No version of node satisfies this version requirement
             // Again, this is just an arbitrary number of node versions
             // since there's so many of them.
@@ -1335,7 +1373,7 @@ mod tests {
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response to query available node versions
-            client.push_search_response(read_search_response("nodejs_all.json"));
+            client.push_response(search_response_nodejs_all());
             // Response for unconstrained nodejs version
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "nodejs_group",
@@ -1374,7 +1412,7 @@ mod tests {
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response to query available node versions
-            client.push_search_response(read_search_response("nodejs_all.json"));
+            client.push_response(search_response_nodejs_all());
             // Response for unconstrained nodejs version
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "nodejs_group",
@@ -1404,7 +1442,7 @@ mod tests {
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response to query available node versions
-            client.push_search_response(read_search_response("nodejs_all.json"));
+            client.push_response(search_response_nodejs_all());
             // Response for nodejs version 18
             client.push_resolve_response(vec![
                 constraints_too_tight_dummy_response("nodejs_23"),
