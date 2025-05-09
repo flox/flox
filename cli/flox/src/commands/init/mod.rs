@@ -818,7 +818,7 @@ mod tests {
         });
     }
 
-    /// format_customization() correctly converts InitCustomization to TOML
+    /// Verify that format_customization() correctly converts InitCustomization to TOML.
     #[test]
     fn test_format_customization() -> Result<()> {
         // Create a test InitCustomization with various fields populated
@@ -839,72 +839,40 @@ mod tests {
         };
 
         let toml_str = format_customization(&customization)?;
+        
+        // Use indoc to create the expected TOML with proper indentation
+        let expected_toml = indoc! {r#"
+            version = 1
 
-        let parsed_toml = toml_str.parse::<toml_edit::DocumentMut>()?;
+            [install]
+            test-package.pkg-path = "test.package"
+            test-package.version = "1.0.0"
 
-        assert!(parsed_toml.contains_key("version"));
-        assert_eq!(
-            parsed_toml["version"].as_str(),
-            toml_edit::value(1).as_str()
-        );
+            [hook]
+            on-activate = """
+              echo 'Activating environment'
+            """
 
-        // Verify hook
-        assert!(parsed_toml.contains_key("hook"));
-        assert!(
-            parsed_toml["hook"]
-                .as_table()
-                .unwrap()
-                .contains_key("on-activate")
-        );
-        let hook_activate = parsed_toml["hook"]["on-activate"].as_str().unwrap();
-        assert!(hook_activate.contains("echo 'Activating environment'"));
+            [profile]
+            common = """
+              export COMMON_VAR=value
+            """
+            bash = """
+              export BASH_VAR=value
+            """
+            fish = """
+              set -x FISH_VAR value
+            """
+            tcsh = """
+              setenv TCSH_VAR value
+            """
+            zsh = """
+              export ZSH_VAR=value
+            """
+        "#};
 
-        // Verify profile
-        assert!(parsed_toml.contains_key("profile"));
-        let profile_table = parsed_toml["profile"].as_table().unwrap();
-
-        assert!(profile_table.contains_key("common"));
-        assert!(
-            profile_table["common"]
-                .as_str()
-                .unwrap()
-                .contains("export COMMON_VAR=value")
-        );
-
-        assert!(profile_table.contains_key("bash"));
-        assert!(
-            profile_table["bash"]
-                .as_str()
-                .unwrap()
-                .contains("export BASH_VAR=value")
-        );
-
-        assert!(profile_table.contains_key("fish"));
-        assert!(
-            profile_table["fish"]
-                .as_str()
-                .unwrap()
-                .contains("set -x FISH_VAR value")
-        );
-
-        assert!(profile_table.contains_key("tcsh"));
-        assert!(
-            profile_table["tcsh"]
-                .as_str()
-                .unwrap()
-                .contains("setenv TCSH_VAR value")
-        );
-
-        assert!(profile_table.contains_key("zsh"));
-        assert!(
-            profile_table["zsh"]
-                .as_str()
-                .unwrap()
-                .contains("export ZSH_VAR=value")
-        );
-
-        // Verify packages
-        assert!(parsed_toml.contains_key("packages"));
+        // Compare the generated TOML string with our expected output
+        assert_eq!(toml_str, expected_toml);
 
         Ok(())
     }
