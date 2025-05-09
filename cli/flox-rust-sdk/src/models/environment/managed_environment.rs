@@ -1780,7 +1780,7 @@ mod test {
     use crate::models::lockfile::Lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::manifest::typed::{Inner, Manifest, PackageDescriptorCatalog, Vars};
-    use crate::providers::catalog::test_helpers::reset_mocks_from_file;
+    use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::catalog::{GENERATED_DATA, MockClient};
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::{GitCommandOptions, GitCommandProvider};
@@ -2363,9 +2363,7 @@ mod test {
     #[test]
     fn reset_local_checkout_discards_local_changes() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
-        let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-
-        flox.catalog_client = MockClient::new(None::<&str>).unwrap().into();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let original_manifest = toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap();
 
@@ -2493,7 +2491,7 @@ mod test {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
         let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        let client = MockClient::new(None::<&str>).unwrap();
+        let client = MockClient::new();
         flox.catalog_client = client.into();
 
         let mut managed_env = test_helpers::mock_managed_environment_unlocked(
@@ -2548,8 +2546,8 @@ mod test {
     }
 
     /// Test that a lockfile is created when a generation is created from a local environment
-    #[test]
-    fn create_generation_from_local_env_builds_and_locks() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn create_generation_from_local_env_builds_and_locks() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
         let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
@@ -2563,7 +2561,8 @@ mod test {
             .local_env_or_copy_current_generation(&flox)
             .unwrap();
 
-        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         let mut new_manifest = Manifest::default();
         new_manifest.install.inner_mut().insert(

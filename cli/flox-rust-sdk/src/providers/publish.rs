@@ -1217,7 +1217,7 @@ pub mod tests {
     #[tokio::test]
     async fn publish_errors_without_key() {
         let (mut flox, _tempdir) = flox_instance();
-        let mut client = Client::Mock(MockClient::new(None::<String>).unwrap());
+        let mut client = Client::Mock(MockClient::new());
 
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();

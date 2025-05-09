@@ -165,7 +165,7 @@ mod tests {
     };
     use flox_rust_sdk::models::manifest::raw::PackageToInstall;
     use flox_rust_sdk::providers::catalog::GENERATED_DATA;
-    use flox_rust_sdk::providers::catalog::test_helpers::reset_mocks_from_file;
+    use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use tracing::instrument::WithSubscriber;
@@ -174,7 +174,7 @@ mod tests {
     use crate::commands::EnvironmentSelect;
 
     /// Check message printed when there are no upgrades available
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn confirmation_when_up_to_date() {
         let (mut flox, _tempdir) = flox_instance();
         let (subscriber, writer) = test_subscriber_message_only();
@@ -185,7 +185,9 @@ mod tests {
             "name",
         );
 
-        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+
         Upgrade {
             environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
             dry_run: true,
@@ -208,10 +210,12 @@ mod tests {
 
         let mut environment = new_named_path_environment(&flox, "version = 1", "name");
 
-        #[cfg(target_os = "macos")]
-        reset_mocks_from_file(&mut flox.catalog_client, "resolve/old_linux_hello.json");
-        #[cfg(target_os = "linux")]
-        reset_mocks_from_file(&mut flox.catalog_client, "resolve/old_darwin_hello.json");
+        let response_path = if cfg!(target_os = "macos") {
+            "resolve/old_linux_hello.yaml"
+        } else {
+            "resolve/old_darwin_hello.yaml"
+        };
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join(response_path)).await;
 
         environment
             .install(
@@ -220,7 +224,8 @@ mod tests {
             )
             .unwrap();
 
-        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         Upgrade {
             environment: EnvironmentSelect::Dir(environment.parent_path().unwrap()),
             dry_run,
@@ -234,7 +239,7 @@ mod tests {
         writer.to_string()
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn upgrade_on_other_system() {
         assert_eq!(
             run_upgrade_with_upgrades_on_other_system(false).await,
@@ -246,7 +251,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn upgrade_dry_run_on_other_system() {
         assert_eq!(
             run_upgrade_with_upgrades_on_other_system(true).await,

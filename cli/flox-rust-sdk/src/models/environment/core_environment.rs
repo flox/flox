@@ -1182,7 +1182,6 @@ mod tests {
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
 
-    use catalog::test_helpers::reset_mocks_from_file;
     use catalog::{GENERATED_DATA, MANUALLY_GENERATED};
     use catalog_api_v1::types::{ResolvedPackageDescriptor, SystemEnum};
     use chrono::{DateTime, Utc};
@@ -1200,6 +1199,7 @@ mod tests {
     use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::manifest::typed::{DEFAULT_GROUP_NAME, Inner};
+    use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::catalog::{self, Client};
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
@@ -1211,9 +1211,11 @@ mod tests {
     }
 
     /// Check that `edit` updates the manifest and creates a lockfile
-    #[test]
+    #[tokio::test(flavor = "multi_thread")]
     #[cfg(feature = "impure-unit-tests")]
-    fn edit_env_creates_manifest_and_lockfile() {
+    async fn edit_env_creates_manifest_and_lockfile() {
+        use crate::providers::catalog::test_helpers::catalog_replay_client;
+
         let (mut flox, tempdir) = flox_instance();
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
@@ -1230,7 +1232,8 @@ mod tests {
         hello.pkg-path = "hello"
         "#;
 
-        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
         assert_eq!(env_view.manifest_contents().unwrap(), new_env_str);
@@ -1305,8 +1308,8 @@ mod tests {
 
     /// Installing hello with edit returns EditResult::Changed and
     /// reactivate_required() returns false
-    #[test]
-    fn edit_adding_package_returns_changed() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn edit_adding_package_returns_changed() {
         let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
 
         let new_env_str = r#"
@@ -1316,7 +1319,8 @@ mod tests {
         hello.pkg-path = "hello"
         "#;
 
-        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
         assert!(matches!(result, EditResult::Changed { .. }));
@@ -1363,7 +1367,7 @@ mod tests {
 
         fs::write(env_view.lockfile_path(), lockfile_str).unwrap();
 
-        let mut mock_client = MockClient::new(None::<&str>).unwrap();
+        let mut mock_client = MockClient::new();
         mock_client.push_resolve_response(vec![ResolvedPackageGroup {
             name: DEFAULT_GROUP_NAME.to_string(),
             page: Some(CatalogPage {
@@ -1463,9 +1467,9 @@ mod tests {
     }
 
     /// linking an environment should set a gc-root
-    #[test]
+    #[tokio::test(flavor = "multi_thread")]
     #[cfg(feature = "impure-unit-tests")]
-    fn build_flox_environment_and_links() {
+    async fn build_flox_environment_and_links() {
         let (mut flox, tempdir) = flox_instance();
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
@@ -1484,7 +1488,9 @@ mod tests {
             base_directory: None,
         });
 
-        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+
         env_view.lock(&flox).expect("locking should succeed");
         let store_path = env_view.build(&flox).expect("build should succeed");
         CoreEnvironment::link(
