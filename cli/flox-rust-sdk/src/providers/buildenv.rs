@@ -306,7 +306,6 @@ where
         // locally, we would not get here as that check happens before this is
         // called within `realise_nixpkgs`.
         let mut netrc_path = None;
-        let mut all_found = true;
         'path_loop: for (path, locations) in store_locations.iter() {
             // If there are no locations
             for location in locations {
@@ -326,6 +325,8 @@ where
                             // Do nothing and hope that a later `location` doesn't
                             // need a token since at some point in the past we
                             // needed one, looked for it, and didn't get one.
+                            // Note that we don't continue because
+                            // store_needs_auth isn't necessarily correct.
                         },
                         None => {
                             let maybe_path = self.auth.create_netrc().map_err(BuildEnvError::Auth);
@@ -348,7 +349,7 @@ where
                     }
                     debug!(%path, %location.url, %stderr, "Failed to copy package from store");
                 } else {
-                    // If we suceeded, then we can continue with the nex path
+                    // If we succeeded, then we can continue with the next path
                     debug!(%path, %location.url, "Succesfully copied package from store");
 
                     // TODO: there is a real but very short period between the successful copy
@@ -369,18 +370,15 @@ where
             }
             // If we get here, we could not download the current path from anywhere
             debug!(%path, "Failed to copy path from any provided location");
-            all_found = false;
-        }
-
-        if !all_found && netrc_path.as_ref().is_some_and(|p| p.is_err()) {
             // At some point we needed an authentication token
             // and didn't find one.
+            if let Some(Err(e)) = netrc_path {
+                return Err(e);
+            }
 
-            // Get the error out of the option. The map just makes the compiler
-            // shut up about the non-existent Ok(T) type.
-            return netrc_path.unwrap().map(|_| false);
+            return Ok(false);
         }
-        Ok(all_found)
+        Ok(true)
     }
 
     /// Realise a package from the (nixpkgs) catalog.
