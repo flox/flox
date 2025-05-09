@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Fri, 09 May 2025 11:03:12 GMT
+    value: Fri, 09 May 2025 11:18:04 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: KTAVrj2poAMEM4w=
+    value: KTChAi5oIAMEM0Q=
   body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The attr_path badpkg is not found in the catalog.","context":{"attr_path":"badpkg","install_id":"badpkg"}}]}]}'
 ---
 when:
@@ -24,7 +24,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Fri, 09 May 2025 11:03:13 GMT
+    value: Fri, 09 May 2025 11:18:04 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -32,5 +32,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: KTAVtj1aIAMEM_g=
+    value: KTChCjFToAMEYVg=
   body: '{"items":[],"total_count":0}'

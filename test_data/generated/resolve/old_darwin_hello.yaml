@@ -6,11 +6,11 @@ then:
   status: 200
   header:
     - name: date
-      value: Fri, 09 May 2025 11:02:55 GMT
+      value: Fri, 09 May 2025 11:18:32 GMT
     - name: content-type
       value: application/json
     - name: server
       value: uvicorn
     - name: apigw-requestid
-      value: KTAS8gKNoAMEYwg=
+      value: KTClTgvcIAMESeA=
   body: ''
