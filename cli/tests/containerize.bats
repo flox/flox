@@ -28,7 +28,7 @@ project_teardown() {
 }
 
 env_setup_catalog() {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$TESTS_DIR/container/manifest1.toml"
 }
@@ -412,7 +412,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENTS" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" edit -f -
 
   TAG="cmd-runs-in-activation"
 
@@ -447,7 +447,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENTS" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" "$FLOX_BIN" edit -f -
 
   TAG="whoami-in-container"
 

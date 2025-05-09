@@ -1063,7 +1063,7 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_build_reproduce_if_invalid() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
-        let client = MockClient::new(None::<String>).unwrap();
+        let client = MockClient::new();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -1092,7 +1092,7 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_skip_eval_if_valid() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
-        let client = MockClient::new(None::<String>).unwrap();
+        let client = MockClient::new();
 
         // build the package to ensure it is in the store
         let buildenv = buildenv_instance();
@@ -1119,7 +1119,7 @@ mod realise_nixpkgs_tests {
     fn nixpkgs_eval_failure() {
         let mut locked_package =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
-        let client = MockClient::new(None::<String>).unwrap();
+        let client = MockClient::new();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -1149,8 +1149,8 @@ mod realise_nixpkgs_tests {
     #[test]
     fn nixpkgs_build_unfree() {
         let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello-unfree-lock.json"));
-        let client = MockClient::new(None::<String>).unwrap();
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello-unfree-lock.yaml"));
+        let client = MockClient::new();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -1177,8 +1177,8 @@ mod realise_nixpkgs_tests {
     #[test]
     fn nixpkgs_build_broken() {
         let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/tabula-lock.json"));
-        let client = MockClient::new(None::<String>).unwrap();
+            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/tabula-lock.yaml"));
+        let client = MockClient::new();
 
         // replace the store path with a known invalid one, to trigger a rebuild
         let invalid_store_path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-invalid".to_string();
@@ -1199,7 +1199,7 @@ mod realise_nixpkgs_tests {
     // #[test]
     // fn nixpkgs_published_pkg_no_matching_response() {
     //     let locked_package = locked_published_package(None);
-    //     let mut client = MockClient::new(None::<String>).unwrap();
+    //     let mut client = MockClient::new();
     //     let mut resp = StoreInfoResponse {
     //         items: std::collections::HashMap::new(),
     //     };
@@ -1220,7 +1220,7 @@ mod realise_nixpkgs_tests {
     #[test]
     fn nixpkgs_published_pkg_no_cache_info() {
         let locked_package = locked_published_package(None);
-        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut client = MockClient::new();
         let mut resp = StoreInfoResponse {
             items: std::collections::HashMap::new(),
         };
@@ -1240,7 +1240,7 @@ mod realise_nixpkgs_tests {
         let real_storepath = known_store_path();
         let real_storepath_str = real_storepath.to_string_lossy();
         let locked_package = locked_published_package(Some(&real_storepath_str));
-        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut client = MockClient::new();
         let mut resp = StoreInfoResponse {
             items: std::collections::HashMap::new(),
         };
@@ -1269,7 +1269,7 @@ mod realise_nixpkgs_tests {
     #[test]
     fn nixpkgs_published_pkg_cache_download_failure() {
         let locked_package = locked_published_package(None);
-        let mut client = MockClient::new(None::<String>).unwrap();
+        let mut client = MockClient::new();
         let mut resp = StoreInfoResponse {
             items: std::collections::HashMap::new(),
         };
@@ -1592,7 +1592,7 @@ mod buildenv_tests {
     static BUILDENV_RESULT_SIMPLE_PACKAGE: LazyLock<BuildEnvOutputs> = LazyLock::new(|| {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/hello/manifest.lock");
-        let client = MockClient::new(None::<String>).unwrap();
+        let client = MockClient::new();
         buildenv.build(&client, &lockfile_path, None).unwrap()
     });
 
@@ -1635,7 +1635,7 @@ mod buildenv_tests {
     fn build_contains_build_script_and_output() {
         let buildenv = buildenv_instance();
         let lockfile_path = GENERATED_DATA.join("envs/build-noop/manifest.lock");
-        let client = MockClient::new(None::<String>).unwrap();
+        let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = result.runtime.as_ref();
@@ -1651,7 +1651,7 @@ mod buildenv_tests {
     fn build_on_activate_lockfile() {
         let buildenv = buildenv_instance();
         let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/on-activate/manifest.lock");
-        let client = MockClient::new(None::<String>).unwrap();
+        let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = &result.runtime;
@@ -1698,8 +1698,8 @@ mod buildenv_tests {
     #[test]
     fn detects_conflicting_packages() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict.json");
-        let client = MockClient::new(None::<String>).unwrap();
+        let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict.yaml");
+        let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("conflicting packages should fail to build");
 
@@ -1721,8 +1721,8 @@ mod buildenv_tests {
     #[test]
     fn resolves_conflicting_packages_with_priority() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict-resolved.json");
-        let client = MockClient::new(None::<String>).unwrap();
+        let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict-resolved.yaml");
+        let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None);
         assert!(
             result.is_ok(),
@@ -1743,7 +1743,7 @@ mod buildenv_tests {
     fn environment_escapes_variables() {
         let buildenv = buildenv_instance();
         let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/vars_escape/manifest.lock");
-        let client = MockClient::new(None::<String>).unwrap();
+        let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = result.runtime.as_ref();
@@ -1763,8 +1763,8 @@ mod buildenv_tests {
     #[test]
     fn verify_build_closure_contains_only_toplevel_packages() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-all-toplevel.json");
-        let client = MockClient::new(None::<String>).unwrap();
+        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-all-toplevel.yaml");
+        let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = result.runtime.as_ref();
@@ -1787,8 +1787,8 @@ mod buildenv_tests {
     #[test]
     fn verify_build_closure_contains_only_hello_with_runtime_packages_attribute() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-only-hello.json");
-        let client = MockClient::new(None::<String>).unwrap();
+        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-only-hello.yaml");
+        let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
         let runtime = result.runtime.as_ref();
@@ -1811,8 +1811,8 @@ mod buildenv_tests {
     #[test]
     fn verify_build_closure_can_only_select_toplevel_packages_from_runtime_packages_attribute() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-toplevel.json");
-        let client = MockClient::new(None::<String>).unwrap();
+        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-toplevel.yaml");
+        let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("build should fail if non-toplevel packages are selected");
 
@@ -1833,8 +1833,8 @@ mod buildenv_tests {
     #[test]
     fn verify_build_closure_cannot_select_nonexistent_packages_in_runtime_packages_attribute() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-found.json");
-        let client = MockClient::new(None::<String>).unwrap();
+        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-found.yaml");
+        let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("build should fail if nonexistent packages are selected");
 

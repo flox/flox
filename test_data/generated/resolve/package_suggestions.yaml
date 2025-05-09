@@ -1,0 +1,36 @@
+when:
+  path: /api/v1/catalog/resolve
+  method: POST
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"package","install_id":"package","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"package","install_id":"package","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"package","install_id":"package","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"package","install_id":"package","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 09 May 2025 11:18:33 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '238'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: KTCleijXIAMEShA=
+  body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The attr_path package is not found in the catalog.","context":{"attr_path":"package","install_id":"package"}}]}]}'
+---
+when:
+  path: /api/v1/catalog/search
+  method: GET
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 09 May 2025 11:18:33 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '732'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: KTClhgKyIAMEacQ=
+  body: '{"items":[{"attr_path":"sayhi","catalog":"meetrlyio","pkg_path":"meetrlyio/sayhi","name":"sayhi-0.0.3","pname":"sayhi","version":"0.0.3","description":"my sayhi package","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"packagekit","catalog":null,"pkg_path":"packagekit","name":"packagekit-1.3.0","pname":"packagekit","version":"1.3.0","description":"System to facilitate installing and updating packages","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"psc-package","catalog":null,"pkg_path":"psc-package","name":"psc-package-simple-0.6.2","pname":"psc-package","version":"0.6.2","description":"Package manager for PureScript based on package sets","stabilities":[],"system":"aarch64-darwin"}],"total_count":3860}'

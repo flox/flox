@@ -7,10 +7,6 @@ mod client;
 mod error;
 pub use client::*;
 
-#[cfg(any(test, feature = "tests"))]
-#[allow(clippy::all)]
-pub mod mock;
-
 pub mod types {
     pub use crate::client::types::*;
     pub use crate::error::MessageType;

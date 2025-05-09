@@ -1,0 +1,17 @@
+when:
+  path: /api/v1/catalog/search
+  method: GET
+then:
+  status: 200
+  header:
+  - name: date
+    value: Fri, 09 May 2025 11:18:44 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '28'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: KTCnQjT3IAMEaIQ=
+  body: '{"items":[],"total_count":0}'

@@ -41,7 +41,7 @@ setup_file() {
   )"
 
   export OWNER="flox"
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
 
 teardown_file() {
@@ -86,7 +86,7 @@ teardown() {
   name="created-on-$NIX_SYSTEM.catalog"
 
   "$FLOX_BIN" init -n "$name"
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello
   run "$FLOX_BIN" push --owner "$OWNER" --force
   assert_success
@@ -117,7 +117,7 @@ teardown() {
   name="created-on-$pull_system.catalog"
 
   # With --force, pull will add the current system and try to lock
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" pull "$OWNER/$name" --force
 
   run "$FLOX_BIN" activate -- hello

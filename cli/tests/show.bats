@@ -38,7 +38,7 @@ project_teardown() {
 setup() {
   common_test_setup
   setup_isolated_flox
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
 
 teardown() {
@@ -52,7 +52,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' can be called at all" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.yaml"
   run "$FLOX_BIN" show hello
   assert_success
 }
@@ -60,11 +60,11 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' accepts search output without separator" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA//search/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA//search/hello.yaml"
   run "$FLOX_BIN" search hello
   assert_success
   first_result="${lines[0]%% *}"
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.yaml"
   run "$FLOX_BIN" show "$first_result"
   assert_success
 }
@@ -72,7 +72,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' - hello" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.yaml"
   run "$FLOX_BIN" show hello
   assert_success
   assert_equal "${lines[0]}" "hello - Program that produces a familiar, friendly greeting"
@@ -85,7 +85,7 @@ setup_file() {
 
 # Check pkg-path is handled correctly
 @test "'flox show' - python310Packages.flask" {
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/flask.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/flask.yaml" \
     run "$FLOX_BIN" show python310Packages.flask
   assert_success
   # Ensure that the package and part of the description show up
