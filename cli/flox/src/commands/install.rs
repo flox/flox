@@ -715,7 +715,8 @@ mod tests {
     use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
     use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall};
-    use flox_rust_sdk::providers::catalog::{Client, GENERATED_DATA, MockClient, SystemEnum};
+    use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
+    use flox_rust_sdk::providers::catalog::{GENERATED_DATA, SystemEnum};
     use flox_test_utils::manifests::EMPTY_ALL_SYSTEMS;
 
     use super::{add_activation_to_rc_file, ensure_rc_file_exists};
@@ -890,7 +891,7 @@ mod tests {
         assert!(backup.exists());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn warns_about_incomplete_system_availability() {
         let (mut flox, tempdir) = flox_instance();
         let is_linux = flox.system.ends_with("linux");
@@ -906,8 +907,7 @@ mod tests {
         } else {
             "aarch64-linux, x86_64-linux"
         };
-        let client = MockClient::new(Some(response_path)).unwrap();
-        flox.catalog_client = Client::Mock(client);
+        flox.catalog_client = catalog_replay_client(response_path).await;
 
         let _env = new_path_environment_in(&flox, EMPTY_ALL_SYSTEMS, tempdir.path());
         let install_cmd = Install {

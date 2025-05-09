@@ -492,7 +492,7 @@ mod tests {
         new_path_environment_from_env_files,
     };
     use crate::providers::catalog::GENERATED_DATA;
-    use crate::providers::catalog::test_helpers::reset_mocks_from_file;
+    use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
     #[test]
@@ -975,8 +975,8 @@ mod tests {
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
-    #[test]
-    fn build_uses_package_from_manifest() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_uses_package_from_manifest() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
         let file_content = String::from("environment-build-foo/bin/hello\n");
@@ -1000,13 +1000,14 @@ mod tests {
 
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
-    #[test]
-    fn build_result_uses_package_from_environment() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_result_uses_package_from_environment() {
         let package_name = String::from("foo");
         let file_name = String::from("exec-hello-from-env.sh");
 
@@ -1033,7 +1034,8 @@ mod tests {
 
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
         assert_build_status(&flox, &mut env, &package_name, None, true);
 
         let result_path = result_dir(&env_path, &package_name)
@@ -1238,8 +1240,8 @@ mod tests {
         assert_build_file(&env_path, &package_name, &file_name, content_after);
     }
 
-    #[test]
-    fn build_wraps_binaries_with_preserved_arg0() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_wraps_binaries_with_preserved_arg0() {
         let package_name = String::from("foo");
         let file_name = String::from("print_arg0");
 
@@ -1275,7 +1277,7 @@ mod tests {
         "#};
         fs::write(env_path.join("main.go"), arg0_code).unwrap();
 
-        reset_mocks_from_file(&mut flox.catalog_client, "resolve/go.json");
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("resolve/go.yaml")).await;
         assert_build_status(&flox, &mut env, &package_name, None, true);
         let result_path = result_dir(&env_path, &package_name)
             .join("bin")
@@ -1339,8 +1341,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn build_wraps_scripts_without_preserved_exe() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_wraps_scripts_without_preserved_exe() {
         let package_name = String::from("foo");
         let file_name = String::from("print_exe");
 
@@ -1382,7 +1384,7 @@ mod tests {
         "#};
         fs::write(env_path.join("main.go"), exe_code).unwrap();
 
-        reset_mocks_from_file(&mut flox.catalog_client, "resolve/go.json");
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join("resolve/go.yaml")).await;
         assert_build_status(&flox, &mut env, &package_name, None, true);
         let result_path = result_dir(&env_path, &package_name)
             .join("bin")
@@ -1405,8 +1407,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn build_impure_against_libc() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_impure_against_libc() {
         let package_name = String::from("foo");
         let bin_name = String::from("links-against-libc");
         let source_name = String::from("main.go");

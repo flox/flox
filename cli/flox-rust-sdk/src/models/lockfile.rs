@@ -2857,7 +2857,7 @@ pub(crate) mod tests {
     async fn test_locking_unknown_message() {
         let manifest = &*TEST_TYPED_MANIFEST;
 
-        let mut client = catalog::MockClient::new(None::<String>).unwrap();
+        let mut client = catalog::MockClient::new();
         let response = TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG.clone();
         let response_msg: ResolutionMessage =
             response.first().unwrap().msgs.first().unwrap().clone();
@@ -2886,7 +2886,7 @@ pub(crate) mod tests {
     async fn locking_message_is_passed_through() {
         let manifest = &*TEST_TYPED_MANIFEST;
 
-        let mut client = catalog::MockClient::new(None::<String>).unwrap();
+        let mut client = catalog::MockClient::new();
 
         for response in [
             TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG.clone(),
@@ -2917,7 +2917,7 @@ pub(crate) mod tests {
         let (mut flox, _tempdir) = flox_instance();
         let manifest = &*TEST_TYPED_MANIFEST;
 
-        let mut client = catalog::MockClient::new(None::<String>).unwrap();
+        let mut client = catalog::MockClient::new();
         client.push_resolve_response(TEST_RESOLUTION_RESPONSE.clone());
         flox.catalog_client = Client::Mock(client);
 
@@ -2943,7 +2943,7 @@ pub(crate) mod tests {
         "#})
         .unwrap();
 
-        let client = catalog::MockClient::new(None::<String>).unwrap();
+        let client = catalog::MockClient::new();
 
         let resolved_packages =
             Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
@@ -3451,7 +3451,7 @@ pub(crate) mod tests {
 
         let foo_catalog_descriptor = foo_descriptor.as_catalog_descriptor_ref().unwrap();
 
-        let mut client_mock = catalog::MockClient::new(None::<String>).unwrap();
+        let mut client_mock = catalog::MockClient::new();
         client_mock.push_resolve_response(vec![ResolvedPackageGroup {
             msgs: vec![],
             name: DEFAULT_GROUP_NAME.to_string(),
@@ -3609,7 +3609,7 @@ pub(crate) mod tests {
         // Set `options.allow.unfree = false` in the manifest, but not the lockfile
         manifest.options.allow.unfree = Some(false);
 
-        let client = catalog::MockClient::new(None::<String>).unwrap();
+        let client = catalog::MockClient::new();
         assert!(matches!(
             Lockfile::resolve_manifest(
                 &manifest,
@@ -3638,7 +3638,7 @@ pub(crate) mod tests {
         manifest.options.allow.unfree = Some(false);
 
         // Return a response that says foo is unfree. If this happens, it's a bug in the server
-        let mut client = catalog::MockClient::new(None::<String>).unwrap();
+        let mut client = catalog::MockClient::new();
         let mut resolved_group = resolved_pkg_group_with_dummy_package(
             "toplevel",
             // TODO: this is hardcoded in fake_package

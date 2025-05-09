@@ -251,7 +251,8 @@ mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
     use flox_rust_sdk::models::environment::{ConcreteEnvironment, UpgradeResult};
-    use flox_rust_sdk::providers::catalog::{Client, GENERATED_DATA, MockClient};
+    use flox_rust_sdk::providers::catalog::GENERATED_DATA;
+    use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
 
     use super::*;
 
@@ -322,8 +323,8 @@ mod tests {
         assert_eq!(exit_branch, ExitBranch::LockTaken);
     }
 
-    #[test]
-    fn checks_if_not_recently_checked() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn checks_if_not_recently_checked() {
         let (mut flox, _tempdir) = flox_instance();
 
         let environment =
@@ -344,9 +345,8 @@ mod tests {
         // provide a mock response from the catalog client
         // in this case an older [sic] version of the hello package,
         // which should trigger an upgrade.
-        flox.catalog_client = Client::Mock(
-            MockClient::new(Some(GENERATED_DATA.join("resolve/old_hello.yaml"))).unwrap(),
-        );
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/old_hello.yaml")).await;
 
         let exit_branch = command.check_for_upgrades(&flox).unwrap();
 
