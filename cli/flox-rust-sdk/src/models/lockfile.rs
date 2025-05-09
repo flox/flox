@@ -1198,6 +1198,7 @@ impl Lockfile {
                     .or(manifest_systems)
                     .unwrap_or(&*DEFAULT_SYSTEMS_STR)
                     .iter()
+                    .sorted()
                     .map(|s| {
                         SystemEnum::from_str(s)
                             .map_err(|_| ResolveError::UnrecognizedSystem(s.to_string()))

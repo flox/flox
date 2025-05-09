@@ -6,13 +6,13 @@ then:
   status: 200
   header:
     - name: date
-      value: Mon, 12 May 2025 14:47:46 GMT
+      value: Mon, 12 May 2025 14:55:15 GMT
     - name: content-type
       value: application/json
     - name: server
       value: uvicorn
     - name: apigw-requestid
-      value: KdaC2gBcIAMEbsQ=
+      value: KdbJGg6UoAMEShg=
   body: '{"items":[{"name":"toplevel","page":{"page":793735,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/AAA-hello-2.10.1.drv","name":"hello-2.12.1","pname":"hello","version":"2.10.1","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/rx1fzrw5bzj2cys6xk5av1v5c6ibh3cr-hello-2.12.1"}],"outputs_to_install":["out"],"description":"Program
     that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e","rev":"979daf34c8cacebcd917d540070b52a3c2b9b16e","rev_count":793735,"rev_date":"2025-05-04T03:14:55Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-05-05T04:19:29.412765Z","cache_uri":null,"install_id":"hello"},{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/8ki4hqm7x69bw9inlfjblbx66zmh0m4m-hello-2.12.1.drv","name":"hello-2.12.1","pname":"hello","version":"2.12.1","system":"aarch64-linux","outputs":[{"name":"out","store_path":"/nix/store/76plgdn1gbaxh0br5xbc6c7pmc3j6rmk-hello-2.12.1"}],"outputs_to_install":["out"],"description":"Program
     that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e","rev":"979daf34c8cacebcd917d540070b52a3c2b9b16e","rev_count":793735,"rev_date":"2025-05-04T03:14:55Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["staging","unstable"],"scrape_date":"2025-05-05T04:37:21.264717Z","cache_uri":null,"install_id":"hello"},{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/AAA-hello-2.10.1.drv","name":"hello-2.12.1","pname":"hello","version":"2.10.1","system":"x86_64-darwin","outputs":[{"name":"out","store_path":"/nix/store/pmvrzc5w8wv71j1d2m74qfnjg81py437-hello-2.12.1"}],"outputs_to_install":["out"],"description":"Program
