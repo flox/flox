@@ -346,6 +346,9 @@ impl CatalogClient {
 }
 
 /// A catalog client that can be seeded with mock responses
+///
+/// This is being deprecated in favour of httpmock and no longer supports
+/// loading from fixture files.
 #[derive(Debug, Default)]
 pub struct MockClient {
     // We use a RefCell here so that we don't have to modify the trait to allow mutable access
@@ -354,16 +357,11 @@ pub struct MockClient {
 }
 
 impl MockClient {
-    /// Create a new mock client, potentially reading mock responses from disk
-    pub fn new(mock_data_path: Option<impl AsRef<Path>>) -> Result<Self, CatalogClientError> {
-        let mock_responses = if let Some(path) = mock_data_path {
-            read_mock_responses(&path).expect("couldn't read mock responses from disk")
-        } else {
-            VecDeque::new()
-        };
-        Ok(Self {
-            mock_responses: Arc::new(Mutex::new(mock_responses)),
-        })
+    /// Create a new mock client.
+    pub fn new() -> Self {
+        Self {
+            mock_responses: Arc::new(Mutex::new(VecDeque::new())),
+        }
     }
 
     /// Push a new response into the list of mock responses
@@ -419,14 +417,6 @@ impl MockClient {
             .lock()
             .expect("couldn't acquire mock lock")
             .push_back(Response::Error(generic_resp));
-    }
-
-    /// See [test_helpers::reset_mocks_from_file].
-    fn reset_mocks_from_file(&mut self, relative_path: &str) {
-        let data_path = (*GENERATED_DATA).join(relative_path);
-        eprintln!("data path: {}", data_path.display());
-        let responses = read_mock_responses(data_path).expect("couldn't read mock responses");
-        self.reset_mocks(responses);
     }
 
     /// See [test_helpers::reset_mocks].
@@ -1478,14 +1468,18 @@ pub mod test_helpers {
     use super::*;
     use crate::data::System;
 
-    /// Clear mock responses and then load responses from a file into the list
-    /// of mock responses
-    pub fn reset_mocks_from_file(client: &mut Client, relative_path: &str) {
-        let Client::Mock(client) = client else {
-            panic!("mocks can only be used with a MockClient");
+    /// Create a mock client that will replay from a given file.
+    ///
+    /// Tests must be run with `#[tokio::test(flavor = "multi_thread")]` to
+    /// allow the `MockServer` to run in another thread.
+    pub async fn catalog_replay_client(path: impl AsRef<Path>) -> Client {
+        let catalog_config = CatalogClientConfig {
+            catalog_url: "https://not_used".to_string(),
+            floxhub_token: None,
+            extra_headers: Default::default(),
+            mock_mode: CatalogMockMode::Replay(path.as_ref().to_path_buf()),
         };
-
-        client.reset_mocks_from_file(relative_path);
+        Client::Catalog(CatalogClient::new(catalog_config))
     }
 
     /// Clear mock responses and then load provided responses
@@ -1556,35 +1550,12 @@ pub mod test_helpers {
             )],
         }
     }
-
-    /// Name = path under test_data/generated e.g. "resolve/hello.yaml"
-    pub fn read_named_mock_responses(name: &str) -> Result<VecDeque<Response>, MockDataError> {
-        let data_dir =
-            std::env::var("GENERATED_DATA").map_err(|_| MockDataError::GeneratedDataVar)?;
-        let response_path = PathBuf::from(data_dir).join(name);
-        read_mock_responses(response_path)
-    }
-
-    /// Name = filename under test_data/generated/search e.g. "ello_all.yaml"
-    pub fn read_search_response(name: &str) -> SearchResults {
-        let name = format!("search/{name}");
-        let mut responses = read_named_mock_responses(&name).unwrap();
-        if responses.len() > 1 {
-            panic!("search response had more than one response");
-        }
-        let Some(Response::Search(search_response)) = responses.pop_front() else {
-            panic!("expected search response, found something else");
-        };
-        search_response
-    }
 }
 
 #[cfg(test)]
 mod tests {
 
-    use std::io::Write;
     use std::num::NonZeroU8;
-    use std::path::PathBuf;
 
     use futures::TryStreamExt;
     use httpmock::prelude::MockServer;
@@ -1593,7 +1564,6 @@ mod tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use serde_json::json;
-    use tempfile::NamedTempFile;
 
     use super::*;
 
@@ -1902,8 +1872,7 @@ mod tests {
 
     #[test]
     fn mock_client_uses_seeded_responses() {
-        let path: Option<&PathBuf> = None;
-        let mut client = MockClient::new(path).unwrap();
+        let mut client = MockClient::new();
         client.push_resolve_response(vec![]);
         let resp = client.resolve(vec![]).block_on().unwrap();
         assert!(resp.is_empty());
@@ -1911,8 +1880,7 @@ mod tests {
 
     #[test]
     fn can_push_responses_outside_of_client() {
-        let path: Option<&PathBuf> = None;
-        let client = MockClient::new(path).unwrap();
+        let client = MockClient::new();
         {
             // Need to drop the mutex guard otherwise `resolve` will block trying to read
             // the queue of mock responses
@@ -1920,24 +1888,6 @@ mod tests {
             let mut responses = resp_handle.lock().unwrap();
             responses.push_back(Response::Resolve(vec![]));
         }
-        let resp = client.resolve(vec![]).block_on().unwrap();
-        assert!(resp.is_empty());
-    }
-
-    #[test]
-    fn error_when_invalid_json() {
-        let tmp = NamedTempFile::new().unwrap();
-        // There's nothing in the mock data file yet, so it can't be parsed as JSON.
-        // This will cause a panic, which is returned as an error from `catch_unwind`.
-        let res = std::panic::catch_unwind(|| MockClient::new(Some(&tmp)));
-        assert!(res.is_err());
-    }
-
-    #[test]
-    fn parses_basic_json() {
-        let mut tmp = NamedTempFile::new().unwrap();
-        tmp.write_all("[[]]".as_bytes()).unwrap();
-        let client = MockClient::new(Some(&tmp)).unwrap();
         let resp = client.resolve(vec![]).block_on().unwrap();
         assert!(resp.is_empty());
     }
