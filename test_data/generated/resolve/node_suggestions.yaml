@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 12 May 2025 14:47:30 GMT
+    value: Mon, 12 May 2025 14:54:31 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: KdaAZgG6IAMES-Q=
+    value: KdbCIjOVIAMES9Q=
   body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The attr_path node is not found in the catalog.","context":{"attr_path":"node","install_id":"node"}}]}]}'
 ---
 when:
@@ -24,7 +24,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 12 May 2025 14:47:30 GMT
+    value: Mon, 12 May 2025 14:54:32 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -32,5 +32,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: KdaAbjkkoAMESaA=
+    value: KdbCKg87oAMEa5g=
   body: '{"items":[{"attr_path":"nodejs","catalog":null,"pkg_path":"nodejs","name":"nodejs-22.14.0","pname":"nodejs","version":"22.14.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_14","catalog":null,"pkg_path":"nodejs_14","name":"nodejs-14.21.3","pname":"nodejs_14","version":"14.21.3","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_16","catalog":null,"pkg_path":"nodejs_16","name":"nodejs-16.20.2","pname":"nodejs_16","version":"16.20.2","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"}],"total_count":73}'
