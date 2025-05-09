@@ -48,7 +48,7 @@ pre-commit-hooks.lib.${system}.run {
       in
       {
         enable = true;
-        entry = lib.mkForce "${wrapper}/bin/cargo-fmt fmt --all --manifest-path 'cli/Cargo.toml' -- --color always";
+        entry = lib.mkForce "${wrapper}/bin/cargo-fmt fmt --all --check --manifest-path 'cli/Cargo.toml' -- --color always";
       };
     clippy = {
       enable = true;
