@@ -26,7 +26,7 @@ use crate::models::lockfile::{
 };
 use crate::models::manifest::typed::ActivateMode;
 use crate::models::nix_plugins::NIX_PLUGINS;
-use crate::providers::auth::store_needs_auth;
+use crate::providers::auth::{catalog_auth_to_envs, store_needs_auth};
 use crate::providers::catalog::CatalogClientError;
 use crate::utils::CommandExt;
 
@@ -106,6 +106,13 @@ pub enum BuildEnvError {
 
     #[error("authentication error")]
     Auth(#[source] AuthError),
+
+    /// An error occurred while performing nix copy
+    /// The contained string should be stderr, which may be a bit too much
+    /// detail,
+    /// but it will allow debugging for now.
+    #[error("couldn't download package:\n{0}")]
+    NixCopyError(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -289,6 +296,10 @@ where
         client: &impl ClientTrait,
         locked: &LockedPackageCatalog,
     ) -> Result<bool, BuildEnvError> {
+        debug!(
+            install_id = locked.install_id,
+            "trying to substitute published package"
+        );
         // TODO - The API call accepts multiple, so an optimization is to
         // collect these for the whole lockfile ahead of time and ask for them
         // all at once.
@@ -307,46 +318,62 @@ where
         // called within `realise_nixpkgs`.
         let mut netrc_path = None;
         'path_loop: for (path, locations) in store_locations.iter() {
+            let mut auth_error = None;
             // If there are no locations
             for location in locations {
                 // nix copy
                 let mut copy_command = nix_base_command();
                 copy_command.arg("copy");
-                // We don't need a floxhub token for the NixOS public cache
-                if store_needs_auth(&location.url) {
-                    // Don't attempt to get the token until we need it,
-                    // and cache the netrc path so that we don't make the same
-                    // file over and over again.
-                    match netrc_path {
-                        Some(Ok(ref path)) => {
-                            copy_command.arg("--netrc-file").arg(path);
-                        },
-                        Some(Err(_)) => {
-                            // Do nothing and hope that a later `location` doesn't
-                            // need a token since at some point in the past we
-                            // needed one, looked for it, and didn't get one.
-                            // Note that we don't continue because
-                            // store_needs_auth isn't necessarily correct.
-                        },
-                        None => {
-                            let maybe_path = self.auth.create_netrc().map_err(BuildEnvError::Auth);
-                            if let Ok(ref path) = maybe_path {
+                // auth.is_some() corresponds to Publisher store type
+                // auth.is_none() corresponds to NixCopy
+                // TODO: this is turning into spaghetti and would be good to refactor,
+                // but this code isn't very stable so hold off for now.
+                if let Some(auth) = &location.auth {
+                    copy_command.envs(catalog_auth_to_envs(auth).map_err(BuildEnvError::Auth)?);
+                } else {
+                    // We don't need a floxhub token for the NixOS public cache
+                    if store_needs_auth(&location.url) {
+                        // Don't attempt to get the token until we need it,
+                        // and cache the netrc path so that we don't make the same
+                        // file over and over again.
+                        match netrc_path {
+                            Some(Ok(ref path)) => {
                                 copy_command.arg("--netrc-file").arg(path);
-                            }
-                            netrc_path = Some(maybe_path);
-                        },
+                            },
+                            Some(Err(_)) => {
+                                // Do nothing and hope that a later `location` doesn't
+                                // need a token since at some point in the past we
+                                // needed one, looked for it, and didn't get one.
+                                // Note that we don't continue because
+                                // store_needs_auth isn't necessarily correct.
+                            },
+                            None => {
+                                let maybe_path =
+                                    self.auth.create_netrc().map_err(BuildEnvError::Auth);
+                                if let Ok(ref path) = maybe_path {
+                                    copy_command.arg("--netrc-file").arg(path);
+                                }
+                                netrc_path = Some(maybe_path);
+                            },
+                        }
                     }
                 }
                 copy_command.arg("--from").arg(&location.url).arg(path);
+                debug!(cmd=%copy_command.display(), "trying to copy published package");
                 let output = copy_command
                     .output()
                     .map_err(|e| BuildEnvError::CacheError(e.to_string()))?;
                 if !output.status.success() {
-                    // If we failed, log the error and try the next location.
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     if stderr.contains("because it lacks a signature by a trusted key") {
                         return Err(BuildEnvError::UntrustedPackage(locked.install_id.clone()));
                     }
+                    // We're expecting errors for netrc type auth, but not for
+                    // catalog provided auth.
+                    if location.auth.is_some() {
+                        auth_error = Some(BuildEnvError::NixCopyError(stderr.to_string()));
+                    }
+                    // If we failed, log the error and try the next location.
                     debug!(%path, %location.url, %stderr, "Failed to copy package from store");
                 } else {
                     // If we succeeded, then we can continue with the next path
@@ -373,6 +400,12 @@ where
             // At some point we needed an authentication token
             // and didn't find one.
             if let Some(Err(e)) = netrc_path {
+                return Err(e);
+            }
+
+            // At some point we tried to authenticate using catalog provided
+            // credentials and there was an error
+            if let Some(e) = auth_error {
                 return Err(e);
             }
 

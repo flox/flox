@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::auth::write_floxhub_netrc;
+use flox_rust_sdk::providers::auth::{NixCopyAuth, write_floxhub_netrc};
 use flox_rust_sdk::providers::publish::ClientSideCatalogStoreConfig;
 use tracing::instrument;
 use url::Url;
@@ -49,7 +49,7 @@ impl Upload {
         ClientSideCatalogStoreConfig::upload_store_path(
             &self.cache.store_url,
             Some(self.cache.signing_key.as_path()),
-            auth_file.as_ref(),
+            &Some(NixCopyAuth::Netrc(auth_file.to_path_buf())),
             &store_path.to_string_lossy(),
         )
         .context("Failed to upload artifact")?;

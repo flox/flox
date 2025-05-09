@@ -10,7 +10,7 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
 
-use super::auth::{AuthError, AuthProvider};
+use super::auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
 use super::build::{BuildResult, BuildResults, ManifestBuilder};
 use super::catalog::{
     CatalogClientError,
@@ -26,12 +26,9 @@ use crate::models::environment::path_environment::PathEnvironment;
 use crate::models::environment::{Environment, EnvironmentError, PathPointer};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::Inner;
+use crate::providers::auth::catalog_auth_to_envs;
 use crate::providers::build;
-use crate::providers::catalog::{
-    CatalogStoreConfig,
-    CatalogStoreConfigNixCopy,
-    CatalogStoreConfigPublisher,
-};
+use crate::providers::catalog::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
 use crate::utils::CommandExt;
@@ -166,8 +163,8 @@ pub enum ClientSideCatalogStoreConfig {
         ingress_uri: Url,
         /// The path to the key used to sign artifacts before uploading them.  Optional here.
         signing_private_key_path: Option<PathBuf>,
-        /// Authentication file used when interacting with the store.
-        auth_netrc_path: PathBuf,
+        /// Authentication provided by the catalog
+        ingress_auth: Option<CatalogAuth>,
     },
 }
 
@@ -229,7 +226,7 @@ impl ClientSideCatalogStoreConfig {
                 Self::upload_build_outputs(
                     ingress_uri,
                     Some(signing_private_key_path.as_path()),
-                    auth_netrc_path,
+                    &Some(NixCopyAuth::Netrc(auth_netrc_path.clone())),
                     build_outputs,
                 )?;
                 let nar_infos =
@@ -250,12 +247,12 @@ impl ClientSideCatalogStoreConfig {
             ClientSideCatalogStoreConfig::Publisher {
                 ingress_uri,
                 signing_private_key_path,
-                auth_netrc_path,
+                ingress_auth,
             } => {
                 Self::upload_build_outputs(
                     ingress_uri,
                     signing_private_key_path.as_deref(),
-                    auth_netrc_path,
+                    &ingress_auth.to_owned().map(NixCopyAuth::CatalogProvided),
                     build_outputs,
                 )?;
                 // No narinfos for publisher type
@@ -269,7 +266,7 @@ impl ClientSideCatalogStoreConfig {
     fn upload_build_outputs(
         destination_url: &Url,
         signing_key_path: Option<&Path>,
-        auth_netrc_path: &Path,
+        nix_copy_auth: &Option<NixCopyAuth>,
         build_outputs: &[Output],
     ) -> Result<(), PublishError> {
         for output in build_outputs.iter() {
@@ -280,7 +277,7 @@ impl ClientSideCatalogStoreConfig {
             Self::upload_store_path(
                 destination_url,
                 signing_key_path,
-                auth_netrc_path,
+                nix_copy_auth,
                 &output.store_path,
             )?;
         }
@@ -295,7 +292,7 @@ impl ClientSideCatalogStoreConfig {
     pub fn upload_store_path(
         destination_url: &Url,
         signing_key_path: Option<&Path>,
-        auth_netrc_path: &Path,
+        nix_copy_auth: &Option<NixCopyAuth>,
         store_path: &str,
     ) -> Result<(), PublishError> {
         let mut url_with_query = destination_url.clone();
@@ -313,7 +310,16 @@ impl ClientSideCatalogStoreConfig {
         drop(query);
 
         let mut copy_command = nix_base_command();
-        copy_command.arg("--netrc-file").arg(auth_netrc_path);
+        match nix_copy_auth {
+            Some(NixCopyAuth::Netrc(path)) => {
+                copy_command.arg("--netrc-file").arg(path);
+            },
+            Some(NixCopyAuth::CatalogProvided(auth)) => {
+                copy_command.envs(catalog_auth_to_envs(auth)?);
+            },
+            // A publisher might not provide auth for a public store
+            _ => {},
+        }
         copy_command
             .arg("copy")
             .arg("--to")
@@ -562,18 +568,16 @@ fn get_client_side_catalog_store_config(
                 ));
             }
         },
-        CatalogStoreConfig::Publisher(publisher_config) => {
-            let CatalogStoreConfigPublisher { .. } = publisher_config;
-            ClientSideCatalogStoreConfig::Publisher {
-                ingress_uri: Url::parse(
-                    publish_response.ingress_uri.as_deref().ok_or_else(|| {
-                        PublishError::Catchall("ingress URI is missing".to_string())
-                    })?,
-                )
-                .map_err(|e| PublishError::Catchall(format!("failed to parse ingress URI: {e}")))?,
-                signing_private_key_path: key_file,
-                auth_netrc_path: auth_netrc_path.as_ref().to_path_buf(),
-            }
+        CatalogStoreConfig::Publisher(_) => ClientSideCatalogStoreConfig::Publisher {
+            ingress_uri: Url::parse(
+                publish_response
+                    .ingress_uri
+                    .as_deref()
+                    .ok_or_else(|| PublishError::Catchall("ingress URI is missing".to_string()))?,
+            )
+            .map_err(|e| PublishError::Catchall(format!("failed to parse ingress URI: {e}")))?,
+            signing_private_key_path: key_file,
+            ingress_auth: publish_response.ingress_auth,
         },
     };
     Ok(config)

@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use indoc::formatdoc;
 use tempfile::{NamedTempFile, TempDir, TempPath, tempdir_in};
@@ -39,6 +40,36 @@ pub enum AuthError {
 
     #[error("{0}")]
     CatchAll(String),
+}
+
+/// A method for authenticating a `nix copy`
+/// TODO: this probably needs to be refactored once we have a clearer idea of
+/// how auth should work.
+pub enum NixCopyAuth {
+    Netrc(PathBuf),
+    CatalogProvided(CatalogAuth),
+}
+
+pub type CatalogAuth = serde_json::Map<String, serde_json::Value>;
+
+pub fn catalog_auth_to_envs(auth: &CatalogAuth) -> Result<HashMap<String, String>, AuthError> {
+    let Some(aws_s3) = auth.get("aws-s3") else {
+        return Err(AuthError::CatchAll(
+            "Only aws-s3 auth is supported".to_string(),
+        ));
+    };
+    // Don't error if there are extra keys we don't know how to handle for
+    // forwards compatibility.
+    let Some(envs_value) = aws_s3.get("envs") else {
+        return Err(AuthError::CatchAll(
+            "Expected 'envs' object in aws-s3 auth".to_string(),
+        ));
+    };
+
+    let envs = serde_json::from_value(envs_value.clone())
+        .map_err(|e| AuthError::CatchAll(format!("Expected 'envs' to be a map: {e}")))?;
+
+    Ok(envs)
 }
 
 /// Handles authentication with catalog stores during build and publish.
