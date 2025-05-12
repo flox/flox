@@ -464,7 +464,7 @@ impl Activate {
         if in_place {
             let shell = Self::detect_shell_for_in_place()?;
             command.arg("--shell").arg(shell.exe_path());
-            Self::activate_in_place(command, shell);
+            Self::activate_in_place(command, shell)?;
 
             return Ok(());
         }
@@ -523,10 +523,12 @@ impl Activate {
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(mut command: Command, shell: Shell) {
+    fn activate_in_place(mut command: Command, shell: Shell) -> Result<()> {
         debug!("running activation command: {:?}", command);
 
-        let output = command.output().expect("failed to run activation script");
+        let output = command
+            .output()
+            .context("failed to run activation script")?;
         eprint!("{}", String::from_utf8_lossy(&output.stderr));
 
         // Render the exports in the correct shell dialect.
@@ -556,6 +558,8 @@ impl Activate {
         };
 
         print!("{script}");
+
+        Ok(())
     }
 
     /// Quote run args so that words don't get split,
