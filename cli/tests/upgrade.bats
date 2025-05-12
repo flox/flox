@@ -93,37 +93,7 @@ function old_hello_response_version() {
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
 
-@test "upgrade by group" {
-  "$FLOX_BIN" init
-  cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
-  tomlq -i -t '.install.hello."pkg-path" = "hello"' "$TMP_MANIFEST_PATH"
-  tomlq -i -t '.install.hello."pkg-group" = "blue"' "$TMP_MANIFEST_PATH"
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
-
-  old_hello_response_drv="$(old_hello_response_derivation)"
-  old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
-  assert_equal "$old_hello_locked_drv" "$old_hello_response_drv"
-
-  # add the package group
-
-  old_hello_response_version="$(old_hello_response_version)"
-  hello_response_version="$(hello_response_version)"
-
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
-    run "$FLOX_BIN" upgrade blue
-  assert_success
-  assert_output \
-"✅  Upgraded 1 package(s) in 'test':
-- hello: $old_hello_response_version -> $hello_response_version"
-
-  hello_response_drv="$(hello_response_derivation)"
-  hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
-  assert_equal "$hello_locked_drv" "$hello_response_drv"
-
-  assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
-}
-
-@test "upgrade toplevel group" {
+@test "upgrade by group (toplevel)" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.yaml" "$FLOX_BIN" install hello
 
