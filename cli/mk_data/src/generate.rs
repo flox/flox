@@ -324,6 +324,9 @@ fn run_pre_cmd(
     ignore_errors: bool,
 ) -> Result<(), Error> {
     let mut cmd = Command::new("bash");
+    if !ignore_errors {
+        cmd.arg("-eu");
+    }
     cmd.arg("-c").arg(pre_cmd);
     cmd.current_dir(dir);
     if let Some(vars) = vars {
@@ -392,8 +395,10 @@ pub fn run_cmd(
     ignore_errors: bool,
 ) -> Result<(), Error> {
     let mut cmd = Command::new("bash");
-    cmd.arg("-c");
-    cmd.arg(gen_cmd);
+    if !ignore_errors {
+        cmd.arg("-eu");
+    }
+    cmd.arg("-c").arg(gen_cmd);
     cmd.current_dir(dir);
     if let Some(vars) = vars {
         for (key, value) in vars.iter() {
@@ -420,8 +425,10 @@ pub fn run_post_cmd(
     ignore_errors: bool,
 ) -> Result<(), Error> {
     let mut cmd = Command::new("bash");
-    cmd.arg("-c");
-    cmd.arg(post_cmd);
+    if !ignore_errors {
+        cmd.arg("-eu");
+    }
+    cmd.arg("-c").arg(post_cmd);
     cmd.current_dir(dir);
     if let Some(vars) = vars {
         for (key, value) in vars.iter() {
