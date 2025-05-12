@@ -345,17 +345,17 @@ EOF
 @test "changes to the local environment block 'flox install'" {
   make_empty_remote_env
 
-  tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
-
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.yaml" \
-    run "$FLOX_BIN" install vim
-  assert_failure
+  tomlq -i -t '.vars.foo = "bar"' .flox/env/manifest.toml
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
-    "$FLOX_BIN" edit --sync
+    run "$FLOX_BIN" install hello
+  assert_failure
+  assert_output --partial "❌ ERROR: Your environment has changes that are not yet synced to a generation."
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.yaml" \
-    run "$FLOX_BIN" install vim
+  "$FLOX_BIN" edit --sync
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    run "$FLOX_BIN" install hello
   assert_success
 }
 
@@ -366,13 +366,13 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello
 
-  tomlq -i -t '.install.curl."pkg-path" = "curl"' .flox/env/manifest.toml
+  tomlq -i -t '.vars.foo = "bar"' .flox/env/manifest.toml
 
   run "$FLOX_BIN" uninstall hello
   assert_failure
+  assert_output --partial "❌ ERROR: Your environment has changes that are not yet synced to a generation."
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" \
-    "$FLOX_BIN" edit --sync
+  "$FLOX_BIN" edit --sync
 
   run "$FLOX_BIN" uninstall hello
   assert_success
@@ -386,6 +386,7 @@ EOF
 
   run "$FLOX_BIN" upgrade
   assert_failure
+  assert_output --partial "❌ ERROR: Your environment has changes that are not yet synced to a generation."
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit --sync
@@ -413,13 +414,11 @@ EOF
 @test "changes to the local environment block 'flox push'"  {
   make_empty_remote_env
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.yaml" \
-    "$FLOX_BIN" install vim
-
   tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
 
   run "$FLOX_BIN" push
   assert_failure
+  assert_output --partial "❌ ERROR: Your environment has changes that are not yet synced to a generation."
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit --sync
@@ -436,6 +435,7 @@ EOF
 
   run "$FLOX_BIN" pull
   assert_failure
+  assert_output --partial "❌ ERROR: Your environment has changes that are not yet synced to a generation."
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" edit --reset
@@ -452,6 +452,7 @@ EOF
 
   run "$FLOX_BIN" pull
   assert_failure
+  assert_output --partial "❌ ERROR: Your environment has changes that are not yet synced to a generation."
 
   run "$FLOX_BIN" pull --force
   assert_success
