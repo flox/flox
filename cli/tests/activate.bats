@@ -4103,7 +4103,10 @@ Setting PATH from ${rc_file}"
   # Start an activation with the previously released version.
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
   # Use setsid so that wait_for_background_activation can kill the process group
-  setsid ./result/bin/flox activate -- \
+  # TODO: Remove unsetting of mocks when `$FLOX_LATEST_VERSION` is using YAML
+  #       instead of JSON mock files.
+  env -u _FLOX_USE_CATALOG_MOCK \
+    setsid ./result/bin/flox activate -- \
     "$shell_path" -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" > output 2>&1 &
 
   # Longer timeout to allow for `nix run` locking.
