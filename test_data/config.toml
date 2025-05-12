@@ -526,7 +526,7 @@ post_cmd = '''
     mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
 '''
 
-# Used in list tests for packages whose install IDs != pkg-path
+# Used in install and list tests for packages whose install IDs != pkg-path
 [envs.hello_as_greeting]
 skip_if_output_exists = "envs/hello_as_greeting"
 files = ["envs/hello_as_greeting/manifest.toml"]
