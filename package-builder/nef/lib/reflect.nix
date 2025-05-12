@@ -66,26 +66,51 @@ let
   attrPathStrings =
     # list of attrpaths e.g. result from `lib.nef.reflect.collectAttrPaths
     # collectAttrPaths: map (lib.showAttrPath) collectAttrPaths;
-    # HACK: Yannik to fix
-    collectAttrPaths: map (x: (lib.showAttrPath x) + ":bin,dev,out,man,devdoc") collectAttrPaths;
+    collectAttrPaths: map (x: (lib.showAttrPath x)) collectAttrPaths;
 
   /*
-    This function converts a list of attrPaths to a space separated string,
-    for use as makeTargets.
+    This function produces `make` targets from a list of attrPaths.
+    The result is a single string with _space separated_ targets,
+    where each target contains the string formatted attrPath _and the outputps_
+    that are defiend by the derivation, i.e.: `<attrPath>:<output>(,<output>)*`.
 
     :::Note
     Todo: tricky attrs, e.g. containing spaces, although renaming is not possible at this point
     :::
 
+    :::Note
+    This function _evaluates_ the package set, and requires the attrPaths to both exist,
+    and point to a derivation.
+    :::
+
     # Type
 
     ```
-    makeTargets :: [ [String] ] -> String
+    makeTargetsWithOutputs :: [ [String] ] -> String
     ```
   */
-  makeTargets =
+  makeTargetsWithOutputs =
     # list of attrpaths e.g. result from `lib.nef.reflect.collectAttrPaths
-    collectAttrPaths: lib.concatStringsSep " " (attrPathStrings collectAttrPaths);
+    collectedAttrPaths:
+    # extended package set, containing **derivation** attrsets at the collected attrPaths
+    pkgs:
+    let
+      mkAttrPathsWithOutputs = map (
+        attrPath:
+        let
+          derivation = lib.getAttrFromPath attrPath pkgs;
+          # derivations have a guaranteed outputs field
+          outputs = lib.concatStringsSep "," derivation.outputs;
+          attrPathString = lib.showAttrPath attrPath;
+        in
+        assert lib.assertMsg (
+          lib.isAttrs derivation && derivation ? type && derivation.type == "derivation"
+        ) "${attrPathString} is not a derivation";
+        # TODO: use "^" as a separator in symmetry with nix?
+        "${attrPathString}:${outputs}"
+      );
+    in
+    lib.concatStringsSep " " (mkAttrPathsWithOutputs collectedAttrPaths);
 
 in
 {
@@ -93,7 +118,7 @@ in
   inherit
     collectAttrPaths
     attrPathStrings
-    makeTargets
+    makeTargetsWithOutputs
     ;
 
 }
