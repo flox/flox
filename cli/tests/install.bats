@@ -57,7 +57,7 @@ teardown() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" install hello
   assert_success
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_after_hello.yaml" \
     run "$FLOX_BIN" install hello curl
   assert_success
   assert_output <<EOF

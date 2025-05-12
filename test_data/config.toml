@@ -85,6 +85,10 @@ post_cmd = '''
     mv tmp.yaml "$RESPONSE_FILE"
 '''
 
+[resolve.curl_after_hello]
+pre_cmd = "flox init && flox install hello"
+cmd = "flox install curl"
+
 [resolve.emacs]
 pre_cmd = "flox init"
 cmd = "flox install emacs"
