@@ -78,6 +78,8 @@ function make_incompatible() {
   shift
   ENV_NAME="$1"
   shift
+  GENERATION="$1"
+  shift
 
   init_system=
   # replace linux with darwin or darwin with linux
@@ -93,7 +95,7 @@ function make_incompatible() {
   git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
   pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
   git checkout "$ENV_NAME"
-  sed -i "s|$NIX_SYSTEM|$init_system|g" 2/env/manifest.toml 2/env/manifest.lock
+  sed -i "s|$NIX_SYSTEM|$init_system|g" "${GENERATION}/env/manifest.toml" "${GENERATION}/env/manifest.lock"
 
   git add .
   git \
@@ -114,12 +116,14 @@ function remove_extra_systems() {
   shift
   ENV_NAME="$1"
   shift
+  GENERATION="$1"
+  shift
 
   git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
   pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
   git checkout "$ENV_NAME"
 
-  tomlq --in-place --toml-output ".options.systems = [\"$NIX_SYSTEM\"]" 1/env/manifest.toml
+  tomlq --in-place --toml-output ".options.systems = [\"$NIX_SYSTEM\"]" "${GENERATION}/env/manifest.toml"
 
   git add .
   git \
@@ -139,6 +143,8 @@ function add_incompatible_package() {
   shift
   ENV_NAME="$1"
   shift
+  GENERATION="$1"
+  shift
 
   package=
   # replace linux with darwin or darwin with linux
@@ -157,7 +163,7 @@ function add_incompatible_package() {
   git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
   pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
   git checkout "$ENV_NAME"
-  tomlq --in-place --toml-output ".install.extra.\"pkg-path\" = $package" 2/env/manifest.toml
+  tomlq --in-place --toml-output ".install.extra.\"pkg-path\" = $package" "${GENERATION}/env/manifest.toml"
 
   git add .
   git \
@@ -363,10 +369,10 @@ function add_incompatible_package() {
 # should show a warning, but otherwise succeed to pull
 @test "pull unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
   make_dummy_env "owner" "name"
-  remove_extra_systems "owner" "name"
+  remove_extra_systems "owner" "name" 1
   update_dummy_env "owner" "name"
-  make_incompatible "owner" "name"
-  add_incompatible_package "owner" "name"
+  make_incompatible "owner" "name" 2
+  add_incompatible_package "owner" "name" 2
 
   # add_incompatible_package does not _lock_ the environment,
   # but pull won't either because it will expect it to already have a lock
@@ -402,7 +408,7 @@ function add_incompatible_package() {
 @test "'pull --copy' has same error semantics as normal 'pull'" {
   make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
-  make_incompatible "owner" "name"
+  make_incompatible "owner" "name" 2
 
   run "$FLOX_BIN" pull --remote owner/name
   assert_failure
@@ -464,9 +470,9 @@ function add_incompatible_package() {
 @test "activate incompatible environment fails gracefully" {
 
   make_dummy_env "owner" "name"
-  remove_extra_systems "owner" "name"
+  remove_extra_systems "owner" "name" 1
   update_dummy_env "owner" "name"
-  make_incompatible "owner" "name"
+  make_incompatible "owner" "name" 2
 
   run "$FLOX_BIN" activate --remote owner/name --trust
   assert_failure
