@@ -1880,10 +1880,7 @@ pub mod types {
     ///      "type": [
     ///        "object",
     ///        "null"
-    ///      ],
-    ///      "additionalProperties": {
-    ///        "type": "string"
-    ///      }
+    ///      ]
     ///    },
     ///    "ingress_uri": {
     ///      "title": "Ingress Uri",
@@ -1900,7 +1897,7 @@ pub mod types {
     pub struct PublishResponse {
         pub catalog_store_config: crate::types::CatalogStoreConfig,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub ingress_auth: Option<std::collections::HashMap<String, String>>,
+        pub ingress_auth: Option<serde_json::Map<String, serde_json::Value>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub ingress_uri: Option<String>,
     }
@@ -2407,10 +2404,7 @@ pub mod types {
     ///      "type": [
     ///        "object",
     ///        "null"
-    ///      ],
-    ///      "additionalProperties": {
-    ///        "type": "string"
-    ///      }
+    ///      ]
     ///    },
     ///    "url": {
     ///      "title": "Url",
@@ -2423,7 +2417,7 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct StoreInfo {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub auth: Option<std::collections::HashMap<String, String>>,
+        pub auth: Option<serde_json::Map<String, serde_json::Value>>,
         pub url: String,
     }
     impl From<&StoreInfo> for StoreInfo {
