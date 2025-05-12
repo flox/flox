@@ -56,7 +56,7 @@ teardown() {
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python3_pip.yaml" \
-      run "$FLOX_BIN" install -i pip python310Packages.pip python3
+      run "$FLOX_BIN" install -i pip python311Packages.pip python3
 
   assert_success
   assert_output --partial "✅ 'python3', 'pip' installed to environment"
