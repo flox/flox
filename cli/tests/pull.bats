@@ -106,31 +106,6 @@ function make_incompatible() {
   rm -rf "$PROJECT_DIR/floxmeta"
 }
 
-function copy_manifest_and_lockfile_to_remote() {
-  OWNER="$1"
-  shift
-  ENV_NAME="$1"
-  shift
-  ENV_FILES_DIR="$1"
-  shift
-
-  git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
-  pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
-  git checkout "$ENV_NAME"
-  cp "$ENV_FILES_DIR/manifest.toml" 2/env/manifest.toml
-  cp "$ENV_FILES_DIR/manifest.lock" 2/env/manifest.lock
-
-  git add .
-  git \
-    -c "user.name=test" \
-    -c "user.email=test@email.address" \
-    commit \
-    -m "copy manifest and lockfile"
-  git push
-  popd >/dev/null || return
-  rm -rf "$PROJECT_DIR/floxmeta"
-}
-
 # catalog manifests by default support all systems.
 # remove additional systems to check handling of missing systems.
 # should be run on an empty environment.
