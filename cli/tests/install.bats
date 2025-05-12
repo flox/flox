@@ -153,23 +153,23 @@ EOF
 }
 
 @test "'flox install' overrides install ID with '-i'" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/hello_as_greeting/hello_as_greeting.yaml"
   run "$FLOX_BIN" init
   assert_success
-  run "$FLOX_BIN" install -i foo hello
+  run "$FLOX_BIN" install -i greeting hello
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
-  assert_regex "$manifest" 'foo\.pkg-path = "hello"'
+  assert_regex "$manifest" 'greeting\.pkg-path = "hello"'
 }
 
 @test "'flox install' overrides install ID with '--id'" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/hello_as_greeting/hello_as_greeting.yaml"
   run "$FLOX_BIN" init
   assert_success
-  run "$FLOX_BIN" install --id foo hello
+  run "$FLOX_BIN" install --id greeting hello
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
-  assert_regex "$manifest" 'foo\.pkg-path = "hello"'
+  assert_regex "$manifest" 'greeting\.pkg-path = "hello"'
 }
 
 @test "'flox install' accepts mix of inferred and supplied install IDs" {
