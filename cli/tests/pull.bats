@@ -370,9 +370,8 @@ function add_incompatible_package() {
 @test "pull unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
   make_dummy_env "owner" "name"
   remove_extra_systems "owner" "name" 1
-  update_dummy_env "owner" "name"
-  make_incompatible "owner" "name" 2
-  add_incompatible_package "owner" "name" 2
+  make_incompatible "owner" "name" 1
+  add_incompatible_package "owner" "name" 1
 
   # add_incompatible_package does not _lock_ the environment,
   # but pull won't either because it will expect it to already have a lock
@@ -471,8 +470,8 @@ function add_incompatible_package() {
 
   make_dummy_env "owner" "name"
   remove_extra_systems "owner" "name" 1
-  update_dummy_env "owner" "name"
-  make_incompatible "owner" "name" 2
+  make_incompatible "owner" "name" 1
+  add_incompatible_package "owner" "name" 1
 
   run "$FLOX_BIN" activate --remote owner/name --trust
   assert_failure
