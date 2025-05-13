@@ -88,7 +88,6 @@ use crate::utils::errors::display_chain;
 use crate::utils::init::{
     init_catalog_client,
     init_telemetry_uuid,
-    init_uuid,
     telemetry_opt_out_needs_migration,
 };
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FILE_NAME};
@@ -353,7 +352,6 @@ impl FloxArgs {
             runtime_dir,
             temp_dir: temp_dir_path.clone(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
-            uuid: init_uuid(&config.flox.data_dir).await?,
             floxhub_token,
             floxhub,
             catalog_client,

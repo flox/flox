@@ -79,8 +79,6 @@ pub struct Flox {
 
     pub system: String,
 
-    pub uuid: uuid::Uuid,
-
     pub floxhub: Floxhub,
 
     /// Token to authenticate with FloxHub.
@@ -330,7 +328,6 @@ pub mod test_helpers {
             temp_dir,
             config_dir,
             runtime_dir,
-            uuid: Default::default(),
             floxhub: Floxhub::new(
                 Url::from_str("https://hub.flox.dev").unwrap(),
                 git_url_override,
