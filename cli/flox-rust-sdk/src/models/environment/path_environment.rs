@@ -77,7 +77,7 @@ pub struct PathEnvironment {
 }
 
 /// A profile script or list of packages to install when initializing an environment
-#[derive(Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct InitCustomization {
     pub hook_on_activate: Option<String>,
     pub profile_common: Option<String>,
