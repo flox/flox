@@ -54,13 +54,30 @@ impl RawManifest {
 
         Self::add_header(&mut manifest);
         Self::add_version(&mut manifest);
-        Self::add_install_section(&mut manifest, customization);
+        Self::add_install_section(&mut manifest, customization, true);
         Self::add_vars_section(&mut manifest);
-        Self::add_hook_section(&mut manifest, customization);
-        Self::add_profile_section(&mut manifest, customization);
+        Self::add_hook_section(&mut manifest, customization, true);
+        Self::add_profile_section(&mut manifest, customization, true);
         Self::add_services_section(&mut manifest);
         Self::add_include_section(&mut manifest);
         Self::add_options_section(&mut manifest, systems, customization);
+
+        RawManifest(manifest)
+    }
+
+    /// Create a minimal [RawManifest] that is close to what will actually be
+    /// generated, but more concise.
+    /// Note that this isn't a valid TypedManifest because it doesn't include
+    /// version.
+    pub fn new_minimal(customization: &InitCustomization) -> RawManifest {
+        let mut manifest = DocumentMut::new();
+
+        Self::add_install_section(&mut manifest, customization, false);
+        Self::add_hook_section(&mut manifest, customization, false);
+        Self::add_profile_section(&mut manifest, customization, false);
+        // We don't need to call add_options_section because it's only used for
+        // activate mode, which we don't need to print when showing a more
+        // concise manifest to the user
 
         RawManifest(manifest)
     }
@@ -119,9 +136,18 @@ impl RawManifest {
 
     /// Populates an example install section with any packages necessary for
     /// init customizations.
-    fn add_install_section(manifest: &mut DocumentMut, customization: &InitCustomization) {
+    fn add_install_section(
+        manifest: &mut DocumentMut,
+        customization: &InitCustomization,
+        documented: bool,
+    ) {
         let packages_vec = vec![];
         let packages = customization.packages.as_ref().unwrap_or(&packages_vec);
+
+        // We don't want to add an empty [install] table
+        if packages.is_empty() && !documented {
+            return;
+        };
 
         let mut install_table = if packages.is_empty() {
             // Add comment with example packages
@@ -142,7 +168,8 @@ impl RawManifest {
             }))
         };
 
-        install_table.decor_mut().set_prefix(indoc! {r#"
+        if documented {
+            install_table.decor_mut().set_prefix(indoc! {r#"
 
 
             ## Install Packages --------------------------------------------------
@@ -150,7 +177,8 @@ impl RawManifest {
             ##  $ flox search gum   <- search for a package
             ##  $ flox show gum     <- show all versions of a package
             ## -------------------------------------------------------------------
-        "#});
+            "#});
+        }
 
         manifest.insert(MANIFEST_INSTALL_KEY, Item::Table(install_table));
     }
@@ -178,22 +206,32 @@ impl RawManifest {
 
     /// Populates an example hook section with any automatic setup added by
     /// init customizations.
-    fn add_hook_section(manifest: &mut DocumentMut, customization: &InitCustomization) {
+    fn add_hook_section(
+        manifest: &mut DocumentMut,
+        customization: &InitCustomization,
+        documented: bool,
+    ) {
         let mut hook_table = Table::new();
 
-        hook_table.decor_mut().set_prefix(indoc! {r#"
+        if documented {
+            hook_table.decor_mut().set_prefix(indoc! {r#"
 
 
-            ## Activation Hook ---------------------------------------------------
-            ##  ... run by _bash_ shell when you run 'flox activate'.
-            ## -------------------------------------------------------------------
-        "#});
+                ## Activation Hook ---------------------------------------------------
+                ##  ... run by _bash_ shell when you run 'flox activate'.
+                ## -------------------------------------------------------------------
+            "#});
+        }
 
         if let Some(ref hook_on_activate_script) = customization.hook_on_activate {
-            let on_activate_content = indent::indent_all_by(2, hook_on_activate_script);
+            let on_activate_content: String = indent::indent_all_by(2, hook_on_activate_script);
 
             hook_table.insert("on-activate", toml_edit::value(on_activate_content));
         } else {
+            // We don't want to add an empty [hook] table
+            if !documented {
+                return;
+            }
             hook_table.decor_mut().set_suffix(indoc! {r#"
 
                 # on-activate = '''
@@ -212,16 +250,22 @@ impl RawManifest {
 
     /// Populates an example profile section with any automatic setup added by
     /// init customizations.
-    fn add_profile_section(manifest: &mut DocumentMut, customization: &InitCustomization) {
+    fn add_profile_section(
+        manifest: &mut DocumentMut,
+        customization: &InitCustomization,
+        documented: bool,
+    ) {
         let mut profile_table = Table::new();
 
-        profile_table.decor_mut().set_prefix(indoc! {r#"
+        if documented {
+            profile_table.decor_mut().set_prefix(indoc! {r#"
 
 
-            ## Profile script ----------------------------------------------------
-            ## ... sourced by _your shell_ when you run 'flox activate'.
-            ## -------------------------------------------------------------------
-        "#});
+                ## Profile script ----------------------------------------------------
+                ## ... sourced by _your shell_ when you run 'flox activate'.
+                ## -------------------------------------------------------------------
+            "#});
+        }
 
         match customization {
             InitCustomization {
@@ -232,6 +276,10 @@ impl RawManifest {
                 profile_zsh: None,
                 ..
             } => {
+                // We don't want to add an empty [profile] table
+                if !documented {
+                    return;
+                }
                 profile_table.decor_mut().set_suffix(indoc! {r#"
 
                     # common = '''

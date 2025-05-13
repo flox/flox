@@ -8,7 +8,7 @@ use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathPointer};
-use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall, insert_packages};
+use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall, RawManifest};
 use flox_rust_sdk::models::manifest::typed::ActivateMode;
 use flox_rust_sdk::providers::catalog::{
     ClientTrait,
@@ -19,7 +19,6 @@ use flox_rust_sdk::providers::catalog::{
 };
 use indoc::formatdoc;
 use path_dedot::ParseDot;
-use toml_edit::{DocumentMut, Formatted, Item, Table, Value};
 use tracing::{debug, info_span, instrument};
 
 use crate::commands::environment_description;
@@ -307,96 +306,25 @@ trait InitHook {
 /// Create a temporary TOML document containing just the contents of the passed
 /// [InitCustomization], and return it as a string.
 fn format_customization(customization: &InitCustomization) -> Result<String> {
-    // Create a basic manifest
-    let mut toml = DocumentMut::new();
-
-    // Add manifest version (which was missing before)
-    toml.insert("version", toml_edit::value(1));
-
-    // Add packages if any
-    if let Some(packages) = &customization.packages {
-        let packages = packages
-            .iter()
-            .map(|p| PackageToInstall::Catalog(p.clone()))
-            .collect::<Vec<_>>();
-        let with_packages = insert_packages(&toml.to_string(), &packages)
-            .context("Failed to insert packages into TOML document")?;
-        if let Some(new_toml) = with_packages.new_toml {
-            toml = new_toml;
-        }
+    let mut customization = customization.clone();
+    // combine_customizations will add a newline after scripts,
+    // so do the same here
+    for script in [
+        &mut customization.hook_on_activate,
+        &mut customization.profile_common,
+        &mut customization.profile_bash,
+        &mut customization.profile_fish,
+        &mut customization.profile_tcsh,
+        &mut customization.profile_zsh,
+    ]
+    .into_iter()
+    // Clippy prefers stripping out None with flatten()
+    .flatten()
+    {
+        *script = format!("{}\n", script);
     }
 
-    // Add the "hook" section to the toml document.
-    let hook_table = {
-        let hook_field = toml
-            .entry("hook")
-            .or_insert_with(|| Item::Table(Table::new()));
-        let hook_field_type = hook_field.type_name();
-        hook_field.as_table_mut().context(format!(
-            "'hook' must be a table, but found {hook_field_type} instead"
-        ))?
-    };
-    if let Some(hook_on_activate_script) = &customization.hook_on_activate {
-        hook_table.insert(
-            "on-activate",
-            Item::Value(Value::String(Formatted::new(formatdoc! {r#"
-                {}
-            "#, indent::indent_all_by(2, hook_on_activate_script)}))),
-        );
-    };
-
-    // Add the "profile" section to the toml document.
-    let profile_table = {
-        let profile_field = toml
-            .entry("profile")
-            .or_insert_with(|| Item::Table(Table::new()));
-        let profile_field_type = profile_field.type_name();
-        profile_field.as_table_mut().context(format!(
-            "'profile' must be a table, but found {profile_field_type} instead"
-        ))?
-    };
-    if let Some(profile_common_script) = &customization.profile_common {
-        profile_table.insert(
-            "common",
-            Item::Value(Value::String(Formatted::new(formatdoc! {r#"
-                {}
-            "#, indent::indent_all_by(2, profile_common_script)}))),
-        );
-    };
-    if let Some(profile_bash_script) = &customization.profile_bash {
-        profile_table.insert(
-            "bash",
-            Item::Value(Value::String(Formatted::new(formatdoc! {r#"
-                {}
-            "#, indent::indent_all_by(2, profile_bash_script)}))),
-        );
-    };
-    if let Some(profile_fish_script) = &customization.profile_fish {
-        profile_table.insert(
-            "fish",
-            Item::Value(Value::String(Formatted::new(formatdoc! {r#"
-                {}
-            "#, indent::indent_all_by(2, profile_fish_script)}))),
-        );
-    };
-    if let Some(profile_tcsh_script) = &customization.profile_tcsh {
-        profile_table.insert(
-            "tcsh",
-            Item::Value(Value::String(Formatted::new(formatdoc! {r#"
-                {}
-            "#, indent::indent_all_by(2, profile_tcsh_script)}))),
-        );
-    };
-    if let Some(profile_zsh_script) = &customization.profile_zsh {
-        profile_table.insert(
-            "zsh",
-            Item::Value(Value::String(Formatted::new(formatdoc! {r#"
-                {}
-            "#, indent::indent_all_by(2, profile_zsh_script)}))),
-        );
-    };
-
-    Ok(toml.to_string())
+    Ok(RawManifest::new_minimal(&customization).to_string())
 }
 
 /// Distinguish compatible versions from default or incompatible versions
@@ -820,7 +748,7 @@ mod tests {
 
     /// Verify that format_customization() correctly converts InitCustomization to TOML.
     #[test]
-    fn test_format_customization() {
+    fn format_customization_exhaustive() {
         // Create a test InitCustomization with various fields populated
         let customization = InitCustomization {
             hook_on_activate: Some("echo 'Activating environment'".to_string()),
@@ -841,8 +769,6 @@ mod tests {
         let toml_str = format_customization(&customization).unwrap();
         // Use indoc to create the expected TOML with proper indentation
         let expected_toml = indoc! {r#"
-            version = 1
-
             [install]
             test-package.pkg-path = "test.package"
             test-package.version = "1.0.0"
@@ -872,5 +798,13 @@ mod tests {
 
         // Compare the generated TOML string with our expected output
         assert_eq!(toml_str, expected_toml);
+    }
+
+    /// Ensures we don't add empty tables or comments we don't want
+    #[test]
+    fn format_customization_empty() {
+        let customization = InitCustomization::default();
+        let toml_str = format_customization(&customization).unwrap();
+        assert_eq!(toml_str, "");
     }
 }
