@@ -1056,6 +1056,14 @@ pub type ApiErrorResponseValue = ResponseValue<ApiErrorResponse>;
 /// An alias so the flox crate doesn't have to depend on the catalog-api crate
 pub type SystemEnum = api_types::SystemEnum;
 
+/// All available systems.
+pub static ALL_SYSTEMS: [SystemEnum; 4] = [
+    SystemEnum::Aarch64Darwin,
+    SystemEnum::Aarch64Linux,
+    SystemEnum::X8664Darwin,
+    SystemEnum::X8664Linux,
+];
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct PackageGroup {
     pub name: String,
