@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::Result;
 use fslock::LockFile;
 use indoc::formatdoc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncReadExt;
 use tracing::debug;
 
 use crate::utils::message;
@@ -91,32 +91,6 @@ pub fn init_telemetry_uuid(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pat
 
     fs::write(uuid_path, telemetry_uuid.to_string())?;
     Ok(())
-}
-
-pub async fn init_uuid(data_dir: &Path) -> Result<uuid::Uuid> {
-    tokio::fs::create_dir_all(data_dir).await?;
-
-    let uuid_file_path = data_dir.join("uuid");
-
-    match tokio::fs::File::open(&uuid_file_path).await {
-        Ok(mut uuid_file) => {
-            debug!("Attempting to read own UUID from file");
-            let mut uuid_str = String::new();
-            uuid_file.read_to_string(&mut uuid_str).await?;
-            Ok(uuid::Uuid::try_parse(&uuid_str)?)
-        },
-        Err(err) => match err.kind() {
-            std::io::ErrorKind::NotFound => {
-                debug!("Creating new uuid");
-                let uuid = uuid::Uuid::new_v4();
-                let mut file = tokio::fs::File::create(&uuid_file_path).await?;
-                file.write_all(uuid.to_string().as_bytes()).await?;
-
-                Ok(uuid)
-            },
-            _ => Err(err.into()),
-        },
-    }
 }
 
 #[cfg(test)]
