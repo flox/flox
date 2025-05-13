@@ -11,11 +11,11 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment, PathP
 use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall, insert_packages};
 use flox_rust_sdk::models::manifest::typed::ActivateMode;
 use flox_rust_sdk::providers::catalog::{
+    ALL_SYSTEMS,
     ClientTrait,
     PackageDescriptor,
     PackageGroup,
     PackageResolutionInfo,
-    SystemEnum,
 };
 use indoc::formatdoc;
 use path_dedot::ParseDot;
@@ -528,7 +528,7 @@ async fn try_find_compatible_package(
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![flox.system.parse()?],
+                    systems: ALL_SYSTEMS.to_vec(),
                 }],
                 name: attr_path.to_string(),
             }])
@@ -575,10 +575,9 @@ async fn try_find_compatible_major_version_package(
         "using catalog client to find compatible major version package"
     );
 
-    let system = flox.system.parse()?;
     let pkg_groups = major_version_packages
         .iter()
-        .map(|pkg_name| group_for_single_package(pkg_name.as_ref(), version, system))
+        .map(|pkg_name| group_for_single_package(pkg_name.as_ref(), version))
         .collect::<Vec<_>>();
     let resolved_groups = flox.catalog_client.resolve(pkg_groups).await?;
     let candidate_pkgs: Vec<ProvidedPackage> = resolved_groups
@@ -612,11 +611,7 @@ async fn try_find_compatible_major_version_package(
     Ok(candidate_pkgs)
 }
 
-fn group_for_single_package(
-    attr_path: &str,
-    version: Option<&str>,
-    system: SystemEnum,
-) -> PackageGroup {
+fn group_for_single_package(attr_path: &str, version: Option<&str>) -> PackageGroup {
     PackageGroup {
         descriptors: vec![PackageDescriptor {
             attr_path: attr_path.to_string(),
@@ -629,7 +624,7 @@ fn group_for_single_package(
             allow_unfree: None,
             allowed_licenses: None,
             allow_missing_builds: None,
-            systems: vec![system],
+            systems: ALL_SYSTEMS.to_vec(),
         }],
         name: attr_path.to_string(),
     }
