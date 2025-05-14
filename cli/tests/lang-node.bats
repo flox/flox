@@ -93,13 +93,13 @@ teardown() {
 }
 
 # bats test_tags=catalog,init
-@test "auto init installs latest nodejs major version package" {
-  cp -r "$INPUT_DATA/init/node/nodejs_gt_20/." .
+@test "auto init installs nodejs version range package" {
+  cp -r "$INPUT_DATA/init/node/nodejs_lt_24/." .
   chmod -R +w .
   # This test ensures that when a package.json has a version requirment,
-  # in this case ">=20", we give them the nodejs_* package corresponding
-  # to the latest version.
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/nodejs_gt_20.yaml" \
+  # in this case "<24", we give them the nodejs_* package corresponding
+  # to the nearly-latest version.
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/nodejs_lt_24.yaml" \
     run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'nodejs' installed"
   run "$FLOX_BIN" list

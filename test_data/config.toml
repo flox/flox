@@ -384,10 +384,10 @@ pre_cmd = '''
 '''
 cmd = "flox init --auto-setup"
 
-[init.nodejs_gt_20]
-files = ["init/node/nodejs_gt_20"]
+[init.nodejs_lt_24]
+files = ["init/node/nodejs_lt_24"]
 pre_cmd = '''
-    cp -r nodejs_gt_20/* .
+    cp -r nodejs_lt_24/* .
 '''
 cmd = "flox init --auto-setup"
 
