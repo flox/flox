@@ -717,12 +717,14 @@ mod tests {
     use flox_rust_sdk::models::manifest::raw::{CatalogPackage, PackageToInstall};
     use flox_rust_sdk::providers::catalog::test_helpers::catalog_replay_client;
     use flox_rust_sdk::providers::catalog::{GENERATED_DATA, SystemEnum};
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use flox_test_utils::manifests::EMPTY_ALL_SYSTEMS;
+    use indoc::formatdoc;
+    use tracing::instrument::WithSubscriber;
 
     use super::{add_activation_to_rc_file, ensure_rc_file_exists};
     use crate::commands::EnvironmentSelect;
     use crate::commands::install::{Install, package_list_for_prompt};
-    use crate::utils::message::history::History;
 
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
     #[test]
@@ -894,6 +896,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn warns_about_incomplete_system_availability() {
         let (mut flox, tempdir) = flox_instance();
+        let (subscriber, writer) = test_subscriber_message_only();
+
         let is_linux = flox.system.ends_with("linux");
         let response_path = if is_linux {
             GENERATED_DATA.join("resolve/darwin_ps_all.yaml")
@@ -915,12 +919,14 @@ mod tests {
             id: vec![],
             packages: vec![pkg_path.to_string()],
         };
-        install_cmd.handle(flox).await.expect("installation failed");
-        let msgs = &History::global().messages();
-        let expected = format!(
-            "⚠\u{fe0f}  '{install_id}' installed only for the following systems: {installed_systems}"
-        );
-        assert_eq!(msgs.len(), 1);
-        assert_eq!(msgs[0], expected);
+        install_cmd
+            .handle(flox)
+            .with_subscriber(subscriber)
+            .await
+            .expect("installation failed");
+        let expected = formatdoc! {"
+            ⚠\u{fe0f}  '{install_id}' installed only for the following systems: {installed_systems}
+        "};
+        assert_eq!(writer.to_string(), expected);
     }
 }
