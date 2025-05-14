@@ -499,7 +499,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn go_work_system_from_env_var_with_catalog() {
         let (mut flox, temp_dir_handle) = flox_instance();
 
@@ -526,7 +525,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[serial_test::serial]
     async fn go_work_system_from_env_var_off_returns_none() {
         let (flox, _temp_dir_handle) = flox_instance();
 
