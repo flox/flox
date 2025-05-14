@@ -769,6 +769,7 @@ mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::search::{SearchResult, SearchResults};
     use flox_rust_sdk::providers::catalog::test_helpers::{
+        auto_recording_catalog_client,
         constraints_too_tight_dummy_response,
         resolved_pkg_group_with_dummy_package,
     };
@@ -1254,27 +1255,9 @@ mod tests {
     #[tokio::test]
     async fn try_find_compatible_yarn_no_constraints_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.catalog_client =
+            auto_recording_catalog_client("try_find_compatible_yarn_no_constraints_with_catalog");
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            // Response to query available node versions
-            client.push_response(search_response_nodejs_all());
-            // Response for unconstrained nodejs version
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "nodejs_group",
-                &System::from("aarch64-darwin"),
-                "nodejs",
-                "nodejs",
-                "18",
-            )]);
-            // Response for unconstrained yarn version
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "yarn_group",
-                &System::from("aarch64-darwin"),
-                "yarn",
-                "yarn",
-                "1.22",
-            )]);
-        }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: None,
             node: None,
@@ -1284,7 +1267,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(yarn_install.node.attr_path, "nodejs".into());
-        assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
+        assert_eq!(yarn_install.yarn.attr_path, "yarn-berry".into());
     }
 
     /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
@@ -1333,9 +1316,11 @@ mod tests {
         .unwrap()
         .unwrap();
 
+        // TODO: I believe this is wrong, as we should only use nodejs with
+        // yarn, since yarn bundles node
         assert_eq!(yarn_install.node.attr_path, "nodejs_18".into());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
+        assert_eq!(yarn_install.yarn.attr_path, "yarn-berry".into());
     }
 
     /// Test finding yarn with a version of node other than that of
