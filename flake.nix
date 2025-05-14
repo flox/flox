@@ -76,6 +76,7 @@
           pre-commit-check = callPackage ./pkgs/pre-commit-check { inherit (inputs) pre-commit-hooks; };
 
           GENERATED_DATA = ./test_data/generated;
+          UNIT_TEST_GENERATED = ./test_data/unit_test_generated;
           MANUALLY_GENERATED = ./test_data/manually_generated;
 
           # We depend on several nightly features of rustfmt,

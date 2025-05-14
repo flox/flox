@@ -112,6 +112,7 @@ reals_setup() {
     print_var INPUT_DATA
     print_var GENERATED_DATA
     print_var MANUALLY_GENERATED
+    print_var UNIT_TEST_GENERATED
   } >&3
 }
 
