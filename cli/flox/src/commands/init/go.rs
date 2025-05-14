@@ -423,13 +423,8 @@ impl GoVersion {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::data::System;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::providers::catalog::Client;
-    use flox_rust_sdk::providers::catalog::test_helpers::{
-        auto_recording_catalog_client,
-        resolved_pkg_group_with_dummy_package,
-    };
+    use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
 
     use super::*;
     use crate::commands::init::ProvidedPackage;
@@ -537,16 +532,9 @@ mod tests {
     async fn go_version_from_content_returns_compatible_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            // Response for go 1.21.4
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "go_group",
-                &System::from("aarch64-darwin"),
-                "go",
-                "go",
-                "1.21.4",
-            )]);
-        }
+        flox.catalog_client = auto_recording_catalog_client(
+            "go_version_from_content_returns_compatible_version_with_catalog",
+        );
 
         let content = indoc! {r#"
                 // valid go version
@@ -558,9 +546,18 @@ mod tests {
             .unwrap()
             .unwrap();
 
+        // I'm not sure whether it was deliberate or accidental to return a
+        // higher version of go.
+        // But per https://go.dev/doc/modules/gomod-ref#go, the version provided
+        // is minimum-go-version, so I think what we're doing is correct.
         assert_eq!(version, ProvidedVersion::Compatible {
             requested: Some("^1.21.4".to_string()),
-            compatible: ProvidedPackage::new("go", vec!["go"], "1.21.4")
+            compatible: ProvidedPackage {
+                name: "go".to_string(),
+                attr_path: "go".into(),
+                display_version: "1.24.2".to_string(),
+                version: Some("1.24.2".to_string()),
+            }
         });
     }
 
@@ -568,10 +565,10 @@ mod tests {
     async fn go_version_from_content_returns_none_on_incompatible_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            // Response for incompatible go version
-            client.push_resolve_response(vec![]);
-        }
+        flox.catalog_client = auto_recording_catalog_client(
+            "go_version_from_content_returns_none_on_incompatible_version_with_catalog",
+        );
+
         let content = indoc! {r#"
                 // incompatible go version
                 go 0.0.0
