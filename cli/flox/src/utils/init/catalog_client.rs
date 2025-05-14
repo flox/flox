@@ -6,6 +6,7 @@ use flox_rust_sdk::providers::catalog::{
     CatalogClientConfig,
     CatalogMockMode,
     Client,
+    DEFAULT_CATALOG_URL,
     FLOX_CATALOG_DUMP_DATA_VAR,
     FLOX_CATALOG_MOCK_DATA_VAR,
 };
@@ -13,8 +14,6 @@ use tracing::debug;
 
 use crate::config::Config;
 use crate::utils::metrics::read_metrics_uuid;
-
-pub const DEFAULT_CATALOG_URL: &str = "https://api.flox.dev";
 
 /// Initialize the Catalog API client
 ///

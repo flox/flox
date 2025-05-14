@@ -426,7 +426,10 @@ mod tests {
     use flox_rust_sdk::data::System;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::providers::catalog::Client;
-    use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
+    use flox_rust_sdk::providers::catalog::test_helpers::{
+        auto_recording_catalog_client,
+        resolved_pkg_group_with_dummy_package,
+    };
 
     use super::*;
     use crate::commands::init::ProvidedPackage;
@@ -498,7 +501,7 @@ mod tests {
         assert!(module_system.is_none());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn go_work_system_from_env_var_with_catalog() {
         let (mut flox, temp_dir_handle) = flox_instance();
 
@@ -507,17 +510,10 @@ mod tests {
         std::fs::write(&gowork_path, "go 1.21.0\n").unwrap();
         let go_work_env = ("GOWORK", Some(gowork_path.to_str().unwrap()));
 
-        temp_env::async_with_vars([go_work_env], async move {
-            if let Client::Mock(ref mut client) = flox.catalog_client {
-                client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                    "go_group",
-                    &System::from("aarch64-darwin"),
-                    "go",
-                    "go",
-                    "1.23.0",
-                )]);
-            }
+        flox.catalog_client =
+            auto_recording_catalog_client("go_work_system_from_env_var_with_catalog");
 
+        temp_env::async_with_vars([go_work_env], async move {
             let go_work = GoWorkSystem::try_new_from_env_var(&flox).await.unwrap();
             assert!(go_work.is_some());
         })
