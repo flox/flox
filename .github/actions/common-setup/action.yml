@@ -33,7 +33,7 @@ runs:
       uses: "cachix/install-nix-action@v31"
 
     - name: "Configure Nix"
-      uses: "flox/configure-nix-action@main"
+      uses: "flox/configure-nix-action@bryanhonof.npm-update"
       with:
         github-access-token:    "${{ inputs.GITHUB_ACCESS_TOKEN }}"
         substituter:            "${{ inputs.SUBSTITUTER }}"
