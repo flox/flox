@@ -197,6 +197,7 @@ writeShellScriptBin PROJECT_NAME ''
     export GENERATED_DATA='${./../../test_data/generated}'
     export MANUALLY_GENERATED='${./../../test_data/manually_generated}'
     export INPUT_DATA='${./../../test_data/input_data}'
+    export UNIT_TEST_GENERATED='${./../../test_data/unit_test_generated}'
 
     export FLOX_BIN="${flox}/bin/flox"
     export NIX_BIN="${nix}/bin/nix"

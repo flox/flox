@@ -142,6 +142,7 @@ mkShell (
 
         # test data
         define_dev_env_var INPUT_DATA "''${REPO_ROOT}/test_data/input_data";
+        define_dev_env_var UNIT_TEST_GENERATED "''${REPO_ROOT}/test_data/unit_test_generated";
         define_dev_env_var GENERATED_DATA "''${REPO_ROOT}/test_data/generated";
         define_dev_env_var MANUALLY_GENERATED "''${REPO_ROOT}/test_data/manually_generated";
 
