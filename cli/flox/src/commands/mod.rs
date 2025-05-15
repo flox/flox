@@ -308,7 +308,13 @@ impl FloxArgs {
             .flox
             .floxhub_token
             .as_deref()
-            .map(FloxhubToken::from_str)
+            .and_then(|s| {
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(FloxhubToken::from_str(s))
+                }
+            })
             .transpose();
 
         let floxhub_token = match floxhub_token {
