@@ -359,8 +359,14 @@ pub mod test_helpers {
 
     use super::*;
     use crate::flox::Flox;
-    use crate::models::environment::Environment;
+    use crate::flox::test_helpers::flox_instance;
     use crate::models::environment::path_environment::PathEnvironment;
+    use crate::models::environment::{
+        ConcreteEnvironment,
+        Environment,
+        copy_dir_recursive,
+        open_path,
+    };
 
     pub fn result_dir(parent: &Path, package: &str) -> PathBuf {
         parent.join(format!("result-{package}"))
@@ -466,6 +472,17 @@ pub mod test_helpers {
         let dir = result_dir(parent, package);
         let file = dir.join(file_name);
         fs::read_to_string(file).unwrap()
+    }
+
+    /// Assert that a build succeeds given the path to the environment
+    pub fn assert_manifest_build_succeeds(path: impl AsRef<Path>, name: &str) {
+        let path = path.as_ref();
+        let (flox, tmpdir) = flox_instance();
+        copy_dir_recursive(path, &tmpdir, true).unwrap();
+        let ConcreteEnvironment::Path(mut env) = open_path(&flox, &tmpdir).unwrap() else {
+            panic!("expected path environment")
+        };
+        assert_build_status(&flox, &mut env, name, None, true);
     }
 }
 
@@ -1956,5 +1973,10 @@ mod tests {
     #[test]
     fn build_does_not_run_profile_sandbox_pure() {
         build_does_not_run_profile(true);
+    }
+
+    #[test]
+    fn hello_world_builds() {
+        assert_manifest_build_succeeds(GENERATED_DATA.join("build/hello"), "hello");
     }
 }
