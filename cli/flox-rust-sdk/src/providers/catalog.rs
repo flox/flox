@@ -252,6 +252,7 @@ impl Drop for MockRecorder {
             .server
             .record_save(&self.recording, "httpmock")
             .expect("failed to save mock recording");
+        debug!(src = %tempfile.as_path().display(), dest = %self.path.as_path().display(), src_exists = tempfile.as_path().exists(), "renaming recorded mock file");
         fs::rename(&tempfile, &self.path).expect("failed to rename recorded mock file");
         debug!(
             path = ?self.path,
