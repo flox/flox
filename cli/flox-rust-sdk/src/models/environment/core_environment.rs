@@ -430,7 +430,7 @@ impl CoreEnvironment<ReadOnly> {
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
-            .into_path();
+            .keep();
 
         debug!(
             "transaction: making temporary environment in {}",
@@ -758,7 +758,7 @@ impl CoreEnvironment<ReadOnly> {
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
-            .into_path();
+            .keep();
 
         debug!(
             "transaction: making temporary environment in {}",
@@ -793,7 +793,7 @@ impl CoreEnvironment<ReadOnly> {
     ) -> Result<BuildEnvOutputs, CoreEnvironmentError> {
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
-            .into_path();
+            .keep();
 
         debug!(
             "transaction: making temporary environment in {}",
@@ -1148,7 +1148,7 @@ pub mod test_helpers {
         "#};
 
     pub fn new_core_environment(flox: &Flox, contents: &str) -> CoreEnvironment {
-        let env_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let env_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
         fs::write(env_path.join(MANIFEST_FILENAME), contents).unwrap();
 
         CoreEnvironment::new(&env_path, mock_include_fetcher())
@@ -1159,7 +1159,7 @@ pub mod test_helpers {
         manifest_contents: &str,
         lockfile_contents: &str,
     ) -> CoreEnvironment {
-        let env_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let env_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
         fs::write(env_path.join(MANIFEST_FILENAME), manifest_contents).unwrap();
         fs::write(env_path.join(LOCKFILE_FILENAME), lockfile_contents).unwrap();
 
@@ -1272,7 +1272,7 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env_view = new_core_environment(&flox, "");
         let mut temp_env = env_view
-            .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
+            .writable(tempdir_in(&flox.temp_dir).unwrap().keep())
             .unwrap();
         temp_env
             .update_manifest(MANIFEST_INCOMPATIBLE_SYSTEM)

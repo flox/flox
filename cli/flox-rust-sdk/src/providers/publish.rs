@@ -1001,7 +1001,7 @@ pub mod tests {
         flox: &Flox,
         remote: Option<&String>,
     ) -> (PathEnvironment, GitCommandProvider) {
-        let repo_root = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let repo_root = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
         let repo_subdir = repo_root.join("subdir_for_flox_stuff");
 
         let env = new_path_environment_from_env_files_in(

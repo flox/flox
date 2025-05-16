@@ -624,18 +624,14 @@ pub mod test_helpers {
     }
 
     pub fn new_path_environment(flox: &Flox, contents: &str) -> PathEnvironment {
-        new_path_environment_in(
-            flox,
-            contents,
-            tempdir_in(&flox.temp_dir).unwrap().into_path(),
-        )
+        new_path_environment_in(flox, contents, tempdir_in(&flox.temp_dir).unwrap().keep())
     }
 
     pub fn new_named_path_environment(flox: &Flox, contents: &str, name: &str) -> PathEnvironment {
         new_named_path_environment_in(
             flox,
             contents,
-            tempdir_in(&flox.temp_dir).unwrap().into_path(),
+            tempdir_in(&flox.temp_dir).unwrap().keep(),
             name,
         )
     }
@@ -644,7 +640,7 @@ pub mod test_helpers {
         flox: &Flox,
         env_files_dir: impl AsRef<Path>,
     ) -> PathEnvironment {
-        let dot_flox_parent_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let dot_flox_parent_path = tempdir_in(&flox.temp_dir).unwrap().keep();
         new_path_environment_from_env_files_in(flox, env_files_dir, dot_flox_parent_path, None)
     }
 
@@ -653,7 +649,7 @@ pub mod test_helpers {
         env_files_dir: impl AsRef<Path>,
         name: &str,
     ) -> PathEnvironment {
-        let dot_flox_parent_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let dot_flox_parent_path = tempdir_in(&flox.temp_dir).unwrap().keep();
         new_path_environment_from_env_files_in(
             flox,
             env_files_dir,

@@ -1338,8 +1338,8 @@ impl ManagedEnvironment {
     ) -> Result<Self, EnvironmentError> {
         let pointer = ManagedPointer::new(owner, name.clone(), &flox.floxhub);
 
-        let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
-        let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
+        let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
 
         // Caller decides whether to set token
         let token = flox.floxhub_token.as_ref();
@@ -1704,7 +1704,7 @@ pub mod test_helpers {
             owner,
             "name".parse().unwrap(),
             false,
-            CanonicalPath::new(tempdir_in(&flox.temp_dir).unwrap().into_path()).unwrap(),
+            CanonicalPath::new(tempdir_in(&flox.temp_dir).unwrap().keep()).unwrap(),
             new_core_environment(flox, contents),
         )
         .unwrap()

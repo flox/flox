@@ -428,7 +428,7 @@ pub mod test_helpers {
             flox,
             contents,
             owner,
-            tempdir_in(&flox.temp_dir).unwrap().into_path(),
+            tempdir_in(&flox.temp_dir).unwrap().keep(),
             name,
         );
         RemoteEnvironment::new_in(

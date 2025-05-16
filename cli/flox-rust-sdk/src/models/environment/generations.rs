@@ -220,7 +220,7 @@ impl Generations<ReadOnly> {
         let repo = checkout_to_tempdir(
             &self.repo,
             &self.branch,
-            tempfile::tempdir_in(tempdir).unwrap().into_path(),
+            tempfile::tempdir_in(tempdir).unwrap().keep(),
         )?;
 
         Ok(Generations {

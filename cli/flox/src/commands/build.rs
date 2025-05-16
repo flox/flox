@@ -237,7 +237,7 @@ mod test {
         let (flox, _temp_dir) = flox_instance();
         let dot_flox_parent_path = tempdir_in(&flox.temp_dir)
             .unwrap()
-            .into_path()
+            .keep()
             .canonicalize()
             .unwrap();
         let environment = new_path_environment_in(&flox, "version 1", &dot_flox_parent_path);
