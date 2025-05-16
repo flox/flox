@@ -61,6 +61,8 @@
           nix = final.callPackage ./pkgs/nix { };
 
           cpp-semver = final.callPackage ./pkgs/cpp-semver { };
+
+          nix-unit = final.callPackage "${inputs.nix-unit-src}" { };
         })
         inputs.fenix.overlays.default
       ];
