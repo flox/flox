@@ -193,8 +193,8 @@ endef
 
 # Process NEF builds first to fully populate BUILD_OUTPUTS.
 $(foreach _build_outputs,$(NIX_EXPRESSION_BUILDS), \
-  $(eval _pname = $(word 1,$(subst :, ,$(_build_outputs)))) \
-  $(eval _outputs = $(word 2,$(subst :, ,$(_build_outputs)))) \
+  $(eval _pname = $(word 1,$(subst ^, ,$(_build_outputs)))) \
+  $(eval _outputs = $(word 2,$(subst ^, ,$(_build_outputs)))) \
   $(eval $(call COMMON_BUILD_VARS_template)) \
   $(foreach _output,$(subst $(comma), ,$(_outputs)), \
     $(eval $(call NIX_EXPRESSION_BUILD_OUTPUT_template))))
@@ -649,8 +649,8 @@ define NIX_EXPRESSION_BUILD_template =
 endef
 
 $(foreach _build_outputs,$(NIX_EXPRESSION_BUILDS), \
-  $(eval _pname = $(word 1,$(subst :, ,$(_build_outputs)))) \
-  $(eval _outputs = $(word 2,$(subst :, ,$(_build_outputs)))) \
+  $(eval _pname = $(word 1,$(subst ^, ,$(_build_outputs)))) \
+  $(eval _outputs = $(word 2,$(subst ^, ,$(_build_outputs)))) \
   $(eval $(call NIX_EXPRESSION_BUILD_template)))
 
 # Combine JSON build data for each build and write to BUILD_RESULT_FILE.

@@ -106,8 +106,7 @@ let
         assert lib.assertMsg (
           lib.isAttrs derivation && derivation ? type && derivation.type == "derivation"
         ) "${attrPathString} is not a derivation";
-        # TODO: use "^" as a separator in symmetry with nix?
-        "${attrPathString}:${outputs}"
+        "${attrPathString}^${outputs}"
       );
     in
     lib.concatStringsSep " " (mkAttrPathsWithOutputs collectedAttrPaths);
