@@ -16,6 +16,7 @@ pre-commit-hooks.lib.${system}.run {
     "manual"
     "pre-push"
   ];
+  excludes = [ "test_data" ];
   hooks = {
     nixfmt-rfc-style = {
       enable = true;

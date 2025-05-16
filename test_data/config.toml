@@ -775,3 +775,21 @@ myhello.command = """
 myhello.runtime-packages = [ "hello", "goodbye" ]
 ' | flox lock-manifest - > "$RESPONSE_FILE"
 '''
+
+[build.hello]
+files = ["build/hello/hello.c", "build/hello/.flox"]
+pre_cmd = '''
+    rm .flox/env/manifest.lock
+'''
+cmd = '''
+    # re-resolve and build
+    flox lock-manifest .flox/env/manifest.toml > .flox/env/manifest.lock
+'''
+post_cmd = '''
+    build_output_dir="$(dirname $RESPONSE_FILE)"
+    build_dir="$build_output_dir/hello"
+    mkdir -p "$build_dir"
+    cp -R .flox "$build_dir/.flox"
+    cp hello.c "$build_dir/hello.c"
+    mv "$RESPONSE_FILE" "$build_dir/hello.yaml"
+'''
