@@ -90,7 +90,7 @@ SHELL := $(_bash)
 OS := $(shell $(_uname) -s)
 
 # Nix system
-# TODO(nef): we might be passing that around differntly (or call nef stuff with --impure)
+# TODO(nef): we might be passing that around differently (or call nef stuff with --impure)  
 NIX_SYSTEM := $(shell $(_nix) config show system)
 
 # Set the default goal to be all builds if one is not specified.

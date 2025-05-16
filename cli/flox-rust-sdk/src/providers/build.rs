@@ -391,6 +391,8 @@ fn read_output_to_channel(
 }
 
 /// The canonical path for nix expressions when associated with an environment:
+/// Evailable expression builds are discovered with in this directory
+/// (see [get_nix_expression_targets] for the discovery results).
 pub fn nix_expression_dir(environment: &impl Environment) -> PathBuf {
     environment.dot_flox_path().join("pkgs")
 }
@@ -402,9 +404,21 @@ pub fn build_symlink_path(
     Ok(environment.parent_path()?.join(format!("result-{package}")))
 }
 
-/// Use our NEF nix susbsystem to query expressions provided in a given expression dir.
+/// Use our NEF nix subsystem to query expressions provided in a given expression dir.  
 /// We need this to verify arguments early rather than running into `make` or `nix` errors,
-/// that while correct are have a bad signal/noise ratio.
+/// that while correct, have a bad signal/noise ratio.
+///
+/// The result of this function are the availaboe package names/attrpaths,
+/// discovered in `expression_dir`:
+///
+/// ```text
+/// /<expression dir>
+///   /foo.nix
+///   /bar/default.nix
+///   /fizz/buzz/default.nix
+/// ```
+///
+/// will expose the packages `foo`, `bar`, `fizz.buzz`.
 pub fn get_nix_expression_targets(
     expression_dir: &Path,
 ) -> Result<Vec<String>, ManifestBuilderError> {
@@ -568,7 +582,7 @@ pub mod test_helpers {
     }
 
     /// For a list tuples `(AttrPath, NixExpr)`,
-    /// create a file stucture compatible with nef loading,
+    /// create a file structure compatible with nef loading,  
     /// within a provided tempdir.
     /// Places the file structure within _a new directory_ within the provided path.
     pub fn prepare_nix_expressions_in(
