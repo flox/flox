@@ -1149,6 +1149,7 @@ dependencies = [
  "proptest-derive",
  "regex",
  "reqwest 0.11.27",
+ "semver",
  "serde",
  "serde_json",
  "serde_with",

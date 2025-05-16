@@ -46,6 +46,7 @@ tracing-subscriber = { workspace = true, optional = true }
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
 httpmock.workspace = true
+semver.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
