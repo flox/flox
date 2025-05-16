@@ -20,7 +20,7 @@ blake3 = "1.8.2"
 bpaf = { version = "0.9.19", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.41", features = ["serde"] }
-clap = { version = "4.5.37", features = ["derive"] }
+clap = { version = "4.5.38", features = ["derive"] }
 clap_derive = "4.5.4"
 close_fds = "0.3"
 # Pinned due to bug: https://github.com/rust-cli/config-rs/issues/531
@@ -77,7 +77,7 @@ sysinfo = "0.32.1"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
-tempfile = "3.19.1"
+tempfile = "3.20.0"
 textwrap = { version = "0.16.2", features = ["terminal_size"] }
 thiserror = "2"
 time = { version = "0.3", features = ["serde", "formatting"] }
@@ -102,8 +102,8 @@ serial_test = "3.2.0"
 temp-env = "0.3.2"
 
 # watchdog dependencies
-kqueue = "1.0.8"
-signal-hook = "0.3.17"
+kqueue = "1.1.1"
+signal-hook = "0.3.18"
 
 # build(.rs) dependencies
 openapiv3 = "2.0"
