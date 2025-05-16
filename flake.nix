@@ -24,6 +24,13 @@
   inputs.fenix.url = "github:nix-community/fenix";
   inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
 
+  # Include upstram nix-unit (with added flake support)
+  # until a new release is tagged and available in nixpkgs.
+  # Avoid management of 'nixpkgs' and other flake inputs
+  # since we will add nix-unit via an overlay to make use of our nix patches.
+  inputs.nix-unit-src.url = "github:nix-community/nix-unit";
+  inputs.nix-unit-src.flake = false;
+
   # -------------------------------------------------------------------------- #
 
   outputs =
