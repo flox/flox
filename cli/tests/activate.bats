@@ -38,8 +38,7 @@ set enable-bracketed-paste off
 EOF
 
   # Posix-compliant shells
-  for i in "profile" "bashrc" \
-    "zshrc" "zshenv" "zlogin" "zlogout" "zprofile"; do
+  for i in "profile" "bashrc" "zshrc" "zshenv" "zlogin" "zlogout" "zprofile"; do
     cat >"$HOME/.$i" <<EOF
 echo "Sourcing .$i" >&2
 echo "Setting PATH from .$i" >&2
@@ -4680,3 +4679,169 @@ Setting PATH from .bashrc"
     assert_success
     assert_output false # lockfile content should differ due to upgrade
 }
+
+# =============================================================================
+# Nested activation PATH/MANPATH tests and helpers
+# =============================================================================
+
+nested_activation_setup() {
+  export original_path="$PATH"
+  project_setup_common
+  # Undo PATH changes from project_setup_common
+  export PATH="$original_path"
+  echo "" > "$HOME/.bashrc"
+  echo "" > "$HOME/.profile"
+  echo "" > "$HOME/.tcshrc"
+  echo "" > "$HOME/.config/fish/config.fish"
+
+  "$FLOX_BIN" init -d default
+  "$FLOX_BIN" init -d outer
+
+  proj="$(realpath "$PROJECT_DIR")"
+  export default_stub="$proj/default/.flox/run/$NIX_SYSTEM.default.dev"
+  export outer_stub="$proj/outer/.flox/run/$NIX_SYSTEM.outer.dev"
+}
+
+inplace_activation_cmd() {
+  shell="${1:?}"
+  env_path="${2:?}"
+  case "$shell" in
+    bash)
+      echo "eval \"\$(\"$FLOX_BIN\" activate -d $env_path)\";"
+      ;;
+    tcsh)
+      echo "eval \"\`'$FLOX_BIN' activate -d $env_path\`\";"
+      ;;
+    fish)
+      echo "$FLOX_BIN activate -d $env_path | source;"
+      ;;
+    *)
+      echo "invalid shell" >&3
+      exit 1
+      ;;
+  esac
+}
+
+nested_activation_prep_rc_file() {
+  shell="${1:?}"
+  original_path="${2:?}"
+  case "$shell" in
+    bash)
+      echo "export PATH=\"before_path:$original_path\";" >> "$HOME/.bashrc"
+      inplace_activation_cmd bash "$PWD/default" >> "$HOME/.bashrc"
+      echo "export PATH=\"before_path:$original_path\";" >> "$HOME/.profile"
+      inplace_activation_cmd bash "$PWD/default" >> "$HOME/.profile"
+      ;;
+    tcsh)
+      echo "setenv PATH \"before_path:$original_path\";" >> "$HOME/.tcshrc"
+      inplace_activation_cmd tcsh "$PWD/default" >> "$HOME/.tcshrc"
+      ;;
+    fish)
+      echo "set -gx PATH \"before_path:$original_path\";" >> "$HOME/.config/fish/config.fish"
+      inplace_activation_cmd fish "$PWD/default" >> "$HOME/.config/fish/config.fish"
+      ;;
+    *)
+      echo "invalid shell" >&3
+      exit 1
+      ;;
+  esac
+}
+
+run_activation_check_command() {
+  shell="${1:?}"
+  flags="${2:?}"
+  # Quotes around PATH are needed with fish, otherwise it prints components
+  # separated by spaces instead of ':' (since all variables in fish are lists).
+  run "$shell" "$flags" "$FLOX_BIN activate -d outer -- $shell $flags 'echo PATH is \"\\\$PATH\"; echo MANPATH is \"\\\$MANPATH\"'"
+}
+
+inplace_activation_check_script() {
+  shell="${1:?}"
+  echo "$(cat << EOF
+    $(inplace_activation_cmd "$shell" "$PWD/outer")
+    echo "PATH is \$PATH";
+    echo "MANPATH is \$MANPATH";
+EOF
+)"
+}
+
+nested_activation_get_output() {
+  shell="${1:?}"
+  flags="${2:?}"
+  if [ "$flags" = "eval" ]; then
+    run "$shell" -c "$(inplace_activation_check_script "$shell")"
+  else
+    run_activation_check_command "$shell" "$flags"
+  fi
+}
+
+nested_activation_assertions() {
+  # Check that PATH is repaired
+  assert_output --partial "PATH is $outer_stub/bin:$outer_stub/sbin:$default_stub/bin:$default_stub/sbin:before_path:$original_path"
+  # Check that MANPATH is repaired
+  assert_output --partial "MANPATH is $outer_stub/share/man:$default_stub/share/man"
+}
+
+check_nested_activation_repairs_path_and_manpath() {
+  shell="${1:?}"
+  flags="${2:?}"
+  nested_activation_setup # exports $original_path
+  nested_activation_prep_rc_file "$shell" "$original_path"
+  nested_activation_get_output "$shell" "$flags"
+  nested_activation_assertions
+}
+
+# bats test_tags=activate:bash,activate:nested
+@test "bash: command: nested activation repairs (MAN)PATH" {
+  skip "fixme"
+  check_nested_activation_repairs_path_and_manpath bash -lc 
+}
+
+# bats test_tags=activate:bash,activate:nested
+@test "bash: interactive: nested activation repairs (MAN)PATH" {
+  skip "fixme"
+  check_nested_activation_repairs_path_and_manpath bash -ic 
+}
+
+# bats test_tags=activate:bash,activate:nested
+@test "bash: in-place: nested activation repairs (MAN)PATH" {
+  skip "fixme"
+  check_nested_activation_repairs_path_and_manpath bash eval
+}
+
+# bats test_tags=activate:tcsh,activate:nested
+@test "tcsh: command: nested activation repairs (MAN)PATH" {
+  skip "fixme"
+  check_nested_activation_repairs_path_and_manpath tcsh -c
+}
+
+# bats test_tags=activate:tcsh,activate:nested
+@test "tcsh: interactive: nested activation repairs (MAN)PATH" {
+  skip "fixme"
+  check_nested_activation_repairs_path_and_manpath tcsh -ic
+}
+
+# bats test_tags=activate:tcsh,activate:nested
+@test "tcsh: in-place: nested activation repairs (MAN)PATH" {
+  skip "fixme"
+  check_nested_activation_repairs_path_and_manpath tcsh eval
+}
+
+# bats test_tags=activate:fish,activate:nested
+@test "fish: command: nested activation repairs (MAN)PATH" {
+  skip "fixme"
+  check_nested_activation_repairs_path_and_manpath fish -c
+}
+
+# bats test_tags=activate:fish,activate:nested
+@test "fish: interactive: nested activation repairs (MAN)PATH" {
+  skip "fixme"
+  check_nested_activation_repairs_path_and_manpath fish -ic
+}
+
+# bats test_tags=activate:fish,activate:nested
+@test "fish: in-place: nested activation repairs (MAN)PATH" {
+  skip "fixme"
+  check_nested_activation_repairs_path_and_manpath fish eval
+}
+
