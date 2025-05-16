@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := all
 
-ALL = flox-build.mk build-manifest.nix
+ALL = flox-build.mk build-manifest.nix nef/default.nix \
+  $(addprefix nef/lib/,default.nix dirToAttrs.nix extendAttrSet.nix mkOverlay.nix reflect.nix)
 
 OS := $(shell uname -s)
 ifeq (Linux,$(OS))
@@ -22,10 +23,12 @@ libsandbox.dylib: sandbox.c closure.o
 .PHONY: all
 all: $(ALL)
 
+%/libexec_install: %
+	@mkdir -p $(PREFIX)/libexec/$(dir $(@D))
+	cp $< $(PREFIX)/libexec/$(@D)
+
 .PHONY: install
-install: $(ALL)
-	mkdir -p $(PREFIX)/libexec
-	cp $^ $(PREFIX)/libexec
+install: $(addsuffix /libexec_install,$(ALL))
 
 .PHONY: tests
 tests:

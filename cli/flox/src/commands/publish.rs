@@ -146,8 +146,13 @@ impl Publish {
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env, &package)?;
 
-        let build_metadata =
-            check_build_metadata(&flox, &env_metadata, &path_env, &FloxBuildMk, &package)?;
+        let build_metadata = check_build_metadata(
+            &flox,
+            &env_metadata,
+            &path_env,
+            &FloxBuildMk::new(&flox),
+            &package,
+        )?;
 
         // CLI args take precedence over config
         let key_file = cache_args.signing_private_key.or(config
