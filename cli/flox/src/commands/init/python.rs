@@ -312,8 +312,6 @@ impl PoetryPyProject {
             return Ok(None);
         };
 
-        // python version constraints may use a looser semver syntax than
-        // pkgdb. We'll parse and convert them to canonical form.
         let required_python_version = poetry
             .get("dependencies")
             .and_then(|dependencies| dependencies.get("python"))
@@ -322,7 +320,6 @@ impl PoetryPyProject {
             .ok_or_else(|| {
                 anyhow!("No python version specified at 'tool.poetry.dependencies.python'")
             })?
-            .parse::<semver::VersionReq>()?
             .to_string();
 
         let provided_python_version = 'version: {
@@ -510,13 +507,10 @@ impl PyProject {
         //
         // python docs have a space in the version (>= 3.8)
         // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
-        // pkgdb currently throws an exception when passed that specifier
         let required_python_version = toml
             .get("project")
             .and_then(|project| project.get("requires-python"))
             .map(|constraint| constraint.as_str().context("expected a string"))
-            .transpose()?
-            .map(|s| s.parse::<semver::VersionReq>())
             .transpose()?
             .map(|req| req.to_string());
 
