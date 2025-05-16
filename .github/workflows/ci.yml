@@ -89,6 +89,39 @@ jobs:
       - name: "Test"
         run: nix develop -L --no-update-lock-file --command just test-nix-plugins
 
+  nef-dev:
+    name: "Nix expression tests"
+    runs-on: "ubuntu-22.04-8core" 
+    timeout-minutes: 15 # eval only tests should be plenty fast
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v4"
+
+      - name: "Setup upterm session"
+        if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
+        uses: owenthereal/action-upterm@v1
+        with:
+          limit-access-to-actor: true
+          limit-access-to-users: ${{ inputs.allowedUptermUsers }}
+          wait-timeout-minutes: 15
+
+      - name: "Setup"
+        uses: "./.github/actions/common-setup"
+        with:
+          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
+          SUBSTITUTER:            "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER_KEY:        "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID:      "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY:  "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
+
+      - name: "Test"
+        run: nix develop -L --no-update-lock-file --command just test-nef
+
   cli-dev:
     name: "dev"
     runs-on: ${{ matrix.os }}
