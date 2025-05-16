@@ -4814,19 +4814,16 @@ check_nested_activation_repairs_path_and_manpath() {
 
 # bats test_tags=activate:bash,activate:nested
 @test "bash: command: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath bash -lc 
 }
 
 # bats test_tags=activate:bash,activate:nested
 @test "bash: interactive: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath bash -ic 
 }
 
 # bats test_tags=activate:bash,activate:nested
 @test "bash: in-place: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath bash eval
 }
 
