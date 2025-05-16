@@ -313,7 +313,7 @@ pub mod test_helpers {
         std::fs::create_dir_all(&runtime_dir).unwrap();
 
         let git_url_override = owner.map(|owner| {
-            let mock_floxhub_git_dir = tempdir_in(&temp_dir).unwrap().into_path();
+            let mock_floxhub_git_dir = tempdir_in(&temp_dir).unwrap().keep();
             let floxmeta_dir = mock_floxhub_git_dir.join(owner.as_str()).join("floxmeta");
             fs::create_dir_all(&floxmeta_dir).unwrap();
             GitCommandProvider::init(floxmeta_dir, true).unwrap();

@@ -367,7 +367,7 @@ impl FloxArgs {
 
         // in debug mode keep the tempdir to reproduce nix commands
         if self.debug || matches!(self.verbosity, Verbosity::Verbose(1..)) {
-            let _ = temp_dir.into_path();
+            let _ = temp_dir.keep();
         }
 
         tokio::spawn(async move {

@@ -616,7 +616,7 @@ mod tests {
     fn test_handle_pull_result_1() {
         let (flox, _temp_dir_handle) = flox_instance();
 
-        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().keep();
 
         assert!(
             Pull::handle_pull_result(
@@ -643,7 +643,7 @@ mod tests {
         let owner = "owner".parse().unwrap();
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().keep();
 
         Pull::handle_pull_result(
             &flox,
@@ -666,7 +666,7 @@ mod tests {
         let owner = "owner".parse().unwrap();
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().keep();
 
         assert!(
             Pull::handle_pull_result(
@@ -697,7 +697,7 @@ mod tests {
         let owner = "owner".parse().unwrap();
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().keep();
 
         Pull::handle_pull_result(
             &flox,
@@ -722,7 +722,7 @@ mod tests {
     fn test_handle_pull_result_5() {
         let (flox, _temp_dir_handle) = flox_instance();
 
-        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().keep();
 
         assert!(
             Pull::handle_pull_result(
@@ -751,7 +751,7 @@ mod tests {
     fn test_handle_pull_result_6() {
         let (flox, _temp_dir_handle) = flox_instance();
 
-        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().keep();
 
         Pull::handle_pull_result(
             &flox,
