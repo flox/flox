@@ -1,27 +1,28 @@
 {
-  treefmt,
-  nixfmt-rfc-style,
+  cargo-nextest,
   commitizen,
+  daemonize,
+  flox-activations,
+  flox-cli-tests,
+  flox-cli,
+  flox-nix-plugins,
+  flox-watchdog,
   hivemind,
   just,
-  yq,
   lib,
+  mitmproxy,
   mkShell,
-  writeShellScript,
-  procps,
+  nix-unit,
+  nixfmt-rfc-style,
+  podman,
   pre-commit-check,
+  procps,
   pstree,
   shfmt,
-  podman,
-  mitmproxy,
-  cargo-nextest,
-  daemonize,
-  flox-cli,
-  flox-cli-tests,
-  flox-activations,
-  flox-watchdog,
-  flox-nix-plugins,
   stdenv,
+  treefmt,
+  writeShellScript,
+  yq,
   ci ? false,
 }:
 let
@@ -32,19 +33,20 @@ let
     flox-nix-plugins.devPackages
     ++ flox-cli.devPackages
     ++ [
-      just
-      hivemind
-      commitizen
-      treefmt
-      nixfmt-rfc-style
-      shfmt
-      yq
       cargo-nextest
-      procps
-      pstree
-      podman
+      commitizen
       daemonize
       flox-cli-tests
+      hivemind
+      just
+      nix-unit
+      nixfmt-rfc-style
+      podman
+      procps
+      pstree
+      shfmt
+      treefmt
+      yq
     ]
     ++ lib.optionals stdenv.isLinux [
       # The python3Packages.mitmproxy-macos package is broken on mac:
