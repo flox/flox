@@ -74,8 +74,11 @@ generate_bash_startup_commands() {
   # We already customized the PATH and MANPATH, but the user and system
   # dotfiles may have changed them, so finish by doing this again.
   # shellcheck disable=SC1090
-  echo "eval \"\$('$_flox_activations' set-env-dirs --shell bash --flox-env '$_FLOX_ENV' --env-dirs '${FLOX_ENV_DIRS:-}')\";"
-  echo "eval \"\$('$_flox_activations' fix-paths --shell bash --env-dirs '$FLOX_ENV_DIRS' --path '$PATH' --manpath '${MANPATH:-}')\";"
+  # Use generation time _FLOX_ENV because we want to guarantee we activate the
+  # environment we think we're activating. Use runtime FLOX_ENV_DIRS to allow
+  # RC files to perform activations.
+  echo "eval \"\$('$_flox_activations' set-env-dirs --shell bash --flox-env \"$_FLOX_ENV\" --env-dirs \"\${FLOX_ENV_DIRS:-}\")\";"
+  echo "eval \"\$('$_flox_activations' fix-paths --shell bash --env-dirs \"\$FLOX_ENV_DIRS\" --path \"\$PATH\" --manpath \"\${MANPATH:-}\")\";"
 
   # Iterate over $FLOX_ENV_DIRS in reverse order and
   # source user-specified profile scripts if they exist.
