@@ -881,6 +881,7 @@ mod tests {
     // Catalog tests
     ///////////////////////////////////////////////////////////////////////////
 
+    const PYTHON_310_VERSION: &str = "3.10.12";
     const PYTHON_LATEST_VERSION: &str = "3.12.10";
     const POETRY_LATEST_VERSION: &str = "2.1.2";
 
@@ -915,16 +916,16 @@ mod tests {
         });
     }
 
-    /// ProvidedVersion::Compatible should be returned for requires-python = ">=3.8"
+    /// ProvidedVersion::Compatible should be returned for requires-python with no space.
     #[tokio::test]
     async fn pyproject_available_version_no_space() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client = auto_recording_catalog_client("python_gte38_no_space");
+        flox.catalog_client = auto_recording_catalog_client("python_lte310_no_space");
 
         let content = indoc! {r#"
             [project]
-            requires-python = ">=3.8" # < no space
+            requires-python = "<=3.10" # < no space
             "#};
 
         let pyproject = PyProject::from_pyproject_content(&flox, content)
@@ -933,25 +934,25 @@ mod tests {
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
-                requested: Some(">=3.8".to_string()),
-                compatible: ProvidedPackage::new("python3", vec!["python3"], PYTHON_LATEST_VERSION),
+                requested: Some("<=3.10".to_string()),
+                compatible: ProvidedPackage::new("python3", vec!["python3"], PYTHON_310_VERSION),
             },
         });
     }
 
-    /// ProvidedVersion::Compatible should be returned for requires-python = ">= 3.8"
+    /// ProvidedVersion::Compatible should be returned for requires-python with space.
     #[tokio::test]
     async fn pyproject_available_version_with_space() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        flox.catalog_client = auto_recording_catalog_client("python_gte38_with_space");
+        flox.catalog_client = auto_recording_catalog_client("python_lte310_with_space");
 
-        // python docs have a space in the version (>= 3.8):
+        // python docs have a space in the version:
         // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
         // Expect that version requirement to be parsed and passed on to pkgdb in canonical form.
         let content = indoc! {r#"
             [project]
-            requires-python = ">= 3.8" # < with space
+            requires-python = "<= 3.10" # < with space
             "#};
 
         let pyproject = PyProject::from_pyproject_content(&flox, content)
@@ -960,8 +961,8 @@ mod tests {
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
-                requested: Some(">=3.8".to_string()), // without space
-                compatible: ProvidedPackage::new("python3", vec!["python3"], PYTHON_LATEST_VERSION),
+                requested: Some("<=3.10".to_string()), // without space
+                compatible: ProvidedPackage::new("python3", vec!["python3"], PYTHON_310_VERSION),
             }
         });
     }
