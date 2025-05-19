@@ -934,7 +934,7 @@ mod tests {
                 "python3_group",
                 &System::from("aarch64-darwin"),
                 "python3",
-                "python39",
+                "python3",
                 "3.9.18", // FIXME: why isn't this 3.11.6 in the original test?
             )]);
         }
@@ -951,7 +951,7 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: Some(">=3.8".to_string()),
-                compatible: ProvidedPackage::new("python3", vec!["python39"], "3.9.18"),
+                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.9.18"),
             },
         });
     }
@@ -967,7 +967,7 @@ mod tests {
                 "python3_group",
                 &System::from("aarch64-darwin"),
                 "python3",
-                "python39",
+                "python3",
                 "3.9.18",
             )]);
         }
@@ -987,7 +987,7 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: Some(">=3.8".to_string()), // without space
-                compatible: ProvidedPackage::new("python3", vec!["python39"], "3.9.18"),
+                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.9.18"),
             }
         });
     }
@@ -1094,7 +1094,7 @@ mod tests {
                 "python3_group",
                 &System::from("aarch64-darwin"),
                 "python3",
-                "python39",
+                "python3",
                 "3.9.18",
             )]);
             // Response for unconstrained poetry version
@@ -1119,7 +1119,7 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PoetryPyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: Some("^3.7".to_string()),
-                compatible: ProvidedPackage::new("python3", vec!["python39"], "3.9.18"),
+                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.9.18"),
             },
             poetry_version: "1.7.1".to_string(),
         });
