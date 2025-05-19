@@ -286,9 +286,17 @@ mod test {
     }
 
     #[test]
-    fn handles_empty_manpath() {
+    fn handles_blank_manpath() {
         let env_dirs = "/env1:/env2";
         let manpath = "";
+        let fixed = fix_manpath_var(env_dirs, manpath);
+        assert_eq!(fixed, "/env1/share/man:/env2/share/man:");
+    }
+
+    #[test]
+    fn handles_empty_manpath() {
+        let env_dirs = "/env1:/env2";
+        let manpath = "empty";
         let fixed = fix_manpath_var(env_dirs, manpath);
         assert_eq!(fixed, "/env1/share/man:/env2/share/man:");
     }

@@ -3765,7 +3765,7 @@ EOF
   )"
   echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
 
-  echo "eval \`$FLOX_BIN activate -d '$PROJECT_DIR/default'\`" > "$HOME/.tcshrc.extra"
+  echo "eval \"\`'$FLOX_BIN' activate -d '$PROJECT_DIR/default'\`\"" >> "$HOME/.tcshrc.extra"
 
   # It would be better use tcsh -i to source .tcshrc,
   # but that causes the tests to background because tcsh -i tries to open
@@ -4829,19 +4829,16 @@ check_nested_activation_repairs_path_and_manpath() {
 
 # bats test_tags=activate:tcsh,activate:nested
 @test "tcsh: command: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath tcsh -c
 }
 
 # bats test_tags=activate:tcsh,activate:nested
 @test "tcsh: interactive: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath tcsh -ic
 }
 
 # bats test_tags=activate:tcsh,activate:nested
 @test "tcsh: in-place: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath tcsh eval
 }
 
