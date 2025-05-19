@@ -1,7 +1,7 @@
 when:
   path: /api/v1/catalog/resolve
   method: POST
-  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"python3","install_id":"python3","systems":["aarch64-darwin","aarch64-linux","x86_64-darwin","x86_64-linux"],"version":"^1"}],"name":"python3"}]}'
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"python3","install_id":"python3","systems":["aarch64-darwin","aarch64-linux","x86_64-darwin","x86_64-linux"],"version":"1"}],"name":"python3"}]}'
 then:
   status: 200
   header:
