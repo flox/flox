@@ -925,7 +925,7 @@ mod tests {
 
     /// ProvidedVersion::Compatible should be returned for requires-python = ">=3.8"
     #[tokio::test]
-    async fn pyproject_available_version_with_catalog() {
+    async fn pyproject_available_version_no_space() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
@@ -941,7 +941,7 @@ mod tests {
 
         let content = indoc! {r#"
             [project]
-            requires-python = ">= 3.8"
+            requires-python = ">=3.8" # < no space
             "#};
 
         let pyproject = PyProject::from_pyproject_content(&flox, content)
@@ -953,6 +953,42 @@ mod tests {
                 requested: Some(">=3.8".to_string()),
                 compatible: ProvidedPackage::new("python3", vec!["python39"], "3.9.18"),
             },
+        });
+    }
+
+    /// ProvidedVersion::Compatible should be returned for requires-python = ">= 3.8"
+    #[tokio::test]
+    async fn pyproject_available_version_with_space() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+
+        if let Client::Mock(ref mut client) = flox.catalog_client {
+            // Response for python >= 3.8
+            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                "python3_group",
+                &System::from("aarch64-darwin"),
+                "python3",
+                "python39",
+                "3.9.18",
+            )]);
+        }
+
+        // python docs have a space in the version (>= 3.8):
+        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
+        // Expect that version requirement to be parsed and passed on to pkgdb in canonical form.
+        let content = indoc! {r#"
+            [project]
+            requires-python = ">= 3.8" # < with space
+            "#};
+
+        let pyproject = PyProject::from_pyproject_content(&flox, content)
+            .await
+            .unwrap();
+
+        assert_eq!(pyproject.unwrap(), PyProject {
+            provided_python_version: ProvidedVersion::Compatible {
+                requested: Some(">=3.8".to_string()), // without space
+                compatible: ProvidedPackage::new("python3", vec!["python39"], "3.9.18"),
+            }
         });
     }
 
@@ -987,42 +1023,6 @@ mod tests {
             provided_python_version: ProvidedVersion::Incompatible {
                 requested: "^1".to_string(),
                 substitute: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
-            }
-        });
-    }
-
-    /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
-    #[tokio::test]
-    async fn pyproject_parse_version_with_catalog() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            // Response for python >= 3.8
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "python3_group",
-                &System::from("aarch64-darwin"),
-                "python3",
-                "python39",
-                "3.9.18",
-            )]);
-        }
-
-        // python docs have a space in the version (>= 3.8):
-        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
-        // Expect that version requirement to be parsed and passed on to pkgdb in canonical form.
-        let content = indoc! {r#"
-            [project]
-            requires-python = ">= 3.8" # < with space
-            "#};
-
-        let pyproject = PyProject::from_pyproject_content(&flox, content)
-            .await
-            .unwrap();
-
-        assert_eq!(pyproject.unwrap(), PyProject {
-            provided_python_version: ProvidedVersion::Compatible {
-                requested: Some(">=3.8".to_string()), // without space
-                compatible: ProvidedPackage::new("python3", vec!["python39"], "3.9.18"),
             }
         });
     }
