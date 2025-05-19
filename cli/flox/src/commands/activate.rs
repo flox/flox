@@ -102,7 +102,8 @@ impl Activate {
         environment_subcommand_metric!(
             "activate",
             self.environment,
-            start_services = self.start_services
+            start_services = self.start_services,
+            mode = self.mode.clone().unwrap_or(ActivateMode::Dev).to_string()
         );
 
         let mut concrete_environment = match self.environment.to_concrete_environment(&flox) {
@@ -463,6 +464,7 @@ impl Activate {
         //    eval "$(flox activate)"
         if in_place {
             let shell = Self::detect_shell_for_in_place()?;
+            subcommand_metric!("activate", "shell" = shell.to_string());
             command.arg("--shell").arg(shell.exe_path());
             Self::activate_in_place(command, shell)?;
 
@@ -470,6 +472,7 @@ impl Activate {
         }
 
         let shell = Self::detect_shell_for_subshell();
+        subcommand_metric!("activate", "shell" = shell.to_string());
         command.arg("--shell").arg(shell.exe_path());
         // These functions will only return if exec fails
         if interactive {
