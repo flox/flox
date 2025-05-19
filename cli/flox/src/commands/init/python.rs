@@ -312,8 +312,6 @@ impl PoetryPyProject {
             return Ok(None);
         };
 
-        // python version constraints may use a looser semver syntax than
-        // pkgdb. We'll parse and convert them to canonical form.
         let required_python_version = poetry
             .get("dependencies")
             .and_then(|dependencies| dependencies.get("python"))
@@ -322,7 +320,6 @@ impl PoetryPyProject {
             .ok_or_else(|| {
                 anyhow!("No python version specified at 'tool.poetry.dependencies.python'")
             })?
-            .parse::<semver::VersionReq>()?
             .to_string();
 
         let provided_python_version = 'version: {
@@ -510,13 +507,10 @@ impl PyProject {
         //
         // python docs have a space in the version (>= 3.8)
         // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
-        // pkgdb currently throws an exception when passed that specifier
         let required_python_version = toml
             .get("project")
             .and_then(|project| project.get("requires-python"))
             .map(|constraint| constraint.as_str().context("expected a string"))
-            .transpose()?
-            .map(|s| s.parse::<semver::VersionReq>())
             .transpose()?
             .map(|req| req.to_string());
 
@@ -961,7 +955,53 @@ mod tests {
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
-                requested: Some("<=3.10".to_string()), // without space
+                requested: Some("<= 3.10".to_string()),
+                compatible: ProvidedPackage::new("python3", vec!["python3"], PYTHON_310_VERSION),
+            }
+        });
+    }
+
+    #[tokio::test]
+    async fn pyproject_available_version_eqeq() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+
+        flox.catalog_client = auto_recording_catalog_client("python_eqeq310");
+
+        let content = indoc! {r#"
+            [project]
+            requires-python = "==3.10"
+            "#};
+
+        let pyproject = PyProject::from_pyproject_content(&flox, content)
+            .await
+            .unwrap();
+
+        assert_eq!(pyproject.unwrap(), PyProject {
+            provided_python_version: ProvidedVersion::Compatible {
+                requested: Some("==3.10".to_string()),
+                compatible: ProvidedPackage::new("python3", vec!["python3"], PYTHON_310_VERSION),
+            }
+        });
+    }
+
+    #[tokio::test]
+    async fn pyproject_available_version_gte_lt() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+
+        flox.catalog_client = auto_recording_catalog_client("python_gte310_lte311");
+
+        let content = indoc! {r#"
+            [project]
+            requires-python = ">=3.10,<3.11"
+            "#};
+
+        let pyproject = PyProject::from_pyproject_content(&flox, content)
+            .await
+            .unwrap();
+
+        assert_eq!(pyproject.unwrap(), PyProject {
+            provided_python_version: ProvidedVersion::Compatible {
+                requested: Some(">=3.10,<3.11".to_string()),
                 compatible: ProvidedPackage::new("python3", vec!["python3"], PYTHON_310_VERSION),
             }
         });
@@ -985,7 +1025,7 @@ mod tests {
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Incompatible {
-                requested: "^1".to_string(),
+                requested: "1".to_string(),
                 substitute: ProvidedPackage::new("python3", vec!["python3"], PYTHON_LATEST_VERSION),
             }
         });
@@ -1075,7 +1115,7 @@ mod tests {
 
         assert_eq!(pyproject.unwrap(), PoetryPyProject {
             provided_python_version: ProvidedVersion::Incompatible {
-                requested: "^1".to_string(),
+                requested: "1".to_string(),
                 substitute: ProvidedPackage::new("python3", vec!["python3"], PYTHON_LATEST_VERSION),
             },
             poetry_version: POETRY_LATEST_VERSION.to_string(),
