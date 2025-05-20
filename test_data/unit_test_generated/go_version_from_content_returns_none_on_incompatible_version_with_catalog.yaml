@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Wed, 14 May 2025 21:28:56 GMT
+    value: Tue, 20 May 2025 00:33:03 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,5 +14,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: Kk6rqjyfoAMESzw=
+    value: K10V-gErIAMEbUg=
   body: '{"items":[{"name":"go","page":null,"messages":[{"level":"error","type":"constraints_too_tight","message":"Resolution constraints are too tight.","context":{}}]}]}'
