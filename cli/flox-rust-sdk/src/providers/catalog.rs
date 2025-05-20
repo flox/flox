@@ -1589,19 +1589,6 @@ pub mod test_helpers {
             msgs: vec![],
         }
     }
-
-    pub fn constraints_too_tight_dummy_response(attr_path: &str) -> ResolvedPackageGroup {
-        ResolvedPackageGroup {
-            name: attr_path.to_string(),
-            page: None,
-            msgs: vec![ResolutionMessage::ConstraintsTooTight(
-                MsgConstraintsTooTight {
-                    level: MessageLevel::Error,
-                    msg: "Resolution constraints are too tight".to_string(),
-                },
-            )],
-        }
-    }
 }
 
 #[cfg(test)]
