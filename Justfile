@@ -129,7 +129,8 @@ version:
     pushd cli; cargo build -p mk_data; popd
 
 # Generate test data
-@gen-data +mk_data_args="": build-data-gen build-cli
+# TODO: should unit test regeneration respect -f?
+@gen-data +mk_data_args="": build-data-gen build-cli && (unit-tests "" "true")
     mkdata="$PWD/cli/target/debug/mk_data"; pushd test_data; "$mkdata" {{mk_data_args}} config.toml; popd
 
 
@@ -155,8 +156,8 @@ version:
         {{bats_args}}
 
 # Run the CLI unit tests
-@unit-tests regex="": build
-     {{cargo_test_invocation}} {{regex}}
+@unit-tests regex="" record="false": build
+     _FLOX_UNIT_TEST_RECORD={{record}} {{cargo_test_invocation}} {{regex}}
 
 test-nef:
     nix-unit package-builder/nef/tests --arg nixpkgs-url "$COMMON_NIXPKGS_URL"

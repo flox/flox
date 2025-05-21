@@ -1498,18 +1498,19 @@ pub mod test_helpers {
     pub fn auto_recording_catalog_client(filename: &str) -> Client {
         let mut path = UNIT_TEST_GENERATED.join(filename);
         path.set_extension("yaml");
-        let (mock_mode, catalog_url) = if std::env::var("_FLOX_UNIT_TEST_RECORD").is_ok() {
-            // Generate against prod
-            (
-                CatalogMockMode::Record(path),
-                DEFAULT_CATALOG_URL.to_string(),
-            )
-        } else {
-            (
-                CatalogMockMode::Replay(path),
-                "https://not_used".to_string(),
-            )
-        };
+        let (mock_mode, catalog_url) =
+            if std::env::var("_FLOX_UNIT_TEST_RECORD") == Ok("true".to_string()) {
+                // Generate against prod
+                (
+                    CatalogMockMode::Record(path),
+                    DEFAULT_CATALOG_URL.to_string(),
+                )
+            } else {
+                (
+                    CatalogMockMode::Replay(path),
+                    "https://not_used".to_string(),
+                )
+            };
 
         let catalog_config = CatalogClientConfig {
             catalog_url,

@@ -765,10 +765,10 @@ impl InitHook for Node {
 mod tests {
     use std::collections::HashMap;
 
-    use flox_rust_sdk::data::System;
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::search::{SearchResult, SearchResults};
     use flox_rust_sdk::providers::catalog::test_helpers::{
+        auto_recording_catalog_client,
         constraints_too_tight_dummy_response,
         resolved_pkg_group_with_dummy_package,
     };
@@ -1254,27 +1254,9 @@ mod tests {
     #[tokio::test]
     async fn try_find_compatible_yarn_no_constraints_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.catalog_client =
+            auto_recording_catalog_client("try_find_compatible_yarn_no_constraints_with_catalog");
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            // Response to query available node versions
-            client.push_response(search_response_nodejs_all());
-            // Response for unconstrained nodejs version
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "nodejs_group",
-                &System::from("aarch64-darwin"),
-                "nodejs",
-                "nodejs",
-                "18",
-            )]);
-            // Response for unconstrained yarn version
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "yarn_group",
-                &System::from("aarch64-darwin"),
-                "yarn",
-                "yarn",
-                "1.22",
-            )]);
-        }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: None,
             node: None,
@@ -1284,47 +1266,16 @@ mod tests {
         .unwrap();
 
         assert_eq!(yarn_install.node.attr_path, "nodejs".into());
-        assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
+        assert_eq!(yarn_install.yarn.attr_path, "yarn-berry".into());
     }
 
     /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
     #[tokio::test]
     async fn try_find_compatible_yarn_node_available_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.catalog_client =
+            auto_recording_catalog_client("try_find_compatible_yarn_node_available_with_catalog");
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            // Response to query available node versions
-            client.push_response(search_response_nodejs_all());
-            // Response when nodejs 18 is requested
-            client.push_resolve_response(vec![
-                // Here rather than writing out all N node versions we support,
-                // I've listed at least one non-matching version, the correct
-                // version, and the catch-all "nodejs" package
-                constraints_too_tight_dummy_response("nodejs_20"),
-                resolved_pkg_group_with_dummy_package(
-                    "nodejs_group",
-                    &System::from("aarch64-darwin"),
-                    "nodejs_18",
-                    "nodejs_18",
-                    "18",
-                ),
-                resolved_pkg_group_with_dummy_package(
-                    "nodejs_group",
-                    &System::from("aarch64-darwin"),
-                    "nodejs",
-                    "nodejs",
-                    "18",
-                ),
-            ]);
-            // Response for unconstrained yarn version
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "yarn_group",
-                &System::from("aarch64-darwin"),
-                "yarn",
-                "yarn",
-                "1.22",
-            )]);
-        }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: None,
             node: Some("18".to_string()),
@@ -1333,9 +1284,11 @@ mod tests {
         .unwrap()
         .unwrap();
 
+        // TODO: I believe this is wrong, as we should only use nodejs with
+        // yarn, since yarn bundles node
         assert_eq!(yarn_install.node.attr_path, "nodejs_18".into());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
+        assert_eq!(yarn_install.yarn.attr_path, "yarn-berry".into());
     }
 
     /// Test finding yarn with a version of node other than that of
@@ -1343,19 +1296,9 @@ mod tests {
     #[tokio::test]
     async fn try_find_compatible_yarn_node_unavailable_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.catalog_client =
+            auto_recording_catalog_client("try_find_compatible_yarn_node_unavailable_with_catalog");
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            // Response to query available node versions
-            client.push_response(search_response_nodejs_all());
-            // No version of node satisfies this version requirement
-            // Again, this is just an arbitrary number of node versions
-            // since there's so many of them.
-            client.push_resolve_response(vec![
-                constraints_too_tight_dummy_response("nodejs_23"),
-                constraints_too_tight_dummy_response("nodejs_18"),
-                constraints_too_tight_dummy_response("nodejs"),
-            ]);
-        }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: None,
             node: Some("25".to_string()),
@@ -1370,27 +1313,9 @@ mod tests {
     #[tokio::test]
     async fn try_find_compatible_yarn_yarn_available_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.catalog_client =
+            auto_recording_catalog_client("try_find_compatible_yarn_yarn_available_with_catalog");
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            // Response to query available node versions
-            client.push_response(search_response_nodejs_all());
-            // Response for unconstrained nodejs version
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "nodejs_group",
-                &System::from("aarch64-darwin"),
-                "nodejs",
-                "nodejs",
-                "18",
-            )]);
-            // Response when yarn version 1 is requested
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "yarn_group",
-                &System::from("aarch64-darwin"),
-                "yarn",
-                "yarn",
-                "1.22",
-            )]);
-        }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: Some("1".to_string()),
             node: None,
@@ -1409,21 +1334,9 @@ mod tests {
     #[tokio::test]
     async fn try_find_compatible_yarn_yarn_unavailable_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.catalog_client =
+            auto_recording_catalog_client("try_find_compatible_yarn_yarn_unavailable_with_catalog");
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            // Response to query available node versions
-            client.push_response(search_response_nodejs_all());
-            // Response for unconstrained nodejs version
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "nodejs_group",
-                &System::from("aarch64-darwin"),
-                "nodejs",
-                "nodejs",
-                "18",
-            )]);
-            // Response for yarn version 2 (resolution failure)
-            client.push_resolve_response(vec![]);
-        }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: Some("2".to_string()),
             node: None,
@@ -1440,31 +1353,8 @@ mod tests {
     async fn try_find_compatible_yarn_both_available_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            // Response to query available node versions
-            client.push_response(search_response_nodejs_all());
-            // Response for nodejs version 18
-            client.push_resolve_response(vec![
-                constraints_too_tight_dummy_response("nodejs_23"),
-                constraints_too_tight_dummy_response("nodejs_21"),
-                constraints_too_tight_dummy_response("nodejs_20"),
-                resolved_pkg_group_with_dummy_package(
-                    "nodejs_group",
-                    &System::from("aarch64-darwin"),
-                    "nodejs_18",
-                    "nodejs_18",
-                    "18",
-                ),
-            ]);
-            // Response for yarn version 1
-            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
-                "yarn_group",
-                &System::from("aarch64-darwin"),
-                "yarn",
-                "yarn",
-                "1.22",
-            )]);
-        }
+        flox.catalog_client =
+            auto_recording_catalog_client("try_find_compatible_yarn_both_available_with_catalog");
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
             yarn: Some("1".to_string()),
             node: Some("18".to_string()),
