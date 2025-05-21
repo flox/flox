@@ -375,7 +375,7 @@ impl_into_inner!(Install, BTreeMap<String, ManifestPackageDescriptor>);
 #[serde(
     untagged,
     expecting = "Expected either a catalog package descriptor, a flake installable or a store path.
-See https://flox.dev/docs/concepts/manifest/#package-descriptors for more information."
+See https://flox.dev/docs/reference/command-reference/manifest.toml/#package-descriptors for more information."
 )]
 pub enum ManifestPackageDescriptor {
     Catalog(PackageDescriptorCatalog),
