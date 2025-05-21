@@ -250,7 +250,19 @@ impl Drop for MockRecorder {
         // https://github.com/alexliesenfeld/httpmock/issues/115
         let tempfile = self
             .server
-            .record_save(&self.recording, "httpmock")
+            .record_save(
+                &self.recording,
+                // We need something unique in the name otherwise parallel
+                // threads can race each other
+                format!(
+                    "httpmock_{}",
+                    self.path
+                        .file_name()
+                        .expect("path should have filename")
+                        .to_str()
+                        .expect("path should be unicode")
+                ),
+            )
             .expect("failed to save mock recording");
         fs::rename(&tempfile, &self.path).expect("failed to rename recorded mock file");
         debug!(
