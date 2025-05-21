@@ -72,7 +72,7 @@ runs:
         # And check that tailscaled came up. The CLI will block for a bit waiting
         # for it. And --json will make it exit with status 0 even if we're logged
         # out (as we will be). Without --json it returns an error if we're not up.
-        sudo $_nix run nixpkgs#tailscale -- status --json >/dev/null
+        sudo $_nix run nixpkgs#tailscale -- status --json
         echo "::endgroup::"
 
         echo "::group::Starting tailscale.."
@@ -84,6 +84,8 @@ runs:
         timeout --verbose --kill-after=1s ${TIMEOUT} \
           sudo $_nix run nixpkgs#tailscale -- \
           up ${TAGS_ARG} --authkey=${TAILSCALE_AUTHKEY} --hostname=${HOSTNAME} --accept-routes ${ADDITIONAL_ARGS}
+        sudo $_nix run nixpkgs#tailscale -- status --json
+        sudo cat ~/tailscaled.log
         echo "::endgroup::"
 
     - name: "Find remote server to run tests on"
