@@ -622,7 +622,7 @@ define NIX_EXPRESSION_BUILD_template =
 
   # Harvest the logfile from the build.
   $($(_pvarname)_logfile): $(_result) FORCE
-	$(_V_) $(_nix) log $$</. > $($(_pvarname)_logfile)
+	( $(_V_) $(_nix) log $$</. || echo "No logs available" ) > $($(_pvarname)_logfile)
 
   # Add the log to the store and create a GCRoot for it.
   $(_result)-log: $($(_pvarname)_logfile)
