@@ -14,6 +14,7 @@ use flox_rust_sdk::providers::publish::{
     build_repo_err,
     check_build_metadata,
     check_environment_metadata,
+    check_package_metadata,
 };
 use indoc::{formatdoc, indoc};
 use tracing::{debug, instrument};
@@ -144,15 +145,12 @@ impl Publish {
         };
 
         // Check the environment for appropriate state to build and publish
-        let env_metadata = check_environment_metadata(&flox, &path_env, &package)?;
+        let env_metadata = check_environment_metadata(&flox, &path_env)?;
 
-        let build_metadata = check_build_metadata(
-            &flox,
-            &env_metadata,
-            &path_env,
-            &FloxBuildMk::new(&flox),
-            &package,
-        )?;
+        let build_metadata =
+            check_build_metadata(&flox, &env_metadata, &FloxBuildMk::new(&flox), &package)?;
+
+        let package_metadata = check_package_metadata(&env_metadata.lockfile, &package)?;
 
         // CLI args take precedence over config
         let key_file = cache_args.signing_private_key.or(config
@@ -162,7 +160,8 @@ impl Publish {
             .and_then(|cfg| cfg.signing_private_key.clone()));
 
         let auth = Auth::from_flox(&flox)?;
-        let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
+        let publish_provider =
+            PublishProvider::new(env_metadata, build_metadata, package_metadata, auth);
 
         debug!("publishing package: {}", &package);
         match publish_provider
