@@ -23,7 +23,7 @@ use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::path_environment::PathEnvironment;
-use crate::models::environment::{Environment, EnvironmentError, PathPointer};
+use crate::models::environment::{Environment, EnvironmentError, EnvironmentPointer};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::Inner;
 use crate::providers::auth::catalog_auth_to_envs;
@@ -97,21 +97,16 @@ pub struct LockedUrlInfo {
 
 /// Ensures that the required metadata for publishing is consistent from the environment
 #[allow(clippy::manual_non_exhaustive)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CheckedEnvironmentMetadata {
+    pub lockfile: Lockfile,
     // This is the local root path of the repo containing the environment
     pub repo_root_path: PathBuf,
     // This is the path to the .flox for the build environment relative to the repo_root_path
     pub rel_dotflox_path: PathBuf,
 
-    // There may or may not be a locked base catalog reference in the environment
-    pub base_catalog_ref: LockedUrlInfo,
     // The build repo reference is always present
     pub build_repo_ref: LockedUrlInfo,
-
-    // These are collected from the environment manifest
-    pub package: String,
-    pub description: String,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
@@ -131,6 +126,21 @@ pub struct CheckedBuildMetadata {
     pub system: SystemEnum,
 
     pub version: Option<String>,
+
+    // This field isn't "pub", so no one outside this module can construct this struct. That helps
+    // ensure that we can only make this struct as a result of doing the "right thing."
+    _private: (),
+}
+
+#[allow(clippy::manual_non_exhaustive)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct PackageMetadata {
+    // There may or may not be a locked base catalog reference in the environment
+    pub base_catalog_ref: LockedUrlInfo,
+
+    // These are collected from the environment manifest
+    pub package: String,
+    pub description: String,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
@@ -417,6 +427,7 @@ impl ClientSideCatalogStoreConfig {
 pub struct PublishProvider<A> {
     pub env_metadata: CheckedEnvironmentMetadata,
     pub build_metadata: CheckedBuildMetadata,
+    pub package_metadata: PackageMetadata,
     auth: A,
 }
 
@@ -424,11 +435,13 @@ impl<A> PublishProvider<A> {
     pub fn new(
         env_metadata: CheckedEnvironmentMetadata,
         build_metadata: CheckedBuildMetadata,
+        package_metadata: PackageMetadata,
         auth: A,
     ) -> Self {
         Self {
             env_metadata,
             build_metadata,
+            package_metadata,
             auth,
         }
     }
@@ -455,7 +468,7 @@ where
         client
             .create_package(
                 &catalog_name,
-                &self.env_metadata.package,
+                &self.package_metadata.package,
                 &self.env_metadata.build_repo_ref.url,
             )
             .await
@@ -470,7 +483,7 @@ where
         // needed.
         tracing::debug!("Beginning publish of package...");
         let publish_response = client
-            .publish_info(catalog_name, &self.env_metadata.package)
+            .publish_info(catalog_name, &self.package_metadata.package)
             .await
             .map_err(PublishError::CatalogError)?;
 
@@ -486,7 +499,7 @@ where
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
                 broken: Some(false),
-                description: self.env_metadata.description.clone(),
+                description: self.package_metadata.description.clone(), // TODO: extract from expr build result
                 drv_path: self.build_metadata.drv_path.clone(),
                 license: None,
                 name: self.build_metadata.name.clone(),
@@ -497,7 +510,7 @@ where
                 unfree: None,
                 version: self.build_metadata.version.clone(),
             },
-            locked_base_catalog_url: Some(self.env_metadata.base_catalog_ref.url.clone()),
+            locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.url.clone()),
             url: self.env_metadata.build_repo_ref.url.clone(),
             rev: self.env_metadata.build_repo_ref.rev.clone(),
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
@@ -515,7 +528,7 @@ where
 
         tracing::debug!("Publishing build in catalog...");
         client
-            .publish_build(&catalog_name, &self.env_metadata.package, &build_info)
+            .publish_build(&catalog_name, &self.package_metadata.package, &build_info)
             .await
             .map_err(PublishError::CatalogError)?;
 
@@ -618,7 +631,6 @@ pub fn check_build_metadata_from_build_result(
 pub fn check_build_metadata(
     flox: &Flox,
     env_metadata: &CheckedEnvironmentMetadata,
-    env: &PathEnvironment,
     builder: &impl ManifestBuilder,
     pkg: &str,
 ) -> Result<CheckedBuildMetadata, PublishError> {
@@ -645,8 +657,13 @@ pub fn check_build_metadata(
                 .to_string(),
         )
     })?;
-    let mut clean_build_env =
-        PathEnvironment::open(flox, PathPointer::new(env.name()), dot_flox_path)?;
+    let EnvironmentPointer::Path(path_pointer) = EnvironmentPointer::open(&dot_flox_path)
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?
+    else {
+        unreachable!("Cloned environment contained a path environmentonment")
+    };
+
+    let mut clean_build_env = PathEnvironment::open(flox, path_pointer, dot_flox_path)?;
 
     // Build the package and collect the outputs
     let output_stream = builder
@@ -877,7 +894,6 @@ fn gather_base_repo_meta(lockfile: &Lockfile) -> Result<LockedUrlInfo, PublishEr
 pub fn check_environment_metadata(
     flox: &Flox,
     environment: &impl Environment,
-    pkg: &str,
 ) -> Result<CheckedEnvironmentMetadata, PublishError> {
     // We want to make sure we don't incur a lock operation, it must be locked and committed to the repo
     // So we do so with an immutable Environment reference.
@@ -901,22 +917,34 @@ pub fn check_environment_metadata(
     })?;
 
     let build_repo_meta = gather_build_repo_meta(&git)?;
-    let base_repo_meta = gather_base_repo_meta(&lockfile)?;
+
+    Ok(CheckedEnvironmentMetadata {
+        lockfile,
+        build_repo_ref: build_repo_meta,
+        repo_root_path: git.path().to_path_buf(),
+        rel_dotflox_path: rel_dotflox_path.to_path_buf(),
+        _private: (),
+    })
+}
+
+pub fn check_package_metadata(
+    lockfile: &Lockfile,
+    pkg: &str,
+) -> Result<PackageMetadata, PublishError> {
+    let base_catalog_ref = gather_base_repo_meta(lockfile)?;
 
     let description = lockfile
         .manifest
         .build
         .inner()
         .get(pkg)
-        .and_then(|desc| desc.description.clone());
+        .and_then(|desc| desc.description.clone())
+        .unwrap_or_default();
 
-    Ok(CheckedEnvironmentMetadata {
-        base_catalog_ref: base_repo_meta,
-        build_repo_ref: build_repo_meta,
+    Ok(PackageMetadata {
         package: pkg.to_string(),
-        repo_root_path: git.path().to_path_buf(),
-        rel_dotflox_path: rel_dotflox_path.to_path_buf(),
-        description: description.unwrap_or_else(|| "Not Provided".to_string()),
+        description,
+        base_catalog_ref,
         _private: (),
     })
 }
@@ -934,7 +962,6 @@ pub mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::data::CanonicalPath;
     use crate::flox::FloxhubToken;
     use crate::flox::test_helpers::{create_test_token, flox_instance};
     use crate::models::environment::path_environment::PathEnvironment;
@@ -1031,7 +1058,7 @@ pub mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let (env, _git) = example_path_environment(&flox, None);
 
-        let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
+        let meta = check_environment_metadata(&flox, &env);
         meta.expect_err("Should fail due to not being a git repo");
     }
 
@@ -1041,13 +1068,13 @@ pub mod tests {
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, _git) = example_path_environment(&flox, Some(&remote_uri));
 
-        let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
+        let meta = check_environment_metadata(&flox, &env);
         assert!(meta.is_ok());
 
         std::fs::write(env.manifest_path(&flox).unwrap(), "dirty content")
             .expect("to write some additional text to the .flox");
 
-        let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
+        let meta = check_environment_metadata(&flox, &env);
         match meta {
             Err(PublishError::UnsupportedEnvironmentState(_msg)) => {},
             _ => panic!("Expected error to be of type UnsupportedEnvironmentState"),
@@ -1060,7 +1087,7 @@ pub mod tests {
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, git) = example_path_environment(&flox, Some(&remote_uri));
 
-        let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
+        let meta = check_environment_metadata(&flox, &env);
         assert!(meta.is_ok());
 
         let manifest_path = env
@@ -1075,7 +1102,7 @@ pub mod tests {
             .expect("adding flox files");
         git.commit("dirty comment").expect("be able to commit");
 
-        let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME);
+        let meta = check_environment_metadata(&flox, &env);
         match meta {
             Err(PublishError::UnsupportedEnvironmentState(_msg)) => {},
             _ => panic!("Expected error to be of type UnsupportedEnvironmentState"),
@@ -1088,8 +1115,7 @@ pub mod tests {
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
-        let meta = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME).unwrap();
-        let description_in_manifest = "Some sample package description from our tests";
+        let meta = check_environment_metadata(&flox, &env).unwrap();
 
         let build_repo_meta = meta.build_repo_ref;
         assert!(build_repo_meta.url.contains(&remote_uri));
@@ -1099,9 +1125,19 @@ pub mod tests {
                 .is_ok()
         );
         assert_eq!(build_repo_meta.rev_count, 1);
+    }
 
-        let lockfile_path = CanonicalPath::new(env.lockfile_path(&flox).unwrap());
-        let lockfile = Lockfile::read_from_file(&lockfile_path.unwrap()).unwrap();
+    #[test]
+    fn test_check_package_meta_nominal() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
+        let (mut env, _) = example_path_environment(&flox, Some(&remote_uri));
+
+        let lockfile = env.lockfile(&flox).unwrap().into();
+
+        let meta = check_package_metadata(&lockfile, EXAMPLE_PACKAGE_NAME).unwrap();
+        let description_in_manifest = "Some sample package description from our tests";
+
         // Only the toplevel group in this example, so we can grab the first package
         let locked_base_pkg = lockfile.packages[0].as_catalog_package_ref().unwrap();
         assert_eq!(meta.base_catalog_ref.url, locked_base_pkg.locked_url);
@@ -1123,11 +1159,11 @@ pub mod tests {
 
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
-        let env_metadata = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME).unwrap();
+        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
 
         // This will actually run the build
-        let meta = check_build_metadata(&flox, &env_metadata, &env, &builder, EXAMPLE_PACKAGE_NAME)
-            .unwrap();
+        let meta =
+            check_build_metadata(&flox, &env_metadata, &builder, EXAMPLE_PACKAGE_NAME).unwrap();
 
         let version_in_manifest = "1.0.2a";
 
@@ -1151,13 +1187,16 @@ pub mod tests {
         let catalog_name = token.handle().to_string();
         flox.floxhub_token = Some(token);
 
-        let env_metadata = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME).unwrap();
+        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let build_metadata =
-            check_build_metadata(&flox, &env_metadata, &env, &builder, EXAMPLE_PACKAGE_NAME)
-                .unwrap();
+            check_build_metadata(&flox, &env_metadata, &builder, EXAMPLE_PACKAGE_NAME).unwrap();
+
+        let package_metadata =
+            check_package_metadata(&env_metadata.lockfile, EXAMPLE_PACKAGE_NAME).unwrap();
 
         let auth = Auth::from_flox(&flox).unwrap();
-        let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
+        let publish_provider =
+            PublishProvider::new(env_metadata, build_metadata, package_metadata, auth);
 
         reset_mocks(&mut flox.catalog_client, vec![
             Response::CreatePackage,
@@ -1180,7 +1219,11 @@ pub mod tests {
     /// can be passed to publish()
     ///
     /// It is dummy in the sense that no human thought about it ;)
-    fn dummy_publish_metadata() -> (CheckedBuildMetadata, CheckedEnvironmentMetadata) {
+    fn dummy_publish_metadata() -> (
+        CheckedBuildMetadata,
+        CheckedEnvironmentMetadata,
+        PackageMetadata,
+    ) {
         let build_metadata = CheckedBuildMetadata {
             name: "dummy".to_string(),
             pname: "dummy".to_string(),
@@ -1193,15 +1236,22 @@ pub mod tests {
         };
 
         let env_metadata = CheckedEnvironmentMetadata {
+            lockfile: Lockfile::default(),
             repo_root_path: PathBuf::new(),
             rel_dotflox_path: PathBuf::new(),
-            base_catalog_ref: LockedUrlInfo {
+
+            build_repo_ref: LockedUrlInfo {
                 url: "dummy".to_string(),
                 rev: "dummy".to_string(),
                 rev_count: 0,
                 rev_date: Utc::now(),
             },
-            build_repo_ref: LockedUrlInfo {
+
+            _private: (),
+        };
+
+        let package_metadata = PackageMetadata {
+            base_catalog_ref: LockedUrlInfo {
                 url: "dummy".to_string(),
                 rev: "dummy".to_string(),
                 rev_count: 0,
@@ -1212,7 +1262,7 @@ pub mod tests {
             _private: (),
         };
 
-        (build_metadata, env_metadata)
+        (build_metadata, env_metadata, package_metadata)
     }
 
     #[tokio::test]
@@ -1225,10 +1275,11 @@ pub mod tests {
         flox.floxhub_token = Some(token);
 
         // Don't do a build because it's slow
-        let (build_metadata, env_metadata) = dummy_publish_metadata();
+        let (build_metadata, env_metadata, package_metadata) = dummy_publish_metadata();
 
         let auth = Auth::from_flox(&flox).unwrap();
-        let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
+        let publish_provider =
+            PublishProvider::new(env_metadata, build_metadata, package_metadata, auth);
 
         reset_mocks(&mut client, vec![
             Response::CreatePackage,
@@ -1340,14 +1391,16 @@ pub mod tests {
         let catalog_name = token.handle().to_string();
         flox.floxhub_token = Some(token.clone());
 
-        let env_metadata = check_environment_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME).unwrap();
+        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let build_metadata =
-            check_build_metadata(&flox, &env_metadata, &env, &builder, EXAMPLE_PACKAGE_NAME)
-                .unwrap();
+            check_build_metadata(&flox, &env_metadata, &builder, EXAMPLE_PACKAGE_NAME).unwrap();
+        let package_metadata =
+            check_package_metadata(&env_metadata.lockfile, EXAMPLE_PACKAGE_NAME).unwrap();
 
         let (_key_file, cache) = local_nix_cache(&token);
         let auth = Auth::from_flox(&flox).unwrap();
-        let publish_provider = PublishProvider::new(env_metadata, build_metadata, auth);
+        let publish_provider =
+            PublishProvider::new(env_metadata, build_metadata, package_metadata, auth);
 
         // the 'cache' should be non existent before the publish
         let cache_url = cache.upload_url().unwrap();

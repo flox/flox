@@ -382,7 +382,7 @@ impl EnvironmentPointer {
     /// Use this method to determine the type of an environment at a given path.
     /// The result should be used to call the appropriate `open` method
     /// on either [path_environment::PathEnvironment] or [managed_environment::ManagedEnvironment].
-    fn open(dot_flox_path: &CanonicalPath) -> Result<EnvironmentPointer, EnvironmentError> {
+    pub fn open(dot_flox_path: &CanonicalPath) -> Result<EnvironmentPointer, EnvironmentError> {
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         let pointer_contents = match fs::read(&pointer_path) {
             Ok(contents) => contents,
