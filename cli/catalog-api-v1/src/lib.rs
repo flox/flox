@@ -34,14 +34,14 @@ pub mod types {
     }
 
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct CatalogStoreConfigPublisher {
-        pub publisher_url: String,
-    }
+    pub struct CatalogStoreConfigPublisher {}
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{CatalogStoreConfig, CatalogStoreConfigNixCopy, CatalogStoreConfigPublisher};
+    use crate::types::{
+        CatalogStoreConfig, CatalogStoreConfigNixCopy, CatalogStoreConfigPublisher,
+    };
 
     #[test]
     fn deserialize_catalog_store_config_null() {
@@ -84,15 +84,27 @@ mod tests {
     #[test]
     fn deserialize_catalog_store_config_publisher() {
         let response_string = r#"{
+           "store_type": "publisher"
+        }"#;
+
+        let store_config = serde_json::from_str::<CatalogStoreConfig>(response_string).unwrap();
+        assert_eq!(
+            store_config,
+            CatalogStoreConfig::Publisher(CatalogStoreConfigPublisher {})
+        )
+    }
+
+    #[test]
+    fn deserialize_catalog_store_config_publisher_ignores_deprecated_url() {
+        let response_string = r#"{
            "store_type": "publisher",
            "publisher_url": "s3://example"
         }"#;
 
         let store_config = serde_json::from_str::<CatalogStoreConfig>(response_string).unwrap();
-        assert_eq!(store_config, 
-            CatalogStoreConfig::Publisher( CatalogStoreConfigPublisher {
-                 publisher_url: "s3://example".into(),
-                })
-            )
+        assert_eq!(
+            store_config,
+            CatalogStoreConfig::Publisher(CatalogStoreConfigPublisher {})
+        )
     }
 }
