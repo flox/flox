@@ -44,7 +44,7 @@ activate_cuda() {
   if [ -z "$SYSTEM_LIBS" ]; then
     # shellcheck disable=SC2016
     SYSTEM_LIBS=$(
-      "$_find" "${fhs_root_prefix}/run/opengl-driver" -type f -print 2> /dev/null \
+      { "$_find" "${fhs_root_prefix}/run/opengl-driver" -type f -print 2> /dev/null || echo; } \
         | "$_nawk" -v lib_pattern="${lib_pattern}" \
           'BEGIN {files=""} $0 ~ lib_pattern {files = ( files == "" ? $NF : files ":" $NF)} END {print files}'
     )

@@ -33,7 +33,6 @@ project_setup() {
   export FAKE_FHS_ROOT="${PROJECT_DIR}/fake_fhs_root"
   mkdir "$FAKE_FHS_ROOT"
   mkdir -p "${FAKE_FHS_ROOT}/dev"
-  mkdir -p "${FAKE_FHS_ROOT}/run/opengl-driver"
 }
 
 project_teardown() {
@@ -77,6 +76,7 @@ teardown() {
 
 @test "cuda disabled when nvidia0 device present but libcuba absent on NixOS" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
+  mkdir -p "${FAKE_FHS_ROOT}/run/opengl-driver"
 
   run "$FLOX_BIN" activate -- bash \
     "$TESTS_DIR/cuda/cuda-disabled.sh" \
@@ -124,6 +124,7 @@ teardown() {
 
 @test "cuda enabled when nvidia0 device present and libcuda present on NixOS" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
+  mkdir -p "${FAKE_FHS_ROOT}/run/opengl-driver"
   touch "${FAKE_FHS_ROOT}/run/opengl-driver/libcuda.so"
   touch "${FAKE_FHS_ROOT}/run/opengl-driver/libcuda.so.1"
   touch "${FAKE_FHS_ROOT}/run/opengl-driver/libcudart.so"
