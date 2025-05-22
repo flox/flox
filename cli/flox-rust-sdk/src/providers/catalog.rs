@@ -1481,7 +1481,6 @@ impl SearchTerm {
 
 pub mod test_helpers {
     use super::*;
-    use crate::data::System;
 
     pub static UNIT_TEST_GENERATED: LazyLock<PathBuf> =
         LazyLock::new(|| PathBuf::from(std::env::var("UNIT_TEST_GENERATED").unwrap()));
@@ -1541,53 +1540,6 @@ pub mod test_helpers {
         };
 
         client.reset_mocks(responses);
-    }
-
-    pub fn resolved_pkg_group_with_dummy_package(
-        group_name: &str,
-        system: &System,
-        install_id: &str,
-        pkg_path: &str,
-        version: &str,
-    ) -> ResolvedPackageGroup {
-        let pkg = PackageResolutionInfo {
-            catalog: None,
-            attr_path: pkg_path.to_string(),
-            pkg_path: pkg_path.to_string(),
-            broken: Some(false),
-            derivation: String::new(),
-            description: None,
-            insecure: Some(false),
-            install_id: install_id.to_string(),
-            license: None,
-            locked_url: String::new(),
-            name: String::new(),
-            outputs: vec![],
-            outputs_to_install: None,
-            pname: String::new(),
-            rev: String::new(),
-            rev_count: 0,
-            rev_date: chrono::offset::Utc::now(),
-            scrape_date: Some(chrono::offset::Utc::now()),
-            stabilities: None,
-            unfree: None,
-            version: version.to_string(),
-            system: system.parse().unwrap(),
-            cache_uri: None,
-            missing_builds: None,
-        };
-        let page = CatalogPage {
-            packages: Some(vec![pkg]),
-            page: 0,
-            url: String::new(),
-            complete: true,
-            msgs: vec![],
-        };
-        ResolvedPackageGroup {
-            name: group_name.to_string(),
-            page: Some(page),
-            msgs: vec![],
-        }
     }
 }
 
