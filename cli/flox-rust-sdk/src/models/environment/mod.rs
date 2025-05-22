@@ -762,7 +762,10 @@ pub enum UninstallError {
 }
 
 /// Open an environment defined in `{path}/.flox`
-pub fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError> {
+pub fn open_path(
+    flox: &Flox,
+    path: impl AsRef<Path>,
+) -> Result<ConcreteEnvironment, EnvironmentError> {
     DotFlox::open_in(path)
         .map(UninitializedEnvironment::DotFlox)?
         .into_concrete_environment(flox)
@@ -774,7 +777,7 @@ pub fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, Env
 /// 1. Sometimes we need to copy from the Nix store
 /// 2. fs_extra::dir::copy doesn't handle symlinks.
 ///    See: https://github.com/webdesus/fs_extra/issues/61
-fn copy_dir_recursive(
+pub(crate) fn copy_dir_recursive(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
     keep_permissions: bool,

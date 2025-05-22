@@ -1,0 +1,13 @@
+version = 1
+
+[install]
+gcc.pkg-path = "gcc"
+
+[build.hello]
+command = '''
+  mkdir -p $out/bin
+  gcc hello.c -o $out/bin/hello
+'''
+
+[options]
+cuda-detection = false

@@ -27,8 +27,10 @@ pub struct Config {
     pub show: Option<HashMap<String, RawSpec>>,
     /// Specs for the init command
     pub init: Option<HashMap<String, RawSpec>>,
-    // /// Specs for manifest/lockfile pairs
+    /// Specs for manifest/lockfile pairs
     pub envs: Option<HashMap<String, RawSpec>>,
+    /// Specs for build environments
+    pub build: Option<HashMap<String, RawSpec>>,
 }
 
 /// A spec for a single generated response file.
@@ -115,7 +117,15 @@ pub fn create_output_dir(output_dir: &Path) -> Result<(), Error> {
     let search_dir = output_dir.join("search");
     let show_dir = output_dir.join("show");
     let envs_dir = output_dir.join("envs");
-    let dirs = [&init_dir, &resolve_dir, &search_dir, &show_dir, &envs_dir];
+    let build_dir = output_dir.join("build");
+    let dirs = [
+        &init_dir,
+        &resolve_dir,
+        &search_dir,
+        &show_dir,
+        &envs_dir,
+        &build_dir,
+    ];
     for dir in dirs.iter() {
         if !dir.exists() {
             std::fs::create_dir_all(dir)?;
@@ -127,7 +137,14 @@ pub fn create_output_dir(output_dir: &Path) -> Result<(), Error> {
 /// Determines the output directory for the mock data
 pub fn get_output_dir(args: &Cli) -> Result<PathBuf, Error> {
     if let Some(output) = &args.output {
-        Ok(output.clone())
+        if output.is_absolute() {
+            Ok(output.clone())
+        } else {
+            let path = std::env::current_dir()
+                .context("couldn't read current directory")?
+                .join(output);
+            Ok(path)
+        }
     } else {
         Ok(std::env::current_dir()
             .context("couldn't read current dir, was it deleted?")?
@@ -138,7 +155,14 @@ pub fn get_output_dir(args: &Cli) -> Result<PathBuf, Error> {
 /// Determines the input data directory
 pub fn get_input_dir(args: &Cli) -> Result<PathBuf, Error> {
     if let Some(input) = &args.input {
-        Ok(input.clone())
+        if input.is_absolute() {
+            Ok(input.clone())
+        } else {
+            let path = std::env::current_dir()
+                .context("couldn't read current directory")?
+                .join(input);
+            Ok(path)
+        }
     } else {
         Ok(std::env::current_dir()
             .context("couldn't read current dir, was it deleted?")?
@@ -181,6 +205,12 @@ pub fn generate_jobs(
         jobs.push(
             generate_category_jobs("envs", envs.iter(), output_dir, force)
                 .context("failed to generate envs jobs")?,
+        );
+    }
+    if let Some(build) = config.build.as_ref() {
+        jobs.push(
+            generate_category_jobs("build", build.iter(), output_dir, force)
+                .context("failed to generate build jobs")?,
         );
     }
     Ok(jobs.into_iter().flatten())
