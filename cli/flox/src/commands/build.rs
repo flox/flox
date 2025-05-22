@@ -22,7 +22,7 @@ use tracing::{debug, instrument};
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::activate::FLOX_INTERPRETER;
 use crate::environment_subcommand_metric;
-use crate::utils::message::{self, warning};
+use crate::utils::message;
 
 #[allow(unused)] // remove when we implement the command
 #[derive(Bpaf, Clone)]
@@ -246,9 +246,12 @@ fn available_packages(
 
         match (is_nix_expression, is_manifest_build) {
             (true, true) => {
-                warning(format!(
-                    "Package '{package}' is defined in manifest and as a nix expression. Using nix expression"
-                ));
+                bail!(formatdoc! {"
+                    Package '{package}' is defined in the manifest and as a Nix expression.
+                
+                    Rename or delete either the package definition in {expression_dir}
+                    or the '[build]' section in the manifest.
+                ", expression_dir = expression_dir.display()})
             },
             (true, false) => debug!(%package, "found nix expression"),
             (false, true) => debug!(%package, "found manifest_build"),
@@ -262,15 +265,19 @@ fn available_packages(
 #[cfg(test)]
 mod test {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_in,
+    };
+    use flox_rust_sdk::providers::build::test_helpers::prepare_nix_expressions_in;
     use flox_rust_sdk::providers::nix::test_helpers::known_store_path;
     use tempfile::tempdir_in;
 
     use super::*;
 
-    #[test]
     /// Test that check_and_display_symlink shortens the symlink when in the
     /// current directory,
+    #[test]
     fn symlink_gets_shortened_when_in_current_dir() {
         let (flox, _temp_dir) = flox_instance();
         let dot_flox_parent_path = tempdir_in(&flox.temp_dir)
@@ -294,5 +301,36 @@ mod test {
         let displayed =
             Build::check_and_display_symlink(&environment, package, &flox.temp_dir).unwrap();
         assert_eq!(displayed, symlink.to_string_lossy());
+    }
+
+    /// Test that conflicting build names are detected if builds are defined via the manifest and nix expressions.
+    #[test]
+    fn conflicting_build_names() {
+        let pname = "conflict".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        // Create a manifest (may be empty)
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build]
+            conflict.command = ""
+        "#};
+
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // Create expressions
+        let expressions_dir =
+            prepare_nix_expressions_in(&tempdir, &[(&[&pname], &formatdoc! {r#"
+                {{runCommand}}: runCommand "{pname}" {{}} ""
+            "#})]);
+
+        let result = available_packages(
+            &env.lockfile(&flox).unwrap().into(),
+            &expressions_dir,
+            vec![],
+        );
+        assert!(result.is_err());
     }
 }
