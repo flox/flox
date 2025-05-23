@@ -675,7 +675,7 @@ pub fn check_build_metadata(
                 .rendered_env_links(flox)
                 .unwrap()
                 .development,
-            &[pkg.to_owned()],
+            &[pkg],
             Some(false),
         )
         .map_err(|e| PublishError::BuildError(e.to_string()))?;

@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 use std::sync::mpsc::Receiver;
 use std::{env, thread};
 
+use indoc::{formatdoc, indoc};
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 use thiserror::Error;
@@ -15,6 +16,8 @@ use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
 use super::nix::nix_base_command;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
+use crate::models::lockfile::Lockfile;
+use crate::models::manifest::typed::Inner;
 use crate::utils::CommandExt;
 
 pub const FLOX_RUNTIME_DIR_VAR: &str = "FLOX_RUNTIME_DIR";
@@ -52,7 +55,7 @@ pub trait ManifestBuilder {
         built_environments: &BuildEnvOutputs,
         expression_dir: Option<&Path>,
         flox_interpreter: &Path,
-        package: &[String],
+        package: &[&str],
         build_cache: Option<bool>,
     ) -> Result<BuildOutput, ManifestBuilderError>;
 
@@ -61,7 +64,7 @@ pub trait ManifestBuilder {
         base_dir: &Path,
         flox_env: &Path,
         expression_dir: Option<&Path>,
-        package: &[String],
+        package: &[&str],
     ) -> Result<(), ManifestBuilderError>;
 }
 
@@ -192,7 +195,7 @@ impl ManifestBuilder for FloxBuildMk {
         built_environments: &BuildEnvOutputs,
         expression_dir: Option<&Path>,
         flox_interpreter: &Path,
-        packages: &[String],
+        packages: &[&str],
         build_cache: Option<bool>,
     ) -> Result<BuildOutput, ManifestBuilderError> {
         let mut command = self.base_command(base_dir);
@@ -317,7 +320,7 @@ impl ManifestBuilder for FloxBuildMk {
         base_dir: &Path,
         flox_env: &Path,
         expression_dir: Option<&Path>,
-        packages: &[String],
+        packages: &[&str],
     ) -> Result<(), ManifestBuilderError> {
         let mut command = self.base_command(base_dir);
         // Required to identify NEF builds.
@@ -447,6 +450,122 @@ pub fn get_nix_expression_targets(
     Ok(attr_paths)
 }
 
+#[derive(Debug, Error)]
+#[error("{message}")]
+pub struct PackageTargetError {
+    pub(crate) message: String,
+}
+impl PackageTargetError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PackageTargetKind {
+    ExpressionBuild,
+    ManifestBuild,
+}
+
+pub struct PackageTargets<'origins> {
+    targets: HashMap<String, PackageTargetKind>,
+    lockfile: &'origins Lockfile,
+    expression_dir: &'origins Path,
+}
+
+impl<'origins> PackageTargets<'origins> {
+    pub fn new(
+        lockfile: &'origins Lockfile,
+        expression_dir: &'origins Path,
+    ) -> Result<PackageTargets<'origins>, PackageTargetError> {
+        let environment_packages = &lockfile.manifest.build;
+
+        let nix_expression_packages = get_nix_expression_targets(expression_dir)
+            .map_err(|e| PackageTargetError::new(e.to_string()))?;
+
+        let mut targets = HashMap::new();
+
+        targets.extend(
+            environment_packages
+                .inner()
+                .iter()
+                .map(|(name, _)| (name.to_string(), PackageTargetKind::ManifestBuild)),
+        );
+
+        for expression_build_target in nix_expression_packages {
+            if targets.contains_key(&expression_build_target) {
+                return Err(PackageTargetError::new(formatdoc! {"
+                    '{expression_build_target}' is defined in the manifest and as a Nix expression.
+                    Rename or delete either the package definition in {expression_dir}
+                    or the '[build]' section in the manifest.
+                    ", expression_dir = expression_dir.display()
+                }));
+            }
+
+            targets.insert(expression_build_target, PackageTargetKind::ExpressionBuild);
+        }
+
+        if targets.is_empty() {
+            return Err(PackageTargetError::new(formatdoc! {"
+                No packages found to build.
+
+                Add a build by modifying the '[build]' section of the manifest with 'flox edit'
+                or add expression files in '{expression_dir}'.
+                ", expression_dir = expression_dir.display()
+            }));
+        }
+
+        Ok(PackageTargets {
+            targets,
+            lockfile,
+            expression_dir,
+        })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.targets.is_empty()
+    }
+
+    pub fn has_target(&self, target_name: &str) -> bool {
+        self.targets.contains_key(target_name)
+    }
+
+    pub fn target_kind(&self, target_name: &str) -> Option<&PackageTargetKind> {
+        self.targets.get(target_name)
+    }
+
+    pub fn target_names(&self) -> Vec<&str> {
+        self.targets.keys().map(|k| k.as_str()).collect()
+    }
+
+    pub fn select(&mut self, targets: &[impl AsRef<str>]) -> Result<(), PackageTargetError> {
+        let mut selected_targets = HashMap::new();
+        for target in targets {
+            if let Some((k, v)) = self.targets.remove_entry(target.as_ref()) {
+                selected_targets.insert(k, v);
+            } else {
+                return Err(PackageTargetError::new(indoc! {"
+                    Target '{target}' not found.
+                "}));
+            }
+        }
+
+        self.targets = selected_targets;
+
+        Ok(())
+    }
+
+    pub fn lockfile(&self) -> &Lockfile {
+        self.lockfile
+    }
+
+    pub fn expression_dir(&self) -> &Path {
+        self.expression_dir
+    }
+}
+
 pub mod test_helpers {
     use std::fs::{self};
 
@@ -492,7 +611,7 @@ pub mod test_helpers {
                 &env.build(flox).unwrap(),
                 expression_dir,
                 &env.rendered_env_links(flox).unwrap().development,
-                &[package_name.to_owned()],
+                &[package_name],
                 build_cache,
             )
             .unwrap();
@@ -556,10 +675,7 @@ pub mod test_helpers {
                 &env.parent_path().unwrap(),
                 &env.rendered_env_links(flox).unwrap().development,
                 None,
-                &package_names
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>(),
+                package_names,
             )
             .err();
 

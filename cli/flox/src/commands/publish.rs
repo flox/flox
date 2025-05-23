@@ -180,22 +180,10 @@ impl Publish {
     }
 }
 
-fn check_target_exists(lockfile: &Lockfile, package: &str) -> Result<bool> {
-    let environment_packages = &lockfile.manifest.build;
-
-    if environment_packages.inner().is_empty() {
-        bail!(indoc! {"
-        No builds found.
-
-        Add a build by modifying the '[build]' section of the manifest with 'flox edit'
-        "});
-    }
-
-    if !environment_packages.inner().contains_key(package) {
-        bail!("Package '{}' not found in environment", package);
-    }
-
-    Ok(true)
+fn check_target_exists(lockfile: &Lockfile, expression_dir: &Path, package: &str) -> Result<()> {
+    // returns the same Vec iff `package` is avalable
+    build::packages_to_build(lockfile, expression_dir, &vec![package])?;
+    Ok(())
 }
 
 #[cfg(test)]
