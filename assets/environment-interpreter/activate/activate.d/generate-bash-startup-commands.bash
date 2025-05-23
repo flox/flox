@@ -79,27 +79,7 @@ generate_bash_startup_commands() {
   # RC files to perform activations.
   echo "eval \"\$('$_flox_activations' set-env-dirs --shell bash --flox-env \"$_FLOX_ENV\" --env-dirs \"\${FLOX_ENV_DIRS:-}\")\";"
   echo "eval \"\$('$_flox_activations' fix-paths --shell bash --env-dirs \"\$FLOX_ENV_DIRS\" --path \"\$PATH\" --manpath \"\${MANPATH:-}\")\";"
-
-  # Iterate over $FLOX_ENV_DIRS in reverse order and
-  # source user-specified profile scripts if they exist.
-  local -a _flox_env_dirs
-  # The `source ~/.bashrc` above may modify FLOX_ENV_DIRS,
-  # and then _flox_env_helper may fix it up.
-  # If this happens, we want to respect those modifications,
-  # so we use FLOX_ENV_DIRS from the environment
-  IFS=':' read -r -a _flox_env_dirs <<< "$FLOX_ENV_DIRS"
-  for ((x = ${#_flox_env_dirs[@]} - 1; x >= 0; x--)); do
-    local _flox_env="${_flox_env_dirs["$x"]}"
-    for i in profile-common profile-bash hook-script; do
-      if [ -e "$_flox_env/activate.d/$i" ]; then
-        "$_flox_activate_tracer" "$_flox_env/activate.d/$i" START
-        echo "source '$_flox_env/activate.d/$i';"
-        "$_flox_activate_tracer" "$_flox_env/activate.d/$i" END
-      else
-        "$_flox_activate_tracer" "$_flox_env/activate.d/$i" NOT FOUND
-      fi
-    done
-  done
+  echo "eval \"\$('$_flox_activations' profile-scripts --shell bash --env-dirs \"\${FLOX_ENV_DIRS:-}\")\";"
 
   # Disable command hashing to allow for newly installed flox packages
   # to be found immediately. We do this as the very last thing because
