@@ -5,11 +5,13 @@ use clap::{Parser, Subcommand};
 
 pub mod attach;
 mod fix_paths;
+mod profile_scripts;
 mod set_env_dirs;
 mod set_ready;
 mod start_or_attach;
 
 use fix_paths::FixPathsArgs;
+use profile_scripts::ProfileScriptsArgs;
 use set_env_dirs::SetEnvDirsArgs;
 pub use set_ready::SetReadyArgs;
 pub use start_or_attach::StartOrAttachArgs;
@@ -37,6 +39,8 @@ pub enum Command {
     FixPaths(FixPathsArgs),
     #[command(about = "Print sourceable output setting FLOX_ENV_DIRS.")]
     SetEnvDirs(SetEnvDirsArgs),
+    #[command(about = "Print sourceable output that sources the user's profile scripts.")]
+    ProfileScripts(ProfileScriptsArgs),
 }
 
 /// Splits PATH-like variables into individual paths, removing any empty strings.
