@@ -378,28 +378,45 @@ impl Generations<ReadWrite<'_>> {
     /// This method will not perform any validation of the generation switched to.
     /// If validation (e.g. proving that the environment builds) is required,
     /// it should first be realized using [Self::realize_generation].
-    #[allow(unused)]
-    fn set_current_generation(&mut self, generation: usize) -> Result<(), GenerationsError> {
+    pub fn set_current_generation(
+        &mut self,
+        generation: Option<GenerationId>,
+    ) -> Result<(GenerationId, SingleGenerationMetadata), GenerationsError> {
         let mut metadata = self.metadata()?;
 
-        let generation_metadata = metadata.generations.contains_key(&generation.into());
-        if !generation_metadata {
-            return Err(GenerationsError::GenerationNotFound(generation));
+        let generation = match generation {
+            Some(id) => id,
+            None => (metadata
+                .current_gen
+                .as_deref()
+                .ok_or(GenerationsError::NoGenerations)?
+                .saturating_sub(1))
+            .into(),
+        };
+
+        if Some(&generation) == metadata.current_gen.as_ref() {
+            return Err(GenerationsError::RollbackToCurrentGeneration);
         }
 
-        metadata.current_gen = Some(generation.into());
+        let Some(new_generation_metadata) = metadata.generations.get(&generation).cloned() else {
+            return Err(GenerationsError::GenerationNotFound(*generation));
+        };
+
+        metadata.current_gen = Some(generation);
 
         write_metadata_file(metadata, self.repo.path())?;
 
         self.repo
             .add(&[Path::new(GENERATIONS_METADATA_FILE)])
-            .unwrap();
+            .map_err(GenerationsError::StageChanges)?;
         self.repo
             .commit(&format!("Set current generation to {}", generation))
-            .unwrap();
-        self.repo.push("origin", false).unwrap();
+            .map_err(GenerationsError::CommitChanges)?;
+        self.repo
+            .push("origin", false)
+            .map_err(GenerationsError::CompleteTransaction)?;
 
-        Ok(())
+        Ok((generation, new_generation_metadata))
     }
 }
 
@@ -432,6 +449,8 @@ pub enum GenerationsError {
     GenerationNotFound(usize),
     #[error("no generations found in environment")]
     NoGenerations,
+    #[error("cannot rollback to current generation")]
+    RollbackToCurrentGeneration,
     // endregion
 
     // region: repo/transaction
@@ -554,6 +573,7 @@ impl SingleGenerationMetadata {
 #[derive(
     Debug,
     Clone,
+    Copy,
     PartialEq,
     Eq,
     PartialOrd,

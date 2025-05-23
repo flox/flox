@@ -9,7 +9,13 @@ use tracing::{debug, instrument};
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::fetcher::IncludeFetcher;
-use super::generations::{Generations, GenerationsError};
+use super::generations::{
+    AllGenerationsMetadata,
+    GenerationId,
+    Generations,
+    GenerationsError,
+    SingleGenerationMetadata,
+};
 use super::path_environment::PathEnvironment;
 use super::{
     CACHE_DIR_NAME,
@@ -1156,6 +1162,36 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
             .get_current_generation(self.include_fetcher.clone())
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)
+    }
+
+    pub fn generations_metadata(&self) -> Result<AllGenerationsMetadata, ManagedEnvironmentError> {
+        self.generations()
+            .metadata()
+            .map_err(ManagedEnvironmentError::Generations)
+    }
+
+    pub fn switch_generation(
+        &mut self,
+        flox: &Flox,
+        generation: Option<GenerationId>,
+    ) -> Result<(GenerationId, SingleGenerationMetadata), EnvironmentError> {
+        let tempdir = tempfile::tempdir_in(&flox.temp_dir).unwrap();
+
+        let mut generations = self.generations();
+        let mut writable_generations = generations
+            .writable(tempdir)
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+
+        let x = writable_generations
+            .set_current_generation(generation)
+            .map_err(ManagedEnvironmentError::Generations)?;
+
+        self.lock_pointer()?;
+        self.reset_local_env_to_current_generation(flox)?;
+        let built_paths = self.build(flox)?;
+        self.link(&built_paths)?;
+
+        Ok(x)
     }
 }
 
