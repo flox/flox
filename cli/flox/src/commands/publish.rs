@@ -4,10 +4,9 @@ use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
-use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::{Inner, Manifest};
 use flox_rust_sdk::providers::auth::Auth;
-use flox_rust_sdk::providers::build::FloxBuildMk;
+use flox_rust_sdk::providers::build::{FloxBuildMk, nix_expression_dir};
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -15,8 +14,9 @@ use flox_rust_sdk::providers::publish::{
     check_build_metadata,
     check_environment_metadata,
     check_package_metadata,
+    mock_locked_url_info,
 };
-use indoc::{formatdoc, indoc};
+use indoc::formatdoc;
 use tracing::{debug, instrument};
 
 use super::{EnvironmentSelect, environment_select};
@@ -121,16 +121,11 @@ impl Publish {
     async fn publish(
         config: Config,
         mut flox: Flox,
-        mut env: ConcreteEnvironment,
+        env: ConcreteEnvironment,
         package: String,
         metadata_only: bool,
         cache_args: CacheArgs,
     ) -> Result<()> {
-        let lockfile = env.lockfile(&flox)?.into();
-        if !check_target_exists(&lockfile, &package)? {
-            bail!("Package '{}' not found in environment", package);
-        }
-
         // Fail as early as possible if the user isn't authenticated or doesn't
         // belong to an org with a catalog.
         let token = ensure_floxhub_token(&mut flox).await?.clone();
@@ -147,10 +142,15 @@ impl Publish {
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
 
+        let package_metadata = check_package_metadata(
+            &env_metadata.lockfile,
+            &nix_expression_dir(&path_env),
+            mock_locked_url_info(), // TODO: Replace with actual locked URL info from catalog server
+            &package,
+        )?;
+
         let build_metadata =
             check_build_metadata(&flox, &env_metadata, &FloxBuildMk::new(&flox), &package)?;
-
-        let package_metadata = check_package_metadata(&env_metadata.lockfile, &package)?;
 
         // CLI args take precedence over config
         let key_file = cache_args.signing_private_key.or(config
@@ -161,7 +161,7 @@ impl Publish {
 
         let auth = Auth::from_flox(&flox)?;
         let publish_provider =
-            PublishProvider::new(env_metadata, build_metadata, package_metadata, auth);
+            PublishProvider::new(env_metadata, package_metadata, build_metadata, auth);
 
         debug!("publishing package: {}", &package);
         match publish_provider
@@ -178,12 +178,6 @@ impl Publish {
 
         Ok(())
     }
-}
-
-fn check_target_exists(lockfile: &Lockfile, expression_dir: &Path, package: &str) -> Result<()> {
-    // returns the same Vec iff `package` is avalable
-    build::packages_to_build(lockfile, expression_dir, &vec![package])?;
-    Ok(())
 }
 
 #[cfg(test)]
