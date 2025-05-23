@@ -379,6 +379,48 @@ pub mod types {
             value.clone()
         }
     }
+    ///CatalogStoreConfigNixCopy
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CatalogStoreConfigNixCopy",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "egress_uri",
+    ///    "ingress_uri"
+    ///  ],
+    ///  "properties": {
+    ///    "egress_uri": {
+    ///      "title": "Egress Uri",
+    ///      "type": "string"
+    ///    },
+    ///    "ingress_uri": {
+    ///      "title": "Ingress Uri",
+    ///      "type": "string"
+    ///    },
+    ///    "store_type": {
+    ///      "title": "Store Type",
+    ///      "default": "nix-copy",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct CatalogStoreConfigNixCopy {
+        pub egress_uri: String,
+        pub ingress_uri: String,
+        #[serde(default = "defaults::catalog_store_config_nix_copy_store_type")]
+        pub store_type: String,
+    }
+    impl From<&CatalogStoreConfigNixCopy> for CatalogStoreConfigNixCopy {
+        fn from(value: &CatalogStoreConfigNixCopy) -> Self {
+            value.clone()
+        }
+    }
     ///CatalogStoreConfigNull
     ///
     /// <details><summary>JSON schema</summary>
@@ -3281,6 +3323,9 @@ pub mod types {
         }
         pub(super) fn catalog_store_config_meta_only_store_type() -> String {
             "meta-only".to_string()
+        }
+        pub(super) fn catalog_store_config_nix_copy_store_type() -> String {
+            "nix-copy".to_string()
         }
         pub(super) fn catalog_store_config_null_store_type() -> String {
             "null".to_string()

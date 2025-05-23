@@ -41,11 +41,6 @@ fn generator() -> progenitor::Generator {
         "crate::types::CatalogStoreConfig",
         vec![].into_iter(),
     );
-    settings.with_replacement(
-        "CatalogStoreConfigNixCopy",
-        "crate::types::CatalogStoreConfigNixCopy",
-        vec![].into_iter(),
-    );
     progenitor::Generator::new(&settings)
 }
 
