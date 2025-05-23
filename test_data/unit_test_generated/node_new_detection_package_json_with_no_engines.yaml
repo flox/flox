@@ -1,0 +1,17 @@
+when:
+  path: /api/v1/catalog/search
+  method: GET
+then:
+  status: 200
+  header:
+  - name: date
+    value: Thu, 22 May 2025 16:36:00 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '2960'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: K-nRniQDIAMEMiQ=
+  body: '{"items":[{"attr_path":"nodejs_14","catalog":null,"pkg_path":"nodejs_14","name":"nodejs-14.21.3","pname":"nodejs_14","version":"14.21.3","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_16","catalog":null,"pkg_path":"nodejs_16","name":"nodejs-16.20.2","pname":"nodejs_16","version":"16.20.2","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_18","catalog":null,"pkg_path":"nodejs_18","name":"nodejs-18.20.8","pname":"nodejs_18","version":"18.20.8","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_19","catalog":null,"pkg_path":"nodejs_19","name":"nodejs-19.9.0","pname":"nodejs_19","version":"19.9.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_20","catalog":null,"pkg_path":"nodejs_20","name":"nodejs-20.19.1","pname":"nodejs_20","version":"20.19.1","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_21","catalog":null,"pkg_path":"nodejs_21","name":"nodejs-21.7.3","pname":"nodejs_21","version":"21.7.3","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_22","catalog":null,"pkg_path":"nodejs_22","name":"nodejs-22.14.0","pname":"nodejs_22","version":"22.14.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_23","catalog":null,"pkg_path":"nodejs_23","name":"nodejs-23.11.0","pname":"nodejs_23","version":"23.11.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_24","catalog":null,"pkg_path":"nodejs_24","name":"nodejs-24.0.1","pname":"nodejs_24","version":"24.0.1","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_latest","catalog":null,"pkg_path":"nodejs_latest","name":"nodejs-24.0.1","pname":"nodejs_latest","version":"24.0.1","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"haxePackages.hxnodejs_4","catalog":null,"pkg_path":"haxePackages.hxnodejs_4","name":"hxnodejs-4.0.9","pname":"hxnodejs_4","version":"4.0.9","description":"Extern definitions for node.js 4.x","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"haxePackages.hxnodejs_6","catalog":null,"pkg_path":"haxePackages.hxnodejs_6","name":"hxnodejs-6.9.0","pname":"hxnodejs_6","version":"6.9.0","description":"Extern definitions for node.js 6.9","stabilities":[],"system":"aarch64-darwin"}],"total_count":12}'

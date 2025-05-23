@@ -130,7 +130,7 @@ version:
 
 # Generate test data
 # TODO: should unit test regeneration respect -f?
-@gen-data +mk_data_args="": build-data-gen build-cli && (unit-tests "" "true")
+@gen-data +mk_data_args="": build-data-gen build-cli && (unit-tests "--filterset 'not test(providers::build::tests)'" "true")
     mkdata="$PWD/cli/target/debug/mk_data"; pushd test_data; "$mkdata" {{mk_data_args}} config.toml; popd
 
 

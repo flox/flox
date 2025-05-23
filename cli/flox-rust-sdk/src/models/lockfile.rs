@@ -1882,14 +1882,13 @@ pub(crate) mod tests {
     use std::sync::LazyLock;
     use std::vec;
 
-    use catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use catalog::{
         MsgAttrPathNotFoundSystemsNotOnSamePage,
         MsgGeneral,
         MsgUnknown,
         ResolutionMessage,
     };
-    use catalog_api_v1::types::{Output, ResolvedPackageDescriptor};
+    use catalog_api_v1::types::Output;
     use indoc::indoc;
     use pollster::FutureExt;
     use pretty_assertions::assert_eq;
@@ -1915,7 +1914,11 @@ pub(crate) mod tests {
     use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
     use crate::models::manifest::raw::RawManifest;
     use crate::models::manifest::typed::{Include, Manifest, Vars};
-    use crate::providers::catalog::{Client, MockClient};
+    use crate::providers::catalog::MockClient;
+    use crate::providers::catalog::test_helpers::{
+        auto_recording_catalog_client,
+        resolved_pkg_group_with_dummy_package,
+    };
     use crate::providers::flake_installable_locker::{
         FlakeInstallableError,
         InstallableLockerMock,
@@ -2009,54 +2012,6 @@ pub(crate) mod tests {
                 allow_missing_builds: None,
                 systems: vec![SystemEnum::Aarch64Darwin],
             }],
-        }]
-    });
-
-    static TEST_RESOLUTION_RESPONSE: LazyLock<Vec<ResolvedPackageGroup>> = LazyLock::new(|| {
-        vec![ResolvedPackageGroup {
-            page: Some(CatalogPage {
-                complete: true,
-                page: 1,
-                url: "url".to_string(),
-                packages: Some(vec![PackageResolutionInfo {
-                    catalog: None,
-                    attr_path: "hello".to_string(),
-                    pkg_path: "hello".to_string(),
-                    broken: Some(false),
-                    derivation: "derivation".to_string(),
-                    description: Some("description".to_string()),
-                    insecure: Some(false),
-                    install_id: "hello_install_id".to_string(),
-                    license: Some("license".to_string()),
-                    locked_url: "locked_url".to_string(),
-                    name: "hello".to_string(),
-                    outputs: vec![Output {
-                        name: "name".to_string(),
-                        store_path: "store_path".to_string(),
-                    }],
-                    outputs_to_install: Some(vec!["name".to_string()]),
-                    pname: "pname".to_string(),
-                    rev: "rev".to_string(),
-                    rev_count: 1,
-                    rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
-                        .unwrap()
-                        .with_timezone(&chrono::offset::Utc),
-                    scrape_date: Some(
-                        chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
-                            .unwrap()
-                            .with_timezone(&chrono::offset::Utc),
-                    ),
-                    system: SystemEnum::Aarch64Darwin,
-                    stabilities: Some(vec!["stability".to_string()]),
-                    unfree: Some(false),
-                    version: "version".to_string(),
-                    cache_uri: None,
-                    missing_builds: None,
-                }]),
-                msgs: vec![],
-            }),
-            name: "group".to_string(),
-            msgs: vec![],
         }]
     });
 
@@ -2857,6 +2812,8 @@ pub(crate) mod tests {
     async fn test_locking_unknown_message() {
         let manifest = &*TEST_TYPED_MANIFEST;
 
+        // We're testing that an unknown message is passed through,
+        // so it doesn't make sense to generate a mock with a known message.
         let mut client = catalog::MockClient::new();
         let response = TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG.clone();
         let response_msg: ResolutionMessage =
@@ -2893,6 +2850,11 @@ pub(crate) mod tests {
             TEST_RESOLUTION_RESPONSE_GENERAL.clone(),
             TEST_RESOLUTION_RESPONSE_SYSTEMS_NOT_ON_SAME_PAGE.clone(),
         ] {
+            // It doesn't make sense to generate mocks since:
+            // - We're testing for future messages with unknown message
+            // - General isn't currently used serverside
+            // We could probably generate one for SYSTEMS_NOT_ON_SAME_PAGE if we
+            // wanted.
             let response_msg: ResolutionMessage =
                 response.first().unwrap().msgs.first().unwrap().clone();
             client.push_resolve_response(response);
@@ -2910,23 +2872,6 @@ pub(crate) mod tests {
                 panic!("expected resolution failure, got {:?}", locked_manifest);
             }
         }
-    }
-
-    #[tokio::test]
-    async fn test_locking_1() {
-        let (mut flox, _tempdir) = flox_instance();
-        let manifest = &*TEST_TYPED_MANIFEST;
-
-        let mut client = catalog::MockClient::new();
-        client.push_resolve_response(TEST_RESOLUTION_RESPONSE.clone());
-        flox.catalog_client = Client::Mock(client);
-
-        let locked_manifest = Lockfile::lock_manifest(&flox, manifest, None, &IncludeFetcher {
-            base_directory: None,
-        })
-        .await
-        .unwrap();
-        assert_eq!(&locked_manifest, &*TEST_LOCKED_MANIFEST);
     }
 
     #[tokio::test]
@@ -3428,15 +3373,20 @@ pub(crate) mod tests {
     /// Catalog packages are still being resolved if not locked.
     #[tokio::test]
     async fn skip_flake_installables_noop_if_fully_locked() {
-        let (foo_iid, foo_descriptor, _) = fake_catalog_package_lock("foo", None);
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
         let mut manifest = Manifest::default();
         manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
-        manifest
-            .install
-            .inner_mut()
-            .insert(foo_iid.clone(), foo_descriptor.clone());
+        manifest.install.inner_mut().insert(
+            "hello".to_string(),
+            ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+                pkg_path: "hello".to_string(),
+                pkg_group: None,
+                priority: None,
+                version: None,
+                systems: None,
+            }),
+        );
         manifest
             .install
             .inner_mut()
@@ -3449,45 +3399,10 @@ pub(crate) mod tests {
             compose: None,
         };
 
-        let foo_catalog_descriptor = foo_descriptor.as_catalog_descriptor_ref().unwrap();
-
-        let mut client_mock = catalog::MockClient::new();
-        client_mock.push_resolve_response(vec![ResolvedPackageGroup {
-            msgs: vec![],
-            name: DEFAULT_GROUP_NAME.to_string(),
-            page: Some(CatalogPage {
-                complete: true,
-                packages: Some(vec![ResolvedPackageDescriptor {
-                    catalog: None,
-                    attr_path: foo_catalog_descriptor.pkg_path.clone(),
-                    pkg_path: foo_catalog_descriptor.pkg_path.clone(),
-                    broken: Default::default(),
-                    derivation: "derivation".to_string(),
-                    description: Default::default(),
-                    insecure: Default::default(),
-                    install_id: foo_iid.clone(),
-                    license: Default::default(),
-                    locked_url: Default::default(),
-                    name: Default::default(),
-                    outputs: Default::default(),
-                    outputs_to_install: Default::default(),
-                    pname: Default::default(),
-                    rev: Default::default(),
-                    rev_count: Default::default(),
-                    rev_date: Default::default(),
-                    scrape_date: Default::default(),
-                    stabilities: Default::default(),
-                    system: SystemEnum::Aarch64Darwin,
-                    unfree: Default::default(),
-                    version: Default::default(),
-                    cache_uri: Default::default(),
-                    missing_builds: Default::default(),
-                }]),
-                page: 1,
-                url: "url".to_string(),
-                msgs: vec![],
-            }),
-        }]);
+        // TODO: it would probably be better to tweak
+        // fake_flake_installable_lock to return a system specific descriptor
+        // and use plain hello mock
+        let client_mock = auto_recording_catalog_client("hello_aarch64-darwin");
 
         let resolved_packages =
             Lockfile::resolve_manifest(&manifest, Some(&locked), &client_mock, &PanickingLocker)
@@ -3637,7 +3552,9 @@ pub(crate) mod tests {
             .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
         manifest.options.allow.unfree = Some(false);
 
-        // Return a response that says foo is unfree. If this happens, it's a bug in the server
+        // Return a response that says foo is unfree.
+        // If this happens, it's a bug in the server, which is why we don't use
+        // a mock for this test.
         let mut client = catalog::MockClient::new();
         let mut resolved_group = resolved_pkg_group_with_dummy_package(
             "toplevel",

@@ -1183,24 +1183,18 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     use catalog::{GENERATED_DATA, MANUALLY_GENERATED};
-    use catalog_api_v1::types::{ResolvedPackageDescriptor, SystemEnum};
-    use chrono::{DateTime, Utc};
-    use flox_core::Version;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use tempfile::{TempDir, tempdir_in};
     use test_helpers::{new_core_environment_from_env_files, new_core_environment_with_lockfile};
     use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
 
-    use self::catalog::{CatalogPage, MockClient, ResolvedPackageGroup};
     use self::test_helpers::new_core_environment;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
-    use crate::models::lockfile;
-    use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
-    use crate::models::manifest::typed::{DEFAULT_GROUP_NAME, Inner};
+    use crate::models::manifest::raw::CatalogPackage;
+    use crate::providers::catalog;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
-    use crate::providers::catalog::{self, Client};
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
     /// Create a CoreEnvironment with an empty manifest (with version = 1)
@@ -1345,69 +1339,26 @@ mod tests {
     }
 
     /// Check that with an empty list of packages to upgrade, all packages are upgraded
-    // TODO: add fixtures for resolve mocks if we add more of these tests
-    #[test]
-    fn upgrade_with_empty_list_upgrades_all() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn upgrade_with_empty_list_upgrades_all() {
         let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
 
-        let mut manifest = Manifest::default();
-        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
-        manifest
-            .install
-            .inner_mut()
-            .insert(foo_iid.clone(), foo_descriptor);
-        let lockfile = lockfile::Lockfile {
-            version: Version,
-            packages: vec![foo_locked.into()],
-            manifest: manifest.clone(),
-            compose: None,
-        };
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/old_hello.yaml")).await;
+        env_view
+            .install(
+                &[PackageToInstall::Catalog(
+                    CatalogPackage::from_str("hello").unwrap(),
+                )],
+                &flox,
+            )
+            .unwrap();
 
-        let lockfile_str = serde_json::to_string_pretty(&lockfile).unwrap();
-
-        fs::write(env_view.lockfile_path(), lockfile_str).unwrap();
-
-        let mut mock_client = MockClient::new();
-        mock_client.push_resolve_response(vec![ResolvedPackageGroup {
-            name: DEFAULT_GROUP_NAME.to_string(),
-            page: Some(CatalogPage {
-                packages: Some(vec![ResolvedPackageDescriptor {
-                    catalog: None,
-                    attr_path: "foo".to_string(),
-                    pkg_path: "foo".to_string(),
-                    broken: Some(false),
-                    derivation: "new derivation".to_string(),
-                    description: Some("description".to_string()),
-                    insecure: Some(false),
-                    install_id: foo_iid.clone(),
-                    license: None,
-                    locked_url: "locked-url".to_string(),
-                    name: "foo".to_string(),
-                    outputs: vec![],
-                    outputs_to_install: None,
-                    pname: "foo".to_string(),
-                    rev: "rev".to_string(),
-                    rev_count: 42,
-                    rev_date: DateTime::<Utc>::MIN_UTC,
-                    scrape_date: Some(DateTime::<Utc>::MIN_UTC),
-                    stabilities: None,
-                    unfree: None,
-                    version: "1.0".to_string(),
-                    system: SystemEnum::Aarch64Darwin,
-                    cache_uri: None,
-                    missing_builds: None,
-                }]),
-                msgs: vec![],
-                page: 1,
-                url: "url".to_string(),
-                complete: true,
-            }),
-            msgs: vec![],
-        }]);
-        flox.catalog_client = Client::Mock(mock_client);
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
 
         let upgraded_packages = env_view
-            .upgrade_with_catalog_client(&flox, &[], &manifest)
+            .upgrade_with_catalog_client(&flox, &[], &env_view.manifest().unwrap())
             .unwrap()
             .diff();
 
