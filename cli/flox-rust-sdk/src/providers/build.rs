@@ -552,6 +552,8 @@ impl<'origins> PackageTargets<'origins> {
             }
         }
 
+        self.targets = selected_targets;
+
         Ok(())
     }
 
