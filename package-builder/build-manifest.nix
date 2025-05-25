@@ -74,9 +74,12 @@ pkgs.runCommandNoCC name
         "log"
       ]
       ++ pkgs.lib.optionals (buildCache != null) [ "buildCache" ];
-    # We don't want to allow build outputs to reference the "develop" environment
-    # because they should get everything they need at runtime from the build wrapper env.
-    disallowedReferences = [ flox-env-package ]; # XXX too easy to leak into output.
+    # We previously used `disallowedReferences` to prevent builds from referencing
+    # the "develop" environment, but that was too strict and caused issues with
+    # the "log" and "buildCache" outputs in particular. Now we instead inspect the
+    # closure once the build is complete to ensure that it only contains packages
+    # found only in the build wrapper closure.
+    # disallowedReferences = [ flox-env-package ];
   }
   (
     (
