@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 use std::sync::mpsc::Receiver;
 use std::{env, thread};
 
+use chrono::{DateTime, Utc};
 use indoc::{formatdoc, indoc};
 use serde::Deserialize;
 use tempfile::NamedTempFile;
@@ -563,6 +564,28 @@ impl<'origins> PackageTargets<'origins> {
 
     pub fn expression_dir(&self) -> &Path {
         self.expression_dir
+    }
+}
+
+/// Simple struct to hold the information of a locked URL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LockedUrlInfo {
+    pub url: String,
+    pub rev: String,
+    pub rev_count: u64,
+    pub rev_date: DateTime<Utc>,
+}
+
+/// Hardcoded locked URL for publishes of expression builds
+///
+/// Outisde of tests this should be replaced by a mechanism that fetches an actual locked URL,
+/// in correspondence with the catalog server.
+pub fn mock_locked_url_info() -> LockedUrlInfo {
+    LockedUrlInfo {
+        url: "https://github.com/flox/nixpkgs?ref=refs/heads/stable&rev=698214a32beb4f4c8e3942372c694f40848b360d".to_string(),
+        rev: "698214a32beb4f4c8e3942372c694f40848b360d".to_string(),
+        rev_count: 773904,
+        rev_date: chrono::DateTime::from_timestamp(1742889210, 0).unwrap(),
     }
 }
 

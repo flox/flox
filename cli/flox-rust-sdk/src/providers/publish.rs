@@ -4,7 +4,6 @@ use std::process::{Command, Stdio};
 use std::str::FromStr;
 
 use catalog_api_v1::types::{NarInfo, NarInfos, Output, Outputs, PublishResponse, SystemEnum};
-use chrono::{DateTime, Utc};
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
 use tracing::{debug, instrument};
@@ -95,28 +94,6 @@ pub trait Publisher {
         key_file: Option<PathBuf>,
         metadata_only: bool,
     ) -> Result<(), PublishError>;
-}
-
-/// Simple struct to hold the information of a locked URL.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LockedUrlInfo {
-    pub url: String,
-    pub rev: String,
-    pub rev_count: u64,
-    pub rev_date: DateTime<Utc>,
-}
-
-/// Hardcoded locked URL for publishes of expression builds
-///
-/// Outisde of tests this should be replaced by a mechanism that fetches an actual locked URL,
-/// in correspondence with the catalog server.
-pub fn mock_locked_url_info() -> LockedUrlInfo {
-    LockedUrlInfo {
-        url: "https://github.com/flox/nixpkgs?ref=refs/heads/stable&rev=698214a32beb4f4c8e3942372c694f40848b360d".to_string(),
-        rev: "698214a32beb4f4c8e3942372c694f40848b360d".to_string(),
-        rev_count: 773904,
-        rev_date: chrono::DateTime::from_timestamp(1742889210, 0).unwrap(),
-    }
 }
 
 /// Ensures that the required metadata for publishing is consistent from the environment
@@ -999,7 +976,9 @@ pub mod tests {
 
     use std::io::Write;
 
+    use build::mock_locked_url_info;
     use catalog_api_v1::types::CatalogStoreConfigNixCopy;
+    use chrono::Utc;
     use pretty_assertions::assert_eq;
 
     use super::*;
