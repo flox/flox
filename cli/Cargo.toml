@@ -17,7 +17,7 @@ resolver = "2"
 anyhow = "1"
 async-stream = "0.3.6"
 blake3 = "1.8.2"
-bpaf = { version = "0.9.19", features = ["derive", "autocomplete"] }
+bpaf = { version = "0.9.20", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.41", features = ["serde"] }
 clap = { version = "4.5.38", features = ["derive"] }
@@ -106,7 +106,7 @@ kqueue = "1.1.1"
 signal-hook = "0.3.18"
 
 # build(.rs) dependencies
-openapiv3 = "2.0"
+openapiv3 = "2.1"
 prettyplease = "0.2"
 progenitor = "0.6"
 syn = "2.0"
