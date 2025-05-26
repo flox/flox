@@ -2,33 +2,28 @@
 pub use progenitor_client::{ByteStream, Error, ResponseValue};
 #[allow(unused_imports)]
 use progenitor_client::{encode_path, RequestBuilderExt};
-#[allow(unused_imports)]
-use reqwest::header::{HeaderMap, HeaderValue};
 /// Types used as operation parameters and responses.
 #[allow(clippy::all)]
 pub mod types {
-    use serde::{Deserialize, Serialize};
-    #[allow(unused_imports)]
-    use std::convert::TryFrom;
     /// Error types.
     pub mod error {
-        /// Error from a TryFrom or FromStr implementation.
-        pub struct ConversionError(std::borrow::Cow<'static, str>);
-        impl std::error::Error for ConversionError {}
-        impl std::fmt::Display for ConversionError {
+        /// Error from a `TryFrom` or `FromStr` implementation.
+        pub struct ConversionError(::std::borrow::Cow<'static, str>);
+        impl ::std::error::Error for ConversionError {}
+        impl ::std::fmt::Display for ConversionError {
             fn fmt(
                 &self,
-                f: &mut std::fmt::Formatter<'_>,
-            ) -> Result<(), std::fmt::Error> {
-                std::fmt::Display::fmt(&self.0, f)
+                f: &mut ::std::fmt::Formatter<'_>,
+            ) -> Result<(), ::std::fmt::Error> {
+                ::std::fmt::Display::fmt(&self.0, f)
             }
         }
-        impl std::fmt::Debug for ConversionError {
+        impl ::std::fmt::Debug for ConversionError {
             fn fmt(
                 &self,
-                f: &mut std::fmt::Formatter<'_>,
-            ) -> Result<(), std::fmt::Error> {
-                std::fmt::Debug::fmt(&self.0, f)
+                f: &mut ::std::fmt::Formatter<'_>,
+            ) -> Result<(), ::std::fmt::Error> {
+                ::std::fmt::Debug::fmt(&self.0, f)
             }
         }
         impl From<&'static str> for ConversionError {
@@ -42,7 +37,7 @@ pub mod types {
             }
         }
     }
-    ///CatalogName
+    ///`CatalogName`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -54,27 +49,30 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-    pub struct CatalogName(String);
-    impl std::ops::Deref for CatalogName {
-        type Target = String;
-        fn deref(&self) -> &String {
+    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    #[serde(transparent)]
+    pub struct CatalogName(::std::string::String);
+    impl ::std::ops::Deref for CatalogName {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
             &self.0
         }
     }
-    impl From<CatalogName> for String {
+    impl ::std::convert::From<CatalogName> for ::std::string::String {
         fn from(value: CatalogName) -> Self {
             value.0
         }
     }
-    impl From<&CatalogName> for CatalogName {
+    impl ::std::convert::From<&CatalogName> for CatalogName {
         fn from(value: &CatalogName) -> Self {
             value.clone()
         }
     }
-    impl std::str::FromStr for CatalogName {
+    impl ::std::str::FromStr for CatalogName {
         type Err = self::error::ConversionError;
-        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             if regress::Regex::new("[a-zA-Z0-9\\-_]{3,64}")
                 .unwrap()
                 .find(value)
@@ -85,37 +83,43 @@ pub mod types {
             Ok(Self(value.to_string()))
         }
     }
-    impl std::convert::TryFrom<&str> for CatalogName {
+    impl ::std::convert::TryFrom<&str> for CatalogName {
         type Error = self::error::ConversionError;
-        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl std::convert::TryFrom<&String> for CatalogName {
+    impl ::std::convert::TryFrom<&::std::string::String> for CatalogName {
         type Error = self::error::ConversionError;
-        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl std::convert::TryFrom<String> for CatalogName {
+    impl ::std::convert::TryFrom<::std::string::String> for CatalogName {
         type Error = self::error::ConversionError;
-        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl<'de> serde::Deserialize<'de> for CatalogName {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    impl<'de> ::serde::Deserialize<'de> for CatalogName {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
         where
-            D: serde::Deserializer<'de>,
+            D: ::serde::Deserializer<'de>,
         {
-            String::deserialize(deserializer)?
+            ::std::string::String::deserialize(deserializer)?
                 .parse()
                 .map_err(|e: self::error::ConversionError| {
-                    <D::Error as serde::de::Error>::custom(e.to_string())
+                    <D::Error as ::serde::de::Error>::custom(e.to_string())
                 })
         }
     }
-    ///CatalogPage
+    ///`CatalogPage`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -185,21 +189,21 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CatalogPage {
         pub complete: bool,
-        pub messages: Vec<ResolutionMessageGeneral>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub packages: Option<Vec<ResolvedPackageDescriptor>>,
+        pub messages: ::std::vec::Vec<ResolutionMessageGeneral>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub packages: ::std::option::Option<::std::vec::Vec<ResolvedPackageDescriptor>>,
         pub page: i64,
-        pub url: String,
+        pub url: ::std::string::String,
     }
-    impl From<&CatalogPage> for CatalogPage {
+    impl ::std::convert::From<&CatalogPage> for CatalogPage {
         fn from(value: &CatalogPage) -> Self {
             value.clone()
         }
     }
-    ///CatalogShareInfo
+    ///`CatalogShareInfo`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -223,17 +227,26 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CatalogShareInfo {
         #[serde(default = "defaults::catalog_share_info_allow_read_users")]
-        pub allow_read_users: Option<Vec<String>>,
+        pub allow_read_users: ::std::option::Option<
+            ::std::vec::Vec<::std::string::String>,
+        >,
     }
-    impl From<&CatalogShareInfo> for CatalogShareInfo {
+    impl ::std::convert::From<&CatalogShareInfo> for CatalogShareInfo {
         fn from(value: &CatalogShareInfo) -> Self {
             value.clone()
         }
     }
-    ///CatalogStatus
+    impl ::std::default::Default for CatalogShareInfo {
+        fn default() -> Self {
+            Self {
+                allow_read_users: defaults::catalog_share_info_allow_read_users(),
+            }
+        }
+    }
+    ///`CatalogStatus`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -328,30 +341,35 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CatalogStatus {
         pub attribute_path_ct: i64,
-        pub catalogs: Vec<String>,
+        pub catalogs: ::std::vec::Vec<::std::string::String>,
         pub derivations_ct: i64,
-        pub latest_rev: chrono::DateTime<chrono::offset::Utc>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub latest_scrape: Option<chrono::DateTime<chrono::offset::Utc>>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub narinfos_ct: Option<i64>,
+        pub latest_rev: ::chrono::DateTime<::chrono::offset::Utc>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub latest_scrape: ::std::option::Option<
+            ::chrono::DateTime<::chrono::offset::Utc>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub narinfos_ct: ::std::option::Option<i64>,
         pub pages_ct: i64,
-        pub schema_version: String,
+        pub schema_version: ::std::string::String,
         pub search_index_ct: i64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub storepaths_ct: Option<i64>,
-        pub systems: Vec<String>,
-        pub tags: std::collections::HashMap<String, Vec<String>>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub storepaths_ct: ::std::option::Option<i64>,
+        pub systems: ::std::vec::Vec<::std::string::String>,
+        pub tags: ::std::collections::HashMap<
+            ::std::string::String,
+            ::std::vec::Vec<::std::string::String>,
+        >,
     }
-    impl From<&CatalogStatus> for CatalogStatus {
+    impl ::std::convert::From<&CatalogStatus> for CatalogStatus {
         fn from(value: &CatalogStatus) -> Self {
             value.clone()
         }
     }
-    ///CatalogStoreConfigMetaOnly
+    ///`CatalogStoreConfigMetaOnly`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -369,17 +387,25 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CatalogStoreConfigMetaOnly {
         #[serde(default = "defaults::catalog_store_config_meta_only_store_type")]
-        pub store_type: String,
+        pub store_type: ::std::string::String,
     }
-    impl From<&CatalogStoreConfigMetaOnly> for CatalogStoreConfigMetaOnly {
+    impl ::std::convert::From<&CatalogStoreConfigMetaOnly>
+    for CatalogStoreConfigMetaOnly {
         fn from(value: &CatalogStoreConfigMetaOnly) -> Self {
             value.clone()
         }
     }
-    ///CatalogStoreConfigNixCopy
+    impl ::std::default::Default for CatalogStoreConfigMetaOnly {
+        fn default() -> Self {
+            Self {
+                store_type: defaults::catalog_store_config_meta_only_store_type(),
+            }
+        }
+    }
+    ///`CatalogStoreConfigNixCopy`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -409,19 +435,19 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CatalogStoreConfigNixCopy {
-        pub egress_uri: String,
-        pub ingress_uri: String,
+        pub egress_uri: ::std::string::String,
+        pub ingress_uri: ::std::string::String,
         #[serde(default = "defaults::catalog_store_config_nix_copy_store_type")]
-        pub store_type: String,
+        pub store_type: ::std::string::String,
     }
-    impl From<&CatalogStoreConfigNixCopy> for CatalogStoreConfigNixCopy {
+    impl ::std::convert::From<&CatalogStoreConfigNixCopy> for CatalogStoreConfigNixCopy {
         fn from(value: &CatalogStoreConfigNixCopy) -> Self {
             value.clone()
         }
     }
-    ///CatalogStoreConfigNull
+    ///`CatalogStoreConfigNull`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -439,17 +465,24 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CatalogStoreConfigNull {
         #[serde(default = "defaults::catalog_store_config_null_store_type")]
-        pub store_type: String,
+        pub store_type: ::std::string::String,
     }
-    impl From<&CatalogStoreConfigNull> for CatalogStoreConfigNull {
+    impl ::std::convert::From<&CatalogStoreConfigNull> for CatalogStoreConfigNull {
         fn from(value: &CatalogStoreConfigNull) -> Self {
             value.clone()
         }
     }
-    ///CatalogStoreConfigPublisher
+    impl ::std::default::Default for CatalogStoreConfigNull {
+        fn default() -> Self {
+            Self {
+                store_type: defaults::catalog_store_config_null_store_type(),
+            }
+        }
+    }
+    ///`CatalogStoreConfigPublisher`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -474,18 +507,19 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CatalogStoreConfigPublisher {
-        pub publisher_url: String,
+        pub publisher_url: ::std::string::String,
         #[serde(default = "defaults::catalog_store_config_publisher_store_type")]
-        pub store_type: String,
+        pub store_type: ::std::string::String,
     }
-    impl From<&CatalogStoreConfigPublisher> for CatalogStoreConfigPublisher {
+    impl ::std::convert::From<&CatalogStoreConfigPublisher>
+    for CatalogStoreConfigPublisher {
         fn from(value: &CatalogStoreConfigPublisher) -> Self {
             value.clone()
         }
     }
-    ///ErrorResponse
+    ///`ErrorResponse`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -505,16 +539,16 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct ErrorResponse {
-        pub detail: String,
+        pub detail: ::std::string::String,
     }
-    impl From<&ErrorResponse> for ErrorResponse {
+    impl ::std::convert::From<&ErrorResponse> for ErrorResponse {
         fn from(value: &ErrorResponse) -> Self {
             value.clone()
         }
     }
-    ///HealthCheck
+    ///`HealthCheck`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -562,10 +596,10 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct HealthCheck {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub check_parameters: Option<Params>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub check_parameters: ::std::option::Option<Params>,
         pub resolve_elapsed_ms: i64,
         pub resolve_ok: bool,
         pub search_elapsed_ms: i64,
@@ -573,12 +607,12 @@ pub mod types {
         pub show_elapsed_ms: i64,
         pub show_ok: bool,
     }
-    impl From<&HealthCheck> for HealthCheck {
+    impl ::std::convert::From<&HealthCheck> for HealthCheck {
         fn from(value: &HealthCheck) -> Self {
             value.clone()
         }
     }
-    ///MessageLevel
+    ///`MessageLevel`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -596,16 +630,16 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(
+        ::serde::Deserialize,
+        ::serde::Serialize,
         Clone,
         Copy,
         Debug,
-        Deserialize,
         Eq,
         Hash,
         Ord,
         PartialEq,
-        PartialOrd,
-        Serialize
+        PartialOrd
     )]
     pub enum MessageLevel {
         #[serde(rename = "trace")]
@@ -617,24 +651,26 @@ pub mod types {
         #[serde(rename = "error")]
         Error,
     }
-    impl From<&MessageLevel> for MessageLevel {
+    impl ::std::convert::From<&Self> for MessageLevel {
         fn from(value: &MessageLevel) -> Self {
             value.clone()
         }
     }
-    impl ToString for MessageLevel {
-        fn to_string(&self) -> String {
+    impl ::std::fmt::Display for MessageLevel {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
             match *self {
-                Self::Trace => "trace".to_string(),
-                Self::Info => "info".to_string(),
-                Self::Warning => "warning".to_string(),
-                Self::Error => "error".to_string(),
+                Self::Trace => write!(f, "trace"),
+                Self::Info => write!(f, "info"),
+                Self::Warning => write!(f, "warning"),
+                Self::Error => write!(f, "error"),
             }
         }
     }
-    impl std::str::FromStr for MessageLevel {
+    impl ::std::str::FromStr for MessageLevel {
         type Err = self::error::ConversionError;
-        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             match value {
                 "trace" => Ok(Self::Trace),
                 "info" => Ok(Self::Info),
@@ -644,25 +680,31 @@ pub mod types {
             }
         }
     }
-    impl std::convert::TryFrom<&str> for MessageLevel {
+    impl ::std::convert::TryFrom<&str> for MessageLevel {
         type Error = self::error::ConversionError;
-        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl std::convert::TryFrom<&String> for MessageLevel {
+    impl ::std::convert::TryFrom<&::std::string::String> for MessageLevel {
         type Error = self::error::ConversionError;
-        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl std::convert::TryFrom<String> for MessageLevel {
+    impl ::std::convert::TryFrom<::std::string::String> for MessageLevel {
         type Error = self::error::ConversionError;
-        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    ///Name
+    ///`Name`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -674,27 +716,30 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-    pub struct Name(String);
-    impl std::ops::Deref for Name {
-        type Target = String;
-        fn deref(&self) -> &String {
+    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    #[serde(transparent)]
+    pub struct Name(::std::string::String);
+    impl ::std::ops::Deref for Name {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
             &self.0
         }
     }
-    impl From<Name> for String {
+    impl ::std::convert::From<Name> for ::std::string::String {
         fn from(value: Name) -> Self {
             value.0
         }
     }
-    impl From<&Name> for Name {
+    impl ::std::convert::From<&Name> for Name {
         fn from(value: &Name) -> Self {
             value.clone()
         }
     }
-    impl std::str::FromStr for Name {
+    impl ::std::str::FromStr for Name {
         type Err = self::error::ConversionError;
-        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             if regress::Regex::new("[a-zA-Z0-9\\-_]{3,64}")
                 .unwrap()
                 .find(value)
@@ -705,37 +750,43 @@ pub mod types {
             Ok(Self(value.to_string()))
         }
     }
-    impl std::convert::TryFrom<&str> for Name {
+    impl ::std::convert::TryFrom<&str> for Name {
         type Error = self::error::ConversionError;
-        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl std::convert::TryFrom<&String> for Name {
+    impl ::std::convert::TryFrom<&::std::string::String> for Name {
         type Error = self::error::ConversionError;
-        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl std::convert::TryFrom<String> for Name {
+    impl ::std::convert::TryFrom<::std::string::String> for Name {
         type Error = self::error::ConversionError;
-        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl<'de> serde::Deserialize<'de> for Name {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    impl<'de> ::serde::Deserialize<'de> for Name {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
         where
-            D: serde::Deserializer<'de>,
+            D: ::serde::Deserializer<'de>,
         {
-            String::deserialize(deserializer)?
+            ::std::string::String::deserialize(deserializer)?
                 .parse()
                 .map_err(|e: self::error::ConversionError| {
-                    <D::Error as serde::de::Error>::custom(e.to_string())
+                    <D::Error as ::serde::de::Error>::custom(e.to_string())
                 })
         }
     }
-    ///NarInfo
+    ///`NarInfo`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -859,65 +910,94 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct NarInfo {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub ca: Option<String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub ca: ::std::option::Option<::std::string::String>,
         #[serde(
             rename = "closureDownloadSize",
             default,
-            skip_serializing_if = "Option::is_none"
+            skip_serializing_if = "::std::option::Option::is_none"
         )]
-        pub closure_download_size: Option<i64>,
+        pub closure_download_size: ::std::option::Option<i64>,
         #[serde(
             rename = "closureSize",
             default,
-            skip_serializing_if = "Option::is_none"
+            skip_serializing_if = "::std::option::Option::is_none"
         )]
-        pub closure_size: Option<i64>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub compression: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub compresssize: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub deriver: Option<String>,
+        pub closure_size: ::std::option::Option<i64>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub compression: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub compresssize: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub deriver: ::std::option::Option<::std::string::String>,
         #[serde(
             rename = "downloadHash",
             default,
-            skip_serializing_if = "Option::is_none"
+            skip_serializing_if = "::std::option::Option::is_none"
         )]
-        pub download_hash: Option<String>,
+        pub download_hash: ::std::option::Option<::std::string::String>,
         #[serde(
             rename = "downloadSize",
             default,
-            skip_serializing_if = "Option::is_none"
+            skip_serializing_if = "::std::option::Option::is_none"
         )]
-        pub download_size: Option<i64>,
-        #[serde(rename = "narHash", default, skip_serializing_if = "Option::is_none")]
-        pub nar_hash: Option<String>,
-        #[serde(rename = "narSize", default, skip_serializing_if = "Option::is_none")]
-        pub nar_size: Option<i64>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub references: Option<Vec<String>>,
+        pub download_size: ::std::option::Option<i64>,
+        #[serde(
+            rename = "narHash",
+            default,
+            skip_serializing_if = "::std::option::Option::is_none"
+        )]
+        pub nar_hash: ::std::option::Option<::std::string::String>,
+        #[serde(
+            rename = "narSize",
+            default,
+            skip_serializing_if = "::std::option::Option::is_none"
+        )]
+        pub nar_size: ::std::option::Option<i64>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub references: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
         #[serde(
             rename = "registrationTime",
             default,
-            skip_serializing_if = "Option::is_none"
+            skip_serializing_if = "::std::option::Option::is_none"
         )]
-        pub registration_time: Option<i64>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub signatures: Option<Vec<String>>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub ultimate: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub url: Option<String>,
+        pub registration_time: ::std::option::Option<i64>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub signatures: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub ultimate: ::std::option::Option<bool>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub url: ::std::option::Option<::std::string::String>,
     }
-    impl From<&NarInfo> for NarInfo {
+    impl ::std::convert::From<&NarInfo> for NarInfo {
         fn from(value: &NarInfo) -> Self {
             value.clone()
         }
     }
-    ///NarInfos
+    impl ::std::default::Default for NarInfo {
+        fn default() -> Self {
+            Self {
+                ca: Default::default(),
+                closure_download_size: Default::default(),
+                closure_size: Default::default(),
+                compression: Default::default(),
+                compresssize: Default::default(),
+                deriver: Default::default(),
+                download_hash: Default::default(),
+                download_size: Default::default(),
+                nar_hash: Default::default(),
+                nar_size: Default::default(),
+                references: Default::default(),
+                registration_time: Default::default(),
+                signatures: Default::default(),
+                ultimate: Default::default(),
+                url: Default::default(),
+            }
+        }
+    }
+    ///`NarInfos`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -931,30 +1011,36 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct NarInfos(pub std::collections::HashMap<String, NarInfo>);
-    impl std::ops::Deref for NarInfos {
-        type Target = std::collections::HashMap<String, NarInfo>;
-        fn deref(&self) -> &std::collections::HashMap<String, NarInfo> {
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    #[serde(transparent)]
+    pub struct NarInfos(pub ::std::collections::HashMap<::std::string::String, NarInfo>);
+    impl ::std::ops::Deref for NarInfos {
+        type Target = ::std::collections::HashMap<::std::string::String, NarInfo>;
+        fn deref(&self) -> &::std::collections::HashMap<::std::string::String, NarInfo> {
             &self.0
         }
     }
-    impl From<NarInfos> for std::collections::HashMap<String, NarInfo> {
+    impl ::std::convert::From<NarInfos>
+    for ::std::collections::HashMap<::std::string::String, NarInfo> {
         fn from(value: NarInfos) -> Self {
             value.0
         }
     }
-    impl From<&NarInfos> for NarInfos {
+    impl ::std::convert::From<&NarInfos> for NarInfos {
         fn from(value: &NarInfos) -> Self {
             value.clone()
         }
     }
-    impl From<std::collections::HashMap<String, NarInfo>> for NarInfos {
-        fn from(value: std::collections::HashMap<String, NarInfo>) -> Self {
+    impl ::std::convert::From<
+        ::std::collections::HashMap<::std::string::String, NarInfo>,
+    > for NarInfos {
+        fn from(
+            value: ::std::collections::HashMap<::std::string::String, NarInfo>,
+        ) -> Self {
             Self(value)
         }
     }
-    ///Output
+    ///`Output`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -979,17 +1065,17 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct Output {
-        pub name: String,
-        pub store_path: String,
+        pub name: ::std::string::String,
+        pub store_path: ::std::string::String,
     }
-    impl From<&Output> for Output {
+    impl ::std::convert::From<&Output> for Output {
         fn from(value: &Output) -> Self {
             value.clone()
         }
     }
-    ///Outputs
+    ///`Outputs`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1003,30 +1089,31 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct Outputs(pub Vec<Output>);
-    impl std::ops::Deref for Outputs {
-        type Target = Vec<Output>;
-        fn deref(&self) -> &Vec<Output> {
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    #[serde(transparent)]
+    pub struct Outputs(pub ::std::vec::Vec<Output>);
+    impl ::std::ops::Deref for Outputs {
+        type Target = ::std::vec::Vec<Output>;
+        fn deref(&self) -> &::std::vec::Vec<Output> {
             &self.0
         }
     }
-    impl From<Outputs> for Vec<Output> {
+    impl ::std::convert::From<Outputs> for ::std::vec::Vec<Output> {
         fn from(value: Outputs) -> Self {
             value.0
         }
     }
-    impl From<&Outputs> for Outputs {
+    impl ::std::convert::From<&Outputs> for Outputs {
         fn from(value: &Outputs) -> Self {
             value.clone()
         }
     }
-    impl From<Vec<Output>> for Outputs {
-        fn from(value: Vec<Output>) -> Self {
+    impl ::std::convert::From<::std::vec::Vec<Output>> for Outputs {
+        fn from(value: ::std::vec::Vec<Output>) -> Self {
             Self(value)
         }
     }
-    ///PackageDescriptor
+    ///`PackageDescriptor`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1132,34 +1219,36 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageDescriptor {
         #[serde(default = "defaults::package_descriptor_allow_broken")]
-        pub allow_broken: Option<bool>,
+        pub allow_broken: ::std::option::Option<bool>,
         #[serde(default = "defaults::package_descriptor_allow_insecure")]
-        pub allow_insecure: Option<bool>,
+        pub allow_insecure: ::std::option::Option<bool>,
         #[serde(default = "defaults::package_descriptor_allow_missing_builds")]
-        pub allow_missing_builds: Option<bool>,
+        pub allow_missing_builds: ::std::option::Option<bool>,
         #[serde(default = "defaults::package_descriptor_allow_pre_releases")]
-        pub allow_pre_releases: Option<bool>,
+        pub allow_pre_releases: ::std::option::Option<bool>,
         #[serde(default = "defaults::package_descriptor_allow_unfree")]
-        pub allow_unfree: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub allowed_licenses: Option<Vec<String>>,
-        pub attr_path: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub derivation: Option<String>,
-        pub install_id: String,
-        pub systems: Vec<SystemEnum>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub version: Option<String>,
+        pub allow_unfree: ::std::option::Option<bool>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub allowed_licenses: ::std::option::Option<
+            ::std::vec::Vec<::std::string::String>,
+        >,
+        pub attr_path: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub derivation: ::std::option::Option<::std::string::String>,
+        pub install_id: ::std::string::String,
+        pub systems: ::std::vec::Vec<SystemEnum>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub version: ::std::option::Option<::std::string::String>,
     }
-    impl From<&PackageDescriptor> for PackageDescriptor {
+    impl ::std::convert::From<&PackageDescriptor> for PackageDescriptor {
         fn from(value: &PackageDescriptor) -> Self {
             value.clone()
         }
     }
-    ///PackageGroup
+    ///`PackageGroup`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1222,19 +1311,19 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageGroup {
-        pub descriptors: Vec<PackageDescriptor>,
-        pub name: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub stability: Option<String>,
+        pub descriptors: ::std::vec::Vec<PackageDescriptor>,
+        pub name: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub stability: ::std::option::Option<::std::string::String>,
     }
-    impl From<&PackageGroup> for PackageGroup {
+    impl ::std::convert::From<&PackageGroup> for PackageGroup {
         fn from(value: &PackageGroup) -> Self {
             value.clone()
         }
     }
-    ///PackageGroups
+    ///`PackageGroups`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1289,16 +1378,16 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageGroups {
-        pub items: Vec<PackageGroup>,
+        pub items: ::std::vec::Vec<PackageGroup>,
     }
-    impl From<&PackageGroups> for PackageGroups {
+    impl ::std::convert::From<&PackageGroups> for PackageGroups {
         fn from(value: &PackageGroups) -> Self {
             value.clone()
         }
     }
-    ///PackageInfoSearch
+    ///`PackageInfoSearch`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1384,25 +1473,25 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageInfoSearch {
-        pub attr_path: String,
-        pub catalog: Option<String>,
-        pub description: Option<String>,
-        pub name: String,
-        pub pkg_path: String,
-        pub pname: String,
-        pub stabilities: Vec<String>,
+        pub attr_path: ::std::string::String,
+        pub catalog: ::std::option::Option<::std::string::String>,
+        pub description: ::std::option::Option<::std::string::String>,
+        pub name: ::std::string::String,
+        pub pkg_path: ::std::string::String,
+        pub pname: ::std::string::String,
+        pub stabilities: ::std::vec::Vec<::std::string::String>,
         pub system: SystemEnum,
         ///While version should always be present, (and is required in the PackageResolutionInfo model), there are cases where it has been historically optional and thus is carried forward here.  Published derivations have an Optional version and this same model is used for both published derivations and base catalog derivations.  For this reason we cannot make it required here until/if we unify those models and ensure every derivation does in fact have a version.
-        pub version: Option<String>,
+        pub version: ::std::option::Option<::std::string::String>,
     }
-    impl From<&PackageInfoSearch> for PackageInfoSearch {
+    impl ::std::convert::From<&PackageInfoSearch> for PackageInfoSearch {
         fn from(value: &PackageInfoSearch) -> Self {
             value.clone()
         }
     }
-    ///PackageName
+    ///`PackageName`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1414,27 +1503,30 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-    pub struct PackageName(String);
-    impl std::ops::Deref for PackageName {
-        type Target = String;
-        fn deref(&self) -> &String {
+    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    #[serde(transparent)]
+    pub struct PackageName(::std::string::String);
+    impl ::std::ops::Deref for PackageName {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
             &self.0
         }
     }
-    impl From<PackageName> for String {
+    impl ::std::convert::From<PackageName> for ::std::string::String {
         fn from(value: PackageName) -> Self {
             value.0
         }
     }
-    impl From<&PackageName> for PackageName {
+    impl ::std::convert::From<&PackageName> for PackageName {
         fn from(value: &PackageName) -> Self {
             value.clone()
         }
     }
-    impl std::str::FromStr for PackageName {
+    impl ::std::str::FromStr for PackageName {
         type Err = self::error::ConversionError;
-        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             if regress::Regex::new("[a-zA-Z0-9\\.\\-_]{3,128}")
                 .unwrap()
                 .find(value)
@@ -1445,37 +1537,43 @@ pub mod types {
             Ok(Self(value.to_string()))
         }
     }
-    impl std::convert::TryFrom<&str> for PackageName {
+    impl ::std::convert::TryFrom<&str> for PackageName {
         type Error = self::error::ConversionError;
-        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl std::convert::TryFrom<&String> for PackageName {
+    impl ::std::convert::TryFrom<&::std::string::String> for PackageName {
         type Error = self::error::ConversionError;
-        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl std::convert::TryFrom<String> for PackageName {
+    impl ::std::convert::TryFrom<::std::string::String> for PackageName {
         type Error = self::error::ConversionError;
-        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl<'de> serde::Deserialize<'de> for PackageName {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    impl<'de> ::serde::Deserialize<'de> for PackageName {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
         where
-            D: serde::Deserializer<'de>,
+            D: ::serde::Deserializer<'de>,
         {
-            String::deserialize(deserializer)?
+            ::std::string::String::deserialize(deserializer)?
                 .parse()
                 .map_err(|e: self::error::ConversionError| {
-                    <D::Error as serde::de::Error>::custom(e.to_string())
+                    <D::Error as ::serde::de::Error>::custom(e.to_string())
                 })
         }
     }
-    ///PackageResolutionInfo
+    ///`PackageResolutionInfo`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1646,40 +1744,44 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageResolutionInfo {
-        pub attr_path: String,
-        pub broken: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub cache_uri: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub catalog: Option<String>,
-        pub derivation: String,
-        pub description: Option<String>,
-        pub insecure: Option<bool>,
-        pub license: Option<String>,
-        pub locked_url: String,
-        pub missing_builds: Option<bool>,
-        pub name: String,
-        pub outputs: Vec<Output>,
-        pub outputs_to_install: Option<Vec<String>>,
-        pub pkg_path: String,
-        pub pname: String,
-        pub rev: String,
+        pub attr_path: ::std::string::String,
+        pub broken: ::std::option::Option<bool>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub cache_uri: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub catalog: ::std::option::Option<::std::string::String>,
+        pub derivation: ::std::string::String,
+        pub description: ::std::option::Option<::std::string::String>,
+        pub insecure: ::std::option::Option<bool>,
+        pub license: ::std::option::Option<::std::string::String>,
+        pub locked_url: ::std::string::String,
+        pub missing_builds: ::std::option::Option<bool>,
+        pub name: ::std::string::String,
+        pub outputs: ::std::vec::Vec<Output>,
+        pub outputs_to_install: ::std::option::Option<
+            ::std::vec::Vec<::std::string::String>,
+        >,
+        pub pkg_path: ::std::string::String,
+        pub pname: ::std::string::String,
+        pub rev: ::std::string::String,
         pub rev_count: i64,
-        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-        pub scrape_date: Option<chrono::DateTime<chrono::offset::Utc>>,
-        pub stabilities: Option<Vec<String>>,
+        pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
+        pub scrape_date: ::std::option::Option<
+            ::chrono::DateTime<::chrono::offset::Utc>,
+        >,
+        pub stabilities: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
         pub system: SystemEnum,
-        pub unfree: Option<bool>,
-        pub version: String,
+        pub unfree: ::std::option::Option<bool>,
+        pub version: ::std::string::String,
     }
-    impl From<&PackageResolutionInfo> for PackageResolutionInfo {
+    impl ::std::convert::From<&PackageResolutionInfo> for PackageResolutionInfo {
         fn from(value: &PackageResolutionInfo) -> Self {
             value.clone()
         }
     }
-    ///PackageSearchResult
+    ///`PackageSearchResult`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1723,17 +1825,17 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackageSearchResult {
-        pub items: Vec<PackageInfoSearch>,
+        pub items: ::std::vec::Vec<PackageInfoSearch>,
         pub total_count: i64,
     }
-    impl From<&PackageSearchResult> for PackageSearchResult {
+    impl ::std::convert::From<&PackageSearchResult> for PackageSearchResult {
         fn from(value: &PackageSearchResult) -> Self {
             value.clone()
         }
     }
-    ///PackagesResult
+    ///`PackagesResult`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1761,17 +1863,17 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PackagesResult {
-        pub items: Vec<PackageResolutionInfo>,
+        pub items: ::std::vec::Vec<PackageResolutionInfo>,
         pub total_count: i64,
     }
-    impl From<&PackagesResult> for PackagesResult {
+    impl ::std::convert::From<&PackagesResult> for PackagesResult {
         fn from(value: &PackagesResult) -> Self {
             value.clone()
         }
     }
-    ///Params
+    ///`Params`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1812,25 +1914,36 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct Params {
         #[serde(default = "defaults::params_resolve_package")]
-        pub resolve_package: String,
+        pub resolve_package: ::std::string::String,
         #[serde(default = "defaults::params_resolve_systems")]
-        pub resolve_systems: Vec<SystemEnum>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub search_system: Option<SystemEnum>,
+        pub resolve_systems: ::std::vec::Vec<SystemEnum>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub search_system: ::std::option::Option<SystemEnum>,
         #[serde(default = "defaults::params_search_term")]
-        pub search_term: String,
+        pub search_term: ::std::string::String,
         #[serde(default = "defaults::params_show_term")]
-        pub show_term: String,
+        pub show_term: ::std::string::String,
     }
-    impl From<&Params> for Params {
+    impl ::std::convert::From<&Params> for Params {
         fn from(value: &Params) -> Self {
             value.clone()
         }
     }
-    ///PkgPathsResult
+    impl ::std::default::Default for Params {
+        fn default() -> Self {
+            Self {
+                resolve_package: defaults::params_resolve_package(),
+                resolve_systems: defaults::params_resolve_systems(),
+                search_system: Default::default(),
+                search_term: defaults::params_search_term(),
+                show_term: defaults::params_show_term(),
+            }
+        }
+    }
+    ///`PkgPathsResult`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1858,17 +1971,17 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PkgPathsResult {
-        pub items: Vec<String>,
+        pub items: ::std::vec::Vec<::std::string::String>,
         pub total_count: i64,
     }
-    impl From<&PkgPathsResult> for PkgPathsResult {
+    impl ::std::convert::From<&PkgPathsResult> for PkgPathsResult {
         fn from(value: &PkgPathsResult) -> Self {
             value.clone()
         }
     }
-    ///PublishRequest
+    ///`PublishRequest`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1879,30 +1992,40 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PublishRequest(pub serde_json::Map<String, serde_json::Value>);
-    impl std::ops::Deref for PublishRequest {
-        type Target = serde_json::Map<String, serde_json::Value>;
-        fn deref(&self) -> &serde_json::Map<String, serde_json::Value> {
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    #[serde(transparent)]
+    pub struct PublishRequest(
+        pub ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    );
+    impl ::std::ops::Deref for PublishRequest {
+        type Target = ::serde_json::Map<::std::string::String, ::serde_json::Value>;
+        fn deref(
+            &self,
+        ) -> &::serde_json::Map<::std::string::String, ::serde_json::Value> {
             &self.0
         }
     }
-    impl From<PublishRequest> for serde_json::Map<String, serde_json::Value> {
+    impl ::std::convert::From<PublishRequest>
+    for ::serde_json::Map<::std::string::String, ::serde_json::Value> {
         fn from(value: PublishRequest) -> Self {
             value.0
         }
     }
-    impl From<&PublishRequest> for PublishRequest {
+    impl ::std::convert::From<&PublishRequest> for PublishRequest {
         fn from(value: &PublishRequest) -> Self {
             value.clone()
         }
     }
-    impl From<serde_json::Map<String, serde_json::Value>> for PublishRequest {
-        fn from(value: serde_json::Map<String, serde_json::Value>) -> Self {
+    impl ::std::convert::From<
+        ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    > for PublishRequest {
+        fn from(
+            value: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+        ) -> Self {
             Self(value)
         }
     }
-    ///PublishResponse
+    ///`PublishResponse`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1935,20 +2058,22 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct PublishResponse {
         pub catalog_store_config: crate::types::CatalogStoreConfig,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub ingress_auth: Option<serde_json::Map<String, serde_json::Value>>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub ingress_uri: Option<String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub ingress_auth: ::std::option::Option<
+            ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub ingress_uri: ::std::option::Option<::std::string::String>,
     }
-    impl From<&PublishResponse> for PublishResponse {
+    impl ::std::convert::From<&PublishResponse> for PublishResponse {
         fn from(value: &PublishResponse) -> Self {
             value.clone()
         }
     }
-    ///ResolutionMessageGeneral
+    ///`ResolutionMessageGeneral`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1984,20 +2109,23 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct ResolutionMessageGeneral {
-        pub context: std::collections::HashMap<String, String>,
+        pub context: ::std::collections::HashMap<
+            ::std::string::String,
+            ::std::string::String,
+        >,
         pub level: MessageLevel,
-        pub message: String,
+        pub message: ::std::string::String,
         #[serde(rename = "type")]
         pub type_: crate::error::MessageType,
     }
-    impl From<&ResolutionMessageGeneral> for ResolutionMessageGeneral {
+    impl ::std::convert::From<&ResolutionMessageGeneral> for ResolutionMessageGeneral {
         fn from(value: &ResolutionMessageGeneral) -> Self {
             value.clone()
         }
     }
-    ///ResolvedPackageDescriptor
+    ///`ResolvedPackageDescriptor`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2173,41 +2301,45 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct ResolvedPackageDescriptor {
-        pub attr_path: String,
-        pub broken: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub cache_uri: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub catalog: Option<String>,
-        pub derivation: String,
-        pub description: Option<String>,
-        pub insecure: Option<bool>,
-        pub install_id: String,
-        pub license: Option<String>,
-        pub locked_url: String,
-        pub missing_builds: Option<bool>,
-        pub name: String,
-        pub outputs: Vec<Output>,
-        pub outputs_to_install: Option<Vec<String>>,
-        pub pkg_path: String,
-        pub pname: String,
-        pub rev: String,
+        pub attr_path: ::std::string::String,
+        pub broken: ::std::option::Option<bool>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub cache_uri: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub catalog: ::std::option::Option<::std::string::String>,
+        pub derivation: ::std::string::String,
+        pub description: ::std::option::Option<::std::string::String>,
+        pub insecure: ::std::option::Option<bool>,
+        pub install_id: ::std::string::String,
+        pub license: ::std::option::Option<::std::string::String>,
+        pub locked_url: ::std::string::String,
+        pub missing_builds: ::std::option::Option<bool>,
+        pub name: ::std::string::String,
+        pub outputs: ::std::vec::Vec<Output>,
+        pub outputs_to_install: ::std::option::Option<
+            ::std::vec::Vec<::std::string::String>,
+        >,
+        pub pkg_path: ::std::string::String,
+        pub pname: ::std::string::String,
+        pub rev: ::std::string::String,
         pub rev_count: i64,
-        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-        pub scrape_date: Option<chrono::DateTime<chrono::offset::Utc>>,
-        pub stabilities: Option<Vec<String>>,
+        pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
+        pub scrape_date: ::std::option::Option<
+            ::chrono::DateTime<::chrono::offset::Utc>,
+        >,
+        pub stabilities: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
         pub system: SystemEnum,
-        pub unfree: Option<bool>,
-        pub version: String,
+        pub unfree: ::std::option::Option<bool>,
+        pub version: ::std::string::String,
     }
-    impl From<&ResolvedPackageDescriptor> for ResolvedPackageDescriptor {
+    impl ::std::convert::From<&ResolvedPackageDescriptor> for ResolvedPackageDescriptor {
         fn from(value: &ResolvedPackageDescriptor) -> Self {
             value.clone()
         }
     }
-    ///ResolvedPackageGroup
+    ///`ResolvedPackageGroup`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2260,19 +2392,19 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct ResolvedPackageGroup {
-        pub messages: Vec<ResolutionMessageGeneral>,
-        pub name: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub page: Option<CatalogPage>,
+        pub messages: ::std::vec::Vec<ResolutionMessageGeneral>,
+        pub name: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub page: ::std::option::Option<CatalogPage>,
     }
-    impl From<&ResolvedPackageGroup> for ResolvedPackageGroup {
+    impl ::std::convert::From<&ResolvedPackageGroup> for ResolvedPackageGroup {
         fn from(value: &ResolvedPackageGroup) -> Self {
             value.clone()
         }
     }
-    ///ResolvedPackageGroups
+    ///`ResolvedPackageGroups`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2295,16 +2427,16 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct ResolvedPackageGroups {
-        pub items: Vec<ResolvedPackageGroup>,
+        pub items: ::std::vec::Vec<ResolvedPackageGroup>,
     }
-    impl From<&ResolvedPackageGroups> for ResolvedPackageGroups {
+    impl ::std::convert::From<&ResolvedPackageGroups> for ResolvedPackageGroups {
         fn from(value: &ResolvedPackageGroups) -> Self {
             value.clone()
         }
     }
-    ///SearchTerm
+    ///`SearchTerm`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2316,27 +2448,30 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-    pub struct SearchTerm(String);
-    impl std::ops::Deref for SearchTerm {
-        type Target = String;
-        fn deref(&self) -> &String {
+    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    #[serde(transparent)]
+    pub struct SearchTerm(::std::string::String);
+    impl ::std::ops::Deref for SearchTerm {
+        type Target = ::std::string::String;
+        fn deref(&self) -> &::std::string::String {
             &self.0
         }
     }
-    impl From<SearchTerm> for String {
+    impl ::std::convert::From<SearchTerm> for ::std::string::String {
         fn from(value: SearchTerm) -> Self {
             value.0
         }
     }
-    impl From<&SearchTerm> for SearchTerm {
+    impl ::std::convert::From<&SearchTerm> for SearchTerm {
         fn from(value: &SearchTerm) -> Self {
             value.clone()
         }
     }
-    impl std::str::FromStr for SearchTerm {
+    impl ::std::str::FromStr for SearchTerm {
         type Err = self::error::ConversionError;
-        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             if regress::Regex::new("[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}")
                 .unwrap()
                 .find(value)
@@ -2349,37 +2484,43 @@ pub mod types {
             Ok(Self(value.to_string()))
         }
     }
-    impl std::convert::TryFrom<&str> for SearchTerm {
+    impl ::std::convert::TryFrom<&str> for SearchTerm {
         type Error = self::error::ConversionError;
-        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl std::convert::TryFrom<&String> for SearchTerm {
+    impl ::std::convert::TryFrom<&::std::string::String> for SearchTerm {
         type Error = self::error::ConversionError;
-        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl std::convert::TryFrom<String> for SearchTerm {
+    impl ::std::convert::TryFrom<::std::string::String> for SearchTerm {
         type Error = self::error::ConversionError;
-        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl<'de> serde::Deserialize<'de> for SearchTerm {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    impl<'de> ::serde::Deserialize<'de> for SearchTerm {
+        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
         where
-            D: serde::Deserializer<'de>,
+            D: ::serde::Deserializer<'de>,
         {
-            String::deserialize(deserializer)?
+            ::std::string::String::deserialize(deserializer)?
                 .parse()
                 .map_err(|e: self::error::ConversionError| {
-                    <D::Error as serde::de::Error>::custom(e.to_string())
+                    <D::Error as ::serde::de::Error>::custom(e.to_string())
                 })
         }
     }
-    ///ServiceStatus
+    ///`ServiceStatus`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2417,19 +2558,19 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct ServiceStatus {
-        pub service_version: String,
-        pub start_tm: chrono::DateTime<chrono::offset::Utc>,
-        pub uptime_pretty: String,
+        pub service_version: ::std::string::String,
+        pub start_tm: ::chrono::DateTime<::chrono::offset::Utc>,
+        pub uptime_pretty: ::std::string::String,
         pub uptime_seconds: f64,
     }
-    impl From<&ServiceStatus> for ServiceStatus {
+    impl ::std::convert::From<&ServiceStatus> for ServiceStatus {
         fn from(value: &ServiceStatus) -> Self {
             value.clone()
         }
     }
-    ///StoreInfo
+    ///`StoreInfo`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2456,18 +2597,20 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct StoreInfo {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub auth: Option<serde_json::Map<String, serde_json::Value>>,
-        pub url: String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub auth: ::std::option::Option<
+            ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+        >,
+        pub url: ::std::string::String,
     }
-    impl From<&StoreInfo> for StoreInfo {
+    impl ::std::convert::From<&StoreInfo> for StoreInfo {
         fn from(value: &StoreInfo) -> Self {
             value.clone()
         }
     }
-    ///StoreInfoRequest
+    ///`StoreInfoRequest`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2501,18 +2644,18 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct StoreInfoRequest {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub drv_paths: Option<Vec<String>>,
-        pub outpaths: Vec<String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub drv_paths: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
+        pub outpaths: ::std::vec::Vec<::std::string::String>,
     }
-    impl From<&StoreInfoRequest> for StoreInfoRequest {
+    impl ::std::convert::From<&StoreInfoRequest> for StoreInfoRequest {
         fn from(value: &StoreInfoRequest) -> Self {
             value.clone()
         }
     }
-    ///StoreInfoResponse
+    ///`StoreInfoResponse`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2538,16 +2681,19 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct StoreInfoResponse {
-        pub items: std::collections::HashMap<String, Vec<StoreInfo>>,
+        pub items: ::std::collections::HashMap<
+            ::std::string::String,
+            ::std::vec::Vec<StoreInfo>,
+        >,
     }
-    impl From<&StoreInfoResponse> for StoreInfoResponse {
+    impl ::std::convert::From<&StoreInfoResponse> for StoreInfoResponse {
         fn from(value: &StoreInfoResponse) -> Self {
             value.clone()
         }
     }
-    ///SystemEnum
+    ///`SystemEnum`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2566,16 +2712,16 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(
+        ::serde::Deserialize,
+        ::serde::Serialize,
         Clone,
         Copy,
         Debug,
-        Deserialize,
         Eq,
         Hash,
         Ord,
         PartialEq,
-        PartialOrd,
-        Serialize
+        PartialOrd
     )]
     pub enum SystemEnum {
         #[serde(rename = "aarch64-darwin")]
@@ -2589,25 +2735,27 @@ pub mod types {
         #[serde(rename = "invalid")]
         Invalid,
     }
-    impl From<&SystemEnum> for SystemEnum {
+    impl ::std::convert::From<&Self> for SystemEnum {
         fn from(value: &SystemEnum) -> Self {
             value.clone()
         }
     }
-    impl ToString for SystemEnum {
-        fn to_string(&self) -> String {
+    impl ::std::fmt::Display for SystemEnum {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
             match *self {
-                Self::Aarch64Darwin => "aarch64-darwin".to_string(),
-                Self::Aarch64Linux => "aarch64-linux".to_string(),
-                Self::X8664Darwin => "x86_64-darwin".to_string(),
-                Self::X8664Linux => "x86_64-linux".to_string(),
-                Self::Invalid => "invalid".to_string(),
+                Self::Aarch64Darwin => write!(f, "aarch64-darwin"),
+                Self::Aarch64Linux => write!(f, "aarch64-linux"),
+                Self::X8664Darwin => write!(f, "x86_64-darwin"),
+                Self::X8664Linux => write!(f, "x86_64-linux"),
+                Self::Invalid => write!(f, "invalid"),
             }
         }
     }
-    impl std::str::FromStr for SystemEnum {
+    impl ::std::str::FromStr for SystemEnum {
         type Err = self::error::ConversionError;
-        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             match value {
                 "aarch64-darwin" => Ok(Self::Aarch64Darwin),
                 "aarch64-linux" => Ok(Self::Aarch64Linux),
@@ -2618,25 +2766,31 @@ pub mod types {
             }
         }
     }
-    impl std::convert::TryFrom<&str> for SystemEnum {
+    impl ::std::convert::TryFrom<&str> for SystemEnum {
         type Error = self::error::ConversionError;
-        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl std::convert::TryFrom<&String> for SystemEnum {
+    impl ::std::convert::TryFrom<&::std::string::String> for SystemEnum {
         type Error = self::error::ConversionError;
-        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    impl std::convert::TryFrom<String> for SystemEnum {
+    impl ::std::convert::TryFrom<::std::string::String> for SystemEnum {
         type Error = self::error::ConversionError;
-        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
             value.parse()
         }
     }
-    ///UserBuild
+    ///`UserBuild`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2714,24 +2868,24 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct UserBuild {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub cache_uri: Option<String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub cache_uri: ::std::option::Option<::std::string::String>,
         pub derivation: UserDerivationOutput,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub locked_base_catalog_url: Option<String>,
-        pub rev: String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
+        pub rev: ::std::string::String,
         pub rev_count: i64,
-        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-        pub url: String,
+        pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
+        pub url: ::std::string::String,
     }
-    impl From<&UserBuild> for UserBuild {
+    impl ::std::convert::From<&UserBuild> for UserBuild {
         fn from(value: &UserBuild) -> Self {
             value.clone()
         }
     }
-    ///UserBuildCreationResponse
+    ///`UserBuildCreationResponse`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2747,17 +2901,22 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct UserBuildCreationResponse {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub store: Option<StoreInfo>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub store: ::std::option::Option<StoreInfo>,
     }
-    impl From<&UserBuildCreationResponse> for UserBuildCreationResponse {
+    impl ::std::convert::From<&UserBuildCreationResponse> for UserBuildCreationResponse {
         fn from(value: &UserBuildCreationResponse) -> Self {
             value.clone()
         }
     }
-    ///UserBuildList
+    impl ::std::default::Default for UserBuildCreationResponse {
+        fn default() -> Self {
+            Self { store: Default::default() }
+        }
+    }
+    ///`UserBuildList`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2780,16 +2939,16 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct UserBuildList {
-        pub items: Vec<UserBuild>,
+        pub items: ::std::vec::Vec<UserBuild>,
     }
-    impl From<&UserBuildList> for UserBuildList {
+    impl ::std::convert::From<&UserBuildList> for UserBuildList {
         fn from(value: &UserBuildList) -> Self {
             value.clone()
         }
     }
-    ///UserBuildPublish
+    ///`UserBuildPublish`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2884,30 +3043,30 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct UserBuildPublish {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub cache_uri: Option<String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub cache_uri: ::std::option::Option<::std::string::String>,
         pub derivation: UserDerivationInput,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub locked_base_catalog_url: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub narinfos: Option<NarInfos>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub narinfos_source_url: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub narinfos_source_version: Option<i64>,
-        pub rev: String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub narinfos: ::std::option::Option<NarInfos>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub narinfos_source_url: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub narinfos_source_version: ::std::option::Option<i64>,
+        pub rev: ::std::string::String,
         pub rev_count: i64,
-        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-        pub url: String,
+        pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
+        pub url: ::std::string::String,
     }
-    impl From<&UserBuildPublish> for UserBuildPublish {
+    impl ::std::convert::From<&UserBuildPublish> for UserBuildPublish {
         fn from(value: &UserBuildPublish) -> Self {
             value.clone()
         }
     }
-    ///UserCatalog
+    ///`UserCatalog`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -2945,20 +3104,20 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct UserCatalog {
-        pub created_at: chrono::DateTime<chrono::offset::Utc>,
+        pub created_at: ::chrono::DateTime<::chrono::offset::Utc>,
         pub id: i64,
-        pub name: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub owner_handle: Option<String>,
+        pub name: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub owner_handle: ::std::option::Option<::std::string::String>,
     }
-    impl From<&UserCatalog> for UserCatalog {
+    impl ::std::convert::From<&UserCatalog> for UserCatalog {
         fn from(value: &UserCatalog) -> Self {
             value.clone()
         }
     }
-    ///UserDerivationInput
+    ///`UserDerivationInput`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -3058,32 +3217,34 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct UserDerivationInput {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub broken: Option<bool>,
-        pub description: String,
-        pub drv_path: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub license: Option<String>,
-        pub name: String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub broken: ::std::option::Option<bool>,
+        pub description: ::std::string::String,
+        pub drv_path: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub license: ::std::option::Option<::std::string::String>,
+        pub name: ::std::string::String,
         pub outputs: Outputs,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub outputs_to_install: Option<Vec<String>>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub pname: Option<String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub outputs_to_install: ::std::option::Option<
+            ::std::vec::Vec<::std::string::String>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub pname: ::std::option::Option<::std::string::String>,
         pub system: SystemEnum,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub unfree: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub version: Option<String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub unfree: ::std::option::Option<bool>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub version: ::std::option::Option<::std::string::String>,
     }
-    impl From<&UserDerivationInput> for UserDerivationInput {
+    impl ::std::convert::From<&UserDerivationInput> for UserDerivationInput {
         fn from(value: &UserDerivationInput) -> Self {
             value.clone()
         }
     }
-    ///UserDerivationOutput
+    ///`UserDerivationOutput`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -3183,32 +3344,34 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct UserDerivationOutput {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub broken: Option<bool>,
-        pub description: String,
-        pub drv_path: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub license: Option<String>,
-        pub name: String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub broken: ::std::option::Option<bool>,
+        pub description: ::std::string::String,
+        pub drv_path: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub license: ::std::option::Option<::std::string::String>,
+        pub name: ::std::string::String,
         pub outputs: Outputs,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub outputs_to_install: Option<Vec<String>>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub pname: Option<String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub outputs_to_install: ::std::option::Option<
+            ::std::vec::Vec<::std::string::String>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub pname: ::std::option::Option<::std::string::String>,
         pub system: SystemEnum,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub unfree: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub version: Option<String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub unfree: ::std::option::Option<bool>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub version: ::std::option::Option<::std::string::String>,
     }
-    impl From<&UserDerivationOutput> for UserDerivationOutput {
+    impl ::std::convert::From<&UserDerivationOutput> for UserDerivationOutput {
         fn from(value: &UserDerivationOutput) -> Self {
             value.clone()
         }
     }
-    ///UserPackage
+    ///`UserPackage`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -3241,19 +3404,19 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct UserPackage {
-        pub catalog: String,
-        pub name: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub original_url: Option<String>,
+        pub catalog: ::std::string::String,
+        pub name: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub original_url: ::std::option::Option<::std::string::String>,
     }
-    impl From<&UserPackage> for UserPackage {
+    impl ::std::convert::From<&UserPackage> for UserPackage {
         fn from(value: &UserPackage) -> Self {
             value.clone()
         }
     }
-    ///UserPackageCreate
+    ///`UserPackageCreate`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -3274,17 +3437,24 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct UserPackageCreate {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub original_url: Option<String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub original_url: ::std::option::Option<::std::string::String>,
     }
-    impl From<&UserPackageCreate> for UserPackageCreate {
+    impl ::std::convert::From<&UserPackageCreate> for UserPackageCreate {
         fn from(value: &UserPackageCreate) -> Self {
             value.clone()
         }
     }
-    ///UserPackageList
+    impl ::std::default::Default for UserPackageCreate {
+        fn default() -> Self {
+            Self {
+                original_url: Default::default(),
+            }
+        }
+    }
+    ///`UserPackageList`
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -3307,57 +3477,65 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct UserPackageList {
-        pub items: Vec<UserPackage>,
+        pub items: ::std::vec::Vec<UserPackage>,
     }
-    impl From<&UserPackageList> for UserPackageList {
+    impl ::std::convert::From<&UserPackageList> for UserPackageList {
         fn from(value: &UserPackageList) -> Self {
             value.clone()
         }
     }
     /// Generation of default values for serde.
     pub mod defaults {
-        pub(super) fn catalog_share_info_allow_read_users() -> Option<Vec<String>> {
-            Some(vec![])
+        pub(super) fn catalog_share_info_allow_read_users() -> ::std::option::Option<
+            ::std::vec::Vec<::std::string::String>,
+        > {
+            ::std::option::Option::Some(vec![])
         }
-        pub(super) fn catalog_store_config_meta_only_store_type() -> String {
+        pub(super) fn catalog_store_config_meta_only_store_type() -> ::std::string::String {
             "meta-only".to_string()
         }
-        pub(super) fn catalog_store_config_nix_copy_store_type() -> String {
+        pub(super) fn catalog_store_config_nix_copy_store_type() -> ::std::string::String {
             "nix-copy".to_string()
         }
-        pub(super) fn catalog_store_config_null_store_type() -> String {
+        pub(super) fn catalog_store_config_null_store_type() -> ::std::string::String {
             "null".to_string()
         }
-        pub(super) fn catalog_store_config_publisher_store_type() -> String {
+        pub(super) fn catalog_store_config_publisher_store_type() -> ::std::string::String {
             "publisher".to_string()
         }
-        pub(super) fn package_descriptor_allow_broken() -> Option<bool> {
-            Some(false)
+        pub(super) fn package_descriptor_allow_broken() -> ::std::option::Option<bool> {
+            ::std::option::Option::Some(false)
         }
-        pub(super) fn package_descriptor_allow_insecure() -> Option<bool> {
-            Some(false)
+        pub(super) fn package_descriptor_allow_insecure() -> ::std::option::Option<
+            bool,
+        > {
+            ::std::option::Option::Some(false)
         }
-        pub(super) fn package_descriptor_allow_missing_builds() -> Option<bool> {
-            Some(false)
+        pub(super) fn package_descriptor_allow_missing_builds() -> ::std::option::Option<
+            bool,
+        > {
+            ::std::option::Option::Some(false)
         }
-        pub(super) fn package_descriptor_allow_pre_releases() -> Option<bool> {
-            Some(false)
+        pub(super) fn package_descriptor_allow_pre_releases() -> ::std::option::Option<
+            bool,
+        > {
+            ::std::option::Option::Some(false)
         }
-        pub(super) fn package_descriptor_allow_unfree() -> Option<bool> {
-            Some(true)
+        pub(super) fn package_descriptor_allow_unfree() -> ::std::option::Option<bool> {
+            ::std::option::Option::Some(true)
         }
-        pub(super) fn params_resolve_package() -> String {
+        pub(super) fn params_resolve_package() -> ::std::string::String {
             "cowsay".to_string()
         }
-        pub(super) fn params_resolve_systems() -> Vec<super::SystemEnum> {
+        pub(super) fn params_resolve_systems() -> ::std::vec::Vec<super::SystemEnum> {
             vec![super::SystemEnum::X8664Linux]
         }
-        pub(super) fn params_search_term() -> String {
+        pub(super) fn params_search_term() -> ::std::string::String {
             "in Go".to_string()
         }
-        pub(super) fn params_show_term() -> String {
+        pub(super) fn params_show_term() -> ::std::string::String {
             "hello".to_string()
         }
     }
@@ -3421,6 +3599,7 @@ impl Client {
     }
 }
 #[allow(clippy::all)]
+#[allow(elided_named_lifetimes)]
 impl Client {
     /**Create a new user catalog
 
@@ -3441,17 +3620,22 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/`
         name: &'a types::Name,
     ) -> Result<ResponseValue<types::UserCatalog>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/catalogs/", self.baseurl,);
-        let mut query = Vec::with_capacity(1usize);
-        query.push(("name", name.to_string()));
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .post(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
-            .query(&query)
+            .query(&progenitor_client::QueryParam::new("name", &name))
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -3488,14 +3672,21 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}`
             "{}/api/v1/catalog/catalogs/{}", self.baseurl, encode_path(& catalog_name
             .to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -3527,19 +3718,26 @@ Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
     pub async fn delete_catalog_api_v1_catalog_catalogs_catalog_name_delete<'a>(
         &'a self,
         catalog_name: &'a types::CatalogName,
-    ) -> Result<ResponseValue<serde_json::Value>, Error<types::ErrorResponse>> {
+    ) -> Result<ResponseValue<::serde_json::Value>, Error<types::ErrorResponse>> {
         let url = format!(
             "{}/api/v1/catalog/catalogs/{}", self.baseurl, encode_path(& catalog_name
             .to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .delete(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -3577,14 +3775,21 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
             "{}/api/v1/catalog/catalogs/{}/packages", self.baseurl, encode_path(&
             catalog_name.to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -3627,18 +3832,23 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
             "{}/api/v1/catalog/catalogs/{}/packages", self.baseurl, encode_path(&
             catalog_name.to_string()),
         );
-        let mut query = Vec::with_capacity(1usize);
-        query.push(("name", name.to_string()));
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .post(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .json(&body)
-            .query(&query)
+            .query(&progenitor_client::QueryParam::new("name", &name))
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -3682,14 +3892,21 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             "{}/api/v1/catalog/catalogs/{}/packages/{}", self.baseurl, encode_path(&
             catalog_name.to_string()), encode_path(& package_name.to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -3730,14 +3947,21 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             encode_path(& catalog_name.to_string()), encode_path(& package_name
             .to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -3784,15 +4008,22 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             encode_path(& catalog_name.to_string()), encode_path(& package_name
             .to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .put(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .json(&body)
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -3843,15 +4074,22 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             encode_path(& catalog_name.to_string()), encode_path(& package_name
             .to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .post(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .json(&body)
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -3897,15 +4135,22 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             encode_path(& catalog_name.to_string()), encode_path(& package_name
             .to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .post(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .json(&body)
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -3950,15 +4195,22 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             encode_path(& catalog_name.to_string()), encode_path(& package_name
             .to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .post(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .json(&body)
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -3999,14 +4251,21 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing`
             "{}/api/v1/catalog/catalogs/{}/sharing", self.baseurl, encode_path(&
             catalog_name.to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4048,15 +4307,22 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/add-r
             "{}/api/v1/catalog/catalogs/{}/sharing/add-read-users", self.baseurl,
             encode_path(& catalog_name.to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .post(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .json(&body)
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4098,15 +4364,22 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/remov
             "{}/api/v1/catalog/catalogs/{}/sharing/remove-read-users", self.baseurl,
             encode_path(& catalog_name.to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .post(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .json(&body)
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4141,14 +4414,21 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
             "{}/api/v1/catalog/catalogs/{}/store/config", self.baseurl, encode_path(&
             catalog_name.to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4184,15 +4464,22 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
             "{}/api/v1/catalog/catalogs/{}/store/config", self.baseurl, encode_path(&
             catalog_name.to_string()),
         );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .put(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .json(&body)
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4220,22 +4507,23 @@ Sends a `GET` request to `/api/v1/catalog/info/pkg-paths`
         page_size: Option<i64>,
     ) -> Result<ResponseValue<types::PkgPathsResult>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/info/pkg-paths", self.baseurl,);
-        let mut query = Vec::with_capacity(2usize);
-        if let Some(v) = &page {
-            query.push(("page", v.to_string()));
-        }
-        if let Some(v) = &page_size {
-            query.push(("pageSize", v.to_string()));
-        }
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
-            .query(&query)
+            .query(&progenitor_client::QueryParam::new("page", &page))
+            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4274,22 +4562,23 @@ Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
             "{}/api/v1/catalog/packages/{}", self.baseurl, encode_path(& attr_path
             .to_string()),
         );
-        let mut query = Vec::with_capacity(2usize);
-        if let Some(v) = &page {
-            query.push(("page", v.to_string()));
-        }
-        if let Some(v) = &page_size {
-            query.push(("pageSize", v.to_string()));
-        }
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
-            .query(&query)
+            .query(&progenitor_client::QueryParam::new("page", &page))
+            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4362,15 +4651,22 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
         Error<types::ErrorResponse>,
     > {
         let url = format!("{}/api/v1/catalog/resolve", self.baseurl,);
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .post(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .json(&body)
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4410,29 +4706,26 @@ Sends a `GET` request to `/api/v1/catalog/search`
         system: types::SystemEnum,
     ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/search", self.baseurl,);
-        let mut query = Vec::with_capacity(5usize);
-        if let Some(v) = &catalogs {
-            query.push(("catalogs", v.to_string()));
-        }
-        if let Some(v) = &page {
-            query.push(("page", v.to_string()));
-        }
-        if let Some(v) = &page_size {
-            query.push(("pageSize", v.to_string()));
-        }
-        if let Some(v) = &search_term {
-            query.push(("search_term", v.to_string()));
-        }
-        query.push(("system", system.to_string()));
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
-            .query(&query)
+            .query(&progenitor_client::QueryParam::new("catalogs", &catalogs))
+            .query(&progenitor_client::QueryParam::new("page", &page))
+            .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
+            .query(&progenitor_client::QueryParam::new("search_term", &search_term))
+            .query(&progenitor_client::QueryParam::new("system", &system))
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4461,22 +4754,27 @@ Sends a `POST` request to `/api/v1/catalog/settings/{key}`
         &'a self,
         key: &'a str,
         value: &'a str,
-    ) -> Result<ResponseValue<serde_json::Value>, Error<types::ErrorResponse>> {
+    ) -> Result<ResponseValue<::serde_json::Value>, Error<types::ErrorResponse>> {
         let url = format!(
             "{}/api/v1/catalog/settings/{}", self.baseurl, encode_path(& key
             .to_string()),
         );
-        let mut query = Vec::with_capacity(1usize);
-        query.push(("value", value.to_string()));
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .post(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
-            .query(&query)
+            .query(&progenitor_client::QueryParam::new("value", &value))
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4502,14 +4800,21 @@ Sends a `GET` request to `/api/v1/catalog/status/catalog`
         &'a self,
     ) -> Result<ResponseValue<types::CatalogStatus>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/status/catalog", self.baseurl,);
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4535,14 +4840,21 @@ Sends a `GET` request to `/api/v1/catalog/status/healthcheck`
         &'a self,
     ) -> Result<ResponseValue<types::HealthCheck>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/status/healthcheck", self.baseurl,);
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4561,16 +4873,23 @@ Sends a `GET` request to `/api/v1/catalog/status/sentry-debug`
 */
     pub async fn trigger_error_api_v1_catalog_status_sentry_debug_get<'a>(
         &'a self,
-    ) -> Result<ResponseValue<serde_json::Value>, Error<()>> {
+    ) -> Result<ResponseValue<::serde_json::Value>, Error<()>> {
         let url = format!("{}/api/v1/catalog/status/sentry-debug", self.baseurl,);
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4593,14 +4912,21 @@ Sends a `GET` request to `/api/v1/catalog/status/service`
         &'a self,
     ) -> Result<ResponseValue<types::ServiceStatus>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/status/service", self.baseurl,);
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .get(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
@@ -4630,15 +4956,22 @@ Sends a `POST` request to `/api/v1/catalog/store`
         body: &'a types::StoreInfoRequest,
     ) -> Result<ResponseValue<types::StoreInfoResponse>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/store", self.baseurl,);
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
         #[allow(unused_mut)]
         let mut request = self
             .client
             .post(url)
             .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .json(&body)
+            .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
