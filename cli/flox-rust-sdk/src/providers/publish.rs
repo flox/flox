@@ -13,10 +13,13 @@ use super::auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
 use super::build::{
     BuildResult,
     BuildResults,
+    LockedUrlInfo,
     ManifestBuilder,
+    ManifestBuilderError,
     PackageTargetError,
     PackageTargetKind,
     PackageTargets,
+    mock_locked_url_info,
     nix_expression_dir,
 };
 use super::catalog::{
@@ -51,8 +54,8 @@ pub enum PublishError {
     #[error(transparent)]
     PackageTargetError(#[from] PackageTargetError),
 
-    #[error("The package could not be built: {0}")]
-    BuildError(String),
+    #[error(transparent)]
+    BuildError(#[from] ManifestBuilderError),
 
     #[error(transparent)]
     CatalogError(CatalogClientError),
@@ -669,19 +672,16 @@ pub fn check_build_metadata(
     let mut clean_build_env = PathEnvironment::open(flox, path_pointer, dot_flox_path)?;
 
     // Build the package and collect the outputs
-    let output_stream = builder
-        .build(
-            &clean_build_env.parent_path()?,
-            &clean_build_env.build(flox)?,
-            Some(&nix_expression_dir(&clean_build_env)),
-            &clean_build_env
-                .rendered_env_links(flox)
-                .unwrap()
-                .development,
-            &[pkg],
-            Some(false),
-        )
-        .map_err(|e| PublishError::BuildError(e.to_string()))?;
+    let output_stream = builder.build(
+        &clean_build_env.parent_path()?,
+        &clean_build_env.build(flox)?,
+        Some(&nix_expression_dir(&clean_build_env)),
+        // todo: use a non-hardcoded nixpkgs url
+        &mock_locked_url_info().as_flake_ref()?,
+        &built_environments.develop,
+        &[pkg],
+        Some(false),
+    )?;
 
     let mut output_build_results: Option<BuildResults> = None;
     for message in output_stream {

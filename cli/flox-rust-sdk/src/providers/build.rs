@@ -12,6 +12,7 @@ use serde::Deserialize;
 use tempfile::NamedTempFile;
 use thiserror::Error;
 use tracing::{debug, error, warn};
+use url::Url;
 
 use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
 use super::nix::nix_base_command;
@@ -41,8 +42,12 @@ static GNUMAKE_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
         .into()
 });
 
-pub(super) static BUILDTIME_NIXPKGS_URL: LazyLock<String> = LazyLock::new(|| {
-    std::env::var("COMMON_NIXPKGS_URL").unwrap_or_else(|_| env!("COMMON_NIXPKGS_URL").to_string())
+pub(super) static COMMON_NIXPKGS_URL: LazyLock<Url> = LazyLock::new(|| {
+    std::env::var("COMMON_NIXPKGS_URL")
+        .as_deref()
+        .unwrap_or_else(|_| env!("COMMON_NIXPKGS_URL"))
+        .parse()
+        .unwrap()
 });
 
 pub trait ManifestBuilder {
@@ -55,6 +60,7 @@ pub trait ManifestBuilder {
         base_dir: &Path,
         built_environments: &BuildEnvOutputs,
         expression_dir: Option<&Path>,
+        expression_build_nixpkgs: &Url,
         flox_interpreter: &Path,
         package: &[&str],
         build_cache: Option<bool>,
@@ -82,6 +88,9 @@ pub enum ManifestBuilderError {
 
     #[error("failed to list available nix expressions to build: {0}")]
     ListNixExpressions(String),
+
+    #[error("invalid nixpkgs base url")]
+    InvalidNixpkgsBaseUrl(url::ParseError),
 
     #[error("failed to clean up build artifacts: {stderr}")]
     RunClean {
@@ -195,13 +204,17 @@ impl ManifestBuilder for FloxBuildMk {
         base_dir: &Path,
         built_environments: &BuildEnvOutputs,
         expression_dir: Option<&Path>,
+        expression_build_nixpkgs: &Url,
         flox_interpreter: &Path,
         packages: &[&str],
         build_cache: Option<bool>,
     ) -> Result<BuildOutput, ManifestBuilderError> {
         let mut command = self.base_command(base_dir);
         command.arg("build");
-        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*BUILDTIME_NIXPKGS_URL));
+        command.arg(format!(
+            "BUILDTIME_NIXPKGS_URL={}",
+            expression_build_nixpkgs
+        ));
         command.arg(format!("FLOX_ENV={}", built_environments.develop.display()));
         command.arg(format!(
             "FLOX_ENV_OUTPUTS={}",
@@ -325,7 +338,7 @@ impl ManifestBuilder for FloxBuildMk {
     ) -> Result<(), ManifestBuilderError> {
         let mut command = self.base_command(base_dir);
         // Required to identify NEF builds.
-        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*BUILDTIME_NIXPKGS_URL));
+        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*COMMON_NIXPKGS_URL));
         // TODO: is this even necessary, or can we detect build outputs instead?
         command.arg(format!("FLOX_ENV={}", flox_env.display()));
 
@@ -408,7 +421,7 @@ pub fn build_symlink_path(
     Ok(environment.parent_path()?.join(format!("result-{package}")))
 }
 
-/// Use our NEF nix subsystem to query expressions provided in a given expression dir.  
+/// Use our NEF nix subsystem to query expressions provided in a given expression dir.
 /// We need this to verify arguments early rather than running into `make` or `nix` errors,
 /// that while correct, have a bad signal/noise ratio.
 ///
@@ -428,7 +441,7 @@ pub fn get_nix_expression_targets(
 ) -> Result<Vec<String>, ManifestBuilderError> {
     let output = nix_base_command()
         .arg("eval")
-        .args(["--argstr", "nixpkgs-url", &*BUILDTIME_NIXPKGS_URL])
+        .args(["--argstr", "nixpkgs-url", COMMON_NIXPKGS_URL.as_str()])
         .args(["--argstr", "pkgs-dir", &*expression_dir.to_string_lossy()])
         .args([
             "--file",
@@ -576,6 +589,13 @@ pub struct LockedUrlInfo {
     pub rev_date: DateTime<Utc>,
 }
 
+impl LockedUrlInfo {
+    pub fn as_flake_ref(&self) -> Result<Url, ManifestBuilderError> {
+        Url::parse(&format!("git+{}", self.url))
+            .map_err(ManifestBuilderError::InvalidNixpkgsBaseUrl)
+    }
+}
+
 /// Hardcoded locked URL for publishes of expression builds
 ///
 /// Outisde of tests this should be replaced by a mechanism that fetches an actual locked URL,
@@ -633,6 +653,7 @@ pub mod test_helpers {
                 &env.parent_path().unwrap(),
                 &env.build(flox).unwrap(),
                 expression_dir,
+                &COMMON_NIXPKGS_URL,
                 &env.rendered_env_links(flox).unwrap().development,
                 &[package_name],
                 build_cache,
@@ -726,7 +747,7 @@ pub mod test_helpers {
     }
 
     /// For a list tuples `(AttrPath, NixExpr)`,
-    /// create a file structure compatible with nef loading,  
+    /// create a file structure compatible with nef loading,
     /// within a provided tempdir.
     /// Places the file structure within _a new directory_ within the provided path.
     pub fn prepare_nix_expressions_in(

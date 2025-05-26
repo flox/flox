@@ -6,7 +6,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::manifest::typed::{Inner, Manifest};
 use flox_rust_sdk::providers::auth::Auth;
-use flox_rust_sdk::providers::build::{FloxBuildMk, nix_expression_dir};
+use flox_rust_sdk::providers::build::{FloxBuildMk, mock_locked_url_info, nix_expression_dir};
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -14,7 +14,6 @@ use flox_rust_sdk::providers::publish::{
     check_build_metadata,
     check_environment_metadata,
     check_package_metadata,
-    mock_locked_url_info,
 };
 use indoc::formatdoc;
 use tracing::{debug, instrument};

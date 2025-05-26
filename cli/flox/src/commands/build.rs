@@ -12,6 +12,7 @@ use flox_rust_sdk::providers::build::{
     Output,
     PackageTargets,
     build_symlink_path,
+    mock_locked_url_info,
     nix_expression_dir,
 };
 use indoc::formatdoc;
@@ -130,6 +131,7 @@ impl Build {
             &base_dir,
             &built_environments,
             Some(&expression_dir),
+            &mock_locked_url_info().as_flake_ref()?,
             &FLOX_INTERPRETER,
             &packages_to_build.target_names(),
             None,
