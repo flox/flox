@@ -6,7 +6,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::manifest::typed::{Inner, Manifest};
 use flox_rust_sdk::providers::auth::Auth;
-use flox_rust_sdk::providers::build::{FloxBuildMk, mock_locked_url_info, nix_expression_dir};
+use flox_rust_sdk::providers::build::{mock_locked_url_info, nix_expression_dir};
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -148,8 +148,7 @@ impl Publish {
             &package,
         )?;
 
-        let build_metadata =
-            check_build_metadata(&flox, &env_metadata, &FloxBuildMk::new(&flox), &package)?;
+        let build_metadata = check_build_metadata(&flox, &env_metadata, &package)?;
 
         // CLI args take precedence over config
         let key_file = cache_args.signing_private_key.or(config

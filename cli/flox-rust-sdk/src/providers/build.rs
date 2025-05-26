@@ -45,7 +45,7 @@ static GNUMAKE_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
 pub(super) static COMMON_NIXPKGS_URL: LazyLock<Url> = LazyLock::new(|| {
     std::env::var("COMMON_NIXPKGS_URL")
         .as_deref()
-        .unwrap_or_else(|_| env!("COMMON_NIXPKGS_URL"))
+        .unwrap_or(env!("COMMON_NIXPKGS_URL"))
         .parse()
         .unwrap()
 });
@@ -57,22 +57,13 @@ pub trait ManifestBuilder {
     /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
     fn build(
         &self,
-        base_dir: &Path,
-        built_environments: &BuildEnvOutputs,
-        expression_dir: Option<&Path>,
         expression_build_nixpkgs: &Url,
         flox_interpreter: &Path,
         package: &[&str],
         build_cache: Option<bool>,
     ) -> Result<BuildOutput, ManifestBuilderError>;
 
-    fn clean(
-        &self,
-        base_dir: &Path,
-        flox_env: &Path,
-        expression_dir: Option<&Path>,
-        package: &[&str],
-    ) -> Result<(), ManifestBuilderError>;
+    fn clean(&self, package: &[&str]) -> Result<(), ManifestBuilderError>;
 }
 
 #[derive(Debug, Error)]
@@ -151,19 +142,32 @@ impl Iterator for BuildOutput {
 }
 
 /// A manifest builder that uses the [FLOX_BUILD_MK] makefile to build packages.
-pub struct FloxBuildMk {
+pub struct FloxBuildMk<'args> {
     verbosity: i32,
     // should these be borrows?
-    temp_dir: PathBuf,
-    runtime_dir: PathBuf,
+    temp_dir: &'args Path,
+    runtime_dir: &'args Path,
+
+    // common build components
+    base_dir: &'args Path,
+    expression_dir: Option<&'args Path>,
+    built_environments: &'args BuildEnvOutputs,
 }
 
-impl FloxBuildMk {
-    pub fn new(flox: &Flox) -> Self {
+impl FloxBuildMk<'_> {
+    pub fn new<'args>(
+        flox: &'args Flox,
+        base_dir: &'args Path,
+        expression_dir: Option<&'args Path>,
+        built_environments: &'args BuildEnvOutputs,
+    ) -> FloxBuildMk<'args> {
         FloxBuildMk {
             verbosity: flox.verbosity,
-            temp_dir: flox.temp_dir.clone(),
-            runtime_dir: flox.runtime_dir.clone(),
+            temp_dir: &flox.temp_dir,
+            runtime_dir: &flox.runtime_dir,
+            base_dir,
+            expression_dir,
+            built_environments,
         }
     }
 
@@ -181,7 +185,7 @@ impl FloxBuildMk {
     }
 }
 
-impl ManifestBuilder for FloxBuildMk {
+impl ManifestBuilder for FloxBuildMk<'_> {
     /// Build `packages` defined in the environment rendered at
     /// `flox_env` using the [FLOX_BUILD_MK] makefile.
     ///
@@ -201,28 +205,28 @@ impl ManifestBuilder for FloxBuildMk {
     /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
     fn build(
         &self,
-        base_dir: &Path,
-        built_environments: &BuildEnvOutputs,
-        expression_dir: Option<&Path>,
         expression_build_nixpkgs: &Url,
         flox_interpreter: &Path,
         packages: &[&str],
         build_cache: Option<bool>,
     ) -> Result<BuildOutput, ManifestBuilderError> {
-        let mut command = self.base_command(base_dir);
+        let mut command = self.base_command(self.base_dir);
         command.arg("build");
         command.arg(format!(
             "BUILDTIME_NIXPKGS_URL={}",
             expression_build_nixpkgs
         ));
-        command.arg(format!("FLOX_ENV={}", built_environments.develop.display()));
+        command.arg(format!(
+            "FLOX_ENV={}",
+            self.built_environments.develop.display()
+        ));
         command.arg(format!(
             "FLOX_ENV_OUTPUTS={}",
-            serde_json::json!(built_environments)
+            serde_json::json!(self.built_environments)
         ));
 
         // TODO: modify flox-build.mk to allow missing expression dirs
-        let expression_dir = match expression_dir {
+        let expression_dir = match self.expression_dir {
             Some(dir) => &*dir.to_string_lossy(),
             None => "/absolutely/nowhere",
         };
@@ -234,7 +238,7 @@ impl ManifestBuilder for FloxBuildMk {
         // the makefile will build all packages by default.
         command.arg(format!("PACKAGES={}", packages.join(" ")));
 
-        let build_result_path = NamedTempFile::new_in(&self.temp_dir)
+        let build_result_path = NamedTempFile::new_in(self.temp_dir)
             .map_err(ManifestBuilderError::CreateBuildResultFile)?
             .into_temp_path();
 
@@ -253,7 +257,7 @@ impl ManifestBuilder for FloxBuildMk {
         // activate needs this var
         // TODO: we should probably figure out a more consistent way to pass
         // this since it's also passed for `flox activate`
-        command.env(FLOX_RUNTIME_DIR_VAR, &self.runtime_dir);
+        command.env(FLOX_RUNTIME_DIR_VAR, self.runtime_dir);
 
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
@@ -329,22 +333,19 @@ impl ManifestBuilder for FloxBuildMk {
     /// * the `result-<package>` and `result-<package>-buildCache` store links in `base_dir`
     /// * the store paths linked to by the `result-<package>` links
     /// * the temporary build directories for the specified packages
-    fn clean(
-        &self,
-        base_dir: &Path,
-        flox_env: &Path,
-        expression_dir: Option<&Path>,
-        packages: &[&str],
-    ) -> Result<(), ManifestBuilderError> {
-        let mut command = self.base_command(base_dir);
+    fn clean(&self, packages: &[&str]) -> Result<(), ManifestBuilderError> {
+        let mut command = self.base_command(self.base_dir);
         // Required to identify NEF builds.
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*COMMON_NIXPKGS_URL));
         // TODO: is this even necessary, or can we detect build outputs instead?
-        command.arg(format!("FLOX_ENV={}", flox_env.display()));
+        command.arg(format!(
+            "FLOX_ENV={}",
+            self.built_environments.develop.display()
+        ));
 
         // TODO: is this even necessary, or can we detect build outputs instead?
         // TODO: modify flox-build.mk to allow missing expression dirs
-        let expression_dir = match expression_dir {
+        let expression_dir = match self.expression_dir {
             Some(dir) => &*dir.to_string_lossy(),
             None => "/absolutely/nowhere",
         };
@@ -647,18 +648,19 @@ pub mod test_helpers {
         build_cache: Option<bool>,
         expect_success: bool,
     ) -> CollectedOutput {
-        let builder = FloxBuildMk::new(flox);
-        let output_stream = builder
-            .build(
-                &env.parent_path().unwrap(),
-                &env.build(flox).unwrap(),
-                expression_dir,
-                &COMMON_NIXPKGS_URL,
-                &env.rendered_env_links(flox).unwrap().development,
-                &[package_name],
-                build_cache,
-            )
-            .unwrap();
+        let output_stream = FloxBuildMk::new(
+            flox,
+            &env.parent_path().unwrap(),
+            expression_dir,
+            &env.build(flox).unwrap(),
+        )
+        .build(
+            &COMMON_NIXPKGS_URL,
+            &env.rendered_env_links(flox).unwrap().development,
+            &[package_name],
+            build_cache,
+        )
+        .unwrap();
 
         let mut output_stdout = String::new();
         let mut output_stderr = String::new();
@@ -713,15 +715,14 @@ pub mod test_helpers {
     }
 
     pub fn assert_clean_success(flox: &Flox, env: &mut PathEnvironment, package_names: &[&str]) {
-        let builder = FloxBuildMk::new(flox);
-        let err = builder
-            .clean(
-                &env.parent_path().unwrap(),
-                &env.rendered_env_links(flox).unwrap().development,
-                None,
-                package_names,
-            )
-            .err();
+        let err = FloxBuildMk::new(
+            flox,
+            &env.parent_path().unwrap(),
+            None,
+            &env.build(flox).unwrap(),
+        )
+        .clean(package_names)
+        .err();
 
         assert!(err.is_none(), "expected clean to succeed: {err:?}")
     }

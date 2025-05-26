@@ -94,18 +94,18 @@ impl Build {
         };
         let base_dir = env.parent_path()?;
         let expression_dir = nix_expression_dir(&env); // TODO: decouple from env
-        let flox_env = env.rendered_env_links(&flox)?;
+        let flox_env_build_outputs = env.build(&flox)?;
         let lockfile = env.lockfile(&flox)?.into();
 
         let packages_to_clean = packages_to_build(&lockfile, &expression_dir, &packages)?;
 
-        let builder = FloxBuildMk::new(&flox);
-        builder.clean(
+        let builder = FloxBuildMk::new(
+            &flox,
             &base_dir,
-            &flox_env.development,
             Some(&expression_dir),
-            &packages_to_clean.target_names(),
-        )?;
+            &flox_env_build_outputs,
+        );
+        builder.clean(&packages_to_clean.target_names())?;
 
         message::created("Clean completed successfully");
 
@@ -126,11 +126,9 @@ impl Build {
 
         let packages_to_build = packages_to_build(&lockfile, &expression_dir, &packages)?;
 
-        let builder = FloxBuildMk::new(&flox);
+        let builder =
+            FloxBuildMk::new(&flox, &base_dir, Some(&expression_dir), &built_environments);
         let output = builder.build(
-            &base_dir,
-            &built_environments,
-            Some(&expression_dir),
             &mock_locked_url_info().as_flake_ref()?,
             &FLOX_INTERPRETER,
             &packages_to_build.target_names(),

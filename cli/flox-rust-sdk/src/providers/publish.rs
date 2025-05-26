@@ -13,6 +13,7 @@ use super::auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
 use super::build::{
     BuildResult,
     BuildResults,
+    FloxBuildMk,
     LockedUrlInfo,
     ManifestBuilder,
     ManifestBuilderError,
@@ -636,7 +637,6 @@ fn check_build_metadata_from_build_result(
 pub fn check_build_metadata(
     flox: &Flox,
     env_metadata: &CheckedEnvironmentMetadata,
-    builder: &impl ManifestBuilder,
     pkg: &str,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     // git clone into a temp directory
@@ -670,12 +670,19 @@ pub fn check_build_metadata(
     };
 
     let mut clean_build_env = PathEnvironment::open(flox, path_pointer, dot_flox_path)?;
+    let base_dir = clean_build_env.parent_path()?;
+    let expression_dir = Some(nix_expression_dir(&clean_build_env));
+    let built_environments = clean_build_env.build(flox)?;
+
+    let builder = FloxBuildMk::new(
+        flox,
+        &base_dir,
+        expression_dir.as_deref(),
+        &built_environments,
+    );
 
     // Build the package and collect the outputs
     let output_stream = builder.build(
-        &clean_build_env.parent_path()?,
-        &clean_build_env.build(flox)?,
-        Some(&nix_expression_dir(&clean_build_env)),
         // todo: use a non-hardcoded nixpkgs url
         &mock_locked_url_info().as_flake_ref()?,
         &built_environments.develop,
@@ -988,7 +995,6 @@ pub mod tests {
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::lockfile::Lockfile;
     use crate::providers::auth::{Auth, write_floxhub_netrc};
-    use crate::providers::build::FloxBuildMk;
     use crate::providers::catalog::test_helpers::reset_mocks;
     use crate::providers::catalog::{GENERATED_DATA, MockClient, PublishResponse, Response};
     use crate::providers::git::tests::{
@@ -1180,7 +1186,6 @@ pub mod tests {
     #[test]
     fn test_check_build_meta_nominal() {
         let (flox, _temp_dir_handle) = flox_instance();
-        let builder = FloxBuildMk::new(&flox);
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
 
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
@@ -1188,8 +1193,7 @@ pub mod tests {
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
 
         // This will actually run the build
-        let meta =
-            check_build_metadata(&flox, &env_metadata, &builder, EXAMPLE_PACKAGE_NAME).unwrap();
+        let meta = check_build_metadata(&flox, &env_metadata, EXAMPLE_PACKAGE_NAME).unwrap();
 
         let version_in_manifest = "1.0.2a";
 
@@ -1205,7 +1209,6 @@ pub mod tests {
     #[tokio::test]
     async fn publish_meta_only() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        let builder = FloxBuildMk::new(&flox);
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
@@ -1223,7 +1226,7 @@ pub mod tests {
         .unwrap();
 
         let build_metadata =
-            check_build_metadata(&flox, &env_metadata, &builder, EXAMPLE_PACKAGE_NAME).unwrap();
+            check_build_metadata(&flox, &env_metadata, EXAMPLE_PACKAGE_NAME).unwrap();
 
         let auth = Auth::from_flox(&flox).unwrap();
         let publish_provider =
@@ -1415,7 +1418,6 @@ pub mod tests {
     #[tokio::test]
     async fn upload_to_local_cache() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        let builder = FloxBuildMk::new(&flox);
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
@@ -1433,7 +1435,7 @@ pub mod tests {
         .unwrap();
 
         let build_metadata =
-            check_build_metadata(&flox, &env_metadata, &builder, EXAMPLE_PACKAGE_NAME).unwrap();
+            check_build_metadata(&flox, &env_metadata, EXAMPLE_PACKAGE_NAME).unwrap();
 
         let (_key_file, cache) = local_nix_cache(&token);
         let auth = Auth::from_flox(&flox).unwrap();
