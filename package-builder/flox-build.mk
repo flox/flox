@@ -27,7 +27,6 @@ endif
 # Define macros for use in string substitution.
 space := $(subst x,,x x)
 comma := ,
-dollar := $$
 
 # Substitute Nix store paths for packages required by this Makefile.
 __bashInteractive := @bashInteractive@
@@ -58,6 +57,7 @@ _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
 _head := $(call __package_bin,$(__coreutils),head)
 _jq := $(call __package_bin,$(__jq),jq)
+_mkdir := $(call __package_bin,$(__coreutils),mkdir)
 _mktemp := $(call __package_bin,$(__coreutils),mktemp)
 _mv := $(call __package_bin,$(__coreutils),mv)
 _nix := $(call __package_bin,$(__nix),nix)
@@ -84,8 +84,13 @@ _nef := $(_libexec_dir)/nef
 # Invoke nix with the required experimental features enabled.
 _nix := $(_nix) --extra-experimental-features "flakes nix-command"
 
+# Set makefile verbosity based on the value of _FLOX_PKGDB_VERBOSITY [sic]
+# as set in the environment by the flox CLI. First set it to 0 if not defined.
+ifeq (,$(_FLOX_PKGDB_VERBOSITY))
+  _FLOX_PKGDB_VERBOSITY = 0
+endif
 # Ensure we use the Nix-provided SHELL.
-SHELL := $(_bash)
+SHELL := $(_bash) $(intcmp 2,$(_FLOX_PKGDB_VERBOSITY),-x)
 
 # Identify target O/S.
 OS := $(shell $(_uname) -s)
@@ -99,6 +104,10 @@ NIX_SYSTEM := $(shell $(_nix) config show system)
 
 # Set a default TMPDIR variable if one is not already defined.
 TMPDIR ?= /tmp
+
+# Create a project-specific TMPDIR variable so we don't have path clash
+# between the same package name built from different project directories.
+PROJECT_TMPDIR := $(TMPDIR)/$(shell $(_pwd) | $(_sha256sum) | $(_head) -c8)
 
 # Use the wildcard operator to identify builds in the provided $FLOX_ENV.
 MANIFEST_BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
@@ -120,11 +129,6 @@ $(if $(MANIFEST_BUILDS),,\
   $(if $(NIX_EXPRESSION_BUILDS),,\
     $(error no manifest or Nix expression builds found in $(FLOX_ENV))))
 
-# Set makefile verbosity based on the value of _FLOX_PKGDB_VERBOSITY [sic]
-# as set in the environment by the flox CLI. First set it to 0 if not defined.
-ifeq (,$(_FLOX_PKGDB_VERBOSITY))
-  _FLOX_PKGDB_VERBOSITY = 0
-endif
 # Then set them to empty string or "@" based on being greater than 0, 1, or 2.
 $(eval _V_ = $(intcmp 0,$(_FLOX_PKGDB_VERBOSITY),,@))
 $(eval _VV_ = $(intcmp 1,$(_FLOX_PKGDB_VERBOSITY),,@))
@@ -140,6 +144,20 @@ usage:
 	@echo "  clean: clean all build artifacts"
 	@echo "  clean/[pname]: clean build artifacts for the specified package"
 
+# Verify certain prerequisites and touch a timestamped file to
+# act as a root prerequisite before kicking off the build DAG.
+.PHONY: $(PROJECT_TMPDIR)/check-build-prerequisites
+$(PROJECT_TMPDIR)/check-build-prerequisites:
+	@# The BUILD_RESULT_FILE must be defined and exist.
+	@$(if $(BUILD_RESULT_FILE), \
+	  $(if $(wildcard $(BUILD_RESULT_FILE)),-, \
+	    $$(error $(BUILD_RESULT_FILE) not found)), \
+	  $$(error BUILD_RESULT_FILE not defined))
+	@# Check that the BUILDTIME_NIXPKGS_URL is defined.
+	@$(if $(BUILDTIME_NIXPKGS_URL),-,$(error BUILDTIME_NIXPKGS_URL not defined))
+	@mkdir -p $(@D)
+	@touch $@
+
 # The `nix build` command will attempt a rebuild in every instance,
 # and we will presumably want `flox build` to do the same. However,
 # we cannot just mark the various build targets as PHONY because they
@@ -147,12 +165,13 @@ usage:
 # `bar` and `baz` as well (unless of course it was a prerequisite).
 # So we instead derive the packages to be force-rebuilt from the special
 # MAKECMDGOALS variable if defined, and otherwise rebuild them all.
+# XXX Still used?
 BUILDGOALS = $(if $(MAKECMDGOALS),$(MAKECMDGOALS),$(notdir $(MANIFEST_BUILDS)))
 $(foreach _build,$(BUILDGOALS),\
   $(eval _pname = $(notdir $(_build)))\
   $(eval _pvarname = $(subst -,_,$(_pname)))\
   $(foreach _buildtype,local sandbox,\
-    $(eval $(_pvarname)_$(_buildtype)_build: FORCE)))
+    $(eval $(_pvarname)_$(_buildtype)_build: $(PROJECT_TMPDIR)/check-build-prerequisites)))
 
 # Template for setting variables common to manifest and NEF builds.
 define COMMON_BUILD_VARS_template =
@@ -166,39 +185,52 @@ define COMMON_BUILD_VARS_template =
   # have "-" in them so we create a version of the build "pname" replacing
   # this with "_" for use in variable names.
   $(eval _pvarname = $(subst -,_,$(_pname)))
+  # Define build-specific result symlink basename.
+  $(eval $(_pvarname)_result = result-$(_pname))
   # Compute 32-character stable string for use in stable path generation
   # based on hash of pname, current working directory and FLOX_ENV.
   $(eval $(_pvarname)_hash = $(shell ( \
     ( echo $(_pname) && $(_pwd) ) | $(_sha256sum) | $(_head) -c32)))
-  # Render a shorter 8-character version as well.
-  $(eval $(_pvarname)_shortHash = $(shell echo $($(_pvarname)_hash) | $(_head) -c8))
-  # And while we're at it, set a temporary basename using the short hash.
-  $(eval $(_pvarname)_tmpBasename = $(TMPDIR)/$($(_pvarname)_shortHash)-$(_pname))
+  # And while we're at it, set a temporary basename in PROJECT_TMPDIR which
+  # is a directory based on hash of pwd.
+  $(eval $(_pvarname)_tmpBasename = $(PROJECT_TMPDIR)/$(_pname))
 
   # Create a target for cleaning up the temporary directory.
   .PHONY: clean/$(_pname)
   clean/$(_pname):
-	-$(_rm) -rf $($(_pvarname)_tmpBasename)
+	-$(_V_) $(_rm) -rf $($(_pvarname)_tmpBasename)
 
   clean_targets += clean/$(_pname)
 
-  # Prepare temporary file for constructing the JSON output to be returned
-  # from the build.
-  $(eval $(_pvarname)_buildMetaJSON = $($(_pvarname)_tmpBasename)-build-meta.json)
-endef
+  # Create target-specific variables for constructing the JSON output to be
+  # returned from the builds.
+  $(eval $(_pvarname)_evalJSON = $($(_pvarname)_tmpBasename)/eval.json)
+  $(eval $(_pvarname)_buildJSON = $($(_pvarname)_tmpBasename)/build.json)
+  $(eval $(_pvarname)_buildMetaJSON = $($(_pvarname)_tmpBasename)/build-meta.json)
+  $(eval $(_pvarname)_logfile = $($(_pvarname)_tmpBasename)/build.log)
 
-define NIX_EXPRESSION_BUILD_OUTPUT_template =
-  $(eval BUILD_OUTPUTS += $(_pname).$(_output))
-  result-$(_pname)-$(_output): result-$(_pname)
+  # Perform post-build checks common to all build modes.
+  .INTERMEDIATE: $(_pvarname)_CHECK_RESULT_LINKS
+  $(_pvarname)_CHECK_RESULT_LINKS: $($(_pvarname)_buildJSON)
+	@# Confirm that we see symlinks for all the expected build outputs.
+	$$(eval _build_outputs = $$(shell $(_jq) -r ' \
+	  .[0] | .outputs | to_entries | map ( \
+	    ( if .key == "out" then "$($(_pvarname)_result)" else "$($(_pvarname)_result)-\(.key)" end ) as $$$$link | \
+	    "\($$$$link),\(.value)" \
+	  )[]' $$<))
+	$$(foreach _build,$$(_build_outputs), \
+	  $$(eval _link = $$(word 1,$$(subst $$(comma), ,$$(_build)))) \
+	  $$(eval _store_path = $$(word 2,$$(subst $$(comma), ,$$(_build)))) \
+	  $$(if $$(wildcard $$(_link)), \
+	    $$(if $$(filter-out $$(_store_path),$$(shell $(_readlink) $$(_link))), \
+	      $$(error $$(_link) of $$(_build) does not point to expected store path: $$(_store_path))), \
+	    $$(error $$(_link) of $$(_build) does not exist)))
+
 endef
 
 # Process NEF builds first to fully populate BUILD_OUTPUTS.
-$(foreach _build_outputs,$(NIX_EXPRESSION_BUILDS), \
-  $(eval _pname = $(word 1,$(subst ^, ,$(_build_outputs)))) \
-  $(eval _outputs = $(word 2,$(subst ^, ,$(_build_outputs)))) \
-  $(eval $(call COMMON_BUILD_VARS_template)) \
-  $(foreach _output,$(subst $(comma), ,$(_outputs)), \
-    $(eval $(call NIX_EXPRESSION_BUILD_OUTPUT_template))))
+$(foreach _pname,$(NIX_EXPRESSION_BUILDS), \
+  $(eval $(call COMMON_BUILD_VARS_template)))
 
 # Scan for "${package}" references within the build instructions and add
 # target prerequisites for any inter-package prerequisites, letting make
@@ -209,7 +241,7 @@ define MANIFEST_BUILD_DEPENDS_template =
   # We need to render a version of the build script with package prerequisites
   # replaced with their corresponding outpaths, and we create that at a stable
   # temporary path so that we only perform Nix rebuilds when necessary.
-  $(eval $(_pvarname)_buildScript = $($(_pvarname)_tmpBasename)-build.bash)
+  $(eval $(_pvarname)_buildScript = $($(_pvarname)_tmpBasename)/build.bash)
 
   # Iterate over each possible {build,package} pair looking for references to
   # ${package} in the build script, being careful to avoid looking for references
@@ -217,11 +249,11 @@ define MANIFEST_BUILD_DEPENDS_template =
   # script to the package. Note that package can either imply the default output
   # (e.g. ${curl}) or explicitly specify an output (e.g. ${curl.bin}).
   $(foreach _output,$(filter-out $(notdir $(build)),$(BUILD_OUTPUTS)), \
-    $(if $(shell $(_grep) '\$${$(_output)}' $(build)), \
-      $(eval _dep = result-$(subst .,-,$(_output))) \
-      $(eval $(_pvarname)_buildDeps += $(_dep)) \
+    $(if $(shell $(_grep) '\$${$(_output)[.}]' $(build)), \
+      $(eval _ovarname = $(subst -,_,$(_output))) \
+      $(eval $(_pvarname)_deps_buildMetaJSON_files += $($(_ovarname)_buildMetaJSON)) \
       # N.B. need newline after following line
-      $($(_pvarname)_buildScript): $(_dep)
+      $($(_pvarname)_buildScript): $($(_ovarname)_buildMetaJSON)
     )
   )
 endef
@@ -258,11 +290,11 @@ define CLEAN_result_store_path_template =
 
   .PHONY: clean_result_link/$(1)
   clean_result_link/$(1):
-	-$(_rm) -f $(1)
+	-$(_V_) $(_rm) -f $(1)
 
   .PHONY: clean_result_storepath/$(1)
   clean_result_storepath/$(1): clean_result_link/$(1)
-	$(_daemonize) $(_nix) store delete $(_storePath)
+	$(_V_) $(_daemonize) $(_nix) store delete $(_storePath)
 
   clean/$(_pname): clean_result_link/$(1) \
     $(if $(_storePath),clean_result_storepath/$(1))
@@ -281,7 +313,7 @@ define CLEAN_result_link_template =
 
   .PHONY: clean_result_link/$(1)
   clean_result_link/$(1):
-	-$(_rm) -f $(1)
+	-$(_V_) $(_rm) -f $(1)
 
   clean/$(_pname): clean_result_link/$(1)
 endef
@@ -317,10 +349,7 @@ define BUILD_local_template =
   # Set temp outpath of same strlen as eventual package storePath using the
   # 32-char hash previously derived from the package name, current working
   # directory and FLOX_ENV.
-  $(eval _out = /tmp/store_$($(_pvarname)_hash)-$(_name))
-
-  # Prepare temporary log file for capturing build output for inspection.
-  $(eval $(_pvarname)_logfile := $(shell $(_mktemp) --dry-run --suffix=-build-$(_pname).log))
+  $(eval $(_pvarname)_out = /tmp/store_$($(_pvarname)_hash)-$(_name))
 
   # Our aim in performing a manifest build is to replicate as closely as possible
   # the experience of running those same build script commands from within an
@@ -355,32 +384,44 @@ define BUILD_local_template =
   #   $(FLOX_INTERPRETER)/activate ... -- \
   #     $(_envFilter) --allow-prefix _ $(foreach v,$(ALLOW_OUTER_ENV_VARS),--allow $(v)) -- \
   #       $(_build_wrapper_env)/wrapper ... -- bash -e buildScript
-  .INTERMEDIATE: $(_pvarname)_local_build
-  $(_pvarname)_local_build: $($(_pvarname)_buildScript)
+  $($(_pvarname)_out) $($(_pvarname)_logfile): $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
 	@echo "Building $(_name) in local mode"
-	$(_VV_) $(_rm) -rf $(_out)
+	$(_VV_) $(_rm) -rf $($(_pvarname)_out)
 	$(_V_) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode build --env-project $$$$($(_pwd)) -- \
 	    $(_envFilter) --allow-prefix _ $(foreach v,$(ALLOW_OUTER_ENV_VARS),--allow $(v)) -- \
 	      $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars -- \
-	        $(_t3) $($(_pvarname)_logfile) -- $(_env) out=$(_out) $(_bash) -e $($(_pvarname)_buildScript)
-	$(_V_) $(_nix) build -L `$(_nix) store add-file "$(shell $(_realpath) "$($(_pvarname)_logfile)")"` \
-	  --out-link "result-$(_pname)-log"
+	        $(_t3) $($(_pvarname)_logfile) -- $(_env) out=$($(_pvarname)_out) $(_bash) -e $$<
+
+  # Having built the package to $($(_pvarname)_out) outside of Nix, call
+  # build-manifest.nix to turn it into a Nix package.
+  $($(_pvarname)_buildJSON): $($(_pvarname)_out)
 	$(_V_) set -o pipefail && \
 	$(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr pname "$(_pname)" \
 	  --argstr version "$(_version)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
 	  --argstr build-wrapper-env "$(_build_wrapper_env)" \
-	  --argstr install-prefix "$(_out)" \
+	  --argstr install-prefix "$($(_pvarname)_out)" \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
+	  $(if $($(_pvarname)_buildDeps),--arg buildDeps '[$($(_pvarname)_buildDeps)]') \
 	  --out-link "result-$(_pname)" \
-	  --json '^*' | \
-	$(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
-	  --arg log "$(shell $(_readlink) result-$(_pname)-log)" \
-	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log}' > $($(_pvarname)_buildMetaJSON)
+	  --json '^*' > $$@
+
+  # Import the build log into the Nix store.
+  $($(_pvarname)_result)-log: $($(_pvarname)_logfile)
+	$(_V_) $(_nix) build -L `$(_nix) store add-file $$(shell $(_realpath) $$<)` --out-link $$@
+
+  # Recall that the $(_pvarname)_CHECK_BUILD target as declared in the
+  # MANIFEST_BUILD_template validates that the build is sane.
+
+  # Assemble the final build metadata.
+  $($(_pvarname)_buildMetaJSON): $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log $(_pvarname)_CHECK_BUILD
+	$(_V_) $(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
+	  --arg log "$(shell $(_readlink) $($(_pvarname)_result)-log)" \
+	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log}' $$< > $$@
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -391,19 +432,19 @@ define BUILD_nix_sandbox_template =
   # build cache.  This is used for (at least) publish.
   $(eval _do_buildCache = $(if $(DISABLE_BUILDCACHE),,true))
 
-  # The sourceTarball value needs to be stable when nothing changes across builds,
-  # so we create a tarball at a stable TMPDIR path and pass that to the derivation
-  # instead.
-  $(eval $(_pvarname)_src_tar = $($(_pvarname)_tmpBasename)-src.tar)
-  $($(_pvarname)_src_tar): FORCE
+  # The sourceTarball value needs to be stable when nothing changes across
+  # builds, so we create a tarball at a stable temporary path and pass that
+  # to the derivation instead.
+  $(eval $(_pvarname)_src_tar = $($(_pvarname)_tmpBasename)/src.tar)
+  $($(_pvarname)_src_tar): $(PROJECT_TMPDIR)/check-build-prerequisites
 	@# TIL that you have to explicitly call `wait` to harvest the exit status
 	@# of a process substitution, and that `set -o pipefail` does nothing here.
 	@# See: https://mywiki.wooledge.org/ProcessSubstitution
 	$(_V_) $(_tar) -cf $$@ --no-recursion -T <($(_git) ls-files) && wait "$$$$!"
 
   # The buildCache value needs to be similarly stable when nothing changes across
-  $(eval $(_pvarname)_buildCache = $($(_pvarname)_tmpBasename)-buildCache.tar)
-  $($(_pvarname)_buildCache): FORCE
+  $(eval $(_pvarname)_buildCache = $($(_pvarname)_tmpBasename)/buildCache.tar)
+  $($(_pvarname)_buildCache): $(PROJECT_TMPDIR)/check-build-prerequisites
 	-$(_V_) $(_rm) -f $$@
 	@# If a previous buildCache exists, then copy, don't link to the
 	@# previous buildCache because we want nix to import it as a
@@ -412,8 +453,8 @@ define BUILD_nix_sandbox_template =
 	@# tarball containing only a single file indicating the time that
 	@# the buildCache was created to differentiate it from other
 	@# prior otherwise-empty buildCaches.
-	$(_VV_) if [ -f "$(_result)-buildCache" ]; then \
-	  $(_cp) $(_result)-buildCache $$@; \
+	$(_VV_) if [ -f "$($(_pvarname)_result)-buildCache" ]; then \
+	  $(_cp) $($(_pvarname)_result)-buildCache $$@; \
 	else \
 	  tmpdir=$$$$($(_mktemp) -d); \
 	  echo "Build cache initialized on $$$$(date)" > $$$$tmpdir/.buildCache.init; \
@@ -422,60 +463,68 @@ define BUILD_nix_sandbox_template =
 	fi
 
   # Create a target for cleaning up the buildCache result symlink and store path.
-  $(eval $(call CLEAN_result_store_path_template,$(_result)-buildCache))
+  $(eval $(call CLEAN_result_store_path_template,$($(_pvarname)_result)-buildCache))
 
-  .PHONY: $(_pvarname)_nix_sandbox_build
-  $(_pvarname)_nix_sandbox_build: $($(_pvarname)_buildScript) $($(_pvarname)_src_tar) \
-		$(if $(_do_buildCache),$($(_pvarname)_buildCache))
+  # Perform the build, creating the JSON output as a result.
+  $($(_pvarname)_buildJSON): $($(_pvarname)_buildScript) $($(_pvarname)_src_tar) \
+    $(if $(_do_buildCache),$($(_pvarname)_buildCache))
 	@echo "Building $(_name) in Nix sandbox (pure) mode"
 	@# If a previous buildCache exists then move it out of the way
 	@# so that we can detect later if it has been updated.
-	$(_VV_) if [ -n "$(_do_buildCache)" ] && [ -f "$(_result)-buildCache" ]; then \
-	  $(_rm) -f "$(_result)-buildCache.prevOutPath"; \
-	  $(_readlink) "$(_result)-buildCache" > "$(_result)-buildCache.prevOutPath"; \
+	$(_VV_) if [ -n "$(_do_buildCache)" ] && [ -f "$($(_pvarname)_result)-buildCache" ]; then \
+	  $(_rm) -f "$($(_pvarname)_result)-buildCache.prevOutPath"; \
+	  $(_readlink) "$($(_pvarname)_result)-buildCache" > "$($(_pvarname)_result)-buildCache.prevOutPath"; \
 	fi
-	$(_V_) set -o pipefail && \
-	$(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
+	$(_V_) $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr pname "$(_pname)" \
 	  --argstr version "$(_version)" \
 	  --argstr srcTarball "$($(_pvarname)_src_tar)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
 	  --argstr build-wrapper-env "$(_build_wrapper_env)" \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
-	  $(if $($(_pvarname)_buildDeps),--arg buildDeps $($(_pvarname)_buildDeps_arg)) \
+	  $(if $($(_pvarname)_buildDeps),--arg buildDeps '[$($(_pvarname)_buildDeps)]') \
 	  --argstr buildScript "$($(_pvarname)_buildScript)" \
 	  $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
 	  --out-link "result-$(_pname)" \
-	  --json '^*' | \
-	$(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
-	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log}' > $($(_pvarname)_buildMetaJSON)
+	  --json '^*' > $$@
+
+  # Recall that the $(_pvarname)_CHECK_BUILD target as declared in the
+  # MANIFEST_BUILD_template validates that the build is sane.
+
+  $($(_pvarname)_buildMetaJSON): $($(_pvarname)_buildJSON) $(_pvarname)_CHECK_BUILD
+	$(_V_) $(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
+	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log}' $$< > $$@
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
 	@# mind that the symlink will remain unchanged in the event of an
 	@# unsuccessful build.
 	$(_VV_) if [ -n "$(_do_buildCache)" ]; then \
-	  if [ -f "$(_result)-buildCache" ] && [ -f "$(_result)-buildCache.prevOutPath" ]; then \
-	    if [ $$$$($(_readlink) "$(_result)-buildCache") != $$$$($(_cat) "$(_result)-buildCache.prevOutPath") ]; then \
+	  if [ -f "$($(_pvarname)_result)-buildCache" ] && [ -f "$($(_pvarname)_result)-buildCache.prevOutPath" ]; then \
+	    if [ $$$$($(_readlink) "$($(_pvarname)_result)-buildCache") != $$$$($(_cat) "$($(_pvarname)_result)-buildCache.prevOutPath") ]; then \
 	      $(_daemonize) $(_nix) store delete \
-	        $$$$($(_cat) "$(_result)-buildCache.prevOutPath"); \
+	        $$$$($(_cat) "$($(_pvarname)_result)-buildCache.prevOutPath"); \
 	    fi; \
 	  fi; \
-	  $(_rm) -f "$(_result)-buildCache.prevOutPath"; \
+	  $(_rm) -f "$($(_pvarname)_result)-buildCache.prevOutPath"; \
 	fi
 
 endef
 
-# Verify certain prerequisites before kicking off the build DAG.
-.PHONY: check_BUILD_PREREQUISITES
-check_BUILD_PREREQUISITES: FORCE
-	@# The BUILD_RESULT_FILE must be defined and exist.
-	@$(if $(BUILD_RESULT_FILE), \
-	  $(if $(wildcard $(BUILD_RESULT_FILE)),-, \
-	    $$(error $(BUILD_RESULT_FILE) not found)), \
-	  $$(error BUILD_RESULT_FILE not defined))
-	@# Check that the BUILDTIME_NIXPKGS_URL is defined.
-	@$(if $(BUILDTIME_NIXPKGS_URL),-,$(error BUILDTIME_NIXPKGS_URL not defined))
+# The following jq script reads a list of build-meta.json files for the
+# purpose of rendering a set of "-e 's%pkgname.output%/nix/store/...%g'"
+# arguments suitable for use with sed.
+define JSON_OUTPUTS_TO_SED_ARGS_jq =
+  .pname as $$pname |
+  .outputs | to_entries | map (
+    " -e " + ("s%\\$$$${\($$pname).\(.key)}%\(.value)%g" | @sh) +
+    (
+      if .key == "out" then (
+        " -e " + ("s%\\$$$${\($$pname)}%\(.value)%g" | @sh)
+      ) else "" end
+    )
+  )[]
+endef
 
 # The following template selects between the local and nix_sandbox
 # modes for rendering manifest build targets.
@@ -496,7 +545,7 @@ define MANIFEST_BUILD_template =
   $(eval _version = $(strip \
     $(if $(filter file,$(_vertype)),$(file <$(subst file:,,$(_version))), \
       $(if $(filter command,$(_vertype)),$(shell $(subst command:,,$(_version))), \
-	$(_version)))))
+        $(_version)))))
 
   # build mode passed as $(1)
   $(eval _build_mode = $(1))
@@ -504,15 +553,13 @@ define MANIFEST_BUILD_template =
   # have "-" in them so we create a version of the build "pname" replacing
   # this with "_" for use in variable names.
   $(eval _pvarname = $(subst -,_,$(_pname)))
-  # Identify result symlink basename.
-  $(eval _result = result-$(_pname))
   # Calculate name.
   $(eval _name = $(_pname)-$(_version))
   # Variable for providing buildDependencies derived in the DEPENDS step
-  # to the Nix expression as a safely-quoted string.
-  $(eval $(_pvarname)_buildDeps_arg = $(strip \
-    $(if $($(_pvarname)_buildDeps),\
-      '["$(subst $(space)," ",$($(_pvarname)_buildDeps))"]')))
+  # to the Nix expression.
+  $(eval _buildMetaJSON_files = $(wildcard $($(_pvarname)_deps_buildMetaJSON_files)))
+  $(eval $(_pvarname)_buildDeps = $(if $(_buildMetaJSON_files), \
+    $(sort $(shell $(_jq) -s -r '(map(.outputs[])[])' $(_buildMetaJSON_files)))))
 
   # By the time this rule will be evaluated all of its package dependencies
   # will have been added to the set of rule prerequisites in $^, using their
@@ -521,43 +568,48 @@ define MANIFEST_BUILD_template =
   # Iterate through this list, replacing all instances of "${package}" with the
   # corresponding storePath as identified by the result-* symlink.
   .PRECIOUS: $($(_pvarname)_buildScript)
-  $($(_pvarname)_buildScript): $(build) check_BUILD_PREREQUISITES
+  $($(_pvarname)_buildScript): $(build) $(PROJECT_TMPDIR)/check-build-prerequisites
+	$(_V_) $(_mkdir) -p $$(@D)
 	@echo "Rendering $(_pname) build script to $$@"
 	@# Always echo lines in the build script as they are invoked.
 	$(_V_) echo "set -x" > $$@.new
 	$(_V_) $(_cat) $$< >> $$@.new
 	$$(eval _sed_args =)
-	$$(foreach _result_link,$$(filter-out $(build) check_BUILD_PREREQUISITES,$$^), \
-	  $$(eval _pkgname = $$(subst -,.,$$(patsubst result-%,%,$$(_result_link)))) \
-	  $$(eval _outpath = $$(shell $(_readlink) $$(patsubst %-out,%,$$(_result_link)))) \
-	  $$(if $$(_outpath),,$$(error could not identify storepath for package $$(dollar){$$(_pkgname)})) \
-	  $$(eval _sed_args += -e 's%$$$$(dollar){$$(_pkgname)}%$$(_outpath)%g'))
-	$$(if $$(_sed_args),$(_V_) $(_sed) -i $$(_sed_args) $$@.new)
+	$$(foreach _buildMetaJSON,$$(filter-out $(build) $(PROJECT_TMPDIR)/check-build-prerequisites,$$^), \
+	  $$(eval _sed_args += $$(shell $(_jq) -r '$$(JSON_OUTPUTS_TO_SED_ARGS_jq)' $$(_buildMetaJSON))))
+	$$(if $$(_sed_args),$(_V_) $(_sed) -i $$(strip $$(_sed_args)) $$@.new)
 	$(_V_) $(_mv) -f $$@.new $$@
 
   # Insert mode-specific template.
   $(call BUILD_$(_build_mode)_template)
 
-  # Select the desired build mode as we declare the result symlink target.
-  $(_result): $(_pvarname)_$(_build_mode)_build
+  # Recall that the $(_pvarname)_CHECK_RESULT_LINKS target as declared in the
+  # COMMON_BUILD_VARS_template checks that the result symlinks point to the
+  # expected store paths.
+
+  # Perform post-build checks common to all build modes.
+  .INTERMEDIATE: $(_pvarname)_CHECK_BUILD
+  $(_pvarname)_CHECK_BUILD: $(_pvarname)_CHECK_RESULT_LINKS
 	@# Take this opportunity to fail the build if we spot fatal errors in the
 	@# build output. Recall that we force the Nix build to "succeed" in all
 	@# cases so that we can persist the buildCache, so when errors do happen
 	@# this is communicated by way of a $out that is 1) a file and 2) contains
 	@# the string "flox build failed (caching build dir)".
-	$(_VV_) if [ -f $(_result) ] && $(_grep) -q "flox build failed (caching build dir)" $(_result); then \
-	  echo "ERROR: flox build failed (see $(_result)-log)" 1>&2; \
-	  $(_rm) -f $$@; \
+	$(_VV_) if [ -f $($(_pvarname)_result) ] && $(_grep) -q "flox build failed (caching build dir)" $($(_pvarname)_result); then \
+	  echo "ERROR: flox build failed (see $($(_pvarname)_result)-log)" 1>&2; \
+	  $(_rm) -f $($(_pvarname)_result); \
 	  exit 1; \
 	fi
 	@# Also fail the build if it contains packages not found in the build
 	@# wrapper's closure.
-	$$(eval _build_store_path = $$(shell $(_readlink) $(_result)))
-	$$(eval _build_closure_requisites = $$(shell $(_nix_store) --query --requisites $(_result)/.))
+	$$(eval _build_store_path = $$(shell $(_readlink) $($(_pvarname)_result)))
+	$$(eval _build_closure_requisites = $$(shell $(_nix_store) --query --requisites $($(_pvarname)_result)/.))
 	@# BUG: $(_build_wrapper_env)/requisites.txt missing libcxx on Darwin??? Repeat the hard way ...
 	$$(eval _build_wrapper_requisites = $$(shell $(_nix_store) --query --requisites $(_build_wrapper_env)/.))
+	$$(eval _nef_requisites = \
+	  $$(if $$($(_pvarname)_buildDeps),$$(shell $(_nix_store) --query --requisites $$($(_pvarname)_buildDeps))))
 	$$(eval _build_closure_extra_packages = $$(strip \
-	  $$(filter-out $$(_build_store_path) $$(_build_wrapper_requisites), \
+	  $$(filter-out $$(_build_store_path) $$(_build_wrapper_requisites) $$(_nef_requisites), \
 	    $$(_build_closure_requisites))))
 	$$(if $$(_build_closure_extra_packages),$(_VV_) \
 	  echo -e "❌ packages found in $$(_build_store_path)\n" \
@@ -567,17 +619,14 @@ define MANIFEST_BUILD_template =
 	  exit 1)
 	@# TODO: Strip the buildCache and log outputs of all requisites.
 
-  # Note that the buildMetaJSON file is created as a side-effect of the build.
-  $($(_pvarname)_buildMetaJSON): $(_result)
-
   # Create targets for cleaning up the result and log symlinks.
-  $(eval $(call CLEAN_result_link_template,$(_result)))
-  $(eval $(call CLEAN_result_link_template,$(_result)-log))
+  $(eval $(call CLEAN_result_link_template,$($(_pvarname)_result)))
+  $(eval $(call CLEAN_result_link_template,$($(_pvarname)_result)-log))
 
   # Create a helper target for referring to the package by its name rather
-  # than the [real] result symlink we're looking to create.
+  # than the [real] result symlink we're looking to create. (UNUSED)
   .PHONY: build/$(_pname)
-  build/$(_pname): $(_result)
+  build/$(_pname): $(_pvarname)_CHECK_BUILD
 endef
 
 # Glean various values from locked manifest as we call the template.
@@ -599,13 +648,9 @@ define NIX_EXPRESSION_BUILD_template =
   # this with "_" for use in variable names.
   $(eval _pvarname = $(subst -,_,$(_pname)))
 
-  # Create target-specific variables.
-  $(eval _result = result-$(_pname))
-  $(eval $(_pvarname)_evalJSON = $($(_pvarname)_tmpBasename)-eval.json)
-  $(eval $(_pvarname)_buildJSON = $($(_pvarname)_tmpBasename)-build.json)
-  $(eval $(_pvarname)_logfile = $($(_pvarname)_tmpBasename)-build.log)
-
-  $($(_pvarname)_evalJSON): FORCE
+  # Start by evaluating the build
+  $($(_pvarname)_evalJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
+	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_nix) eval -L --file $(_nef) \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  --argstr system $(NIX_SYSTEM) \
@@ -620,59 +665,68 @@ define NIX_EXPRESSION_BUILD_template =
 	  }' \
 	  pkgs.$(_pname) > $$@
 
+  # Following a successful eval, carry on with building the drvPath directly.
   $($(_pvarname)_buildJSON): $($(_pvarname)_evalJSON)
 	@# Now that we have the metadata, set the _name.
 	$$(eval _name = $$(shell $(_jq) -r '.name' $$<))
+	$$(eval _drvPath = $$(shell $(_jq) -r '.drvPath' $$<))
+	@# Verify that the drvPath still exists in the store because there
+	@# is a very small but non-zero chance that the package has been
+	@# garbage collected since the eval was performed.
+	$$(if $$(wildcard $$(_drvPath)),,\
+	  $$(error $$(_drvPath) has been garbage collected - please try again))
 	@echo "Building $$(_name) in Nix expression mode"
-	$(_V_) $(_nix) build --json -L --out-link $(_result) \
-	  $$(shell $(_jq) -r '.drvPath' $$<)'^*' > $($(_pvarname)_buildJSON)
+	$(_V_) $(_nix) build --json -L --out-link $($(_pvarname)_result) \
+	  $$(_drvPath)'^*' > $$@
 
-  # Note that the result symlink is created as a side-effect of the build.
-  $(_result): $($(_pvarname)_buildJSON)
+  # Recall that the $(_pvarname)_CHECK_RESULT_LINKS target as declared in the
+  # COMMON_BUILD_VARS_template checks that the result symlinks point to the
+  # expected store paths.
 
-  # Similarly note result symlink target for each output apart from "out".
-  $(foreach _output,$(subst $(comma), ,$(_outputs)), \
-    $(if $(filter-out out,$(_output)), \
-      $(_result)-$(_output): $($(_pvarname)_buildJSON)
-    )
-  )
+  # Perform post-build checks common to all build modes.
+  .INTERMEDIATE: $(_pvarname)_CHECK_BUILD
+  $(_pvarname)_CHECK_BUILD: $(_pvarname)_CHECK_RESULT_LINKS
+	@# do something here?
 
   # Harvest the logfile from the build.
-  $($(_pvarname)_logfile): $(_result) FORCE
-	( $(_V_) $(_nix) log $$</. || echo "No logs available" ) > $($(_pvarname)_logfile)
+  $($(_pvarname)_logfile): $($(_pvarname)_buildJSON) $(_pvarname)_CHECK_BUILD
+	$$(eval _drvPath = $$(shell $(_jq) -r '.[0].drvPath' $$<))
+	$(_V_) ( $(_nix) log $$(_drvPath) || echo "No logs available" ) > $($(_pvarname)_logfile)
 
   # Add the log to the store and create a GCRoot for it.
-  $(_result)-log: $($(_pvarname)_logfile)
-	$(_V_) $(_nix) build -L --out-link $(_result)-log \
+  $($(_pvarname)_result)-log: $($(_pvarname)_logfile)
+	$(_V_) $(_nix) build -L --out-link $($(_pvarname)_result)-log \
 	  $$(shell $(_nix) store add-file $($(_pvarname)_logfile))
 
   # Following a successful build, merge in the eval json.
-  $($(_pvarname)_buildMetaJSON): $($(_pvarname)_evalJSON) $($(_pvarname)_buildJSON) $(_result)-log
+  $($(_pvarname)_buildMetaJSON): $($(_pvarname)_evalJSON) $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log
 	$(_V_) $(_jq) -n \
-	  --arg logfile $$(shell $(_readlink) $(_result)-log) \
+	  --arg logfile $$(shell $(_readlink) $($(_pvarname)_result)-log) \
 	  --slurpfile eval $($(_pvarname)_evalJSON) \
 	  --slurpfile build $($(_pvarname)_buildJSON) \
 	  '$$$$build[0][0] * $$$$eval[0] * { log: $$$$logfile }' > $$@
 	@echo -e "Completed build of $$(_name) in Nix expression mode\n"
 
   # Create targets for cleaning up the result and log symlinks.
-  $(eval $(call CLEAN_result_link_template,$(_result)))
-  $(eval $(call CLEAN_result_link_template,$(_result)-log))
+  $(eval $(call CLEAN_result_link_template,$($(_pvarname)_result)))
+  $(eval $(call CLEAN_result_link_template,$($(_pvarname)_result)-log))
+
+  # Create targets for cleaning up all other NEF output result symlinks.
+  $(if $(wildcard $($(_pvarname)_buildJSON)), \
+    $(eval _outputs = $(shell $(_jq) -r '.[0].outputs | keys[]' $($(_pvarname)_buildJSON))) \
+    $(foreach _output,$(_outputs), \
+      $(eval $(call CLEAN_result_link_template,$($(_pvarname)_result)-$(_output)))))
 
   # Create a helper target for referring to the package by its name rather
-  # than the [real] result symlink we're looking to create.
+  # than the [real] result symlink we're looking to create. (UNUSED)
   .PHONY: build/$(_pname)
   build/$(_pname): $($(_pvarname)_buildMetaJSON)
 endef
 
-$(foreach _build_outputs,$(NIX_EXPRESSION_BUILDS), \
-  $(eval _pname = $(word 1,$(subst ^, ,$(_build_outputs)))) \
-  $(eval _outputs = $(word 2,$(subst ^, ,$(_build_outputs)))) \
+$(foreach _pname,$(NIX_EXPRESSION_BUILDS), \
   $(eval $(call NIX_EXPRESSION_BUILD_template)))
 
 # Combine JSON build data for each build and write to BUILD_RESULT_FILE.
-# Mark it as phony to force it to be evaluated every time.
-.PHONY: $(BUILD_RESULT_FILE)
 $(BUILD_RESULT_FILE): $(foreach pname,$(PACKAGES),$($(subst -,_,$(pname))_buildMetaJSON))
 	$(_VV_) [ -n "$^" ] || ( echo "ERROR: PACKAGES not defined or empty" 1>&2; exit 1 )
 	$(_VV_) $(_jq) -s . $^ > $@
@@ -685,6 +739,3 @@ build: $(BUILD_RESULT_FILE)
 # Add a target for cleaning up the build artifacts.
 .PHONY: clean
 clean: $(clean_targets)
-
-.PHONY: FORCE
-FORCE:
