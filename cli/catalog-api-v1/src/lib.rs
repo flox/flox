@@ -14,6 +14,9 @@ pub mod types {
     use serde::{Deserialize, Serialize};
     /// Progenitor doesn't know how to use a discriminator as a tag, so add this
     /// enum manually.
+    ///
+    /// We still embed the underlying variant types, which have an extraneous
+    /// `store_type` field, so that we don't shadow changes in the catalog API.
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     #[serde(tag = "store_type", rename_all = "kebab-case")]
     pub enum CatalogStoreConfig {
@@ -26,22 +29,13 @@ pub mod types {
         /// Not yet supported
         Publisher(CatalogStoreConfigPublisher),
     }
-
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct CatalogStoreConfigNixCopy {
-        pub egress_uri: String,
-        pub ingress_uri: String,
-    }
-
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct CatalogStoreConfigPublisher {
-        pub publisher_url: String,
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{CatalogStoreConfig, CatalogStoreConfigNixCopy, CatalogStoreConfigPublisher};
+    use crate::types::{
+        CatalogStoreConfig, CatalogStoreConfigNixCopy, CatalogStoreConfigPublisher,
+    };
 
     #[test]
     fn deserialize_catalog_store_config_null() {
@@ -76,7 +70,8 @@ mod tests {
             store_config,
             CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
                 ingress_uri: "s3://example".into(),
-                egress_uri: "s3://example".into()
+                egress_uri: "s3://example".into(),
+                store_type: "nix-copy".into(),
             })
         )
     }
@@ -89,10 +84,12 @@ mod tests {
         }"#;
 
         let store_config = serde_json::from_str::<CatalogStoreConfig>(response_string).unwrap();
-        assert_eq!(store_config, 
-            CatalogStoreConfig::Publisher( CatalogStoreConfigPublisher {
-                 publisher_url: "s3://example".into(),
-                })
-            )
+        assert_eq!(
+            store_config,
+            CatalogStoreConfig::Publisher(CatalogStoreConfigPublisher {
+                publisher_url: "s3://example".into(),
+                store_type: "publisher".into(),
+            })
+        )
     }
 }

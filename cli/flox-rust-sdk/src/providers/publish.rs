@@ -541,6 +541,7 @@ fn get_client_side_catalog_store_config(
             let CatalogStoreConfigNixCopy {
                 ingress_uri,
                 egress_uri,
+                ..
             } = nix_copy_config;
             if let Some(path) = key_file {
                 ClientSideCatalogStoreConfig::NixCopy {
@@ -1237,6 +1238,7 @@ pub mod tests {
                 catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
                     ingress_uri: "https://example.com".to_string(),
                     egress_uri: "https://example.com".to_string(),
+                    store_type: "nix-copy".to_string(),
                 }),
             }),
         ]);
@@ -1360,6 +1362,7 @@ pub mod tests {
                 catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
                     ingress_uri: cache_url.to_string(),
                     egress_uri: cache_url.to_string(),
+                    store_type: "nix-copy".to_string(),
                 }),
             }),
             Response::PublishBuild,
