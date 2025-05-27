@@ -61,6 +61,7 @@ _jq := $(call __package_bin,$(__jq),jq)
 _mktemp := $(call __package_bin,$(__coreutils),mktemp)
 _mv := $(call __package_bin,$(__coreutils),mv)
 _nix := $(call __package_bin,$(__nix),nix)
+_nix_store := $(call __package_bin,$(__nix),nix-store)
 _pwd := $(call __package_bin,$(__coreutils),pwd)
 _readlink := $(call __package_bin,$(__coreutils),readlink)
 _realpath := $(call __package_bin,$(__coreutils),realpath)
@@ -90,7 +91,7 @@ SHELL := $(_bash)
 OS := $(shell $(_uname) -s)
 
 # Nix system
-# TODO(nef): we might be passing that around differently (or call nef stuff with --impure)  
+# TODO(nef): we might be passing that around differently (or call nef stuff with --impure)
 NIX_SYSTEM := $(shell $(_nix) config show system)
 
 # Set the default goal to be all builds if one is not specified.
@@ -455,9 +456,9 @@ define BUILD_nix_sandbox_template =
 	@# unsuccessful build.
 	$(_VV_) if [ -n "$(_do_buildCache)" ]; then \
 	  if [ -f "$(_result)-buildCache" ] && [ -f "$(_result)-buildCache.prevOutPath" ]; then \
-	    if [ $$$$($(_readlink) "$(_result)-buildCache") != $$$$(cat "$(_result)-buildCache.prevOutPath") ]; then \
+	    if [ $$$$($(_readlink) "$(_result)-buildCache") != $$$$($(_cat) "$(_result)-buildCache.prevOutPath") ]; then \
 	      $(_daemonize) $(_nix) store delete \
-	        $$$$(cat "$(_result)-buildCache.prevOutPath"); \
+	        $$$$($(_cat) "$(_result)-buildCache.prevOutPath"); \
 	    fi; \
 	  fi; \
 	  $(_rm) -f "$(_result)-buildCache.prevOutPath"; \
@@ -549,6 +550,22 @@ define MANIFEST_BUILD_template =
 	  $(_rm) -f $$@; \
 	  exit 1; \
 	fi
+	@# Also fail the build if it contains packages not found in the build
+	@# wrapper's closure.
+	$$(eval _build_store_path = $$(shell $(_readlink) $(_result)))
+	$$(eval _build_closure_requisites = $$(shell $(_nix_store) --query --requisites $(_result)/.))
+	@# BUG: $(_build_wrapper_env)/requisites.txt missing libcxx on Darwin??? Repeat the hard way ...
+	$$(eval _build_wrapper_requisites = $$(shell $(_nix_store) --query --requisites $(_build_wrapper_env)/.))
+	$$(eval _build_closure_extra_packages = $$(strip \
+	  $$(filter-out $$(_build_store_path) $$(_build_wrapper_requisites), \
+	    $$(_build_closure_requisites))))
+	$$(if $$(_build_closure_extra_packages),$(_VV_) \
+	  echo -e "❌ packages found in $$(_build_store_path)\n" \
+	           "       not found in $(_build_wrapper_env)\n" 1>&2; \
+	  $$(foreach _pkg,$$(_build_closure_extra_packages), \
+	    ( $(_nix) why-depends --precise $$(_build_store_path) $$(_pkg) && echo ) 1>&2; ) \
+	  exit 1)
+	@# TODO: Strip the buildCache and log outputs of all requisites.
 
   # Note that the buildMetaJSON file is created as a side-effect of the build.
   $($(_pvarname)_buildMetaJSON): $(_result)

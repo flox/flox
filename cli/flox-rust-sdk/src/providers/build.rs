@@ -1660,7 +1660,8 @@ mod tests {
                 mkdir -p $out/bin
                 cp {bin_name} $out/bin/{bin_name}
             """
-            runtime-packages = [ "boost" ]
+            # FIXME: replace with gcc.lib once we support outputs
+            runtime-packages = [ "boost", "gcc" ]
             sandbox = "{}"
             "#, if sandbox { "pure" } else { "off" }};
         env.edit(&flox, build_manifest).unwrap();
@@ -1742,7 +1743,8 @@ mod tests {
                 mkdir -p $out/bin
                 cp {bin_name} $out/bin/{bin_name}
             """
-            runtime-packages = []
+            # FIXME: replace with gcc.lib once we support outputs
+            runtime-packages = [ "gcc" ]
             sandbox = "{}"
             "#, if sandbox { "pure" } else { "off" }};
         env.edit(&flox, build_manifest).unwrap();
