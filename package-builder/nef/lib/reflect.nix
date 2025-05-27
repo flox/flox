@@ -71,8 +71,8 @@ let
   /*
     This function produces `make` targets from a list of attrPaths.
     The result is a single string with _space separated_ targets,
-    where each target contains the string formatted attrPath _and the outputps_
-    that are defiend by the derivation, i.e.: `<attrPath>:<output>(,<output>)*`.
+    where each target contains the string formatted attrPath
+    that are defiend by the derivation, i.e.: `<attrPath> <attrPath> ...`.
 
     :::Note
     Todo: tricky attrs, e.g. containing spaces, although renaming is not possible at this point
@@ -86,28 +86,16 @@ let
     # Type
 
     ```
-    makeTargetsWithOutputs :: [ [String] ] -> String
+    makeTargets :: [ [String] ] -> String
     ```
   */
-  makeTargetsWithOutputs =
+  makeTargets =
     # list of attrpaths e.g. result from `lib.nef.reflect.collectAttrPaths
     collectedAttrPaths:
     # extended package set, containing **derivation** attrsets at the collected attrPaths
     pkgs:
     let
-      mkAttrPathsWithOutputs = map (
-        attrPath:
-        let
-          derivation = lib.getAttrFromPath attrPath pkgs;
-          # derivations have a guaranteed outputs field
-          outputs = lib.concatStringsSep "," derivation.outputs;
-          attrPathString = lib.showAttrPath attrPath;
-        in
-        assert lib.assertMsg (
-          lib.isAttrs derivation && derivation ? type && derivation.type == "derivation"
-        ) "${attrPathString} is not a derivation";
-        "${attrPathString}^${outputs}"
-      );
+      mkAttrPathsWithOutputs = map lib.showAttrPath;
     in
     lib.concatStringsSep " " (mkAttrPathsWithOutputs collectedAttrPaths);
 
@@ -117,7 +105,7 @@ in
   inherit
     collectAttrPaths
     attrPathStrings
-    makeTargetsWithOutputs
+    makeTargets
     ;
 
 }
