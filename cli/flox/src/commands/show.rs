@@ -126,22 +126,14 @@ fn render_show_catalog(
 #[cfg(test)]
 mod test {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::providers::catalog::{ApiErrorResponse, Client};
+    use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
 
     use super::*;
 
     #[tokio::test]
     async fn show_handles_404() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        let Client::Mock(ref mut client) = flox.catalog_client else {
-            panic!()
-        };
-        client.push_error_response(
-            ApiErrorResponse {
-                detail: "detail".to_string(),
-            },
-            404,
-        );
+        flox.catalog_client = auto_recording_catalog_client("show_handles_404");
         let search_term = "search_term";
         let err = Show {
             pkg_path: search_term.to_string(),

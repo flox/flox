@@ -763,57 +763,14 @@ impl InitHook for Node {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
 
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::models::search::{SearchResult, SearchResults};
-    use flox_rust_sdk::providers::catalog::test_helpers::{
-        auto_recording_catalog_client,
-        constraints_too_tight_dummy_response,
-        resolved_pkg_group_with_dummy_package,
-    };
-    use flox_rust_sdk::providers::catalog::{Client, Response, SystemEnum};
+    use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
     use pretty_assertions::assert_eq;
     use serde::Serialize;
     use serde_with::skip_serializing_none;
 
     use super::*;
-
-    // TODO: Replace with httpmock generated fixture.
-    fn search_response_nodejs_all() -> Response {
-        let packages_versions = HashMap::from([
-            ("nodejs_14", "14.21.3"),
-            ("nodejs_16", "16.20.2"),
-            ("nodejs_18", "18.20.8"),
-            ("nodejs_19", "19.9.0"),
-            ("nodejs_20", "20.19.0"),
-            ("nodejs_21", "21.7.3"),
-            ("nodejs_22", "22.14.0"),
-            ("nodejs_23", "23.11.0"),
-            ("nodejs_24", "24.0.0"),
-            ("nodejs_latest", "24.0.0"),
-        ]);
-
-        Response::Search(SearchResults {
-            count: Some(packages_versions.len() as u64),
-            results: packages_versions
-                .iter()
-                .map(|(name, version)| SearchResult {
-                    attr_path: name.to_string(),
-                    catalog: None,
-                    description: Some(
-                        "Event-driven I/O framework for the V8 JavaScript engine".to_string(),
-                    ),
-                    name: format!("nodejs-{}", version),
-                    pkg_path: name.to_string(),
-                    pname: name.to_string(),
-                    stabilities: vec![],
-                    system: SystemEnum::Aarch64Darwin,
-                    version: Some(version.to_string()),
-                })
-                .collect(),
-        })
-    }
 
     #[tokio::test]
     async fn new_detection() {
@@ -853,29 +810,22 @@ mod tests {
         struct TestCase {
             description: &'static str,
             files: Vec<File>,
-            catalog_responses: Vec<Response>,
             expected: Option<Node>,
+            needs_client: bool,
         }
 
         let yarn_package = Package {
             name: "yarn".to_string(),
-            version: "1.1.1".to_string(),
+            version: "1.22.22".to_string(),
         };
         let node_package = Package {
             name: "nodejs".to_string(),
-            version: "2.2.2".to_string(),
+            version: "20.18.1".to_string(),
         };
-
-        fn dummy_pkg_to_resolved_pkg_group_response(pkg: &Package) -> Response {
-            let pkg_group = resolved_pkg_group_with_dummy_package(
-                &pkg.name,
-                &"aarch64-darwin".to_string(),
-                &pkg.name,
-                &pkg.name,
-                &pkg.version,
-            );
-            Response::Resolve(vec![pkg_group])
-        }
+        let node_20 = Package {
+            name: "nodejs_20".to_string(),
+            version: "20.18.1".to_string(),
+        };
 
         let test_cases = vec![
             // - Returns [NodeAction::InstallYarn] if
@@ -890,7 +840,7 @@ mod tests {
                         name: "package.json".to_string(),
                         content: serde_json::to_string(&PackageJSON {
                             engines: Some(Engines {
-                                node: Some(node_package.version.clone()),
+                                node: Some(node_20.version.clone()),
                                 yarn: Some(yarn_package.version.clone()),
                             }),
                         })
@@ -901,19 +851,15 @@ mod tests {
                         content: "".to_string(),
                     },
                 ],
-                catalog_responses: vec![
-                    search_response_nodejs_all(),
-                    dummy_pkg_to_resolved_pkg_group_response(&node_package),
-                    dummy_pkg_to_resolved_pkg_group_response(&yarn_package),
-                ],
                 expected: Some(Node {
                     action: NodeInstallAction::Yarn(YarnInstall {
                         yarn: (&yarn_package).into(),
-                        node: (&node_package).into(),
+                        node: (&node_20).into(),
                     }),
                     package_json_node_version: None,
                     nvmrc_version: None,
                 }),
+                needs_client: true,
             },
             // - Returns [NodeAction::InstallNode] if
             //   - .nvmrc or package.json exists
@@ -923,48 +869,43 @@ mod tests {
             //     constraints)
             //   - yarn.lock does not exist
             TestCase {
-                description: "package.json with satisified nodejs version",
+                description: "package.json with satisfied nodejs version",
                 files: vec![File {
                     name: "package.json".to_string(),
                     content: serde_json::to_string(&PackageJSON {
                         engines: Some(Engines {
-                            node: Some(node_package.version.clone()),
+                            node: Some(node_20.version.clone()),
                             yarn: None,
                         }),
                     })
                     .unwrap(),
                 }],
-                catalog_responses: vec![
-                    search_response_nodejs_all(),
-                    dummy_pkg_to_resolved_pkg_group_response(&node_package),
-                ],
                 expected: Some(Node {
                     action: NodeInstallAction::Node(NodeInstall {
-                        node: Some((&node_package).into()),
+                        node: Some((&node_20).into()),
                         npm_hook: true,
                     }),
-                    package_json_node_version: Some(PackageJSONVersion::Found(
-                        (&node_package).into(),
-                    )),
+                    package_json_node_version: Some(PackageJSONVersion::Found((&node_20).into())),
                     nvmrc_version: None,
                 }),
+                needs_client: true,
             },
             TestCase {
-                description: ".nvmrc with satisified version",
+                description: ".nvmrc with satisfied version",
                 files: vec![File {
                     name: ".nvmrc".to_string(),
-                    content: "v0.1.14".to_string(),
+                    content: "v20".to_string(),
                 }],
-                // There's no node version search when we install nvm
-                catalog_responses: vec![dummy_pkg_to_resolved_pkg_group_response(&node_package)],
                 expected: Some(Node {
                     action: NodeInstallAction::Node(NodeInstall {
                         node: Some((&node_package).into()),
                         npm_hook: false,
                     }),
                     package_json_node_version: None,
+                    // TODO: nvmrc should use major node version (nodejs_20)
                     nvmrc_version: Some(NVMRCVersion::Found((&node_package).into())),
                 }),
+                needs_client: true,
             },
             TestCase {
                 description: "package.json with no engines",
@@ -972,11 +913,6 @@ mod tests {
                     name: "package.json".to_string(),
                     content: serde_json::to_string(&PackageJSON { engines: None }).unwrap(),
                 }],
-                catalog_responses: vec![
-                    search_response_nodejs_all(),
-                    dummy_pkg_to_resolved_pkg_group_response(&node_package),
-                    Response::Resolve(vec![constraints_too_tight_dummy_response("yarn")]),
-                ],
                 expected: Some(Node {
                     action: NodeInstallAction::Node(NodeInstall {
                         node: None,
@@ -985,6 +921,7 @@ mod tests {
                     package_json_node_version: Some(PackageJSONVersion::Unspecified),
                     nvmrc_version: None,
                 }),
+                needs_client: true,
             },
             // returns YarnOrNode
             // - Returns [NodeAction::InstallYarnOrNode] if
@@ -996,7 +933,7 @@ mod tests {
                         name: "package.json".to_string(),
                         content: serde_json::to_string(&PackageJSON {
                             engines: Some(Engines {
-                                node: Some(node_package.version.clone()),
+                                node: Some(node_20.version.clone()),
                                 yarn: Some(yarn_package.version.clone()),
                             }),
                         })
@@ -1011,29 +948,21 @@ mod tests {
                         content: "".to_string(),
                     },
                 ],
-                catalog_responses: vec![
-                    search_response_nodejs_all(),
-                    dummy_pkg_to_resolved_pkg_group_response(&node_package),
-                    dummy_pkg_to_resolved_pkg_group_response(&yarn_package),
-                    search_response_nodejs_all(),
-                    dummy_pkg_to_resolved_pkg_group_response(&node_package),
-                ],
                 expected: Some(Node {
                     action: NodeInstallAction::YarnOrNode(
                         YarnInstall {
                             yarn: (&yarn_package).into(),
-                            node: (&node_package).into(),
+                            node: (&node_20).into(),
                         },
                         NodeInstall {
-                            node: Some((&node_package).into()),
+                            node: Some((&node_20).into()),
                             npm_hook: true,
                         },
                     ),
-                    package_json_node_version: Some(PackageJSONVersion::Found(
-                        (&node_package).into(),
-                    )),
+                    package_json_node_version: Some(PackageJSONVersion::Found((&node_20).into())),
                     nvmrc_version: None,
                 }),
+                needs_client: true,
             },
             // - Returns [None] if
             //   - There's no package.json or .nvmrc
@@ -1041,8 +970,8 @@ mod tests {
             TestCase {
                 description: "no files at all",
                 files: vec![],
-                catalog_responses: vec![],
                 expected: None,
+                needs_client: false,
             },
             TestCase {
                 description: "constraints not met",
@@ -1056,11 +985,8 @@ mod tests {
                     })
                     .unwrap(),
                 }],
-                catalog_responses: vec![
-                    search_response_nodejs_all(),
-                    Response::Resolve(vec![constraints_too_tight_dummy_response("nodejs_XX")]),
-                ],
                 expected: None,
+                needs_client: true,
             },
         ];
 
@@ -1072,13 +998,17 @@ mod tests {
                 fs::write(file, content).unwrap();
             }
 
-            if let Client::Mock(ref mut client) = flox.catalog_client {
-                for resp in tc.catalog_responses.into_iter() {
-                    client.push_response(resp);
-                }
+            if tc.needs_client {
+                flox.catalog_client = auto_recording_catalog_client(&format!(
+                    "node_new_detection_{}",
+                    tc.description.replace(" ", "_").replace(".", "_")
+                ));
             }
 
-            let node = Node::new(&flox, temp_dir.path()).await.unwrap();
+            let node = Node::new(&flox, temp_dir.path())
+                .await
+                .context(format!("test case: {}", tc.description))
+                .unwrap();
             assert_eq!(node, tc.expected, "test case: {}", tc.description);
         }
     }

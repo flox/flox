@@ -1,0 +1,17 @@
+when:
+  path: /api/v1/catalog/packages/search_term
+  method: GET
+then:
+  status: 404
+  header:
+  - name: date
+    value: Thu, 22 May 2025 16:35:55 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '53'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: K-nQ6gV4IAMEMRg=
+  body: '{"detail":"Unable to locate attr_path ''search_term''"}'
