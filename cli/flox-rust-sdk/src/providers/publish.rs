@@ -17,9 +17,9 @@ use super::build::{
     FloxBuildMk,
     ManifestBuilder,
     ManifestBuilderError,
+    PackageTarget,
     PackageTargetError,
     PackageTargetKind,
-    PackageTargets,
     nix_expression_dir,
 };
 use super::catalog::{
@@ -162,8 +162,7 @@ pub struct PackageMetadata {
     pub base_catalog_ref: BaseCatalogUrl,
 
     // These are collected from the environment manifest
-    pub package: String,
-    pub package_kind: PackageTargetKind,
+    pub package: PackageTarget,
     pub description: String,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
@@ -492,7 +491,7 @@ where
         client
             .create_package(
                 &catalog_name,
-                &self.package_metadata.package,
+                self.package_metadata.package.name().as_ref(),
                 &self.env_metadata.build_repo_ref.url,
             )
             .await
@@ -507,7 +506,7 @@ where
         // needed.
         tracing::debug!("Beginning publish of package...");
         let publish_response = client
-            .publish_info(catalog_name, &self.package_metadata.package)
+            .publish_info(catalog_name, self.package_metadata.package.name().as_ref())
             .await
             .map_err(PublishError::CatalogError)?;
 
@@ -552,7 +551,11 @@ where
 
         tracing::debug!("Publishing build in catalog...");
         client
-            .publish_build(&catalog_name, &self.package_metadata.package, &build_info)
+            .publish_build(
+                &catalog_name,
+                self.package_metadata.package.name().as_ref(),
+                &build_info,
+            )
             .await
             .map_err(PublishError::CatalogError)?;
 
@@ -655,7 +658,7 @@ fn check_build_metadata_from_build_result(
 pub fn check_build_metadata(
     flox: &Flox,
     env_metadata: &CheckedEnvironmentMetadata,
-    pkg: &str,
+    pkg: &PackageTarget,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     // git clone into a temp directory
     let clean_repo_path = tempfile::tempdir_in(flox.temp_dir.clone()).unwrap();
@@ -704,7 +707,7 @@ pub fn check_build_metadata(
         // todo: use a non-hardcoded nixpkgs url
         &mock_base_catalog_url().as_flake_ref()?,
         &built_environments.develop,
-        &[pkg],
+        &[pkg.name()],
         Some(false),
     )?;
 
@@ -950,19 +953,10 @@ pub fn check_environment_metadata(
 
 pub fn check_package_metadata(
     lockfile: &Lockfile,
-    expression_dir: &Path,
     expression_build_ref: &BaseCatalogUrl,
-    pkg: &str,
+    pkg: PackageTarget,
 ) -> Result<PackageMetadata, PublishError> {
-    // ensure the package exists and can be built
-    let mut targets = PackageTargets::new(lockfile, expression_dir)?;
-    targets.select(&[pkg])?;
-
-    let package_kind = *targets
-        .target_kind(pkg)
-        .expect("package was previously selected");
-
-    let base_catalog_ref = if package_kind == PackageTargetKind::ManifestBuild {
+    let base_catalog_ref = if pkg.kind() == PackageTargetKind::ManifestBuild {
         gather_base_repo_meta(lockfile)?
     } else {
         expression_build_ref.clone()
@@ -972,13 +966,12 @@ pub fn check_package_metadata(
         .manifest
         .build
         .inner()
-        .get(pkg)
+        .get(*pkg.name().as_ref())
         .and_then(|desc| desc.description.clone())
         .unwrap_or_default();
 
     Ok(PackageMetadata {
-        package: pkg.to_string(),
-        package_kind,
+        package: pkg,
         description,
         base_catalog_ref,
         _private: (),
@@ -990,9 +983,14 @@ pub mod tests {
 
     // Defined in the manifest.toml in
     const EXAMPLE_PACKAGE_NAME: &str = "mypkg";
+    static EXAMPLE_MANIFEST_PACKAGE_TARGET: LazyLock<PackageTarget> = LazyLock::new(|| {
+        PackageTarget::new_unchecked(EXAMPLE_PACKAGE_NAME, PackageTargetKind::ManifestBuild)
+    });
+
     const EXAMPLE_MANIFEST: &str = "envs/publish-simple";
 
     use std::io::Write;
+    use std::sync::LazyLock;
 
     use catalog_api_v1::types::CatalogStoreConfigNixCopy;
     use chrono::Utc;
@@ -1179,9 +1177,8 @@ pub mod tests {
 
         let meta = check_package_metadata(
             &lockfile,
-            &nix_expression_dir(&env),
             &mock_base_catalog_url(),
-            EXAMPLE_PACKAGE_NAME,
+            EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
         )
         .unwrap();
         let description_in_manifest = "Some sample package description from our tests";
@@ -1192,7 +1189,7 @@ pub mod tests {
             meta.base_catalog_ref.to_string(),
             locked_base_pkg.locked_url
         );
-        assert_eq!(meta.package, EXAMPLE_PACKAGE_NAME);
+        assert_eq!(&meta.package, &*EXAMPLE_MANIFEST_PACKAGE_TARGET);
         assert_eq!(meta.description, description_in_manifest.to_string());
     }
 
@@ -1206,7 +1203,8 @@ pub mod tests {
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
 
         // This will actually run the build
-        let meta = check_build_metadata(&flox, &env_metadata, EXAMPLE_PACKAGE_NAME).unwrap();
+        let meta =
+            check_build_metadata(&flox, &env_metadata, &EXAMPLE_MANIFEST_PACKAGE_TARGET).unwrap();
 
         let version_in_manifest = "1.0.2a";
 
@@ -1232,14 +1230,13 @@ pub mod tests {
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
-            &nix_expression_dir(&env),
             &mock_base_catalog_url(),
-            EXAMPLE_PACKAGE_NAME,
+            EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
         )
         .unwrap();
 
         let build_metadata =
-            check_build_metadata(&flox, &env_metadata, EXAMPLE_PACKAGE_NAME).unwrap();
+            check_build_metadata(&flox, &env_metadata, &package_metadata.package).unwrap();
 
         let auth = Auth::from_flox(&flox).unwrap();
         let publish_provider =
@@ -1299,8 +1296,7 @@ pub mod tests {
 
         let package_metadata = PackageMetadata {
             base_catalog_ref: mock_base_catalog_url(),
-            package: "dummy".to_string(),
-            package_kind: PackageTargetKind::ManifestBuild,
+            package: EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
             description: "dummy".to_string(),
             _private: (),
         };
@@ -1436,14 +1432,13 @@ pub mod tests {
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
-            &nix_expression_dir(&env),
             &mock_base_catalog_url(),
-            EXAMPLE_PACKAGE_NAME,
+            EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
         )
         .unwrap();
 
         let build_metadata =
-            check_build_metadata(&flox, &env_metadata, EXAMPLE_PACKAGE_NAME).unwrap();
+            check_build_metadata(&flox, &env_metadata, &package_metadata.package).unwrap();
 
         let (_key_file, cache) = local_nix_cache(&token);
         let auth = Auth::from_flox(&flox).unwrap();

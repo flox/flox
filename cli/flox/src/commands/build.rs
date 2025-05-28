@@ -6,10 +6,12 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
+use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::build::{
     FloxBuildMk,
     ManifestBuilder,
     Output,
+    PackageTarget,
     PackageTargets,
     build_symlink_path,
     nix_expression_dir,
@@ -95,9 +97,13 @@ impl Build {
         let base_dir = env.parent_path()?;
         let expression_dir = nix_expression_dir(&env); // TODO: decouple from env
         let flox_env_build_outputs = env.build(&flox)?;
-        let lockfile = env.lockfile(&flox)?.into();
+        let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
-        let packages_to_clean = packages_to_build(&lockfile, &expression_dir, &packages)?;
+        let packages_to_clean = packages_to_build(&lockfile.manifest, &expression_dir, &packages)?;
+        let target_names = packages_to_clean
+            .iter()
+            .map(|target| target.name())
+            .collect::<Vec<_>>();
 
         let builder = FloxBuildMk::new(
             &flox,
@@ -105,7 +111,7 @@ impl Build {
             Some(&expression_dir),
             &flox_env_build_outputs,
         );
-        builder.clean(&packages_to_clean.target_names())?;
+        builder.clean(&target_names)?;
 
         message::created("Clean completed successfully");
 
@@ -122,16 +128,20 @@ impl Build {
         let built_environments = env.build(&flox)?;
         let expression_dir = nix_expression_dir(&env); // TODO: decouple from env
 
-        let lockfile = env.lockfile(&flox)?.into();
+        let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
-        let packages_to_build = packages_to_build(&lockfile, &expression_dir, &packages)?;
+        let packages_to_build = packages_to_build(&lockfile.manifest, &expression_dir, &packages)?;
+        let target_names = packages_to_build
+            .iter()
+            .map(|target| target.name())
+            .collect::<Vec<_>>();
 
         let builder =
             FloxBuildMk::new(&flox, &base_dir, Some(&expression_dir), &built_environments);
         let output = builder.build(
             &mock_base_catalog_url().as_flake_ref()?,
             &FLOX_INTERPRETER,
-            &packages_to_build.target_names(),
+            &target_names,
             None,
         )?;
 
@@ -213,17 +223,29 @@ impl Build {
 }
 
 pub(crate) fn packages_to_build<'o>(
-    lockfile: &'o Lockfile,
+    manifest: &'o Manifest,
     expression_dir: &'o Path,
     packages: &[impl AsRef<str>],
-) -> Result<PackageTargets<'o>> {
-    let mut available_targets = PackageTargets::new(lockfile, expression_dir)?;
+) -> Result<Vec<PackageTarget>> {
+    let available_targets = PackageTargets::new(manifest, expression_dir)?;
 
-    if !packages.is_empty() {
-        available_targets.select(packages)?;
+    if available_targets.is_empty() {
+        bail!(formatdoc! {"
+            No packages found to build.
+
+            Add a build by modifying the '[build]' section of the manifest with 'flox edit'
+            or add expression files in '{expression_dir}'.
+            ", expression_dir = expression_dir.display()
+        });
     }
 
-    Ok(available_targets)
+    let selected = if !packages.is_empty() {
+        available_targets.select(packages)?
+    } else {
+        available_targets.all()
+    };
+
+    Ok(selected)
 }
 
 #[cfg(test)]
@@ -290,8 +312,8 @@ mod test {
                 {{runCommand}}: runCommand "{pname}" {{}} ""
             "#})]);
 
-        let lockfile = env.lockfile(&flox).unwrap().into();
-        let result = packages_to_build(&lockfile, &expressions_dir, &Vec::<String>::new());
+        let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
+        let result = packages_to_build(&lockfile.manifest, &expressions_dir, &Vec::<String>::new());
         assert!(result.is_err());
     }
 }

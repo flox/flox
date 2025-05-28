@@ -1,12 +1,12 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
-use flox_rust_sdk::models::manifest::typed::{Inner, Manifest};
+use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::auth::Auth;
-use flox_rust_sdk::providers::build::nix_expression_dir;
+use flox_rust_sdk::providers::build::{PackageTarget, nix_expression_dir};
 use flox_rust_sdk::providers::catalog::mock_base_catalog_url;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
@@ -20,6 +20,7 @@ use indoc::formatdoc;
 use tracing::{debug, instrument};
 
 use super::{EnvironmentSelect, environment_select};
+use crate::commands::build::packages_to_build;
 use crate::commands::ensure_floxhub_token;
 use crate::config::Config;
 use crate::environment_subcommand_metric;
@@ -83,38 +84,31 @@ impl Publish {
         let Some(lockfile) = env.existing_lockfile(&flox)? else {
             bail!(build_repo_err("Environment must be locked."));
         };
-        let target = Self::get_publish_target(&lockfile.manifest, &self.publish_target)?;
+
+        let target = Self::get_publish_target(
+            &lockfile.manifest,
+            &nix_expression_dir(&env),
+            self.publish_target,
+        )?;
         Self::publish(config, flox, env, target, self.metadata_only, self.cache).await
     }
 
     fn get_publish_target(
         manifest: &Manifest,
-        target_arg: &Option<PublishTarget>,
-    ) -> Result<String> {
-        let target = if target_arg.is_none() {
-            match manifest.build.inner().len() {
-                0 => {
-                    bail!("Cannot publish without a build specified");
-                },
-                1 => manifest
-                    .build
-                    .inner()
-                    .keys()
-                    .next()
-                    .expect("expect there to be at least one build")
-                    .clone(),
-                _ => {
-                    bail!("Must specify an artifact to publish");
-                },
-            }
-        } else {
-            target_arg
-                .as_ref()
-                .expect("already checked that publish target existed")
-                .target
-                .clone()
-        };
-        Ok(target)
+        expression_dir: &Path,
+        target_arg: Option<PublishTarget>,
+    ) -> Result<PackageTarget> {
+        match packages_to_build(
+            manifest,
+            expression_dir,
+            &Vec::from_iter(target_arg.map(|arg| arg.target)),
+        )?
+        .as_slice()
+        {
+            [target] => Ok(target.clone()),
+            [] => bail!("Cannot publish without a build specified"),
+            _ => bail!("Must specify an artifact to publish"),
+        }
     }
 
     #[instrument(name = "publish", skip_all, fields(package))]
@@ -122,7 +116,7 @@ impl Publish {
         config: Config,
         mut flox: Flox,
         env: ConcreteEnvironment,
-        package: String,
+        package: PackageTarget,
         metadata_only: bool,
         cache_args: CacheArgs,
     ) -> Result<()> {
@@ -144,12 +138,11 @@ impl Publish {
 
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
-            &nix_expression_dir(&path_env),
             &mock_base_catalog_url(), // TODO: Replace with actual locked URL info from catalog server
-            &package,
+            package,
         )?;
 
-        let build_metadata = check_build_metadata(&flox, &env_metadata, &package)?;
+        let build_metadata = check_build_metadata(&flox, &env_metadata, &package_metadata.package)?;
 
         // CLI args take precedence over config
         let key_file = cache_args.signing_private_key.or(config
@@ -162,7 +155,10 @@ impl Publish {
         let publish_provider =
             PublishProvider::new(env_metadata, package_metadata, build_metadata, auth);
 
-        debug!("publishing package: {}", &package);
+        debug!(
+            "publishing package: {}",
+            &publish_provider.package_metadata.package
+        );
         match publish_provider
             .publish(&flox.catalog_client, &catalog_name, key_file, metadata_only)
             .await
@@ -171,7 +167,7 @@ impl Publish {
                 Package published successfully.
 
                 Use 'flox install {catalog_name}/{package}' to install it.
-                "}),
+                ", package = &publish_provider.package_metadata.package,}),
             Err(e) => bail!("Failed to publish package: {}", display_chain(&e)),
         }
 
@@ -199,8 +195,17 @@ mod tests {
             '''
         "#};
         let manifest = Manifest::from_str(&manifest_str).unwrap();
-        let target = Publish::get_publish_target(&manifest, &None).unwrap();
-        assert_eq!(target, "hello");
+
+        let target =
+            Publish::get_publish_target(&manifest, Path::new("/no/expression/builds"), None)
+                .unwrap();
+        assert_eq!(
+            target,
+            PackageTarget::new_unchecked(
+                "hello",
+                flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild
+            )
+        );
     }
 
     #[test]
@@ -212,7 +217,7 @@ mod tests {
             hello.pkg-path = "hello"
         "#};
         let manifest = Manifest::from_str(&manifest_str).unwrap();
-        let res = Publish::get_publish_target(&manifest, &None);
+        let res = Publish::get_publish_target(&manifest, Path::new("/no/expression/builds"), None);
         assert!(res.is_err());
     }
 
@@ -235,7 +240,7 @@ mod tests {
             '''
         "#};
         let manifest = Manifest::from_str(&manifest_str).unwrap();
-        let res = Publish::get_publish_target(&manifest, &None);
+        let res = Publish::get_publish_target(&manifest, Path::new("/no/expression/builds"), None);
         assert!(res.is_err());
     }
 
@@ -260,12 +265,19 @@ mod tests {
         let manifest = Manifest::from_str(&manifest_str).unwrap();
         let target = Publish::get_publish_target(
             &manifest,
-            &Some(PublishTarget {
+            Path::new("/no/expression/builds"),
+            Some(PublishTarget {
                 target: "hello2".to_string(),
             }),
         )
         .unwrap();
-        assert_eq!(target, "hello2".to_string());
+        assert_eq!(
+            target,
+            PackageTarget::new_unchecked(
+                "hello2",
+                flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild
+            )
+        );
     }
 
     #[test]
@@ -284,11 +296,18 @@ mod tests {
         let manifest = Manifest::from_str(&manifest_str).unwrap();
         let target = Publish::get_publish_target(
             &manifest,
-            &Some(PublishTarget {
+            Path::new("/no/expression/builds"),
+            Some(PublishTarget {
                 target: "hello".to_string(),
             }),
         )
         .unwrap();
-        assert_eq!(target, "hello".to_string());
+        assert_eq!(
+            target,
+            PackageTarget::new_unchecked(
+                "hello",
+                flox_rust_sdk::providers::build::PackageTargetKind::ManifestBuild
+            )
+        );
     }
 }

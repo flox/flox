@@ -6,7 +6,8 @@ use std::sync::LazyLock;
 use std::sync::mpsc::Receiver;
 use std::{env, thread};
 
-use indoc::{formatdoc, indoc};
+use indoc::formatdoc;
+use itertools::Itertools;
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 use thiserror::Error;
@@ -17,8 +18,7 @@ use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
 use super::nix::nix_base_command;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
-use crate::models::lockfile::Lockfile;
-use crate::models::manifest::typed::Inner;
+use crate::models::manifest::typed::{Inner, Manifest};
 use crate::utils::CommandExt;
 
 pub const FLOX_RUNTIME_DIR_VAR: &str = "FLOX_RUNTIME_DIR";
@@ -58,11 +58,11 @@ pub trait ManifestBuilder {
         &self,
         expression_build_nixpkgs: &Url,
         flox_interpreter: &Path,
-        package: &[&str],
+        package: &[PackageTargetName],
         build_cache: Option<bool>,
     ) -> Result<BuildOutput, ManifestBuilderError>;
 
-    fn clean(&self, package: &[&str]) -> Result<(), ManifestBuilderError>;
+    fn clean(&self, package: &[PackageTargetName]) -> Result<(), ManifestBuilderError>;
 }
 
 #[derive(Debug, Error)]
@@ -203,7 +203,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         &self,
         expression_build_nixpkgs: &Url,
         flox_interpreter: &Path,
-        packages: &[&str],
+        packages: &[PackageTargetName],
         build_cache: Option<bool>,
     ) -> Result<BuildOutput, ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
@@ -232,7 +232,10 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         // Add the list of packages to be built by passing a space-delimited list
         // of pnames in the PACKAGES variable. If no packages are specified then
         // the makefile will build all packages by default.
-        command.arg(format!("PACKAGES={}", packages.join(" ")));
+        command.arg(format!(
+            "PACKAGES={}",
+            packages.iter().map(|name| name.as_ref()).join(" ")
+        ));
 
         let build_result_path = NamedTempFile::new_in(self.temp_dir)
             .map_err(ManifestBuilderError::CreateBuildResultFile)?
@@ -329,7 +332,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     /// * the `result-<package>` and `result-<package>-buildCache` store links in `base_dir`
     /// * the store paths linked to by the `result-<package>` links
     /// * the temporary build directories for the specified packages
-    fn clean(&self, packages: &[&str]) -> Result<(), ManifestBuilderError> {
+    fn clean(&self, packages: &[PackageTargetName]) -> Result<(), ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
         // Required to identify NEF builds.
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*COMMON_NIXPKGS_URL));
@@ -433,9 +436,7 @@ pub fn build_symlink_path(
 /// ```
 ///
 /// will expose the packages `foo`, `bar`, `fizz.buzz`.
-pub fn get_nix_expression_targets(
-    expression_dir: &Path,
-) -> Result<Vec<String>, ManifestBuilderError> {
+fn get_nix_expression_targets(expression_dir: &Path) -> Result<Vec<String>, ManifestBuilderError> {
     let output = nix_base_command()
         .arg("eval")
         .args(["--argstr", "nixpkgs-url", COMMON_NIXPKGS_URL.as_str()])
@@ -474,24 +475,91 @@ impl PackageTargetError {
     }
 }
 
+/// The kind of a package target,
+/// i.e. whether a pacakge is sourced from the manifest or a nix expression.
+///
+/// While not relevant to the build itself,
+/// publishing pacakges may differ depending on the kind.
+/// For example [super::publish::check_package_metadata]
+/// needs to infer the base catalog url
+/// from the installed packages in the  top-level group
+/// for manifest builds, while expression builds
+/// are assigned their base nixpkgs url in coordination with the catalog API
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PackageTargetKind {
     ExpressionBuild,
     ManifestBuild,
 }
 
-pub struct PackageTargets<'origins> {
-    targets: HashMap<String, PackageTargetKind>,
-    lockfile: &'origins Lockfile,
-    expression_dir: &'origins Path,
+/// A wrapper type for the name of package targets.
+///
+/// This was added to maintain type safety from the [PackageTarget]
+/// in the API of the Builder trait,
+/// while avoiding the builder to require [PackageTargetKinds],
+/// which would otherwise be unused.
+///
+/// Outside of tests [PacakgeTargetName]s
+/// should only be produced via [PackageTarget::name],
+/// to maintain the guarantee that the package suppiosedly exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display, derive_more::AsRef)]
+pub struct PackageTargetName<'t>(&'t str);
+
+impl PackageTargetName<'_> {
+    #[cfg(any(test, feature = "tests"))]
+    pub fn new_unchecked(name: &impl AsRef<str>) -> PackageTargetName<'_> {
+        let name = name.as_ref();
+        PackageTargetName(name)
+    }
 }
 
-impl<'origins> PackageTargets<'origins> {
+/// A known package target, i.e. a target sourced from the manifest
+/// or nix expression, carrying information about its kind / origin.
+///
+/// Outside of tests this should only be created via [PackageTargets::select],
+/// or [PackageTargets::all] which validate (string) names and associate them with their origin.
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
+#[display(fmt = "{name}")]
+pub struct PackageTarget {
+    name: String,
+    kind: PackageTargetKind,
+}
+
+impl PackageTarget {
+    pub fn name(&self) -> PackageTargetName {
+        PackageTargetName(&self.name)
+    }
+
+    pub fn kind(&self) -> PackageTargetKind {
+        self.kind
+    }
+
+    #[cfg(any(test, feature = "tests"))]
+    pub fn new_unchecked(name: impl Into<String>, kind: PackageTargetKind) -> Self {
+        let name = name.into();
+        PackageTarget { name, kind }
+    }
+}
+
+pub struct PackageTargets {
+    targets: HashMap<String, PackageTargetKind>,
+}
+
+impl PackageTargets {
+    /// Collects all build targets from the manifest
+    /// and nix expression builds from the expression dir.
+    /// For nix expressions [get_nix_expression_targets] is used,
+    /// which consults the nef library via `nix eval`.
+    ///
+    /// This function returns an error if a target name is provided
+    /// by both the manifest and an expression.
+    ///
+    /// Target names, e.g. arguments from the CLI
+    /// can be validated against the known targets via [Self::select].
     pub fn new(
-        lockfile: &'origins Lockfile,
-        expression_dir: &'origins Path,
-    ) -> Result<PackageTargets<'origins>, PackageTargetError> {
-        let environment_packages = &lockfile.manifest.build;
+        manifest: &Manifest,
+        expression_dir: &Path,
+    ) -> Result<PackageTargets, PackageTargetError> {
+        let environment_packages = &manifest.build;
 
         let nix_expression_packages = get_nix_expression_targets(expression_dir)
             .map_err(|e| PackageTargetError::new(e.to_string()))?;
@@ -518,65 +586,48 @@ impl<'origins> PackageTargets<'origins> {
             targets.insert(expression_build_target, PackageTargetKind::ExpressionBuild);
         }
 
-        if targets.is_empty() {
-            return Err(PackageTargetError::new(formatdoc! {"
-                No packages found to build.
-
-                Add a build by modifying the '[build]' section of the manifest with 'flox edit'
-                or add expression files in '{expression_dir}'.
-                ", expression_dir = expression_dir.display()
-            }));
-        }
-
-        Ok(PackageTargets {
-            targets,
-            lockfile,
-            expression_dir,
-        })
+        Ok(PackageTargets { targets })
     }
 
     pub fn is_empty(&self) -> bool {
         self.targets.is_empty()
     }
 
-    pub fn has_target(&self, target_name: &str) -> bool {
-        self.targets.contains_key(target_name)
+    /// Validates a list of target names (e.g. CLI arguments),
+    /// against the knwon targets, returning a [Vec<PackageTarget>] of valid targets.
+    /// If invalid target names are detected this function will return an error instead.
+    pub fn select(
+        &self,
+        targets: &[impl AsRef<str>],
+    ) -> Result<Vec<PackageTarget>, PackageTargetError> {
+        targets
+            .iter()
+            .map(|target_name| {
+                let target_name = target_name.as_ref();
+                let (name, kind) = self.targets.get_key_value(target_name).ok_or_else(|| {
+                    PackageTargetError::new(format!("Target '{target_name}' not found."))
+                })?;
+                Ok(PackageTarget {
+                    name: name.to_string(),
+                    kind: *kind,
+                })
+            })
+            .collect()
     }
 
-    pub fn target_kind(&self, target_name: &str) -> Option<&PackageTargetKind> {
-        self.targets.get(target_name)
-    }
-
-    pub fn target_names(&self) -> Vec<&str> {
-        self.targets.keys().map(|k| k.as_str()).collect()
-    }
-
-    pub fn select(&mut self, targets: &[impl AsRef<str>]) -> Result<(), PackageTargetError> {
-        let mut selected_targets = HashMap::new();
-        for target in targets {
-            if let Some((k, v)) = self.targets.remove_entry(target.as_ref()) {
-                selected_targets.insert(k, v);
-            } else {
-                return Err(PackageTargetError::new(indoc! {"
-                    Target '{target}' not found.
-                "}));
-            }
-        }
-
-        self.targets = selected_targets;
-
-        Ok(())
-    }
-
-    pub fn lockfile(&self) -> &Lockfile {
-        self.lockfile
-    }
-
-    pub fn expression_dir(&self) -> &Path {
-        self.expression_dir
+    /// Returns all known targets as a [Vec<PackageTarget>]
+    pub fn all(&self) -> Vec<PackageTarget> {
+        self.targets
+            .iter()
+            .map(|(name, kind)| PackageTarget {
+                name: name.to_string(),
+                kind: *kind,
+            })
+            .collect()
     }
 }
 
+#[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
     use std::fs::{self};
 
@@ -611,7 +662,7 @@ pub mod test_helpers {
         flox: &Flox,
         env: &mut PathEnvironment,
         expression_dir: Option<&Path>,
-        package_name: &str,
+        package: &str,
         build_cache: Option<bool>,
         expect_success: bool,
     ) -> CollectedOutput {
@@ -624,7 +675,7 @@ pub mod test_helpers {
         .build(
             &COMMON_NIXPKGS_URL,
             &env.rendered_env_links(flox).unwrap().development,
-            &[package_name],
+            &[PackageTargetName::new_unchecked(&package)],
             build_cache,
         )
         .unwrap();
@@ -688,7 +739,12 @@ pub mod test_helpers {
             None,
             &env.build(flox).unwrap(),
         )
-        .clean(package_names)
+        .clean(
+            &package_names
+                .iter()
+                .map(|name| PackageTargetName::new_unchecked(name))
+                .collect::<Vec<_>>(),
+        )
         .err();
 
         assert!(err.is_none(), "expected clean to succeed: {err:?}")
