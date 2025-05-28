@@ -70,6 +70,7 @@ _sed := $(call __package_bin,$(__gnused),sed)
 _sha256sum := $(call __package_bin,$(__coreutils),sha256sum)
 _tar := $(call __package_bin,$(__gnutar),tar)
 _t3 := $(call __package_bin,$(__t3),t3) --relative $(if $(NO_COLOR),,--forcecolor)
+_tr := $(call __package_bin,$(__coreutils),tr)
 _uname := $(call __package_bin,$(__coreutils),uname)
 
 # Identify path to build-manifest.nix, in same directory as this Makefile.
@@ -611,10 +612,13 @@ define MANIFEST_BUILD_template =
 	$$(eval _build_closure_extra_packages = $$(strip \
 	  $$(filter-out $$(_build_store_path) $$(_build_wrapper_requisites) $$(_nef_requisites), \
 	    $$(_build_closure_requisites))))
+	$$(eval _count = $$(words $$(_build_closure_extra_packages)))
+	$$(eval _space = $$(shell echo $$(_count) | $(_tr) '[0-9]' '-'))
 	$$(if $$(_build_closure_extra_packages),$(_VV_) \
-	  echo -e "❌ packages found in $$(_build_store_path)\n" \
-	           "       not found in $(_build_wrapper_env)\n" 1>&2; \
-	  $$(foreach _pkg,$$(_build_closure_extra_packages), \
+	  echo -e "❌ $$(_count) packages found in $$(_build_store_path)\n" \
+	           "  $$(_space)      not found in $(_build_wrapper_env)\n" 1>&2; \
+	  $$(intcmp 3,$$(_count),echo -e "Displaying first 3 only:\n" 1>&2; ) \
+	  $$(foreach _pkg,$$(wordlist 1,3,$$(_build_closure_extra_packages)), \
 	    ( $(_nix) why-depends --precise $$(_build_store_path) $$(_pkg) && echo ) 1>&2; ) \
 	  exit 1)
 	@# TODO: Strip the buildCache and log outputs of all requisites.
