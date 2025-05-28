@@ -130,8 +130,15 @@ version:
 
 # Generate test data
 # TODO: should unit test regeneration respect -f?
-@gen-data +mk_data_args="": build-data-gen build-cli && (unit-tests "--filterset 'not test(providers::build::tests)'" "true")
+@gen-data +mk_data_args="": (mk-data mk_data_args) gen-unit-data
+
+@mk-data +mk_data_args="": build-data-gen build-cli md
+
+# The same as mk-data, but faster to type, and doesn't rebuild stuff
+@md +mk_data_args="":
     mkdata="$PWD/cli/target/debug/mk_data"; pushd test_data; "$mkdata" {{mk_data_args}} config.toml; popd
+
+@gen-unit-data: (unit-tests "--filterset 'not test(providers::build::tests)'" "true")
 
 
 # ---------------------------------------------------------------------------- #

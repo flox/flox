@@ -154,6 +154,52 @@ cmd = '''
 '''
 ignore_cmd_errors = true # build will fail on linux, that's fine
 
+[resolve.darwin_ps_incompatible_transform_error_to_unknown]
+pre_cmd = '''
+    flox init
+'''
+cmd = '''
+    tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin", "aarch64-linux" ]' .flox/env/manifest.toml
+    flox install darwin.ps
+'''
+ignore_cmd_errors = true # build will fail on linux, that's fine
+post_cmd = '''
+    yq -r '.then.body' "$RESPONSE_FILE" | \
+        jq -c '
+            .items[0].messages[].type |= "unknown" |
+            .items[0].messages[].message |= "unknown message"
+        ' \
+        > patched_body.json
+    yq -y \
+        --arg body "$(cat patched_body.json)" \
+        'del(.then.header[] | select(.name == "content-length")) | .then.body = $body' \
+        "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
+
+[resolve.darwin_ps_incompatible_transform_error_to_general]
+pre_cmd = '''
+    flox init
+'''
+cmd = '''
+    tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin", "aarch64-linux" ]' .flox/env/manifest.toml
+    flox install darwin.ps
+'''
+ignore_cmd_errors = true # build will fail on linux, that's fine
+post_cmd = '''
+    yq -r '.then.body' "$RESPONSE_FILE" | \
+        jq -c '
+            .items[0].messages[].type |= "general" |
+            .items[0].messages[].message |= "general message"
+        ' \
+        > patched_body.json
+    yq -y \
+        --arg body "$(cat patched_body.json)" \
+        'del(.then.header[] | select(.name == "content-length")) | .then.body = $body' \
+        "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
+
 [resolve.fish_3_2_2]
 pre_cmd = "flox init"
 cmd = "flox install fish@3.2.2"
@@ -255,6 +301,26 @@ post_cmd = '''
         "$RESPONSE_FILE" > tmp.yaml
     mv tmp.yaml "$RESPONSE_FILE"
 '''
+
+[resolve.hello_buggy_unfree_server_response]
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output '.options.allow.unfree = false' .flox/env/manifest.toml
+'''
+cmd = "flox install hello"
+post_cmd = '''
+    yq -r '.then.body' "$RESPONSE_FILE" | \
+        jq -c '
+            .items[].page.packages[].unfree |= true
+        ' \
+        > patched_body.json
+    yq -y \
+        --arg body "$(cat patched_body.json)" \
+        'del(.then.header[] | select(.name == "content-length")) | .then.body = $body' \
+        "$RESPONSE_FILE" > tmp.yaml
+    mv tmp.yaml "$RESPONSE_FILE"
+'''
+
 
 # Install a specific version of Node that doesn't exist on x86_64-darwin
 # so we get "constraints too tight" as a resolution message

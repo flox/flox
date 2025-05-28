@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 12 May 2025 14:54:53 GMT
+    value: Wed, 28 May 2025 00:50:27 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: KdbFiiU3IAMEaVQ=
+    value: LQOY-g9boAMEMvg=
   body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The attr_path badpkg is not found in the catalog.","context":{"attr_path":"badpkg","install_id":"badpkg"}},{"level":"error","type":"attr_path_not_found.not_found_for_all_systems","message":"The attr_path bpftrace is not found for all the requested systems, suggest limiting systems to (aarch64-linux,x86_64-linux).","context":{"attr_path":"bpftrace","install_id":"bpftrace","valid_systems":"aarch64-linux,x86_64-linux"}}]}]}'
 ---
 when:
@@ -24,7 +24,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 12 May 2025 14:54:53 GMT
+    value: Wed, 28 May 2025 00:50:27 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -32,5 +32,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: KdbFphs6IAMESUA=
+    value: LQOZDg6yIAMEMEQ=
   body: '{"items":[],"total_count":0}'

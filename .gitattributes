@@ -11,3 +11,4 @@ img/*   binary
 # Mark test mock data as generated
 test_data/generated/**           linguist-generated=true
 test_data/manually_generated/**  linguist-generated=true
+test_data/unit_test_generated/** linguist-generated=true

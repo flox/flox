@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 12 May 2025 14:54:37 GMT
+    value: Wed, 28 May 2025 00:50:18 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,5 +14,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: KdbDHgHhIAMESbg=
+    value: LQOXri_roAMEYWA=
   body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.systems_not_on_same_page","message":"The attr_path darwin.ps is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,x86_64-darwin), (x86_64-darwin).","context":{"attr_path":"darwin.ps","install_id":"ps","system_groupings":"(aarch64-darwin,x86_64-darwin), (x86_64-darwin)"}}]}]}'

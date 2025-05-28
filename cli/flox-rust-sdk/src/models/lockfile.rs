@@ -1878,16 +1878,10 @@ pub mod test_helpers {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use std::collections::HashMap;
     use std::sync::LazyLock;
     use std::vec;
 
-    use catalog::{
-        MsgAttrPathNotFoundSystemsNotOnSamePage,
-        MsgGeneral,
-        MsgUnknown,
-        ResolutionMessage,
-    };
+    use catalog::MsgUnknown;
     use catalog_api_v1::types::Output;
     use indoc::indoc;
     use pollster::FutureExt;
@@ -1914,11 +1908,11 @@ pub(crate) mod tests {
     use crate::models::environment::remote_environment::test_helpers::mock_remote_environment;
     use crate::models::manifest::raw::RawManifest;
     use crate::models::manifest::typed::{Include, Manifest, Vars};
-    use crate::providers::catalog::MockClient;
     use crate::providers::catalog::test_helpers::{
         auto_recording_catalog_client,
-        resolved_pkg_group_with_dummy_package,
+        catalog_replay_client,
     };
+    use crate::providers::catalog::{GENERATED_DATA, MockClient};
     use crate::providers::flake_installable_locker::{
         FlakeInstallableError,
         InstallableLockerMock,
@@ -1952,49 +1946,6 @@ pub(crate) mod tests {
 
     static TEST_TYPED_MANIFEST: LazyLock<Manifest> =
         LazyLock::new(|| TEST_RAW_MANIFEST.to_typed().unwrap());
-
-    static TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG: LazyLock<Vec<ResolvedPackageGroup>> =
-        LazyLock::new(|| {
-            vec![ResolvedPackageGroup {
-                page: None,
-                name: "group".to_string(),
-                msgs: vec![ResolutionMessage::Unknown(MsgUnknown {
-                    level: MessageLevel::Error,
-                    msg_type: "new_type".to_string(),
-                    msg: "User consumable message".to_string(),
-                    context: HashMap::new(),
-                })],
-            }]
-        });
-
-    static TEST_RESOLUTION_RESPONSE_GENERAL: LazyLock<Vec<ResolvedPackageGroup>> =
-        LazyLock::new(|| {
-            vec![ResolvedPackageGroup {
-                page: None,
-                name: "group".to_string(),
-                msgs: vec![ResolutionMessage::General(MsgGeneral {
-                    level: MessageLevel::Error,
-                    msg: "User consumable message".to_string(),
-                })],
-            }]
-        });
-
-    static TEST_RESOLUTION_RESPONSE_SYSTEMS_NOT_ON_SAME_PAGE: LazyLock<Vec<ResolvedPackageGroup>> =
-        LazyLock::new(|| {
-            vec![ResolvedPackageGroup {
-                page: None,
-                name: "group".to_string(),
-                msgs: vec![ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(
-                    MsgAttrPathNotFoundSystemsNotOnSamePage {
-                        level: MessageLevel::Error,
-                        msg: "User consumable message".to_string(),
-                        attr_path: "attr_path".to_string(),
-                        install_id: "install_id".to_string(),
-                        system_groupings: "system_groupings".to_string(),
-                    },
-                )],
-            }]
-        });
 
     static TEST_RESOLUTION_PARAMS: LazyLock<Vec<PackageGroup>> = LazyLock::new(|| {
         vec![PackageGroup {
@@ -2809,25 +2760,32 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn test_locking_unknown_message() {
-        let manifest = &*TEST_TYPED_MANIFEST;
+    async fn locking_unknown_message() {
+        let manifest = Manifest::from_str(indoc! {r#"
+                version = 1
 
-        // We're testing that an unknown message is passed through,
-        // so it doesn't make sense to generate a mock with a known message.
-        let mut client = catalog::MockClient::new();
-        let response = TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG.clone();
-        let response_msg: ResolutionMessage =
-            response.first().unwrap().msgs.first().unwrap().clone();
-        client.push_resolve_response(response);
+                [install]
+                ps.pkg-path = "darwin.ps"
+
+                [options]
+                systems = [ "x86_64-darwin", "aarch64-linux" ]
+            "#})
+        .unwrap();
+
+        let client = catalog_replay_client(
+            GENERATED_DATA.join("resolve/darwin_ps_incompatible_transform_error_to_unknown.yaml"),
+        )
+        .await;
 
         let locked_manifest =
-            Lockfile::resolve_manifest(manifest, None, &client, &InstallableLockerMock::new())
+            Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
                 .await;
         if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
+            assert_eq!(res_failures.to_string(), format!("\n{}", "unknown message"));
             if let [ResolutionFailure::UnknownServiceMessage(MsgUnknown { msg, .. })] =
                 res_failures.0.as_slice()
             {
-                assert_eq!(msg, response_msg.msg());
+                assert_eq!(msg, "unknown message");
             } else {
                 panic!(
                     "expected a single UnknownServiceMessage, got {:?}",
@@ -2840,37 +2798,68 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn locking_message_is_passed_through() {
-        let manifest = &*TEST_TYPED_MANIFEST;
+    async fn locking_general_message() {
+        let manifest = Manifest::from_str(indoc! {r#"
+                version = 1
 
-        let mut client = catalog::MockClient::new();
+                [install]
+                ps.pkg-path = "darwin.ps"
 
-        for response in [
-            TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG.clone(),
-            TEST_RESOLUTION_RESPONSE_GENERAL.clone(),
-            TEST_RESOLUTION_RESPONSE_SYSTEMS_NOT_ON_SAME_PAGE.clone(),
-        ] {
-            // It doesn't make sense to generate mocks since:
-            // - We're testing for future messages with unknown message
-            // - General isn't currently used serverside
-            // We could probably generate one for SYSTEMS_NOT_ON_SAME_PAGE if we
-            // wanted.
-            let response_msg: ResolutionMessage =
-                response.first().unwrap().msgs.first().unwrap().clone();
-            client.push_resolve_response(response);
+                [options]
+                systems = [ "x86_64-darwin", "aarch64-linux" ]
+            "#})
+        .unwrap();
 
-            let locked_manifest =
-                Lockfile::resolve_manifest(manifest, None, &client, &InstallableLockerMock::new())
-                    .await;
-            if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
-                // A newline is added for formatting when it's a single message
-                assert_eq!(
-                    res_failures.to_string(),
-                    format!("\n{}", response_msg.msg())
-                );
+        let client = catalog_replay_client(
+            GENERATED_DATA.join("resolve/darwin_ps_incompatible_transform_error_to_general.yaml"),
+        )
+        .await;
+
+        let locked_manifest =
+            Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+                .await;
+        if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
+            assert_eq!(res_failures.to_string(), format!("\n{}", "general message"));
+            if let [ResolutionFailure::FallbackMessage { msg, .. }] = res_failures.0.as_slice() {
+                assert_eq!(msg, "general message");
             } else {
-                panic!("expected resolution failure, got {:?}", locked_manifest);
+                panic!(
+                    "expected a single FallbackMessage, got {:?}",
+                    res_failures.0.as_slice()
+                );
             }
+        } else {
+            panic!("expected resolution failure, got {:?}", locked_manifest);
+        }
+    }
+
+    /// Test the server generated message is passed through for systems not on same page
+    #[tokio::test]
+    async fn locking_message_is_passed_through_for_systems_not_on_same_page() {
+        let manifest = Manifest::from_str(indoc! {r#"
+                version = 1
+
+                [install]
+                ps.pkg-path = "darwin.ps"
+
+                [options]
+                systems = [ "x86_64-darwin", "aarch64-linux" ]
+            "#})
+        .unwrap();
+        let client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/darwin_ps_incompatible.yaml")).await;
+
+        let locked_manifest =
+            Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
+                .await;
+        if let Err(ResolveError::ResolutionFailed(res_failures)) = locked_manifest {
+            // A newline is added for formatting when it's a single message
+            assert_eq!(
+                res_failures.to_string(),
+                "\nThe attr_path darwin.ps is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,x86_64-darwin), (x86_64-darwin)."
+            );
+        } else {
+            panic!("expected resolution failure, got {:?}", locked_manifest);
         }
     }
 
@@ -3542,37 +3531,24 @@ pub(crate) mod tests {
     /// returns a package that is not allowed.
     #[tokio::test]
     async fn lock_manifest_catches_not_allowed_package_from_server() {
-        // Create a manifest with a package foo and `options.allow.unfree = false`
-        let (foo_iid, foo_descriptor_one_system, _) =
-            fake_catalog_package_lock("foo", Some("toplevel"));
-        let mut manifest = Manifest::default();
-        manifest
-            .install
-            .inner_mut()
-            .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
-        manifest.options.allow.unfree = Some(false);
+        let manifest = Manifest::from_str(indoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+
+            [options]
+            allow.unfree = false
+        "#})
+        .unwrap();
 
         // Return a response that says foo is unfree.
         // If this happens, it's a bug in the server, which is why we don't use
         // a mock for this test.
-        let mut client = catalog::MockClient::new();
-        let mut resolved_group = resolved_pkg_group_with_dummy_package(
-            "toplevel",
-            // TODO: this is hardcoded in fake_package
-            &System::from("aarch64-darwin"),
-            &foo_iid,
-            "foo",
-            "0",
-        );
-        resolved_group
-            .page
-            .as_mut()
-            .unwrap()
-            .packages
-            .as_mut()
-            .unwrap()[0]
-            .unfree = Some(true);
-        client.push_resolve_response(vec![resolved_group]);
+        let client = catalog_replay_client(
+            GENERATED_DATA.join("resolve/hello_buggy_unfree_server_response.yaml"),
+        )
+        .await;
         assert!(matches!(
             Lockfile::resolve_manifest(&manifest, None, &client, &InstallableLockerMock::new())
                 .await
