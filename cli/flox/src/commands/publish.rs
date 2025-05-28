@@ -6,7 +6,8 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::manifest::typed::{Inner, Manifest};
 use flox_rust_sdk::providers::auth::Auth;
-use flox_rust_sdk::providers::build::{mock_locked_url_info, nix_expression_dir};
+use flox_rust_sdk::providers::build::nix_expression_dir;
+use flox_rust_sdk::providers::catalog::mock_base_catalog_url;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -144,7 +145,7 @@ impl Publish {
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
             &nix_expression_dir(&path_env),
-            mock_locked_url_info(), // TODO: Replace with actual locked URL info from catalog server
+            &mock_base_catalog_url(), // TODO: Replace with actual locked URL info from catalog server
             &package,
         )?;
 

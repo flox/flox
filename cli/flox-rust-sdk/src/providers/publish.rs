@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 
 use catalog_api_v1::types::{NarInfo, NarInfos, Output, Outputs, PublishResponse, SystemEnum};
+use chrono::{DateTime, Utc};
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
 use tracing::{debug, instrument};
@@ -14,21 +15,22 @@ use super::build::{
     BuildResult,
     BuildResults,
     FloxBuildMk,
-    LockedUrlInfo,
     ManifestBuilder,
     ManifestBuilderError,
     PackageTargetError,
     PackageTargetKind,
     PackageTargets,
-    mock_locked_url_info,
     nix_expression_dir,
 };
 use super::catalog::{
+    BaseCatalogUrl,
+    BaseCatalogUrlError,
     CatalogClientError,
     Client,
     ClientTrait,
     UserBuildPublish,
     UserDerivationInfo,
+    mock_base_catalog_url,
 };
 use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
@@ -60,6 +62,13 @@ pub enum PublishError {
 
     #[error(transparent)]
     CatalogError(CatalogClientError),
+
+    #[error("invalid nixpkgs base url")]
+    InvalidNixpkgsBaseUrl(
+        #[source]
+        #[from]
+        BaseCatalogUrlError,
+    ),
 
     #[error("Could not identify user from authentication info")]
     Unauthenticated,
@@ -98,6 +107,15 @@ pub trait Publisher {
         key_file: Option<PathBuf>,
         metadata_only: bool,
     ) -> Result<(), PublishError>;
+}
+
+/// Simple struct to hold the information of a locked URL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LockedUrlInfo {
+    pub url: String,
+    pub rev: String,
+    pub rev_count: u64,
+    pub rev_date: DateTime<Utc>,
 }
 
 /// Ensures that the required metadata for publishing is consistent from the environment
@@ -141,7 +159,7 @@ pub struct CheckedBuildMetadata {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PackageMetadata {
     // There may or may not be a locked base catalog reference in the environment
-    pub base_catalog_ref: LockedUrlInfo,
+    pub base_catalog_ref: BaseCatalogUrl,
 
     // These are collected from the environment manifest
     pub package: String,
@@ -516,7 +534,7 @@ where
                 unfree: None,
                 version: self.build_metadata.version.clone(),
             },
-            locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.url.clone()),
+            locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
             url: self.env_metadata.build_repo_ref.url.clone(),
             rev: self.env_metadata.build_repo_ref.rev.clone(),
             rev_count: self.env_metadata.build_repo_ref.rev_count as i64,
@@ -684,7 +702,7 @@ pub fn check_build_metadata(
     // Build the package and collect the outputs
     let output_stream = builder.build(
         // todo: use a non-hardcoded nixpkgs url
-        &mock_locked_url_info().as_flake_ref()?,
+        &mock_base_catalog_url().as_flake_ref()?,
         &built_environments.develop,
         &[pkg],
         Some(false),
@@ -861,39 +879,32 @@ fn url_for_remote_containing_current_rev(
     }
 }
 
-fn gather_base_repo_meta(lockfile: &Lockfile) -> Result<LockedUrlInfo, PublishError> {
+fn gather_base_repo_meta(lockfile: &Lockfile) -> Result<BaseCatalogUrl, PublishError> {
     let install_ids_in_toplevel_group = lockfile
         .manifest
         .pkg_descriptors_in_toplevel_group()
         .into_iter()
-        .map(|(pkg, _desc)| pkg);
+        .map(|(pkg, _desc)| pkg)
+        .collect::<HashSet<_>>();
 
     // We should not need this, and allow for no base catalog page dependency.
     // But for now, requiring it simplifies resolution and model updates
     // significantly.
-    if install_ids_in_toplevel_group.clone().count() == 0 {
+    if install_ids_in_toplevel_group.is_empty() {
         return Err(PublishError::UnsupportedEnvironmentState(
             "No packages in toplevel group".to_string(),
         ));
     }
 
-    let top_level_locked_descs = lockfile.packages.iter().filter(|pkg| {
-        install_ids_in_toplevel_group
-            .clone()
-            .any(|id| id == pkg.install_id())
-    });
-    if let Some(pkg) = top_level_locked_descs.clone().next() {
-        Ok(LockedUrlInfo {
-            url: pkg.as_catalog_package_ref().unwrap().locked_url.clone(),
-            rev: pkg.as_catalog_package_ref().unwrap().rev.clone(),
-            rev_count: pkg
-                .as_catalog_package_ref()
-                .unwrap()
-                .rev_count
-                .try_into()
-                .unwrap(),
-            rev_date: pkg.as_catalog_package_ref().unwrap().rev_date,
-        })
+    let top_level_locked_descs = lockfile
+        .packages
+        .iter()
+        .find(|pkg| install_ids_in_toplevel_group.contains(pkg.install_id()));
+
+    if let Some(pkg) = top_level_locked_descs {
+        Ok(BaseCatalogUrl::from(
+            &*pkg.as_catalog_package_ref().unwrap().locked_url,
+        ))
     } else {
         Err(PublishError::UnsupportedEnvironmentState(
             "Unable to find locked descriptor for toplevel package".to_string(),
@@ -940,7 +951,7 @@ pub fn check_environment_metadata(
 pub fn check_package_metadata(
     lockfile: &Lockfile,
     expression_dir: &Path,
-    expression_build_ref: LockedUrlInfo,
+    expression_build_ref: &BaseCatalogUrl,
     pkg: &str,
 ) -> Result<PackageMetadata, PublishError> {
     // ensure the package exists and can be built
@@ -954,7 +965,7 @@ pub fn check_package_metadata(
     let base_catalog_ref = if package_kind == PackageTargetKind::ManifestBuild {
         gather_base_repo_meta(lockfile)?
     } else {
-        expression_build_ref
+        expression_build_ref.clone()
     };
 
     let description = lockfile
@@ -983,7 +994,6 @@ pub mod tests {
 
     use std::io::Write;
 
-    use build::mock_locked_url_info;
     use catalog_api_v1::types::CatalogStoreConfigNixCopy;
     use chrono::Utc;
     use pretty_assertions::assert_eq;
@@ -996,7 +1006,13 @@ pub mod tests {
     use crate::models::lockfile::Lockfile;
     use crate::providers::auth::{Auth, write_floxhub_netrc};
     use crate::providers::catalog::test_helpers::reset_mocks;
-    use crate::providers::catalog::{GENERATED_DATA, MockClient, PublishResponse, Response};
+    use crate::providers::catalog::{
+        GENERATED_DATA,
+        MockClient,
+        PublishResponse,
+        Response,
+        mock_base_catalog_url,
+    };
     use crate::providers::git::tests::{
         commit_file,
         create_remotes,
@@ -1164,7 +1180,7 @@ pub mod tests {
         let meta = check_package_metadata(
             &lockfile,
             &nix_expression_dir(&env),
-            mock_locked_url_info(),
+            &mock_base_catalog_url(),
             EXAMPLE_PACKAGE_NAME,
         )
         .unwrap();
@@ -1172,13 +1188,10 @@ pub mod tests {
 
         // Only the toplevel group in this example, so we can grab the first package
         let locked_base_pkg = lockfile.packages[0].as_catalog_package_ref().unwrap();
-        assert_eq!(meta.base_catalog_ref.url, locked_base_pkg.locked_url);
-        assert_eq!(meta.base_catalog_ref.rev, locked_base_pkg.rev);
         assert_eq!(
-            meta.base_catalog_ref.rev_count,
-            TryInto::<u64>::try_into(locked_base_pkg.rev_count).unwrap()
+            meta.base_catalog_ref.to_string(),
+            locked_base_pkg.locked_url
         );
-        assert_eq!(meta.base_catalog_ref.rev_date, locked_base_pkg.rev_date);
         assert_eq!(meta.package, EXAMPLE_PACKAGE_NAME);
         assert_eq!(meta.description, description_in_manifest.to_string());
     }
@@ -1220,7 +1233,7 @@ pub mod tests {
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
             &nix_expression_dir(&env),
-            mock_locked_url_info(),
+            &mock_base_catalog_url(),
             EXAMPLE_PACKAGE_NAME,
         )
         .unwrap();
@@ -1285,12 +1298,7 @@ pub mod tests {
         };
 
         let package_metadata = PackageMetadata {
-            base_catalog_ref: LockedUrlInfo {
-                url: "dummy".to_string(),
-                rev: "dummy".to_string(),
-                rev_count: 0,
-                rev_date: Utc::now(),
-            },
+            base_catalog_ref: mock_base_catalog_url(),
             package: "dummy".to_string(),
             package_kind: PackageTargetKind::ManifestBuild,
             description: "dummy".to_string(),
@@ -1429,7 +1437,7 @@ pub mod tests {
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
             &nix_expression_dir(&env),
-            mock_locked_url_info(),
+            &mock_base_catalog_url(),
             EXAMPLE_PACKAGE_NAME,
         )
         .unwrap();

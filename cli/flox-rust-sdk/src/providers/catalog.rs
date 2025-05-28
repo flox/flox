@@ -1,6 +1,6 @@
 use std::cmp::min;
 use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::fs;
 use std::future::ready;
 use std::num::NonZeroU32;
@@ -27,6 +27,7 @@ use reqwest::header::{self, HeaderMap};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, instrument};
+use url::Url;
 
 use crate::data::System;
 use crate::flox::FLOX_VERSION;
@@ -1430,6 +1431,61 @@ impl SearchTerm {
             None => SearchTerm::Clean(search_term.to_string()),
         }
     }
+}
+
+#[derive(Debug, Error)]
+#[error(transparent)]
+pub struct BaseCatalogUrlError(url::ParseError);
+
+/// A base catalog url as tracked by the catalog server
+///
+/// We use this to associate Expression builds with a catalog page,
+/// and derive a nix flakeref in order to actually use this as the base package set
+/// for nix expression builds.
+/// Eventually base catalog urls are advertised by the catalog server
+/// and then attached unaltered to publication of nix expression builds.
+///
+/// Since, the url acts as a key, we do not want to modify it.
+/// That includes parsing it as a [Url] as that may change escapes.
+///
+/// Furthermore we expect the url to be
+/// 1. a valid url
+/// 2. pointing at a git source (i.e. resulting in a valid git flakeref i.e. `git+<url>`)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BaseCatalogUrl(String);
+
+impl BaseCatalogUrl {
+    pub fn as_flake_ref(&self) -> Result<Url, BaseCatalogUrlError> {
+        Url::parse(&format!("git+{}", self.0.as_str())).map_err(BaseCatalogUrlError)
+    }
+}
+
+impl From<String> for BaseCatalogUrl {
+    fn from(value: String) -> Self {
+        BaseCatalogUrl(value)
+    }
+}
+
+impl From<&str> for BaseCatalogUrl {
+    fn from(value: &str) -> Self {
+        BaseCatalogUrl(value.to_owned())
+    }
+}
+
+impl Display for BaseCatalogUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+/// Hardcoded locked URL for publishes of expression builds
+///
+/// Outisde of tests this should be replaced by a mechanism that fetches an actual locked URL,
+/// in correspondence with the catalog server.
+pub fn mock_base_catalog_url() -> BaseCatalogUrl {
+    BaseCatalogUrl::from(
+        "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+    )
 }
 
 pub mod test_helpers {

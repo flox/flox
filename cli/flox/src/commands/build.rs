@@ -12,9 +12,9 @@ use flox_rust_sdk::providers::build::{
     Output,
     PackageTargets,
     build_symlink_path,
-    mock_locked_url_info,
     nix_expression_dir,
 };
+use flox_rust_sdk::providers::catalog::mock_base_catalog_url;
 use indoc::formatdoc;
 use tracing::instrument;
 
@@ -129,7 +129,7 @@ impl Build {
         let builder =
             FloxBuildMk::new(&flox, &base_dir, Some(&expression_dir), &built_environments);
         let output = builder.build(
-            &mock_locked_url_info().as_flake_ref()?,
+            &mock_base_catalog_url().as_flake_ref()?,
             &FLOX_INTERPRETER,
             &packages_to_build.target_names(),
             None,
