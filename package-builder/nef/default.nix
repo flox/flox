@@ -25,7 +25,7 @@ let
   collectedAttrPaths = lib.nef.reflect.collectAttrPaths [ ] collectedPackages;
   reflect = {
     attrPaths = lib.nef.reflect.attrPathStrings collectedAttrPaths;
-    targets = lib.nef.reflect.makeTargetsWithOutputs collectedAttrPaths extendedNixpkgs;
+    targets = lib.nef.reflect.makeTargets collectedAttrPaths extendedNixpkgs;
   };
 
 in

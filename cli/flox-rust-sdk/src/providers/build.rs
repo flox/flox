@@ -1979,7 +1979,7 @@ mod tests {
         });
 
         let build_script_path_message_regex =
-            regex::Regex::new(r#"bash -e (.+-build.bash)|--argstr buildScript "(.+build.bash)""#)
+            regex::Regex::new(r#"bash -e (.+/build.bash)|--argstr buildScript "(.+build.bash)""#)
                 .unwrap();
 
         let build_script_path = match build_script_path_message_regex.captures(&output.stdout) {
