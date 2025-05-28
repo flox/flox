@@ -404,7 +404,7 @@ pub fn build_symlink_path(
     Ok(environment.parent_path()?.join(format!("result-{package}")))
 }
 
-/// Use our NEF nix subsystem to query expressions provided in a given expression dir.  
+/// Use our NEF nix subsystem to query expressions provided in a given expression dir.
 /// We need this to verify arguments early rather than running into `make` or `nix` errors,
 /// that while correct, have a bad signal/noise ratio.
 ///
@@ -587,7 +587,7 @@ pub mod test_helpers {
     }
 
     /// For a list tuples `(AttrPath, NixExpr)`,
-    /// create a file structure compatible with nef loading,  
+    /// create a file structure compatible with nef loading,
     /// within a provided tempdir.
     /// Places the file structure within _a new directory_ within the provided path.
     pub fn prepare_nix_expressions_in(
@@ -1707,15 +1707,7 @@ mod tests {
         boost_runtime(false);
     }
 
-    // TODO: currently failing on Linux since the built artifact depends on the
-    // environment store path
-    // If I comment out disallowedReferences in order to see why the artifact
-    // depends on the environment store path, I'm seeing:
-    // $ ldd result-test_boost/bin/.test_boost-wrapped
-    // ...
-    // libboost_system.so.1.87.0 => /nix/store/rfrdr79nk2l0s01zzpfzczjlscimawvl-environment-develop/lib/libboost_system.so.1.87.0 (0x00007fafcf2ed000)
     #[test]
-    #[cfg(target_os = "macos")]
     fn boost_runtime_sandbox_pure() {
         boost_runtime(true);
     }
