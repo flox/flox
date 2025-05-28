@@ -380,59 +380,12 @@ impl MockClient {
     }
 
     /// Push a new response into the list of mock responses
-    pub fn push_resolve_response(&mut self, resp: ResolvedGroups) {
-        self.mock_responses
-            .lock()
-            .expect("couldn't acquire mock lock")
-            .push_back(Response::Resolve(resp));
-    }
-
-    // /// Push a new response into the list of mock responses given a name under
-    // /// the `test_data/generated/resolve` directory.
-    // pub fn push_named_resolve_response(&mut self, name: &str) {
-    //     let msg = format!("couldn't read resolve response named '{name}'");
-    //     let resp = read_mock_responses((*GENERATED_DATA).join("resolve").join(name)).expect(&msg);
-    //     self.mock_responses
-    //         .lock()
-    //         .expect("couldn't acquire mock lock")
-    //         .extend(resp);
-    // }
-
-    // /// Push a new response into the list of mock responses
-    // pub fn push_search_response(&mut self, resp: SearchResults) {
-    //     self.mock_responses
-    //         .lock()
-    //         .expect("couldn't acquire mock lock")
-    //         .push_back(Response::Search(resp));
-    // }
-
-    // /// Push _any_ kind of response
-    // pub fn push_response(&mut self, resp: Response) {
-    //     self.mock_responses
-    //         .lock()
-    //         .expect("couldn't acquire mock lock")
-    //         .push_back(resp);
-    // }
-
-    /// Push a new response into the list of mock responses
     pub fn push_store_info_response(&mut self, resp: StoreInfoResponse) {
         self.mock_responses
             .lock()
             .expect("couldn't acquire mock lock")
             .push_back(Response::GetStoreInfo(resp));
     }
-
-    // /// Push an API error into the list of mock responses
-    // pub fn push_error_response(&mut self, err: ErrorResponse, status_code: u16) {
-    //     let generic_resp = GenericResponse {
-    //         inner: err,
-    //         status: status_code,
-    //     };
-    //     self.mock_responses
-    //         .lock()
-    //         .expect("couldn't acquire mock lock")
-    //         .push_back(Response::Error(generic_resp));
-    // }
 
     /// See [test_helpers::reset_mocks].
     fn reset_mocks(&mut self, responses: impl IntoIterator<Item = Response>) {
@@ -1859,14 +1812,6 @@ mod tests {
             };
             prop_assert_eq!(expected_results, collected_results);
         }
-    }
-
-    #[test]
-    fn mock_client_uses_seeded_responses() {
-        let mut client = MockClient::new();
-        client.push_resolve_response(vec![]);
-        let resp = client.resolve(vec![]).block_on().unwrap();
-        assert!(resp.is_empty());
     }
 
     #[test]
