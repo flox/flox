@@ -20,17 +20,16 @@
     {
       "attr_path": "influxdb2",
       "broken": false,
-      "derivation": "/nix/store/g7zvdj3ijiyz7z2sdfg1647d5ggi3h7y-influxdb2.drv",
+      "derivation": "/nix/store/1xkd2gl8mlcvf356ndq7zc38w8z25zf3-influxdb2.drv",
       "install_id": "influxdb2",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=063f43f2dbdef86376cc29ad646c45c46e93234c",
       "name": "influxdb2",
       "pname": "influxdb2",
-      "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
-      "rev_count": 793735,
-      "rev_date": "2025-05-04T03:14:55Z",
-      "scrape_date": "2025-05-05T04:19:29.572643Z",
+      "rev": "063f43f2dbdef86376cc29ad646c45c46e93234c",
+      "rev_count": 804993,
+      "rev_date": "2025-05-23T18:48:26Z",
+      "scrape_date": "2025-05-26T04:22:16.458784Z",
       "stabilities": [
-        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -39,7 +38,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/drvrznc1l9rsk05zx5k2y19hdnk8f56g-influxdb2"
+        "out": "/nix/store/3y7nywj38g7m1qj43ybh415mkr5acf5x-influxdb2"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -48,17 +47,16 @@
     {
       "attr_path": "influxdb2",
       "broken": false,
-      "derivation": "/nix/store/4qwvcf7w7svwhkjargk34592994qb5hw-influxdb2.drv",
+      "derivation": "/nix/store/jf3xgawrf9f5pz7kv4s8ynsdkzs2i5mb-influxdb2.drv",
       "install_id": "influxdb2",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=063f43f2dbdef86376cc29ad646c45c46e93234c",
       "name": "influxdb2",
       "pname": "influxdb2",
-      "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
-      "rev_count": 793735,
-      "rev_date": "2025-05-04T03:14:55Z",
-      "scrape_date": "2025-05-05T04:37:22.024464Z",
+      "rev": "063f43f2dbdef86376cc29ad646c45c46e93234c",
+      "rev_count": 804993,
+      "rev_date": "2025-05-23T18:48:26Z",
+      "scrape_date": "2025-05-26T04:40:52.279215Z",
       "stabilities": [
-        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -67,7 +65,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/phkkf7zyr0j6plv36fyv07k10zj2vgfl-influxdb2"
+        "out": "/nix/store/v1w8m1br0r49f4zf4grssls984x7fmg0-influxdb2"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -76,17 +74,16 @@
     {
       "attr_path": "influxdb2",
       "broken": false,
-      "derivation": "/nix/store/4293pppgr8fsb6827bm3sjx1vbizgfx3-influxdb2.drv",
+      "derivation": "/nix/store/j9xczkbyarr6k95a4yavkwnr5cggrjx3-influxdb2.drv",
       "install_id": "influxdb2",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=063f43f2dbdef86376cc29ad646c45c46e93234c",
       "name": "influxdb2",
       "pname": "influxdb2",
-      "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
-      "rev_count": 793735,
-      "rev_date": "2025-05-04T03:14:55Z",
-      "scrape_date": "2025-05-05T04:54:30.242105Z",
+      "rev": "063f43f2dbdef86376cc29ad646c45c46e93234c",
+      "rev_count": 804993,
+      "rev_date": "2025-05-23T18:48:26Z",
+      "scrape_date": "2025-05-26T04:57:25.391542Z",
       "stabilities": [
-        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -95,7 +92,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/h8vkn3qjvm3hv7ffl4m34b4i60x4npf0-influxdb2"
+        "out": "/nix/store/8cqzznc5h2mgdq59smqhpp6k1bbb14qn-influxdb2"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -104,17 +101,16 @@
     {
       "attr_path": "influxdb2",
       "broken": false,
-      "derivation": "/nix/store/fx8sqnjdzfidzflyrwcmd08x3329fzsd-influxdb2.drv",
+      "derivation": "/nix/store/jv3f90l4km2d62s4kdv39nf4wwc3rpj9-influxdb2.drv",
       "install_id": "influxdb2",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=979daf34c8cacebcd917d540070b52a3c2b9b16e",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=063f43f2dbdef86376cc29ad646c45c46e93234c",
       "name": "influxdb2",
       "pname": "influxdb2",
-      "rev": "979daf34c8cacebcd917d540070b52a3c2b9b16e",
-      "rev_count": 793735,
-      "rev_date": "2025-05-04T03:14:55Z",
-      "scrape_date": "2025-05-05T05:15:57.079300Z",
+      "rev": "063f43f2dbdef86376cc29ad646c45c46e93234c",
+      "rev_count": 804993,
+      "rev_date": "2025-05-23T18:48:26Z",
+      "scrape_date": "2025-05-26T05:16:54.198401Z",
       "stabilities": [
-        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -123,7 +119,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/k1q8zs3plmlcmhlz1cy6anfq5zkxkyf5-influxdb2"
+        "out": "/nix/store/sflqqmj0qwyfl9b8fpy8zrfaxwkdln6v-influxdb2"
       },
       "system": "x86_64-linux",
       "group": "toplevel",

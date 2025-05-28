@@ -76,9 +76,10 @@ setup_file() {
   run "$FLOX_BIN" show hello
   assert_success
   assert_equal "${lines[0]}" "hello - Program that produces a familiar, friendly greeting"
-  assert_equal "${lines[1]}" "    hello@2.12.1"
-  assert_equal "${lines[2]}" "    hello@2.12"
-  assert_equal "${lines[3]}" "    hello@2.10"
+  assert_equal "${lines[1]}" "    hello@2.12.2"
+  assert_equal "${lines[2]}" "    hello@2.12.1"
+  assert_equal "${lines[3]}" "    hello@2.12"
+  assert_equal "${lines[4]}" "    hello@2.10"
 }
 
 # bats test_tags=python
