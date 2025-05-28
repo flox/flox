@@ -68,34 +68,14 @@ generate_fish_startup_commands() {
   # We already customized the PATH and MANPATH, but the user and system
   # dotfiles may have changed them, so finish by doing this again.
 
-  echo "$_flox_activations set-env-dirs --shell fish --flox-env $_FLOX_ENV --env-dirs ${FLOX_ENV_DIRS:-} | source;"
-
   # fish doesn't have {foo:-} syntax, so we need to provide a temporary variable
-  # (manpath_with_default) that is either the runtime (not generation-time) MANPATH
-  # or the empty string.
-  echo "set manpath_with_default (if set -q MANPATH; echo \"\$MANPATH\"; else; echo ""; end);"
-  echo "$_flox_activations fix-paths --shell fish --env-dirs $FLOX_ENV_DIRS --path \"\$PATH\" --manpath \"\$manpath_with_default\" | source;"
-
-  # Iterate over $FLOX_ENV_DIRS in reverse order and
-  # source user-specified profile scripts if they exist.
-  # fish startup may source a user RC file that may modify FLOX_ENV_DIRS,
-  # and then _flox_env_helper may fix it up.
-  # If this happens, we want to respect those modifications,
-  # so we use FLOX_ENV_DIRS from the environment
-  local -a _flox_env_dirs
-  IFS=':' read -r -a _flox_env_dirs <<< "$FLOX_ENV_DIRS"
-  for ((x = ${#_flox_env_dirs[@]} - 1; x >= 0; x--)); do
-    local _flox_env="${_flox_env_dirs["$x"]}"
-    for i in profile-common profile-fish hook-script; do
-      if [ -e "$_flox_env/activate.d/$i" ]; then
-        "$_flox_activate_tracer" "$_flox_env/activate.d/$i" START
-        echo "source '$_flox_env/activate.d/$i';"
-        "$_flox_activate_tracer" "$_flox_env/activate.d/$i" END
-      else
-        "$_flox_activate_tracer" "$_flox_env/activate.d/$i" NOT FOUND
-      fi
-    done
-  done
+  # (foo_with_default) that is either the runtime (not generation-time) value
+  # or the string 'empty'.
+  echo "set -gx FLOX_ENV_DIRS (if set -q FLOX_ENV_DIRS; echo \"\$FLOX_ENV_DIRS\"; else; echo empty; end);"
+  echo "$_flox_activations set-env-dirs --shell fish --flox-env $_FLOX_ENV --env-dirs \$FLOX_ENV_DIRS | source;"
+  echo "set -gx MANPATH (if set -q MANPATH; echo \"\$MANPATH\"; else; echo empty; end);"
+  echo "$_flox_activations fix-paths --shell fish --env-dirs \$FLOX_ENV_DIRS --path \"\$PATH\" --manpath \"\$MANPATH\" | source;"
+  echo "$_flox_activations profile-scripts --shell fish --env-dirs \$FLOX_ENV_DIRS | source;"
 
   # fish does not use hashing in the same way bash does, so there's
   # nothing to be done here by way of that requirement.

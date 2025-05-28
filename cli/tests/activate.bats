@@ -4844,19 +4844,16 @@ check_nested_activation_repairs_path_and_manpath() {
 
 # bats test_tags=activate:fish,activate:nested
 @test "fish: command: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath fish -c
 }
 
 # bats test_tags=activate:fish,activate:nested
 @test "fish: interactive: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath fish -ic
 }
 
 # bats test_tags=activate:fish,activate:nested
 @test "fish: in-place: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath fish eval
 }
 
