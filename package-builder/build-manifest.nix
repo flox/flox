@@ -12,6 +12,8 @@
   buildDeps ? [ ], # optional
   buildScript ? null, # optional
   buildCache ? null, # optional
+  allowEnvVars ? [ ], # variables to allow into build from outer dev env
+  allowEnvVarPrefixes ? [ ], # prefixes of variables allowed into build
 }:
 # First a few assertions to ensure that the inputs are consistent.
 # buildCache is only meaningful with a build script
@@ -46,6 +48,10 @@ let
     ${dollar_out_bin_copy_hints}
   '';
   name = "${pname}-${version}";
+  envFilterAllowArgs = builtins.concatStringsSep " " (
+    builtins.map (x: "--allow ${x}") allowEnvVars
+    ++ builtins.map (x: "--allow-prefix ${x}") allowEnvVarPrefixes
+  );
 in
 pkgs.runCommandNoCC name
   {
@@ -166,9 +172,10 @@ pkgs.runCommandNoCC name
                 # N.B. not using t3 --forcecolor option because Nix sandbox
                 # strips color codes from output anyway.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
-                  ${flox-env-package}/activate --env ${flox-env-package} --env-project $(pwd) --mode build-sandbox -- \
-                    ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
-                      t3 --relative $log -- bash -e ${buildScript-contents}
+                  ${flox-env-package}/activate --env ${flox-env-package} --mode build --env-project $(pwd) -- \
+                    @envFilter@ ${envFilterAllowArgs} -- \
+                      ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
+                        t3 --relative $log -- bash -e ${buildScript-contents}
               ''
             else
               ''
@@ -180,25 +187,13 @@ pkgs.runCommandNoCC name
                 # TMP will be set to something like
                 # /private/tmp/nix-build-file-0.0.0.drv-0
 
-                # See flox-build.mk for more explanation of why we use a nested
-                # activation.
-                # Just like for impure builds, we want to prefer the build
-                # wrapper environment for tools and libraries.
-                # Unlike for impure builds, we use run mode since we're leaning
-                # on Nix to setup languages.
-                # This may be happening because flox-env-package is in
-                # buildInputs,
-                # but we would need to confirm.
-                # Because we use run mode instead of dev mode, we don't need to
-                # filter out anything set by dev mode, so we don't use env -i
-                # Strictly speaking we don't need --set-vars, since the outer
-                # activation will set those,
-                # and we're not using env -i like we are in the impure build
-
+                # See flox-build.mk for a detailed explanation of why we use a nested
+                # activation when performing builds.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
-                  ${flox-env-package}/activate --env ${flox-env-package} --env-project $(pwd) --mode build-sandbox -- \
-                    ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
-                      t3 --relative $log -- bash -e ${buildScript-contents} || \
+                  ${flox-env-package}/activate --env ${flox-env-package} --mode build --env-project $(pwd) -- \
+                    @envFilter@ ${envFilterAllowArgs} -- \
+                      ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
+                        t3 --relative $log -- bash -e ${buildScript-contents} || \
                 ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
           }

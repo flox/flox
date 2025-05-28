@@ -1978,12 +1978,10 @@ mod tests {
         boost_include_only(false);
     }
 
-    // TODO: currently failing since build-sandbox mode doesn't run etc-profiles
-    // for the outer activation
-    // #[test]
-    // fn boost_include_only_sandbox_pure() {
-    //     boost_include_only(true);
-    // }
+    #[test]
+    fn boost_include_only_sandbox_pure() {
+        boost_include_only(true);
+    }
 
     #[test]
     fn cleans_up_data_sandbox() {
