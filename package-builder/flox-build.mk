@@ -118,7 +118,7 @@ ifeq (,$(NIX_EXPRESSION_DIR))
 endif
 NIX_EXPRESSION_BUILDS := \
   $(shell $(_nix) eval \
-    --argstr nixpkgs-url $(BUILDTIME_NIXPKGS_URL) \
+    --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
     --argstr system $(NIX_SYSTEM) \
     --argstr pkgs-dir $(NIX_EXPRESSION_DIR) \
     --file $(_nef) \

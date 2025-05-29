@@ -12,7 +12,7 @@ use tracing::{debug, info, instrument};
 use super::buildenv::BuiltStorePath;
 use crate::flox::Flox;
 use crate::models::manifest::typed::{ActivateMode, ContainerizeConfig};
-use crate::providers::build::BUILDTIME_NIXPKGS_URL;
+use crate::providers::build::COMMON_NIXPKGS_URL;
 use crate::providers::nix::nix_base_command;
 use crate::utils::gomap::GoMap;
 use crate::utils::{CommandExt, ReaderExt};
@@ -145,7 +145,7 @@ impl ContainerBuilder for MkContainerNix {
         command.arg("--json");
         command.arg("--no-link");
         command.arg("--file").arg(&*MK_CONTAINER_NIX);
-        command.args(["--argstr", "nixpkgsFlakeRef", &*BUILDTIME_NIXPKGS_URL]);
+        command.args(["--argstr", "nixpkgsFlakeRef", COMMON_NIXPKGS_URL.as_str()]);
         command.args(["--argstr", "containerSystem", env!("NIX_TARGET_SYSTEM")]);
         command.args(["--argstr", "system", env!("NIX_TARGET_SYSTEM")]);
         command.args([

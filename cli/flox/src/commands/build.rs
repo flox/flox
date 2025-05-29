@@ -6,18 +6,19 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
-use flox_rust_sdk::models::manifest::typed::Inner;
+use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::build::{
     FloxBuildMk,
     ManifestBuilder,
     Output,
+    PackageTarget,
+    PackageTargets,
     build_symlink_path,
-    get_nix_expression_targets,
     nix_expression_dir,
 };
-use indoc::{formatdoc, indoc};
-use itertools::Itertools;
-use tracing::{debug, instrument};
+use flox_rust_sdk::providers::catalog::mock_base_catalog_url;
+use indoc::formatdoc;
+use tracing::instrument;
 
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::activate::FLOX_INTERPRETER;
@@ -93,21 +94,24 @@ impl Build {
         if let ConcreteEnvironment::Remote(_) = &env {
             bail!("Cannot build from a remote environment");
         };
-
         let base_dir = env.parent_path()?;
         let expression_dir = nix_expression_dir(&env); // TODO: decouple from env
-        let flox_env = env.rendered_env_links(&flox)?;
-        let lockfile = env.lockfile(&flox)?.into();
+        let flox_env_build_outputs = env.build(&flox)?;
+        let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
-        let packages_to_clean = available_packages(&lockfile, &expression_dir, packages)?;
+        let packages_to_clean = packages_to_build(&lockfile.manifest, &expression_dir, &packages)?;
+        let target_names = packages_to_clean
+            .iter()
+            .map(|target| target.name())
+            .collect::<Vec<_>>();
 
-        let builder = FloxBuildMk::new(&flox);
-        builder.clean(
+        let builder = FloxBuildMk::new(
+            &flox,
             &base_dir,
-            &flox_env.development,
             Some(&expression_dir),
-            &packages_to_clean,
-        )?;
+            &flox_env_build_outputs,
+        );
+        builder.clean(&target_names)?;
 
         message::created("Clean completed successfully");
 
@@ -124,17 +128,20 @@ impl Build {
         let built_environments = env.build(&flox)?;
         let expression_dir = nix_expression_dir(&env); // TODO: decouple from env
 
-        let lockfile = env.lockfile(&flox)?.into();
+        let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
-        let packages_to_build = available_packages(&lockfile, &expression_dir, packages)?;
+        let packages_to_build = packages_to_build(&lockfile.manifest, &expression_dir, &packages)?;
+        let target_names = packages_to_build
+            .iter()
+            .map(|target| target.name())
+            .collect::<Vec<_>>();
 
-        let builder = FloxBuildMk::new(&flox);
+        let builder =
+            FloxBuildMk::new(&flox, &base_dir, Some(&expression_dir), &built_environments);
         let output = builder.build(
-            &base_dir,
-            &built_environments,
-            Some(&expression_dir),
+            &mock_base_catalog_url().as_flake_ref()?,
             &FLOX_INTERPRETER,
-            &packages_to_build,
+            &target_names,
             None,
         )?;
 
@@ -142,16 +149,20 @@ impl Build {
             match message {
                 Output::Stdout(line) => println!("{line}"),
                 Output::Stderr(line) => eprintln!("{line}"),
-                Output::Success { .. } => {
+                Output::Success(results) => {
                     let current_dir = env::current_dir()
                         .context("could not get current directory")?
                         .canonicalize()
                         .context("could not canonicalize current directory")?;
-                    let links_to_print = packages_to_build
+
+                    let links_to_print = results
                         .iter()
-                        .map(|package| Self::check_and_display_symlink(&env, package, &current_dir))
+                        .map(|package| {
+                            Self::check_and_display_symlink(&env, &package.pname, &current_dir)
+                        })
                         .collect::<Result<Vec<_>, _>>()?;
-                    if packages_to_build.len() > 1 {
+
+                    if links_to_print.len() > 1 {
                         message::created(formatdoc!(
                             "Builds completed successfully.
                             Outputs created: {}",
@@ -211,55 +222,30 @@ impl Build {
     }
 }
 
-fn available_packages(
-    lockfile: &Lockfile,
-    expression_dir: &Path,
-    packages: Vec<String>,
-) -> Result<Vec<String>> {
-    let environment_packages = &lockfile.manifest.build;
-    let nix_expression_packages =
-        get_nix_expression_targets(expression_dir).map_err(anyhow::Error::msg)?;
+pub(crate) fn packages_to_build<'o>(
+    manifest: &'o Manifest,
+    expression_dir: &'o Path,
+    packages: &[impl AsRef<str>],
+) -> Result<Vec<PackageTarget>> {
+    let available_targets = PackageTargets::new(manifest, expression_dir)?;
 
-    if environment_packages.inner().is_empty() && nix_expression_packages.is_empty() {
-        bail!(indoc! {"
-        No builds found.
+    if available_targets.is_empty() {
+        bail!(formatdoc! {"
+            No packages found to build.
 
-        Add a build by modifying the '[build]' section of the manifest with 'flox edit'
-        "});
+            Add a build by modifying the '[build]' section of the manifest with 'flox edit'
+            or add expression files in '{expression_dir}'.
+            ", expression_dir = expression_dir.display()
+        });
     }
 
-    let packages_to_build = if packages.is_empty() {
-        environment_packages
-            .inner()
-            .keys()
-            .chain(nix_expression_packages.iter())
-            .cloned()
-            .dedup()
-            .collect()
+    let selected = if !packages.is_empty() {
+        available_targets.select(packages)?
     } else {
-        packages
+        available_targets.all()
     };
 
-    for package in &packages_to_build {
-        let is_nix_expression = nix_expression_packages.contains(package);
-        let is_manifest_build = environment_packages.inner().contains_key(package);
-
-        match (is_nix_expression, is_manifest_build) {
-            (true, true) => {
-                bail!(formatdoc! {"
-                    Package '{package}' is defined in the manifest and as a Nix expression.
-                
-                    Rename or delete either the package definition in {expression_dir}
-                    or the '[build]' section in the manifest.
-                ", expression_dir = expression_dir.display()})
-            },
-            (true, false) => debug!(%package, "found nix expression"),
-            (false, true) => debug!(%package, "found manifest_build"),
-            (false, false) => bail!("Package '{}' not found in environment", package),
-        }
-    }
-
-    Ok(packages_to_build)
+    Ok(selected)
 }
 
 #[cfg(test)]
@@ -326,11 +312,8 @@ mod test {
                 {{runCommand}}: runCommand "{pname}" {{}} ""
             "#})]);
 
-        let result = available_packages(
-            &env.lockfile(&flox).unwrap().into(),
-            &expressions_dir,
-            vec![],
-        );
+        let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
+        let result = packages_to_build(&lockfile.manifest, &expressions_dir, &Vec::<String>::new());
         assert!(result.is_err());
     }
 }
