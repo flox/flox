@@ -12,6 +12,7 @@
   buildDeps ? [ ], # optional
   buildScript ? null, # optional
   buildCache ? null, # optional
+  packageBuilder ? "@out@", # path to find adjacent env-filter script
   allowEnvVars ? [ ], # variables to allow into build from outer dev env
   allowEnvVarPrefixes ? [ ], # prefixes of variables allowed into build
 }:
@@ -23,7 +24,11 @@ assert (srcTarball != null) -> (buildScript != null);
 let
   flox-env-package = builtins.storePath flox-env;
   build-wrapper-env-package = builtins.storePath build-wrapper-env;
+  # We need a reference to the package that this file comes from so that
+  # we can pull the adjacent env-filter script into the build.
+  package-builder-package = builtins.storePath packageBuilder;
   buildInputs = [
+    package-builder-package
     build-wrapper-env-package
     flox-env-package
   ] ++ (map (d: builtins.storePath d) buildDeps);
@@ -173,7 +178,7 @@ pkgs.runCommandNoCC name
                 # strips color codes from output anyway.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --env ${flox-env-package} --mode build --env-project $(pwd) -- \
-                    @envFilter@ ${envFilterAllowArgs} -- \
+                    ${package-builder-package}/libexec/env-filter ${envFilterAllowArgs} -- \
                       ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
                         t3 --relative $log -- bash -e ${buildScript-contents}
               ''
@@ -191,7 +196,7 @@ pkgs.runCommandNoCC name
                 # activation when performing builds.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
                   ${flox-env-package}/activate --env ${flox-env-package} --mode build --env-project $(pwd) -- \
-                    @envFilter@ ${envFilterAllowArgs} -- \
+                    ${package-builder-package}/libexec/env-filter ${envFilterAllowArgs} -- \
                       ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
                         t3 --relative $log -- bash -e ${buildScript-contents} || \
                 ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )

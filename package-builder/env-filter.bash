@@ -1,3 +1,4 @@
+#!/bin/bash
 
 # env-filter: redact environment variables, apart from those expressly called out
 # with (-a|--allow) args or matching prefixes provided with (-p|--allow-prefix).

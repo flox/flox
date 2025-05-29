@@ -51,7 +51,6 @@ _cat := $(call __package_bin,$(__coreutils),cat)
 _cp := $(call __package_bin,$(__coreutils),cp)
 _cut := $(call __package_bin,$(__coreutils),cut)
 _daemonize := $(call __package_bin,$(__daemonize),daemonize)
-_envFilter := @envFilter@
 _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
 _head := $(call __package_bin,$(__coreutils),head)
@@ -349,12 +348,12 @@ ALLOW_OUTER_ENV_PREFIXES = _
 # Add vars set by Nix stdenv hooks.
 ALLOW_OUTER_ENV_PREFIXES += NIX_CFLAGS NIX_CC
 
-# Assemble list of all $(_envFilter) "allow" args. First start by
+# Assemble list of all env-filter "allow" args. First start by
 # quoting the variable names so that they can be passed in the shell
 # and as arguments to build-manifest.nix.
 QUOTED_ALLOW_OUTER_ENV_VARS = $(foreach _v,$(ALLOW_OUTER_ENV_VARS),"$(_v)")
 QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES = $(foreach _p,$(ALLOW_OUTER_ENV_PREFIXES),"$(_p)")
-envFilter_ALLOW_ARGS = \
+env_filter_ALLOW_ARGS = \
   $(foreach _v,$(QUOTED_ALLOW_OUTER_ENV_VARS),--allow $(_v)) \
   $(foreach _p,$(QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES),--allow-prefix $(_p))
 
@@ -392,13 +391,13 @@ define BUILD_local_template =
   # We could use `env -i` to prevent all variables from leaking from the
   # "develop" environment into the inner activation, but then that causes
   # problems for compilers that rely on NIX_CC* environment variables set in
-  # the outer activation. To address this problem we use the `envFilter` script
+  # the outer activation. To address this problem we use the `env-filter` script
   # to remove all variables not specifically allowed through to the inner
   # activation.
 
   # The final result is approximately the following:
   #   $(FLOX_INTERPRETER)/activate ... -- \
-  #     $(_envFilter) $(envFilter_ALLOW_ARGS) -- \
+  #     $(_libexec_dir)/env-filter $(env_filter_ALLOW_ARGS) -- \
   #       $(_build_wrapper_env)/wrapper ... -- bash -e buildScript
   $($(_pvarname)_out) $($(_pvarname)_logfile): $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
@@ -407,7 +406,7 @@ define BUILD_local_template =
 	$(_V_) out=$($(_pvarname)_out) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode build --env-project $$$$($(_pwd)) -- \
-	    $(_envFilter) $(envFilter_ALLOW_ARGS) -- \
+	    $(_libexec_dir)/env-filter $(env_filter_ALLOW_ARGS) -- \
 	      $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars -- \
 	        $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $$<
 

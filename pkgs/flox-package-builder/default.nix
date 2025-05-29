@@ -10,42 +10,8 @@
   jq,
   nix,
   stdenv,
-  substituteAll,
   t3,
-  writeShellScript,
 }:
-let
-  envFilter = writeShellScript "env-filter" (
-    builtins.readFile (substituteAll {
-      src = ../../package-builder/env-filter.bash;
-      env = {
-        inherit coreutils getopt;
-      };
-    })
-  );
-  build-manifest-nix = substituteAll {
-    name = "build-manifest.nix";
-    src = ../../package-builder/build-manifest.nix;
-    inherit envFilter;
-  };
-  flox-build-mk = substituteAll {
-    name = "flox-build.mk";
-    src = ../../package-builder/flox-build.mk;
-    inherit
-      bashInteractive
-      coreutils
-      daemonize
-      envFilter
-      gitMinimal
-      gnugrep
-      gnused
-      gnutar
-      jq
-      nix
-      t3
-      ;
-  };
-in
 stdenv.mkDerivation {
   pname = "package-builder";
   version = "1.0.0";
@@ -54,8 +20,20 @@ stdenv.mkDerivation {
     path = "${./../../package-builder}";
   };
   postPatch = ''
-    cp ${flox-build-mk} flox-build.mk
-    cp ${build-manifest-nix} build-manifest.nix
+    # Need to perform substitutions within derivation for access to $out.
+    for i in build-manifest.nix env-filter.bash flox-build.mk; do
+      bashInteractive=${bashInteractive} \
+      coreutils=${coreutils} \
+      daemonize=${daemonize} \
+      getopt=${getopt} \
+      gitMinimal=${gitMinimal} \
+      gnugrep=${gnugrep} \
+      gnused=${gnused} \
+      gnutar=${gnutar} \
+      jq=${jq} \
+      nix=${nix} \
+      t3=${t3} substituteAllInPlace $i
+    done
   '';
   # install the packages to $out/libexec/*
   makeFlags = [ "PREFIX=$(out)" ];
