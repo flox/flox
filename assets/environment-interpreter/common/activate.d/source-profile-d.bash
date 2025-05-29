@@ -12,14 +12,11 @@ function source_profile_d {
   }
 
   declare -a _profile_scripts
-  # TODO: figure out why this is needed
-  set +e
-  read -r -d '' -a _profile_scripts < <(
+  read -r -a _profile_scripts < <(
     cd "$_profile_d" || exit
     shopt -s nullglob
     echo *.sh
   )
-  set -e
   for profile_script in "${_profile_scripts[@]}"; do
     # shellcheck disable=SC1090 # from rendered environment
     source "$_profile_d/$profile_script"
