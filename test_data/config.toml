@@ -154,6 +154,11 @@ cmd = '''
 '''
 ignore_cmd_errors = true # build will fail on linux, that's fine
 
+# Generate a response with an "unkown" type of error.
+# Instead of forcing an "unknown" type of error from the catalog server
+# we trigger a general error response and then transform the error type
+# and message to match to an "unknown" type of error,
+# knowing that there is only 1 response.
 [resolve.darwin_ps_incompatible_transform_error_to_unknown]
 pre_cmd = '''
     flox init
@@ -177,6 +182,11 @@ post_cmd = '''
     mv tmp.yaml "$RESPONSE_FILE"
 '''
 
+# Generate a response with an "general" type of error.
+# Instead of forcing an "general" type of error from the catalog server
+# we trigger a general error response and then transform the error type
+# and message to match to an "general" type of error,
+# knowing that there is only 1 response.
 [resolve.darwin_ps_incompatible_transform_error_to_general]
 pre_cmd = '''
     flox init
