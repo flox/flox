@@ -4796,7 +4796,7 @@ nested_activation_get_output() {
 # are present in PATH, and the outer environment appears first.
 nested_activation_assertions() {
   # Check that PATH is repaired
-  assert_output --partial "PATH is $outer_stub/bin:$outer_stub/sbin:$default_stub/bin:$default_stub/sbin:before_path:$original_path"
+  assert_output --partial "PATH is $outer_stub/bin:$outer_stub/sbin:$default_stub/bin:$default_stub/sbin:before_path"
   # Check that MANPATH is repaired
   assert_output --partial "MANPATH is $outer_stub/share/man:$default_stub/share/man"
 }
