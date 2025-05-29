@@ -101,3 +101,5 @@ runs:
         cat $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE
         echo "REMOTE_SERVER_ADDRESS=$REMOTE_SERVER_ADDRESS" >> $GITHUB_ENV
         echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" >> $GITHUB_ENV
+        _nix=$(which nix)
+        sudo $_nix run nixpkgs#tailscale -- ping "$REMOTE_SERVER_ADDRESS"
