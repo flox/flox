@@ -346,7 +346,7 @@ impl FromStr for Runtime {
         match s {
             "docker" => Ok(Runtime::Docker),
             "podman" => Ok(Runtime::Podman),
-            _ => Err(anyhow!("Registry must be 'docker' or 'podman'")),
+            _ => Err(anyhow!("Runtime must be 'docker' or 'podman'")),
         }
     }
 }
