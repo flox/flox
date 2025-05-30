@@ -53,6 +53,19 @@ teardown() {
   assert_output --partial '"name": "test"'
 }
 
+@test "c2: flox init should normalize the current directory name when used to infer the environment name" {
+  mkdir -p "spa ce"
+  pushd "spa ce"
+
+  run "$FLOX_BIN" init
+  assert_success
+
+  run cat .flox/env.json
+  assert_success
+  assert_output --partial '"name": "spa-ce"'
+  popd
+}
+
 @test "c4: custom name option 1: flox init accepts -n for a user defined name" {
   run "$FLOX_BIN" init -n "other-test"
   assert_success
@@ -104,6 +117,7 @@ EOF
   run "$FLOX_BIN" init -n "na me"
   assert_failure
 }
+
 
 function check_with_dir() {
   run ls -A "$PROJECT_DIR"

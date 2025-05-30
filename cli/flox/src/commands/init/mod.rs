@@ -108,7 +108,7 @@ impl Init {
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .context("Can't init in root")?;
-            EnvironmentName::from_str(&name)?
+            EnvironmentName::from_str(&slug::slugify(name))?
         };
 
         // Don't run language hooks for "default" environment
