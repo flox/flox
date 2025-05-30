@@ -167,8 +167,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     .commitLockFile        = false,
     .referenceLockFilePath = std::nullopt,
     .outputLockFilePath    = std::nullopt,
-    .inputOverrides        = std::map<nix::flake::InputPath, nix::FlakeRef> {},
-    .inputUpdates          = std::set<nix::flake::InputPath> {}
+    .inputOverrides = std::map<nix::flake::InputAttrPath, nix::FlakeRef> {},
+    .inputUpdates   = std::set<nix::flake::InputAttrPath> {}
   };
 
 
