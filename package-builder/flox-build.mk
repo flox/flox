@@ -51,8 +51,6 @@ _cat := $(call __package_bin,$(__coreutils),cat)
 _cp := $(call __package_bin,$(__coreutils),cp)
 _cut := $(call __package_bin,$(__coreutils),cut)
 _daemonize := $(call __package_bin,$(__daemonize),daemonize)
-_env := $(call __package_bin,$(__coreutils),env)
-_envFilter := @envFilter@
 _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
 _head := $(call __package_bin,$(__coreutils),head)
@@ -70,6 +68,7 @@ _sed := $(call __package_bin,$(__gnused),sed)
 _sha256sum := $(call __package_bin,$(__coreutils),sha256sum)
 _tar := $(call __package_bin,$(__gnutar),tar)
 _t3 := $(call __package_bin,$(__t3),t3) --relative $(if $(NO_COLOR),,--forcecolor)
+_tr := $(call __package_bin,$(__coreutils),tr)
 _uname := $(call __package_bin,$(__coreutils),uname)
 
 # Identify path to build-manifest.nix, in same directory as this Makefile.
@@ -323,8 +322,10 @@ endef
 # of the tools and compilers found in the outer environment, and for Flox to
 # otherwise function properly.
 #
+# Start with output path created by the build.
+ALLOW_OUTER_ENV_VARS = out
 # Vars required for flox functionality.
-ALLOW_OUTER_ENV_VARS := \
+ALLOW_OUTER_ENV_VARS += \
   FLOX_ACTIVATE_TRACE FLOX_ENV_DIRS FLOX_RUNTIME_DIR HOME PATH
 # Vars exported by 0100_common-paths.sh. Not included:
 # - LIBRARY_PATH : embedded in runpath of executables
@@ -339,8 +340,22 @@ ALLOW_OUTER_ENV_VARS += RUST_SRC_PATH
 ALLOW_OUTER_ENV_VARS += JUPYTER_PATH
 # Vars exported by 0800_cuda.sh.
 ALLOW_OUTER_ENV_VARS += LD_FLOXLIB_FILES_PATH
-# Vars set by Nix stdenv hooks.
-ALLOW_OUTER_ENV_VARS += $(filter NIX_CFLAGS% NIX_CC%,$(.VARIABLES))
+
+# Env var prefixes that are allowed to be passed from the outer
+# "develop" environment to the inner "build wrapper" environment.
+# Start by allowing any variable starting with "_".
+ALLOW_OUTER_ENV_PREFIXES = _
+# Add vars set by Nix stdenv hooks.
+ALLOW_OUTER_ENV_PREFIXES += NIX_CFLAGS NIX_CC
+
+# Assemble list of all env-filter "allow" args. First start by
+# quoting the variable names so that they can be passed in the shell
+# and as arguments to build-manifest.nix.
+QUOTED_ALLOW_OUTER_ENV_VARS = $(foreach _v,$(ALLOW_OUTER_ENV_VARS),"$(_v)")
+QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES = $(foreach _p,$(ALLOW_OUTER_ENV_PREFIXES),"$(_p)")
+env_filter_ALLOW_ARGS = \
+  $(foreach _v,$(QUOTED_ALLOW_OUTER_ENV_VARS),--allow $(_v)) \
+  $(foreach _p,$(QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES),--allow-prefix $(_p))
 
 # The following template renders targets for the in-situ build mode.
 define BUILD_local_template =
@@ -373,33 +388,32 @@ define BUILD_local_template =
   # activations can prepend to a PYTHONPATH that gets embedded in the
   # build, which has the effect of pulling both environments into the closure.
 
-  # We can use `env -i` to prevent that leakage of the "develop" environment
-  # path into the inner activation, but then that causes problems for compilers
-  # that rely on NIX_CC* environment variables set in the outer activation. To
-  # address this problem we maintain a list of ALLOW_OUTER_ENV_VARS allowed
-  # to be propagated from the outer to the inner activation, and again use the
-  # `env` command to let those through.
+  # We could use `env -i` to prevent all variables from leaking from the
+  # "develop" environment into the inner activation, but then that causes
+  # problems for compilers that rely on NIX_CC* environment variables set in
+  # the outer activation. To address this problem we use the `env-filter` script
+  # to remove all variables not specifically allowed through to the inner
+  # activation.
 
   # The final result is approximately the following:
   #   $(FLOX_INTERPRETER)/activate ... -- \
-  #     $(_envFilter) --allow-prefix _ $(foreach v,$(ALLOW_OUTER_ENV_VARS),--allow $(v)) -- \
+  #     $(_libexec_dir)/env-filter $(env_filter_ALLOW_ARGS) -- \
   #       $(_build_wrapper_env)/wrapper ... -- bash -e buildScript
   $($(_pvarname)_out) $($(_pvarname)_logfile): $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
 	@echo "Building $(_name) in local mode"
 	$(_VV_) $(_rm) -rf $($(_pvarname)_out)
-	$(_V_) \
+	$(_V_) out=$($(_pvarname)_out) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode build --env-project $$$$($(_pwd)) -- \
-	    $(_envFilter) --allow-prefix _ $(foreach v,$(ALLOW_OUTER_ENV_VARS),--allow $(v)) -- \
+	    $(_libexec_dir)/env-filter $(env_filter_ALLOW_ARGS) -- \
 	      $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars -- \
-	        $(_t3) $($(_pvarname)_logfile) -- $(_env) out=$($(_pvarname)_out) $(_bash) -e $$<
+	        $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $$<
 
   # Having built the package to $($(_pvarname)_out) outside of Nix, call
   # build-manifest.nix to turn it into a Nix package.
   $($(_pvarname)_buildJSON): $($(_pvarname)_out)
-	$(_V_) set -o pipefail && \
-	$(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
+	$(_V_) $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr pname "$(_pname)" \
 	  --argstr version "$(_version)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
@@ -407,6 +421,8 @@ define BUILD_local_template =
 	  --argstr install-prefix "$($(_pvarname)_out)" \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  $(if $($(_pvarname)_buildDeps),--arg buildDeps '[$($(_pvarname)_buildDeps)]') \
+	  --arg allowEnvVars '[$(QUOTED_ALLOW_OUTER_ENV_VARS)]' \
+	  --arg allowEnvVarPrefixes '[$(QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES)]' \
 	  --out-link "result-$(_pname)" \
 	  --json '^*' > $$@
 
@@ -483,6 +499,8 @@ define BUILD_nix_sandbox_template =
 	  --argstr build-wrapper-env "$(_build_wrapper_env)" \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  $(if $($(_pvarname)_buildDeps),--arg buildDeps '[$($(_pvarname)_buildDeps)]') \
+	  --arg allowEnvVars '[$(QUOTED_ALLOW_OUTER_ENV_VARS)]' \
+	  --arg allowEnvVarPrefixes '[$(QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES)]' \
 	  --argstr buildScript "$($(_pvarname)_buildScript)" \
 	  $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
 	  --out-link "result-$(_pname)" \
@@ -611,10 +629,13 @@ define MANIFEST_BUILD_template =
 	$$(eval _build_closure_extra_packages = $$(strip \
 	  $$(filter-out $$(_build_store_path) $$(_build_wrapper_requisites) $$(_nef_requisites), \
 	    $$(_build_closure_requisites))))
+	$$(eval _count = $$(words $$(_build_closure_extra_packages)))
+	$$(eval _space = $$(shell echo $$(_count) | $(_tr) '[0-9]' '-'))
 	$$(if $$(_build_closure_extra_packages),$(_VV_) \
-	  echo -e "❌ packages found in $$(_build_store_path)\n" \
-	           "       not found in $(_build_wrapper_env)\n" 1>&2; \
-	  $$(foreach _pkg,$$(_build_closure_extra_packages), \
+	  echo -e "❌ $$(_count) packages found in $$(_build_store_path)\n" \
+	           "  $$(_space)      not found in $(_build_wrapper_env)\n" 1>&2; \
+	  $$(intcmp 3,$$(_count),echo -e "Displaying first 3 only:\n" 1>&2; ) \
+	  $$(foreach _pkg,$$(wordlist 1,3,$$(_build_closure_extra_packages)), \
 	    ( $(_nix) why-depends --precise $$(_build_store_path) $$(_pkg) && echo ) 1>&2; ) \
 	  exit 1)
 	@# TODO: Strip the buildCache and log outputs of all requisites.

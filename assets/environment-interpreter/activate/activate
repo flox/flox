@@ -167,8 +167,8 @@ while true; do
       ;;
     -m | --mode)
       shift
-      if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ] || [ "$1" == "build" ] || [ "$1" == "build-sandbox" ]; }; then
-        echo "Option --mode requires 'dev', 'run', 'build', or 'build-sandbox' as an argument." >&2
+      if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ] || [ "$1" == "build" ]; }; then
+        echo "Option --mode requires 'dev', 'run', or 'build' as an argument." >&2
         echo "$USAGE" >&2
         exit 1
       fi
@@ -258,7 +258,7 @@ case "$_flox_shell" in
     ;;
 esac
 
-if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ] || [ "$_FLOX_ENV_ACTIVATION_MODE" = "build-sandbox" ]; then
+if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
   if [ $# -eq 0 ]; then
     echo "build mode is only supported for running a command" >&2
     exit 1

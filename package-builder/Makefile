@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := all
 
-ALL = flox-build.mk build-manifest.nix nef/default.nix \
+ALL = env-filter flox-build.mk build-manifest.nix nef/default.nix \
   $(addprefix nef/lib/,default.nix dirToAttrs.nix extendAttrSet.nix mkOverlay.nix reflect.nix)
 
 OS := $(shell uname -s)
@@ -19,6 +19,10 @@ libsandbox.so: sandbox.c closure.o
 
 libsandbox.dylib: sandbox.c closure.o
 	$(CC) -pthread -dynamiclib $^ -o $@
+
+env-filter: env-filter.bash
+	cp $< $@
+	chmod +x $@
 
 .PHONY: all
 all: $(ALL)
