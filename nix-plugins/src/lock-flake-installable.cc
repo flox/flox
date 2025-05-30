@@ -17,6 +17,7 @@
 #include <nix/expr/primops.hh>
 #include <nix/expr/value-to-json.hh>
 #include <nix/flake/flake.hh>
+#include <nix/util/json-utils.hh>
 #include <nlohmann/json.hpp>
 
 #include "flox/core/util.hh"
