@@ -149,7 +149,7 @@ pub struct FloxBuildMk<'args> {
 
     // common build components
     base_dir: &'args Path,
-    expression_dir: Option<&'args Path>,
+    expression_dir: &'args Path,
     built_environments: &'args BuildEnvOutputs,
 }
 
@@ -157,7 +157,7 @@ impl FloxBuildMk<'_> {
     pub fn new<'args>(
         flox: &'args Flox,
         base_dir: &'args Path,
-        expression_dir: Option<&'args Path>,
+        expression_dir: &'args Path,
         built_environments: &'args BuildEnvOutputs,
     ) -> FloxBuildMk<'args> {
         FloxBuildMk {
@@ -231,10 +231,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         ));
 
         // TODO: modify flox-build.mk to allow missing expression dirs
-        let expression_dir = match self.expression_dir {
-            Some(dir) => &*dir.to_string_lossy(),
-            None => "/absolutely/nowhere",
-        };
+        let expression_dir = self.expression_dir.to_string_lossy();
         command.arg(format!("NIX_EXPRESSION_DIR={expression_dir}"));
         command.arg(format!("FLOX_INTERPRETER={}", flox_interpreter.display()));
 
@@ -352,11 +349,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         ));
 
         // TODO: is this even necessary, or can we detect build outputs instead?
-        // TODO: modify flox-build.mk to allow missing expression dirs
-        let expression_dir = match self.expression_dir {
-            Some(dir) => &*dir.to_string_lossy(),
-            None => "/absolutely/nowhere",
-        };
+        let expression_dir = self.expression_dir.to_string_lossy();
         command.arg(format!("NIX_EXPRESSION_DIR={expression_dir}"));
 
         // Add clean target arguments by prefixing the package names with "clean/".
@@ -689,7 +682,7 @@ pub mod test_helpers {
     pub fn assert_build_status_with_nix_expr(
         flox: &Flox,
         env: &mut PathEnvironment,
-        expression_dir: Option<&Path>,
+        expression_dir: &Path,
         package: &str,
         build_cache: Option<bool>,
         expect_success: bool,
@@ -754,7 +747,7 @@ pub mod test_helpers {
         assert_build_status_with_nix_expr(
             flox,
             env,
-            None,
+            &nix_expression_dir(env),
             package_name,
             build_cache,
             expect_success,
@@ -765,7 +758,7 @@ pub mod test_helpers {
         let err = FloxBuildMk::new(
             flox,
             &env.parent_path().unwrap(),
-            None,
+            &nix_expression_dir(env),
             &env.build(flox).unwrap(),
         )
         .clean(
@@ -2371,7 +2364,7 @@ mod nef_tests {
         let collected = assert_build_status_with_nix_expr(
             &flox,
             &mut env,
-            Some(&expressions_dir),
+            &expressions_dir,
             &pname,
             None,
             true,
@@ -2413,7 +2406,7 @@ mod nef_tests {
         let collected = assert_build_status_with_nix_expr(
             &flox,
             &mut env,
-            Some(&expressions_dir),
+            &expressions_dir,
             &pname,
             None,
             true,

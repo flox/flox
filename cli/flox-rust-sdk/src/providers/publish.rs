@@ -695,15 +695,10 @@ pub fn check_build_metadata(
 
     let mut clean_build_env = PathEnvironment::open(flox, path_pointer, dot_flox_path)?;
     let base_dir = clean_build_env.parent_path()?;
-    let expression_dir = Some(nix_expression_dir(&clean_build_env));
+    let expression_dir = nix_expression_dir(&clean_build_env);
     let built_environments = clean_build_env.build(flox)?;
 
-    let builder = FloxBuildMk::new(
-        flox,
-        &base_dir,
-        expression_dir.as_deref(),
-        &built_environments,
-    );
+    let builder = FloxBuildMk::new(flox, &base_dir, &expression_dir, &built_environments);
 
     // Build the package and collect the outputs
     let output_stream = builder.build(
