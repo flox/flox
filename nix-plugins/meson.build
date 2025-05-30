@@ -39,7 +39,7 @@ dependencies = [
 ]
 
 # nix global constants such as `SYSTEM`
-nix_config_h = nix_main_dep.get_variable('includedir') / 'nix/config.h'
+# nix_config_h = nix_main_dep.get_variable('includedir') / 'nix/config.h'
 
 # internal headers
 include_dirs = [include_directories('include')]
@@ -55,7 +55,6 @@ lock_flake_installable = library(
     prelink: true,  # For C++ static initializers
     install: true,
     install_dir: 'lib/nix-plugins',
-    cpp_args: ['--include', nix_config_h],
 )
 
 # wrapped-nixpkgs-input-schema ==========================================
@@ -70,7 +69,6 @@ wrapped_nixpkgs_input = library(
     prelink: true,  # For C++ static initializers
     install: true,
     install_dir: 'lib/nix-plugins',
-    cpp_args: ['--include', nix_config_h],
 )
 
 # tests ================================================================

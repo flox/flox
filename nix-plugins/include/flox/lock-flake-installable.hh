@@ -11,7 +11,7 @@
 
 #include <filesystem>
 
-#include <nix/globals.hh>
+#include <nix/store/globals.hh>
 
 /* -------------------------------------------------------------------------- */
 

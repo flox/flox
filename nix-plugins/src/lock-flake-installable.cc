@@ -9,14 +9,16 @@
 
 #include <fstream>
 
-#include <nix/attr-path.hh>
-#include <nix/eval-cache.hh>
-#include <nix/eval.hh>
+#include <nix/cmd/installable-flake.hh>
+#include <nix/expr/attr-path.hh>
+#include <nix/expr/eval-cache.hh>
+#include <nix/expr/eval.hh>
+#include <nix/expr/json-to-value.hh>
+#include <nix/expr/primops.hh>
+#include <nix/expr/value-to-json.hh>
 #include <nix/flake/flake.hh>
-#include <nix/installable-flake.hh>
-#include <nix/json-to-value.hh>
-#include <nix/primops.hh>
-#include <nix/value-to-json.hh>
+#include <nix/util/json-utils.hh>
+#include <nlohmann/json.hpp>
 
 #include "flox/core/util.hh"
 #include "flox/lock-flake-installable.hh"
