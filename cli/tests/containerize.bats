@@ -238,9 +238,6 @@ function skip_if_linux() {
 
 # ---------------------------------------------------------------------------- #
 
-# TODO: Implement happy path tests for macOS in
-# https://github.com/flox/flox/issues/2466
-
 # bats test_tags=containerize:macos
 @test "runtime is required for proxy container on macos" {
   skip_if_linux
