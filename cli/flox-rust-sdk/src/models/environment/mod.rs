@@ -761,7 +761,7 @@ pub enum UninstallError {
     PackageOnlyIncluded(String, String),
 }
 
-/// Open an environment defined in `{path}/.flox`
+/// Open an environment defined in `path` that has a `.flox` within.
 pub fn open_path(
     flox: &Flox,
     path: impl AsRef<Path>,
