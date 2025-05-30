@@ -1,4 +1,4 @@
-#include "nix/shared.hh"
+#include "nix/main/shared.hh"
 
 int main() {
   try {

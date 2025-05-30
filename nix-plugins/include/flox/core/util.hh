@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include <nix/util.hh>
+#include <nix/util/util.hh>
 
 /* -------------------------------------------------------------------------- */
 
