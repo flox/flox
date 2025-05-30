@@ -310,13 +310,13 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 }
 
 # bats test_tags=containerize:runtime-not-in-path
-@test "error if runtime not in PATH" {
-  skip_if_not_linux # macOS checks for the container runtime earlier.
+@test "error if specified runtime not in PATH" {
   env_setup_catalog
 
-  run bash -c 'PATH= "$FLOX_BIN" containerize --runtime podman' 3>&-
+  # disable backtrace; we expect this to fail and assert output
+  RUST_BACKTRACE=0 run bash -c 'PATH= "$FLOX_BIN" containerize --runtime podman' 3>&-
   assert_failure
-  assert_line --partial "Failed to call runtime"
+  assert_output "❌ ERROR: Container runtime 'podman' not found in PATH."
 }
 
 function assert_container_output() {

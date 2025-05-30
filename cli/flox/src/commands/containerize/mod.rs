@@ -56,6 +56,10 @@ impl Containerize {
             .environment
             .detect_concrete_environment(&flox, "Containerize")?;
 
+        // Check that a specified runtime exists.
+        if let Some(runtime) = &self.runtime {
+            runtime.validate_in_path()?
+        }
         let runtime = self.runtime.or_else(Runtime::detect_from_path);
         let output = match (&runtime, self.file) {
             // Specified file.
@@ -276,15 +280,32 @@ impl Runtime {
         Some(runtime)
     }
 
+    /// Get the unqualified command name for the runtime.
+    fn to_cmd(&self) -> &str {
+        match self {
+            Runtime::Docker => "docker",
+            Runtime::Podman => "podman",
+        }
+    }
+
+    /// Validate that the container runtime is available in the PATH.
+    fn validate_in_path(&self) -> Result<()> {
+        let path_var = std::env::var("PATH").context("Could not read PATH variable")?;
+        let paths = std::env::split_paths(path_var.as_str());
+        let cmd = self.to_cmd();
+        match first_in_path([cmd], paths) {
+            Some(_) => Ok(()),
+            None => Err(anyhow!(format!(
+                "Container runtime '{cmd}' not found in PATH.",
+            ))),
+        }
+    }
+
     /// Get a writer to the registry,
     /// Essentially spawns a `docker load` or `podman load` process
     /// and returns a handle to its stdin.
     fn to_writer(&self) -> Result<impl ContainerSink> {
-        let cmd = match self {
-            Runtime::Docker => "docker",
-            Runtime::Podman => "podman",
-        };
-
+        let cmd = self.to_cmd();
         let mut child = Command::new(cmd)
             .arg("load")
             .stdin(Stdio::piped())
@@ -403,5 +424,19 @@ mod tests {
             Runtime::detect_from_path()
         });
         assert_eq!(target, None);
+
+        // Check that a specified Runtime is in PATH.
+        assert!(temp_env::with_var("PATH", docker_first_path, || {
+            docker_target.validate_in_path().is_ok()
+        }));
+        assert!(temp_env::with_var("PATH", podman_first_path, || {
+            docker_target.validate_in_path().is_ok()
+        }));
+        assert!(temp_env::with_var("PATH", combined_path, || {
+            docker_target.validate_in_path().is_ok()
+        }));
+        assert!(temp_env::with_var("PATH", neither_path, || {
+            docker_target.validate_in_path().is_err()
+        }));
     }
 }
