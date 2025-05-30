@@ -252,7 +252,7 @@ function skip_if_linux() {
 Exporting a container on macOS requires Docker or Podman to be installed."
 }
 
-# bats test_tags=containerize:default-to-file
+# bats test_tags=containerize:default-to-runtime
 @test "container is written to a runtime by default" {
   env_setup_catalog
 
@@ -286,7 +286,7 @@ Exporting a container on macOS requires Docker or Podman to be installed."
   assert_line "✨ 'test:sometag' written to Podman runtime"
 }
 
-# bats test_tags=containerize:piped-to-runtime
+# bats test_tags=containerize:runtime
 @test "container is written to runtime when '--runtime <runtime>' is passed" {
   env_setup_catalog
 
