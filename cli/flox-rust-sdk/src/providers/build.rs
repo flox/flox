@@ -15,10 +15,12 @@ use tracing::{debug, error, warn};
 use url::Url;
 
 use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
+use super::catalog::BaseCatalogUrl;
 use super::nix::nix_base_command;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
 use crate::models::manifest::typed::{Inner, Manifest};
+use crate::models::lockfile::Lockfile;
 use crate::utils::CommandExt;
 
 pub const FLOX_RUNTIME_DIR_VAR: &str = "FLOX_RUNTIME_DIR";
@@ -419,6 +421,25 @@ pub fn build_symlink_path(
     package: &str,
 ) -> Result<PathBuf, EnvironmentError> {
     Ok(environment.parent_path()?.join(format!("result-{package}")))
+}
+
+/// Look up the "toplevel" groups nixpkgs url from the lockfile.
+///
+/// Returns [None] if no package is locked under the "toplevel" group.
+pub fn find_toplevel_group_nixpkgs(lockfile: &Lockfile) -> Option<BaseCatalogUrl> {
+    let top_level_locked_desc = lockfile.packages.iter().find(|pkg| {
+        let Some(catalog_package_ref) = pkg.as_catalog_package_ref() else {
+            return false;
+        };
+        catalog_package_ref.group == DEFAULT_GROUP_NAME
+    })?;
+
+    Some(BaseCatalogUrl::from(
+        &*top_level_locked_desc
+            .as_catalog_package_ref()
+            .unwrap()
+            .locked_url,
+    ))
 }
 
 /// Use our NEF nix subsystem to query expressions provided in a given expression dir.

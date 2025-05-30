@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
@@ -20,6 +20,7 @@ use super::build::{
     PackageTarget,
     PackageTargetError,
     PackageTargetKind,
+    find_toplevel_group_nixpkgs,
     nix_expression_dir,
 };
 use super::catalog::{
@@ -882,39 +883,6 @@ fn url_for_remote_containing_current_rev(
     }
 }
 
-fn gather_base_repo_meta(lockfile: &Lockfile) -> Result<BaseCatalogUrl, PublishError> {
-    let install_ids_in_toplevel_group = lockfile
-        .manifest
-        .pkg_descriptors_in_toplevel_group()
-        .into_iter()
-        .map(|(pkg, _desc)| pkg)
-        .collect::<HashSet<_>>();
-
-    // We should not need this, and allow for no base catalog page dependency.
-    // But for now, requiring it simplifies resolution and model updates
-    // significantly.
-    if install_ids_in_toplevel_group.is_empty() {
-        return Err(PublishError::UnsupportedEnvironmentState(
-            "No packages in toplevel group".to_string(),
-        ));
-    }
-
-    let top_level_locked_descs = lockfile
-        .packages
-        .iter()
-        .find(|pkg| install_ids_in_toplevel_group.contains(pkg.install_id()));
-
-    if let Some(pkg) = top_level_locked_descs {
-        Ok(BaseCatalogUrl::from(
-            &*pkg.as_catalog_package_ref().unwrap().locked_url,
-        ))
-    } else {
-        Err(PublishError::UnsupportedEnvironmentState(
-            "Unable to find locked descriptor for toplevel package".to_string(),
-        ))
-    }
-}
-
 pub fn check_environment_metadata(
     flox: &Flox,
     environment: &impl Environment,
@@ -956,8 +924,16 @@ pub fn check_package_metadata(
     expression_build_ref: &BaseCatalogUrl,
     pkg: PackageTarget,
 ) -> Result<PackageMetadata, PublishError> {
+    // When publishing a manifest build the toplevel nixpkgs is required as the base url.
+    // for expression builds we want to use the extenally determined base url, i.e. stability.
+    //
+    // We should not need this, and allow for no base catalog page dependency.
+    // But for now, requiring it simplifies resolution and model updates
+    // significantly.
     let base_catalog_ref = if pkg.kind() == PackageTargetKind::ManifestBuild {
-        gather_base_repo_meta(lockfile)?
+        find_toplevel_group_nixpkgs(lockfile).ok_or_else(|| {
+            PublishError::UnsupportedEnvironmentState("No packages in toplevel group".to_string())
+        })?
     } else {
         expression_build_ref.clone()
     };
