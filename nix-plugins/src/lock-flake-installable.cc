@@ -435,7 +435,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 
     auto priorityCursor = cursor->findAlongAttrPath(
       nix::parseAttrPath( *state, "meta.priority" ) );
-    if ( priorityCursor ) { priority = ( *priorityCursor )->getInt(); }
+    if ( priorityCursor ) { priority = ( *priorityCursor )->getInt().value; }
   }
 
 
