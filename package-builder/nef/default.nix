@@ -6,7 +6,11 @@
 }:
 let
   nixpkgs = import nixpkgs-flake {
-    inherit system; # todo set config
+    inherit system;
+    config = {
+      allowUnfree = true;
+      allowInsecure = true;
+    };
   };
   pkgsDir = pkgs-dir;
 
