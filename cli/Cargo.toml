@@ -7,7 +7,7 @@ members = [
     "flox-watchdog",
     "flox-activations",
     "flox-core",
-    "flox-test-utils"
+    "flox-test-utils",
 ]
 default-members = ["flox", "flox-watchdog", "flox-activations"]
 
@@ -24,7 +24,7 @@ clap = { version = "4.5.38", features = ["derive"] }
 clap_derive = "4.5.4"
 close_fds = "0.3"
 # Pinned due to bug: https://github.com/rust-cli/config-rs/issues/531
-config = { version = "0.13.4", default-features = false, features = ["toml"]}
+config = { version = "0.13.4", default-features = false, features = ["toml"] }
 crossterm = "0.27"
 derive_more = "0.99.20"
 dirs = "5.0.0"
@@ -39,7 +39,10 @@ futures = "0.3"
 # git pending:
 # - https://github.com/alexliesenfeld/httpmock/issues/127
 # - https://github.com/alexliesenfeld/httpmock/pull/131
-httpmock = { git = "https://github.com/flox/httpmock.git", branch = "flox/remove_recording_struct", default-features = false , features = ["proxy", "record"] }
+httpmock = { git = "https://github.com/flox/httpmock.git", branch = "flox/remove_recording_struct", default-features = false, features = [
+    "proxy",
+    "record",
+] }
 indent = "0.1.1"
 indexmap = { version = "2.9.0", features = ["serde"] }
 indoc = "2.0.6"
@@ -47,7 +50,7 @@ inquire = "0.6.0"
 indicatif = "0.17"
 itertools = "0.12.1"
 jsonwebtoken = "9.3"
-log = { version = "0.4.27", features = ["kv"]}
+log = { version = "0.4.27", features = ["kv"] }
 nix = { version = "0.28", features = ["signal", "process", "user"] }
 oauth2 = "4.4"
 once_cell = "1.21.3"
@@ -71,6 +74,7 @@ serde_json = "1"
 serde_with = "3.12.0"
 serde_yaml = "0.9"
 shell-escape = "0.1.5"
+slug = "0.1"
 supports-color = "3.0.2"
 # provides process tools for shell detection
 sysinfo = "0.32.1"
