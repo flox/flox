@@ -35,8 +35,7 @@ use super::catalog::{
 use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
-use crate::models::environment::path_environment::PathEnvironment;
-use crate::models::environment::{Environment, EnvironmentError, EnvironmentPointer};
+use crate::models::environment::{Environment, EnvironmentError, open_path};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::Inner;
 use crate::providers::auth::catalog_auth_to_envs;
@@ -125,8 +124,8 @@ pub struct CheckedEnvironmentMetadata {
     pub lockfile: Lockfile,
     // This is the local root path of the repo containing the environment
     pub repo_root_path: PathBuf,
-    // This is the path to the .flox for the build environment relative to the repo_root_path
-    pub rel_dotflox_path: PathBuf,
+    // This is the path to the parent of .flox for the build environment relative to the repo_root_path
+    pub rel_project_path: PathBuf,
 
     // The build repo reference is always present
     pub build_repo_ref: LockedUrlInfo,
@@ -673,24 +672,20 @@ pub fn check_build_metadata(
     git.checkout(env_metadata.build_repo_ref.rev.as_str(), true)
         .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
 
-    let dot_flox_path = CanonicalPath::new(
+    let project_path = CanonicalPath::new(
         clean_repo_path
             .path()
-            .join(env_metadata.rel_dotflox_path.as_path()),
+            .join(env_metadata.rel_project_path.as_path()),
     )
     .map_err(|_err| {
         PublishError::UnsupportedEnvironmentState(
-            ".flox folder not found in clean checkout, is it tracked in the repository?"
+            "Flox project not found in clean checkout, is it tracked in the repository?"
                 .to_string(),
         )
     })?;
-    let EnvironmentPointer::Path(path_pointer) = EnvironmentPointer::open(&dot_flox_path)
-        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?
-    else {
-        unreachable!("Cloned environment contained a path environmentonment")
-    };
 
-    let mut clean_build_env = PathEnvironment::open(flox, path_pointer, dot_flox_path)?;
+    let mut clean_build_env = open_path(flox, &project_path)
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
     let base_dir = clean_build_env.parent_path()?;
     let expression_dir = Some(nix_expression_dir(&clean_build_env));
     let built_environments = clean_build_env.build(flox)?;
@@ -929,15 +924,15 @@ pub fn check_environment_metadata(
     };
 
     // Gather build repo info
-    let git = match environment.parent_path() {
-        Ok(env_path) => GitCommandProvider::discover(env_path)
-            .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git discover {e}")))?,
+    let project_path = match environment.parent_path() {
+        Ok(env_path) => env_path,
         Err(e) => return Err(PublishError::UnsupportedEnvironmentState(e.to_string())),
     };
+    let git = GitCommandProvider::discover(&project_path)
+        .map_err(|e| PublishError::UnsupportedEnvironmentState(format!("Git discover {e}")))?;
 
-    let dot_flox_path = environment.dot_flox_path();
-    let rel_dotflox_path = dot_flox_path.strip_prefix(git.path()).map_err(|e| {
-        PublishError::UnsupportedEnvironmentState(format!("Flox path not in git repo: {e}"))
+    let rel_project_path = project_path.strip_prefix(git.path()).map_err(|e| {
+        PublishError::UnsupportedEnvironmentState(format!("Flox project path not in git repo: {e}"))
     })?;
 
     let build_repo_meta = gather_build_repo_meta(&git)?;
@@ -946,7 +941,7 @@ pub fn check_environment_metadata(
         lockfile,
         build_repo_ref: build_repo_meta,
         repo_root_path: git.path().to_path_buf(),
-        rel_dotflox_path: rel_dotflox_path.to_path_buf(),
+        rel_project_path: rel_project_path.to_path_buf(),
         _private: (),
     })
 }
@@ -1282,7 +1277,7 @@ pub mod tests {
         let env_metadata = CheckedEnvironmentMetadata {
             lockfile: Lockfile::default(),
             repo_root_path: PathBuf::new(),
-            rel_dotflox_path: PathBuf::new(),
+            rel_project_path: PathBuf::new(),
 
             build_repo_ref: LockedUrlInfo {
                 url: "dummy".to_string(),
