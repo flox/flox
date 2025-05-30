@@ -139,6 +139,7 @@ impl Publish {
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
             &mock_base_catalog_url(), // TODO: Replace with actual locked URL info from catalog server
+            env_metadata.toplevel_catalog_ref.as_ref(),
             package,
         )?;
 

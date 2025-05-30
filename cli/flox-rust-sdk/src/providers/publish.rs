@@ -132,6 +132,9 @@ pub struct CheckedEnvironmentMetadata {
     // The build repo reference is always present
     pub build_repo_ref: LockedUrlInfo,
 
+    // There may or may not be a locked base catalog reference in the environment
+    pub toplevel_catalog_ref: Option<BaseCatalogUrl>,
+
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
     _private: (),
@@ -159,7 +162,6 @@ pub struct CheckedBuildMetadata {
 #[allow(clippy::manual_non_exhaustive)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct PackageMetadata {
-    // There may or may not be a locked base catalog reference in the environment
     pub base_catalog_ref: BaseCatalogUrl,
 
     // These are collected from the environment manifest
@@ -707,6 +709,12 @@ pub fn check_build_metadata(
     let output_stream = builder.build(
         // todo: use a non-hardcoded nixpkgs url
         &mock_base_catalog_url().as_flake_ref()?,
+        env_metadata
+            .toplevel_catalog_ref
+            .as_ref()
+            .map(BaseCatalogUrl::as_flake_ref)
+            .transpose()?
+            .as_ref(),
         &built_environments.develop,
         &[pkg.name()],
         Some(false),
@@ -910,9 +918,12 @@ pub fn check_environment_metadata(
 
     let build_repo_meta = gather_build_repo_meta(&git)?;
 
+    let toplevel_catalog_ref = find_toplevel_group_nixpkgs(&lockfile);
+
     Ok(CheckedEnvironmentMetadata {
         lockfile,
         build_repo_ref: build_repo_meta,
+        toplevel_catalog_ref,
         repo_root_path: git.path().to_path_buf(),
         rel_dotflox_path: rel_dotflox_path.to_path_buf(),
         _private: (),
@@ -922,6 +933,7 @@ pub fn check_environment_metadata(
 pub fn check_package_metadata(
     lockfile: &Lockfile,
     expression_build_ref: &BaseCatalogUrl,
+    toplevel_catalog_ref: Option<&BaseCatalogUrl>,
     pkg: PackageTarget,
 ) -> Result<PackageMetadata, PublishError> {
     // When publishing a manifest build the toplevel nixpkgs is required as the base url.
@@ -931,7 +943,7 @@ pub fn check_package_metadata(
     // But for now, requiring it simplifies resolution and model updates
     // significantly.
     let base_catalog_ref = if pkg.kind() == PackageTargetKind::ManifestBuild {
-        find_toplevel_group_nixpkgs(lockfile).ok_or_else(|| {
+        toplevel_catalog_ref.cloned().ok_or_else(|| {
             PublishError::UnsupportedEnvironmentState("No packages in toplevel group".to_string())
         })?
     } else {
@@ -1151,9 +1163,12 @@ pub mod tests {
 
         let lockfile = env.lockfile(&flox).unwrap().into();
 
+        let toplevel_catalog_url = find_toplevel_group_nixpkgs(&lockfile);
+
         let meta = check_package_metadata(
             &lockfile,
             &mock_base_catalog_url(),
+            toplevel_catalog_url.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
         )
         .unwrap();
@@ -1207,6 +1222,7 @@ pub mod tests {
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
             &mock_base_catalog_url(),
+            env_metadata.toplevel_catalog_ref.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
         )
         .unwrap();
@@ -1260,6 +1276,7 @@ pub mod tests {
             repo_root_path: PathBuf::new(),
             rel_dotflox_path: PathBuf::new(),
 
+            toplevel_catalog_ref: Some(mock_base_catalog_url()),
             build_repo_ref: LockedUrlInfo {
                 url: "dummy".to_string(),
                 rev: "dummy".to_string(),
@@ -1409,6 +1426,7 @@ pub mod tests {
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
             &mock_base_catalog_url(),
+            env_metadata.toplevel_catalog_ref.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
         )
         .unwrap();
