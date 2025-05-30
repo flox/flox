@@ -45,6 +45,7 @@ pub enum Command {
 
 /// Splits PATH-like variables into individual paths, removing any empty strings.
 fn separate_dir_list(joined: &str) -> Vec<PathBuf> {
+    let joined = if joined == "empty" { "" } else { joined };
     let split = std::env::split_paths(joined).collect::<Vec<_>>();
     if (split.len() == 1) && (split[0] == PathBuf::from("")) {
         vec![]

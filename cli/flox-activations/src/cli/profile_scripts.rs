@@ -31,7 +31,8 @@ impl ProfileScriptsArgs {
         );
         let individual_cmds =
             source_profile_scripts_cmds(&self.env_dirs, &self.shell, Path::exists);
-        output.write_all(individual_cmds.join("\n").as_bytes())?;
+        let all_cmds = format!("{}\n", individual_cmds.join("\n"));
+        output.write_all(all_cmds.as_bytes())?;
         Ok(())
     }
 }
@@ -55,11 +56,12 @@ fn source_profile_scripts_cmds(
             let shell_specific = path.join(format!("activate.d/profile-{shell}"));
             [common, shell_specific]
         })
-        .map(|path| {
+        .filter_map(|path| {
             if path_predicate(&path) {
-                source_file(&path)
+                Some(source_file(&path))
             } else {
-                format!("# Script did not exist: '{}'", path.display())
+                debug!(path:display = path.display(); "script did not exist");
+                None
             }
         })
         .collect::<Vec<_>>()
@@ -130,7 +132,6 @@ mod test {
         let expected = vec![
             "source 'older/activate.d/profile-common';".to_string(),
             "source 'older/activate.d/profile-bash';".to_string(),
-            "# Script did not exist: 'newer/activate.d/profile-common'".to_string(),
             "source 'newer/activate.d/profile-bash';".to_string(),
         ];
         assert_eq!(expected, cmds);
@@ -145,7 +146,6 @@ mod test {
         let expected = vec![
             "source 'older/activate.d/profile-common';".to_string(),
             "source 'older/activate.d/profile-zsh';".to_string(),
-            "# Script did not exist: 'newer/activate.d/profile-common'".to_string(),
             "source 'newer/activate.d/profile-zsh';".to_string(),
         ];
         assert_eq!(expected, cmds);
@@ -160,7 +160,6 @@ mod test {
         let expected = vec![
             "source 'older/activate.d/profile-common';".to_string(),
             "source 'older/activate.d/profile-tcsh';".to_string(),
-            "# Script did not exist: 'newer/activate.d/profile-common'".to_string(),
             "source 'newer/activate.d/profile-tcsh';".to_string(),
         ];
         assert_eq!(expected, cmds);
@@ -175,7 +174,6 @@ mod test {
         let expected = vec![
             "source 'older/activate.d/profile-common';".to_string(),
             "source 'older/activate.d/profile-fish';".to_string(),
-            "# Script did not exist: 'newer/activate.d/profile-common'".to_string(),
             "source 'newer/activate.d/profile-fish';".to_string(),
         ];
         assert_eq!(expected, cmds);

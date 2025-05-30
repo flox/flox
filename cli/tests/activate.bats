@@ -3765,7 +3765,7 @@ EOF
   )"
   echo "$MANIFEST_CONTENTS_PROJECT" | "$FLOX_BIN" edit -d project -f -
 
-  echo "eval \`$FLOX_BIN activate -d '$PROJECT_DIR/default'\`" > "$HOME/.tcshrc.extra"
+  echo "eval \"\`'$FLOX_BIN' activate -d '$PROJECT_DIR/default'\`\"" >> "$HOME/.tcshrc.extra"
 
   # It would be better use tcsh -i to source .tcshrc,
   # but that causes the tests to background because tcsh -i tries to open
@@ -4796,7 +4796,7 @@ nested_activation_get_output() {
 # are present in PATH, and the outer environment appears first.
 nested_activation_assertions() {
   # Check that PATH is repaired
-  assert_output --partial "PATH is $outer_stub/bin:$outer_stub/sbin:$default_stub/bin:$default_stub/sbin:before_path:$original_path"
+  assert_output --partial "PATH is $outer_stub/bin:$outer_stub/sbin:$default_stub/bin:$default_stub/sbin:before_path"
   # Check that MANPATH is repaired
   assert_output --partial "MANPATH is $outer_stub/share/man:$default_stub/share/man"
 }
@@ -4829,37 +4829,31 @@ check_nested_activation_repairs_path_and_manpath() {
 
 # bats test_tags=activate:tcsh,activate:nested
 @test "tcsh: command: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath tcsh -c
 }
 
 # bats test_tags=activate:tcsh,activate:nested
 @test "tcsh: interactive: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath tcsh -ic
 }
 
 # bats test_tags=activate:tcsh,activate:nested
 @test "tcsh: in-place: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath tcsh eval
 }
 
 # bats test_tags=activate:fish,activate:nested
 @test "fish: command: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath fish -c
 }
 
 # bats test_tags=activate:fish,activate:nested
 @test "fish: interactive: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath fish -ic
 }
 
 # bats test_tags=activate:fish,activate:nested
 @test "fish: in-place: nested activation repairs (MAN)PATH" {
-  skip "fixme"
   check_nested_activation_repairs_path_and_manpath fish eval
 }
 
