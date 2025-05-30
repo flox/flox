@@ -14,6 +14,7 @@ use flox_rust_sdk::providers::build::{
     PackageTarget,
     PackageTargets,
     build_symlink_path,
+    find_toplevel_group_nixpkgs,
     nix_expression_dir,
 };
 use flox_rust_sdk::providers::catalog::mock_base_catalog_url;
@@ -140,6 +141,10 @@ impl Build {
             FloxBuildMk::new(&flox, &base_dir, Some(&expression_dir), &built_environments);
         let output = builder.build(
             &mock_base_catalog_url().as_flake_ref()?,
+            find_toplevel_group_nixpkgs(&lockfile)
+                .map(|catalog_ref| catalog_ref.as_flake_ref())
+                .transpose()?
+                .as_ref(),
             &FLOX_INTERPRETER,
             &target_names,
             None,

@@ -19,8 +19,8 @@ use super::catalog::BaseCatalogUrl;
 use super::nix::nix_base_command;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
-use crate::models::manifest::typed::{Inner, Manifest};
 use crate::models::lockfile::Lockfile;
+use crate::models::manifest::typed::{DEFAULT_GROUP_NAME, Inner, Manifest};
 use crate::utils::CommandExt;
 
 pub const FLOX_RUNTIME_DIR_VAR: &str = "FLOX_RUNTIME_DIR";
@@ -59,6 +59,7 @@ pub trait ManifestBuilder {
     fn build(
         &self,
         expression_build_nixpkgs: &Url,
+        toplevel_nixpkgs: Option<&Url>,
         flox_interpreter: &Path,
         package: &[PackageTargetName],
         build_cache: Option<bool>,
@@ -204,6 +205,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     fn build(
         &self,
         expression_build_nixpkgs: &Url,
+        toplevel_nixpkgs: Option<&Url>,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
         build_cache: Option<bool>,
@@ -214,6 +216,11 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             "BUILDTIME_NIXPKGS_URL={}",
             expression_build_nixpkgs
         ));
+
+        if let Some(toplevel_nixpkgs_url) = toplevel_nixpkgs {
+            command.arg(format!("TOPLEVEL_NIXPKGS_URL={toplevel_nixpkgs_url}"));
+        }
+
         command.arg(format!(
             "FLOX_ENV={}",
             self.built_environments.develop.display()
@@ -695,6 +702,7 @@ pub mod test_helpers {
         )
         .build(
             &COMMON_NIXPKGS_URL,
+            None,
             &env.rendered_env_links(flox).unwrap().development,
             &[PackageTargetName::new_unchecked(&package)],
             build_cache,
