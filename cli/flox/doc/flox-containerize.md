@@ -20,17 +20,7 @@ flox [<general-options>] containerize
 # DESCRIPTION
 
 Export a Flox environment as a container image.
-The image is written to the specified output target.
-With `--file|-f <file>` a tarball is writtent to the specified file.
-When `-` is passed as `<file>` the image is instead written to stdout.
-The `--runtime <runtime>` flag supports `docker` and `podman`,
-and expects the selected runtime to be found in PATH.
-
-When neither option is provided,
-the container is loaded into a supported runtime,
-`docker` or `podman`, whichever is found first in PATH.
-If no supported runtime is found,
-the container is written to `./<env name>-container.tar` instead.
+The image can be written to a container runtime registry, a file, or another process.
 
 **Note**: Exporting a container from macOS requires a supported runtime
 because a proxy container is used to build the environment and image. You
