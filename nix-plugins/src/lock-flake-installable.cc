@@ -48,7 +48,7 @@ parseInstallable( const nix::ref<nix::EvalState> & state,
       return nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec(
         state->fetchSettings,
         installableStr,
-        nix::absPath( "." ) );
+        nix::absPath( std::string_view( "." ) ) );
     }
   catch ( const nix::Error & e )
     {
