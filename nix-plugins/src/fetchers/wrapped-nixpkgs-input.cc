@@ -319,7 +319,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
 
   if ( path.size() != 3 )
     {
-      throw nix::BadURL( "URL '%s' is invalid", url.url );
+      throw nix::BadURL( "URL '%s' is invalid", url.to_string() );
     }
 
   // Extract version
@@ -341,7 +341,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
     {
       throw nix::BadURL(
         "in URL '%s', '%s' is not a rules version tag like 'v<NUMBER>'",
-        url.url,
+        url.to_string(),
         version );
     }
 
@@ -355,7 +355,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
     {
       throw nix::BadURL(
         "in URL '%s', '%s' is not 'NixOS' or 'flox' (case-insensitive)",
-        url.url,
+        url.to_string(),
         owner );
     }
 
@@ -371,7 +371,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
         {
           throw nix::BadURL(
             "in URL '%s', '%s' is not a valid Git branch/tag name",
-            url.url,
+            url.to_string(),
             ref_or_rev );
         }
       input.attrs.insert_or_assign( "ref", ref_or_rev );
@@ -380,7 +380,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
     {
       throw nix::BadURL(
         "in URL '%s', '%s' is not a Git commit hash or branch/tag name",
-        url.url,
+        url.to_string(),
         path[1] );
     }
 
