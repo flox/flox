@@ -13,7 +13,7 @@ flox-containerize - export an environment as a container image
 ```
 flox [<general-options>] containerize
      [-d=<path> | -r=<owner/name>]
-     [-f=<file> | --runtime=<runtime>]
+     [-f=<file>] [--runtime=<runtime>]
      [--tag=<tag>]
 ```
 
@@ -32,8 +32,8 @@ the container is loaded into a supported runtime,
 If no supported runtime is found,
 the container is written to `./<env name>-container.tar` instead.
 
-**Note**: Exporting a container from macOS requires a supported runtime to be
-found because a proxy container is used to build the environment and image. You
+**Note**: Exporting a container from macOS requires a supported runtime
+because a proxy container is used to build the environment and image. You
 may be prompted for permissions to share files into the proxy container.
 Files used in the proxy container are cached using a `docker` or `podman`
 volume named `flox-nix`.
@@ -53,13 +53,15 @@ similar to `flox activate --`.
 # OPTIONS
 
 `-f`, `--file`
-:   Write the container image to `<file>`.
-    If `<output target>` is `-`, writes to `stdout`.
+:   File to write the container image to.
+    `-` to write to stdout.
+    Defaults to `{name}-container.tar` if `--runtime` isn't specified or detected.
 
 `--runtime`
-:   Load the image into the specified `<runtime>`.
-    `<runtime>` may bei either `docker` or `podman`.
-    The specified binary must be found in `PATH`.
+:   Container runtime to
+    store the image (when `--file` is not specified)
+    or build the image (when on macOS).
+    Defaults to detecting the first available on PATH.
 
 ```{.include}
 ./include/environment-options.md

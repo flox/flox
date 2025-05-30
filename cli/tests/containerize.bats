@@ -270,6 +270,7 @@ Exporting a container on macOS requires Docker or Podman to be installed."
   env_setup_catalog
 
   PATH= run "$FLOX_BIN" containerize
+  assert_line "✨ 'test:latest' written to file 'test-container.tar'"
   assert_success
   assert [ -f "test-container.tar" ] # <env-name>-container.tar by default
 }
@@ -296,6 +297,16 @@ Exporting a container on macOS requires Docker or Podman to be installed."
 
   run --separate-stderr podman run -q -i "localhost/test:runtime" -c 'echo $foo'
   assert_success
+}
+
+# bats test_tags=containerize:file-and-runtime
+@test "container is written to file when '--runtime' and '--file' are passed" {
+  env_setup_catalog
+
+  run bash -c '"$FLOX_BIN" containerize --runtime podman --file podman-container.tar' 3>&-
+  assert_success
+  assert_line "✨ 'test:latest' written to file 'podman-container.tar'"
+  assert [ -f "podman-container.tar" ]
 }
 
 # bats test_tags=containerize:runtime-not-in-path
