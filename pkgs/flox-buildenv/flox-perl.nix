@@ -17,7 +17,7 @@ let
     "Compress/Raw/Zlib"
     # "Cwd" # Required by builder.pl.
     "DB_File"
-    "Data/Dumper"
+    # "Data/Dumper" # Desired for debugging.
     "Devel/PPPort"
     "Devel/Peek"
     "Digest/MD5"
@@ -58,6 +58,18 @@ let
     "threads"
     "threads/shared"
   ];
+
+  # The script which determines the modules to keep.
+  perlExerciseModules = [
+    # Require perl5db.pl and Term/ReadLine.pm so that we can invoke the debugger.
+    "require \"perl5db.pl\""
+    "require Term::ReadLine"
+    # Require Data/Dumper.pm so that we can inspect data from the debugger.
+    "require Data::Dumper"
+    # Pull in modules required by the supplied ${perlScript}.
+    "do \"${perlScript}\""
+  ];
+  perlExerciseModulesCommands = builtins.concatStringsSep "; " perlExerciseModules;
 
 in
 perl.overrideAttrs (oldAttrs: {
@@ -117,7 +129,7 @@ perl.overrideAttrs (oldAttrs: {
         # itself exercises all of the same inputs used by builder.pl.
         keeplibs=$(mktemp)
         $out/bin/perl -MConfig \
-          -e 'do "${perlScript}"; END {
+          -e '${perlExerciseModulesCommands}; END {
             foreach my $lib (keys %INC) {
               next if $lib eq "${perlScript}";
               if ( -e "$Config{archlib}/$lib" ) {
@@ -162,7 +174,7 @@ perl.overrideAttrs (oldAttrs: {
     # The following command exercises the same modules used by builder.pl.
     (
       set -x
-      $out/bin/perl -e 'do "${perlScript}"'
+      $out/bin/perl -e '${perlExerciseModulesCommands}'
     )
   '';
 })
