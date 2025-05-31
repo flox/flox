@@ -540,6 +540,11 @@ if ($manifest) {
                     my @buildPackageAttrPaths;
                     foreach my $name (@buildPackageNames) {
                         if (exists $install->{$name}) {
+                            # Skip over any packages referenced in "runtime-packages" that
+                            # are not installed for this system type.
+                            if (exists $install->{$name}{'systems'}) {
+                                next unless grep { $_ eq $system } @{$install->{$name}{'systems'}};
+                            }
                             # First confirm that the pkg-path can be found in @toplevelPackages
                             if (grep { $_->{"attr_path"} eq $install->{$name}{"pkg-path"} } @toplevelPackages) {
                                 push @buildPackageAttrPaths, $install->{$name}{"pkg-path"};
