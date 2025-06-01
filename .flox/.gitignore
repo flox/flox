@@ -1,0 +1,7 @@
+.
+run/
+cache/
+lib/
+log/
+!env/
+!pkgs/

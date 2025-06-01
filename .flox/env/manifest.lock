@@ -1,0 +1,1231 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "jupyter": {
+        "pkg-path": "jupyter-all"
+      },
+      "matplotlib": {
+        "pkg-path": "python311Packages.matplotlib"
+      },
+      "numpy": {
+        "pkg-path": "python311Packages.numpy"
+      },
+      "ollama": {
+        "pkg-path": "ollama"
+      },
+      "pandas": {
+        "pkg-path": "python311Packages.pandas"
+      },
+      "plotly": {
+        "pkg-path": "python311Packages.plotly"
+      },
+      "pyarrow": {
+        "pkg-path": "python311Packages.pyarrow"
+      },
+      "pydot": {
+        "pkg-path": "python311Packages.pydot"
+      },
+      "sympy": {
+        "pkg-path": "python311Packages.sympy"
+      },
+      "ysndr/foo": {
+        "pkg-path": "ysndr/foo",
+        "pkg-group": "ysndr/foo",
+        "systems": [
+          "aarch64-darwin"
+        ]
+      }
+    },
+    "vars": {
+      "virtualEnv": "./nb-venv/"
+    },
+    "hook": {
+      "on-activate": "\nif [[ -d $virtualEnv ]]; then\n  echo; echo -n \"⚡️ Activating existing venv in $virtualEnv...\"\n  . $virtualEnv/bin/activate\n  echo \"done.\"\nfi\n\n# If we see a requirements.txt file, install its contents\n# into a virtual environment\n\nif [[ -f requirements.txt ]]; then\n  echo -n \"🐍 Processing requirements.txt...\"\n  [ ! -d $virtualEnv ] && python -m venv $virtualEnv\n  . $virtualEnv/bin/activate\n  pip3 -qq install -r requirements.txt\n  echo \"done.\"\nfi\n\n# Set an alias to start the notebook and educate the user\n\nalias nb=\"jupyter notebook --ip 0.0.0.0\"\necho; echo \"Jupyter environment ready - start notebook with alias 'nb'.\"\n\n"
+    },
+    "options": {
+      "systems": [
+        "x86_64-linux",
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-darwin"
+      ]
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "jupyter-all",
+      "broken": false,
+      "derivation": "/nix/store/c10a198hjag6dwhxlkap037gpxr1zl1q-python3-3.12.7-env.drv",
+      "description": "High-level dynamically-typed programming language",
+      "install_id": "jupyter",
+      "license": "Python-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3-3.12.7-env",
+      "pname": "jupyter-all",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "python3-3.12.7-env",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/mdmyh99159h2y5sza1577vkh456psrwx-python3-3.12.7-env"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "jupyter-all",
+      "broken": false,
+      "derivation": "/nix/store/slbznix4dy4sdklzp6ch765hirfb851x-python3-3.12.7-env.drv",
+      "description": "High-level dynamically-typed programming language",
+      "install_id": "jupyter",
+      "license": "Python-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3-3.12.7-env",
+      "pname": "jupyter-all",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "python3-3.12.7-env",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/90xi0rgwb0g9cz1gwbndn8c84yfs7wx6-python3-3.12.7-env"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "jupyter-all",
+      "broken": false,
+      "derivation": "/nix/store/bq4ivh8jh9xqi9i1vm3pmzfzwj90r2ha-python3-3.12.7-env.drv",
+      "description": "High-level dynamically-typed programming language",
+      "install_id": "jupyter",
+      "license": "Python-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3-3.12.7-env",
+      "pname": "jupyter-all",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "python3-3.12.7-env",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/ww6h3l6ahrrdwmbw5kpsk00mybywx6qd-python3-3.12.7-env"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "jupyter-all",
+      "broken": false,
+      "derivation": "/nix/store/qyc3yw3qwa3ck6w7vwqf7cv2lh4qs81j-python3-3.12.7-env.drv",
+      "description": "High-level dynamically-typed programming language",
+      "install_id": "jupyter",
+      "license": "Python-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3-3.12.7-env",
+      "pname": "jupyter-all",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "python3-3.12.7-env",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/mqlw58d5jg3pjpvgdw6si09073i7hbh2-python3-3.12.7-env"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.matplotlib",
+      "broken": false,
+      "derivation": "/nix/store/4r6rf6m59590ymm1b1jrpv591jkk2aq8-python3.11-matplotlib-3.9.2.drv",
+      "description": "Python plotting library, making publication quality plots",
+      "install_id": "matplotlib",
+      "license": "[ Python-2.0, 0BSD ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-matplotlib-3.9.2",
+      "pname": "matplotlib",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.9.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/lylg6ywpgxz1acvc23is1xqv33szq6aw-python3.11-matplotlib-3.9.2-dist",
+        "out": "/nix/store/wr6wxiamx5jayapfbzap2c4qa89ba5sx-python3.11-matplotlib-3.9.2"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.matplotlib",
+      "broken": false,
+      "derivation": "/nix/store/c47163qkwx2pcvngljxk0lna2k5nb7p6-python3.11-matplotlib-3.9.2.drv",
+      "description": "Python plotting library, making publication quality plots",
+      "install_id": "matplotlib",
+      "license": "[ Python-2.0, 0BSD ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-matplotlib-3.9.2",
+      "pname": "matplotlib",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.9.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/mylwgmqqvll1f6sliklksih9f2v3p66p-python3.11-matplotlib-3.9.2-dist",
+        "out": "/nix/store/kpc185lc50kb5kz8y8agq6gh31zqip54-python3.11-matplotlib-3.9.2"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.matplotlib",
+      "broken": false,
+      "derivation": "/nix/store/qn2an7qshj6vm86cidmyn6dj6fh82sh5-python3.11-matplotlib-3.9.2.drv",
+      "description": "Python plotting library, making publication quality plots",
+      "install_id": "matplotlib",
+      "license": "[ Python-2.0, 0BSD ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-matplotlib-3.9.2",
+      "pname": "matplotlib",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.9.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/bqv14fr7h7ami3vlm4yfchkiliyqnx0m-python3.11-matplotlib-3.9.2-dist",
+        "out": "/nix/store/kn5prhxqn425pym0pdd32y8p2c6q0rkr-python3.11-matplotlib-3.9.2"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.matplotlib",
+      "broken": false,
+      "derivation": "/nix/store/6n3wb7mgvcgdl9az9ynwbk3p8zwli9zg-python3.11-matplotlib-3.9.2.drv",
+      "description": "Python plotting library, making publication quality plots",
+      "install_id": "matplotlib",
+      "license": "[ Python-2.0, 0BSD ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-matplotlib-3.9.2",
+      "pname": "matplotlib",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.9.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/njgydy8csnsx5kwd666pdf1ibkqyn51l-python3.11-matplotlib-3.9.2-dist",
+        "out": "/nix/store/smwjm887v440nj1m02a32rwzdfn6wi17-python3.11-matplotlib-3.9.2"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.numpy",
+      "broken": false,
+      "derivation": "/nix/store/j52x6z5rkqryr1fvxrqi8ncxcawlsxdy-python3.11-numpy-1.26.4.drv",
+      "description": "Scientific tools for Python",
+      "install_id": "numpy",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-numpy-1.26.4",
+      "pname": "numpy",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.26.4",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/gfmfvvxf81zsjfcfpps1i5azv8ig69fc-python3.11-numpy-1.26.4-dist",
+        "out": "/nix/store/41bx8y7h7w19aldw53v5i3f6ncxghjh2-python3.11-numpy-1.26.4"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.numpy",
+      "broken": false,
+      "derivation": "/nix/store/f2imgd44a2s8xp63hrwg902hp0j2khbz-python3.11-numpy-1.26.4.drv",
+      "description": "Scientific tools for Python",
+      "install_id": "numpy",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-numpy-1.26.4",
+      "pname": "numpy",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.26.4",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/0fd878mvnwdibxnff7i89k43acfafhxz-python3.11-numpy-1.26.4-dist",
+        "out": "/nix/store/4scpjpzzlm8nr4w1k8dbndg11a6za7r6-python3.11-numpy-1.26.4"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.numpy",
+      "broken": false,
+      "derivation": "/nix/store/2hlmak791mxxlancxnxfx0bmp1a4zkk3-python3.11-numpy-1.26.4.drv",
+      "description": "Scientific tools for Python",
+      "install_id": "numpy",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-numpy-1.26.4",
+      "pname": "numpy",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.26.4",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/5wsxcjnd0l3zpvg6sk7l5svnrn9qcnvk-python3.11-numpy-1.26.4-dist",
+        "out": "/nix/store/qhdh2lcipl3iswd6wdv35wfva4vsdqbf-python3.11-numpy-1.26.4"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.numpy",
+      "broken": false,
+      "derivation": "/nix/store/1qh9fg19m52avrj63z14n5f8k21qi80p-python3.11-numpy-1.26.4.drv",
+      "description": "Scientific tools for Python",
+      "install_id": "numpy",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-numpy-1.26.4",
+      "pname": "numpy",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.26.4",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/kdlm2azwygpbpy65qmffi04nw9igmap8-python3.11-numpy-1.26.4-dist",
+        "out": "/nix/store/12nkx5irbnfdh06frm3sxs7drdw9ah4r-python3.11-numpy-1.26.4"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "ollama",
+      "broken": false,
+      "derivation": "/nix/store/3wyv7jh2d0dbv1jgwvl737v3rnhmrjs9-ollama-0.5.1.drv",
+      "description": "Get up and running with large language models locally",
+      "install_id": "ollama",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "ollama-0.5.1",
+      "pname": "ollama",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.5.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/6z7jpkbapww4xsmisqxmwjydr3crp79m-ollama-0.5.1"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "ollama",
+      "broken": false,
+      "derivation": "/nix/store/a6wp0f8g2rs0crh1lda09s7802hzi5k8-ollama-0.5.1.drv",
+      "description": "Get up and running with large language models locally",
+      "install_id": "ollama",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "ollama-0.5.1",
+      "pname": "ollama",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.5.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/jvnyjkkrz4i9lnmmxwhg2fqjjkybqj8q-ollama-0.5.1"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "ollama",
+      "broken": false,
+      "derivation": "/nix/store/f9x8hwp9z2dwkd89mxp2g8bx1gx871mi-ollama-0.5.1.drv",
+      "description": "Get up and running with large language models locally",
+      "install_id": "ollama",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "ollama-0.5.1",
+      "pname": "ollama",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.5.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/z3afzn5q82p9bsc28dvillymaira81a8-ollama-0.5.1"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "ollama",
+      "broken": false,
+      "derivation": "/nix/store/2090vj8c3w4y7bj2bpqp7skir72r13im-ollama-0.5.1.drv",
+      "description": "Get up and running with large language models locally",
+      "install_id": "ollama",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "ollama-0.5.1",
+      "pname": "ollama",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "0.5.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/askvjpbpi1xm66d0flx8ql6bxz8m4axq-ollama-0.5.1"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.pandas",
+      "broken": false,
+      "derivation": "/nix/store/aw3476qb47yj1glnm82jqwpss7brs7cc-python3.11-pandas-2.2.3.drv",
+      "description": "Powerful data structures for data analysis, time series, and statistics",
+      "install_id": "pandas",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-pandas-2.2.3",
+      "pname": "pandas",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.2.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/2j2plgzx3mapr49kfpz46rfqb14yggxg-python3.11-pandas-2.2.3-dist",
+        "out": "/nix/store/fp5qnb4dvswnkfvxw9ydb6isjf7k7lbc-python3.11-pandas-2.2.3"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.pandas",
+      "broken": false,
+      "derivation": "/nix/store/bz83qlxvhjpivcwkpvxn3l08s8zpm5yg-python3.11-pandas-2.2.3.drv",
+      "description": "Powerful data structures for data analysis, time series, and statistics",
+      "install_id": "pandas",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-pandas-2.2.3",
+      "pname": "pandas",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.2.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/dfp2pa2gak4d1yriyccva8hfsapziybk-python3.11-pandas-2.2.3-dist",
+        "out": "/nix/store/zrzxzmmy9g7hmjci27blf86szcjwag66-python3.11-pandas-2.2.3"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.pandas",
+      "broken": false,
+      "derivation": "/nix/store/ixqdl550d3fs4d0ii6zvzm1g8m8gjfj3-python3.11-pandas-2.2.3.drv",
+      "description": "Powerful data structures for data analysis, time series, and statistics",
+      "install_id": "pandas",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-pandas-2.2.3",
+      "pname": "pandas",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.2.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/aq6ack6qy8ysx3ksn1fysy3lss9xd7l9-python3.11-pandas-2.2.3-dist",
+        "out": "/nix/store/12avgr9s4a5pjzg9i283is1xfchzwy22-python3.11-pandas-2.2.3"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.pandas",
+      "broken": false,
+      "derivation": "/nix/store/yv6algw00xwk5g1rihi688l7vwkgdva6-python3.11-pandas-2.2.3.drv",
+      "description": "Powerful data structures for data analysis, time series, and statistics",
+      "install_id": "pandas",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-pandas-2.2.3",
+      "pname": "pandas",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.2.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/b4krw8gg7clhwzhhbgk5c7pyb9wmjhmv-python3.11-pandas-2.2.3-dist",
+        "out": "/nix/store/ykj2zgln73lsm8wr797wsc8b2mpdp6k8-python3.11-pandas-2.2.3"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.plotly",
+      "broken": false,
+      "derivation": "/nix/store/iih0m8v858isfkai8h2yqs151p4yr3fk-python3.11-plotly-5.24.1.drv",
+      "description": "Python plotting library for collaborative, interactive, publication-quality graphs",
+      "install_id": "plotly",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-plotly-5.24.1",
+      "pname": "plotly",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.24.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/pvm6a2fccfig1il6iw8iqyzylaan9zli-python3.11-plotly-5.24.1-dist",
+        "out": "/nix/store/4jcafqv9b8j2p635acc5xqfa4pqsk36m-python3.11-plotly-5.24.1"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.plotly",
+      "broken": false,
+      "derivation": "/nix/store/fhx8xwanmvsgzakr4f0x9pjcbvfiy2vi-python3.11-plotly-5.24.1.drv",
+      "description": "Python plotting library for collaborative, interactive, publication-quality graphs",
+      "install_id": "plotly",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-plotly-5.24.1",
+      "pname": "plotly",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.24.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/sfmxkbx6if7p7b7s3qqq9ns9mrxw6kni-python3.11-plotly-5.24.1-dist",
+        "out": "/nix/store/pnv32xw1rhk586zs3adzx6rj6zcb70lq-python3.11-plotly-5.24.1"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.plotly",
+      "broken": false,
+      "derivation": "/nix/store/jdx1dakd3yjrvv412manzx3rad1rq6sl-python3.11-plotly-5.24.1.drv",
+      "description": "Python plotting library for collaborative, interactive, publication-quality graphs",
+      "install_id": "plotly",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-plotly-5.24.1",
+      "pname": "plotly",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.24.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/m2d8pp2nijad7q1z16alx4yz6x7djj3z-python3.11-plotly-5.24.1-dist",
+        "out": "/nix/store/16by8xy9yd3naign2ccs9l4k5572zw3h-python3.11-plotly-5.24.1"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.plotly",
+      "broken": false,
+      "derivation": "/nix/store/0v0h7ch1b0vhx3v8g594jf1cj6wvgh71-python3.11-plotly-5.24.1.drv",
+      "description": "Python plotting library for collaborative, interactive, publication-quality graphs",
+      "install_id": "plotly",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-plotly-5.24.1",
+      "pname": "plotly",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.24.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/p9fsmcaxgn02p5k9bq7fi5qp67jf5b80-python3.11-plotly-5.24.1-dist",
+        "out": "/nix/store/abkpld3bfcz9valvkqnv3y7qgsvx2rc0-python3.11-plotly-5.24.1"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.pyarrow",
+      "broken": false,
+      "derivation": "/nix/store/nb1hqvvj2cjxs1jpwf607lnv95ibxkp5-python3.11-pyarrow-18.0.0.drv",
+      "description": "Cross-language development platform for in-memory data",
+      "install_id": "pyarrow",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-pyarrow-18.0.0",
+      "pname": "pyarrow",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "18.0.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/n7xxssh8fwlniwp5acma1js43i3rrr17-python3.11-pyarrow-18.0.0-dist",
+        "out": "/nix/store/lazml282agj6rnymhjabjivw45gm8b08-python3.11-pyarrow-18.0.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.pyarrow",
+      "broken": false,
+      "derivation": "/nix/store/i60qhg70sjg4i712n9w5wh5zbxag9p27-python3.11-pyarrow-18.0.0.drv",
+      "description": "Cross-language development platform for in-memory data",
+      "install_id": "pyarrow",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-pyarrow-18.0.0",
+      "pname": "pyarrow",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "18.0.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/zhwkkkqii0s766n5qw93p04z68qjvr13-python3.11-pyarrow-18.0.0-dist",
+        "out": "/nix/store/g8pcfqkprzxpvi8067mqqfahcx4prc65-python3.11-pyarrow-18.0.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.pyarrow",
+      "broken": false,
+      "derivation": "/nix/store/fgj87vqg6xjp0yiyy2j45ggbdx7m4s72-python3.11-pyarrow-18.0.0.drv",
+      "description": "Cross-language development platform for in-memory data",
+      "install_id": "pyarrow",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-pyarrow-18.0.0",
+      "pname": "pyarrow",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "18.0.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/shys4r2xq4rb21204mmm403gagghjhqr-python3.11-pyarrow-18.0.0-dist",
+        "out": "/nix/store/7vjv6h3myzwbvyk31yf6xaym92wp98cz-python3.11-pyarrow-18.0.0"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.pyarrow",
+      "broken": false,
+      "derivation": "/nix/store/zipqxf3bnmpc5in13ifh7agdqivpzaqh-python3.11-pyarrow-18.0.0.drv",
+      "description": "Cross-language development platform for in-memory data",
+      "install_id": "pyarrow",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-pyarrow-18.0.0",
+      "pname": "pyarrow",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "18.0.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/hv3di1zwxv08rkfr47ab3hkh5zgk71r0-python3.11-pyarrow-18.0.0-dist",
+        "out": "/nix/store/lxldyljhn1x4v2zbrrv8xvfp5ai13y3g-python3.11-pyarrow-18.0.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.pydot",
+      "broken": false,
+      "derivation": "/nix/store/2sl4rb3px3q1n9rzw7c3imxffwkb8pdm-python3.11-pydot-2.0.0.drv",
+      "description": "Allows to create both directed and non directed graphs from Python",
+      "install_id": "pydot",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-pydot-2.0.0",
+      "pname": "pydot",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.0.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/khpl8c1jjvl0dzph1idz9jfp319bgacp-python3.11-pydot-2.0.0-dist",
+        "out": "/nix/store/nsgy7mv2gb9ms1rzsnw41hh4bd67aln0-python3.11-pydot-2.0.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.pydot",
+      "broken": false,
+      "derivation": "/nix/store/a8qcn19qjfl5ajn107xhrd65mx222a8b-python3.11-pydot-2.0.0.drv",
+      "description": "Allows to create both directed and non directed graphs from Python",
+      "install_id": "pydot",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-pydot-2.0.0",
+      "pname": "pydot",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.0.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/95x2y84b1kna2ksfr9src077kwpw8928-python3.11-pydot-2.0.0-dist",
+        "out": "/nix/store/j5gm2cx01bfmh5g8dkb42qah4jd5c0lp-python3.11-pydot-2.0.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.pydot",
+      "broken": false,
+      "derivation": "/nix/store/8jcll1lns2h79yyhb2radsv8klrjj5sq-python3.11-pydot-2.0.0.drv",
+      "description": "Allows to create both directed and non directed graphs from Python",
+      "install_id": "pydot",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-pydot-2.0.0",
+      "pname": "pydot",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.0.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/p803zc38v40lv0h07n4cn5249x9b7jrk-python3.11-pydot-2.0.0-dist",
+        "out": "/nix/store/fnj34irp20y6zndqivh9nipq6wyy1zki-python3.11-pydot-2.0.0"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.pydot",
+      "broken": false,
+      "derivation": "/nix/store/jwchgdcfs28gva8nyw9yhmwcpp3rf5zr-python3.11-pydot-2.0.0.drv",
+      "description": "Allows to create both directed and non directed graphs from Python",
+      "install_id": "pydot",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-pydot-2.0.0",
+      "pname": "pydot",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.0.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/fhbr1kn5lsnws18v4s2s5nrfqwidqjw3-python3.11-pydot-2.0.0-dist",
+        "out": "/nix/store/291591pbnyipagxl3bfzbym7pp20crz3-python3.11-pydot-2.0.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.sympy",
+      "broken": false,
+      "derivation": "/nix/store/656saa2p41rjdnka6yqpd98a9v2lwlk5-python3.11-sympy-1.13.3.drv",
+      "description": "Python library for symbolic mathematics",
+      "install_id": "sympy",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-sympy-1.13.3",
+      "pname": "sympy",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.13.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/66jz4vhjw4lkxmnyjr1n7jpmngmcn2gv-python3.11-sympy-1.13.3-dist",
+        "out": "/nix/store/cmb012nd1ncs6sxm3xjl6kihhx74mck8-python3.11-sympy-1.13.3"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.sympy",
+      "broken": false,
+      "derivation": "/nix/store/f5zrm9s1c3795s2c4ziyxqnnd8y3rwb3-python3.11-sympy-1.13.3.drv",
+      "description": "Python library for symbolic mathematics",
+      "install_id": "sympy",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-sympy-1.13.3",
+      "pname": "sympy",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.13.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/32hbpmw0xzssmzn7z0hlcg18yqyaszla-python3.11-sympy-1.13.3-dist",
+        "out": "/nix/store/76nz6wigsg2lqf7r93m070mhrlsn7m3f-python3.11-sympy-1.13.3"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.sympy",
+      "broken": false,
+      "derivation": "/nix/store/6vbnmg86pvy0liv4ph8j753wv0igjj64-python3.11-sympy-1.13.3.drv",
+      "description": "Python library for symbolic mathematics",
+      "install_id": "sympy",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-sympy-1.13.3",
+      "pname": "sympy",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.13.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/g7a1w0a30an9aqkklw1lhzv32kiw60k1-python3.11-sympy-1.13.3-dist",
+        "out": "/nix/store/lb5zxhxyz3128a3icr2qm447hlqk1pfd-python3.11-sympy-1.13.3"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python311Packages.sympy",
+      "broken": false,
+      "derivation": "/nix/store/fbqkrp2hb54hp4l9lj865s0cn3p79q9b-python3.11-sympy-1.13.3.drv",
+      "description": "Python library for symbolic mathematics",
+      "install_id": "sympy",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "name": "python3.11-sympy-1.13.3",
+      "pname": "sympy",
+      "rev": "d70bd19e0a38ad4790d3913bf08fcbfc9eeca507",
+      "rev_count": 724962,
+      "rev_date": "2024-12-19T23:01:11Z",
+      "scrape_date": "2024-12-23T03:54:12Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.13.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dist": "/nix/store/y3q7hqbxwy6k2n4biz0715l1glygvvlr-python3.11-sympy-1.13.3-dist",
+        "out": "/nix/store/k37w9aspqa9083lwjllyiy3cb4lv746p-python3.11-sympy-1.13.3"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "foo",
+      "broken": false,
+      "derivation": "/nix/store/31c4sqjc75mvyz3sxcp0vmw997avb81l-foo.drv",
+      "description": "",
+      "install_id": "ysndr/foo",
+      "locked_url": "file:///Users/yannik/Workbench/flox/publish?rev=c7e0a322f3bf49edcfb2555047234b3e3dd99db6",
+      "name": "foo",
+      "pname": "foo",
+      "rev": "c7e0a322f3bf49edcfb2555047234b3e3dd99db6",
+      "rev_count": 2,
+      "rev_date": "2025-05-28T18:29:01Z",
+      "scrape_date": "2025-05-28T18:33:25.270228Z",
+      "stabilities": [
+        "stable",
+        "staging",
+        "unstable"
+      ],
+      "version": "unknown",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/mhkb130pycrxw8fchcwp953sw8f7xznj-foo"
+      },
+      "system": "aarch64-darwin",
+      "group": "ysndr/foo",
+      "priority": 5
+    }
+  ]
+}
