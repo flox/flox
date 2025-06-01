@@ -1,0 +1,105 @@
+--- a/src/libfetchers/github.cc	2024-10-29 16:20:56.525966855 +0000
++++ b/src/libfetchers/github.cc	2024-10-29 16:37:44.624397023 +0000
+@@ -172,9 +172,22 @@
+         return input;
+     }
+ 
+-    std::optional<std::string> getAccessToken(const fetchers::Settings & settings, const std::string & host) const
++    std::optional<std::string> getAccessToken(const fetchers::Settings & settings, const std::string & host, const std::string & url) const
+     {
+         auto tokens = settings.accessTokens.get();
++        std::string answer;
++        size_t answer_match_len = 0;
++        if(! url.empty()) {
++            for (auto & token : tokens) {
++                auto match_len = url.find(token.first);
++                if (match_len != std::string::npos && token.first.length() > answer_match_len) {
++                    answer = token.second;
++                    answer_match_len = token.first.length();
++                }
++            }
++            if (!answer.empty())
++                return answer;
++        }
+         if (auto token = get(tokens, host))
+             return *token;
+         return {};
+@@ -182,10 +195,22 @@
+ 
+     Headers makeHeadersWithAuthTokens(
+         const fetchers::Settings & settings,
+-        const std::string & host) const
++        const std::string & host,
++        const Input & input) const
++    {
++        auto owner = getStrAttr(input.attrs, "owner");
++        auto repo = getStrAttr(input.attrs, "repo");
++        auto urlGen = fmt( "%s/%s/%s", host, owner, repo);
++        return makeHeadersWithAuthTokens(settings, host, urlGen);
++    }
++
++    Headers makeHeadersWithAuthTokens(
++        const fetchers::Settings & settings,
++        const std::string & host,
++        const std::string & url) const
+     {
+         Headers headers;
+-        auto accessToken = getAccessToken(settings, host);
++        auto accessToken = getAccessToken(settings, host, url);
+         if (accessToken) {
+             auto hdr = accessHeaderFromToken(*accessToken);
+             if (hdr)
+@@ -364,7 +389,7 @@
+             : "https://%s/api/v3/repos/%s/%s/commits/%s",
+             host, getOwner(input), getRepo(input), *input.getRef());
+ 
+-        Headers headers = makeHeadersWithAuthTokens(*input.settings, host);
++        Headers headers = makeHeadersWithAuthTokens(*input.settings, host, input);
+ 
+         auto json = nlohmann::json::parse(
+             readFile(
+@@ -381,7 +406,7 @@
+     {
+         auto host = getHost(input);
+ 
+-        Headers headers = makeHeadersWithAuthTokens(*input.settings, host);
++        Headers headers = makeHeadersWithAuthTokens(*input.settings, host, input);
+ 
+         // If we have no auth headers then we default to the public archive
+         // urls so we do not run into rate limits.
+@@ -438,7 +463,7 @@
+         auto url = fmt("https://%s/api/v4/projects/%s%%2F%s/repository/commits?ref_name=%s",
+             host, getStrAttr(input.attrs, "owner"), getStrAttr(input.attrs, "repo"), *input.getRef());
+ 
+-        Headers headers = makeHeadersWithAuthTokens(*input.settings, host);
++        Headers headers = makeHeadersWithAuthTokens(*input.settings, host, input);
+ 
+         auto json = nlohmann::json::parse(
+             readFile(
+@@ -468,7 +493,7 @@
+             host, getStrAttr(input.attrs, "owner"), getStrAttr(input.attrs, "repo"),
+             input.getRev()->to_string(HashFormat::Base16, false));
+ 
+-        Headers headers = makeHeadersWithAuthTokens(*input.settings, host);
++        Headers headers = makeHeadersWithAuthTokens(*input.settings, host, input);
+         return DownloadUrl { url, headers };
+     }
+ 
+@@ -508,7 +533,7 @@
+         auto base_url = fmt("https://%s/%s/%s",
+             host, getStrAttr(input.attrs, "owner"), getStrAttr(input.attrs, "repo"));
+ 
+-        Headers headers = makeHeadersWithAuthTokens(*input.settings, host);
++        Headers headers = makeHeadersWithAuthTokens(*input.settings, host, input);
+ 
+         std::string refUri;
+         if (ref == "HEAD") {
+@@ -555,7 +580,7 @@
+             host, getStrAttr(input.attrs, "owner"), getStrAttr(input.attrs, "repo"),
+             input.getRev()->to_string(HashFormat::Base16, false));
+ 
+-        Headers headers = makeHeadersWithAuthTokens(*input.settings, host);
++        Headers headers = makeHeadersWithAuthTokens(*input.settings, host, input);
+         return DownloadUrl { url, headers };
+     }
+ 

@@ -1,0 +1,51 @@
+#
+# This is a flox environment manifest.
+# Visit
+# or see flox-edit(1) for more information
+#
+
+version = 1
+
+[install]
+jupyter.pkg-path = "jupyter-all"
+pandas.pkg-path = "python311Packages.pandas"
+matplotlib.pkg-path = "python311Packages.matplotlib"
+numpy.pkg-path = "python311Packages.numpy"
+pyarrow.pkg-path = "python311Packages.pyarrow"
+sympy.pkg-path = "python311Packages.sympy"
+pydot.pkg-path = "python311Packages.pydot"
+plotly.pkg-path = "python311Packages.plotly"
+ollama.pkg-path = "ollama"
+
+[vars]
+virtualEnv = './nb-venv/'
+
+[hook]
+on-activate = """
+
+if [[ -d $virtualEnv ]]; then
+  echo; echo -n "⚡️ Activating existing venv in $virtualEnv..."
+  . $virtualEnv/bin/activate
+  echo "done."
+fi
+
+# If we see a requirements.txt file, install its contents
+# into a virtual environment
+
+if [[ -f requirements.txt ]]; then
+  echo -n "🐍 Processing requirements.txt..."
+  [ ! -d $virtualEnv ] && python -m venv $virtualEnv
+  . $virtualEnv/bin/activate
+  pip3 -qq install -r requirements.txt
+  echo "done."
+fi
+
+# Set an alias to start the notebook and educate the user
+
+alias nb="jupyter notebook --ip 0.0.0.0"
+echo; echo "Jupyter environment ready - start notebook with alias 'nb'."
+
+"""
+
+[options]
+systems = ["x86_64-linux", "aarch64-darwin", "aarch64-linux", "x86_64-darwin"]
