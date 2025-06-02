@@ -2083,6 +2083,68 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+function setup_cwd_with_braces() {
+  bad_dir="$PWD/contains ( braces )"
+  mkdir -p "$bad_dir"
+  pushd "$bad_dir"
+  "$FLOX_BIN" init
+}
+
+# bats test_tags=activate,activate:cwd_braces,activate:cwd_braces:bash
+@test "bash: tolerates cwd containing braces" {
+  project_setup
+  setup_cwd_with_braces
+  activation_cmd="$(cat <<'EOF'
+    eval "$("$FLOX_BIN" activate)"
+EOF
+)"
+  run bash -c "$activation_cmd"
+  assert_success
+}
+
+# bats test_tags=activate,activate:cwd_braces,activate:cwd_braces:fish
+@test "fish: tolerates cwd containing braces" {
+  project_setup
+  setup_cwd_with_braces
+  activation_cmd="$(cat <<'EOF'
+    "$FLOX_BIN" activate | source
+EOF
+)"
+  run fish -c "$activation_cmd"
+  # always succeeds, parsing error does not result in non-0 exit
+  assert_success
+  refute_line "fish: Unknown command: braces"
+}
+
+# bats test_tags=activate,activate:cwd_braces,activate:cwd_braces:tcsh
+@test "tcsh: tolerates cwd containing braces" {
+  skip "Apparently regressed in 1.4.3, now failing with Missing '}', due to quoting in _FLOX_ACTIVE_ENVIRONMENTS (#3173)"
+  project_setup
+  setup_cwd_with_braces
+  activation_cmd="$(cat <<'EOF'
+    "$FLOX_BIN" activate --print-script
+    eval `"$FLOX_BIN" activate`
+EOF
+)"
+  run tcsh -c "$activation_cmd"
+  assert_success
+}
+
+
+# bats test_tags=activate,activate:cwd_braces,activate:cwd_braces:zsh
+@test "zsh: tolerates cwd containing braces" {
+  project_setup
+  setup_cwd_with_braces
+  activation_cmd="$(cat <<'EOF'
+    eval "$("$FLOX_BIN" activate)"
+EOF
+)"
+  run zsh -c "$activation_cmd"
+  assert_success
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:bash
 @test "bash: test for infinite source loop" {
   project_setup
@@ -4856,4 +4918,3 @@ check_nested_activation_repairs_path_and_manpath() {
 @test "fish: in-place: nested activation repairs (MAN)PATH" {
   check_nested_activation_repairs_path_and_manpath fish eval
 }
-
