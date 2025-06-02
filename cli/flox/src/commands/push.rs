@@ -55,7 +55,10 @@ impl Push {
         let span = tracing::info_span!("post-auth");
         let _guard = span.enter();
 
-        let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
+        let dir = match self.dir {
+            Some(d) => d,
+            None => std::env::current_dir().context("could not get current directory")?,
+        };
 
         let dot_flox = DotFlox::open_in(dir)?;
         let canonical_dot_flox_path =

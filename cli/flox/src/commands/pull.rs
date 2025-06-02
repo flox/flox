@@ -91,22 +91,23 @@ impl Pull {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("pull");
 
+        let dir_message = match &self.dir {
+            Some(dir) => format!("{}", dir.display()),
+            None => "the current directory".to_string(),
+        };
+        let dir = match self.dir {
+            Some(dir) => dir,
+            None => std::env::current_dir().context("could not get current directory")?,
+        };
+
         match self.pull_select {
             PullSelect::New { remote } | PullSelect::NewAbbreviated { remote } => {
                 let start_message = format!(
                     "Pulling {env_ref} from {host} into {into_dir}",
                     env_ref = &remote,
                     host = flox.floxhub.base_url(),
-                    into_dir = if let Some(dir) = self.dir.as_deref() {
-                        format!("{}", dir.display())
-                    } else {
-                        "the current directory".to_string()
-                    }
+                    into_dir = dir_message,
                 );
-
-                // FIXME: this could panic if the current directory is deleted between
-                //        calling `flox` and running this line
-                let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
                 let span = tracing::info_span!(
@@ -119,8 +120,6 @@ impl Pull {
                 Self::pull_new_environment(&flox, dir, remote, self.copy, self.force)?;
             },
             PullSelect::Existing {} => {
-                let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
-
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
 
                 let pointer = {
