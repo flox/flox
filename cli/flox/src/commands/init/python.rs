@@ -415,7 +415,7 @@ impl Provider for PoetryPyProject {
                 # Quietly activate venv and install packages in a subshell so
                 # that the venv can be freshly activated in the profile section.
                 (
-                  source "$(poetry env info --path)/bin/activate"
+                  eval "$(poetry env activate)"
                   poetry install --quiet
                 )"#}
                 .to_string(),
@@ -423,25 +423,25 @@ impl Provider for PoetryPyProject {
             profile_bash: Some(
                 indoc! {r#"
                 echo "Activating poetry virtual environment" >&2
-                source "$(poetry env info --path)/bin/activate""#}
+                eval "$(poetry env activate)""#}
                 .to_string(),
             ),
             profile_fish: Some(
                 indoc! {r#"
                 echo "Activating poetry virtual environment" >&2
-                source "$(poetry env info --path)/bin/activate.fish""#}
+                eval (poetry env activate)"#}
                 .to_string(),
             ),
             profile_tcsh: Some(
                 indoc! {r#"
                 echo "Activating poetry virtual environment" >&2
-                source "$(poetry env info --path)/bin/activate.csh""#}
+                eval "`poetry env activate`""#}
                 .to_string(),
             ),
             profile_zsh: Some(
                 indoc! {r#"
                 echo "Activating poetry virtual environment" >&2
-                source "$(poetry env info --path)/bin/activate""#}
+                eval "$(poetry env activate)""#}
                 .to_string(),
             ),
             packages: Some(vec![
