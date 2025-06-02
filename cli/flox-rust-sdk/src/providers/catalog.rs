@@ -1456,7 +1456,7 @@ pub struct BaseCatalogUrl(String);
 
 impl BaseCatalogUrl {
     pub fn as_flake_ref(&self) -> Result<Url, BaseCatalogUrlError> {
-        Url::parse(&format!("git+{}", self.0.as_str())).map_err(BaseCatalogUrlError)
+        Url::parse(&format!("git+{}&shallow=1", self.0.as_str())).map_err(BaseCatalogUrlError)
     }
 }
 
