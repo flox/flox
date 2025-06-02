@@ -44,7 +44,7 @@ pub static GENERATED_DATA: LazyLock<PathBuf> =
 pub static MANUALLY_GENERATED: LazyLock<PathBuf> =
     LazyLock::new(|| PathBuf::from(std::env::var("MANUALLY_GENERATED").unwrap()));
 
-const RESPONSE_PAGE_SIZE: NonZeroU32 = unsafe { NonZeroU32::new_unchecked(1000) };
+const RESPONSE_PAGE_SIZE: NonZeroU32 = NonZeroU32::new(1000).unwrap();
 
 type ResolvedGroups = Vec<ResolvedPackageGroup>;
 
