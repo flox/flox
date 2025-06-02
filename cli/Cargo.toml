@@ -20,7 +20,7 @@ blake3 = "1.8.2"
 bpaf = { version = "0.9.20", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.41", features = ["serde"] }
-clap = { version = "4.5.38", features = ["derive"] }
+clap = { version = "4.5.39", features = ["derive"] }
 clap_derive = "4.5.4"
 close_fds = "0.3"
 # Pinned due to bug: https://github.com/rust-cli/config-rs/issues/531
@@ -60,7 +60,7 @@ progenitor-client = "0.10"
 proptest = "1.6.0"
 proptest-derive = "0.5.1"
 regex = "1.10"
-regress = "0.9.1"
+regress = "0.10.3"
 reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
 semver = "1.0.26"
 sentry = { version = "0.32.3", features = [
