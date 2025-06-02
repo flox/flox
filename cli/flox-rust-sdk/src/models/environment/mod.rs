@@ -379,10 +379,9 @@ impl EnvironmentPointer {
     /// the function returns an [EnvironmentPointer] containing information about the environment.
     /// If reading or parsing fails, an [EnvironmentError] is returned.
     ///
-    /// Use this method to determine the type of an environment at a given path.
-    /// The result should be used to call the appropriate `open` method
-    /// on either [path_environment::PathEnvironment] or [managed_environment::ManagedEnvironment].
-    pub fn open(dot_flox_path: &CanonicalPath) -> Result<EnvironmentPointer, EnvironmentError> {
+    /// If you want to operate on the [Environment] at the given path then use
+    /// [open_path] on a project path instead.
+    fn open(dot_flox_path: &CanonicalPath) -> Result<EnvironmentPointer, EnvironmentError> {
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         let pointer_contents = match fs::read(&pointer_path) {
             Ok(contents) => contents,
@@ -761,7 +760,7 @@ pub enum UninstallError {
     PackageOnlyIncluded(String, String),
 }
 
-/// Open an environment defined in `{path}/.flox`
+/// Open an environment defined in `path` that has a `.flox` within.
 pub fn open_path(
     flox: &Flox,
     path: impl AsRef<Path>,
