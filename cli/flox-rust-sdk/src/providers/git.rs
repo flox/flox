@@ -917,13 +917,12 @@ impl GitProvider for GitCommandProvider {
                     .arg(&remote_branch),
             )?;
 
-            let remote_revision = if remote_revision.len() < 40 {
+            if remote_revision.len() < 40 {
                 warn!("No commit found found upstream for ref {remote_branch}");
                 None
             } else {
                 Some(remote_revision.to_string_lossy()[..40].to_string())
-            };
-            remote_revision
+            }
         };
 
         Ok(OriginInfo {
