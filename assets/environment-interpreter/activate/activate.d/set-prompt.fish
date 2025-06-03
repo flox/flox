@@ -2,7 +2,7 @@
 
 if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS" && [ "$_FLOX_SET_PROMPT" != false ]
     if not set -q FLOX_PROMPT
-        set FLOX_PROMPT "flox"
+        set FLOX_PROMPT flox
     end
 
     if set -q NO_COLOR
@@ -20,8 +20,8 @@ if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS" && [ "
     end
 
     function fish_prompt
-        echo -n $_flox ""
-        flox_saved_fish_prompt
+        set -l original_prompt (flox_saved_fish_prompt | string collect --no-trim-newlines)
+        printf "%s %s\n" $_flox $original_prompt
     end
 end
 
