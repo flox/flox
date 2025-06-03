@@ -1,12 +1,12 @@
 when:
   path: /api/v1/catalog/resolve
   method: POST
-  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"go","install_id":"go","systems":["aarch64-darwin","aarch64-linux","x86_64-darwin","x86_64-linux"],"version":"^0.0.0"}],"name":"go"}]}'
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"go","install_id":"go","systems":["aarch64-darwin","aarch64-linux","x86_64-darwin","x86_64-linux"],"version":"^0.0.0"}],"name":"go"}]}'
 then:
   status: 200
   header:
   - name: date
-    value: Wed, 28 May 2025 00:30:57 GMT
+    value: Tue, 03 Jun 2025 16:41:29 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,5 +14,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LQLiHg6wIAMEbog=
+    value: LmLU3iwkIAMEVjw=
   body: '{"items":[{"name":"go","page":null,"messages":[{"level":"error","type":"constraints_too_tight","message":"Resolution constraints are too tight.","context":{}}]}]}'

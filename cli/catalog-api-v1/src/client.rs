@@ -1923,8 +1923,7 @@ pub mod types {
     ///      "type": [
     ///        "object",
     ///        "null"
-    ///      ],
-    ///      "additionalProperties": true
+    ///      ]
     ///    },
     ///    "ingress_uri": {
     ///      "title": "Ingress Uri",
@@ -2448,8 +2447,7 @@ pub mod types {
     ///      "type": [
     ///        "object",
     ///        "null"
-    ///      ],
-    ///      "additionalProperties": true
+    ///      ]
     ///    },
     ///    "catalog": {
     ///      "title": "Catalog",

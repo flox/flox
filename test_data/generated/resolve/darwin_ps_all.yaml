@@ -1,12 +1,12 @@
 when:
   path: /api/v1/catalog/resolve
   method: POST
-  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
 then:
   status: 200
   header:
   - name: date
-    value: Wed, 28 May 2025 00:50:24 GMT
+    value: Tue, 03 Jun 2025 16:40:34 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,18 +14,18 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LQOYkh9DIAMEY-Q=
+    value: LmLMTgnloAMES4A=
   body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.not_found_for_all_systems","message":"The attr_path darwin.ps is not found for all the requested systems, suggest limiting systems to (aarch64-darwin,x86_64-darwin).","context":{"attr_path":"darwin.ps","install_id":"ps","valid_systems":"aarch64-darwin,x86_64-darwin"}}]}]}'
 ---
 when:
   path: /api/v1/catalog/resolve
   method: POST
-  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["x86_64-darwin"]}],"name":"toplevel"}]}'
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["x86_64-darwin"]}],"name":"toplevel"}]}'
 then:
   status: 200
   header:
   - name: date
-    value: Wed, 28 May 2025 00:50:24 GMT
+    value: Tue, 03 Jun 2025 16:40:34 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -33,5 +33,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LQOYoj42oAMEMZw=
-  body: '{"items":[{"name":"toplevel","page":{"page":804993,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/vrb7dszkv0y2xw6avkkln97ssifqnwrp-adv_cmds-231.drv","name":"adv_cmds-231","pname":"ps","version":"231","system":"aarch64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/ikl4ybibh079nifrfx38l5zhqipms05c-adv_cmds-231-ps"},{"name":"man","store_path":"/nix/store/g5xdh8dxp45zsr66ldvczaf0hq1ycbxy-adv_cmds-231-man"},{"name":"out","store_path":"/nix/store/40d4f1jfq9cna873cx305cmazi23xygf-adv_cmds-231"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=063f43f2dbdef86376cc29ad646c45c46e93234c","rev":"063f43f2dbdef86376cc29ad646c45c46e93234c","rev_count":804993,"rev_date":"2025-05-23T18:48:26Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-05-26T04:23:23.459949Z","cache_uri":null,"install_id":"ps"},{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/sin5vkf3kxxzzadhradd2rpz90rc88bg-adv_cmds-231.drv","name":"adv_cmds-231","pname":"ps","version":"231","system":"x86_64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/hypl8yx7hk22k2mpc9a2zp82w6gk33qi-adv_cmds-231-ps"},{"name":"man","store_path":"/nix/store/xpsj7hgj4fppsfa7dcv8bwi3a0552zwn-adv_cmds-231-man"},{"name":"out","store_path":"/nix/store/36f6am5v4rzg39rz9b6p9vx4g8ri4rf8-adv_cmds-231"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=063f43f2dbdef86376cc29ad646c45c46e93234c","rev":"063f43f2dbdef86376cc29ad646c45c46e93234c","rev_count":804993,"rev_date":"2025-05-23T18:48:26Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-05-26T04:58:34.889785Z","cache_uri":null,"install_id":"ps"}],"messages":[],"complete":true},"messages":[]}]}'
+    value: LmLMdh41oAMESZQ=
+  body: '{"items":[{"name":"toplevel","page":{"page":808478,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/vrb7dszkv0y2xw6avkkln97ssifqnwrp-adv_cmds-231.drv","name":"adv_cmds-231","pname":"ps","version":"231","system":"aarch64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/ikl4ybibh079nifrfx38l5zhqipms05c-adv_cmds-231-ps"},{"name":"man","store_path":"/nix/store/g5xdh8dxp45zsr66ldvczaf0hq1ycbxy-adv_cmds-231-man"},{"name":"out","store_path":"/nix/store/40d4f1jfq9cna873cx305cmazi23xygf-adv_cmds-231"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc","rev":"910796cabe436259a29a72e8d3f5e180fc6dfacc","rev_count":808478,"rev_date":"2025-05-31T12:05:15Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-06-02T04:26:15.621075Z","cache_uri":null,"install_id":"ps"},{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/sin5vkf3kxxzzadhradd2rpz90rc88bg-adv_cmds-231.drv","name":"adv_cmds-231","pname":"ps","version":"231","system":"x86_64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/hypl8yx7hk22k2mpc9a2zp82w6gk33qi-adv_cmds-231-ps"},{"name":"man","store_path":"/nix/store/xpsj7hgj4fppsfa7dcv8bwi3a0552zwn-adv_cmds-231-man"},{"name":"out","store_path":"/nix/store/36f6am5v4rzg39rz9b6p9vx4g8ri4rf8-adv_cmds-231"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc","rev":"910796cabe436259a29a72e8d3f5e180fc6dfacc","rev_count":808478,"rev_date":"2025-05-31T12:05:15Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-06-02T05:05:13.677230Z","cache_uri":null,"install_id":"ps"}],"messages":[],"complete":true},"messages":[]}]}'

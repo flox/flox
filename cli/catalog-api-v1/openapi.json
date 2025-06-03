@@ -2533,7 +2533,6 @@
           "ingress_auth": {
             "title": "Ingress Auth",
             "nullable": true,
-            "additionalProperties": true,
             "type": "object"
           },
           "catalog_store_config": {
@@ -2823,7 +2822,6 @@
           "auth": {
             "title": "Auth",
             "nullable": true,
-            "additionalProperties": true,
             "type": "object"
           },
           "catalog": {

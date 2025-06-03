@@ -1,12 +1,12 @@
 when:
   path: /api/v1/catalog/resolve
   method: POST
-  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"hello","install_id":"hello","systems":["aarch64-darwin"]}],"name":"toplevel"}]}'
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"hello","install_id":"hello","systems":["aarch64-darwin"]}],"name":"toplevel"}]}'
 then:
   status: 200
   header:
   - name: date
-    value: Wed, 28 May 2025 00:31:15 GMT
+    value: Tue, 03 Jun 2025 16:41:39 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,5 +14,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LQLk-hMQoAMEbIQ=
-  body: '{"items":[{"name":"toplevel","page":{"page":803506,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/cg3sfpzw3md7y6j9rk2b36m7f6pvhgsi-hello-2.12.1.drv","name":"hello-2.12.1","pname":"hello","version":"2.12.1","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/zq74har4ak9dxi7z5k7id9v6sgm2kb8w-hello-2.12.1"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=2795c506fe8fb7b03c36ccb51f75b6df0ab2553f","rev":"2795c506fe8fb7b03c36ccb51f75b6df0ab2553f","rev_count":803506,"rev_date":"2025-05-20T12:29:04Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-05-24T04:22:06.575854Z","cache_uri":null,"install_id":"hello"}],"messages":[],"complete":true},"messages":[]}]}'
+    value: LmLWljk0IAMEb0g=
+  body: '{"items":[{"name":"toplevel","page":{"page":808478,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"hello","pkg_path":"hello","derivation":"/nix/store/5cwvcayncc3x8cyjwzpansj5zjmnx25j-hello-2.12.2.drv","name":"hello-2.12.2","pname":"hello","version":"2.12.2","system":"aarch64-darwin","outputs":[{"name":"out","store_path":"/nix/store/ap166019kj8xgrbq3x82yp40l192axsc-hello-2.12.2"}],"outputs_to_install":["out"],"description":"Program that produces a familiar, friendly greeting","license":"GPL-3.0-or-later","locked_url":"https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc","rev":"910796cabe436259a29a72e8d3f5e180fc6dfacc","rev_count":808478,"rev_date":"2025-05-31T12:05:15Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-06-02T04:25:07.021182Z","cache_uri":null,"install_id":"hello"}],"messages":[],"complete":true},"messages":[]}]}'

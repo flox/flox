@@ -1,12 +1,12 @@
 when:
   path: /api/v1/catalog/resolve
   method: POST
-  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"node","install_id":"node","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"node","install_id":"node","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"node","install_id":"node","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"node","install_id":"node","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"node","install_id":"node","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"node","install_id":"node","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"node","install_id":"node","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"node","install_id":"node","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
 then:
   status: 200
   header:
   - name: date
-    value: Wed, 28 May 2025 00:50:45 GMT
+    value: Tue, 03 Jun 2025 16:39:18 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LQOb9jSnIAMEYnQ=
+    value: LmLAmgZLoAMEMCA=
   body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The attr_path node is not found in the catalog.","context":{"attr_path":"node","install_id":"node"}}]}]}'
 ---
 when:
@@ -24,13 +24,13 @@ then:
   status: 200
   header:
   - name: date
-    value: Wed, 28 May 2025 00:50:46 GMT
+    value: Tue, 03 Jun 2025 16:39:19 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '748'
+    value: '742'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LQOb_glRoAMEMPw=
-  body: '{"items":[{"attr_path":"nodejs","catalog":null,"pkg_path":"nodejs","name":"nodejs-22.14.0","pname":"nodejs","version":"22.14.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_14","catalog":null,"pkg_path":"nodejs_14","name":"nodejs-14.21.3","pname":"nodejs_14","version":"14.21.3","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"nodejs_16","catalog":null,"pkg_path":"nodejs_16","name":"nodejs-16.20.2","pname":"nodejs_16","version":"16.20.2","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"aarch64-darwin"}],"total_count":73}'
+    value: LmLAnjQ5oAMEM9g=
+  body: '{"items":[{"attr_path":"nodejs","catalog":null,"pkg_path":"nodejs","name":"nodejs-22.14.0","pname":"nodejs","version":"22.14.0","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"x86_64-linux"},{"attr_path":"nodejs_14","catalog":null,"pkg_path":"nodejs_14","name":"nodejs-14.21.3","pname":"nodejs_14","version":"14.21.3","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"x86_64-linux"},{"attr_path":"nodejs_16","catalog":null,"pkg_path":"nodejs_16","name":"nodejs-16.20.2","pname":"nodejs_16","version":"16.20.2","description":"Event-driven I/O framework for the V8 JavaScript engine","stabilities":[],"system":"x86_64-linux"}],"total_count":73}'

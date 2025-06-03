@@ -87,7 +87,7 @@ mod tests {
         assert_eq!(
             store_config,
             CatalogStoreConfig::Publisher(CatalogStoreConfigPublisher {
-                publisher_url: "s3://example".into(),
+                publisher_url: Some("s3://example".to_string()),
                 store_type: "publisher".into(),
             })
         )
