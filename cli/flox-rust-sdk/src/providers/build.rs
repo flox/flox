@@ -970,8 +970,6 @@ mod tests {
         // expect the build to succeed
         let output = assert_build_status(&flox, &mut env, &pname, None, true);
 
-        // [sic] newline before 'HINT: ...' ignored in 'nix build -L' output:
-        // <https://github.com/NixOS/nix/issues/11991>
         let expected_output = formatdoc! {r#"
             {pname}> ⚠️  WARNING: $out/bin/not-executable is not executable.
             {pname}> ⚠️  WARNING: $out/bin/subdir is not a file.
@@ -982,14 +980,21 @@ mod tests {
             {pname}>   - copy a bin directory with 'mkdir $out && cp -r bin $out'
             {pname}>   - copy multiple files with 'mkdir -p $out/bin && cp bin/* $out/bin'
             {pname}>   - copy files from an Autotools project with 'make install PREFIX=$out'
+            {pname}>{}
             {pname}> HINT: The following executables were found outside of '$out/bin':
             {pname}>   - not-bin/hello
             {pname}>   - bin/subdir/executable-in-subdir
-        "#};
-        assert!(
-            output.stderr.contains(&expected_output),
-            "{expected_output}"
-        );
+        "#,
+        // Add a trailing space like this so auto-formatters don't trim trailing
+        // whitespace
+        " "};
+        if !output.stderr.contains(&expected_output) {
+            pretty_assertions::assert_eq!(
+                output.stderr,
+                expected_output,
+                "didn't find expected output, diffing entire output"
+            );
+        }
     }
 
     #[test]
