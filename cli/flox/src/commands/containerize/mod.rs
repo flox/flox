@@ -30,11 +30,18 @@ pub struct Containerize {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// Output to write the container to.
-    /// Defaults to loading into container storage if docker or podman is present
-    /// or otherwise writes to a file '{name}-container.tar'
-    #[bpaf(external(output_target), optional)]
-    output: Option<OutputTarget>,
+    /// Container runtime to
+    /// store the image (when '--file' is not specified)
+    /// or build the image (when on macOS).
+    /// Defaults to detecting the first available on PATH.
+    #[bpaf(long, argument("docker|podman"))]
+    runtime: Option<Runtime>,
+
+    /// File to write the container image to.
+    /// '-` to write to stdout.
+    /// Defaults to '{name}-container.tar' if '--runtime' isn't specified or detected.
+    #[bpaf(short, long, argument("file"))]
+    file: Option<FileOrStdout>,
 
     /// Tag to apply to the container, defaults to 'latest'
     #[bpaf(short, long, argument("tag"))]
@@ -49,9 +56,19 @@ impl Containerize {
             .environment
             .detect_concrete_environment(&flox, "Containerize")?;
 
-        let output = self
-            .output
-            .unwrap_or_else(|| OutputTarget::detect_or_default(env.name().as_ref()));
+        // Check that a specified runtime exists.
+        if let Some(runtime) = &self.runtime {
+            runtime.validate_in_path()?
+        }
+        let runtime = self.runtime.or_else(Runtime::detect_from_path);
+        let output = match (&runtime, self.file) {
+            // Specified file.
+            (_, Some(dest)) => OutputTarget::File(dest),
+            // Or specified or detected runtime.
+            (Some(runtime), None) => OutputTarget::Runtime(runtime.clone()),
+            // Or default file.
+            (None, None) => OutputTarget::default_file(env.name().as_ref()),
+        };
 
         let output_tag: &str = match self.tag {
             Some(tag) => &tag.to_string(),
@@ -82,14 +99,14 @@ impl Containerize {
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         } else {
             let env_path = env.parent_path()?;
-            let Some(container_runtime) = Runtime::detect_from_path() else {
+            let Some(proxy_runtime) = runtime else {
                 bail!(indoc! {r#"
                     No container runtime found in PATH.
 
                     Exporting a container on macOS requires Docker or Podman to be installed.
                 "#});
             };
-            let builder = ContainerizeProxy::new(env_path, container_runtime);
+            let builder = ContainerizeProxy::new(env_path, proxy_runtime);
             builder.create_container_source(&flox, env_name.as_ref(), output_tag)?
         };
 
@@ -100,27 +117,6 @@ impl Containerize {
         message::created(format!("'{env_name}:{output_tag}' written to {output}"));
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Bpaf)]
-enum OutputTarget {
-    File(
-        #[bpaf(
-            long("file"),
-            short('f'),
-            argument("file"),
-            help("File to write the container image to. '-' to write to stdout.")
-        )]
-        FileOrStdout,
-    ),
-    Runtime(
-        #[bpaf(
-            long("runtime"),
-            argument("runtime"),
-            help("Container runtime to load the image into. 'docker' or 'podman'")
-        )]
-        Runtime,
-    ),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -141,19 +137,18 @@ impl FromStr for FileOrStdout {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Bpaf)]
+enum OutputTarget {
+    File(FileOrStdout),
+    Runtime(Runtime),
+}
+
 impl OutputTarget {
-    fn detect_or_default(env_name: impl AsRef<str>) -> Self {
-        let default_to_file = OutputTarget::File(FileOrStdout::File(PathBuf::from(format!(
+    fn default_file(env_name: impl AsRef<str>) -> Self {
+        OutputTarget::File(FileOrStdout::File(PathBuf::from(format!(
             "{}-container.tar",
             env_name.as_ref()
-        ))));
-
-        let Some(runtime) = Runtime::detect_from_path() else {
-            debug!("No container runtime found in PATH, defaulting to file");
-            return default_to_file;
-        };
-
-        OutputTarget::Runtime(runtime)
+        ))))
     }
 
     fn to_writer(&self) -> Result<Box<dyn ContainerSink + '_>> {
@@ -285,15 +280,32 @@ impl Runtime {
         Some(runtime)
     }
 
+    /// Get the unqualified command name for the runtime.
+    fn to_cmd(&self) -> &str {
+        match self {
+            Runtime::Docker => "docker",
+            Runtime::Podman => "podman",
+        }
+    }
+
+    /// Validate that the container runtime is available in the PATH.
+    fn validate_in_path(&self) -> Result<()> {
+        let path_var = std::env::var("PATH").context("Could not read PATH variable")?;
+        let paths = std::env::split_paths(path_var.as_str());
+        let cmd = self.to_cmd();
+        match first_in_path([cmd], paths) {
+            Some(_) => Ok(()),
+            None => Err(anyhow!(format!(
+                "Container runtime '{cmd}' not found in PATH.",
+            ))),
+        }
+    }
+
     /// Get a writer to the registry,
     /// Essentially spawns a `docker load` or `podman load` process
     /// and returns a handle to its stdin.
     fn to_writer(&self) -> Result<impl ContainerSink> {
-        let cmd = match self {
-            Runtime::Docker => "docker",
-            Runtime::Podman => "podman",
-        };
-
+        let cmd = self.to_cmd();
         let mut child = Command::new(cmd)
             .arg("load")
             .stdin(Stdio::piped())
@@ -346,7 +358,7 @@ impl FromStr for Runtime {
         match s {
             "docker" => Ok(Runtime::Docker),
             "podman" => Ok(Runtime::Podman),
-            _ => Err(anyhow!("Registry must be 'docker' or 'podman'")),
+            _ => Err(anyhow!("Runtime must be 'docker' or 'podman'")),
         }
     }
 }
@@ -362,17 +374,12 @@ mod tests {
         assert!("invalid".parse::<Runtime>().is_err());
     }
 
-    /// Test that the default output target is one of the supported runtimes
-    /// which is found first in the PATH, or a file with the environment name,
-    /// if no supported runtime is found in the PATH.
     #[test]
     fn detect_runtime_in_path() {
         let tempdir = tempfile::tempdir().unwrap();
 
-        let default_target =
-            OutputTarget::File(FileOrStdout::File(PathBuf::from("test-container.tar")));
-        let docker_target = OutputTarget::Runtime(Runtime::Docker);
-        let podman_target = OutputTarget::Runtime(Runtime::Podman);
+        let docker_target = Runtime::Docker;
+        let podman_target = Runtime::Podman;
 
         let docker_bin = tempdir.path().join("docker-bin");
         let podman_bin = tempdir.path().join("podman-bin");
@@ -389,32 +396,47 @@ mod tests {
         fs::write(combined_bin.join("docker"), "").unwrap();
         fs::write(combined_bin.join("podman"), "").unwrap();
 
-        let target = temp_env::with_var(
-            "PATH",
-            Some(std::env::join_paths([&docker_bin, &podman_bin, &combined_bin]).unwrap()),
-            || OutputTarget::detect_or_default("test"),
-        );
-        assert_eq!(target, docker_target);
+        let docker_first_path =
+            Some(std::env::join_paths([&docker_bin, &podman_bin, &combined_bin]).unwrap());
+        let podman_first_path =
+            Some(std::env::join_paths([&podman_bin, &docker_bin, &combined_bin]).unwrap());
+        let combined_path =
+            Some(std::env::join_paths([&combined_bin, &podman_bin, &docker_bin]).unwrap());
+        let neither_path = Some(std::env::join_paths([neither_bin]).unwrap());
 
-        let target = temp_env::with_var(
-            "PATH",
-            Some(std::env::join_paths([&podman_bin, &docker_bin, &combined_bin]).unwrap()),
-            || OutputTarget::detect_or_default("test"),
-        );
-        assert_eq!(target, podman_target);
+        // Check that a Runtime can be detected in PATH.
+        let target = temp_env::with_var("PATH", docker_first_path.as_ref(), || {
+            Runtime::detect_from_path()
+        });
+        assert_eq!(target, Some(docker_target.clone()));
 
-        let target = temp_env::with_var(
-            "PATH",
-            Some(std::env::join_paths([&combined_bin, &podman_bin, &docker_bin]).unwrap()),
-            || OutputTarget::detect_or_default("test"),
-        );
-        assert_eq!(target, docker_target);
+        let target = temp_env::with_var("PATH", podman_first_path.as_ref(), || {
+            Runtime::detect_from_path()
+        });
+        assert_eq!(target, Some(podman_target.clone()));
 
-        let target = temp_env::with_var(
-            "PATH",
-            Some(std::env::join_paths([neither_bin]).unwrap()),
-            || OutputTarget::detect_or_default("test"),
-        );
-        assert_eq!(target, default_target);
+        let target = temp_env::with_var("PATH", combined_path.as_ref(), || {
+            Runtime::detect_from_path()
+        });
+        assert_eq!(target, Some(docker_target.clone()));
+
+        let target = temp_env::with_var("PATH", neither_path.as_ref(), || {
+            Runtime::detect_from_path()
+        });
+        assert_eq!(target, None);
+
+        // Check that a specified Runtime is in PATH.
+        assert!(temp_env::with_var("PATH", docker_first_path, || {
+            docker_target.validate_in_path().is_ok()
+        }));
+        assert!(temp_env::with_var("PATH", podman_first_path, || {
+            docker_target.validate_in_path().is_ok()
+        }));
+        assert!(temp_env::with_var("PATH", combined_path, || {
+            docker_target.validate_in_path().is_ok()
+        }));
+        assert!(temp_env::with_var("PATH", neither_path, || {
+            docker_target.validate_in_path().is_err()
+        }));
     }
 }
