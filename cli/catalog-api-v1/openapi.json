@@ -785,95 +785,6 @@
         }
       }
     },
-    "/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/publish": {
-      "post": {
-        "tags": [
-          "catalogs"
-        ],
-        "summary": "Request access and info to publish a package",
-        "description": "Request access and informatin to publish a package to this catalog.\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **PublishRequest**: The information needed to publish to the catalog\nReturns:\n- **PublishRequestResponse**",
-        "operationId": "publish_request_api_v1_catalog_catalogs__catalog_name__packages__package_name__publish_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "catalog_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
-            }
-          },
-          {
-            "name": "package_name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}",
-              "title": "Package Name"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PublishRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The requested information to publish the package",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PublishResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The build cannot be published as requested",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "The catalog or package could not be found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "The request parameters are invalid",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/publish/info": {
       "post": {
         "tags": [
@@ -1921,14 +1832,13 @@
             "default": "publisher"
           },
           "publisher_url": {
-            "type": "string",
-            "title": "Publisher Url"
+            "title": "Publisher Url",
+            "deprecated": true,
+            "nullable": true,
+            "type": "string"
           }
         },
         "type": "object",
-        "required": [
-          "publisher_url"
-        ],
         "title": "CatalogStoreConfigPublisher"
       },
       "ErrorResponse": {
@@ -2196,7 +2106,6 @@
           },
           "allow_missing_builds": {
             "title": "Allow Missing Builds",
-            "default": false,
             "nullable": true,
             "type": "boolean"
           },
@@ -2914,6 +2823,24 @@
             "title": "Auth",
             "nullable": true,
             "type": "object"
+          },
+          "catalog": {
+            "title": "Catalog",
+            "nullable": true,
+            "type": "string"
+          },
+          "package": {
+            "title": "Package",
+            "nullable": true,
+            "type": "string"
+          },
+          "public_keys": {
+            "title": "Public Keys",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object",
