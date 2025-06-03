@@ -1983,6 +1983,38 @@ mod tests {
         boost_include_only(true);
     }
 
+    /// Test that a runtime package installed to an "other" system type does
+    /// not trigger a build failure (#3055).
+    #[test]
+    fn other_system_runtime_packages() {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let file_content = String::from("some content");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+            # Intentionally not installing hello for any systems to trigger
+            # runtime-packages exception below.
+            hello.systems = [ ]
+
+            [build.{package_name}]
+            command = """
+                mkdir $out
+                echo -n {file_content} > $out/{file_name}
+            """
+            runtime-packages = [ "hello" ]
+        "#};
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+        assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
     #[test]
     fn cleans_up_data_sandbox() {
         let package_name = String::from("foo");
