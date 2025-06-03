@@ -1891,15 +1891,7 @@ mod tests {
         boost_runtime(false);
     }
 
-    // TODO: currently failing on Linux since the built artifact depends on the
-    // environment store path
-    // If I comment out disallowedReferences in order to see why the artifact
-    // depends on the environment store path, I'm seeing:
-    // $ ldd result-test_boost/bin/.test_boost-wrapped
-    // ...
-    // libboost_system.so.1.87.0 => /nix/store/rfrdr79nk2l0s01zzpfzczjlscimawvl-environment-develop/lib/libboost_system.so.1.87.0 (0x00007fafcf2ed000)
     #[test]
-    #[cfg(target_os = "macos")]
     fn boost_runtime_sandbox_pure() {
         boost_runtime(true);
     }
