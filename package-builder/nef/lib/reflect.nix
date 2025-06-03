@@ -92,8 +92,6 @@ let
   makeTargets =
     # list of attrpaths e.g. result from `lib.nef.reflect.collectAttrPaths
     collectedAttrPaths:
-    # extended package set, containing **derivation** attrsets at the collected attrPaths
-    pkgs:
     let
       mkAttrPathsWithOutputs = map lib.showAttrPath;
     in

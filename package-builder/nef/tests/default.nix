@@ -7,10 +7,10 @@ let
   libOverlay = (import ../lib).overlay;
   lib = nixpkgs.lib.extend libOverlay;
 
-  collectionTests = import ./collectionTests.nix { inherit lib; };
-  extensionTests = import ./extensionTests.nix { inherit lib; };
-
 in
 {
-  inherit collectionTests extensionTests;
+
+  collectionTests = import ./collectionTests.nix { inherit lib; };
+  extensionTests = import ./extensionTests.nix { inherit lib; };
+  reflectTests = import ./reflectTests { inherit lib; };
 }
