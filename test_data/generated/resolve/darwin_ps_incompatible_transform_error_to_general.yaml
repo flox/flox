@@ -1,18 +1,18 @@
 when:
   path: /api/v1/catalog/resolve
   method: POST
-  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["x86_64-darwin"]}],"name":"toplevel"}]}'
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"darwin.ps","install_id":"ps","systems":["x86_64-darwin"]}],"name":"toplevel"}]}'
 then:
   status: 200
   header:
     - name: date
-      value: Wed, 28 May 2025 00:50:38 GMT
+      value: Tue, 03 Jun 2025 17:26:08 GMT
     - name: content-type
       value: application/json
     - name: server
       value: uvicorn
     - name: apigw-requestid
-      value: LQOaxjqNIAMEM-A=
+      value: LmR3pgrGIAMEScg=
   body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"general","message":"general
     message","context":{"attr_path":"darwin.ps","install_id":"ps","system_groupings":"(aarch64-darwin,x86_64-darwin),
     (x86_64-darwin)"}}]}]}'

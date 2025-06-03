@@ -1,12 +1,12 @@
 when:
   path: /api/v1/catalog/resolve
   method: POST
-  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["x86_64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg1","install_id":"badpkg1","systems":["x86_64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg2","install_id":"badpkg2","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
 then:
   status: 200
   header:
   - name: date
-    value: Wed, 28 May 2025 00:50:41 GMT
+    value: Tue, 03 Jun 2025 17:26:20 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LQObWiiDIAMEM8Q=
+    value: LmR5eidNoAMESIQ=
   body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The attr_path badpkg1 is not found in the catalog.","context":{"attr_path":"badpkg1","install_id":"badpkg1"}},{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The attr_path badpkg2 is not found in the catalog.","context":{"attr_path":"badpkg2","install_id":"badpkg2"}}]}]}'
 ---
 when:
@@ -24,7 +24,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Wed, 28 May 2025 00:50:42 GMT
+    value: Tue, 03 Jun 2025 17:26:20 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -32,7 +32,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LQObXgZIIAMEYaQ=
+    value: LmR5fjy2oAMEaWQ=
   body: '{"items":[],"total_count":0}'
 ---
 when:
@@ -42,7 +42,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Wed, 28 May 2025 00:50:42 GMT
+    value: Tue, 03 Jun 2025 17:26:20 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -50,5 +50,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LQObaiXzoAMEMHw=
+    value: LmR5hjv6oAMEa3w=
   body: '{"items":[],"total_count":0}'
