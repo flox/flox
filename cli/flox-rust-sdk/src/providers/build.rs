@@ -15,10 +15,12 @@ use tracing::{debug, error, warn};
 use url::Url;
 
 use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
+use super::catalog::BaseCatalogUrl;
 use super::nix::nix_base_command;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
-use crate::models::manifest::typed::{Inner, Manifest};
+use crate::models::lockfile::Lockfile;
+use crate::models::manifest::typed::{DEFAULT_GROUP_NAME, Inner, Manifest};
 use crate::utils::CommandExt;
 
 pub const FLOX_RUNTIME_DIR_VAR: &str = "FLOX_RUNTIME_DIR";
@@ -57,6 +59,7 @@ pub trait ManifestBuilder {
     fn build(
         &self,
         expression_build_nixpkgs: &Url,
+        toplevel_nixpkgs: Option<&Url>,
         flox_interpreter: &Path,
         package: &[PackageTargetName],
         build_cache: Option<bool>,
@@ -146,7 +149,7 @@ pub struct FloxBuildMk<'args> {
 
     // common build components
     base_dir: &'args Path,
-    expression_dir: Option<&'args Path>,
+    expression_dir: &'args Path,
     built_environments: &'args BuildEnvOutputs,
 }
 
@@ -154,7 +157,7 @@ impl FloxBuildMk<'_> {
     pub fn new<'args>(
         flox: &'args Flox,
         base_dir: &'args Path,
-        expression_dir: Option<&'args Path>,
+        expression_dir: &'args Path,
         built_environments: &'args BuildEnvOutputs,
     ) -> FloxBuildMk<'args> {
         FloxBuildMk {
@@ -202,6 +205,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     fn build(
         &self,
         expression_build_nixpkgs: &Url,
+        toplevel_nixpkgs: Option<&Url>,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
         build_cache: Option<bool>,
@@ -212,6 +216,11 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             "BUILDTIME_NIXPKGS_URL={}",
             expression_build_nixpkgs
         ));
+
+        if let Some(toplevel_nixpkgs_url) = toplevel_nixpkgs {
+            command.arg(format!("TOPLEVEL_NIXPKGS_URL={toplevel_nixpkgs_url}"));
+        }
+
         command.arg(format!(
             "FLOX_ENV={}",
             self.built_environments.develop.display()
@@ -222,10 +231,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         ));
 
         // TODO: modify flox-build.mk to allow missing expression dirs
-        let expression_dir = match self.expression_dir {
-            Some(dir) => &*dir.to_string_lossy(),
-            None => "/absolutely/nowhere",
-        };
+        let expression_dir = self.expression_dir.to_string_lossy();
         command.arg(format!("NIX_EXPRESSION_DIR={expression_dir}"));
         command.arg(format!("FLOX_INTERPRETER={}", flox_interpreter.display()));
 
@@ -343,11 +349,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         ));
 
         // TODO: is this even necessary, or can we detect build outputs instead?
-        // TODO: modify flox-build.mk to allow missing expression dirs
-        let expression_dir = match self.expression_dir {
-            Some(dir) => &*dir.to_string_lossy(),
-            None => "/absolutely/nowhere",
-        };
+        let expression_dir = self.expression_dir.to_string_lossy();
         command.arg(format!("NIX_EXPRESSION_DIR={expression_dir}"));
 
         // Add clean target arguments by prefixing the package names with "clean/".
@@ -419,6 +421,25 @@ pub fn build_symlink_path(
     package: &str,
 ) -> Result<PathBuf, EnvironmentError> {
     Ok(environment.parent_path()?.join(format!("result-{package}")))
+}
+
+/// Look up the "toplevel" groups nixpkgs url from the lockfile.
+///
+/// Returns [None] if no package is locked under the "toplevel" group.
+pub fn find_toplevel_group_nixpkgs(lockfile: &Lockfile) -> Option<BaseCatalogUrl> {
+    let top_level_locked_desc = lockfile.packages.iter().find(|pkg| {
+        let Some(catalog_package_ref) = pkg.as_catalog_package_ref() else {
+            return false;
+        };
+        catalog_package_ref.group == DEFAULT_GROUP_NAME
+    })?;
+
+    Some(BaseCatalogUrl::from(
+        &*top_level_locked_desc
+            .as_catalog_package_ref()
+            .unwrap()
+            .locked_url,
+    ))
 }
 
 /// Use our NEF nix subsystem to query expressions provided in a given expression dir.
@@ -661,7 +682,7 @@ pub mod test_helpers {
     pub fn assert_build_status_with_nix_expr(
         flox: &Flox,
         env: &mut PathEnvironment,
-        expression_dir: Option<&Path>,
+        expression_dir: &Path,
         package: &str,
         build_cache: Option<bool>,
         expect_success: bool,
@@ -674,6 +695,7 @@ pub mod test_helpers {
         )
         .build(
             &COMMON_NIXPKGS_URL,
+            None,
             &env.rendered_env_links(flox).unwrap().development,
             &[PackageTargetName::new_unchecked(&package)],
             build_cache,
@@ -725,7 +747,7 @@ pub mod test_helpers {
         assert_build_status_with_nix_expr(
             flox,
             env,
-            None,
+            &nix_expression_dir(env),
             package_name,
             build_cache,
             expect_success,
@@ -736,7 +758,7 @@ pub mod test_helpers {
         let err = FloxBuildMk::new(
             flox,
             &env.parent_path().unwrap(),
-            None,
+            &nix_expression_dir(env),
             &env.build(flox).unwrap(),
         )
         .clean(
@@ -2366,7 +2388,7 @@ mod nef_tests {
         let collected = assert_build_status_with_nix_expr(
             &flox,
             &mut env,
-            Some(&expressions_dir),
+            &expressions_dir,
             &pname,
             None,
             true,
@@ -2408,7 +2430,7 @@ mod nef_tests {
         let collected = assert_build_status_with_nix_expr(
             &flox,
             &mut env,
-            Some(&expressions_dir),
+            &expressions_dir,
             &pname,
             None,
             true,
