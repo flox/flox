@@ -1,12 +1,12 @@
 when:
   path: /api/v1/catalog/resolve
   method: POST
-  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg","install_id":"badpkg","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg","install_id":"badpkg","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg","install_id":"badpkg","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg","install_id":"badpkg","systems":["x86_64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"bpftrace","install_id":"bpftrace","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"bpftrace","install_id":"bpftrace","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"bpftrace","install_id":"bpftrace","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_missing_builds":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"bpftrace","install_id":"bpftrace","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
+  body: '{"items":[{"descriptors":[{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg","install_id":"badpkg","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg","install_id":"badpkg","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg","install_id":"badpkg","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"badpkg","install_id":"badpkg","systems":["x86_64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"bpftrace","install_id":"bpftrace","systems":["aarch64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"bpftrace","install_id":"bpftrace","systems":["aarch64-linux"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"bpftrace","install_id":"bpftrace","systems":["x86_64-darwin"]},{"allow_broken":null,"allow_insecure":null,"allow_pre_releases":null,"allow_unfree":null,"attr_path":"bpftrace","install_id":"bpftrace","systems":["x86_64-linux"]}],"name":"toplevel"}]}'
 then:
   status: 200
   header:
   - name: date
-    value: Wed, 28 May 2025 00:50:27 GMT
+    value: Tue, 03 Jun 2025 17:26:05 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,7 +14,7 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LQOY-g9boAMEMvg=
+    value: LmR3FhBXIAMESFQ=
   body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.not_in_catalog","message":"The attr_path badpkg is not found in the catalog.","context":{"attr_path":"badpkg","install_id":"badpkg"}},{"level":"error","type":"attr_path_not_found.not_found_for_all_systems","message":"The attr_path bpftrace is not found for all the requested systems, suggest limiting systems to (aarch64-linux,x86_64-linux).","context":{"attr_path":"bpftrace","install_id":"bpftrace","valid_systems":"aarch64-linux,x86_64-linux"}}]}]}'
 ---
 when:
@@ -24,7 +24,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Wed, 28 May 2025 00:50:27 GMT
+    value: Tue, 03 Jun 2025 17:26:05 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -32,5 +32,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LQOZDg6yIAMEMEQ=
+    value: LmR3NhlIIAMESVw=
   body: '{"items":[],"total_count":0}'

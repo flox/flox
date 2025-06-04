@@ -869,7 +869,6 @@ post_cmd = '''
     mkdir -p "$build_dir"
     mv "$RESPONSE_FILE" "$build_dir/$resp_file"
     cp -R .flox "$build_dir/.flox"
-    rm -r "$build_dir/.flox/run"
     # Copy over any source files
     cp hello.c "$build_dir/hello.c"
 '''

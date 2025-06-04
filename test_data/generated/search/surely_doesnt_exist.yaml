@@ -5,7 +5,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Wed, 28 May 2025 00:50:54 GMT
+    value: Tue, 03 Jun 2025 17:26:28 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -13,5 +13,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LQOdUjjDIAMEVoQ=
+    value: LmR6wgASoAMEaFw=
   body: '{"items":[],"total_count":0}'

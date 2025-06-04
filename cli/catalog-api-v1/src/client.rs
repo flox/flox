@@ -490,13 +490,14 @@ pub mod types {
     ///{
     ///  "title": "CatalogStoreConfigPublisher",
     ///  "type": "object",
-    ///  "required": [
-    ///    "publisher_url"
-    ///  ],
     ///  "properties": {
     ///    "publisher_url": {
     ///      "title": "Publisher Url",
-    ///      "type": "string"
+    ///      "deprecated": true,
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    },
     ///    "store_type": {
     ///      "title": "Store Type",
@@ -509,7 +510,8 @@ pub mod types {
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CatalogStoreConfigPublisher {
-        pub publisher_url: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub publisher_url: ::std::option::Option<::std::string::String>,
         #[serde(default = "defaults::catalog_store_config_publisher_store_type")]
         pub store_type: ::std::string::String,
     }
@@ -517,6 +519,14 @@ pub mod types {
     for CatalogStoreConfigPublisher {
         fn from(value: &CatalogStoreConfigPublisher) -> Self {
             value.clone()
+        }
+    }
+    impl ::std::default::Default for CatalogStoreConfigPublisher {
+        fn default() -> Self {
+            Self {
+                publisher_url: Default::default(),
+                store_type: defaults::catalog_store_config_publisher_store_type(),
+            }
         }
     }
     ///`ErrorResponse`
@@ -1154,7 +1164,6 @@ pub mod types {
     ///    },
     ///    "allow_missing_builds": {
     ///      "title": "Allow Missing Builds",
-    ///      "default": false,
     ///      "type": [
     ///        "boolean",
     ///        "null"
@@ -1225,7 +1234,7 @@ pub mod types {
         pub allow_broken: ::std::option::Option<bool>,
         #[serde(default = "defaults::package_descriptor_allow_insecure")]
         pub allow_insecure: ::std::option::Option<bool>,
-        #[serde(default = "defaults::package_descriptor_allow_missing_builds")]
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub allow_missing_builds: ::std::option::Option<bool>,
         #[serde(default = "defaults::package_descriptor_allow_pre_releases")]
         pub allow_pre_releases: ::std::option::Option<bool>,
@@ -2589,6 +2598,30 @@ pub mod types {
     ///        "null"
     ///      ]
     ///    },
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "package": {
+    ///      "title": "Package",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "public_keys": {
+    ///      "title": "Public Keys",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
     ///    "url": {
     ///      "title": "Url",
     ///      "type": "string"
@@ -2603,6 +2636,12 @@ pub mod types {
         pub auth: ::std::option::Option<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
         >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub catalog: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub package: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub public_keys: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
         pub url: ::std::string::String,
     }
     impl ::std::convert::From<&StoreInfo> for StoreInfo {
@@ -3513,11 +3552,6 @@ pub mod types {
         > {
             ::std::option::Option::Some(false)
         }
-        pub(super) fn package_descriptor_allow_missing_builds() -> ::std::option::Option<
-            bool,
-        > {
-            ::std::option::Option::Some(false)
-        }
         pub(super) fn package_descriptor_allow_pre_releases() -> ::std::option::Option<
             bool,
         > {
@@ -4096,66 +4130,6 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
             201u16 => ResponseValue::from_response(response).await,
-            400u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            404u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Request access and info to publish a package
-
-Request access and informatin to publish a package to this catalog.
-Path Parameters:
-- **catalog_name**: The name of the catalog
-- **package_name**: The name of the package
-Body Content:
-- **PublishRequest**: The information needed to publish to the catalog
-Returns:
-- **PublishRequestResponse**
-
-Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/publish`
-
-*/
-    pub async fn publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_post<
-        'a,
-    >(
-        &'a self,
-        catalog_name: &'a types::CatalogName,
-        package_name: &'a types::PackageName,
-        body: &'a types::PublishRequest,
-    ) -> Result<ResponseValue<types::PublishResponse>, Error<types::ErrorResponse>> {
-        let url = format!(
-            "{}/api/v1/catalog/catalogs/{}/packages/{}/publish", self.baseurl,
-            encode_path(& catalog_name.to_string()), encode_path(& package_name
-            .to_string()),
-        );
-        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
-        header_map
-            .append(
-                ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
-            );
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .post(url)
-            .header(
-                ::reqwest::header::ACCEPT,
-                ::reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .json(&body)
-            .headers(header_map)
-            .build()?;
-        let result = self.client.execute(request).await;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
             400u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }

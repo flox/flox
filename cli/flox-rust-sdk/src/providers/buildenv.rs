@@ -1282,10 +1282,16 @@ mod realise_nixpkgs_tests {
             StoreInfo {
                 url: "blasphemy*".to_string(),
                 auth: None,
+                catalog: None,
+                package: None,
+                public_keys: None,
             },
             StoreInfo {
                 url: "daemon".to_string(),
                 auth: None,
+                catalog: None,
+                package: None,
+                public_keys: None,
             },
         ]);
         client.push_store_info_response(resp);
@@ -1317,6 +1323,9 @@ mod realise_nixpkgs_tests {
                 StoreInfo {
                     url: "daemon".to_string(),
                     auth: None,
+                    catalog: None,
+                    package: None,
+                    public_keys: None,
                 },
             ]);
         client.push_store_info_response(resp);
