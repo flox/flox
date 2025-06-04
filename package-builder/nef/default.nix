@@ -2,6 +2,7 @@
   nixpkgs-url ? "nixpkgs",
   nixpkgs-flake ? builtins.getFlake nixpkgs-url,
   pkgs-dir,
+  git-subdir ? null,
   system ? builtins.currentSystem or null,
 }:
 let
@@ -12,7 +13,15 @@ let
       allowInsecure = true;
     };
   };
-  pkgsDir = pkgs-dir;
+  pkgsDir =
+    if git-subdir != null then
+      let
+        tree = builtins.fetchTree "git+file://${pkgs-dir}";
+      in
+      "${tree.outPath}/${git-subdir}"
+
+    else
+      pkgs-dir;
 
   lib = nixpkgs.lib.extend libOverlay;
   libOverlay = (import ./lib).overlay;

@@ -87,7 +87,7 @@ ifeq (,$(_FLOX_PKGDB_VERBOSITY))
 endif
 
 # Invoke nix with the required experimental features enabled.
-_nix := $(_nix) --extra-experimental-features "flakes nix-command" $(intcmp 0,$(_FLOX_PKGDB_VERBOSITY),--trace-verbose)
+_nix := $(_nix) --extra-experimental-features "flakes nix-command fetch-tree" $(intcmp 0,$(_FLOX_PKGDB_VERBOSITY),--trace-verbose)
 
 # Ensure we use the Nix-provided SHELL.
 SHELL := $(_bash) $(intcmp 2,$(_FLOX_PKGDB_VERBOSITY),-x)
@@ -119,11 +119,33 @@ MANIFEST_BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
 ifeq (,$(NIX_EXPRESSION_DIR))
   $(error NIX_EXPRESSION_DIR not defined)
 endif
+
+NIX_EXPRESSION_GIT_PARENT := \
+  $(shell $(_git) -C '$(NIX_EXPRESSION_DIR)' rev-parse --show-toplevel || echo)
+
+NIX_EXPRESSION_GIT_SUBDIR := \
+  $(shell $(_git) -C '$(NIX_EXPRESSION_DIR)' rev-parse --show-prefix || echo)
+
+
+ifeq (,$(NIX_EXPRESSION_DIR))
+  $(error NIX_EXPRESSION_DIR not defined)
+endif
+
+ifeq (,$(NIX_EXPRESSION_GIT_PARENT))
+  NIX_EXPRESSION_DIR_ARGS := \
+    --argstr pkgs-dir '$(NIX_EXPRESSION_DIR)'
+else
+  NIX_EXPRESSION_DIR_ARGS := \
+    --argstr pkgs-dir '$(NIX_EXPRESSION_GIT_PARENT)' \
+    --argstr git-subdir '$(NIX_EXPRESSION_GIT_SUBDIR)'
+endif
+
+
 NIX_EXPRESSION_BUILDS := \
   $(shell $(_nix) eval \
     --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
     --argstr system $(NIX_SYSTEM) \
-    --argstr pkgs-dir $(NIX_EXPRESSION_DIR) \
+    $(NIX_EXPRESSION_DIR_ARGS) \
     --file $(_nef) \
     reflect.targets --raw)
 
@@ -688,12 +710,14 @@ define NIX_EXPRESSION_BUILD_template =
   $(eval _pvarname = $(subst -,_,$(_pname)))
 
   # Start by evaluating the build
+  #
+
   $($(_pvarname)_evalJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_nix) eval -L --file $(_nef) \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  --argstr system $(NIX_SYSTEM) \
-	  --argstr pkgs-dir $(NIX_EXPRESSION_DIR) \
+    $(NIX_EXPRESSION_DIR_ARGS) \
 	  --json \
 	  --apply 'pkg: { \
 	    drvPath = pkg.drvPath; \
