@@ -48,10 +48,10 @@ pub struct Publish {
 
 #[derive(Debug, Bpaf, Clone, Default)]
 struct CacheArgs {
-    /// Which catalog to publish to.
+    /// Which organization to publish packages to.
     /// Takes precedence over the default value of the user's GitHub handle.
     #[bpaf(short, long, argument("NAME"))]
-    catalog: Option<String>,
+    org: Option<String>,
 
     /// Path of the key file used to sign packages before copying.
     /// Takes precedence over a value from 'flox config'.
@@ -123,10 +123,7 @@ impl Publish {
         // Fail as early as possible if the user isn't authenticated or doesn't
         // belong to an org with a catalog.
         let token = ensure_floxhub_token(&mut flox).await?.clone();
-        let catalog_name = cache_args
-            .catalog
-            .clone()
-            .unwrap_or(token.handle().to_string());
+        let catalog_name = cache_args.org.clone().unwrap_or(token.handle().to_string());
 
         let path_env = match env {
             ConcreteEnvironment::Path(path_env) => path_env,
