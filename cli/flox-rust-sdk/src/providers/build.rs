@@ -120,6 +120,8 @@ pub struct BuildResult {
     pub version: String,
     pub system: Option<String>,
     pub log: BuiltStorePath,
+    #[serde(rename = "outLink")]
+    pub out_link: PathBuf,
 }
 
 /// Output received from an ongoing build process.
