@@ -112,7 +112,7 @@
         if exists then
           entry
         else
-          builtins.trace "Not importing any attributes because the directory ${dir} doesn't exist" null;
+          builtins.traceVerbose "Not importing any attributes because the directory ${dir} doesn't exist" null;
 
       result = pathToEntries dir;
     in

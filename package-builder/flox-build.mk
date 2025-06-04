@@ -80,14 +80,15 @@ endif
 # Path to Nix expession (NEF) library.
 _nef := $(_libexec_dir)/nef
 
-# Invoke nix with the required experimental features enabled.
-_nix := $(_nix) --extra-experimental-features "flakes nix-command"
-
 # Set makefile verbosity based on the value of _FLOX_PKGDB_VERBOSITY [sic]
 # as set in the environment by the flox CLI. First set it to 0 if not defined.
 ifeq (,$(_FLOX_PKGDB_VERBOSITY))
   _FLOX_PKGDB_VERBOSITY = 0
 endif
+
+# Invoke nix with the required experimental features enabled.
+_nix := $(_nix) --extra-experimental-features "flakes nix-command" $(intcmp 0,$(_FLOX_PKGDB_VERBOSITY),--trace-verbose)
+
 # Ensure we use the Nix-provided SHELL.
 SHELL := $(_bash) $(intcmp 2,$(_FLOX_PKGDB_VERBOSITY),-x)
 
