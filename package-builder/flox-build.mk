@@ -437,7 +437,8 @@ define BUILD_local_template =
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log $(_pvarname)_CHECK_BUILD
 	$(_V_) $(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
 	  --arg log "$(shell $(_readlink) $($(_pvarname)_result)-log)" \
-	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log}' $$< > $$@
+	  --arg outLink "$$$$($(_pwd))/$($(_pvarname)_result)" \
+	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, outLink: $$$$outLink}' $$< > $$@
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -510,8 +511,12 @@ define BUILD_nix_sandbox_template =
   # MANIFEST_BUILD_template validates that the build is sane.
 
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_buildJSON) $(_pvarname)_CHECK_BUILD
-	$(_V_) $(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
-	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log}' $$< > $$@
+	$(_V_) $(_jq) \
+	  --arg name "$(_name)" \
+	  --arg pname "$(_pname)" \
+	  --arg version "$(_version)" \
+		--arg outLink "$$$$($(_pwd))/$($(_pvarname)_result)" \
+	  '.[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, outLink: $$$$outLink }' $$< > $$@
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
@@ -723,9 +728,10 @@ define NIX_EXPRESSION_BUILD_template =
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_evalJSON) $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log
 	$(_V_) $(_jq) -n \
 	  --arg logfile $$(shell $(_readlink) $($(_pvarname)_result)-log) \
+	  --arg outLink "$$$$($(_pwd))/$($(_pvarname)_result)" \
 	  --slurpfile eval $($(_pvarname)_evalJSON) \
 	  --slurpfile build $($(_pvarname)_buildJSON) \
-	  '$$$$build[0][0] * $$$$eval[0] * { log: $$$$logfile }' > $$@
+	  '$$$$build[0][0] * $$$$eval[0] * { log: $$$$logfile, outLink: $$$$outLink }' > $$@
 	@echo -e "Completed build of $$(_name) in Nix expression mode\n"
 
   # Create targets for cleaning up the result and log symlinks.
