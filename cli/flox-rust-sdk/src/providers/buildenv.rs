@@ -1285,6 +1285,7 @@ mod realise_nixpkgs_tests {
                 catalog: None,
                 package: None,
                 public_keys: None,
+                narinfo_exists: None,
             },
             StoreInfo {
                 url: "daemon".to_string(),
@@ -1292,6 +1293,7 @@ mod realise_nixpkgs_tests {
                 catalog: None,
                 package: None,
                 public_keys: None,
+                narinfo_exists: None,
             },
         ]);
         client.push_store_info_response(resp);
@@ -1326,6 +1328,7 @@ mod realise_nixpkgs_tests {
                     catalog: None,
                     package: None,
                     public_keys: None,
+                    narinfo_exists: None,
                 },
             ]);
         client.push_store_info_response(resp);
