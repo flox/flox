@@ -2054,7 +2054,8 @@ pub mod types {
     ///      "type": [
     ///        "object",
     ///        "null"
-    ///      ]
+    ///      ],
+    ///      "additionalProperties": true
     ///    },
     ///    "ingress_uri": {
     ///      "title": "Ingress Uri",
@@ -2383,6 +2384,16 @@ pub mod types {
     ///    "name"
     ///  ],
     ///  "properties": {
+    ///    "additionl_pages": {
+    ///      "title": "Additionl Pages",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/CatalogPage"
+    ///      }
+    ///    },
     ///    "messages": {
     ///      "title": "Messages",
     ///      "type": "array",
@@ -2403,6 +2414,8 @@ pub mod types {
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct ResolvedPackageGroup {
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub additionl_pages: ::std::option::Option<::std::vec::Vec<CatalogPage>>,
         pub messages: ::std::vec::Vec<ResolutionMessageGeneral>,
         pub name: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -2596,12 +2609,20 @@ pub mod types {
     ///      "type": [
     ///        "object",
     ///        "null"
-    ///      ]
+    ///      ],
+    ///      "additionalProperties": true
     ///    },
     ///    "catalog": {
     ///      "title": "Catalog",
     ///      "type": [
     ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "narinfo_exists": {
+    ///      "title": "Narinfo Exists",
+    ///      "type": [
+    ///        "boolean",
     ///        "null"
     ///      ]
     ///    },
@@ -2638,6 +2659,8 @@ pub mod types {
         >,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub catalog: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub narinfo_exists: ::std::option::Option<bool>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub package: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -4619,6 +4642,7 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
 */
     pub async fn resolve_api_v1_catalog_resolve_post<'a>(
         &'a self,
+        candidate_pages: Option<i64>,
         body: &'a types::PackageGroups,
     ) -> Result<
         ResponseValue<types::ResolvedPackageGroups>,
@@ -4640,6 +4664,9 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
                 ::reqwest::header::HeaderValue::from_static("application/json"),
             )
             .json(&body)
+            .query(
+                &progenitor_client::QueryParam::new("candidate_pages", &candidate_pages),
+            )
             .headers(header_map)
             .build()?;
         let result = self.client.execute(request).await;

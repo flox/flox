@@ -183,15 +183,32 @@
         "summary": "Resolve a list of Package Groups",
         "description": "Resolves a list of package groups, each being a list of package descriptors.\n\nRequired Body:\n- **groups**: An object with an `items` array of PackageGroups to resolve.\n\nOptional Query Parameters:\n- **none**\n\nReturns:\n- **ResolvedPackageGroups**: A object with an `items` array of\n    `ResolvedPackageGroup` items.\n\nResolution Rules:\n- Each `PackageGroup` is resolved independently.\n- Each page that has a package that meets each of the descriptors in that group is returned in the results\n- The latest page will include details for each package in the group from that page\n- The remainder pages are returned without details (to get those details... TBD)\n\nA Package Descriptor match:\n- **name**: [required] - is not used in matching, only for reference (TBD is\n            there a uniqueness constraint?)\n- **attr_path**: [required] - this must match the nix attribute path exactly and in full\n- **version**: [optional] - Either a literal version to match or a **semver** constraint.\n    This will be treated as a **semver** IFF TBD, otherwise it will be treated as\n    a literal string match to the nix `version` field.  If this is detected as a **semver**,\n    packages whose `version` field cannot be parsed as a **semver** will be excluded.\n- **allow_pre_release**: [optional] - Defaults to False.  Only applies\n    when a **semver** constraint is given.  If true, a `version` that can\n    be parsed as a valid semver, that includes a pre-release suffix will\n    be included as a candidate.  Otherwise, they will be excluded.\n- **allow_broken**: [optional] - Defaults to False.  A package\n    marked as broken = True will be excluded unless this is set to True.\n- **allow_unfree**: [optional] - Defaults to True.  A package\n    marked as unfree = True will be excluded unless this is set to True.\n- **allow_insecure**: [optional] - Defaults to False.  A package\n    marked as insecure = True will be excluded unless this is set to True.\n- **allow_missing_builds**: [optional] - Defaults to\n    False.  A package is expected to have been built if it\n    is not marked as broken, unfree, or insecure.  A package\n    that is expected to have been built, but none of it's outputs have been\n    observed to build, will attempt to be excluded unless this is set to\n    True.  This constraint may be softened if the group can not be resolved\n    with it enforced.  If this occurs, the ressponse will note this by\n    including a warning level message.",
         "operationId": "resolve_api_v1_catalog_resolve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "candidate_pages",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Candidate Pages"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PackageGroups"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -214,12 +231,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/catalog/settings/{key}": {
@@ -1918,7 +1930,7 @@
         "type": "string",
         "enum": [
           "general",
-          "resolution_trace",
+          "resolution_logic",
           "attr_path_not_found",
           "constraints_too_tight",
           "attr_path_not_found.not_in_catalog",
@@ -2533,6 +2545,7 @@
           "ingress_auth": {
             "title": "Ingress Auth",
             "nullable": true,
+            "additionalProperties": true,
             "type": "object"
           },
           "catalog_store_config": {
@@ -2731,6 +2744,14 @@
             "nullable": true,
             "$ref": "#/components/schemas/CatalogPage"
           },
+          "additionl_pages": {
+            "title": "Additionl Pages",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/CatalogPage"
+            },
+            "type": "array"
+          },
           "messages": {
             "items": {
               "$ref": "#/components/schemas/ResolutionMessageGeneral"
@@ -2822,6 +2843,7 @@
           "auth": {
             "title": "Auth",
             "nullable": true,
+            "additionalProperties": true,
             "type": "object"
           },
           "catalog": {
@@ -2841,6 +2863,11 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "narinfo_exists": {
+            "title": "Narinfo Exists",
+            "nullable": true,
+            "type": "boolean"
           }
         },
         "type": "object",
