@@ -8,6 +8,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry, filter};
 
 use crate::commands::Verbosity;
+use crate::utils::init::logger::indicatif::PROGRESS_TAG;
 use crate::utils::metrics::MetricsLayer;
 
 static LOGGER_HANDLE: OnceLock<Handle<EnvFilter, Registry>> = OnceLock::new();
@@ -107,7 +108,7 @@ pub fn create_registry_and_filter_reload_handle() -> (
         .with_writer(writer.clone())
         .with_ansi(use_colors)
         .map_fmt_fields(|format| {
-            FilteredFormatFields::new(format, |field| field.name() != "progress")
+            FilteredFormatFields::new(format, |field| field.name() != PROGRESS_TAG)
         })
         .with_filter(filter::filter_fn(|meta| {
             !meta.target().starts_with("flox::utils::message")
@@ -148,6 +149,8 @@ mod indicatif {
     use tracing_subscriber::layer::Layer;
     use tracing_subscriber::registry;
 
+    pub(super) const PROGRESS_TAG: &str = "progress";
+
     pub fn progress_layer<S>() -> (impl tracing_subscriber::Layer<S>, IndicatifWriter)
     where
         S: Subscriber + for<'span> registry::LookupSpan<'span> + 'static,
@@ -171,7 +174,7 @@ mod indicatif {
             }
 
             fn record_str(&mut self, field: &Field, value: &str) {
-                if field.name() == "progress" {
+                if field.name() == PROGRESS_TAG {
                     self.message = Some(value.to_string());
                 }
             }
@@ -217,7 +220,9 @@ mod indicatif {
         let writer = layer.get_stderr_writer();
 
         let filtered = layer.with_filter(tracing_subscriber::filter::FilterFn::new(|meta| {
-            meta.fields().iter().any(|field| field.name() == "progress")
+            meta.fields()
+                .iter()
+                .any(|field| field.name() == PROGRESS_TAG)
         }));
 
         (filtered, writer)
