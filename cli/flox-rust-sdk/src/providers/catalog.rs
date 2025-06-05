@@ -491,9 +491,12 @@ impl ClientTrait for CatalogClient {
                 .collect::<Result<Vec<_>, _>>()?,
         };
 
+        // TODO: once we decide how to handle the candidate pages we get back
+        //       from catalog-server, we can change this `None` to the number
+        //       of candidate pages we *want*.
         let response = self
             .client
-            .resolve_api_v1_catalog_resolve_post(&package_groups)
+            .resolve_api_v1_catalog_resolve_post(None, &package_groups)
             .await
             .map_err(CatalogClientError::APIError)?;
 
