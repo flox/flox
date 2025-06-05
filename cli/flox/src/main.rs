@@ -3,7 +3,7 @@ use std::env;
 use std::fmt::{Debug, Display};
 use std::process::ExitCode;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use bpaf::{Args, Parser};
 use commands::{EnvironmentSelectError, FloxArgs, FloxCli, Prefix, Version};
 use flox_rust_sdk::flox::{FLOX_VERSION, FLOX_VERSION_STRING, FLOX_VERSION_VAR};
@@ -11,7 +11,7 @@ use flox_rust_sdk::models::environment::EnvironmentError;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::providers::services::ServiceError;
-use tracing::{debug, warn};
+use tracing::debug;
 use utils::errors::format_service_error;
 use utils::init::{init_logger, init_sentry};
 use utils::{message, populate_default_nix_env_vars};
@@ -216,9 +216,12 @@ impl std::error::Error for Exit {}
 /// Resetting `$USER`/`$HOME` will solve that.
 fn set_user() -> Result<()> {
     {
+        let effective_uid = nix::unistd::geteuid();
+        let user_var = env::var("USER").unwrap_or_default();
+
         if let Some(effective_user) = nix::unistd::User::from_uid(nix::unistd::geteuid())? {
-            // TODO: warn if variable is empty?
-            if env::var("USER").unwrap_or_default() != effective_user.name {
+            if user_var != effective_user.name {
+                debug!(user_old = %user_var, user = %effective_user.name, home = ?effective_user.dir, "Resetting USER and HOME environment variables");
                 unsafe {
                     env::set_var("USER", effective_user.name);
                     env::set_var("HOME", effective_user.dir);
@@ -230,13 +233,10 @@ fn set_user() -> Result<()> {
             // lookups instead. The Nix version of glibc has been modified
             // to disable ld.so.cache, so if nscd isn't configured to do
             // this then ldap access to the passwd map will not work.
-            // Bottom line - don't abort if we cannot find a passwd
-            // entry for the euid, but do warn because it's very
-            // likely to cause problems at some point.
-            warn!(
-                "cannot determine effective uid - continuing as user '{}'",
-                env::var("USER").context("Could not read '$USER' variable")?
-            );
+            // Bottom line - don't abort or warn if we cannot find a passwd
+            // entry for the euid, but do log it in debug output so that we can
+            // diagnose whether it has contributed to user reported issues.
+            debug!(euid = %effective_uid, user = %user_var, "Unable to get passwd entry for USER and HOME check");
         };
         Ok(())
     }
