@@ -29,13 +29,6 @@
       },
       "sympy": {
         "pkg-path": "python311Packages.sympy"
-      },
-      "ysndr/foo": {
-        "pkg-path": "ysndr/foo",
-        "pkg-group": "ysndr/foo",
-        "systems": [
-          "aarch64-darwin"
-        ]
       }
     },
     "vars": {
@@ -1196,35 +1189,6 @@
       },
       "system": "x86_64-linux",
       "group": "toplevel",
-      "priority": 5
-    },
-    {
-      "attr_path": "foo",
-      "broken": false,
-      "derivation": "/nix/store/31c4sqjc75mvyz3sxcp0vmw997avb81l-foo.drv",
-      "description": "",
-      "install_id": "ysndr/foo",
-      "locked_url": "file:///Users/yannik/Workbench/flox/publish?rev=c7e0a322f3bf49edcfb2555047234b3e3dd99db6",
-      "name": "foo",
-      "pname": "foo",
-      "rev": "c7e0a322f3bf49edcfb2555047234b3e3dd99db6",
-      "rev_count": 2,
-      "rev_date": "2025-05-28T18:29:01Z",
-      "scrape_date": "2025-05-28T18:33:25.270228Z",
-      "stabilities": [
-        "stable",
-        "staging",
-        "unstable"
-      ],
-      "version": "unknown",
-      "outputs_to_install": [
-        "out"
-      ],
-      "outputs": {
-        "out": "/nix/store/mhkb130pycrxw8fchcwp953sw8f7xznj-foo"
-      },
-      "system": "aarch64-darwin",
-      "group": "ysndr/foo",
       "priority": 5
     }
   ]
