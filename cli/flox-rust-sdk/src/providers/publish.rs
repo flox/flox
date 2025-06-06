@@ -93,6 +93,9 @@ pub enum PublishError {
 
     #[error(transparent)]
     Auth(#[from] AuthError),
+
+    #[error("Timed out waiting for publish completion")]
+    PublishTimeout,
 }
 
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
@@ -106,6 +109,12 @@ pub trait Publisher {
         catalog_name: &str,
         key_file: Option<PathBuf>,
         metadata_only: bool,
+    ) -> Result<(), PublishError>;
+    async fn wait_for_publish_completion(
+        &self,
+        client: &Client,
+        poll_interval_millis: u64,
+        timeout_millis: u64,
     ) -> Result<(), PublishError>;
 }
 
@@ -561,6 +570,53 @@ where
             .await
             .map_err(PublishError::CatalogError)?;
 
+        Ok(())
+    }
+
+    /// Waits until the narinfos for all store paths are present in the catalog,
+    /// or errors on timeout.
+    async fn wait_for_publish_completion(
+        &self,
+        client: &Client,
+        poll_interval_millis: u64,
+        timeout_millis: u64,
+    ) -> Result<(), PublishError> {
+        let store_paths = self
+            .build_metadata
+            .outputs
+            .0
+            .iter()
+            .map(|output| output.store_path.clone())
+            .collect::<Vec<_>>();
+        let loop_poll_and_wait = async {
+            let start = tokio::time::Instant::now();
+            let wait_duration = tokio::time::Duration::from_millis(poll_interval_millis);
+            loop {
+                let now = tokio::time::Instant::now();
+                let elapsed = now.duration_since(start);
+                debug!(
+                    elapsed_millis = elapsed.as_millis(),
+                    "polling publish completion"
+                );
+                if client
+                    .is_publish_complete(&store_paths)
+                    .await
+                    .map_err(PublishError::CatalogError)?
+                {
+                    break;
+                }
+                debug!("not complete, sleeping");
+                tokio::time::sleep(wait_duration).await;
+            }
+            let now = tokio::time::Instant::now();
+            let elapsed = now.duration_since(start);
+            debug!(elapsed_millis = elapsed.as_millis(), "publish complete");
+            Ok::<_, PublishError>(())
+        };
+        let timeout = tokio::time::Duration::from_millis(timeout_millis);
+        tokio::time::timeout(timeout, loop_poll_and_wait)
+            .await
+            .map_err(|_| PublishError::PublishTimeout)??;
         Ok(())
     }
 }
