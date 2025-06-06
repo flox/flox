@@ -1,12 +1,14 @@
 use std::sync::OnceLock;
 
 use tracing::{debug, error};
+use tracing_indicatif::util::FilteredFormatFields;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::reload::Handle;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry, filter};
 
 use crate::commands::Verbosity;
+use crate::utils::init::logger::indicatif::PROGRESS_TAG;
 use crate::utils::metrics::MetricsLayer;
 
 static LOGGER_HANDLE: OnceLock<Handle<EnvFilter, Registry>> = OnceLock::new();
@@ -89,9 +91,25 @@ pub fn create_registry_and_filter_reload_handle() -> (
         }));
 
     // Tracing layer that handles all other logs.
+    //
+    // Span data is added to _all_ events within them, and "stack" if multiple spans are active.
+    // While the JSON formatter seems to support to suppress this span information,
+    // the same is not possible with either of the other builtin formatters.
+    //
+    // An existing issue on that upstream appears not to have active development:
+    // <https://github.com/tokio-rs/tracing/issues/3254>
+    //
+    // What is possible however is to filter out the _"progress" fields_,
+    // so that spans are still printed but we don't repeat the messages.
+    // That is using the `FilteredFormatFields` utility from `tracing_indicative`,
+    // which is a visitor implementation that just dropts fields based on a filter function,
+    // here: a test for the field name "progress".
     let log_layer = tracing_subscriber::fmt::layer()
         .with_writer(writer.clone())
         .with_ansi(use_colors)
+        .map_fmt_fields(|format| {
+            FilteredFormatFields::new(format, |field| field.name() != PROGRESS_TAG)
+        })
         .with_filter(filter::filter_fn(|meta| {
             !meta.target().starts_with("flox::utils::message")
         }));
@@ -131,6 +149,8 @@ mod indicatif {
     use tracing_subscriber::layer::Layer;
     use tracing_subscriber::registry;
 
+    pub(super) const PROGRESS_TAG: &str = "progress";
+
     pub fn progress_layer<S>() -> (impl tracing_subscriber::Layer<S>, IndicatifWriter)
     where
         S: Subscriber + for<'span> registry::LookupSpan<'span> + 'static,
@@ -154,7 +174,7 @@ mod indicatif {
             }
 
             fn record_str(&mut self, field: &Field, value: &str) {
-                if field.name() == "progress" {
+                if field.name() == PROGRESS_TAG {
                     self.message = Some(value.to_string());
                 }
             }
@@ -200,7 +220,9 @@ mod indicatif {
         let writer = layer.get_stderr_writer();
 
         let filtered = layer.with_filter(tracing_subscriber::filter::FilterFn::new(|meta| {
-            meta.fields().iter().any(|field| field.name() == "progress")
+            meta.fields()
+                .iter()
+                .any(|field| field.name() == PROGRESS_TAG)
         }));
 
         (filtered, writer)
