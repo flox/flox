@@ -1573,6 +1573,53 @@
         ]
       }
     },
+    "/api/v1/catalog/store/status": {
+      "post": {
+        "tags": [
+          "store"
+        ],
+        "summary": "Get status for a list of storepaths",
+        "description": "Get status for a list of storepaths\n\nBody Parameters:\n- **StoreInfoRequest**: A list of derivation paths\n\nReturns:\n- **StoreInfoResponse**: a map of derivation path to a list of store info objects",
+        "operationId": "get_storepath_status_api_v1_catalog_store_status_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoreInfoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The list of storepath statuses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorepathStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request parameters are invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/metrics/": {
       "get": {
         "summary": "Handle Metrics",
@@ -2744,8 +2791,8 @@
             "nullable": true,
             "$ref": "#/components/schemas/CatalogPage"
           },
-          "additionl_pages": {
-            "title": "Additionl Pages",
+          "candidate_pages": {
+            "title": "Candidate Pages",
             "nullable": true,
             "items": {
               "$ref": "#/components/schemas/CatalogPage"
@@ -2863,11 +2910,6 @@
               "type": "string"
             },
             "type": "array"
-          },
-          "narinfo_exists": {
-            "title": "Narinfo Exists",
-            "nullable": true,
-            "type": "boolean"
           }
         },
         "type": "object",
@@ -2919,6 +2961,48 @@
           "items"
         ],
         "title": "StoreInfoResponse"
+      },
+      "StorepathStatus": {
+        "properties": {
+          "catalog": {
+            "type": "string",
+            "title": "Catalog"
+          },
+          "package": {
+            "type": "string",
+            "title": "Package"
+          },
+          "narinfo_known": {
+            "type": "boolean",
+            "title": "Narinfo Known"
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalog",
+          "package",
+          "narinfo_known"
+        ],
+        "title": "StorepathStatus"
+      },
+      "StorepathStatusResponse": {
+        "properties": {
+          "items": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/StorepathStatus"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "StorepathStatusResponse"
       },
       "SystemEnum": {
         "type": "string",
