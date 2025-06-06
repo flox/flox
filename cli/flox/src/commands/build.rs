@@ -1,7 +1,6 @@
-use std::env;
 use std::path::Path;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -13,7 +12,6 @@ use flox_rust_sdk::providers::build::{
     Output,
     PackageTarget,
     PackageTargets,
-    build_symlink_path,
     find_toplevel_group_nixpkgs,
     nix_expression_dir,
 };
@@ -148,31 +146,10 @@ impl Build {
             match message {
                 Output::Stdout(line) => println!("{line}"),
                 Output::Stderr(line) => eprintln!("{line}"),
-                Output::Success(results) => {
-                    let current_dir = env::current_dir()
-                        .context("could not get current directory")?
-                        .canonicalize()
-                        .context("could not canonicalize current directory")?;
-
-                    let links_to_print = results
-                        .iter()
-                        .map(|package| {
-                            Self::check_and_display_symlink(&env, &package.pname, &current_dir)
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-
-                    if links_to_print.len() > 1 {
-                        message::created(formatdoc!(
-                            "Builds completed successfully.
-                            Outputs created: {}",
-                            links_to_print.join(", ")
-                        ));
-                    } else {
-                        message::created(format!(
-                            "Build completed successfully. Output created: {}",
-                            links_to_print[0]
-                        ));
-                    }
+                Output::Success(_) => {
+                    message::created(formatdoc!(
+                        "Build completed successfully."
+                    ));
                     break;
                 },
                 Output::Failure(status) => {
@@ -182,42 +159,6 @@ impl Build {
         }
 
         Ok(())
-    }
-
-    /// Check if the expected symlink for a package exists.
-    /// If so, shorten it if in the current directory.
-    ///
-    /// current_dir should be canonicalized
-    fn check_and_display_symlink(
-        environment: &impl Environment,
-        package: &str,
-        current_dir: impl AsRef<Path>,
-    ) -> Result<String> {
-        let symlink = build_symlink_path(environment, package)?;
-
-        if !symlink.exists() {
-            bail!("Build symlink for package '{}' does not exist", package);
-        }
-
-        let parent = symlink
-            .parent()
-            .ok_or(anyhow!("symlink must be in a directory"))?;
-
-        let parent = parent
-            .canonicalize()
-            .context("couldn't canonicalize parent of build symlink")?;
-
-        if parent == current_dir.as_ref() {
-            Ok(format!(
-                "./{}",
-                symlink
-                    .file_name()
-                    .ok_or(anyhow!("symlink must have a file name"))?
-                    .to_string_lossy()
-            ))
-        } else {
-            Ok(symlink.to_string_lossy().to_string())
-        }
     }
 }
 

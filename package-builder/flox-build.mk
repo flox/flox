@@ -221,10 +221,14 @@ define COMMON_BUILD_VARS_template =
 	$$(foreach _build,$$(_build_outputs), \
 	  $$(eval _link = $$(word 1,$$(subst $$(comma), ,$$(_build)))) \
 	  $$(eval _store_path = $$(word 2,$$(subst $$(comma), ,$$(_build)))) \
+	  $$(eval _build_result_links := ) \
 	  $$(if $$(wildcard $$(_link)), \
-	    $$(if $$(filter-out $$(_store_path),$$(shell $(_readlink) $$(_link))), \
+	    $$(if $$(filter $$(_store_path),$$(shell $(_readlink) $$(_link))), \
+	      $$(eval _build_result_links += $$(_link)), \
 	      $$(error $$(_link) of $$(_build) does not point to expected store path: $$(_store_path))), \
 	    $$(error $$(_link) of $$(_build) does not exist)))
+	$$(eval _s = $$(intcmp $$(words $$(_build_result_links)),2,,s))
+	@echo -e '\nOutput$$(_s) created: $$(_build_result_links)' 1>&2
 
 endef
 
@@ -713,7 +717,7 @@ define NIX_EXPRESSION_BUILD_template =
   # Harvest the logfile from the build.
   $($(_pvarname)_logfile): $($(_pvarname)_buildJSON) $(_pvarname)_CHECK_BUILD
 	$$(eval _drvPath = $$(shell $(_jq) -r '.[0].drvPath' $$<))
-	$(_V_) ( $(_nix) log $$(_drvPath) || echo "No logs available" ) > $($(_pvarname)_logfile)
+	$(_V_) ( $(_nix) log $$(_drvPath) 2>/dev/null || echo "No logs available" ) > $($(_pvarname)_logfile)
 
   # Add the log to the store and create a GCRoot for it.
   $($(_pvarname)_result)-log: $($(_pvarname)_logfile)

@@ -18,7 +18,7 @@ use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
 use super::catalog::BaseCatalogUrl;
 use super::nix::nix_base_command;
 use crate::flox::Flox;
-use crate::models::environment::{Environment, EnvironmentError};
+use crate::models::environment::{Environment};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::{DEFAULT_GROUP_NAME, Inner, Manifest};
 use crate::utils::CommandExt;
@@ -414,13 +414,6 @@ fn read_output_to_channel(
 /// (see [get_nix_expression_targets] for the discovery results).
 pub fn nix_expression_dir(environment: &impl Environment) -> PathBuf {
     environment.dot_flox_path().join("pkgs")
-}
-
-pub fn build_symlink_path(
-    environment: &impl Environment,
-    package: &str,
-) -> Result<PathBuf, EnvironmentError> {
-    Ok(environment.parent_path()?.join(format!("result-{package}")))
 }
 
 /// Look up the "toplevel" groups nixpkgs url from the lockfile.
