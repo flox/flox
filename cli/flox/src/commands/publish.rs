@@ -74,10 +74,10 @@ impl Publish {
             bail!("'publish' feature is not enabled.");
         }
 
-        environment_subcommand_metric!("publish", self.environment);
         let env = self
             .environment
             .detect_concrete_environment(&flox, "Publish")?;
+        environment_subcommand_metric!("publish", env);
         // If the environment isn't locked, locking it will modify the lockfile,
         // which will mean the repo will have uncommitted changes.
         // Instead of locking and erroring later on, error now.

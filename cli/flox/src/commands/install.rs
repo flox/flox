@@ -119,7 +119,7 @@ struct PartitionedPackages {
 impl Install {
     #[instrument(name = "install", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        environment_subcommand_metric!("install", self.environment);
+        subcommand_metric!("install");
 
         debug!(
             "attempting to install packages [{}] to {:?}",
@@ -221,6 +221,8 @@ impl Install {
             Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
             Err(e) => Err(e)?,
         };
+        environment_subcommand_metric!("install", concrete_environment);
+
         let description = environment_description(&concrete_environment)?;
 
         // Get a list of the packages that this environment is already overriding via composition.

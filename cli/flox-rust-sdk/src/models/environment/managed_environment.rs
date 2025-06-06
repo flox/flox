@@ -886,6 +886,10 @@ impl ManagedEnvironment {
         }
         Ok(())
     }
+
+    pub fn env_ref(&self) -> EnvironmentRef {
+        self.pointer.clone().into()
+    }
 }
 
 /// Result of creating a generation from local changes with
@@ -1531,7 +1535,7 @@ impl ManagedEnvironment {
             Ok(_) => {},
             Err(GitRemoteCommandError::RefNotFound(_)) => {
                 Err(ManagedEnvironmentError::UpstreamNotFound {
-                    env_ref: self.pointer.clone().into(),
+                    env_ref: self.env_ref(),
                     upstream: self.pointer.floxhub_url.to_string(),
                     user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
                 })?

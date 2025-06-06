@@ -38,9 +38,8 @@ pub struct Restart {
 impl Restart {
     #[instrument(name = "restart", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        environment_subcommand_metric!("services::restart", self.environment);
-
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+        environment_subcommand_metric!("services::restart", env.environment);
         guard_is_within_activation(&env, "restart")?;
         guard_service_commands_available(&env, &flox.system)?;
 

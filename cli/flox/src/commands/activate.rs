@@ -99,13 +99,6 @@ pub struct Activate {
 
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
-        environment_subcommand_metric!(
-            "activate",
-            self.environment,
-            start_services = self.start_services,
-            mode = self.mode.clone().unwrap_or(ActivateMode::Dev).to_string()
-        );
-
         let mut concrete_environment = match self.environment.to_concrete_environment(&flox) {
             Ok(concrete_environment) => concrete_environment,
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
@@ -118,6 +111,13 @@ impl Activate {
             Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
             Err(e) => Err(e)?,
         };
+
+        environment_subcommand_metric!(
+            "activate",
+            concrete_environment,
+            start_services = self.start_services,
+            mode = self.mode.clone().unwrap_or(ActivateMode::Dev).to_string()
+        );
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
             if !self.trust {

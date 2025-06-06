@@ -34,9 +34,8 @@ pub struct Logs {
 impl Logs {
     #[instrument(name = "logs", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        environment_subcommand_metric!("services::logs", self.environment);
-
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+        environment_subcommand_metric!("services::logs", env.environment);
         guard_service_commands_available(&env, &flox.system)?;
 
         let socket = env.socket();

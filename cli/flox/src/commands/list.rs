@@ -54,11 +54,11 @@ impl List {
     #[instrument(name = "list", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         sentry_set_tag("list_mode", format!("{:?}", &self.list_mode));
-        environment_subcommand_metric!("list", self.environment);
 
         let mut env = self
             .environment
             .detect_concrete_environment(&flox, "List using")?;
+        environment_subcommand_metric!("list", env);
 
         let lockfile = env.lockfile(&flox)?.into();
         if self.list_mode == ListMode::Config {

@@ -22,9 +22,8 @@ pub struct Stop {
 impl Stop {
     #[instrument(name = "stop", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        environment_subcommand_metric!("services::stop", self.environment);
-
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+        environment_subcommand_metric!("services::stop", env.environment);
         guard_service_commands_available(&env, &flox.system)?;
 
         let socket = env.socket();

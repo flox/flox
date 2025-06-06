@@ -75,7 +75,9 @@ pub enum EditAction {
 impl Edit {
     #[instrument(name = "edit", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        environment_subcommand_metric!("edit", self.environment);
+        // Record subcommand metric prior to environment_subcommand_metric below
+        // in case we error before then
+        subcommand_metric!("edit");
 
         // Ensure the user is logged in for the following remote operations
         if let EnvironmentSelect::Remote(_) = self.environment {
@@ -88,6 +90,7 @@ impl Edit {
                 Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
                 Err(e) => Err(e)?,
             };
+        environment_subcommand_metric!("edit", detected_environment);
 
         match self.action {
             EditAction::EditManifest { file } => {
