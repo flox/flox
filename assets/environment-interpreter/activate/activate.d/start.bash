@@ -39,6 +39,9 @@ start() {
   if [ "$_FLOX_ENV_ACTIVATION_MODE" = "dev" ] || [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
     # shellcheck disable=SC1090 # from rendered environment
     source_profile_d "$_profile_d"
+  else
+    # shellcheck disable=SC1091 # from rendered environment
+    source "$_profile_d/0100_common-run-mode-paths.sh"
   fi
 
   # Capture post-etc-profiles.env.
