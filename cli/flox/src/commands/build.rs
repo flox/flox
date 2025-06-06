@@ -19,6 +19,7 @@ use flox_rust_sdk::providers::build::{
 use flox_rust_sdk::providers::catalog::mock_base_catalog_url;
 use indoc::formatdoc;
 use tracing::instrument;
+use url::Url;
 
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::activate::FLOX_INTERPRETER;
@@ -35,6 +36,9 @@ pub struct Build {
     /// Logs are always written to <TBD>
     #[bpaf(short('L'), long)]
     build_logs: bool,
+
+    #[bpaf(long, hide)]
+    nixpkgs_url: Option<Url>,
 
     #[bpaf(external(subcommand_or_build_targets))]
     subcommand_or_targets: SubcommandOrBuildTargets,
@@ -84,7 +88,7 @@ impl Build {
                     .environment
                     .detect_concrete_environment(&flox, "Clean build files of")?;
 
-                Self::build(flox, env, targets).await
+                Self::build(flox, env, targets, self.nixpkgs_url).await
             },
         }
     }
@@ -114,7 +118,12 @@ impl Build {
     }
 
     #[instrument(name = "build", skip_all, fields(packages))]
-    async fn build(flox: Flox, mut env: ConcreteEnvironment, packages: Vec<String>) -> Result<()> {
+    async fn build(
+        flox: Flox,
+        mut env: ConcreteEnvironment,
+        packages: Vec<String>,
+        nixpkgs_url_override: Option<Url>,
+    ) -> Result<()> {
         if let ConcreteEnvironment::Remote(_) = &env {
             bail!("Cannot build from a remote environment");
         };
@@ -131,13 +140,19 @@ impl Build {
             .map(|target| target.name())
             .collect::<Vec<_>>();
 
+        let base_nixpkgs_url = match nixpkgs_url_override {
+            Some(url) => url,
+            None => mock_base_catalog_url().as_flake_ref()?,
+        };
+
+        let dependency_nixpkgs_url = find_toplevel_group_nixpkgs(&lockfile)
+            .map(|catalog_ref| catalog_ref.as_flake_ref())
+            .transpose()?;
+
         let builder = FloxBuildMk::new(&flox, &base_dir, &expression_dir, &built_environments);
         let output = builder.build(
-            &mock_base_catalog_url().as_flake_ref()?,
-            find_toplevel_group_nixpkgs(&lockfile)
-                .map(|catalog_ref| catalog_ref.as_flake_ref())
-                .transpose()?
-                .as_ref(),
+            &base_nixpkgs_url,
+            dependency_nixpkgs_url.as_ref(),
             &FLOX_INTERPRETER,
             &target_names,
             None,
