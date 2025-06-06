@@ -115,9 +115,11 @@ craneLib.buildPackage (
     # See: <https://github.com/flox/flox/issues/1820>
     propagatedBuildInputs = rust-internal-deps.propagatedBuildInputs ++ [
       bashInteractive
-      nix
+      nix.out
       flox-interpreter
     ];
+
+    disallowedReferences = [ nix.dev ];
 
     # https://github.com/ipetkov/crane/issues/385
     # doNotLinkInheritedArtifacts = true;

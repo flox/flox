@@ -427,7 +427,7 @@ mod test {
             entry.register_env(&ptr).unwrap();
             let new_envs = entry.envs;
             prop_assert!(new_envs.len() == previous_envs.len() + 1);
-            let latest_ptr = new_envs.into_iter().last().unwrap().pointer;
+            let latest_ptr = new_envs.into_iter().next_back().unwrap().pointer;
             prop_assert_eq!(latest_ptr, ptr);
         }
 

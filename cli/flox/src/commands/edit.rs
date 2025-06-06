@@ -118,7 +118,7 @@ impl Edit {
                 }
             },
 
-            EditAction::Sync { .. } => {
+            EditAction::Sync => {
                 let span = tracing::info_span!(
                     "sync",
                     progress = "Syncing environment to a new generation"
@@ -137,7 +137,7 @@ impl Edit {
                 }
             },
 
-            EditAction::Reset { .. } => {
+            EditAction::Reset => {
                 let span = tracing::info_span!(
                     "reset",
                     progress = "Resetting environment to current generation"
@@ -216,6 +216,7 @@ impl Edit {
 
                 // breadcrumb metric to estimate use of composition
                 let old_includes = old_lockfile
+                    .as_ref()
                     .as_ref()
                     .and_then(|lf| lf.compose.as_ref())
                     .map(|compose| &compose.include);
