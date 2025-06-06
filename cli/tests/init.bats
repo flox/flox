@@ -226,13 +226,6 @@ EOF
   FLOX_SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
 }
 
-# bats test_tags=init:catalog
-@test "init creates manifest with all 4 systems" {
-  "$FLOX_BIN" init
-  systems=$(tomlq -r -c '.options.systems' .flox/env/manifest.toml)
-  assert_equal "$systems" '["aarch64-darwin","aarch64-linux","x86_64-darwin","x86_64-linux"]'
-}
-
 # ---------------------------------------------------------------------------- #
 #
 #

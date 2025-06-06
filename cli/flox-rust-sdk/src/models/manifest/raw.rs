@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -14,6 +14,7 @@ use super::typed::Manifest;
 use crate::data::System;
 use crate::flox::Features;
 use crate::models::environment::path_environment::InitCustomization;
+use crate::models::lockfile::DEFAULT_SYSTEMS_STR;
 
 /// Represents the `[version]` number key in manifest.toml
 pub const MANIFEST_VERSION_KEY: &str = "version";
@@ -388,22 +389,39 @@ impl RawManifest {
         "#});
 
         // `systems` array with custom formatting
-        let mut systems_array = Array::new();
-        for system in systems {
-            let mut item = Value::from(system.to_string());
-            item.decor_mut().set_prefix("\n  "); // Indent each item with two spaces
-            if Some(system) == systems.last() {
-                item.decor_mut().set_suffix(",\n"); // Add a newline before the first item
+        let these_systems: HashSet<&String> = HashSet::from_iter(systems.iter().cloned());
+        let all_systems = HashSet::from_iter(DEFAULT_SYSTEMS_STR.iter());
+        if these_systems != all_systems {
+            // If somehow we init with something *other* than the default systems,
+            // add those.
+            let mut systems_array = Array::new();
+            for system in systems {
+                let mut item = Value::from(system.to_string());
+                item.decor_mut().set_prefix("\n  "); // Indent each item with two spaces
+                if Some(system) == systems.last() {
+                    item.decor_mut().set_suffix(",\n"); // Add a newline before the first item
+                }
+                systems_array.push_formatted(item);
             }
-            systems_array.push_formatted(item);
-        }
 
-        let systems_key = Key::new(MANIFEST_SYSTEMS_KEY);
-        options_table.insert(&systems_key, toml_edit::value(systems_array));
-        if let Some((mut key, _)) = options_table.get_key_value_mut(&systems_key) {
-            key.leaf_decor_mut().set_prefix(indoc! {r#"
+            let systems_key = Key::new(MANIFEST_SYSTEMS_KEY);
+            options_table.insert(&systems_key, toml_edit::value(systems_array));
+            if let Some((mut key, _)) = options_table.get_key_value_mut(&systems_key) {
+                key.leaf_decor_mut().set_prefix(indoc! {r#"
+                    # Systems that environment is compatible with
+                    "#});
+            }
+        } else {
+            // If we init with the default systems, we can omit those.
+            options_table.decor_mut().set_suffix(indoc! {r#"
+
                 # Systems that environment is compatible with
-                "#});
+                # systems = [
+                #   "aarch64-darwin",
+                #   "aarch64-linux",
+                #   "x86_64-darwin",
+                #   "x86_64-linux",
+                # ]"#});
         }
 
         let cuda_detection_key = Key::new("cuda-detection");
@@ -1188,12 +1206,12 @@ pub(super) mod test {
             ## Other Environment Options -----------------------------------------
             [options]
             # Systems that environment is compatible with
-            systems = [
-              "aarch64-darwin",
-              "aarch64-linux",
-              "x86_64-darwin",
-              "x86_64-linux",
-            ]
+            # systems = [
+            #   "aarch64-darwin",
+            #   "aarch64-linux",
+            #   "x86_64-darwin",
+            #   "x86_64-linux",
+            # ]
             # Uncomment to disable CUDA detection.
             # cuda-detection = false
         "#};
@@ -1297,12 +1315,12 @@ pub(super) mod test {
             ## Other Environment Options -----------------------------------------
             [options]
             # Systems that environment is compatible with
-            systems = [
-              "aarch64-darwin",
-              "aarch64-linux",
-              "x86_64-darwin",
-              "x86_64-linux",
-            ]
+            # systems = [
+            #   "aarch64-darwin",
+            #   "aarch64-linux",
+            #   "x86_64-darwin",
+            #   "x86_64-linux",
+            # ]
             # Uncomment to disable CUDA detection.
             # cuda-detection = false
         "#};
