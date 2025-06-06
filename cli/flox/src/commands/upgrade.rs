@@ -9,8 +9,8 @@ use tracing::{info_span, instrument};
 use super::services::warn_manifest_changes_for_services;
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::{ensure_floxhub_token, environment_description};
-use crate::environment_subcommand_metric;
 use crate::utils::message;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 // Upgrade packages in an environment
 #[derive(Bpaf, Clone)]
@@ -29,7 +29,9 @@ pub struct Upgrade {
 impl Upgrade {
     #[instrument(name = "upgrade", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
-        environment_subcommand_metric!("upgrade", self.environment);
+        // Record subcommand metric prior to environment_subcommand_metric below
+        // in case we error before then
+        subcommand_metric!("upgrade");
         tracing::debug!(
             to_upgrade = self.groups_or_iids.join(","),
             "upgrading groups and install ids"
@@ -43,6 +45,7 @@ impl Upgrade {
         let mut concrete_environment = self
             .environment
             .detect_concrete_environment(&flox, "Upgrade")?;
+        environment_subcommand_metric!("upgrade", concrete_environment);
 
         let description = environment_description(&concrete_environment)?;
 

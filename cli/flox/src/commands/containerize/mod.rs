@@ -50,11 +50,10 @@ pub struct Containerize {
 impl Containerize {
     #[instrument(name = "containerize", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        environment_subcommand_metric!("containerize", self.environment);
-
         let mut env = self
             .environment
             .detect_concrete_environment(&flox, "Containerize")?;
+        environment_subcommand_metric!("containerize", env);
 
         // Check that a specified runtime exists.
         if let Some(runtime) = &self.runtime {

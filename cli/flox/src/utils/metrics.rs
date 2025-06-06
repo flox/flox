@@ -53,11 +53,17 @@ macro_rules! subcommand_metric {
 /// We set the target to `flox_command` so that we can filter for these exact events.
 #[macro_export]
 macro_rules! environment_subcommand_metric {
-    ($subcommand:tt, $environment_select:expr $(, $key:tt = $value:expr)*) => {{
-        if let EnvironmentSelect::Remote(environment_ref) = &$environment_select {
-            $crate::subcommand_metric!($subcommand, remote_environment = environment_ref.to_string() $(, $key = $value)*);
-        } else {
-            $crate::subcommand_metric!($subcommand $(, $key = $value)*);
+    ($subcommand:tt, $concrete_environment:expr $(, $key:tt = $value:expr)*) => {{
+        match &$concrete_environment {
+            flox_rust_sdk::models::environment::ConcreteEnvironment::Remote(environment) => {
+                 $crate::subcommand_metric!($subcommand, remote_environment = environment.env_ref().to_string() $(, $key = $value)*);
+            },
+            flox_rust_sdk::models::environment::ConcreteEnvironment::Managed(environment) => {
+                 $crate::subcommand_metric!($subcommand, managed_environment = environment.env_ref().to_string() $(, $key = $value)*);
+            },
+            flox_rust_sdk::models::environment::ConcreteEnvironment::Path(environment) => {
+                 $crate::subcommand_metric!($subcommand, path_environment = flox_rust_sdk::models::environment::Environment::name(environment).to_string() $(, $key = $value)*);
+            }
         }
     }};
 }

@@ -58,11 +58,11 @@ impl IncludeCommands {
 impl Upgrade {
     #[instrument(name = "upgrade", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        environment_subcommand_metric!("include::upgrade", self.environment);
-
         let mut environment = self
             .environment
             .detect_concrete_environment(&flox, "Get latest changes to included environments in")?;
+
+        environment_subcommand_metric!("include::upgrade", environment);
 
         let description = environment_description(&environment)?;
 
