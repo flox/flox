@@ -105,9 +105,12 @@ NIX_SYSTEM := $(shell $(_nix) config show system)
 # Set a default TMPDIR variable if one is not already defined.
 TMPDIR ?= /tmp
 
+# Record PWD once, to be used throughout the Makefile.
+PWD := $(shell $(_pwd))
+
 # Create a project-specific TMPDIR variable so we don't have path clash
 # between the same package name built from different project directories.
-PROJECT_TMPDIR := $(TMPDIR)/$(shell $(_pwd) | $(_sha256sum) | $(_head) -c8)
+PROJECT_TMPDIR := $(TMPDIR)/$(shell echo $(PWD) | $(_sha256sum) | $(_head) -c8)
 
 # Use the wildcard operator to identify builds in the provided $FLOX_ENV.
 MANIFEST_BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
@@ -190,7 +193,7 @@ define COMMON_BUILD_VARS_template =
   # Compute 32-character stable string for use in stable path generation
   # based on hash of pname, current working directory and FLOX_ENV.
   $(eval $(_pvarname)_hash = $(shell ( \
-    ( echo $(_pname) && $(_pwd) ) | $(_sha256sum) | $(_head) -c32)))
+    ( echo $(_pname) $(PWD) ) | $(_sha256sum) | $(_head) -c32)))
   # And while we're at it, set a temporary basename in PROJECT_TMPDIR which
   # is a directory based on hash of pwd.
   $(eval $(_pvarname)_tmpBasename = $(PROJECT_TMPDIR)/$(_pname))
@@ -222,9 +225,15 @@ define COMMON_BUILD_VARS_template =
 	  $$(eval _link = $$(word 1,$$(subst $$(comma), ,$$(_build)))) \
 	  $$(eval _store_path = $$(word 2,$$(subst $$(comma), ,$$(_build)))) \
 	  $$(if $$(wildcard $$(_link)), \
-	    $$(if $$(filter-out $$(_store_path),$$(shell $(_readlink) $$(_link))), \
+	    $$(if $$(filter $$(_store_path),$$(shell $(_readlink) $$(_link))), \
+	      $$(eval $(_pvarname)_resultLinks += "$(PWD)/$$(_link)":"$$(_store_path)"), \
 	      $$(error $$(_link) of $$(_build) does not point to expected store path: $$(_store_path))), \
 	    $$(error $$(_link) of $$(_build) does not exist)))
+	@# Having confirmed the links, create the $(_pvarname)_resultLinks_json
+	@# variable used to construct build-meta.json in the form of a json string
+	@# like '{ "result-link1":"store-path1","result-link2":"store-path2",... }'.
+	$$(eval $(_pvarname)_resultLinks_json = \
+	  { $$(subst $$(space),$$(comma),$$($(_pvarname)_resultLinks)) })
 
 endef
 
@@ -405,8 +414,8 @@ define BUILD_local_template =
 	@echo "Building $(_name) in local mode"
 	$(_VV_) $(_rm) -rf $($(_pvarname)_out)
 	$(_V_) out=$($(_pvarname)_out) \
-	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
-	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode build --env-project $$$$($(_pwd)) -- \
+	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
+	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode build --env-project $(PWD) -- \
 	    $(_libexec_dir)/env-filter $(env_filter_ALLOW_ARGS) -- \
 	      $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars -- \
 	        $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $$<
@@ -438,8 +447,8 @@ define BUILD_local_template =
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log $(_pvarname)_CHECK_BUILD
 	$(_V_) $(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
 	  --arg log "$(shell $(_readlink) $($(_pvarname)_result)-log)" \
-	  --arg outLink "$$$$($(_pwd))/$($(_pvarname)_result)" \
-	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, outLink: $$$$outLink}' $$< > $$@
+	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
+	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks}' $$< > $$@
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -516,8 +525,8 @@ define BUILD_nix_sandbox_template =
 	  --arg name "$(_name)" \
 	  --arg pname "$(_pname)" \
 	  --arg version "$(_version)" \
-		--arg outLink "$$$$($(_pwd))/$($(_pvarname)_result)" \
-	  '.[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, outLink: $$$$outLink }' $$< > $$@
+	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
+	  '.[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks }' $$< > $$@
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
@@ -718,7 +727,7 @@ define NIX_EXPRESSION_BUILD_template =
   # Harvest the logfile from the build.
   $($(_pvarname)_logfile): $($(_pvarname)_buildJSON) $(_pvarname)_CHECK_BUILD
 	$$(eval _drvPath = $$(shell $(_jq) -r '.[0].drvPath' $$<))
-	$(_V_) ( $(_nix) log $$(_drvPath) || echo "No logs available" ) > $($(_pvarname)_logfile)
+	$(_V_) ( $(_nix) log $$(_drvPath) 2>/dev/null || echo "No logs available" ) > $($(_pvarname)_logfile)
 
   # Add the log to the store and create a GCRoot for it.
   $($(_pvarname)_result)-log: $($(_pvarname)_logfile)
@@ -729,10 +738,10 @@ define NIX_EXPRESSION_BUILD_template =
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_evalJSON) $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log
 	$(_V_) $(_jq) -n \
 	  --arg logfile $$(shell $(_readlink) $($(_pvarname)_result)-log) \
-	  --arg outLink "$$$$($(_pwd))/$($(_pvarname)_result)" \
+	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
 	  --slurpfile eval $($(_pvarname)_evalJSON) \
 	  --slurpfile build $($(_pvarname)_buildJSON) \
-	  '$$$$build[0][0] * $$$$eval[0] * { log: $$$$logfile, outLink: $$$$outLink }' > $$@
+	  '$$$$build[0][0] * $$$$eval[0] * { log: $$$$logfile, resultLinks: $$$$resultLinks }' > $$@
 	@echo -e "Completed build of $$(_name) in Nix expression mode\n"
 
   # Create targets for cleaning up the result and log symlinks.
