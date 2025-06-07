@@ -105,9 +105,12 @@ NIX_SYSTEM := $(shell $(_nix) config show system)
 # Set a default TMPDIR variable if one is not already defined.
 TMPDIR ?= /tmp
 
+# Record PWD once, to be used throughout the Makefile.
+PWD := $(shell $(_pwd))
+
 # Create a project-specific TMPDIR variable so we don't have path clash
 # between the same package name built from different project directories.
-PROJECT_TMPDIR := $(TMPDIR)/$(shell $(_pwd) | $(_sha256sum) | $(_head) -c8)
+PROJECT_TMPDIR := $(TMPDIR)/$(shell echo $(PWD) | $(_sha256sum) | $(_head) -c8)
 
 # Use the wildcard operator to identify builds in the provided $FLOX_ENV.
 MANIFEST_BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
@@ -190,7 +193,7 @@ define COMMON_BUILD_VARS_template =
   # Compute 32-character stable string for use in stable path generation
   # based on hash of pname, current working directory and FLOX_ENV.
   $(eval $(_pvarname)_hash = $(shell ( \
-    ( echo $(_pname) && $(_pwd) ) | $(_sha256sum) | $(_head) -c32)))
+    ( echo $(_pname) $(PWD) ) | $(_sha256sum) | $(_head) -c32)))
   # And while we're at it, set a temporary basename in PROJECT_TMPDIR which
   # is a directory based on hash of pwd.
   $(eval $(_pvarname)_tmpBasename = $(PROJECT_TMPDIR)/$(_pname))
@@ -405,8 +408,8 @@ define BUILD_local_template =
 	@echo "Building $(_name) in local mode"
 	$(_VV_) $(_rm) -rf $($(_pvarname)_out)
 	$(_V_) out=$($(_pvarname)_out) \
-	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
-	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode build --env-project $$$$($(_pwd)) -- \
+	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
+	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode build --env-project $(PWD) -- \
 	    $(_libexec_dir)/env-filter $(env_filter_ALLOW_ARGS) -- \
 	      $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars -- \
 	        $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $$<
