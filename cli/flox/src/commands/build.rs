@@ -1,7 +1,7 @@
 use std::env;
 use std::path::Path;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -18,6 +18,7 @@ use flox_rust_sdk::providers::build::{
 };
 use flox_rust_sdk::providers::catalog::mock_base_catalog_url;
 use indoc::formatdoc;
+use itertools::Itertools;
 use tracing::instrument;
 
 use super::{EnvironmentSelect, environment_select};
@@ -156,12 +157,9 @@ impl Build {
                     let links_to_print = results
                         .iter()
                         .map(|package| {
-                            Self::check_and_display_symlink(
-                                &package.pname,
-                                &package.out_link,
-                                &current_dir,
-                            )
+                            Self::format_result_links(package.result_links.keys(), &current_dir)
                         })
+                        .flatten_ok()
                         .collect::<Result<Vec<_>, _>>()?;
 
                     if links_to_print.len() > 1 {
@@ -187,39 +185,38 @@ impl Build {
         Ok(())
     }
 
-    /// Check if the expected symlink for a package exists.
-    /// If so, shorten it if in the current directory.
+    /// If so, shorten symlink for a package it if in the current directory.
     ///
     /// current_dir should be canonicalized
-    fn check_and_display_symlink(
-        package: &str,
-        package_out_link: impl AsRef<Path>,
+    fn format_result_links(
+        package_result_links: impl IntoIterator<Item = impl AsRef<Path>>,
         current_dir: impl AsRef<Path>,
-    ) -> Result<String> {
-        let package_out_link = package_out_link.as_ref();
-        if !package_out_link.exists() {
-            bail!("Build symlink for package '{}' does not exist", package);
-        }
+    ) -> Result<Vec<String>> {
+        package_result_links
+            .into_iter()
+            .map(|result_link| {
+                let result_link = result_link.as_ref();
+                let parent = result_link
+                    .parent()
+                    .expect("symlink must be in a directory");
 
-        let parent = package_out_link
-            .parent()
-            .ok_or(anyhow!("symlink must be in a directory"))?;
+                let parent = parent
+                    .canonicalize()
+                    .context("couldn't canonicalize parent of build symlink")?;
 
-        let parent = parent
-            .canonicalize()
-            .context("couldn't canonicalize parent of build symlink")?;
-
-        if parent == current_dir.as_ref() {
-            Ok(format!(
-                "./{}",
-                package_out_link
-                    .file_name()
-                    .ok_or(anyhow!("symlink must have a file name"))?
-                    .to_string_lossy()
-            ))
-        } else {
-            Ok(package_out_link.to_string_lossy().to_string())
-        }
+                if parent == current_dir.as_ref() {
+                    Ok(format!(
+                        "./{}",
+                        result_link
+                            .file_name()
+                            .expect("symlink must have a file name")
+                            .to_string_lossy()
+                    ))
+                } else {
+                    Ok(result_link.display().to_string())
+                }
+            })
+            .collect::<Result<Vec<_>>>()
     }
 }
 
@@ -273,17 +270,13 @@ mod test {
         let symlink = dot_flox_parent_path.join(format!("result-{package}"));
         // We just want some random symlink possibly into the /nix/store
         std::os::unix::fs::symlink(known_store_path(), &symlink).unwrap();
-        let displayed = Build::check_and_display_symlink(
-            package,
-            &symlink,
-            dot_flox_parent_path.canonicalize().unwrap(),
-        )
-        .unwrap();
-        assert_eq!(displayed, format!("./result-{package}"));
-
         let displayed =
-            Build::check_and_display_symlink(package, &symlink, &flox.temp_dir).unwrap();
-        assert_eq!(displayed, symlink.to_string_lossy());
+            Build::format_result_links([&symlink], dot_flox_parent_path.canonicalize().unwrap())
+                .unwrap();
+        assert_eq!(displayed, vec![format!("./result-{package}")]);
+
+        let displayed = Build::format_result_links([&symlink], &flox.temp_dir).unwrap();
+        assert_eq!(displayed, vec![symlink.to_string_lossy()]);
     }
 
     /// Test that conflicting build names are detected if builds are defined via the manifest and nix expressions.

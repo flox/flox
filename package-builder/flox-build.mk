@@ -225,9 +225,15 @@ define COMMON_BUILD_VARS_template =
 	  $$(eval _link = $$(word 1,$$(subst $$(comma), ,$$(_build)))) \
 	  $$(eval _store_path = $$(word 2,$$(subst $$(comma), ,$$(_build)))) \
 	  $$(if $$(wildcard $$(_link)), \
-	    $$(if $$(filter-out $$(_store_path),$$(shell $(_readlink) $$(_link))), \
+	    $$(if $$(filter $$(_store_path),$$(shell $(_readlink) $$(_link))), \
+	      $$(eval $(_pvarname)_resultLinks += "$(PWD)/$$(_link)":"$$(_store_path)"), \
 	      $$(error $$(_link) of $$(_build) does not point to expected store path: $$(_store_path))), \
 	    $$(error $$(_link) of $$(_build) does not exist)))
+	@# Having confirmed the links, create the $(_pvarname)_resultLinks_json
+	@# variable used to construct build-meta.json in the form of a json string
+	@# like '{ "result-link1":"store-path1","result-link2":"store-path2",... }'.
+	$$(eval $(_pvarname)_resultLinks_json = \
+	  { $$(subst $$(space),$$(comma),$$($(_pvarname)_resultLinks)) })
 
 endef
 
@@ -441,8 +447,8 @@ define BUILD_local_template =
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log $(_pvarname)_CHECK_BUILD
 	$(_V_) $(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
 	  --arg log "$(shell $(_readlink) $($(_pvarname)_result)-log)" \
-	  --arg outLink "$$$$($(_pwd))/$($(_pvarname)_result)" \
-	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, outLink: $$$$outLink}' $$< > $$@
+	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
+	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks}' $$< > $$@
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -519,8 +525,8 @@ define BUILD_nix_sandbox_template =
 	  --arg name "$(_name)" \
 	  --arg pname "$(_pname)" \
 	  --arg version "$(_version)" \
-		--arg outLink "$$$$($(_pwd))/$($(_pvarname)_result)" \
-	  '.[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, outLink: $$$$outLink }' $$< > $$@
+	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
+	  '.[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks }' $$< > $$@
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
@@ -732,10 +738,10 @@ define NIX_EXPRESSION_BUILD_template =
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_evalJSON) $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log
 	$(_V_) $(_jq) -n \
 	  --arg logfile $$(shell $(_readlink) $($(_pvarname)_result)-log) \
-	  --arg outLink "$$$$($(_pwd))/$($(_pvarname)_result)" \
+	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
 	  --slurpfile eval $($(_pvarname)_evalJSON) \
 	  --slurpfile build $($(_pvarname)_buildJSON) \
-	  '$$$$build[0][0] * $$$$eval[0] * { log: $$$$logfile, outLink: $$$$outLink }' > $$@
+	  '$$$$build[0][0] * $$$$eval[0] * { log: $$$$logfile, resultLinks: $$$$resultLinks }' > $$@
 	@echo -e "Completed build of $$(_name) in Nix expression mode\n"
 
   # Create targets for cleaning up the result and log symlinks.
