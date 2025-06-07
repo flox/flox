@@ -718,7 +718,7 @@ define NIX_EXPRESSION_BUILD_template =
   # Harvest the logfile from the build.
   $($(_pvarname)_logfile): $($(_pvarname)_buildJSON) $(_pvarname)_CHECK_BUILD
 	$$(eval _drvPath = $$(shell $(_jq) -r '.[0].drvPath' $$<))
-	$(_V_) ( $(_nix) log $$(_drvPath) || echo "No logs available" ) > $($(_pvarname)_logfile)
+	$(_V_) ( $(_nix) log $$(_drvPath) 2>/dev/null || echo "No logs available" ) > $($(_pvarname)_logfile)
 
   # Add the log to the store and create a GCRoot for it.
   $($(_pvarname)_result)-log: $($(_pvarname)_logfile)
