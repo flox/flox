@@ -95,7 +95,15 @@ function make_incompatible() {
   git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
   pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
   git checkout "$ENV_NAME"
-  sed -i "s|$NIX_SYSTEM|$init_system|g" "${GENERATION}/env/manifest.toml" "${GENERATION}/env/manifest.lock"
+
+  # Remove any existing systems and append just the incompatible one
+  tomlq -it ".options.systems = [ \"${init_system}\" ]" "${GENERATION}/env/manifest.toml"
+
+  # Do the same thing for the lockfile: remove any existing systems and add in
+  # just the incompatible one
+  tmp_lockfile="$(mktemp)"
+  cat "${GENERATION}/env/manifest.lock" | jq ".manifest.options.systems = [\"$init_system\"]" > "$tmp_lockfile"
+  mv "$tmp_lockfile" "${GENERATION}/env/manifest.lock"
 
   git add .
   git \
