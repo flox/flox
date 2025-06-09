@@ -121,3 +121,9 @@ opt-level = "z"
 strip = true
 lto = true
 codegen-units = 1
+
+# Disable compiler optimizations until
+# https://github.com/rust-lang/rust/issues/140686
+# is fixed
+[profile.release.package."hyper"]
+opt-level = 0

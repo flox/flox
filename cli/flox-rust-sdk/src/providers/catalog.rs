@@ -322,6 +322,7 @@ impl CatalogClient {
             let conn_timeout = std::time::Duration::from_secs(15);
             let req_timeout = std::time::Duration::from_secs(60);
             reqwest::ClientBuilder::new()
+                .connection_verbose(true)
                 .connect_timeout(conn_timeout)
                 .timeout(req_timeout)
                 .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
