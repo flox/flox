@@ -57,7 +57,7 @@ once_cell = "1.21.3"
 path-dedot = "3.1.1"
 pollster = "0.3.0"
 progenitor-client = "0.10"
-proptest = "1.6.0"
+proptest = "1.7.0"
 proptest-derive = "0.5.1"
 regex = "1.10"
 regress = "0.10.3"
@@ -86,7 +86,7 @@ textwrap = { version = "0.16.2", features = ["terminal_size"] }
 thiserror = "2"
 time = { version = "0.3", features = ["serde", "formatting"] }
 tokio = { version = "1", features = ["full"] }
-toml = "0.8.22"
+toml = "0.8.23"
 toml_edit = { version = "0.22", features = ["serde"] }
 tracing = "0.1"
 tracing-appender = "0.2"
@@ -110,7 +110,7 @@ kqueue = "1.1.1"
 signal-hook = "0.3.18"
 
 # build(.rs) dependencies
-openapiv3 = "2.0"
+openapiv3 = "2.2"
 prettyplease = "0.2"
 progenitor = "0.10"
 syn = "2.0"
