@@ -22,26 +22,26 @@
 #include <variant>
 #include <vector>
 
-#include <nix/attrs.hh>
-#include <nix/cache.hh>
-#include <nix/command.hh>
-#include <nix/error.hh>
-#include <nix/eval.hh>
-#include <nix/fetchers.hh>
+#include <nix/cmd/command.hh>
+#include <nix/expr/eval.hh>
+#include <nix/expr/search-path.hh>
+#include <nix/fetchers/attrs.hh>
+#include <nix/fetchers/cache.hh>
+#include <nix/fetchers/fetchers.hh>
+#include <nix/fetchers/store-path-accessor.hh>
 #include <nix/flake/flake.hh>
 #include <nix/flake/flakeref.hh>
 #include <nix/flake/lockfile.hh>
-#include <nix/hash.hh>
-#include <nix/logging.hh>
-#include <nix/path.hh>
-#include <nix/ref.hh>
-#include <nix/search-path.hh>
-#include <nix/store-api.hh>
-#include <nix/store-path-accessor.hh>
-#include <nix/types.hh>
-#include <nix/url-parts.hh>
-#include <nix/url.hh>
-#include <nix/util.hh>
+#include <nix/store/path.hh>
+#include <nix/store/store-api.hh>
+#include <nix/util/error.hh>
+#include <nix/util/hash.hh>
+#include <nix/util/logging.hh>
+#include <nix/util/ref.hh>
+#include <nix/util/types.hh>
+#include <nix/util/url-parts.hh>
+#include <nix/util/url.hh>
+#include <nix/util/util.hh>
 
 #include "flox/core/util.hh"
 #include "flox/fetchers/wrapped-nixpkgs-input.hh"
@@ -319,7 +319,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
 
   if ( path.size() != 3 )
     {
-      throw nix::BadURL( "URL '%s' is invalid", url.url );
+      throw nix::BadURL( "URL '%s' is invalid", url.to_string() );
     }
 
   // Extract version
@@ -341,7 +341,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
     {
       throw nix::BadURL(
         "in URL '%s', '%s' is not a rules version tag like 'v<NUMBER>'",
-        url.url,
+        url.to_string(),
         version );
     }
 
@@ -355,7 +355,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
     {
       throw nix::BadURL(
         "in URL '%s', '%s' is not 'NixOS' or 'flox' (case-insensitive)",
-        url.url,
+        url.to_string(),
         owner );
     }
 
@@ -371,7 +371,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
         {
           throw nix::BadURL(
             "in URL '%s', '%s' is not a valid Git branch/tag name",
-            url.url,
+            url.to_string(),
             ref_or_rev );
         }
       input.attrs.insert_or_assign( "ref", ref_or_rev );
@@ -380,7 +380,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
     {
       throw nix::BadURL(
         "in URL '%s', '%s' is not a Git commit hash or branch/tag name",
-        url.url,
+        url.to_string(),
         path[1] );
     }
 

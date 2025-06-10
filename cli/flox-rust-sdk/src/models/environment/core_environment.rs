@@ -401,8 +401,8 @@ impl CoreEnvironment<ReadOnly> {
         let (store_path, new_lockfile) = self.transact_with_manifest_contents(&contents, flox)?;
 
         Ok(EditResult::Changed {
-            old_lockfile,
-            new_lockfile,
+            old_lockfile: Box::new(old_lockfile),
+            new_lockfile: Box::new(new_lockfile),
             built_environment_store_paths: store_path,
         })
     }
@@ -460,8 +460,8 @@ impl CoreEnvironment<ReadOnly> {
 
         match build_attempt {
             Ok(store_path) => Ok(Ok(EditResult::Changed {
-                old_lockfile,
-                new_lockfile,
+                old_lockfile: Box::new(old_lockfile),
+                new_lockfile: Box::new(new_lockfile),
                 built_environment_store_paths: store_path,
             })),
             Err(err) => Ok(Err(EnvironmentError::Core(err))),
@@ -848,8 +848,8 @@ pub enum EditResult {
     /// The manifest was modified, although the change could be as minimal as
     /// whitespace
     Changed {
-        old_lockfile: Option<Lockfile>,
-        new_lockfile: Lockfile,
+        old_lockfile: Box<Option<Lockfile>>,
+        new_lockfile: Box<Lockfile>,
         built_environment_store_paths: BuildEnvOutputs,
     },
 }
@@ -867,16 +867,19 @@ impl EditResult {
             } => {
                 let hook_changed = old_lockfile
                     .as_ref()
+                    .as_ref()
                     .and_then(|lockfile| lockfile.manifest.hook.as_ref())
                     != new_lockfile.manifest.hook.as_ref();
 
                 let vars_changed = old_lockfile
+                    .as_ref()
                     .as_ref()
                     .map(|lockfile| lockfile.manifest.vars.clone())
                     .unwrap_or_default()
                     != new_lockfile.manifest.vars;
 
                 let profile_changed = old_lockfile
+                    .as_ref()
                     .as_ref()
                     .and_then(|lockfile| lockfile.manifest.profile.as_ref())
                     != new_lockfile.manifest.profile.as_ref();

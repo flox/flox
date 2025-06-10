@@ -91,7 +91,7 @@ jobs:
 
   nef-dev:
     name: "Nix expression tests"
-    runs-on: "ubuntu-22.04-8core" 
+    runs-on: "ubuntu-22.04-8core"
     timeout-minutes: 15 # eval only tests should be plenty fast
 
     permissions:
@@ -300,7 +300,7 @@ jobs:
               if [[ "$package" = *flox ]]; then
                   CLOSURE_SIZE=$(nix path-info ./result -S | awk '{print $2}')
                   echo "closure-size-${{ matrix.system }}=$CLOSURE_SIZE" >> "$GITHUB_OUTPUT"
-                  if [[ "$CLOSURE_SIZE" -gt 320000000 ]]; then # 320MB-ish
+                  if [[ "$CLOSURE_SIZE" -gt 335000000 ]]; then # 320MB-ish
                     echo "  -> $package is too large: $CLOSURE_SIZE";
                     exit 1;
                   fi

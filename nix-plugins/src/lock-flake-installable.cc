@@ -9,14 +9,16 @@
 
 #include <fstream>
 
-#include <nix/attr-path.hh>
-#include <nix/eval-cache.hh>
-#include <nix/eval.hh>
+#include <nix/cmd/installable-flake.hh>
+#include <nix/expr/attr-path.hh>
+#include <nix/expr/eval-cache.hh>
+#include <nix/expr/eval.hh>
+#include <nix/expr/json-to-value.hh>
+#include <nix/expr/primops.hh>
+#include <nix/expr/value-to-json.hh>
 #include <nix/flake/flake.hh>
-#include <nix/installable-flake.hh>
-#include <nix/json-to-value.hh>
-#include <nix/primops.hh>
-#include <nix/value-to-json.hh>
+#include <nix/util/json-utils.hh>
+#include <nlohmann/json.hpp>
 
 #include "flox/core/util.hh"
 #include "flox/lock-flake-installable.hh"
@@ -46,7 +48,7 @@ parseInstallable( const nix::ref<nix::EvalState> & state,
       return nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec(
         state->fetchSettings,
         installableStr,
-        nix::absPath( "." ) );
+        nix::absPath( std::string_view( "." ) ) );
     }
   catch ( const nix::Error & e )
     {
@@ -165,8 +167,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     .commitLockFile        = false,
     .referenceLockFilePath = std::nullopt,
     .outputLockFilePath    = std::nullopt,
-    .inputOverrides        = std::map<nix::flake::InputPath, nix::FlakeRef> {},
-    .inputUpdates          = std::set<nix::flake::InputPath> {}
+    .inputOverrides = std::map<nix::flake::InputAttrPath, nix::FlakeRef> {},
+    .inputUpdates   = std::set<nix::flake::InputAttrPath> {}
   };
 
 
@@ -434,7 +436,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 
     auto priorityCursor = cursor->findAlongAttrPath(
       nix::parseAttrPath( *state, "meta.priority" ) );
-    if ( priorityCursor ) { priority = ( *priorityCursor )->getInt(); }
+    if ( priorityCursor ) { priority = ( *priorityCursor )->getInt().value; }
   }
 
 

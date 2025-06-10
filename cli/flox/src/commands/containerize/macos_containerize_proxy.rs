@@ -125,7 +125,7 @@ impl ContainerizeProxy {
 
         if !status.success() {
             return Err(ContainerizeProxyError::PopulateCacheVolume(
-                std::io::Error::new(std::io::ErrorKind::Other, stderr.wait().to_string()),
+                std::io::Error::other(stderr.wait().to_string()),
             ));
         }
 

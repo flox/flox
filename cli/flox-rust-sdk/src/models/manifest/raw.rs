@@ -609,7 +609,7 @@ fn infer_flake_install_id(url: &Url) -> Result<String, RawManifestError> {
     } else {
         url.path()
             .split('/')
-            .last()
+            .next_back()
             .map(|s| url_escape::decode(s).to_string())
             .ok_or(RawManifestError::InvalidFlakeRef(url.to_string()))
     }

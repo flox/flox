@@ -71,10 +71,7 @@ impl ServiceError {
         extract_err_msgs(&output)
             .map(|msgs| LoggedError::from(msgs).into())
             .unwrap_or_else(|| {
-                ServiceError::ProcessComposeCmd(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    output.as_ref().to_string(),
-                ))
+                ServiceError::ProcessComposeCmd(std::io::Error::other(output.as_ref().to_string()))
             })
     }
 }

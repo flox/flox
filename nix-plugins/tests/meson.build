@@ -5,7 +5,6 @@ lock_flake_installable_test = executable(
     dependencies: dependencies,
     include_directories: include_dirs,
     link_with: lock_flake_installable,
-    cpp_args: ['--include', nix_config_h],
 )
 
 test(
@@ -23,7 +22,6 @@ flox_nixpkgs_test = executable(
     dependencies: dependencies,
     include_directories: include_dirs,
     link_with: wrapped_nixpkgs_input,
-    cpp_args: ['--include', nix_config_h],
 )
 
 test(

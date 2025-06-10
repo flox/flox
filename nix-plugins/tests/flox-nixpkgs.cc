@@ -7,14 +7,14 @@
 #include <fstream>
 #include <iostream>
 
-#include <nix/attrs.hh>
-#include <nix/command.hh>
-#include <nix/eval-gc.hh>
-#include <nix/eval.hh>
-#include <nix/search-path.hh>
-#include <nix/shared.hh>
-#include <nix/store-api.hh>
-#include <nix/url.hh>
+#include <nix/cmd/command.hh>
+#include <nix/expr/eval-gc.hh>
+#include <nix/expr/eval.hh>
+#include <nix/expr/search-path.hh>
+#include <nix/fetchers/attrs.hh>
+#include <nix/main/shared.hh>
+#include <nix/store/store-api.hh>
+#include <nix/util/url.hh>
 #include <nlohmann/json.hpp>
 
 #include "flox/fetchers/wrapped-nixpkgs-input.hh"

@@ -44,7 +44,7 @@ pub static GENERATED_DATA: LazyLock<PathBuf> =
 pub static MANUALLY_GENERATED: LazyLock<PathBuf> =
     LazyLock::new(|| PathBuf::from(std::env::var("MANUALLY_GENERATED").unwrap()));
 
-const RESPONSE_PAGE_SIZE: NonZeroU32 = unsafe { NonZeroU32::new_unchecked(1000) };
+const RESPONSE_PAGE_SIZE: NonZeroU32 = NonZeroU32::new(1000).unwrap();
 
 type ResolvedGroups = Vec<ResolvedPackageGroup>;
 
@@ -323,6 +323,7 @@ impl CatalogClient {
             let conn_timeout = std::time::Duration::from_secs(15);
             let req_timeout = std::time::Duration::from_secs(60);
             reqwest::ClientBuilder::new()
+                .connection_verbose(true)
                 .connect_timeout(conn_timeout)
                 .timeout(req_timeout)
                 .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
@@ -1545,9 +1546,7 @@ impl Display for BaseCatalogUrl {
 /// Outisde of tests this should be replaced by a mechanism that fetches an actual locked URL,
 /// in correspondence with the catalog server.
 pub fn mock_base_catalog_url() -> BaseCatalogUrl {
-    BaseCatalogUrl::from(
-        "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
-    )
+    BaseCatalogUrl::from(env!("TESTING_BASE_CATALOG_URL"))
 }
 
 pub mod test_helpers {

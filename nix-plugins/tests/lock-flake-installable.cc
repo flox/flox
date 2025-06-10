@@ -7,14 +7,15 @@
  * -------------------------------------------------------------------------- */
 
 #include <fstream>
-#include <nix/eval-gc.hh>
-#include <nix/eval.hh>
+#include <nix/expr/eval-gc.hh>
+#include <nix/expr/eval.hh>
 
-#include <nix/command.hh>
+#include <nix/cmd/command.hh>
+#include <nix/expr/search-path.hh>
 #include <nix/flake/flake.hh>
-#include <nix/search-path.hh>
-#include <nix/shared.hh>
-#include <nix/store-api.hh>
+#include <nix/main/shared.hh>
+#include <nix/store/store-api.hh>
+#include <nlohmann/json.hpp>
 
 #include "flox/lock-flake-installable.hh"
 
