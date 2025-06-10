@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -120,8 +120,9 @@ pub struct BuildResult {
     pub version: String,
     pub system: Option<String>,
     pub log: BuiltStorePath,
-    #[serde(rename = "outLink")]
-    pub out_link: PathBuf,
+    // TODO: factor out and use buildenv::BuiltStorePath (?)
+    #[serde(rename = "resultLinks")]
+    pub result_links: BTreeMap<PathBuf, PathBuf>,
 }
 
 /// Output received from an ongoing build process.
