@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -17,7 +17,7 @@ use flox_rust_sdk::providers::publish::{
     check_package_metadata,
 };
 use indoc::formatdoc;
-use tracing::{debug, instrument};
+use tracing::{debug, info_span, instrument};
 
 use super::{EnvironmentSelect, environment_select};
 use crate::commands::build::packages_to_build;
@@ -26,6 +26,9 @@ use crate::config::Config;
 use crate::environment_subcommand_metric;
 use crate::utils::errors::display_chain;
 use crate::utils::message;
+
+const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
+const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 5 * 60 * 1_000; // 5 min
 
 #[derive(Bpaf, Clone)]
 pub struct Publish {
@@ -161,14 +164,32 @@ impl Publish {
             .publish(&flox.catalog_client, &catalog_name, key_file, metadata_only)
             .await
         {
-            Ok(_) => message::updated(formatdoc! {"
-                Package published successfully.
-
-                Use 'flox install {catalog_name}/{package}' to install it.
-                ", package = &publish_provider.package_metadata.package,}),
+            Ok(_) => {
+                let span = info_span!(
+                    "publish",
+                    progress = "Waiting for confirmation of successful publish..."
+                );
+                {
+                    // Using a block here instead of `span.in_scope()` because
+                    // that's not an async context.
+                    let _ = span.enter();
+                    publish_provider
+                        .wait_for_publish_completion(
+                            &flox.catalog_client,
+                            PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS,
+                            PUBLISH_COMPLETION_TIMEOUT_MILLIS,
+                        )
+                        .await
+                        .context("Failed while waiting for publish confirmation")?;
+                }
+            },
             Err(e) => bail!("Failed to publish package: {}", display_chain(&e)),
         }
+        message::updated(formatdoc! {"
+            Package published successfully.
 
+            Use 'flox install {catalog_name}/{package}' to install it.
+            ", package = &publish_provider.package_metadata.package,});
         Ok(())
     }
 }
