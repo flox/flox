@@ -1538,14 +1538,14 @@ mod tests {
 
     #[test]
     fn build_depending_on_another_build() {
-        let package_name = String::from("foo");
-        let file_name = String::from("bar");
+        let package_name = String::from("app-with-dashes");
+        let file_name = String::from("foo");
         let file_content = String::from("some content");
 
         let manifest = formatdoc! {r#"
             version = 1
 
-            [build.dep]
+            [build.dep-with-dashes]
             command = """
                 mkdir $out
                 echo -n "{file_content}" > $out/{file_name}
@@ -1554,7 +1554,7 @@ mod tests {
             [build.{package_name}]
             command = """
                 mkdir $out
-                cp ${{dep}}/{file_name} $out/{file_name}
+                cp ${{dep-with-dashes}}/{file_name} $out/{file_name}
             """
         "#};
 

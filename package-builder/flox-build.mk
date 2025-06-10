@@ -210,7 +210,15 @@ define COMMON_BUILD_VARS_template =
   $(eval $(_pvarname)_evalJSON = $($(_pvarname)_tmpBasename)/eval.json)
   $(eval $(_pvarname)_buildJSON = $($(_pvarname)_tmpBasename)/build.json)
   $(eval $(_pvarname)_buildMetaJSON = $($(_pvarname)_tmpBasename)/build-meta.json)
+
+  # Create a temporary file for collecting log output from the build.
   $(eval $(_pvarname)_logfile = $($(_pvarname)_tmpBasename)/build.log)
+
+  # For manifest builds only, we need to render a version of the build script
+  # with package prerequisites replaced with their corresponding outpaths,
+  # and we create that at a stable temporary path so that we only perform Nix
+  # rebuilds when necessary.
+  $(eval $(_pvarname)_buildScript = $($(_pvarname)_tmpBasename)/build.bash)
 
   # Perform post-build checks common to all build modes.
   .INTERMEDIATE: $(_pvarname)_CHECK_RESULT_LINKS
@@ -237,20 +245,16 @@ define COMMON_BUILD_VARS_template =
 
 endef
 
-# Process NEF builds first to fully populate BUILD_OUTPUTS.
-$(foreach _pname,$(NIX_EXPRESSION_BUILDS), \
+# Process common vars for NEF and manifest builds first in order to populate
+# BUILD_OUTPUTS for the benefit of the MANIFEST_BUILD_DEPENDS_template later.
+$(foreach _pname,$(NIX_EXPRESSION_BUILDS) $(notdir $(MANIFEST_BUILDS)), \
   $(eval $(call COMMON_BUILD_VARS_template)))
 
 # Scan for "${package}" references within the build instructions and add
 # target prerequisites for any inter-package prerequisites, letting make
 # flag any circular dependencies encountered along the way.
 define MANIFEST_BUILD_DEPENDS_template =
-  # MANIFEST_BUILD_DEPENDS_template(build = $(build), _pname = $(_pname))
-
-  # We need to render a version of the build script with package prerequisites
-  # replaced with their corresponding outpaths, and we create that at a stable
-  # temporary path so that we only perform Nix rebuilds when necessary.
-  $(eval $(_pvarname)_buildScript = $($(_pvarname)_tmpBasename)/build.bash)
+  $(eval _pvarname = $(subst -,_,$(notdir $(build))))
 
   # Iterate over each possible {build,package} pair looking for references to
   # ${package} in the build script, being careful to avoid looking for references
@@ -267,9 +271,8 @@ define MANIFEST_BUILD_DEPENDS_template =
   )
 endef
 
+# Call MANIFEST_BUILD_DEPENDS_template to populate the build DAG.
 $(foreach build,$(MANIFEST_BUILDS), \
-  $(eval _pname = $(notdir $(build))) \
-  $(eval $(call COMMON_BUILD_VARS_template)) \
   $(eval $(call MANIFEST_BUILD_DEPENDS_template)))
 
 # The method of calling the sandbox differs based on O/S. Define
