@@ -162,9 +162,11 @@ version:
         .#flox-cli-tests \
         {{bats_args}}
 
+@ut regex="" record="false":
+    _FLOX_UNIT_TEST_RECORD={{record}} {{cargo_test_invocation}} {{regex}}
+
 # Run the CLI unit tests
-@unit-tests regex="" record="false": build
-     _FLOX_UNIT_TEST_RECORD={{record}} {{cargo_test_invocation}} {{regex}}
+@unit-tests regex="" record="false": build (ut regex record)
 
 test-nef:
     nix-unit package-builder/nef/tests --arg nixpkgs-url "$COMMON_NIXPKGS_URL"
