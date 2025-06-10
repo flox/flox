@@ -1018,9 +1018,10 @@ pub(crate) fn create_gc_root_in(
         .map_err(BuildEnvError::CallNixBuild)?;
 
     if !output.status.success() {
-        return Err(BuildEnvError::Link(
-            String::from_utf8_lossy(&output.stderr).into_owned(),
-        ));
+        return Err(BuildEnvError::Link(format!(
+            "\n{}",
+            String::from_utf8_lossy(&output.stdout)
+        )));
     }
 
     Ok(())
