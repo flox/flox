@@ -1,0 +1,37 @@
+when:
+  path: /api/v1/catalog/catalogs/dcarley/packages
+  method: POST
+  body: '{"original_url":"dummy"}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Wed, 11 Jun 2025 16:05:49 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '56'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: MAdmtgK0IAMEMgQ=
+  body: '{"catalog":"dcarley","name":"mypkg","original_url":null}'
+---
+when:
+  path: /api/v1/catalog/catalogs/dcarley/packages/mypkg/publish/info
+  method: POST
+  body: '{}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Wed, 11 Jun 2025 16:05:49 GMT
+  - name: content-type
+    value: application/json
+  - name: content-length
+    value: '153'
+  - name: server
+    value: uvicorn
+  - name: apigw-requestid
+    value: MAdmvgzmoAMEM1g=
+  body: '{"ingress_uri":"file:///tmp","ingress_auth":null,"catalog_store_config":{"store_type":"nix-copy","ingress_uri":"file:///tmp","egress_uri":"file:///tmp"}}'

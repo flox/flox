@@ -981,10 +981,12 @@ pub mod tests {
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::lockfile::Lockfile;
     use crate::providers::auth::{Auth, write_floxhub_netrc};
-    use crate::providers::catalog::test_helpers::reset_mocks;
+    use crate::providers::catalog::test_helpers::{
+        auto_recording_catalog_client_authed,
+        reset_mocks,
+    };
     use crate::providers::catalog::{
         GENERATED_DATA,
-        MockClient,
         PublishResponse,
         Response,
         mock_base_catalog_url,
@@ -1201,38 +1203,24 @@ pub mod tests {
     #[tokio::test]
     async fn publish_meta_only() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
-        let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
 
-        let token = create_test_token("test");
-        let catalog_name = token.handle().to_string();
-        flox.floxhub_token = Some(token);
+        let (build_metadata, env_metadata, package_metadata) = dummy_publish_metadata();
 
-        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
-        let package_metadata = check_package_metadata(
-            &env_metadata.lockfile,
-            &mock_base_catalog_url(),
-            env_metadata.toplevel_catalog_ref.as_ref(),
-            EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
-        )
-        .unwrap();
-
-        let build_metadata =
-            check_build_metadata(&flox, &env_metadata, &package_metadata.package).unwrap();
-
+        // TODO: Move to test helper.
+        let token = match std::env::var("_FLOX_UNIT_TEST_RECORD_TOKEN") {
+            Ok(token) => FloxhubToken::from_str(&token).unwrap(),
+            Err(_) => create_test_token("test"),
+        };
         let auth = Auth::from_flox(&flox).unwrap();
+        flox.floxhub_token = Some(token);
+        // TODO: Needs a catalog that we all have access to.
+        // let catalog_name = "flox-unit-tests-meta-only".to_string();
+        let catalog_name = "dcarley".to_string();
+
+        flox.catalog_client = auto_recording_catalog_client_authed("publish_meta_only", &auth);
+
         let publish_provider =
             PublishProvider::new(env_metadata, package_metadata, build_metadata, auth);
-
-        reset_mocks(&mut flox.catalog_client, vec![
-            Response::CreatePackage,
-            Response::Publish(PublishResponse {
-                ingress_uri: None,
-                ingress_auth: None,
-                catalog_store_config: CatalogStoreConfig::MetaOnly,
-            }),
-            Response::PublishBuild,
-        ]);
 
         let res = publish_provider
             .publish(&flox.catalog_client, &catalog_name, None, false)
@@ -1271,7 +1259,7 @@ pub mod tests {
                 url: "dummy".to_string(),
                 rev: "dummy".to_string(),
                 rev_count: 0,
-                rev_date: Utc::now(),
+                rev_date: "2025-01-01T12:00:00Z".parse::<DateTime<Utc>>().unwrap(),
             },
 
             _private: (),
@@ -1290,34 +1278,28 @@ pub mod tests {
     #[tokio::test]
     async fn publish_errors_without_key() {
         let (mut flox, _tempdir) = flox_instance();
-        let mut client = Client::Mock(MockClient::new());
 
-        let token = create_test_token("test");
-        let catalog_name = token.handle().to_string();
-        flox.floxhub_token = Some(token);
-
-        // Don't do a build because it's slow
         let (build_metadata, env_metadata, package_metadata) = dummy_publish_metadata();
 
+        // TODO: Move to test helper.
+        let token = match std::env::var("_FLOX_UNIT_TEST_RECORD_TOKEN") {
+            Ok(token) => FloxhubToken::from_str(&token).unwrap(),
+            Err(_) => create_test_token("test"),
+        };
         let auth = Auth::from_flox(&flox).unwrap();
+        flox.floxhub_token = Some(token);
+        // TODO: Needs a catalog that we all have access to.
+        // let catalog_name = "flox-unit-tests-nix-copy".to_string();
+        let catalog_name = "dcarley".to_string();
+
+        flox.catalog_client =
+            auto_recording_catalog_client_authed("publish_errors_without_key", &auth);
+
         let publish_provider =
             PublishProvider::new(env_metadata, package_metadata, build_metadata, auth);
 
-        reset_mocks(&mut client, vec![
-            Response::CreatePackage,
-            Response::Publish(PublishResponse {
-                ingress_uri: Some("https://example.com".to_string()),
-                ingress_auth: None,
-                catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
-                    ingress_uri: "https://example.com".to_string(),
-                    egress_uri: "https://example.com".to_string(),
-                    store_type: "nix-copy".to_string(),
-                }),
-            }),
-        ]);
-
         let result = publish_provider
-            .publish(&client, &catalog_name, None, false)
+            .publish(&flox.catalog_client, &catalog_name, None, false)
             .await;
 
         let err = result.unwrap_err();

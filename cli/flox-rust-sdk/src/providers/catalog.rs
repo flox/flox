@@ -1493,6 +1493,7 @@ pub fn mock_base_catalog_url() -> BaseCatalogUrl {
 
 pub mod test_helpers {
     use super::*;
+    use crate::providers::auth::{Auth, AuthProvider};
 
     pub static UNIT_TEST_GENERATED: LazyLock<PathBuf> =
         LazyLock::new(|| PathBuf::from(std::env::var("UNIT_TEST_GENERATED").unwrap()));
@@ -1514,12 +1515,17 @@ pub mod test_helpers {
         Client::Catalog(CatalogClient::new(catalog_config))
     }
 
+    /// TODO: docs
+    pub fn auto_recording_catalog_client(filename: &str) -> Client {
+        auto_recording_catalog_client_authed(filename, &Auth::from_none().unwrap())
+    }
+
     /// Create a mock client that will either record to or replay from a given
     /// file name depending on whether `_FLOX_UNIT_TEST_RECORD` is set.
     ///
     /// Tests must be run with `#[tokio::test(flavor = "multi_thread")]` to
     /// allow the `MockServer` to run in another thread.
-    pub fn auto_recording_catalog_client(filename: &str) -> Client {
+    pub fn auto_recording_catalog_client_authed(filename: &str, auth: &Auth) -> Client {
         let mut path = UNIT_TEST_GENERATED.join(filename);
         path.set_extension("yaml");
         let (mock_mode, catalog_url) =
@@ -1538,7 +1544,7 @@ pub mod test_helpers {
 
         let catalog_config = CatalogClientConfig {
             catalog_url,
-            floxhub_token: None,
+            floxhub_token: auth.token().map(|token| token.secret().to_string()),
             extra_headers: Default::default(),
             mock_mode,
         };

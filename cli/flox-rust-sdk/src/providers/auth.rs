@@ -95,6 +95,14 @@ impl Auth {
             floxhub_token: token,
         }
     }
+
+    /// Construct a new auth provider with no token and a standalone tempdir.
+    pub fn from_none() -> Result<Self, AuthError> {
+        Ok(Self {
+            netrc_tempdir: TempDir::new().map_err(AuthError::CreateTempDir)?,
+            floxhub_token: None,
+        })
+    }
 }
 
 impl AuthProvider for Auth {
