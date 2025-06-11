@@ -4,10 +4,6 @@ section: 1
 header: "Flox User Manuals"
 ...
 
-```{.include}
-./include/experimental-warning.md
-```
-> Feature flag: `build`
 
 # NAME
 
@@ -28,30 +24,31 @@ flox [<general-options>] build
 Build the specified `<package>` from the environment in `<path>`,
 and output build artifacts at `result-<package>` adjacent to the environment.
 
-## Manifest defined Packages
+## Manifest-defined artifacts
 
 Possible values for `<package>` are all keys under the `build` attribute
 in the `manifest.toml`.
 If no `<package>` is specified, Flox will attempt to build all packages
-that are defined in the environment.
+that are defined in the `manifest.toml`.
 
 Packages are built by running the script defined in `build.<package>.command`
 within a `bash` subshell.
-The shell will behave as if `flox activate` was run
-immediately prior to running the build script.
+The shell will behave as if `flox activate` was run immediately prior to
+running the build script.
 
-By default, builds are run in a sandbox.
-For a sandboxed build, the current project is _copied_ into a sandbox directory.
-To avoid copying excessive files, e.g. accumulating build artifacts from earlier
-manual builds, `.env` files containing secrets etc.,
-only files tracked by `git` are available.
-Untracked files, files outside of the repository and notably network access
-will be restricted to encourage "pure" and reproducible builds.
-Builds can opt out of the sandbox by setting `build.<package>.sandbox = "off"`.
-With the sandbox disabled, building is equivalent
-to running the build script manually within a shell created by `flox activate`.
-Any build can access the _results_ of other builds
-(including non-sandboxed ones) by referring to their name via `${<package>}`.
+Builds are always run in a temporary directory into which all `git` tracked
+files are copied.
+A sandbox can be optionally enabled by setting
+`build.<package>.sandbox = "pure"`.
+For this kind of "sandboxed" build, access to untracked files, files outside of
+the repository, and the network are restricted to provide a reproducible build
+environment.
+With the sandbox disabled, building is equivalent to running the build script
+manually within a shell created by `flox activate`.
+
+Any build can access the _results_ of other builds (including non-sandboxed
+ones) by referring to their name via `${<package>}`.
+This allows multi-stage builds.
 In the example below, the `app` package depends on the `dep` package
 by using `${deps}/node_modules`.
 
@@ -60,10 +57,14 @@ to output build artifacts to.
 The environment variable `out` is set to this directory,
 and the build script is expected to copy or move artifacts to `$out`.
 
-Upon conclusion of the build, the build result
-will be symlinked to `result-<package>` adjacent to the `.flox` directory
-that defines the package.
+Upon completion of the build, the build result will be symlinked to
+`result-<package>` adjacent to the `.flox` directory that defines the package.
 
+### Metadata
+
+Specifying the `build.<package>.description>` and `build.<package>.version`
+fields of the build provide extra metadata that can be used by `flox install`,
+`flox search`, and `flox show` commands if the build is later published.
 
 # OPTIONS
 
@@ -84,15 +85,6 @@ that defines the package.
 
 # EXAMPLES
 
-`flox build` is an experimental feature.
-To use it the `build` feature flag has to be enabled:
-
-```shell
-$ flox config --set features.build true
-# OR
-$ export FLOX_FEATURES_BUILD=true
-```
-
 ## Building a simple pure package
 
 1. Add build instructions to the manifest:
@@ -107,6 +99,8 @@ hello.command = '''
 mkdir -p $out
 echo "hello world" >> $out/hello.txt
 '''
+description = "Produces a file containing 'hello world'"
+version = "0.0.0"
 ```
 
 2. Build the package and verify its contents:
