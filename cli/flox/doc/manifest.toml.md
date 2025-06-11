@@ -586,6 +586,78 @@ manifest, but things can be overridden or added by higher priority manifests.
   `options.activate.mode = run` unless a higher priority manifest explicitly
   sets `options.activate.mode = dev`.
 
+## `[build]`
+
+The `[build]` section of the manifest allows you to describe build instructions
+for custom packages that can be built using `flox build`.
+
+The build commands use the packages provided by the `[install]` section
+and any variables defined in the `[vars]` section or `hook.on-activate` script.
+
+The `[build]` section is a table of key-value pairs where the keys determine
+the package names, and the values (build descriptors) determine
+how to build the package.
+
+An example build definition is shown below:
+
+```toml
+[build.hello]
+command = '''
+mkdir -p $out
+echo 'Hello, World!' >> $out/hello.txt
+'''
+```
+
+This would define a package called `hello` that produces a single file
+`hello.txt` containing the string `Hello, World!".
+Running `flox build hello` would create a symlink `./result-hello`
+in the directory adjacent to the `./flox` directory.
+The symlink then points to an immutable directory
+with the produced `hello.txt` file in it.
+
+The full set of options is shown below:
+```
+BuildDescriptor ::= {
+  command     = STRING
+, sandbox     = null | ("off" | "pure")
+, files       = null | [PATH]
+, systems     = null | [STRING, ...]
+, version     = STRING
+, description = null | STRING
+}
+
+```
+
+`command`
+:   The command to run (interpreted by a Bash shell) to build the package.
+    This command can use any environment variables
+    that were set in the `[vars]` section, or the `hook.on-activate` script.
+
+`sandbox`
+:   The level of sandboxing applied to the build.
+    When set to `"off"`, the build is executed in a subshell
+    of the current shell and is equivalent to running the commands manually
+    in a subshell created by `flox activate`.
+    When set to `"pure"`, the build will be unable to make network connections
+    and can only access to the files currently under version control.
+    Consequently, `"pure"` builds require your project
+    to be under `git` version control.
+
+`files`
+:   Files that are explicitly added to the build artifact.
+    Alternatively, build scripts may manually move or copy files to `$out`.
+    The contents of `$out` will afterwards be linked to by `./result-<package>`
+
+`systems`
+:   An optional list of systems on which to build this package.
+    If omitted, the package can be built on any system.
+
+`version`
+:   The version string to attach to this build artifact.
+
+`description`
+:   The description string to attach to this build artifact.
+
 ## `[options]`
 
 The `[options]` section of the manifest details settings for the environment
@@ -672,3 +744,4 @@ Semver ::= {
 [`flox-init(1)`](./flox-init.md),
 [`flox-install(1)`](./flox-install.md),
 [`flox-edit(1)`](./flox-edit.md)
+[`flox-build(1)`](./flox-build.md)
