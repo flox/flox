@@ -4,10 +4,6 @@ section: 1
 header: "Flox User Manuals"
 ...
 
-```{.include}
-./include/experimental-warning.md
-```
-> Feature flag: `publish`
 
 # NAME
 
@@ -19,7 +15,7 @@ flox-publish - Publish local packages for Flox
 ``` bash
 flox [<general-options>] publish
      [-d=<path>]
-     [--store-url]
+     [-o=<org>]
      [--signing-private-key]
      [<package>]...
 ```
@@ -29,15 +25,7 @@ flox [<general-options>] publish
 Publish the specified `<package>` from the environment in `<path>`,
 and output build artifacts.
 
-## Publishing process
-
-Possible values for `<package>` are all keys under the `build` attribute
-in the `manifest.toml` and you must specify one.
-
-When publishing a package,
-Flox will send the package metadata to the catalog
-and optionally upload the package binaries to the store indicated.
-This allows re-use of the package in other environments.
+## Preconditions
 
 Flox makes some assertions before publishing, specifically
 
@@ -46,101 +34,55 @@ Flox makes some assertions before publishing, specifically
 - The repository has a remote defined and the current revision has been pushed to it.
 - The build environment must have at least one package installed.
 
-Flox will then perform a clone of the repository
-to a temporary location
-and perform a clean `flox build` operation.
-This ensures that all files
-required to build the package are included in the git repo.
+## Publishing process
 
-Upon completion,
-the package closure is signed with the key file provided in `--signing-private-key`
-and uploaded to the location specified in `--store_url`.
+Possible values for `<package>` are all keys under the `build` attribute
+in the `manifest.toml`.
+If only one build is defined in `manifest.toml`, specifying the `<package>` is
+unnecessary, otherwise you may only publish a single artifact at a time and
+must specify the name when calling `flox publish`.
+
+When publishing an artifact, metadata is sent to Flox servers so that the
+artifact is made available to `flox install`, `flox search`, and `flox show`.
+The artifact itself, along with any other artifacts it depends on, are uploaded
+to the Catalog's configured Catalog Store.
+By default, Flox provides and configures a Catalog Store, but you may
+optionally provide your own Catalog Store.
+Contact Flox directly if you're interested in this option.
+
+Flox will then perform a clone of the repository to a temporary location
+and perform a clean `flox build` operation.
+This ensures that all files required to build the package are included in the
+git repository.
+
+Finally, the artifact is uploaded to the default Catalog, which is named after
+your user, but you may specify the catalog to publish to via the `--catalog`
+option.
 
 ## After publishing
 
-After publishing,
-the package will be availble for `search`, `show`, and `install` operations
-like any other package.
-The package will be published
-to the catalog named as your FloxHub user handle.
-To distinguish these packages
-from base catalog pacakges,
-the name is prefixed with your catalog name.
-If your github name was `jsmith` for example,
-published packages would be prefixed with `jsmith/`.
-If you published a package called `foo`,
-you could _search_ and see `jsmith/foo` in the results.
-Likewise, you could install the package as
-`jsmith/foo`.
-The package will be downloaded from the location where it was uploaded.
+After the artifact is published, it will be available to the `flox install`,
+`flox search`, and `flox show` commands.
+The name of the package will appear with a name of the form `<catalog>/<name>`
+where `<catalog>` is the name of the catalog it was published to, and `<name>`
+is the name of the artifact.
+The `<catalog>` name is either your user name or the name of the organization
+that owns the Catalog.
 
-## Store Location and Authorization
+For instance, if a user `myuser` published an artifact called `hello` to their
+personal Catalog, the artifact would appear in `flox search` as `myuser/hello`.
 
-Currently Flox only supports S3 compatibile store locations,
-and defers authorization to the nix AWS provider.
+When installing the artifact, it is downloaded directly from the Catalog Store
+that it was published to.
 
-Flox uses nix's S3 provider to perform the uploads and downloads,
-so you need to be authenticated with AWS
-to allow for this.
-Using the `awscli2` package (as found in Flox),
-you need to run `aws sso login`.
-If you are using non-default profiles (see `~/.aws/config`),
-you should set AWS_PROFILE in your shell
-so `aws` CLI and Flox invocations
-use the same AWS profile.
+## Sharing published artifacts
 
-Instructions for setting up the AWS CLI
-can be found [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-quickstart.html).
-
-## Config options
-
-To simplify the command line during publish,
-you can set the `store_url` and `signing_key`
-in the Flox config:
-
-``` bash
-flox config --set publish.store_url "s3://my-bucket-name"
-flox config --set publish.signing_private_key "/home/<name>/.config/my-flox-catalog.key"
-```
-
-## Signing key
-
-If you provide a signing key to Flox,
-it will pass this on to Nix
-and be used to sign the closure
-with that key.
-In order to install packages,
-nix must be configured to trust this key.
-
-To generate a key pair,
-you can use the following commands.
-You will use the secret key for publishing
-and install the public key on all hosts
-where you intend to install this packages
-signed by it.
-
-``` bash
-# This is the key file you pass to --signing-private-key
-nix key generate-secret --key-name mytest > mytest.key
-
-# Put this public key in `/etc/nix/nix.conf` as an `extra-trusted-public-keys` and restart the nix-daemon
-nix key convert-secret-to-public < mytest.key > mytest.pub
-```
-
-## Sharing published packages
-
-You are only able to publish packages to your own catalog.
-By default only you can see and use these packages.
-To allow others
-to search and install the packages in you catalog,
-you will need to add thier github handles
-to a allowlist of users allowed to read from your catalog.
-
-Currently this is managed by a CLI utility shared
-[here](https://github.com/flox/catalog-util).
-Only the owner of the catalog can manage this list.
-See the README of that repository
-for additional details.
+An artifact published to an individual user's Catalog may only be seen and
+installed by that user.
+In order to share artifacts with other users you must create an organization.
+See https://flox.dev/docs/concepts/organizations/ for more details on
+organizations and how to create them.
+Note that this is a paid feature available with Flox for Teams.
 
 # OPTIONS
 
@@ -149,29 +91,17 @@ for additional details.
     Possible values are all keys under the `build` attribute
     in the environment's `manifest.toml`.
 
-`--store-url <url>`
-:   The store location to upload and download from.
-    Currently this must be an S3 bucket like
-    `s3://my-bucket`.
+`-o, --org <org>`
+:   Specify the organization to which an artifact should be published to.
 
 `--signing-private-key <path>`
 :   The private key to use in signing the packge
-    during upload.  This is a local file path.
+    during upload.  This is a local file path. This option is only necessary
+    when using a Catalog Store not provided by Flox.
 
 ```{.include}
 ./include/environment-options.md
 ./include/general-options.md
-```
-
-# EXAMPLES
-
-`flox publish` is an experimental feature.
-To use it the `publish` feature flag has to be enabled:
-
-```shell
-$ flox config --set features.publish true
-# OR
-$ export FLOX_FEATURES_PUBLISH=true
 ```
 
 # SEE ALSO
