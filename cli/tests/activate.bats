@@ -1525,10 +1525,11 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:python-detects-installed-python
-@test "'flox activate' sets python vars if python is installed" {
+@test "'flox activate' sets correct PYTHONPATH and vars if python is installed" {
   project_setup
-  # unset python vars if any
-  unset PYTHONPATH
+  # set initial PYTHONPATH containing duplicates
+  export PYTHONPATH="/dup/1:/dup/2:/dup/1:/dup/3:/dup/2:/dup/4"
+  # unset other python var to be set
   unset PIP_CONFIG_FILE
 
   # install python and pip
@@ -1537,7 +1538,7 @@ EOF
 
   run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
   assert_success
-  assert_line "PYTHONPATH is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/lib/python3.11/site-packages"
+  assert_line "PYTHONPATH is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/lib/python3.11/site-packages:/dup/1:/dup/2:/dup/3:/dup/4"
 
   run -- "$FLOX_BIN" activate -- echo PIP_CONFIG_FILE is '$PIP_CONFIG_FILE'
   assert_success
