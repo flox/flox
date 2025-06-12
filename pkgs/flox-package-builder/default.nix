@@ -2,7 +2,6 @@
   bashInteractive,
   coreutils,
   daemonize,
-  getopt,
   gitMinimal,
   gnugrep,
   gnused,
@@ -21,11 +20,10 @@ stdenv.mkDerivation {
   };
   postPatch = ''
     # Need to perform substitutions within derivation for access to $out.
-    for i in build-manifest.nix env-filter.bash flox-build.mk; do
+    for i in build-manifest.nix flox-build.mk; do
       bashInteractive=${bashInteractive} \
       coreutils=${coreutils} \
       daemonize=${daemonize} \
-      getopt=${getopt} \
       gitMinimal=${gitMinimal} \
       gnugrep=${gnugrep} \
       gnused=${gnused} \

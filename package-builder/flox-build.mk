@@ -51,6 +51,7 @@ _cat := $(call __package_bin,$(__coreutils),cat)
 _cp := $(call __package_bin,$(__coreutils),cp)
 _cut := $(call __package_bin,$(__coreutils),cut)
 _daemonize := $(call __package_bin,$(__daemonize),daemonize)
+_env := $(call __package_bin,$(__coreutils),env)
 _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
 _head := $(call __package_bin,$(__coreutils),head)
@@ -329,45 +330,23 @@ define CLEAN_result_link_template =
   clean/$(_pname): clean_result_link/$(1)
 endef
 
-# The following env vars need to be passed from the outer "develop" environment
-# to the inner "build wrapper" environment in the in-situ build mode in support
-# of the tools and compilers found in the outer environment, and for Flox to
-# otherwise function properly.
-#
-# Start with output path created by the build.
-ALLOW_OUTER_ENV_VARS = out
-# Vars required for flox functionality.
-ALLOW_OUTER_ENV_VARS += \
-  FLOX_ACTIVATE_TRACE FLOX_ENV_DIRS FLOX_RUNTIME_DIR HOME PATH
-# Vars exported by 0100_common-paths.sh. Not included:
-# - LIBRARY_PATH : embedded in runpath of executables
-ALLOW_OUTER_ENV_VARS += \
+# The manifest build strives to achieve reproducibility by first redacting
+# the environment of variables actively managed by the Flox environment.
+# We do this not only because we can rely on the Flox environment to set
+# these variables to their correct values, but also because we want to
+# avoid embedding untracked environment variables that were present at the
+# time of the build.
+
+# The following variables are used to track the set of variables to be redacted
+# from the environment prior to kicking off a manifest build.
+# TODO: move the clearing of variables to "activate --mode build"
+FLOX_MANAGED_ENV_VARS = \
+  FLOX_ACTIVATE_TRACE FLOX_ENV_DIRS FLOX_RUNTIME_DIR \
   INFOPATH CPATH PKG_CONFIG_PATH ACLOCAL_PATH XDG_DATA_DIRS \
-  LD_AUDIT GLIBC_TUNABLES DYLD_FALLBACK_LIBRARY_PATH
-# Vars exported by 0500_python.sh.
-ALLOW_OUTER_ENV_VARS += PYTHONPATH PIP_CONFIG_FILE
-# Vars exported by 0501_rust.sh.
-ALLOW_OUTER_ENV_VARS += RUST_SRC_PATH
-# Vars exported by 0502_jupyter.sh.
-ALLOW_OUTER_ENV_VARS += JUPYTER_PATH
-# Vars exported by 0800_cuda.sh.
-ALLOW_OUTER_ENV_VARS += LD_FLOXLIB_FILES_PATH
-
-# Env var prefixes that are allowed to be passed from the outer
-# "develop" environment to the inner "build wrapper" environment.
-# Start by allowing any variable starting with "_".
-ALLOW_OUTER_ENV_PREFIXES = _
-# Add vars set by Nix stdenv hooks.
-ALLOW_OUTER_ENV_PREFIXES += NIX_CFLAGS NIX_CC
-
-# Assemble list of all env-filter "allow" args. First start by
-# quoting the variable names so that they can be passed in the shell
-# and as arguments to build-manifest.nix.
-QUOTED_ALLOW_OUTER_ENV_VARS = $(foreach _v,$(ALLOW_OUTER_ENV_VARS),"$(_v)")
-QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES = $(foreach _p,$(ALLOW_OUTER_ENV_PREFIXES),"$(_p)")
-env_filter_ALLOW_ARGS = \
-  $(foreach _v,$(QUOTED_ALLOW_OUTER_ENV_VARS),--allow $(_v)) \
-  $(foreach _p,$(QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES),--allow-prefix $(_p))
+  LD_AUDIT GLIBC_TUNABLES DYLD_FALLBACK_LIBRARY_PATH \
+  PYTHONPATH PIP_CONFIG_FILE RUST_SRC_PATH JUPYTER_PATH LD_FLOXLIB_FILES_PATH
+QUOTED_ENV_DISALLOW_ARGS = \
+  $(foreach _arg,$(sort $(FLOX_MANAGED_ENV_VARS)),-u "$(_arg)")
 
 # The following template renders targets for the in-situ build mode.
 define BUILD_local_template =
@@ -378,49 +357,70 @@ define BUILD_local_template =
   # directory and FLOX_ENV.
   $(eval $(_pvarname)_out = /tmp/store_$($(_pvarname)_hash)-$(_name))
 
-  # Our aim in performing a manifest build is to replicate as closely as possible
-  # the experience of running those same build script commands from within an
-  # interactive `flox activate -m dev` shell (i.e. using the "develop" environment).
+  # Our aim in performing a manifest build is to replicate as closely as
+  # possible the experience of running those same build script commands
+  # from within an interactive `flox activate -m dev` shell (i.e. using
+  # the "develop" environment), but we also need to provide a way to avoid
+  # having to materialize compilers and tools not required at runtime, and
+  # our approach for addressing this issue is the following:
 
-  # But unlike the interactive case, the manifest build seeks to use dependencies
-  # as found in the target package's "wrapper" environment in preference to those
-  # found in the "develop" environment. It does this for the express purpose of
-  # preventing the resulting closure from depending on the "develop" environment,
-  # which can contain compilers, libraries and tools not required at runtime.
+  # 1. create "build-wrapper" environments for each build, customized to only
+  #    include packages as found in the "runtime-packages" manifest attribute
+  # 2. perform the build using the "develop" environment
+  # 3. replace all references to the "develop" environment path with that of
+  #    the "build-wrapper" environment
 
-  # The way it does this is by performing the build within a nested activation of
-  # each of the "develop" and "wrapper" environments:
-  # * the [outer] "develop" environment is activated first, providing access to
-  #    runtime dependencies and compilers/tools required only at build time
-  # * then the [inner] "wrapper" environment is activated, providing access
-  #    to only those runtime dependencies
+  # The easiest and most reliable way to replace those references (i.e. without
+  # resorting to the use of tools like patchelf) is by way of a binary string
+  # substitution, which carries the requirement that the paths involved in the
+  # substitution must be of the same length. In other words, the path to the
+  # "develop" environment _used for the build_ must have the same length as the
+  # path to the "build-wrapper" environment.
 
-  # The only issue with the above approach is that references to the "develop"
-  # environment can leak into the resulting build. For example, each of these
-  # activations can prepend to a PYTHONPATH that gets embedded in the
-  # build, which has the effect of pulling both environments into the closure.
+  # We accomplish this by performing the build using a _copy_ of the "develop"
+  # environment found in a path with the same strlen as the "build-wrapper"
+  # environment, so that following a successful build we can replace references
+  # to the former with the latter as we copy the output to its final path.
 
-  # We could use `env -i` to prevent all variables from leaking from the
-  # "develop" environment into the inner activation, but then that causes
-  # problems for compilers that rely on NIX_CC* environment variables set in
-  # the outer activation. To address this problem we use the `env-filter` script
-  # to remove all variables not specifically allowed through to the inner
-  # activation.
-
-  # The final result is approximately the following:
-  #   $(FLOX_INTERPRETER)/activate ... -- \
-  #     $(_libexec_dir)/env-filter $(env_filter_ALLOW_ARGS) -- \
-  #       $(_build_wrapper_env)/wrapper ... -- bash -e buildScript
   $($(_pvarname)_out) $($(_pvarname)_logfile): $($(_pvarname)_buildScript)
 	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
+	@#
+	@# Create a copy of the "develop" environment at a storepath with the
+	@# same length as the "build-wrapper". N.B.: the "build-wrapper"
+	@# environment bears the name "environment-build-$(_pname)" and
+	@# strlen("environment") == strlen("developcopy").
+	@#
+	$$(eval $(_pvarname)_develop_copy_env = \
+	  $$(shell $(_nix) store add --name "developcopy-build-$(_pname)" $(FLOX_ENV)))
+	@#
+	@# Throw error if the temporary build wrapper env path is empty.
+	@#
+	$$(if $$($(_pvarname)_develop_copy_env),, \
+	  $$(error could not create copy of develop environment in store))
+	@#
+	@# Actually perform the build using the temporary build wrapper.
+	@#
 	@echo "Building $(_name) in local mode"
 	$(_VV_) $(_rm) -rf $($(_pvarname)_out)
-	$(_V_) out=$($(_pvarname)_out) \
+	$(_V_) $(_env) $$(QUOTED_ENV_DISALLOW_ARGS) out=$($(_pvarname)_out) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
-	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode build --env-project $(PWD) -- \
-	    $(_libexec_dir)/env-filter $(env_filter_ALLOW_ARGS) -- \
-	      $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars -- \
-	        $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $$<
+	  $(FLOX_INTERPRETER)/activate --env $$($(_pvarname)_develop_copy_env) \
+	    --mode build --env-project $(PWD) -- \
+	    $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $$<
+	@#
+	@# Finally, rewrite references to temporary build wrapper in "out",
+	@# making sure to render the substituted output in the same location
+	@# in which it was built.
+	@#
+	$(_VV_) if [ -d "$($(_pvarname)_out)" ]; then \
+	  $(_mkdir) -p $($(_pvarname)_out).new && \
+	  set -o pipefail && \
+	    $(_tar) -C $($(_pvarname)_out) -c --mode=u+w -f - . | \
+	    $(_sed) --binary "s%$$($(_pvarname)_develop_copy_env)%$$($(_pvarname)_build_wrapper_env)%g" | \
+	    $(_tar) -C $($(_pvarname)_out).new -xf - && \
+	  $(_rm) -rf $($(_pvarname)_out) && \
+	  $(_mv) $($(_pvarname)_out).new $($(_pvarname)_out); \
+	fi
 
   # Having built the package to $($(_pvarname)_out) outside of Nix, call
   # build-manifest.nix to turn it into a Nix package.
@@ -429,12 +429,10 @@ define BUILD_local_template =
 	  --argstr pname "$(_pname)" \
 	  --argstr version "$(_version)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
-	  --argstr build-wrapper-env "$(_build_wrapper_env)" \
+	  --argstr build-wrapper-env "$$($(_pvarname)_build_wrapper_env)" \
 	  --argstr install-prefix "$($(_pvarname)_out)" \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
-	  $(if $($(_pvarname)_buildDeps),--arg buildDeps '[$($(_pvarname)_buildDeps)]') \
-	  --arg allowEnvVars '[$(QUOTED_ALLOW_OUTER_ENV_VARS)]' \
-	  --arg allowEnvVarPrefixes '[$(QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES)]' \
+	  $$(if $$($(_pvarname)_buildDeps),--arg buildDeps '[$$($(_pvarname)_buildDeps)]') \
 	  --out-link "result-$(_pname)" \
 	  --json '^*' > $$@
 
@@ -509,11 +507,9 @@ define BUILD_nix_sandbox_template =
 	  --argstr version "$(_version)" \
 	  --argstr srcTarball "$($(_pvarname)_src_tar)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
-	  --argstr build-wrapper-env "$(_build_wrapper_env)" \
+	  --argstr build-wrapper-env "$$($(_pvarname)_build_wrapper_env)" \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
-	  $(if $($(_pvarname)_buildDeps),--arg buildDeps '[$($(_pvarname)_buildDeps)]') \
-	  --arg allowEnvVars '[$(QUOTED_ALLOW_OUTER_ENV_VARS)]' \
-	  --arg allowEnvVarPrefixes '[$(QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES)]' \
+	  $$(if $$($(_pvarname)_buildDeps),--arg buildDeps '[$$($(_pvarname)_buildDeps)]') \
 	  --argstr buildScript "$($(_pvarname)_buildScript)" \
 	  $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
 	  --out-link "result-$(_pname)" \
@@ -564,16 +560,6 @@ endef
 # The following template selects between the local and nix_sandbox
 # modes for rendering manifest build targets.
 define MANIFEST_BUILD_template =
-  # Identify the build wrapper environment with which to wrap the contents
-  # of bin, sbin.
-  $(eval _build_wrapper_env = $$(strip \
-    $(if $(FLOX_ENV_OUTPUTS), \
-      $$(shell $(_jq) -n -r \
-        --argjson results '$$(FLOX_ENV_OUTPUTS)' \
-        '$$$$results."build-$(_pname)"') \
-      $$(if $$(filter 0,$$(.SHELLSTATUS)),,$$(error could not identify build wrapper env for $(_pname))), \
-      $$$$(error FLOX_ENV_OUTPUTS not defined))))
-
   # build mode passed as $(1)
   $(eval _build_mode = $(1))
   # We want to create build-specific variables, and variable names cannot
@@ -582,11 +568,6 @@ define MANIFEST_BUILD_template =
   $(eval _pvarname = $(subst -,_,$(_pname)))
   # Calculate name.
   $(eval _name = $(_pname)-$(_version))
-  # Variable for providing buildDependencies derived in the DEPENDS step
-  # to the Nix expression.
-  $(eval _buildMetaJSON_files = $(wildcard $($(_pvarname)_deps_buildMetaJSON_files)))
-  $(eval $(_pvarname)_buildDeps = $(if $(_buildMetaJSON_files), \
-    $(sort $(shell $(_jq) -s -r '(map(.outputs[])[])' $(_buildMetaJSON_files)))))
 
   # By the time this rule will be evaluated all of its package dependencies
   # will have been added to the set of rule prerequisites in $^, using their
@@ -596,6 +577,20 @@ define MANIFEST_BUILD_template =
   # corresponding storePath as identified by the result-* symlink.
   .PRECIOUS: $($(_pvarname)_buildScript)
   $($(_pvarname)_buildScript): $(build) $(PROJECT_TMPDIR)/check-build-prerequisites
+	@# Identify _at runtime_ the build wrapper environment with which
+	@# to wrap the contents of bin, sbin.
+	$$(eval $(_pvarname)_build_wrapper_env = $$(strip \
+	  $$(if $$(FLOX_ENV_OUTPUTS), \
+	    $$(shell $(_jq) -n -r \
+	      --argjson results '$$(FLOX_ENV_OUTPUTS)' \
+	      '$$$$results."build-$(_pname)"') \
+	    $$(if $$(filter 0,$$(.SHELLSTATUS)),,$$(error could not identify build wrapper env for $(_pname))), \
+	    $$$$(error FLOX_ENV_OUTPUTS not defined))))
+	@# Variable for providing buildDependencies derived in the DEPENDS step
+	@# to the Nix expression.
+	$$(eval $(_pvarname)_buildMetaJSON_files = $$(wildcard $$($(_pvarname)_deps_buildMetaJSON_files)))
+	$$(eval $(_pvarname)_buildDeps = $$(if $$($(_pvarname)_buildMetaJSON_files), \
+	  $$(sort $$(shell $(_jq) -s -r '(map(.outputs[])[])' $$($(_pvarname)_buildMetaJSON_files)))))
 	$(_V_) $(_mkdir) -p $$(@D)
 	@echo "Rendering $(_pname) build script to $$@"
 	@# Always echo lines in the build script as they are invoked.
@@ -631,8 +626,8 @@ define MANIFEST_BUILD_template =
 	@# wrapper's closure.
 	$$(eval _build_store_path = $$(shell $(_readlink) $($(_pvarname)_result)))
 	$$(eval _build_closure_requisites = $$(shell $(_nix_store) --query --requisites $($(_pvarname)_result)/.))
-	@# BUG: $(_build_wrapper_env)/requisites.txt missing libcxx on Darwin??? Repeat the hard way ...
-	$$(eval _build_wrapper_requisites = $$(shell $(_nix_store) --query --requisites $(_build_wrapper_env)/.))
+	@# BUG: $$($(_pvarname)_build_wrapper_env)/requisites.txt missing libcxx on Darwin??? Repeat the hard way ...
+	$$(eval _build_wrapper_requisites = $$(shell $(_nix_store) --query --requisites $$($(_pvarname)_build_wrapper_env)/.))
 	$$(eval _nef_requisites = \
 	  $$(if $$($(_pvarname)_buildDeps),$$(shell $(_nix_store) --query --requisites $$($(_pvarname)_buildDeps))))
 	$$(eval _build_closure_extra_packages = $$(strip \
@@ -642,7 +637,7 @@ define MANIFEST_BUILD_template =
 	$$(eval _space = $$(shell echo $$(_count) | $(_tr) '[0-9]' '-'))
 	$$(if $$(_build_closure_extra_packages),$(_VV_) \
 	  echo -e "❌ $$(_count) packages found in $$(_build_store_path)\n" \
-	           "  $$(_space)      not found in $(_build_wrapper_env)\n" 1>&2; \
+	           "  $$(_space)      not found in $$($(_pvarname)_build_wrapper_env)\n" 1>&2; \
 	  $$(intcmp 3,$$(_count),echo -e "Displaying first 3 only:\n" 1>&2; ) \
 	  $$(foreach _pkg,$$(wordlist 1,3,$$(_build_closure_extra_packages)), \
 	    ( $(_nix) why-depends --precise $$(_build_store_path) $$(_pkg) && echo ) 1>&2; ) \

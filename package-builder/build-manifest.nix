@@ -12,9 +12,6 @@
   buildDeps ? [ ], # optional
   buildScript ? null, # optional
   buildCache ? null, # optional
-  packageBuilder ? "@out@", # path to find adjacent env-filter script
-  allowEnvVars ? [ ], # variables to allow into build from outer dev env
-  allowEnvVarPrefixes ? [ ], # prefixes of variables allowed into build
 }:
 # First a few assertions to ensure that the inputs are consistent.
 # buildCache is only meaningful with a build script
@@ -24,14 +21,12 @@ assert (srcTarball != null) -> (buildScript != null);
 let
   flox-env-package = builtins.storePath flox-env;
   build-wrapper-env-package = builtins.storePath build-wrapper-env;
-  # We need a reference to the package that this file comes from so that
-  # we can pull the adjacent env-filter script into the build.
-  package-builder-package = builtins.storePath packageBuilder;
-  buildInputs = [
-    package-builder-package
-    build-wrapper-env-package
-    flox-env-package
-  ] ++ (map (d: builtins.storePath d) buildDeps);
+  develop-copy-env-package = builtins.path {
+    path = flox-env-package;
+    name = "developcopy-build-${pname}";
+  };
+  buildInputs = [ build-wrapper-env-package ];
+  buildDepInputs = map (d: builtins.storePath d) buildDeps;
   install-prefix-contents = /. + install-prefix;
   buildScript-contents = /. + buildScript;
   buildCache-tar-contents = if (buildCache == null) then null else (/. + buildCache);
@@ -53,16 +48,15 @@ let
     ${dollar_out_bin_copy_hints}
   '';
   name = "${pname}-${version}";
-  envFilterAllowArgs = builtins.concatStringsSep " " (
-    builtins.map (x: "--allow ${x}") allowEnvVars
-    ++ builtins.map (x: "--allow-prefix ${x}") allowEnvVarPrefixes
-  );
 in
 pkgs.runCommandNoCC name
   {
     inherit
-      buildInputs
+      buildInputs # required to include build wrapper environment in NIX_LDFLAGS
+      flox-env-package # required to bring in all dependencies
+      develop-copy-env-package # shallow copy with no dependencies
       srcTarball
+      buildDepInputs
       pname
       version
       ;
@@ -115,9 +109,6 @@ pkgs.runCommandNoCC name
               cp ${install-prefix-contents} $out
               sed --binary "s%${install-prefix}%$out%g" $out
             fi
-            ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
-              signDarwinBinariesInAllOutputs
-            ''}
           ''
       # Assume we perform a full sandboxed build.
       else
@@ -162,10 +153,12 @@ pkgs.runCommandNoCC name
               ''
           }
 
-          # Run the build script using _BOTH_ the flox and build wrapper
-          # environments, ensuring that the build wrapper environment is the
-          # "inner" activation so that its tools and libraries are preferred
-          # over those from the "develop" environment.
+          # Perform the build using a _copy_ of the "develop" environment
+          # found in a storepath with the same strlen as the "build-wrapper"
+          # environment, so that following a successful build we can replace
+          # references to the former with the latter as we copy the output
+          # to its final path.
+
           ${
             if buildCache == null then
               ''
@@ -177,10 +170,9 @@ pkgs.runCommandNoCC name
                 # N.B. not using t3 --forcecolor option because Nix sandbox
                 # strips color codes from output anyway.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
-                  ${flox-env-package}/activate --env ${flox-env-package} --mode build --env-project $(pwd) -- \
-                    ${package-builder-package}/libexec/env-filter ${envFilterAllowArgs} -- \
-                      ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
-                        t3 --relative $log -- bash -e ${buildScript-contents}
+                  ${develop-copy-env-package}/activate --env ${develop-copy-env-package} \
+                    --mode build --env-project $(pwd) -- \
+                      t3 --relative $log -- bash -e ${buildScript-contents}
               ''
             else
               ''
@@ -195,13 +187,27 @@ pkgs.runCommandNoCC name
                 # See flox-build.mk for a detailed explanation of why we use a nested
                 # activation when performing builds.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
-                  ${flox-env-package}/activate --env ${flox-env-package} --mode build --env-project $(pwd) -- \
-                    ${package-builder-package}/libexec/env-filter ${envFilterAllowArgs} -- \
-                      ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
-                        t3 --relative $log -- bash -e ${buildScript-contents} || \
+                  ${develop-copy-env-package}/activate --env ${develop-copy-env-package} \
+                    --mode build --env-project $(pwd) -- \
+                      t3 --relative $log -- bash -e ${buildScript-contents} || \
                 ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
           }
+
+          # Rewrite references to temporary build wrapper in "out".
+          if [ -e "$out" ]; then
+            bn="$(basename $out)"
+            mv "$out" "$TMPDIR/$bn"
+            if [ -d "$TMPDIR/$bn" ]; then
+              mkdir "$out"
+              tar -C "$TMPDIR/$bn" -c --mode=u+w -f - . | \
+                sed --binary "s%${develop-copy-env-package}%${build-wrapper-env-package}%g" | \
+                tar -C "$out" -xf -
+            else
+              sed --binary "s%${develop-copy-env-package}%${build-wrapper-env-package}%g" < "$TMPDIR/$bn" > "$out"
+            fi
+            rm -rf "$TMPDIR/$bn"
+          fi
         ''
     )
     + ''
@@ -306,5 +312,8 @@ pkgs.runCommandNoCC name
       # and we probably don't actually need to compress the build cache
       # because we actively delete the old copy as we create a new one.
       find . -type f | sort | tar -c --no-recursion -f $buildCache -T -
+    ''
+    + pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
+      signDarwinBinariesIn "$out"
     ''
   )
