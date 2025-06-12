@@ -251,6 +251,11 @@ impl ClientSideCatalogStoreConfig {
         &self,
         build_outputs: &[Output],
     ) -> Result<Option<NarInfos>, PublishError> {
+        if build_outputs.is_empty() {
+            debug!(reason = "no build outputs", "skipping artifact upload");
+            return Ok(None);
+        }
+
         match self {
             ClientSideCatalogStoreConfig::NixCopy {
                 ingress_uri,
@@ -258,6 +263,11 @@ impl ClientSideCatalogStoreConfig {
                 signing_private_key_path,
                 auth_netrc_path,
             } => {
+                debug!(
+                    reason = "nix-copy catalog store",
+                    ?ingress_uri,
+                    "uploading artifacts to cache"
+                );
                 Self::upload_build_outputs(
                     ingress_uri,
                     Some(signing_private_key_path.as_path()),
@@ -306,8 +316,9 @@ impl ClientSideCatalogStoreConfig {
     ) -> Result<(), PublishError> {
         for output in build_outputs.iter() {
             debug!(
-                "Uploading output {} ({}) to cache...",
-                output.name, output.store_path
+                ?output,
+                %destination_url,
+                "Uploading output...",
             );
             Self::upload_store_path(
                 destination_url,
