@@ -51,10 +51,12 @@ _cat := $(call __package_bin,$(__coreutils),cat)
 _cp := $(call __package_bin,$(__coreutils),cp)
 _cut := $(call __package_bin,$(__coreutils),cut)
 _daemonize := $(call __package_bin,$(__daemonize),daemonize)
+_env := $(call __package_bin,$(__coreutils),env)
 _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
 _head := $(call __package_bin,$(__coreutils),head)
 _jq := $(call __package_bin,$(__jq),jq)
+_ln := $(call __package_bin,$(__coreutils),ln)
 _mkdir := $(call __package_bin,$(__coreutils),mkdir)
 _mktemp := $(call __package_bin,$(__coreutils),mktemp)
 _mv := $(call __package_bin,$(__coreutils),mv)
@@ -329,45 +331,30 @@ define CLEAN_result_link_template =
   clean/$(_pname): clean_result_link/$(1)
 endef
 
-# The following env vars need to be passed from the outer "develop" environment
-# to the inner "build wrapper" environment in the in-situ build mode in support
-# of the tools and compilers found in the outer environment, and for Flox to
-# otherwise function properly.
+# Our aim in performing a manifest build is to replicate as closely as
+# possible the experience of running those same build script commands
+# from within an interactive `flox activate -m dev` shell (i.e. using
+# the "develop" environment).
 #
-# Start with output path created by the build.
-ALLOW_OUTER_ENV_VARS = out
-# Vars required for flox functionality.
-ALLOW_OUTER_ENV_VARS += \
-  FLOX_ACTIVATE_TRACE FLOX_ENV_DIRS FLOX_RUNTIME_DIR HOME PATH
-# Vars exported by 0100_common-paths.sh. Not included:
-# - LIBRARY_PATH : embedded in runpath of executables
-ALLOW_OUTER_ENV_VARS += \
+# But unlike the interactive case, the manifest build strives to achieve
+# reproducibility by first redacting the environment of variables actively
+# managed by the Flox environment. We can do this not only because we can
+# rely on the Flox environment to set these variables to their correct
+# values, but also because we want to avoid embedding untracked state that
+# just happened to be present in the user's environment at build time to
+# leak into the resulting build.
+#
+# The following variables are used to track the set of variables to be redacted
+# from the environment prior to kicking off a manifest build. We append to the
+# list to allow users to supply at build time their own set of environment
+# variables to be redacted from the environment.
+FLOX_MANAGED_ENV_VARS += \
+  FLOX_ACTIVATE_TRACE FLOX_ENV_DIRS FLOX_RUNTIME_DIR \
   INFOPATH CPATH PKG_CONFIG_PATH ACLOCAL_PATH XDG_DATA_DIRS \
-  LD_AUDIT GLIBC_TUNABLES DYLD_FALLBACK_LIBRARY_PATH
-# Vars exported by 0500_python.sh.
-ALLOW_OUTER_ENV_VARS += PYTHONPATH PIP_CONFIG_FILE
-# Vars exported by 0501_rust.sh.
-ALLOW_OUTER_ENV_VARS += RUST_SRC_PATH
-# Vars exported by 0502_jupyter.sh.
-ALLOW_OUTER_ENV_VARS += JUPYTER_PATH
-# Vars exported by 0800_cuda.sh.
-ALLOW_OUTER_ENV_VARS += LD_FLOXLIB_FILES_PATH
-
-# Env var prefixes that are allowed to be passed from the outer
-# "develop" environment to the inner "build wrapper" environment.
-# Start by allowing any variable starting with "_".
-ALLOW_OUTER_ENV_PREFIXES = _
-# Add vars set by Nix stdenv hooks.
-ALLOW_OUTER_ENV_PREFIXES += NIX_CFLAGS NIX_CC
-
-# Assemble list of all env-filter "allow" args. First start by
-# quoting the variable names so that they can be passed in the shell
-# and as arguments to build-manifest.nix.
-QUOTED_ALLOW_OUTER_ENV_VARS = $(foreach _v,$(ALLOW_OUTER_ENV_VARS),"$(_v)")
-QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES = $(foreach _p,$(ALLOW_OUTER_ENV_PREFIXES),"$(_p)")
-env_filter_ALLOW_ARGS = \
-  $(foreach _v,$(QUOTED_ALLOW_OUTER_ENV_VARS),--allow $(_v)) \
-  $(foreach _p,$(QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES),--allow-prefix $(_p))
+  LD_AUDIT GLIBC_TUNABLES DYLD_FALLBACK_LIBRARY_PATH \
+  PYTHONPATH PIP_CONFIG_FILE RUST_SRC_PATH JUPYTER_PATH LD_FLOXLIB_FILES_PATH
+QUOTED_ENV_DISALLOW_ARGS = \
+  $(foreach _arg,$(sort $(FLOX_MANAGED_ENV_VARS)),-u "$(_arg)")
 
 # The following template renders targets for the in-situ build mode.
 define BUILD_local_template =
@@ -378,49 +365,36 @@ define BUILD_local_template =
   # directory and FLOX_ENV.
   $(eval $(_pvarname)_out = /tmp/store_$($(_pvarname)_hash)-$(_name))
 
-  # Our aim in performing a manifest build is to replicate as closely as possible
-  # the experience of running those same build script commands from within an
-  # interactive `flox activate -m dev` shell (i.e. using the "develop" environment).
+  # The manifest build seeks to replicate the experience of using the "develop"
+  # environment to build interactively, while preventing references to the
+  # "develop" environment from being added to the resulting build. It does this
+  # to avoid having to materialize compilers and tools not required at runtime.
 
-  # But unlike the interactive case, the manifest build seeks to use dependencies
-  # as found in the target package's "wrapper" environment in preference to those
-  # found in the "develop" environment. It does this for the express purpose of
-  # preventing the resulting closure from depending on the "develop" environment,
-  # which can contain compilers, libraries and tools not required at runtime.
+  # Our approach for addressing this issue is to first perform the build using the
+  # "develop" environment, and then replace all references to that environment with
+  # the "build-wrapper" environment which has been built to include only the packages
+  # required at runtime as specified by the "runtime-packages" manifest attribute.
+  # Like so many problems in computer science, this is done by introducing a level
+  # of indirection:
 
-  # The way it does this is by performing the build within a nested activation of
-  # each of the "develop" and "wrapper" environments:
-  # * the [outer] "develop" environment is activated first, providing access to
-  #    runtime dependencies and compilers/tools required only at build time
-  # * then the [inner] "wrapper" environment is activated, providing access
-  #    to only those runtime dependencies
+  # 1. create symlink from $($(_pvarname)_out)/nix-support/FLOX_ENV -> "develop"
+  # 2. perform build using $($(_pvarname)_out)/nix-support/FLOX_ENV, being careful to
+  #    redact Flox-managed variables from the process's environment before we start
+  # 3. replace $($(_pvarname)_out)/nix-support/FLOX_ENV with link to "build-wrapper"
 
-  # The only issue with the above approach is that references to the "develop"
-  # environment can leak into the resulting build. For example, each of these
-  # activations can prepend to a PYTHONPATH that gets embedded in the
-  # build, which has the effect of pulling both environments into the closure.
-
-  # We could use `env -i` to prevent all variables from leaking from the
-  # "develop" environment into the inner activation, but then that causes
-  # problems for compilers that rely on NIX_CC* environment variables set in
-  # the outer activation. To address this problem we use the `env-filter` script
-  # to remove all variables not specifically allowed through to the inner
-  # activation.
-
-  # The final result is approximately the following:
-  #   $(FLOX_INTERPRETER)/activate ... -- \
-  #     $(_libexec_dir)/env-filter $(env_filter_ALLOW_ARGS) -- \
-  #       $(_build_wrapper_env)/wrapper ... -- bash -e buildScript
   $($(_pvarname)_out) $($(_pvarname)_logfile): $($(_pvarname)_buildScript)
-	@# $(if $(FLOX_INTERPRETER),,$$(error FLOX_INTERPRETER not defined))
 	@echo "Building $(_name) in local mode"
 	$(_VV_) $(_rm) -rf $($(_pvarname)_out)
-	$(_V_) out=$($(_pvarname)_out) \
+	$(_VV_) $(_mkdir) -p $($(_pvarname)_out)/nix-support
+	$(_V_) $(_ln) -s $(FLOX_ENV) $($(_pvarname)_out)/nix-support/FLOX_ENV
+	$(_V_) $(_env) $(QUOTED_ENV_DISALLOW_ARGS) \
+	  out=$($(_pvarname)_out) PATH=$(__coreutils)/bin:$(__bashInteractive)/bin \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
-	  $(FLOX_INTERPRETER)/activate --env $(FLOX_ENV) --mode build --env-project $(PWD) -- \
-	    $(_libexec_dir)/env-filter $(env_filter_ALLOW_ARGS) -- \
-	      $(_build_wrapper_env)/wrapper --env $(_build_wrapper_env) --set-vars -- \
-	        $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $$<
+	  $($(_pvarname)_out)/nix-support/FLOX_ENV/activate --env $($(_pvarname)_out)/nix-support/FLOX_ENV \
+	    --mode build --env-project $(PWD) -- \
+	    $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $$<
+	$(_V_) $(_rm) $($(_pvarname)_out)/nix-support/FLOX_ENV
+	$(_V_) $(_ln) -s $(_build_wrapper_env) $($(_pvarname)_out)/nix-support/FLOX_ENV
 
   # Having built the package to $($(_pvarname)_out) outside of Nix, call
   # build-manifest.nix to turn it into a Nix package.
@@ -433,8 +407,6 @@ define BUILD_local_template =
 	  --argstr install-prefix "$($(_pvarname)_out)" \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  $(if $($(_pvarname)_buildDeps),--arg buildDeps '[$($(_pvarname)_buildDeps)]') \
-	  --arg allowEnvVars '[$(QUOTED_ALLOW_OUTER_ENV_VARS)]' \
-	  --arg allowEnvVarPrefixes '[$(QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES)]' \
 	  --out-link "result-$(_pname)" \
 	  --json '^*' > $$@
 
@@ -512,8 +484,6 @@ define BUILD_nix_sandbox_template =
 	  --argstr build-wrapper-env "$(_build_wrapper_env)" \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  $(if $($(_pvarname)_buildDeps),--arg buildDeps '[$($(_pvarname)_buildDeps)]') \
-	  --arg allowEnvVars '[$(QUOTED_ALLOW_OUTER_ENV_VARS)]' \
-	  --arg allowEnvVarPrefixes '[$(QUOTED_ALLOW_OUTER_ENV_VAR_PREFIXES)]' \
 	  --argstr buildScript "$($(_pvarname)_buildScript)" \
 	  $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
 	  --out-link "result-$(_pname)" \

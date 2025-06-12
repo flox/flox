@@ -12,9 +12,6 @@
   buildDeps ? [ ], # optional
   buildScript ? null, # optional
   buildCache ? null, # optional
-  packageBuilder ? "@out@", # path to find adjacent env-filter script
-  allowEnvVars ? [ ], # variables to allow into build from outer dev env
-  allowEnvVarPrefixes ? [ ], # prefixes of variables allowed into build
 }:
 # First a few assertions to ensure that the inputs are consistent.
 # buildCache is only meaningful with a build script
@@ -24,11 +21,7 @@ assert (srcTarball != null) -> (buildScript != null);
 let
   flox-env-package = builtins.storePath flox-env;
   build-wrapper-env-package = builtins.storePath build-wrapper-env;
-  # We need a reference to the package that this file comes from so that
-  # we can pull the adjacent env-filter script into the build.
-  package-builder-package = builtins.storePath packageBuilder;
   buildInputs = [
-    package-builder-package
     build-wrapper-env-package
     flox-env-package
   ] ++ (map (d: builtins.storePath d) buildDeps);
@@ -53,10 +46,6 @@ let
     ${dollar_out_bin_copy_hints}
   '';
   name = "${pname}-${version}";
-  envFilterAllowArgs = builtins.concatStringsSep " " (
-    builtins.map (x: "--allow ${x}") allowEnvVars
-    ++ builtins.map (x: "--allow-prefix ${x}") allowEnvVarPrefixes
-  );
 in
 pkgs.runCommandNoCC name
   {
@@ -85,12 +74,11 @@ pkgs.runCommandNoCC name
         "log"
       ]
       ++ pkgs.lib.optionals (buildCache != null) [ "buildCache" ];
-    # We previously used `disallowedReferences` to prevent builds from referencing
-    # the "develop" environment, but that was too strict and caused issues with
-    # the "log" and "buildCache" outputs in particular. Now we instead inspect the
-    # closure once the build is complete to ensure that it only contains packages
-    # found only in the build wrapper closure.
-    # disallowedReferences = [ flox-env-package ];
+    # We use `disallowedReferences` to prevent the build from referencing the
+    # "develop" environment with which it is built, and the trick in doing this
+    # is to first link that environment from a path in $out that can subsequently
+    # be swapped out for the build wrapper environment at the end of the build.
+    disallowedReferences = [ flox-env-package ];
   }
   (
     (
@@ -162,10 +150,12 @@ pkgs.runCommandNoCC name
               ''
           }
 
-          # Run the build script using _BOTH_ the flox and build wrapper
-          # environments, ensuring that the build wrapper environment is the
-          # "inner" activation so that its tools and libraries are preferred
-          # over those from the "develop" environment.
+          # Perform the build using the "develop" environment as linked from
+          # $out/nix-support/FLOX_ENV so that we can swap that out for the
+          # "build-wrapper-env" environment following the build.
+          mkdir -p $out/nix-support
+          ln -s $out/FLOX_ENV ${flox-env-package}
+
           ${
             if buildCache == null then
               ''
@@ -177,10 +167,9 @@ pkgs.runCommandNoCC name
                 # N.B. not using t3 --forcecolor option because Nix sandbox
                 # strips color codes from output anyway.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
-                  ${flox-env-package}/activate --env ${flox-env-package} --mode build --env-project $(pwd) -- \
-                    ${package-builder-package}/libexec/env-filter ${envFilterAllowArgs} -- \
-                      ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
-                        t3 --relative $log -- bash -e ${buildScript-contents}
+                  $out/nix-support/FLOX_ENV/activate --env $out/nix-support/FLOX_ENV \
+                    --mode build --env-project $(pwd) -- \
+                    t3 --relative $log -- bash -e ${buildScript-contents}
               ''
             else
               ''
@@ -195,13 +184,16 @@ pkgs.runCommandNoCC name
                 # See flox-build.mk for a detailed explanation of why we use a nested
                 # activation when performing builds.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
-                  ${flox-env-package}/activate --env ${flox-env-package} --mode build --env-project $(pwd) -- \
-                    ${package-builder-package}/libexec/env-filter ${envFilterAllowArgs} -- \
-                      ${build-wrapper-env-package}/wrapper --env ${build-wrapper-env-package} --set-vars -- \
-                        t3 --relative $log -- bash -e ${buildScript-contents} || \
+                  $out/nix-support/FLOX_ENV/activate --env $out/nix-support/FLOX_ENV \
+                    --mode build --env-project $(pwd) -- \
+                    t3 --relative $log -- bash -e ${buildScript-contents} || \
                 ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
           }
+
+          # Redirect FLOX_ENV to "build-wrapper-env" following a successful build.
+          rm $out/nix-support/FLOX_ENV
+          ln -s $out/nix-support/FLOX_ENV ${build-wrapper-env-package}
         ''
     )
     + ''
