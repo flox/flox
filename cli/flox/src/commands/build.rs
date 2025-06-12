@@ -16,10 +16,10 @@ use flox_rust_sdk::providers::build::{
     find_toplevel_group_nixpkgs,
     nix_expression_dir,
 };
-use flox_rust_sdk::providers::catalog::mock_base_catalog_url;
+use flox_rust_sdk::providers::catalog::ClientTrait;
 use indoc::formatdoc;
 use itertools::Itertools;
-use tracing::instrument;
+use tracing::{debug, instrument};
 use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
@@ -144,8 +144,34 @@ impl Build {
             .collect::<Vec<_>>();
 
         let base_nixpkgs_url = match nixpkgs_url_override {
-            Some(url) => url,
-            None => mock_base_catalog_url().as_flake_ref()?,
+            Some(url) => {
+                debug!(?url, "using provided nixpkgs flake");
+                url
+            },
+            None => {
+                let base_catalog_info = flox
+                    .catalog_client
+                    .get_base_catalog()
+                    .await
+                    .context("could not get infomration about the base catalog")?;
+
+                let make_error_message = || {
+                    let available_stabilities =
+                        base_catalog_info.available_stabilities().join(", ");
+                    formatdoc! {"
+                      The default stability {} does not exist (or has not yet been populated).
+                      Available stabilities are: {available_stabilities}
+                  ", BaseCatalogInfo::DEFAULT_STABILITY}
+                };
+
+                let url = base_catalog_info
+                    .url_for_latest_page_with_default_stability()
+                    .with_context(make_error_message)?
+                    .as_flake_ref()?;
+
+                debug!(?url, "using page from default stability flake");
+                url
+            },
         };
 
         let dependency_nixpkgs_url = find_toplevel_group_nixpkgs(&lockfile)

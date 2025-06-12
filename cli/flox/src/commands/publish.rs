@@ -7,7 +7,7 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::auth::Auth;
 use flox_rust_sdk::providers::build::{PackageTarget, nix_expression_dir};
-use flox_rust_sdk::providers::catalog::mock_base_catalog_url;
+use flox_rust_sdk::providers::catalog::{BaseCatalogInfo, ClientTrait};
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -139,12 +139,27 @@ impl Publish {
             },
         };
 
+        let base_nixpkgs_url = {
+            let base_catalog_info = flox
+                .catalog_client
+                .get_base_catalog()
+                .await
+                .context("could not get information about the base catalog")?;
+
+            let url = base_catalog_info
+                .url_for_latest_page_with_default_stability()
+                .context("no page for the default stability exists")?;
+
+            debug!(?url, "using page from default stability flake");
+            url
+        };
+
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
 
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
-            &mock_base_catalog_url(), // TODO: Replace with actual locked URL info from catalog server
+            &base_nixpkgs_url,
             env_metadata.toplevel_catalog_ref.as_ref(),
             package,
         )?;
