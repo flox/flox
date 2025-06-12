@@ -987,22 +987,16 @@ pub mod tests {
 
     use super::*;
     use crate::flox::FloxhubToken;
-    use crate::flox::test_helpers::{create_test_token, flox_instance};
+    use crate::flox::test_helpers::flox_instance;
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::lockfile::Lockfile;
-    use crate::providers::auth::{Auth, write_floxhub_netrc};
+    use crate::providers::auth::write_floxhub_netrc;
     use crate::providers::catalog::test_helpers::{
         auto_recording_catalog_client_dev_authed,
         create_catalog_with_config,
-        reset_mocks,
     };
-    use crate::providers::catalog::{
-        GENERATED_DATA,
-        PublishResponse,
-        Response,
-        mock_base_catalog_url,
-    };
+    use crate::providers::catalog::{GENERATED_DATA, mock_base_catalog_url};
     use crate::providers::git::tests::{
         commit_file,
         create_remotes,
@@ -1395,27 +1389,22 @@ pub mod tests {
     #[tokio::test]
     async fn upload_to_local_cache() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
-        let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
+        let (build_metadata, env_metadata, package_metadata) = dummy_publish_metadata();
 
-        let token = create_test_token("test");
-        let catalog_name = token.handle().to_string();
-        flox.floxhub_token = Some(token.clone());
+        let auth = auto_recording_catalog_client_dev_authed(&mut flox, "upload_to_local_cache");
 
-        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
-        let package_metadata = check_package_metadata(
-            &env_metadata.lockfile,
-            &mock_base_catalog_url(),
-            env_metadata.toplevel_catalog_ref.as_ref(),
-            EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
-        )
-        .unwrap();
+        let (_key_file, cache) = local_nix_cache(auth.token().unwrap());
+        let catalog_name = "flox-unit-tests-nix-copy".to_string();
+        let catalog_config = CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
+            ingress_uri: cache.upload_url().unwrap().to_string(),
+            egress_uri: cache.download_url().unwrap().to_string(),
+            store_type: "nix-copy".to_string(),
+        });
 
-        let build_metadata =
-            check_build_metadata(&flox, &env_metadata, &package_metadata.package).unwrap();
+        create_catalog_with_config(&flox.catalog_client, &catalog_name, &catalog_config)
+            .await
+            .unwrap();
 
-        let (_key_file, cache) = local_nix_cache(&token);
-        let auth = Auth::from_flox(&flox).unwrap();
         let publish_provider =
             PublishProvider::new(env_metadata, package_metadata, build_metadata, auth);
 
@@ -1423,20 +1412,6 @@ pub mod tests {
         let cache_url = cache.upload_url().unwrap();
         let cache_path = cache_url.to_file_path().unwrap();
         assert!(std::fs::read_dir(&cache_path).is_err());
-
-        reset_mocks(&mut flox.catalog_client, vec![
-            Response::CreatePackage,
-            Response::Publish(PublishResponse {
-                ingress_uri: Some(cache_url.to_string()),
-                ingress_auth: None,
-                catalog_store_config: CatalogStoreConfig::NixCopy(CatalogStoreConfigNixCopy {
-                    ingress_uri: cache_url.to_string(),
-                    egress_uri: cache_url.to_string(),
-                    store_type: "nix-copy".to_string(),
-                }),
-            }),
-            Response::PublishBuild,
-        ]);
 
         publish_provider
             .publish(
