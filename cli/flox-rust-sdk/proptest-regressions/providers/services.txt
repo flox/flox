@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ae24b2728fb0cc0f7dbbbf096b84c5fc6da95b8f1042a796484325e3735595fc # shrinks to config = ProcessComposeConfig { log_level: Debug, log_configuration: ProcessComposeLoggerConfig { no_color: false }, processes: {"": ProcessConfig { command: "", vars: Some({}), is_daemon: None, shutdown: None }} }
+cc 2b4150f7eb0709284e1eed7667ce769f0218e283d8c8cecdb224ac3e66b7937f # shrinks to config = ProcessComposeConfig { log_level: Debug, log_configuration: ProcessComposeLoggerConfig { no_color: false }, disable_env_expansion: false, processes: {"": ProcessConfig { command: "", vars: Some({}), is_daemon: None, shutdown: None }} }

@@ -1538,3 +1538,33 @@ EOF
     "${TESTS_DIR}"/services/wait_for_service_status.sh one:Stopped two:Stopped
   '
 }
+
+@test "vars: service-level variables are set" {
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = '''
+      echo "hello $myvar"
+    '''
+    one.vars.myvar = "some_value"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start one
+    "$FLOX_BIN" services logs -n 10 one
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial "Service 'one' started."
+  assert_output --partial "some_value"
+}
