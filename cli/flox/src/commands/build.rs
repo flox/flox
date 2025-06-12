@@ -22,21 +22,15 @@ use itertools::Itertools;
 use tracing::instrument;
 use url::Url;
 
-use super::{EnvironmentSelect, environment_select};
+use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::activate::FLOX_INTERPRETER;
 use crate::environment_subcommand_metric;
 use crate::utils::message;
 
-#[allow(unused)] // remove when we implement the command
 #[derive(Bpaf, Clone)]
 pub struct Build {
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
-
-    /// Whether to print logs to stderr during build.
-    /// Logs are always written to <TBD>
-    #[bpaf(short('L'), long)]
-    build_logs: bool,
+    #[bpaf(external(dir_environment_select), fallback(Default::default()))]
+    environment: DirEnvironmentSelect,
 
     #[bpaf(long, hide)]
     nixpkgs_url: Option<Url>,
@@ -49,7 +43,7 @@ pub struct Build {
 enum SubcommandOrBuildTargets {
     /// Clean the build directory
     ///
-    /// Remove builds artifacts and temporary files.
+    /// Removes build artifacts and temporary files.
     #[bpaf(command, footer("Run 'man flox-build-clean' for more details."))]
     Clean {
         /// The package(s) to clean.
@@ -97,8 +91,8 @@ impl Build {
     #[instrument(name = "build::clean", skip_all)]
     async fn clean(flox: Flox, mut env: ConcreteEnvironment, packages: Vec<String>) -> Result<()> {
         if let ConcreteEnvironment::Remote(_) = &env {
-            bail!("Cannot build from a remote environment");
-        };
+            unreachable!("Cannot build from a remote environment");
+        }
         let base_dir = env.parent_path()?;
         let expression_dir = nix_expression_dir(&env); // TODO: decouple from env
         let flox_env_build_outputs = env.build(&flox)?;
@@ -126,7 +120,7 @@ impl Build {
         nixpkgs_url_override: Option<Url>,
     ) -> Result<()> {
         if let ConcreteEnvironment::Remote(_) = &env {
-            bail!("Cannot build from a remote environment");
+            unreachable!("Cannot build from a remote environment");
         };
 
         let base_dir = env.parent_path()?;

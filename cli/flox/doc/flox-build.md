@@ -74,7 +74,7 @@ fields of the build provide extra metadata that can be used by `flox install`,
 
 
 ```{.include}
-./include/environment-options.md
+./include/dir-environment-options.md
 ./include/general-options.md
 ```
 
