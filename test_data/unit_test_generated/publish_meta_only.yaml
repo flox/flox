@@ -5,7 +5,7 @@ then:
   status: 409
   header:
   - name: date
-    value: Thu, 12 Jun 2025 11:30:50 GMT
+    value: Thu, 12 Jun 2025 15:56:34 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -22,7 +22,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Thu, 12 Jun 2025 11:30:50 GMT
+    value: Thu, 12 Jun 2025 15:56:34 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -39,7 +39,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Thu, 12 Jun 2025 11:30:50 GMT
+    value: Thu, 12 Jun 2025 15:56:34 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -56,7 +56,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Thu, 12 Jun 2025 11:30:50 GMT
+    value: Thu, 12 Jun 2025 15:56:34 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -68,16 +68,16 @@ then:
 when:
   path: /api/v1/catalog/catalogs/flox-unit-tests-meta-only/packages/mypkg/builds
   method: POST
-  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"dummy","outputs":[],"outputs_to_install":[],"pname":"dummy","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
+  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"dummy","outputs":[{"name":"out","store_path":"/nix/store/fnswpav9ywgmndy2mangxrzvgld1yviw-nix-2.24.12/bin/nix"}],"outputs_to_install":[],"pname":"dummy","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=693bc46d169f5af9c992095736e82c3488bf7dbb","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
 then:
-  status: 400
+  status: 200
   header:
   - name: date
-    value: Thu, 12 Jun 2025 11:30:50 GMT
+    value: Thu, 12 Jun 2025 15:56:34 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '179'
+    value: '14'
   - name: content-type
     value: application/json
-  body: '{"detail":"The base catalog url ''https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d'' specifies a page or catalog that does not exist in this instance. "}'
+  body: '{"store":null}'

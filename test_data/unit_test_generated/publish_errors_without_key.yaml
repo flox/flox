@@ -5,7 +5,7 @@ then:
   status: 409
   header:
   - name: date
-    value: Thu, 12 Jun 2025 11:37:26 GMT
+    value: Thu, 12 Jun 2025 15:56:34 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -22,7 +22,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Thu, 12 Jun 2025 11:37:26 GMT
+    value: Thu, 12 Jun 2025 15:56:34 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -36,10 +36,10 @@ when:
   method: POST
   body: '{"original_url":"dummy"}'
 then:
-  status: 201
+  status: 200
   header:
   - name: date
-    value: Thu, 12 Jun 2025 11:37:26 GMT
+    value: Thu, 12 Jun 2025 15:56:34 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -56,28 +56,11 @@ then:
   status: 200
   header:
   - name: date
-    value: Thu, 12 Jun 2025 11:37:26 GMT
+    value: Thu, 12 Jun 2025 15:56:34 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '90'
+    value: '369'
   - name: content-type
     value: application/json
-  body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"meta-only"}}'
----
-when:
-  path: /api/v1/catalog/catalogs/flox-unit-tests-nix-copy/packages/mypkg/builds
-  method: POST
-  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"dummy","outputs":[],"outputs_to_install":[],"pname":"dummy","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
-then:
-  status: 400
-  header:
-  - name: date
-    value: Thu, 12 Jun 2025 11:37:26 GMT
-  - name: server
-    value: uvicorn
-  - name: content-length
-    value: '179'
-  - name: content-type
-    value: application/json
-  body: '{"detail":"The base catalog url ''https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d'' specifies a page or catalog that does not exist in this instance. "}'
+  body: '{"ingress_uri":"file:///var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.fiJmxP/.tmpdM2xrD","ingress_auth":null,"catalog_store_config":{"store_type":"nix-copy","ingress_uri":"file:///var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.fiJmxP/.tmpdM2xrD","egress_uri":"file:///var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.fiJmxP/.tmpdM2xrD"}}'

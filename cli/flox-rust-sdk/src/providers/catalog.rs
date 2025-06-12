@@ -1487,7 +1487,7 @@ impl Display for BaseCatalogUrl {
 /// in correspondence with the catalog server.
 pub fn mock_base_catalog_url() -> BaseCatalogUrl {
     BaseCatalogUrl::from(
-        "https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d",
+        "https://github.com/flox/nixpkgs?rev=693bc46d169f5af9c992095736e82c3488bf7dbb",
     )
 }
 
