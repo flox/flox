@@ -1493,6 +1493,8 @@ pub fn mock_base_catalog_url() -> BaseCatalogUrl {
 
 pub mod test_helpers {
     use super::*;
+    use crate::flox::test_helpers::create_test_token;
+    use crate::flox::{Flox, FloxhubToken};
     use crate::providers::auth::{Auth, AuthProvider};
 
     pub static UNIT_TEST_GENERATED: LazyLock<PathBuf> =
@@ -1515,26 +1517,43 @@ pub mod test_helpers {
         Client::Catalog(CatalogClient::new(catalog_config))
     }
 
-    /// TODO: docs
-    pub fn auto_recording_catalog_client(filename: &str) -> Client {
-        auto_recording_catalog_client_authed(filename, &Auth::from_none().unwrap())
-    }
-
     /// Create a mock client that will either record to or replay from a given
     /// file name depending on whether `_FLOX_UNIT_TEST_RECORD` is set.
     ///
     /// Tests must be run with `#[tokio::test(flavor = "multi_thread")]` to
     /// allow the `MockServer` to run in another thread.
-    pub fn auto_recording_catalog_client_authed(filename: &str, auth: &Auth) -> Client {
+    pub fn auto_recording_catalog_client(filename: &str) -> Client {
+        _auto_recording_catalog_client(filename, DEFAULT_CATALOG_URL, &Auth::from_none().unwrap())
+    }
+
+    /// Similar to [auto_recording_catalog_client] but authenticates against a dev
+    /// instance of the catalog-server using a token from
+    /// `_FLOX_UNIT_TEST_RECORD_TOKEN` and updates [Flox] to have the
+    /// appropriate token and client.
+    ///
+    /// Should only be used for tests that require authentication.
+    pub fn auto_recording_catalog_client_dev_authed(flox: &mut Flox, filename: &str) -> Auth {
+        let token = if std::env::var("_FLOX_UNIT_TEST_RECORD") == Ok("true".to_string()) {
+            FloxhubToken::from_str(&std::env::var("_FLOX_UNIT_TEST_RECORD_TOKEN").unwrap()).unwrap()
+        } else {
+            create_test_token("test")
+        };
+
+        flox.floxhub_token = Some(token);
+        let auth = Auth::from_flox(flox).unwrap();
+        let base_url = "http://localhost:8000";
+        let client = _auto_recording_catalog_client(filename, base_url, &auth);
+        flox.catalog_client = client;
+
+        auth
+    }
+
+    fn _auto_recording_catalog_client(filename: &str, base_url: &str, auth: &Auth) -> Client {
         let mut path = UNIT_TEST_GENERATED.join(filename);
         path.set_extension("yaml");
         let (mock_mode, catalog_url) =
             if std::env::var("_FLOX_UNIT_TEST_RECORD") == Ok("true".to_string()) {
-                // Generate against prod
-                (
-                    CatalogMockMode::Record(path),
-                    DEFAULT_CATALOG_URL.to_string(),
-                )
+                (CatalogMockMode::Record(path), base_url.to_string())
             } else {
                 (
                     CatalogMockMode::Replay(path),
@@ -1558,6 +1577,52 @@ pub mod test_helpers {
         };
 
         client.reset_mocks(responses);
+    }
+
+    /// Create a catalog with the given name and config.
+    ///
+    /// Will continue with config and not return an error if the catalog already exists.
+    pub async fn create_catalog_with_config(
+        client: &Client,
+        name: &str,
+        config: &CatalogStoreConfig,
+    ) -> Result<(), CatalogClientError> {
+        let Client::Catalog(client) = client else {
+            panic!("can only be used with a CatalogClient");
+        };
+
+        // TODO: Change `catalog-server` to use `CatalogName` instead of `Name`.
+        let name_name = api_types::Name::from_str(name).map_err(|_e| {
+            CatalogClientError::APIError(APIError::InvalidRequest(
+                format!("catalog name {} does not meet API requirements.", name).to_string(),
+            ))
+        })?;
+        let catalog_name = str_to_catalog_name(name)?;
+
+        // create idempotently
+        match client
+            .client
+            .create_catalog_api_v1_catalog_catalogs_post(&name_name)
+            .await
+        {
+            Ok(_) => {},
+            // Continue if already exists.
+            Err(e) if e.status() == Some(StatusCode::CONFLICT) => {},
+            Err(e) => {
+                return Err(CatalogClientError::APIError(e));
+            },
+        }
+
+        client
+            .client
+            .set_catalog_store_config_api_v1_catalog_catalogs_catalog_name_store_config_put(
+                &catalog_name,
+                config,
+            )
+            .await
+            .map_err(CatalogClientError::APIError)?;
+
+        Ok(())
     }
 }
 

@@ -1,56 +1,83 @@
 when:
-  path: /api/v1/catalog/catalogs/dcarley/packages
+  path: /api/v1/catalog/catalogs/
+  method: POST
+then:
+  status: 409
+  header:
+  - name: date
+    value: Thu, 12 Jun 2025 11:30:50 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '75'
+  - name: content-type
+    value: application/json
+  body: '{"detail":"The catalog with name flox-unit-tests-meta-only already exists"}'
+---
+when:
+  path: /api/v1/catalog/catalogs/flox-unit-tests-meta-only/store/config
+  method: PUT
+  body: '{"store_type":"meta-only"}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Thu, 12 Jun 2025 11:30:50 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '26'
+  - name: content-type
+    value: application/json
+  body: '{"store_type":"meta-only"}'
+---
+when:
+  path: /api/v1/catalog/catalogs/flox-unit-tests-meta-only/packages
   method: POST
   body: '{"original_url":"dummy"}'
 then:
-  status: 201
+  status: 200
   header:
   - name: date
-    value: Wed, 11 Jun 2025 15:50:08 GMT
-  - name: content-type
-    value: application/json
-  - name: content-length
-    value: '56'
+    value: Thu, 12 Jun 2025 11:30:50 GMT
   - name: server
     value: uvicorn
-  - name: apigw-requestid
-    value: MAbTpgmUIAMETIg=
-  body: '{"catalog":"dcarley","name":"mypkg","original_url":null}'
+  - name: content-length
+    value: '74'
+  - name: content-type
+    value: application/json
+  body: '{"catalog":"flox-unit-tests-meta-only","name":"mypkg","original_url":null}'
 ---
 when:
-  path: /api/v1/catalog/catalogs/dcarley/packages/mypkg/publish/info
+  path: /api/v1/catalog/catalogs/flox-unit-tests-meta-only/packages/mypkg/publish/info
   method: POST
   body: '{}'
 then:
   status: 200
   header:
   - name: date
-    value: Wed, 11 Jun 2025 15:50:08 GMT
-  - name: content-type
-    value: application/json
-  - name: content-length
-    value: '90'
+    value: Thu, 12 Jun 2025 11:30:50 GMT
   - name: server
     value: uvicorn
-  - name: apigw-requestid
-    value: MAbTrgz-oAMEayw=
+  - name: content-length
+    value: '90'
+  - name: content-type
+    value: application/json
   body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"meta-only"}}'
 ---
 when:
-  path: /api/v1/catalog/catalogs/dcarley/packages/mypkg/builds
+  path: /api/v1/catalog/catalogs/flox-unit-tests-meta-only/packages/mypkg/builds
   method: POST
   body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"dummy","outputs":[],"outputs_to_install":[],"pname":"dummy","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
 then:
-  status: 201
+  status: 400
   header:
   - name: date
-    value: Wed, 11 Jun 2025 15:50:09 GMT
-  - name: content-type
-    value: application/json
-  - name: content-length
-    value: '14'
+    value: Thu, 12 Jun 2025 11:30:50 GMT
   - name: server
     value: uvicorn
-  - name: apigw-requestid
-    value: MAbTsjcNIAMESCQ=
-  body: '{"store":null}'
+  - name: content-length
+    value: '179'
+  - name: content-type
+    value: application/json
+  body: '{"detail":"The base catalog url ''https://github.com/flox/nixpkgs?rev=698214a32beb4f4c8e3942372c694f40848b360d'' specifies a page or catalog that does not exist in this instance. "}'

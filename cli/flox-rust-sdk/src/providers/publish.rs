@@ -982,7 +982,8 @@ pub mod tests {
     use crate::models::lockfile::Lockfile;
     use crate::providers::auth::{Auth, write_floxhub_netrc};
     use crate::providers::catalog::test_helpers::{
-        auto_recording_catalog_client_authed,
+        auto_recording_catalog_client_dev_authed,
+        create_catalog_with_config,
         reset_mocks,
     };
     use crate::providers::catalog::{
@@ -1206,18 +1207,14 @@ pub mod tests {
 
         let (build_metadata, env_metadata, package_metadata) = dummy_publish_metadata();
 
-        // TODO: Move to test helper.
-        let token = match std::env::var("_FLOX_UNIT_TEST_RECORD_TOKEN") {
-            Ok(token) => FloxhubToken::from_str(&token).unwrap(),
-            Err(_) => create_test_token("test"),
-        };
-        let auth = Auth::from_flox(&flox).unwrap();
-        flox.floxhub_token = Some(token);
-        // TODO: Needs a catalog that we all have access to.
-        // let catalog_name = "flox-unit-tests-meta-only".to_string();
-        let catalog_name = "dcarley".to_string();
+        let catalog_name = "flox-unit-tests-meta-only".to_string();
+        let catalog_config = CatalogStoreConfig::MetaOnly;
 
-        flox.catalog_client = auto_recording_catalog_client_authed("publish_meta_only", &auth);
+        let auth = auto_recording_catalog_client_dev_authed(&mut flox, "publish_meta_only");
+
+        create_catalog_with_config(&flox.catalog_client, &catalog_name, &catalog_config)
+            .await
+            .unwrap();
 
         let publish_provider =
             PublishProvider::new(env_metadata, package_metadata, build_metadata, auth);
@@ -1226,7 +1223,7 @@ pub mod tests {
             .publish(&flox.catalog_client, &catalog_name, None, false)
             .await;
 
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "Expected publish to succeed, got: {:?}", res);
     }
 
     /// Generate dummy CheckedBuildMetadata and CheckedEnvironmentMetadata that
@@ -1281,19 +1278,15 @@ pub mod tests {
 
         let (build_metadata, env_metadata, package_metadata) = dummy_publish_metadata();
 
-        // TODO: Move to test helper.
-        let token = match std::env::var("_FLOX_UNIT_TEST_RECORD_TOKEN") {
-            Ok(token) => FloxhubToken::from_str(&token).unwrap(),
-            Err(_) => create_test_token("test"),
-        };
-        let auth = Auth::from_flox(&flox).unwrap();
-        flox.floxhub_token = Some(token);
-        // TODO: Needs a catalog that we all have access to.
-        // let catalog_name = "flox-unit-tests-nix-copy".to_string();
-        let catalog_name = "dcarley".to_string();
+        let catalog_name = "flox-unit-tests-nix-copy".to_string();
+        let catalog_config = CatalogStoreConfig::MetaOnly;
 
-        flox.catalog_client =
-            auto_recording_catalog_client_authed("publish_errors_without_key", &auth);
+        let auth =
+            auto_recording_catalog_client_dev_authed(&mut flox, "publish_errors_without_key");
+
+        create_catalog_with_config(&flox.catalog_client, &catalog_name, &catalog_config)
+            .await
+            .unwrap();
 
         let publish_provider =
             PublishProvider::new(env_metadata, package_metadata, build_metadata, auth);
