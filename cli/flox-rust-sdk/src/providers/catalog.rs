@@ -87,6 +87,7 @@ pub enum Response {
     Publish(PublishResponse),
     CreatePackage,
     PublishBuild,
+    GetBaseCatalog(api_types::BaseCatalogInfo),
 }
 
 #[derive(Debug, Error)]
@@ -480,6 +481,8 @@ pub trait ClientTrait {
     /// Checks whether the provided package has been successfully published.
     async fn is_publish_complete(&self, store_paths: &[String])
     -> Result<bool, CatalogClientError>;
+
+    async fn get_base_catalog(&self) -> Result<BaseCatalogInfo, CatalogClientError>;
 }
 
 impl ClientTrait for CatalogClient {
@@ -758,6 +761,15 @@ impl ClientTrait for CatalogClient {
                 .all(|status| status.narinfo_known)
         });
         Ok(all_narinfo_available)
+    }
+
+    async fn get_base_catalog(&self) -> Result<BaseCatalogInfo, CatalogClientError> {
+        self.client
+            .get_base_catalog_api_v1_catalog_info_base_catalog_get()
+            .await
+            .map_api_error()
+            .await
+            .map(|res| res.into_inner().into())
     }
 }
 
@@ -1055,6 +1067,21 @@ impl ClientTrait for MockClient {
                 .all(|status| status.narinfo_known)
         });
         Ok(all_narinfo_available)
+    }
+
+    async fn get_base_catalog(&self) -> Result<BaseCatalogInfo, CatalogClientError> {
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+
+        let resp = match mock_resp {
+            Some(Response::GetBaseCatalog(resp)) => resp,
+            _ => panic!("expected get_base_catalog response, found {:?}", &mock_resp),
+        };
+
+        Ok(resp.into())
     }
 }
 
@@ -1584,6 +1611,54 @@ impl Display for BaseCatalogUrl {
 /// in correspondence with the catalog server.
 pub fn mock_base_catalog_url() -> BaseCatalogUrl {
     BaseCatalogUrl::from(env!("TESTING_BASE_CATALOG_URL"))
+}
+
+pub type PageInfo = api_types::PageInfo;
+pub type StabilityInfo = api_types::StabilityInfo;
+#[derive(Debug, Clone, PartialEq, derive_more::From)]
+pub struct BaseCatalogInfo(api_types::BaseCatalogInfo);
+impl BaseCatalogInfo {
+    /// Name of the default stability for [Self::url_for_latest_page_with_default_stability].
+    ///
+    /// Currently there is no uniform definition of what is the default.
+    /// For now, this makes the assumption that Flox's naming convention is followed,
+    /// at least to the extend of there being a "stable" stability.
+    /// Eventually we would probably want the catalog server to tell us
+    /// what the default, as only the catalog knows about which stabilities exist.
+    pub const DEFAULT_STABILITY: &str = "stable";
+
+    /// Return the url for the newest page with the given stability.
+    /// Return [None] if no pages for the stability exist.
+    pub fn url_for_latest_page_with_stability(&self, stability: &str) -> Option<BaseCatalogUrl> {
+        // Catalog Invariant: pages are ordered newest to oldest
+        let page_info = self.0.scraped_pages.iter().find(|page| {
+            page.stability_tags
+                .iter()
+                .any(|page_stability| page_stability == stability)
+        })?;
+
+        let url = BaseCatalogUrl::from(format!(
+            "{base_url}?rev={rev}",
+            base_url = self.0.base_url,
+            rev = page_info.rev
+        ));
+
+        Some(url)
+    }
+
+    /// Return a url for the "default" stability.
+    pub fn url_for_latest_page_with_default_stability(&self) -> Option<BaseCatalogUrl> {
+        self.url_for_latest_page_with_stability(Self::DEFAULT_STABILITY)
+    }
+
+    /// Return the names of available stabilities.
+    pub fn available_stabilities(&self) -> Vec<&str> {
+        self.0
+            .stabilities
+            .iter()
+            .map(|stability_info| &*stability_info.name)
+            .collect()
+    }
 }
 
 pub mod test_helpers {
