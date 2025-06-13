@@ -1,0 +1,83 @@
+when:
+  path: /api/v1/catalog/catalogs/
+  method: POST
+then:
+  status: 409
+  header:
+  - name: date
+    value: Thu, 12 Jun 2025 15:56:34 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '74'
+  - name: content-type
+    value: application/json
+  body: '{"detail":"The catalog with name flox-unit-tests-nix-copy already exists"}'
+---
+when:
+  path: /api/v1/catalog/catalogs/flox-unit-tests-nix-copy/store/config
+  method: PUT
+  body: '{"store_type":"nix-copy","egress_uri":"file:///var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.fiJmxP/.tmpdM2xrD","ingress_uri":"file:///var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.fiJmxP/.tmpdM2xrD","store_type":"nix-copy"}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Thu, 12 Jun 2025 15:56:34 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '224'
+  - name: content-type
+    value: application/json
+  body: '{"store_type":"nix-copy","ingress_uri":"file:///var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.fiJmxP/.tmpdM2xrD","egress_uri":"file:///var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.fiJmxP/.tmpdM2xrD"}'
+---
+when:
+  path: /api/v1/catalog/catalogs/flox-unit-tests-nix-copy/packages
+  method: POST
+  body: '{"original_url":"dummy"}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Thu, 12 Jun 2025 15:56:34 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '73'
+  - name: content-type
+    value: application/json
+  body: '{"catalog":"flox-unit-tests-nix-copy","name":"mypkg","original_url":null}'
+---
+when:
+  path: /api/v1/catalog/catalogs/flox-unit-tests-nix-copy/packages/mypkg/publish/info
+  method: POST
+  body: '{}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Thu, 12 Jun 2025 15:56:34 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '369'
+  - name: content-type
+    value: application/json
+  body: '{"ingress_uri":"file:///var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.fiJmxP/.tmpdM2xrD","ingress_auth":null,"catalog_store_config":{"store_type":"nix-copy","ingress_uri":"file:///var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.fiJmxP/.tmpdM2xrD","egress_uri":"file:///var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.fiJmxP/.tmpdM2xrD"}}'
+---
+when:
+  path: /api/v1/catalog/catalogs/flox-unit-tests-nix-copy/packages/mypkg/builds
+  method: POST
+  body: '{"cache_uri":"file:///var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.fiJmxP/.tmpdM2xrD","derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"dummy","outputs":[{"name":"out","store_path":"/nix/store/fnswpav9ywgmndy2mangxrzvgld1yviw-nix-2.24.12/bin/nix"}],"outputs_to_install":[],"pname":"dummy","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=693bc46d169f5af9c992095736e82c3488bf7dbb","narinfos":{"out":{}},"narinfos_source_url":"file:///var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.fiJmxP/.tmpdM2xrD","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Thu, 12 Jun 2025 15:56:36 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '14'
+  - name: content-type
+    value: application/json
+  body: '{"store":null}'

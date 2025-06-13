@@ -1,0 +1,83 @@
+when:
+  path: /api/v1/catalog/catalogs/
+  method: POST
+then:
+  status: 409
+  header:
+  - name: date
+    value: Thu, 12 Jun 2025 15:56:34 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '75'
+  - name: content-type
+    value: application/json
+  body: '{"detail":"The catalog with name flox-unit-tests-meta-only already exists"}'
+---
+when:
+  path: /api/v1/catalog/catalogs/flox-unit-tests-meta-only/store/config
+  method: PUT
+  body: '{"store_type":"meta-only"}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Thu, 12 Jun 2025 15:56:34 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '26'
+  - name: content-type
+    value: application/json
+  body: '{"store_type":"meta-only"}'
+---
+when:
+  path: /api/v1/catalog/catalogs/flox-unit-tests-meta-only/packages
+  method: POST
+  body: '{"original_url":"dummy"}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Thu, 12 Jun 2025 15:56:34 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '74'
+  - name: content-type
+    value: application/json
+  body: '{"catalog":"flox-unit-tests-meta-only","name":"mypkg","original_url":null}'
+---
+when:
+  path: /api/v1/catalog/catalogs/flox-unit-tests-meta-only/packages/mypkg/publish/info
+  method: POST
+  body: '{}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Thu, 12 Jun 2025 15:56:34 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '90'
+  - name: content-type
+    value: application/json
+  body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"meta-only"}}'
+---
+when:
+  path: /api/v1/catalog/catalogs/flox-unit-tests-meta-only/packages/mypkg/builds
+  method: POST
+  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"dummy","outputs":[{"name":"out","store_path":"/nix/store/fnswpav9ywgmndy2mangxrzvgld1yviw-nix-2.24.12/bin/nix"}],"outputs_to_install":[],"pname":"dummy","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=693bc46d169f5af9c992095736e82c3488bf7dbb","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Thu, 12 Jun 2025 15:56:34 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '14'
+  - name: content-type
+    value: application/json
+  body: '{"store":null}'
