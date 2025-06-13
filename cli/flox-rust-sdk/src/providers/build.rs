@@ -11,7 +11,7 @@ use itertools::Itertools;
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 use thiserror::Error;
-use tracing::{debug, error, instrument, warn};
+use tracing::{debug, error, warn};
 use url::Url;
 
 use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
@@ -205,7 +205,6 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     /// The build process will start in the background.
     /// To process the output, the caller should iterate over the returned [BuildOutput].
     /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
-    #[instrument(skip(self))]
     fn build(
         &self,
         expression_build_nixpkgs: &Url,

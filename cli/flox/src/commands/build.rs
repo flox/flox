@@ -1,7 +1,7 @@
 use std::env;
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -16,7 +16,8 @@ use flox_rust_sdk::providers::build::{
     find_toplevel_group_nixpkgs,
     nix_expression_dir,
 };
-use flox_rust_sdk::providers::catalog::ClientTrait;
+use flox_rust_sdk::providers::catalog::{BaseCatalogInfo, ClientTrait};
+use futures::TryFutureExt;
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::{debug, instrument};
@@ -32,11 +33,14 @@ pub struct Build {
     #[bpaf(external(dir_environment_select), fallback(Default::default()))]
     environment: DirEnvironmentSelect,
 
-    #[bpaf(long, hide)]
-    nixpkgs_url: Option<Url>,
-
     #[bpaf(external(subcommand_or_build_targets))]
     subcommand_or_targets: SubcommandOrBuildTargets,
+}
+
+#[derive(Debug, Clone, Bpaf)]
+enum BaseCatalogUrlSelect {
+    NixpkgsUrl(#[bpaf(long("nixpkgs-url"), argument("url"), hide)] Url),
+    Stability(#[bpaf(long("stability"), argument("stability"))] String),
 }
 
 #[derive(Debug, Bpaf, Clone)]
@@ -53,6 +57,9 @@ enum SubcommandOrBuildTargets {
         targets: Vec<String>,
     },
     BuildTargets {
+        #[bpaf(external(base_catalog_url_select), optional)]
+        base_catalog_url_select: Option<BaseCatalogUrlSelect>,
+
         /// The package to build.
         /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
         /// If not specified, all packages are built.
@@ -72,13 +79,16 @@ impl Build {
 
                 Self::clean(flox, env, targets).await
             },
-            SubcommandOrBuildTargets::BuildTargets { targets } => {
+            SubcommandOrBuildTargets::BuildTargets {
+                targets,
+                base_catalog_url_select,
+            } => {
                 let env = self
                     .environment
                     .detect_concrete_environment(&flox, "Build packages of")?;
                 environment_subcommand_metric!("build", env);
 
-                Self::build(flox, env, targets, self.nixpkgs_url).await
+                Self::build(flox, env, targets, base_catalog_url_select).await
             },
         }
     }
@@ -119,7 +129,7 @@ impl Build {
         flox: Flox,
         mut env: ConcreteEnvironment,
         packages: Vec<String>,
-        nixpkgs_url_override: Option<Url>,
+        nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
@@ -143,17 +153,37 @@ impl Build {
             .map(|target| target.name())
             .collect::<Vec<_>>();
 
-        let base_nixpkgs_url = match nixpkgs_url_override {
-            Some(url) => {
-                debug!(?url, "using provided nixpkgs flake");
+        let base_catalog_info_fut = flox.catalog_client.get_base_catalog_info().map_err(|err| {
+            anyhow!(err).context("could not get information about the base catalog")
+        });
+
+        let base_nixpkgs_url = match nixpkgs_url_select {
+            Some(BaseCatalogUrlSelect::NixpkgsUrl(url)) => {
+                debug!(%url, "using provided nixpkgs flake");
+                url
+            },
+            Some(BaseCatalogUrlSelect::Stability(stability)) => {
+                let base_catalog_info = base_catalog_info_fut.await?;
+
+                let make_error_message = || {
+                    let available_stabilities =
+                        base_catalog_info.available_stabilities().join(", ");
+                    formatdoc! {"
+                      Stability '{stability}' does not exist (or has not yet been populated).
+                      Available stabilities are: {available_stabilities}
+                  "}
+                };
+
+                let url = base_catalog_info
+                    .url_for_latest_page_with_stability(&stability)
+                    .with_context(make_error_message)?
+                    .as_flake_ref()?;
+
+                debug!(%url, "using page from '{stability}'");
                 url
             },
             None => {
-                let base_catalog_info = flox
-                    .catalog_client
-                    .get_base_catalog()
-                    .await
-                    .context("could not get infomration about the base catalog")?;
+                let base_catalog_info = base_catalog_info_fut.await?;
 
                 let make_error_message = || {
                     let available_stabilities =
@@ -169,7 +199,7 @@ impl Build {
                     .with_context(make_error_message)?
                     .as_flake_ref()?;
 
-                debug!(?url, "using page from default stability flake");
+                debug!(%url, "using page from default stability");
                 url
             },
         };

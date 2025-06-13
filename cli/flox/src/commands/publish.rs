@@ -45,6 +45,9 @@ pub struct Publish {
     #[bpaf(long, hide)]
     metadata_only: bool,
 
+    #[bpaf(long)]
+    stability: Option<String>,
+
     #[bpaf(external(publish_target), optional)]
     publish_target: Option<PublishTarget>,
 }
@@ -94,7 +97,16 @@ impl Publish {
             &nix_expression_dir(&env),
             self.publish_target,
         )?;
-        Self::publish(config, flox, env, target, self.metadata_only, self.cache).await
+        Self::publish(
+            config,
+            flox,
+            env,
+            target,
+            self.metadata_only,
+            self.cache,
+            self.stability,
+        )
+        .await
     }
 
     fn get_publish_target(
@@ -123,6 +135,7 @@ impl Publish {
         package: PackageTarget,
         metadata_only: bool,
         cache_args: CacheArgs,
+        stability: Option<String>,
     ) -> Result<()> {
         // Fail as early as possible if the user isn't authenticated or doesn't
         // belong to an org with a catalog.
@@ -142,16 +155,46 @@ impl Publish {
         let base_nixpkgs_url = {
             let base_catalog_info = flox
                 .catalog_client
-                .get_base_catalog()
+                .get_base_catalog_info()
                 .await
                 .context("could not get information about the base catalog")?;
 
-            let url = base_catalog_info
-                .url_for_latest_page_with_default_stability()
-                .context("no page for the default stability exists")?;
+            match stability {
+                Some(stability) => {
+                    let make_error_message = || {
+                        let available_stabilities =
+                            base_catalog_info.available_stabilities().join(", ");
+                        formatdoc! {"
+                          Stability '{stability}' does not exist (or has not yet been populated).
+                          Available stabilities are: {available_stabilities}
+                      "}
+                    };
 
-            debug!(?url, "using page from default stability flake");
-            url
+                    let url = base_catalog_info
+                        .url_for_latest_page_with_stability(&stability)
+                        .with_context(make_error_message)?;
+
+                    debug!(%url, %stability, "using page from user provided stability");
+                    url
+                },
+                None => {
+                    let make_error_message = || {
+                        let available_stabilities =
+                            base_catalog_info.available_stabilities().join(", ");
+                        formatdoc! {"
+                          The default stability {} does not exist (or has not yet been populated).
+                          Available stabilities are: {available_stabilities}
+                      ", BaseCatalogInfo::DEFAULT_STABILITY}
+                    };
+
+                    let url = base_catalog_info
+                        .url_for_latest_page_with_default_stability()
+                        .with_context(make_error_message)?;
+
+                    debug!(%url, "using page from default stability flake");
+                    url
+                },
+            }
         };
 
         // Check the environment for appropriate state to build and publish
