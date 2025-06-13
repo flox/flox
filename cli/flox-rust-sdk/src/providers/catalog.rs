@@ -482,7 +482,8 @@ pub trait ClientTrait {
     async fn is_publish_complete(&self, store_paths: &[String])
     -> Result<bool, CatalogClientError>;
 
-    async fn get_base_catalog(&self) -> Result<BaseCatalogInfo, CatalogClientError>;
+    /// Get information about the base catalog, and available stabilities
+    async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError>;
 }
 
 impl ClientTrait for CatalogClient {
@@ -772,7 +773,8 @@ impl ClientTrait for CatalogClient {
         Ok(all_narinfo_available)
     }
 
-    async fn get_base_catalog(&self) -> Result<BaseCatalogInfo, CatalogClientError> {
+    #[instrument(skip_all)]
+    async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError> {
         self.client
             .get_base_catalog_api_v1_catalog_info_base_catalog_get()
             .await
@@ -1082,7 +1084,7 @@ impl ClientTrait for MockClient {
         Ok(all_narinfo_available)
     }
 
-    async fn get_base_catalog(&self) -> Result<BaseCatalogInfo, CatalogClientError> {
+    async fn get_base_catalog_info(&self) -> Result<BaseCatalogInfo, CatalogClientError> {
         let mock_resp = self
             .mock_responses
             .lock()
