@@ -19,7 +19,7 @@ use flox_rust_sdk::providers::publish::{
 use indoc::formatdoc;
 use tracing::{debug, info_span, instrument};
 
-use super::{EnvironmentSelect, environment_select};
+use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::build::packages_to_build;
 use crate::commands::ensure_floxhub_token;
 use crate::config::Config;
@@ -32,8 +32,8 @@ const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 5 * 60 * 1_000; // 5 min
 
 #[derive(Bpaf, Clone)]
 pub struct Publish {
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
+    #[bpaf(external(dir_environment_select), fallback(Default::default()))]
+    environment: DirEnvironmentSelect,
 
     #[bpaf(external(cache_args))]
     cache: CacheArgs,
@@ -51,13 +51,18 @@ pub struct Publish {
 
 #[derive(Debug, Bpaf, Clone, Default)]
 struct CacheArgs {
-    /// Which organization to publish packages to.
+    /// Specify the organization to which an artifact should be published to.
     /// Takes precedence over the default value of the user's GitHub handle.
     #[bpaf(short, long, argument("NAME"))]
     org: Option<String>,
 
-    /// Path of the key file used to sign packages before copying.
-    /// Takes precedence over a value from 'flox config'.
+    /// The private key to use in signing the package
+    /// during upload.
+    /// This is a local file path.
+    /// This option is only necessary when using a Catalog Store not provided by
+    /// Flox.
+    /// Takes precedence over the value of `publish.signing_private_key` from
+    /// 'flox config'.
     #[bpaf(long, argument("FILE"))]
     signing_private_key: Option<PathBuf>,
 }
@@ -65,7 +70,8 @@ struct CacheArgs {
 #[derive(Debug, Bpaf, Clone)]
 struct PublishTarget {
     /// The package to publish.
-    /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
+    /// Possible values are all keys under the `build` attribute in the
+    /// environment's `manifest.toml`.
     #[bpaf(positional("package"))]
     target: String,
 }
@@ -128,13 +134,12 @@ impl Publish {
         let token = ensure_floxhub_token(&mut flox).await?.clone();
         let catalog_name = cache_args.org.clone().unwrap_or(token.handle().to_string());
 
-        let path_env = match env {
-            ConcreteEnvironment::Path(path_env) => path_env,
-            _ => bail!("Unsupported environment type"),
-        };
+        if let ConcreteEnvironment::Remote(_) = &env {
+            unreachable!("Cannot publish from a remote environment");
+        }
 
         // Check the environment for appropriate state to build and publish
-        let env_metadata = check_environment_metadata(&flox, &path_env)?;
+        let env_metadata = check_environment_metadata(&flox, &env)?;
 
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,

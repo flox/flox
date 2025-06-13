@@ -33,7 +33,7 @@ data.
 
 
 ```{.include}
-./include/environment-options.md
+./include/dir-environment-options.md
 ./include/general-options.md
 ```
 
