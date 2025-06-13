@@ -1492,7 +1492,12 @@ pub fn mock_base_catalog_url() -> BaseCatalogUrl {
 }
 
 pub mod test_helpers {
+    use tempfile::TempDir;
+
     use super::*;
+    use crate::flox::test_helpers::create_test_token;
+    use crate::flox::{Flox, FloxhubToken};
+    use crate::providers::auth::{Auth, AuthProvider};
 
     pub static UNIT_TEST_GENERATED: LazyLock<PathBuf> =
         LazyLock::new(|| PathBuf::from(std::env::var("UNIT_TEST_GENERATED").unwrap()));
@@ -1520,15 +1525,38 @@ pub mod test_helpers {
     /// Tests must be run with `#[tokio::test(flavor = "multi_thread")]` to
     /// allow the `MockServer` to run in another thread.
     pub fn auto_recording_catalog_client(filename: &str) -> Client {
+        let auth = Auth::from_tempdir_and_token(TempDir::new().unwrap(), None);
+        _auto_recording_catalog_client(filename, DEFAULT_CATALOG_URL, &auth)
+    }
+
+    /// Similar to [auto_recording_catalog_client] but authenticates against a dev
+    /// instance of the catalog-server using a token from
+    /// `_FLOX_UNIT_TEST_RECORD_TOKEN` and updates [Flox] to have the
+    /// appropriate token and client.
+    ///
+    /// Should only be used for tests that require authentication.
+    pub fn auto_recording_catalog_client_authed_dev(flox: &mut Flox, filename: &str) -> Auth {
+        let token = if std::env::var("_FLOX_UNIT_TEST_RECORD") == Ok("true".to_string()) {
+            FloxhubToken::from_str(&std::env::var("_FLOX_UNIT_TEST_RECORD_TOKEN").unwrap()).unwrap()
+        } else {
+            create_test_token("test")
+        };
+
+        flox.floxhub_token = Some(token);
+        let auth = Auth::from_flox(flox).unwrap();
+        let base_url = "http://localhost:8000";
+        let client = _auto_recording_catalog_client(filename, base_url, &auth);
+        flox.catalog_client = client;
+
+        auth
+    }
+
+    fn _auto_recording_catalog_client(filename: &str, base_url: &str, auth: &Auth) -> Client {
         let mut path = UNIT_TEST_GENERATED.join(filename);
         path.set_extension("yaml");
         let (mock_mode, catalog_url) =
             if std::env::var("_FLOX_UNIT_TEST_RECORD") == Ok("true".to_string()) {
-                // Generate against prod
-                (
-                    CatalogMockMode::Record(path),
-                    DEFAULT_CATALOG_URL.to_string(),
-                )
+                (CatalogMockMode::Record(path), base_url.to_string())
             } else {
                 (
                     CatalogMockMode::Replay(path),
@@ -1538,7 +1566,7 @@ pub mod test_helpers {
 
         let catalog_config = CatalogClientConfig {
             catalog_url,
-            floxhub_token: None,
+            floxhub_token: auth.token().map(|token| token.secret().to_string()),
             extra_headers: Default::default(),
             mock_mode,
         };
