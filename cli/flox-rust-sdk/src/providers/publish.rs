@@ -1277,7 +1277,7 @@ pub mod tests {
                 url: "dummy".to_string(),
                 rev: "dummy".to_string(),
                 rev_count: 0,
-                rev_date: Utc::now(),
+                rev_date: "2025-01-01T12:00:00Z".parse::<DateTime<Utc>>().unwrap(),
             },
 
             _private: (),
