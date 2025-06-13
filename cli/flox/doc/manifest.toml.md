@@ -31,6 +31,7 @@ tables:
 - [`[profile]`](#profile)
 - [`[services]`](#services)
 - [`[include]`](#include)
+- [`[build]`](#build)
 - [`[options]`](#options)
 - [`containerize`] - see [`flox-containerize(1)`](./flox-containerize.md)
 
