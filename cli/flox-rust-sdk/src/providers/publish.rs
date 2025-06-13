@@ -1255,7 +1255,7 @@ pub mod tests {
             .publish(&flox.catalog_client, &catalog_name, None, false)
             .await;
 
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "Expected publish to succeed, got: {:?}", res);
     }
 
     /// Generate dummy CheckedBuildMetadata and CheckedEnvironmentMetadata that
