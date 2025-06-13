@@ -274,6 +274,11 @@ impl ClientSideCatalogStoreConfig {
         &self,
         build_outputs: &[Output],
     ) -> Result<Option<NarInfos>, PublishError> {
+        if build_outputs.is_empty() {
+            debug!(reason = "no build outputs", "skipping artifact upload");
+            return Ok(None);
+        }
+
         match self {
             ClientSideCatalogStoreConfig::NixCopy {
                 ingress_uri,
@@ -281,6 +286,11 @@ impl ClientSideCatalogStoreConfig {
                 signing_private_key_path,
                 auth_netrc_path,
             } => {
+                debug!(
+                    reason = "nix-copy catalog store",
+                    ?ingress_uri,
+                    "uploading artifacts to cache"
+                );
                 Self::upload_build_outputs(
                     ingress_uri,
                     Some(signing_private_key_path.as_path()),
@@ -307,6 +317,11 @@ impl ClientSideCatalogStoreConfig {
                 signing_private_key_path,
                 ingress_auth,
             } => {
+                debug!(
+                    reason = "publisher catalog store",
+                    ?ingress_uri,
+                    "uploading artifacts to cache"
+                );
                 Self::upload_build_outputs(
                     ingress_uri,
                     signing_private_key_path.as_deref(),
@@ -329,8 +344,9 @@ impl ClientSideCatalogStoreConfig {
     ) -> Result<(), PublishError> {
         for output in build_outputs.iter() {
             debug!(
-                "Uploading output {} ({}) to cache...",
-                output.name, output.store_path
+                ?output,
+                %destination_url,
+                "Uploading output...",
             );
             Self::upload_store_path(
                 destination_url,
@@ -1077,6 +1093,7 @@ pub mod tests {
         get_remote_url,
         init_temp_repo,
     };
+    use crate::providers::nix::test_helpers::known_store_path;
 
     fn example_git_remote_repo() -> (tempfile::TempDir, GitCommandProvider, String) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -1320,7 +1337,7 @@ pub mod tests {
             .publish(&flox.catalog_client, &catalog_name, None, false)
             .await;
 
-        assert!(res.is_ok());
+        assert!(res.is_ok(), "Expected publish to succeed, got: {:?}", res);
     }
 
     /// Generate dummy CheckedBuildMetadata and CheckedEnvironmentMetadata that
@@ -1335,7 +1352,10 @@ pub mod tests {
         let build_metadata = CheckedBuildMetadata {
             name: "dummy".to_string(),
             pname: "dummy".to_string(),
-            outputs: Outputs(vec![]),
+            outputs: Outputs(vec![Output {
+                name: "out".to_string(),
+                store_path: known_store_path().to_string_lossy().to_string(),
+            }]),
             outputs_to_install: vec![],
             drv_path: "dummy".to_string(),
             system: SystemEnum::X8664Linux,
