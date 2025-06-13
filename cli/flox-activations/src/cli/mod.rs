@@ -5,12 +5,14 @@ use clap::{Parser, Subcommand};
 
 pub mod attach;
 mod fix_paths;
+mod prepend_and_dedup;
 mod profile_scripts;
 mod set_env_dirs;
 mod set_ready;
 mod start_or_attach;
 
 use fix_paths::FixPathsArgs;
+use prepend_and_dedup::PrependAndDedupArgs;
 use profile_scripts::ProfileScriptsArgs;
 use set_env_dirs::SetEnvDirsArgs;
 pub use set_ready::SetReadyArgs;
@@ -41,6 +43,10 @@ pub enum Command {
     SetEnvDirs(SetEnvDirsArgs),
     #[command(about = "Print sourceable output that sources the user's profile scripts.")]
     ProfileScripts(ProfileScriptsArgs),
+    #[command(
+        about = "Prepends and dedups environment dirs, optionally pruning directories that aren't from environments"
+    )]
+    PrependAndDedup(PrependAndDedupArgs),
 }
 
 /// Splits PATH-like variables into individual paths, removing any empty strings.
