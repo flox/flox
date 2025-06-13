@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
 
 use catalog_api_v1::types::{NarInfo, NarInfos, Output, Outputs, PublishResponse, SystemEnum};
 use chrono::{DateTime, Utc};
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument};
 use url::Url;
 
 use super::auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
@@ -58,7 +58,7 @@ pub enum PublishError {
     PackageTargetError(#[from] PackageTargetError),
 
     #[error(transparent)]
-    BuildError(#[from] ManifestBuilderError),
+    ManifestBuildError(#[from] ManifestBuilderError),
 
     #[error(transparent)]
     CatalogError(CatalogClientError),
@@ -69,6 +69,20 @@ pub enum PublishError {
         #[from]
         BaseCatalogUrlError,
     ),
+
+    #[error(
+        "build of package(s) failed ({status})\n\
+        stderr:\n\
+        {stderr}\n\
+        \n\
+        stdout:\n\
+        {stdout}"
+    )]
+    PackageBuildError {
+        status: ExitStatus,
+        stderr: String,
+        stdout: String,
+    },
 
     #[error("Could not identify user from authentication info")]
     Unauthenticated,
@@ -719,7 +733,8 @@ pub fn check_build_metadata(
     pkg: &PackageTarget,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     // git clone into a temp directory
-    let clean_repo_path = tempfile::tempdir_in(flox.temp_dir.clone()).unwrap();
+    let clean_repo_path = tempfile::tempdir_in(flox.temp_dir.clone())
+        .map_err(|err| PublishError::Catchall(format!("could not create tempdir: {err}")))?;
     let git = <GitCommandProvider as GitProvider>::clone(
         env_metadata.repo_root_path.as_path(),
         &clean_repo_path,
@@ -767,19 +782,30 @@ pub fn check_build_metadata(
     )?;
 
     let mut output_build_results: Option<BuildResults> = None;
+
+    let mut stdout = String::new();
+    let mut stderr = String::new();
     for message in output_stream {
         match message {
             build::Output::Success(build_results) => {
                 output_build_results = Some(build_results);
             },
-            build::Output::Failure(_) => {
-                panic!("expected build to succeed");
+            build::Output::Failure(status) => {
+                return Err(PublishError::PackageBuildError {
+                    status,
+                    stderr,
+                    stdout,
+                });
             },
             build::Output::Stdout(line) => {
-                println!("{line}");
+                info!("{line}");
+                stdout.push_str(&line);
+                stdout.push('\n');
             },
             build::Output::Stderr(line) => {
-                eprintln!("{line}");
+                stderr.push_str(&line);
+                stderr.push('\n');
+                info!("{line}");
             },
         }
     }
