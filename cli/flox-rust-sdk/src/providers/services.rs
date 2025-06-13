@@ -14,6 +14,8 @@ use std::sync::LazyLock;
 use std::sync::mpsc::{Receiver, Sender};
 
 #[cfg(test)]
+use flox_test_utils::proptest::alphanum_string;
+#[cfg(test)]
 use proptest::prelude::*;
 use regex::Regex;
 use serde::ser::SerializeStruct;
@@ -82,10 +84,11 @@ impl ServiceError {
 pub struct ProcessComposeConfig {
     pub log_level: ProcessComposeLogLevel,
     pub log_configuration: ProcessComposeLoggerConfig,
+    pub disable_env_expansion: bool,
     #[cfg_attr(
         test,
         proptest(
-            strategy = "proptest::collection::btree_map(any::<String>(), any::<ProcessConfig>(), 0..=3)"
+            strategy = "proptest::collection::btree_map(alphanum_string(5), any::<ProcessConfig>(), 0..=3)"
         )
     )]
     pub processes: BTreeMap<String, ProcessConfig>,
@@ -104,6 +107,7 @@ impl Default for ProcessComposeConfig {
         Self {
             log_level: ProcessComposeLogLevel::Debug,
             log_configuration: ProcessComposeLoggerConfig::default(),
+            disable_env_expansion: true,
             processes: BTreeMap::new(),
         }
     }
@@ -127,9 +131,13 @@ impl Default for ProcessComposeLoggerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ProcessConfig {
+    #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub command: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, proptest(strategy = "arbitrary_process_config_environment()"))]
+    #[serde(default, rename = "environment")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "serialize_process_vars")]
+    #[serde(deserialize_with = "deserialize_process_vars")]
     pub vars: Option<BTreeMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_daemon: Option<bool>,
@@ -137,10 +145,47 @@ pub struct ProcessConfig {
     pub shutdown: Option<ProcessShutdown>,
 }
 
+// process-compose expects environment variables as a list of "key=value" strings
+// rather than a map, so we need to manually convert from one to the other.
+fn serialize_process_vars<S: Serializer>(
+    maybe_vars: &Option<BTreeMap<String, String>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    maybe_vars
+        .as_ref()
+        .map(|vars| {
+            let mut joined = vec![];
+            for (k, v) in vars.iter() {
+                joined.push(format!("{k}={v}"));
+            }
+            joined
+        })
+        .serialize(serializer)
+}
+
+fn deserialize_process_vars<'de, D>(
+    deserializer: D,
+) -> Result<Option<BTreeMap<String, String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let maybe_joined = Option::<Vec<String>>::deserialize(deserializer)?;
+    Ok(maybe_joined.map(|joined| {
+        let mut vars = BTreeMap::new();
+        for name_and_value in joined.iter() {
+            // We only read in this config in tests, so it's safe to unwrap.
+            let (name, value) = name_and_value.split_once('=').unwrap();
+            vars.insert(name.to_string(), value.to_string());
+        }
+        vars
+    }))
+}
+
 /// How to shut down a service
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ProcessShutdown {
+    #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
     pub command: String,
 }
 
@@ -155,9 +200,11 @@ impl From<ServiceShutdown> for ProcessShutdown {
 #[cfg(test)]
 fn arbitrary_process_config_environment()
 -> impl proptest::strategy::Strategy<Value = Option<BTreeMap<String, String>>> {
+    use flox_test_utils::proptest::alphanum_string;
+
     proptest::option::of(proptest::collection::btree_map(
-        any::<String>(),
-        any::<String>(),
+        alphanum_string(4),
+        alphanum_string(4),
         0..=3,
     ))
 }
@@ -222,6 +269,9 @@ impl Serialize for ProcessComposeConfig {
         let mut state = serializer.serialize_struct("ProcessComposeConfig", 1)?;
         state.serialize_field("log_level", &self.log_level)?;
         state.serialize_field("log_configuration", &self.log_configuration)?;
+        // This prevents variables in the config file from being expanded
+        // as a pre-processing step before starting services.
+        state.serialize_field("disable_env_expansion", &self.disable_env_expansion)?;
         state.serialize_field("processes", &processes)?;
         state.end()
     }
@@ -236,6 +286,7 @@ impl<'de> Deserialize<'de> for ProcessComposeConfig {
         struct Inner {
             processes: BTreeMap<String, ProcessConfig>,
             log_level: ProcessComposeLogLevel,
+            disable_env_expansion: bool,
             log_configuration: ProcessComposeLoggerConfig,
         }
 
@@ -246,6 +297,7 @@ impl<'de> Deserialize<'de> for ProcessComposeConfig {
         Ok(ProcessComposeConfig {
             processes: inner.processes,
             log_level: inner.log_level,
+            disable_env_expansion: inner.disable_env_expansion,
             log_configuration: inner.log_configuration,
         })
     }
@@ -1083,6 +1135,7 @@ mod tests {
             log_level: debug
             log_configuration:
               no_color: true
+            disable_env_expansion: true
             processes:
               flox_never_exit:
                 command: {sleep} infinity
