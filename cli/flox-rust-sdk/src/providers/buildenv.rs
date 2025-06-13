@@ -986,6 +986,16 @@ pub(crate) fn create_gc_root_in(
     paths: impl IntoIterator<Item = impl AsRef<Path>>,
     gc_root_prefix: impl AsRef<Path>,
 ) -> Result<(), BuildEnvError> {
+    let paths = paths
+        .into_iter()
+        .map(|p| p.as_ref().to_string_lossy().into_owned())
+        .collect::<HashSet<_>>();
+
+    if paths.is_empty() {
+        debug!("no paths to create gc roots for, skipping");
+        return Ok(());
+    }
+
     let mut command = nix::nix_base_command();
     command.stdin(Stdio::piped());
     command.stderr(Stdio::piped());
@@ -996,15 +1006,19 @@ pub(crate) fn create_gc_root_in(
     command.arg("--out-link");
     command.arg(gc_root_prefix.as_ref());
 
-    debug!(cmd=%command.display(), "bulk setting gc roots for store_paths (paths passed to stdin)");
+    let paths_arg = paths
+        .iter()
+        .map(|s| s.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    debug!(
+        cmd = format!("echo '{}' | {}", paths_arg, command.display()),
+        "bulk setting gc roots for store_paths"
+    );
 
     let mut child = command.spawn().map_err(BuildEnvError::CallNixBuild)?;
     let stdin = child.stdin.as_mut().unwrap();
-
-    let paths = paths
-        .into_iter()
-        .map(|p| p.as_ref().to_string_lossy().into_owned())
-        .collect::<HashSet<_>>();
 
     for path in paths.iter() {
         trace!(%path, "setting gc root for store path");
