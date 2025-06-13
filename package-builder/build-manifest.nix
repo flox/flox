@@ -85,28 +85,30 @@ pkgs.runCommandNoCC name
       # Assume this script was called after an impure/non-sandboxed build.
       if (buildScript == null) then
         # local mode
-        if !builtins.pathExists install-prefix then
-          ''
+        ''
+          # Check that the build populated $out, taking note to ignore the FLOX_ENV
+          # symlink that we created above.
+          _files="$(find "$out" ! -type d | grep -v "$out/nix-support/FLOX_ENV")"
+          if [ -z "$_files" ]; then
             ${dollar_out_error}
             exit 1
-          ''
-        else
-          ''
-            # If no build script is provided copy the contents of install prefix
-            # to the output directory, rewriting path references as we go.
-            if [ -d ${install-prefix-contents} ]; then
-              mkdir $out
-              tar -C ${install-prefix-contents} -c --mode=u+w -f - . | \
-                sed --binary "s%${install-prefix}%$out%g" | \
-                tar -C $out -xf -
-            else
-              cp ${install-prefix-contents} $out
-              sed --binary "s%${install-prefix}%$out%g" $out
-            fi
-            ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
-              signDarwinBinariesInAllOutputs
-            ''}
-          ''
+          fi
+
+          # If no build script is provided copy the contents of install prefix
+          # to the output directory, rewriting path references as we go.
+          if [ -d ${install-prefix-contents} ]; then
+            mkdir $out
+            tar -C ${install-prefix-contents} -c --mode=u+w -f - . | \
+              sed --binary "s%${install-prefix}%$out%g" | \
+              tar -C $out -xf -
+          else
+            cp ${install-prefix-contents} $out
+            sed --binary "s%${install-prefix}%$out%g" $out
+          fi
+          ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
+            signDarwinBinariesInAllOutputs
+          ''}
+        ''
       # Assume we perform a full sandboxed build.
       else
         # sandbox mode
@@ -197,8 +199,10 @@ pkgs.runCommandNoCC name
         ''
     )
     + ''
-      # Check that the build populated $out.
-      if [ ! -e "$out" ]; then
+      # Check that the build populated $out, taking note to ignore the FLOX_ENV
+      # symlink that we created above.
+      _files="$(find "$out" ! -type d | grep -v "$out/nix-support/FLOX_ENV")"
+      if [ -z "$_files" ]; then
         ${dollar_out_error}
         exit 1
       fi
