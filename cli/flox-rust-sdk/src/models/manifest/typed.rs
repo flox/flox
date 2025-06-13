@@ -870,15 +870,9 @@ pub struct BuildDescriptor {
     /// The command to run to build a package.
     #[cfg_attr(test, proptest(strategy = "alphanum_string(3)"))]
     pub command: String,
-    /// Files to explicitly include in the build result.
-    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
-    pub files: Option<Vec<String>>,
     /// Packages from the 'toplevel' group to include in the closure of the build result.
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub runtime_packages: Option<Vec<String>>,
-    /// Systems to allow running the build.
-    #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
-    pub systems: Option<Vec<System>>,
     /// Sandbox mode for the build.
     pub sandbox: Option<BuildSandbox>,
     /// The version to assign the package.
@@ -1216,8 +1210,6 @@ pub mod test {
                 [("test".to_string(), BuildDescriptor {
                     command: "hello".to_string(),
                     runtime_packages: None,
-                    files: None,
-                    systems: None,
                     sandbox: None,
                     version: None,
                     description: None,
