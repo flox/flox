@@ -995,6 +995,7 @@ pub mod tests {
         get_remote_url,
         init_temp_repo,
     };
+    use crate::providers::nix::test_helpers::known_store_path;
 
     fn example_git_remote_repo() -> (tempfile::TempDir, GitCommandProvider, String) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -1253,7 +1254,10 @@ pub mod tests {
         let build_metadata = CheckedBuildMetadata {
             name: "dummy".to_string(),
             pname: "dummy".to_string(),
-            outputs: Outputs(vec![]),
+            outputs: Outputs(vec![Output {
+                name: "out".to_string(),
+                store_path: known_store_path().to_string_lossy().to_string(),
+            }]),
             outputs_to_install: vec![],
             drv_path: "dummy".to_string(),
             system: SystemEnum::X8664Linux,
