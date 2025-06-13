@@ -265,7 +265,6 @@ define MANIFEST_BUILD_DEPENDS_template =
     $(if $(shell $(_grep) '\$${$(_output)[.}]' $(build)), \
       $(eval _ovarname = $(subst -,_,$(_output))) \
       $(eval $(_pvarname)_deps_buildMetaJSON_files += $($(_ovarname)_buildMetaJSON)) \
-      # N.B. need newline after following line
       $($(_pvarname)_buildScript): $($(_ovarname)_buildMetaJSON)
     )
   )
