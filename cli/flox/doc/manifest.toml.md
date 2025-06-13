@@ -609,11 +609,8 @@ echo 'Hello, World!' >> $out/hello.txt
 ```
 
 This would define a package called `hello` that produces a single file
-`hello.txt` containing the string `Hello, World!".
-Running `flox build hello` would create a symlink `./result-hello`
-in the directory adjacent to the `./flox` directory.
-The symlink then points to an immutable directory
-with the produced `hello.txt` file in it.
+`hello.txt` containing the string `"Hello, World!"`.
+See `flox-build(1)` for more details.
 
 The full set of options is shown below:
 ```
@@ -625,7 +622,6 @@ BuildDescriptor ::= {
 , version     = STRING
 , description = null | STRING
 }
-
 ```
 
 `command`
@@ -636,7 +632,7 @@ BuildDescriptor ::= {
 `sandbox`
 :   The level of sandboxing applied to the build.
     When set to `"off"`, the build is executed in a subshell
-    of the current shell and is equivalent to running the commands manually
+    of the current shell and is similar to running the commands manually
     in a subshell created by `flox activate`.
     When set to `"pure"`, the build will be unable to make network connections
     and can only access to the files currently under version control.

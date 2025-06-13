@@ -4,11 +4,6 @@ section: 1
 header: "Flox User Manuals"
 ...
 
-```{.include}
-./include/experimental-warning.md
-```
-> Feature flag: `build`
-
 # NAME
 
 flox-build-clean - Clean the build directory
@@ -24,8 +19,8 @@ flox [<general-options>] build clean
 # DESCRIPTION
 
 Remove the build artifacts for `<package>` from the environment in `<path>`.
-Without `<package>` specified clean up all packages
-and build related temporary data.
+Without `<package>` specified clean up all packages and build-related temporary
+data.
 
 
 # OPTIONS

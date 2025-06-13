@@ -15,7 +15,6 @@ flox-build - Build packages for Flox
 ```
 flox [<general-options>] build
      [-d=<path>]
-     [-L]
      [<package>]...
 ```
 
@@ -43,7 +42,7 @@ A sandbox can be optionally enabled by setting
 For this kind of "sandboxed" build, access to untracked files, files outside of
 the repository, and the network are restricted to provide a reproducible build
 environment.
-With the sandbox disabled, building is equivalent to running the build script
+With the sandbox disabled, building is similar to running the build script
 manually within a shell created by `flox activate`.
 
 Any build can access the _results_ of other builds (including non-sandboxed
@@ -67,10 +66,6 @@ fields of the build provide extra metadata that can be used by `flox install`,
 `flox search`, and `flox show` commands if the build is later published.
 
 # OPTIONS
-
-`-L`, `--build-logs`
-:   Enable detailed logging emitted by the build scripts.
-    **not implemented yet**
 
 `<package>`
 :   The package(s) to build.
@@ -170,5 +165,6 @@ $ npx serve result-app
 
 # SEE ALSO
 
+[`flox-build-clean(1)`](./flox-build-clean.md)
 [`flox-activate(1)`](./flox-activate.md)
 [`manifest.toml(5)`](./manifest.toml.md)
