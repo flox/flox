@@ -1273,10 +1273,11 @@ mod realise_nixpkgs_tests {
         client.push_store_info_response(resp);
 
         let buildenv = buildenv_instance();
-        let subst_resp = buildenv
-            .try_substitute_published_pkg(&client, &locked_package)
-            .unwrap();
-        assert!(!subst_resp);
+        let subst_resp = buildenv.try_substitute_published_pkg(&client, &locked_package);
+        assert!(matches!(
+            subst_resp,
+            Err(BuildEnvError::NoPackageStoreLocation(_))
+        ));
     }
 
     #[test]
