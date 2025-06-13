@@ -117,6 +117,9 @@ if [ -z "${FLOX_ENV-}" ]; then
   exit 1
 fi
 
+# Propagate required variables that are documented as exposed.
+export FLOX_ENV
+
 # prepend path
 export PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin:$PATH"
 
