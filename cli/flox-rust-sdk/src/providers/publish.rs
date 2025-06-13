@@ -1250,6 +1250,12 @@ pub mod tests {
         CheckedEnvironmentMetadata,
         PackageMetadata,
     ) {
+        // TODO: https://github.com/flox/flox/issues/3179
+        // Use a page available available on whichever catalog-server instance we're using.
+        let base_ref = BaseCatalogUrl::from(
+            "https://github.com/flox/nixpkgs?rev=693bc46d169f5af9c992095736e82c3488bf7dbb",
+        );
+
         let build_metadata = CheckedBuildMetadata {
             name: "dummy".to_string(),
             pname: "dummy".to_string(),
@@ -1266,7 +1272,7 @@ pub mod tests {
             repo_root_path: PathBuf::new(),
             rel_project_path: PathBuf::new(),
 
-            toplevel_catalog_ref: Some(mock_base_catalog_url()),
+            toplevel_catalog_ref: Some(base_ref.clone()),
             build_repo_ref: LockedUrlInfo {
                 url: "dummy".to_string(),
                 rev: "dummy".to_string(),
@@ -1278,7 +1284,7 @@ pub mod tests {
         };
 
         let package_metadata = PackageMetadata {
-            base_catalog_ref: mock_base_catalog_url(),
+            base_catalog_ref: base_ref,
             package: EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
             description: "dummy".to_string(),
             _private: (),
