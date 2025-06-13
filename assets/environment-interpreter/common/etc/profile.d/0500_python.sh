@@ -2,6 +2,30 @@
 _cat="@coreutils@/bin/cat"
 _realpath="@coreutils@/bin/realpath"
 
+# FIXME: this belongs in a helper-functions.bash file as suggested in #1767
+function removePathDups {
+  for __varname in "$@"; do
+    declare -A __seen
+    __rewrite=
+
+    # Split $PATH on ':' into the array '__paths'
+    IFS=: read -r -a __paths <<< "${!__varname}"
+    # Unset IFS to its default value
+    unset IFS
+
+    for __dir in "${__paths[@]}"; do
+      if [ -z "${__seen[$__dir]:-}" ]; then
+        __rewrite="$__rewrite${__rewrite:+:}$__dir"
+        __seen[$__dir]=1
+      fi
+    done
+
+    export "$__varname"="$__rewrite"
+    unset __seen
+    unset __rewrite
+  done
+}
+
 # ============================================================================ #
 #
 # Setup Python3
@@ -15,11 +39,13 @@ if [[ -x "$FLOX_ENV/bin/python3" ]]; then
     "$FLOX_ENV/bin/python3" -c 'import sys
 print( "{}.{}".format( sys.version_info[0], sys.version_info[1] ) )'
   )/site-packages"
-  # Only add the path if its missing
-  case ":${PYTHONPATH:-}:" in
-    *:"$_env_pypath":*) : ;;
-    *) PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$_env_pypath" ;;
-  esac
+
+  # Always prepend to the PYTHONPATH.
+  PYTHONPATH="$_env_pypath${PYTHONPATH:+:}${PYTHONPATH:-}"
+
+  # Remove duplicate elements in case the path was already present.
+  removePathDups PYTHONPATH
+
   export PYTHONPATH
 fi
 
