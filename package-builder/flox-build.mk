@@ -574,14 +574,6 @@ define MANIFEST_BUILD_template =
       $$(if $$(filter 0,$$(.SHELLSTATUS)),,$$(error could not identify build wrapper env for $(_pname))), \
       $$$$(error FLOX_ENV_OUTPUTS not defined))))
 
-  # Take this opportunity to evaluate the "file" and "command" forms of
-  # the "version" string.
-  $(eval _vertype = $(firstword $(subst :, ,$(strip $(_version)))))
-  $(eval _version = $(strip \
-    $(if $(filter file,$(_vertype)),$(file <$(subst file:,,$(_version))), \
-      $(if $(filter command,$(_vertype)),$(shell $(subst command:,,$(_version))), \
-        $(_version)))))
-
   # build mode passed as $(1)
   $(eval _build_mode = $(1))
   # We want to create build-specific variables, and variable names cannot
@@ -668,12 +660,40 @@ define MANIFEST_BUILD_template =
 endef
 
 # Glean various values from locked manifest as we call the template.
+
+# The following jq script parses the JSON representation of the version
+# string and converts it to a command that can be immediately evaluated
+# by the shell prior to being represented as a Makefile variable. This is
+# particularly relevant in the case that people attempt to set a version
+# using a command like "echo $(whoami)", and you want the shell to invoke
+# the command before make gets a chance of attempting to evaluate it as an
+# [undefined] variable.
+#
+# The JSON version variable can take the form of a string like "1.2.3",
+# or it can be a single-element object like {"file": "VERSION"} or
+# {"command": "echo $(whoami)"}. This script converts these to strings
+# "echo 1.2.3", "cat VERSION" and "echo $(whoami)", respectively so
+# that the shell can then evaluate any variable expansions immediately
+# as it invokes the commands.
+#
+define JSON_VERSION_TO_COMMAND_jq =
+  (.manifest.build."\($$pname)".version // "0.0.0") | (
+    if type == "object" then (
+      to_entries[] | \
+      if .key == "file" then "$(_cat) \(.value)" else (
+        if .key == "command" then .value else (
+          "unknown version type: \(.key)" | halt_error(1)
+        ) end
+      ) end
+    ) else "echo \(. | @sh)" end
+  )
+endef
 $(foreach build,$(MANIFEST_BUILDS), \
   $(eval _pname = $(notdir $(build))) \
   $(eval _sandbox = $(shell \
     $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK))) \
-  $(eval _version = $(shell \
-    $(_jq) -r '.manifest.build."$(_pname)".version // "0.0.0"' $(MANIFEST_LOCK))) \
+  $(eval _version = $(shell $(shell \
+    $(_jq) -r --arg pname "$(_pname)" '$(strip $(JSON_VERSION_TO_COMMAND_jq))' $(MANIFEST_LOCK)))) \
   $(if $(filter null off,$(_sandbox)), \
     $(eval $(call MANIFEST_BUILD_template,local)), \
     $(eval $(call MANIFEST_BUILD_template,nix_sandbox))))
