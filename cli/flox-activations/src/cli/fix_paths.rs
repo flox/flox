@@ -70,7 +70,7 @@ impl FixPathsArgs {
 
 /// Adds subdirectories of FLOX_ENV_DIRS to the front of the provided list
 /// of directories.
-fn prepend_dirs_to_pathlike_var(
+pub fn prepend_dirs_to_pathlike_var(
     flox_env_dirs: &[PathBuf],
     suffixes: &[&str],
     existing_dirs: &[PathBuf],

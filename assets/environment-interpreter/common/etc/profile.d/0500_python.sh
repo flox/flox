@@ -1,6 +1,7 @@
 # shellcheck shell=bash
 _cat="@coreutils@/bin/cat"
 _realpath="@coreutils@/bin/realpath"
+_flox_activations="@flox_activations@"
 
 # ============================================================================ #
 #
@@ -11,15 +12,11 @@ _realpath="@coreutils@/bin/realpath"
 # Only run if `python3' is in `PATH'
 if [[ -x "$FLOX_ENV/bin/python3" ]]; then
   # Get the major/minor version from `python3' to determine the correct path.
-  _env_pypath="$FLOX_ENV/lib/python$(
-    "$FLOX_ENV/bin/python3" -c 'import sys
-print( "{}.{}".format( sys.version_info[0], sys.version_info[1] ) )'
-  )/site-packages"
-  # Only add the path if its missing
-  case ":${PYTHONPATH:-}:" in
-    *:"$_env_pypath":*) : ;;
-    *) PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$_env_pypath" ;;
-  esac
+  _python_version="$("$FLOX_ENV/bin/python3" -c 'import sys; print( "{}.{}".format( sys.version_info[0], sys.version_info[1] ) )')"
+  # This will be appended to each environment directory to form an entry in the
+  # PATH-like variable.
+  _env_suffix="lib/python${_python_version}/site-packages"
+  PYTHONPATH="$($_flox_activations prepend-and-dedup --env-dirs "$FLOX_ENV_DIRS" --suffix "$_env_suffix" --path-like "${PYTHONPATH:-}")"
   export PYTHONPATH
 fi
 

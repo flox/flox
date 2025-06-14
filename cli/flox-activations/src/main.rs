@@ -18,6 +18,7 @@ fn main() -> Result<(), Error> {
         cli::Command::FixPaths(args) => args.handle()?,
         cli::Command::SetEnvDirs(args) => args.handle()?,
         cli::Command::ProfileScripts(args) => args.handle()?,
+        cli::Command::PrependAndDedup(args) => args.handle(),
     }
     Ok(())
 }
