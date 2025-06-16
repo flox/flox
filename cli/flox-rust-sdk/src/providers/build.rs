@@ -1034,60 +1034,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "TODO: `files` isn't currently passed to or parsed by `flox-build.mk`."]
-    fn build_includes_files() {
-        let package_name = String::from("foo");
-        let file_name = String::from("bar");
-        let file_content = String::from("some content");
-
-        let manifest = formatdoc! {r#"
-            version = 1
-
-            [build.{package_name}]
-            files = ["{file_name}"]
-            command = "mkdir $out"
-        "#};
-
-        let (flox, _temp_dir_handle) = flox_instance();
-        let mut env = new_path_environment(&flox, &manifest);
-        let env_path = env.parent_path().unwrap();
-
-        fs::write(env_path.join(&file_name), &file_content).unwrap();
-
-        assert_build_status(&flox, &mut env, &package_name, None, true);
-        assert_build_file(&env_path, &package_name, &file_name, &file_content);
-    }
-
-    #[test]
-    #[ignore = "TODO: `systems` isn't currently passed to or parsed by `flox-build.mk`."]
-    fn build_restricts_systems() {
-        let package_name = String::from("foo");
-        let file_name = String::from("bar");
-        let file_content = String::from("some content");
-
-        let manifest = formatdoc! {r#"
-            version = 1
-
-            [build.{package_name}]
-            systems = ["invalid"]
-            command = """
-                mkdir $out
-                echo -n {file_content} > $out/{file_name}
-            """
-        "#};
-
-        let (flox, _temp_dir_handle) = flox_instance();
-        let mut env = new_path_environment(&flox, &manifest);
-        let env_path = env.parent_path().unwrap();
-
-        fs::write(env_path.join(&file_name), &file_content).unwrap();
-
-        assert_build_status(&flox, &mut env, &package_name, None, false);
-        let dir = result_dir(&env_path, &package_name);
-        assert!(!dir.exists());
-    }
-
-    #[test]
     fn build_sandbox_pure() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
