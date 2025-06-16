@@ -2257,11 +2257,19 @@ mod tests {
     }
 
     fn assert_derivation_metadata_propagated(keypath: &[&str], expected: &str, store_path: &Path) {
-        let stdout = Command::new("nix")
-            .args(["derivation", "show", store_path.to_str().unwrap()])
-            .output()
-            .unwrap()
-            .stdout;
+        let child = Command::new("nix")
+            .args([
+                "--extra-experimental-features",
+                "nix-command",
+                "derivation",
+                "show",
+                store_path.to_str().unwrap(),
+            ])
+            .stderr(Stdio::inherit())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stdout = child.wait_with_output().unwrap().stdout;
         let drv = serde_json::from_slice::<serde_json::Value>(&stdout).unwrap();
         // `nix derivation show` prints a map with the .drv path as the key
         // We just care about the value and discard the key
@@ -2284,6 +2292,7 @@ mod tests {
                 format!("version = '{version}'"),
                 format!("version.file = '{version_file}'"),
                 format!("version.command = 'echo {version}'"),
+                format!("version.command = 'echo $(echo {version})'"),
             ];
 
             for version_spec in version_specs {
