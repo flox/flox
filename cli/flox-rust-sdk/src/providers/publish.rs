@@ -117,16 +117,24 @@ pub enum PublishError {
 /// Modeling the behavior as a trait allows us to swap out the provider, e.g. a mock for testing.
 #[allow(async_fn_in_trait)]
 pub trait Publisher {
+    async fn create_package(
+        &self,
+        client: &Client,
+        catalog_name: &str,
+    ) -> Result<PackageCreatedGuard, PublishError>;
     async fn publish(
         &self,
         client: &Client,
         catalog_name: &str,
+        package_created: PackageCreatedGuard,
+        build_metadata: &CheckedBuildMetadata,
         key_file: Option<PathBuf>,
         metadata_only: bool,
     ) -> Result<(), PublishError>;
     async fn wait_for_publish_completion(
         &self,
         client: &Client,
+        build_metadata: &CheckedBuildMetadata,
         poll_interval_millis: u64,
         timeout_millis: u64,
     ) -> Result<(), PublishError>;
@@ -190,6 +198,15 @@ pub struct PackageMetadata {
     pub package: PackageTarget,
     pub description: String,
 
+    // This field isn't "pub", so no one outside this module can construct this struct. That helps
+    // ensure that we can only make this struct as a result of doing the "right thing."
+    _private: (),
+}
+
+/// Ensures that a package has been created (or rather registered) before
+/// attempting to publish the build.
+#[derive(Debug)]
+pub struct PackageCreatedGuard {
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
     _private: (),
@@ -490,7 +507,6 @@ impl ClientSideCatalogStoreConfig {
 /// to build packages before publishing.
 pub struct PublishProvider<A> {
     pub env_metadata: CheckedEnvironmentMetadata,
-    pub build_metadata: CheckedBuildMetadata,
     pub package_metadata: PackageMetadata,
     auth: A,
 }
@@ -499,12 +515,10 @@ impl<A> PublishProvider<A> {
     pub fn new(
         env_metadata: CheckedEnvironmentMetadata,
         package_metadata: PackageMetadata,
-        build_metadata: CheckedBuildMetadata,
         auth: A,
     ) -> Self {
         Self {
             env_metadata,
-            build_metadata,
             package_metadata,
             auth,
         }
@@ -516,13 +530,13 @@ impl<A> Publisher for PublishProvider<A>
 where
     A: AuthProvider,
 {
-    async fn publish(
+    /// Ensure that a package is created and, by proxy, that the user has
+    /// permission to publish it.
+    async fn create_package(
         &self,
         client: &Client,
         catalog_name: &str,
-        key_file: Option<PathBuf>,
-        metadata_only: bool,
-    ) -> Result<(), PublishError> {
+    ) -> Result<PackageCreatedGuard, PublishError> {
         // Step 1 hit /packages
         // The create package service call will create the user's own catalog
         // if not already created, and then create (or return) the package noted
@@ -538,6 +552,21 @@ where
             .await
             .map_err(PublishError::CatalogError)?;
 
+        Ok(PackageCreatedGuard { _private: () })
+    }
+
+    /// Publish a built package.
+    ///
+    /// [PackageCreatedGuard] must be obtained from [Self::create_package].
+    async fn publish(
+        &self,
+        client: &Client,
+        catalog_name: &str,
+        _package_created: PackageCreatedGuard,
+        build_metadata: &CheckedBuildMetadata,
+        key_file: Option<PathBuf>,
+        metadata_only: bool,
+    ) -> Result<(), PublishError> {
         // Step 2 hit /publish
         // Catalogs are configured with their "store".
         // We must request upload information for _this_ catalog to know where
@@ -558,21 +587,21 @@ where
             &netrc_path,
             publish_response,
         )?;
-        let narinfos = catalog_store_config.maybe_upload_artifacts(&self.build_metadata.outputs)?;
+        let narinfos = catalog_store_config.maybe_upload_artifacts(&build_metadata.outputs)?;
 
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
                 broken: Some(false),
                 description: self.package_metadata.description.clone(), // TODO: extract from expr build result
-                drv_path: self.build_metadata.drv_path.clone(),
+                drv_path: build_metadata.drv_path.clone(),
                 license: None,
-                name: self.build_metadata.name.clone(),
-                outputs: self.build_metadata.outputs.clone(),
-                outputs_to_install: Some(self.build_metadata.outputs_to_install.clone()),
-                pname: Some(self.build_metadata.pname.clone()),
-                system: self.build_metadata.system,
+                name: build_metadata.name.clone(),
+                outputs: build_metadata.outputs.clone(),
+                outputs_to_install: Some(build_metadata.outputs_to_install.clone()),
+                pname: Some(build_metadata.pname.clone()),
+                system: build_metadata.system,
                 unfree: None,
-                version: self.build_metadata.version.clone(),
+                version: build_metadata.version.clone(),
             },
             locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
             url: self.env_metadata.build_repo_ref.url.clone(),
@@ -608,11 +637,11 @@ where
     async fn wait_for_publish_completion(
         &self,
         client: &Client,
+        build_metadata: &CheckedBuildMetadata,
         poll_interval_millis: u64,
         timeout_millis: u64,
     ) -> Result<(), PublishError> {
-        let store_paths = self
-            .build_metadata
+        let store_paths = build_metadata
             .outputs
             .0
             .iter()
@@ -1320,8 +1349,7 @@ pub mod tests {
             check_build_metadata(&flox, &env_metadata, &package_metadata.package).unwrap();
 
         let auth = Auth::from_flox(&flox).unwrap();
-        let publish_provider =
-            PublishProvider::new(env_metadata, package_metadata, build_metadata, auth);
+        let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
         reset_mocks(&mut flox.catalog_client, vec![
             Response::CreatePackage,
@@ -1333,8 +1361,19 @@ pub mod tests {
             Response::PublishBuild,
         ]);
 
+        let package_created = publish_provider
+            .create_package(&flox.catalog_client, &catalog_name)
+            .await
+            .unwrap();
         let res = publish_provider
-            .publish(&flox.catalog_client, &catalog_name, None, false)
+            .publish(
+                &flox.catalog_client,
+                &catalog_name,
+                package_created,
+                &build_metadata,
+                None,
+                false,
+            )
             .await;
 
         assert!(res.is_ok(), "Expected publish to succeed, got: {:?}", res);
@@ -1402,8 +1441,7 @@ pub mod tests {
         let (build_metadata, env_metadata, package_metadata) = dummy_publish_metadata();
 
         let auth = Auth::from_flox(&flox).unwrap();
-        let publish_provider =
-            PublishProvider::new(env_metadata, package_metadata, build_metadata, auth);
+        let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
         reset_mocks(&mut client, vec![
             Response::CreatePackage,
@@ -1418,8 +1456,20 @@ pub mod tests {
             }),
         ]);
 
+        let package_created = publish_provider
+            .create_package(&client, &catalog_name)
+            .await
+            .unwrap();
+
         let result = publish_provider
-            .publish(&client, &catalog_name, None, false)
+            .publish(
+                &client,
+                &catalog_name,
+                package_created,
+                &build_metadata,
+                None,
+                false,
+            )
             .await;
 
         let err = result.unwrap_err();
@@ -1528,8 +1578,7 @@ pub mod tests {
 
         let (_key_file, cache) = local_nix_cache(&token);
         let auth = Auth::from_flox(&flox).unwrap();
-        let publish_provider =
-            PublishProvider::new(env_metadata, package_metadata, build_metadata, auth);
+        let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
 
         // the 'cache' should be non existent before the publish
         let cache_url = cache.upload_url().unwrap();
@@ -1550,10 +1599,17 @@ pub mod tests {
             Response::PublishBuild,
         ]);
 
+        let package_created = publish_provider
+            .create_package(&flox.catalog_client, &catalog_name)
+            .await
+            .unwrap();
+
         publish_provider
             .publish(
                 &flox.catalog_client,
                 &catalog_name,
+                package_created,
+                &build_metadata,
                 cache.local_signing_key_path(),
                 false,
             )
