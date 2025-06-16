@@ -96,8 +96,14 @@ pub enum BuildEnvError {
         err: serde_json::Error,
     },
 
-    #[error("Building published packages from source is not yet supported")]
-    BuildPublishedPackage,
+    #[error(
+        "Can't find download location for package '{0}'.\nYou may not be authenticated or package may have been deleted.\nTry logging in with 'flox auth login'"
+    )]
+    NoPackageStoreLocation(String),
+    // TODO: we should unravel the nix copy spaghetti in
+    // try_substitute_published_package and give the actual reason `nix copy` failed
+    #[error("Couldn't download package '{0}' for unknown reason")]
+    BuildPublishedPackage(String),
 
     /// A custom package has been uploaded, but the current user hasn't configured
     /// a trusted public key that matches a signature of this package.
@@ -320,6 +326,11 @@ where
         'path_loop: for (path, locations) in store_locations.iter() {
             let mut auth_error = None;
             // If there are no locations
+            if locations.is_empty() {
+                return Err(BuildEnvError::NoPackageStoreLocation(
+                    locked.install_id.clone(),
+                ));
+            }
             for location in locations {
                 // nix copy
                 let mut copy_command = nix_base_command();
@@ -494,7 +505,9 @@ where
                 if all_found {
                     return Ok(());
                 };
-                return Err(BuildEnvError::BuildPublishedPackage);
+                return Err(BuildEnvError::BuildPublishedPackage(
+                    locked.install_id.clone(),
+                ));
             }
 
             // build all out paths
@@ -1274,10 +1287,11 @@ mod realise_nixpkgs_tests {
         client.push_store_info_response(resp);
 
         let buildenv = buildenv_instance();
-        let subst_resp = buildenv
-            .try_substitute_published_pkg(&client, &locked_package)
-            .unwrap();
-        assert!(!subst_resp);
+        let subst_resp = buildenv.try_substitute_published_pkg(&client, &locked_package);
+        assert!(matches!(
+            subst_resp,
+            Err(BuildEnvError::NoPackageStoreLocation(_))
+        ));
     }
 
     #[test]
@@ -1346,7 +1360,10 @@ mod realise_nixpkgs_tests {
 
         let buildenv = buildenv_instance();
         let result = buildenv.realise_nixpkgs(&client, &locked_package, &Default::default());
-        assert!(matches!(result, Err(BuildEnvError::BuildPublishedPackage)));
+        assert!(matches!(
+            result,
+            Err(BuildEnvError::BuildPublishedPackage(_))
+        ));
     }
 
     /// Ensure that we can build, or (attempt to build) a package from the catalog,
