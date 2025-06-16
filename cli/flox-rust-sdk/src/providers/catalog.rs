@@ -505,7 +505,8 @@ impl ClientTrait for CatalogClient {
             .client
             .resolve_api_v1_catalog_resolve_post(None, &package_groups)
             .await
-            .map_err(CatalogClientError::APIError)?;
+            .map_api_error()
+            .await?;
 
         let api_resolved_package_groups = response.into_inner();
 
@@ -580,7 +581,8 @@ impl ClientTrait for CatalogClient {
                         system,
                     )
                     .await
-                    .map_err(CatalogClientError::APIError)?;
+                    .map_api_error()
+                    .await?;
 
                 let packages = response.into_inner();
 
@@ -612,13 +614,15 @@ impl ClientTrait for CatalogClient {
                         Some(page_size),
                     )
                     .await
+                    .map_api_error()
+                    .await
                     .map_err(|e| match e {
-                        APIError::ErrorResponse(response)
+                        CatalogClientError::APIError(APIError::ErrorResponse(response))
                             if response.status() == StatusCode::NOT_FOUND =>
                         {
                             VersionsError::NotFound
                         },
-                        _ => CatalogClientError::APIError(e).into(),
+                        other => other.into(),
                     })?;
 
                 let packages = response.into_inner();
@@ -645,7 +649,9 @@ impl ClientTrait for CatalogClient {
         let body = api_types::PublishRequest(serde_json::Map::new());
         self.client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post(&catalog, &package, &body)
             .await
-            .map_err( CatalogClientError::APIError).map(|resp| resp.into_inner())
+            .map_api_error()
+            .await
+            .map(|resp| resp.into_inner())
     }
 
     async fn create_package(
@@ -680,12 +686,9 @@ impl ClientTrait for CatalogClient {
                 &catalog, &package, &body,
             )
             .await
-            .map_err(|e| match e {
-                APIError::ErrorResponse(err) => {
-                    CatalogClientError::APIError(APIError::ErrorResponse(err))
-                },
-                _ => CatalogClientError::APIError(e),
-            })?;
+            .map_api_error()
+            .await?;
+
         debug!("successfully created package");
         Ok(())
     }
@@ -703,12 +706,8 @@ impl ClientTrait for CatalogClient {
                 &catalog, &package, build_info,
             )
             .await
-            .map_err(|e| match e {
-                APIError::ErrorResponse(err) => {
-                    CatalogClientError::APIError(APIError::ErrorResponse(err))
-                },
-                _ => CatalogClientError::APIError(e),
-            })?;
+            .map_api_error()
+            .await?;
         Ok(())
     }
 
@@ -727,12 +726,8 @@ impl ClientTrait for CatalogClient {
             .client
             .get_store_info_api_v1_catalog_store_post(&body)
             .await
-            .map_err(|e| match e {
-                APIError::ErrorResponse(err) => {
-                    CatalogClientError::APIError(APIError::ErrorResponse(err))
-                },
-                _ => CatalogClientError::APIError(e),
-            })?;
+            .map_api_error()
+            .await?;
         let store_info = response.into_inner();
         Ok(store_info.items)
     }
@@ -750,12 +745,8 @@ impl ClientTrait for CatalogClient {
             .client
             .get_storepath_status_api_v1_catalog_store_status_post(&req)
             .await
-            .map_err(|e| match e {
-                APIError::ErrorResponse(err) => {
-                    CatalogClientError::APIError(APIError::ErrorResponse(err))
-                },
-                _ => CatalogClientError::APIError(e),
-            })?;
+            .map_api_error()
+            .await?;
         // TODO(zmitchell): We currently throw away _progress_ because the status is reported
         //                  by store path, and what we're reporting here is all or nothing.
         //                  In the future we can provide more detail using the statuses here,
@@ -1098,6 +1089,52 @@ pub enum CatalogClientError {
     UnsupportedSystem(#[source] api_error::ConversionError),
     #[error("{}", fmt_api_error(.0))]
     APIError(APIError<api_types::ErrorResponse>),
+}
+
+/// Extension trait for converting API errors into our client errors.
+trait MapApiErrorExt<T> {
+    /// Consumes a `Result<T, APIError<ApiErrorResponse>>`, maps any APIError
+    /// into `CatalogClientError`, and returns `Ok(T)` or `Err(...)`.
+    async fn map_api_error(self) -> Result<T, CatalogClientError>;
+}
+
+impl<T> MapApiErrorExt<T> for Result<T, APIError<ApiErrorResponse>> {
+    async fn map_api_error(self) -> Result<T, CatalogClientError> {
+        let err = match self {
+            Ok(v) => return Ok(v),
+            Err(err) => err,
+        };
+
+        // Attempt to parse errors that don't have status code enumerated in the
+        // spec but still contain a `detail` field.
+        if let APIError::UnexpectedResponse(resp) = err {
+            return parse_api_error(resp).await;
+        }
+
+        Err(CatalogClientError::APIError(err))
+    }
+}
+
+async fn parse_api_error<T>(resp: reqwest::Response) -> Result<T, CatalogClientError> {
+    let status = resp.status();
+    match ApiErrorResponseValue::from_response::<ErrorResponse>(resp).await {
+        Ok(resp_parsed) => Err(CatalogClientError::APIError(APIError::ErrorResponse(
+            resp_parsed,
+        ))),
+        Err(_) => {
+            // We couldn't parse but consumed the response body, which we don't
+            // format anyway because it may contain HTML garbage, so recreate a
+            // response with the right status.
+            let resp_bare = http::Response::builder()
+                .status(status)
+                .body("response body omitted by error parsing")
+                .expect("failed to rebuild response while parsing error response")
+                .into();
+            Err(CatalogClientError::APIError(APIError::UnexpectedResponse(
+                resp_bare,
+            )))
+        },
+    }
 }
 
 fn fmt_api_error(api_error: &APIError<api_types::ErrorResponse>) -> String {
@@ -1638,6 +1675,90 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn map_api_error_ok() {
+        let expected = 1234;
+        let result: Result<u32, APIError<ErrorResponse>> = Ok(expected);
+        let mapped = result.map_api_error().await.unwrap();
+        assert_eq!(mapped, expected);
+    }
+
+    #[tokio::test]
+    async fn map_api_error_known_error_response() {
+        let status = StatusCode::FORBIDDEN;
+        let error_body = ErrorResponse {
+            detail: "context specific message".to_string(),
+        };
+
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "application/json".parse().unwrap());
+        let resp_val = ResponseValue::new(error_body.clone(), status, headers);
+
+        let result: Result<(), APIError<ErrorResponse>> = Err(APIError::ErrorResponse(resp_val));
+        let err = result.map_api_error().await.unwrap_err();
+        assert_eq!(err.to_string(), "403 Forbidden: context specific message");
+    }
+
+    #[tokio::test]
+    async fn map_api_error_unexpected_response_parsed() {
+        let status = StatusCode::FORBIDDEN;
+        let body = json!({
+            "detail": "context specific message",
+        });
+        let resp = http::Response::builder()
+            .status(status)
+            .header("content-type", "application/json")
+            .body(body.to_string())
+            .unwrap()
+            .into();
+
+        let result: Result<(), APIError<ErrorResponse>> = Err(APIError::UnexpectedResponse(resp));
+        let err = result.map_api_error().await.unwrap_err();
+        assert_eq!(err.to_string(), "403 Forbidden: context specific message");
+    }
+
+    #[tokio::test]
+    async fn map_api_error_unexpected_response_unparsed_text() {
+        let status = StatusCode::FORBIDDEN;
+        let body = "not valid JSON";
+        let resp = http::Response::builder()
+            .status(status)
+            .body(body.to_string())
+            .unwrap()
+            .into();
+
+        let result: Result<(), APIError<ErrorResponse>> = Err(APIError::UnexpectedResponse(resp));
+        let err = result.map_api_error().await.unwrap_err();
+        assert_eq!(err.to_string(), "403 Forbidden");
+    }
+
+    #[tokio::test]
+    async fn map_api_error_unexpected_response_unparsed_json() {
+        let status = StatusCode::FORBIDDEN;
+        let body = json!({
+            "something": "else",
+        });
+        let resp = http::Response::builder()
+            .status(status)
+            .body(body.to_string())
+            .unwrap()
+            .into();
+
+        let result: Result<(), APIError<ErrorResponse>> = Err(APIError::UnexpectedResponse(resp));
+        let err = result.map_api_error().await.unwrap_err();
+        assert_eq!(err.to_string(), "403 Forbidden");
+    }
+
+    #[tokio::test]
+    async fn map_api_error_other() {
+        let msg = "something bad".to_string();
+        let result: Result<(), APIError<ErrorResponse>> =
+            Err(APIError::InvalidRequest(msg.clone()));
+
+        let err = result.map_api_error().await.unwrap_err();
+        assert_eq!(err.to_string(), "Invalid Request: something bad");
+    }
+
+    #[tokio::test]
     async fn resolve_response_with_new_message_type() {
         let user_message = "User consumable Message";
         let user_message_type = "willnevereverexist_ihope";
@@ -1796,7 +1917,7 @@ mod tests {
         let mock = server.mock(|_, then| {
             then.status(418)
                 .header("content-type", "application/json")
-                .json_body(json! ({"detail" : "ceramic"}));
+                .json_body(json! ({"unknown" : "ceramic"}));
         });
 
         let client = CatalogClient::new(client_config(server.base_url().as_str()));

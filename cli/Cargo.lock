@@ -1131,6 +1131,7 @@ dependencies = [
  "flox-test-utils",
  "fslock",
  "futures",
+ "http 1.3.1",
  "httpmock",
  "indent",
  "indexmap 2.9.0",

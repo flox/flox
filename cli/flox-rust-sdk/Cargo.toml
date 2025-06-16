@@ -45,6 +45,7 @@ serial_test = { workspace = true, features = ["file_locks"] }
 tracing-subscriber = { workspace = true, optional = true }
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
+http.workspace = true
 httpmock.workspace = true
 
 [dev-dependencies]
