@@ -1488,8 +1488,7 @@ mod tests {
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
-    #[test]
-    fn build_depending_on_another_build() {
+    fn build_depending_on_another_build(dep_sandbox: &str, package_sandbox: &str) {
         let package_name = String::from("app-with-dashes");
         let file_name = String::from("foo");
         let file_content = String::from("some content");
@@ -1498,12 +1497,14 @@ mod tests {
             version = 1
 
             [build.dep-with-dashes]
+            sandbox = "{dep_sandbox}"
             command = """
                 mkdir $out
                 echo -n "{file_content}" > $out/{file_name}
             """
 
             [build.{package_name}]
+            sandbox = "{package_sandbox}"
             command = """
                 mkdir $out
                 cp ${{dep-with-dashes}}/{file_name} $out/{file_name}
@@ -1513,9 +1514,30 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
+        let _ = GitCommandProvider::init(&env_path, false).unwrap();
 
         assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    #[test]
+    fn build_depending_on_another_build_both_off() {
+        build_depending_on_another_build("off", "off");
+    }
+
+    #[test]
+    fn build_depending_on_another_build_both_pure() {
+        build_depending_on_another_build("pure", "pure");
+    }
+
+    #[test]
+    fn build_depending_on_another_build_off_and_pure() {
+        build_depending_on_another_build("off", "pure");
+    }
+
+    #[test]
+    fn build_depending_on_another_build_pure_and_off() {
+        build_depending_on_another_build("pure", "off");
     }
 
     #[test]
