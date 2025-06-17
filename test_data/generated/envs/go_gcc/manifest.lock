@@ -3,6 +3,13 @@
   "manifest": {
     "version": 1,
     "install": {
+      "clang": {
+        "pkg-path": "clang",
+        "systems": [
+          "aarch64-darwin",
+          "x86_64-darwin"
+        ]
+      },
       "gcc": {
         "pkg-path": "gcc",
         "systems": [
@@ -18,22 +25,71 @@
   },
   "packages": [
     {
+      "attr_path": "clang",
+      "broken": false,
+      "derivation": "/nix/store/l5l5gsvjqqnr4vwvg6jygqr9409jf7ml-clang-wrapper-19.1.7.drv",
+      "description": "C language family frontend for LLVM (wrapper script)",
+      "install_id": "clang",
+      "license": "[ NCSA, Apache-2.0, LLVM-exception ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=ee930f9755f58096ac6e8ca94a1887e0534e2d81",
+      "name": "clang-wrapper-19.1.7",
+      "pname": "clang",
+      "rev": "ee930f9755f58096ac6e8ca94a1887e0534e2d81",
+      "rev_count": 814309,
+      "rev_date": "2025-06-13T06:09:42Z",
+      "scrape_date": "2025-06-15T00:16:02.439989Z",
+      "unfree": false,
+      "version": "19.1.7",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/cvhbqa01i5yy7xmmpqp1hbnvq7kpvgsx-clang-wrapper-19.1.7"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "clang",
+      "broken": false,
+      "derivation": "/nix/store/0z1jb53aac4kr850x6zadkdnb3dhasff-clang-wrapper-19.1.7.drv",
+      "description": "C language family frontend for LLVM (wrapper script)",
+      "install_id": "clang",
+      "license": "[ NCSA, Apache-2.0, LLVM-exception ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=ee930f9755f58096ac6e8ca94a1887e0534e2d81",
+      "name": "clang-wrapper-19.1.7",
+      "pname": "clang",
+      "rev": "ee930f9755f58096ac6e8ca94a1887e0534e2d81",
+      "rev_count": 814309,
+      "rev_date": "2025-06-13T06:09:42Z",
+      "scrape_date": "2025-06-15T00:54:01.798767Z",
+      "unfree": false,
+      "version": "19.1.7",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/cm1kj0v0xpsql7fww3hv7f3z930k2fnw-clang-wrapper-19.1.7"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
       "attr_path": "gcc",
       "broken": false,
       "derivation": "/nix/store/bn7yhf3ngv7r5lcsi8psy5bgpc2751km-gcc-wrapper-14.2.1.20250322.drv",
       "description": "GNU Compiler Collection, version 14.2.1.20250322 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=ee930f9755f58096ac6e8ca94a1887e0534e2d81",
       "name": "gcc-wrapper-14.2.1.20250322",
       "pname": "gcc",
-      "rev": "910796cabe436259a29a72e8d3f5e180fc6dfacc",
-      "rev_count": 808478,
-      "rev_date": "2025-05-31T12:05:15Z",
-      "scrape_date": "2025-06-02T04:45:29.421398Z",
-      "stabilities": [
-        "unstable"
-      ],
+      "rev": "ee930f9755f58096ac6e8ca94a1887e0534e2d81",
+      "rev_count": 814309,
+      "rev_date": "2025-06-13T06:09:42Z",
+      "scrape_date": "2025-06-15T00:35:27.383453Z",
       "unfree": false,
       "version": "14.2.1.20250322",
       "outputs_to_install": [
@@ -56,16 +112,13 @@
       "description": "GNU Compiler Collection, version 14.2.1.20250322 (wrapper script)",
       "install_id": "gcc",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=ee930f9755f58096ac6e8ca94a1887e0534e2d81",
       "name": "gcc-wrapper-14.2.1.20250322",
       "pname": "gcc",
-      "rev": "910796cabe436259a29a72e8d3f5e180fc6dfacc",
-      "rev_count": 808478,
-      "rev_date": "2025-05-31T12:05:15Z",
-      "scrape_date": "2025-06-02T05:26:11.967703Z",
-      "stabilities": [
-        "unstable"
-      ],
+      "rev": "ee930f9755f58096ac6e8ca94a1887e0534e2d81",
+      "rev_count": 814309,
+      "rev_date": "2025-06-13T06:09:42Z",
+      "scrape_date": "2025-06-15T01:16:12.786913Z",
       "unfree": false,
       "version": "14.2.1.20250322",
       "outputs_to_install": [
@@ -84,20 +137,17 @@
     {
       "attr_path": "go",
       "broken": false,
-      "derivation": "/nix/store/329sscyxvzdgfyykds76dwnlmxrpbf65-go-1.24.3.drv",
+      "derivation": "/nix/store/c6h9pn9a4mwgz63qdiw70ac6fv7341v9-go-1.24.3.drv",
       "description": "Go Programming language",
       "install_id": "go",
       "license": "BSD-3-Clause",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=ee930f9755f58096ac6e8ca94a1887e0534e2d81",
       "name": "go-1.24.3",
       "pname": "go",
-      "rev": "910796cabe436259a29a72e8d3f5e180fc6dfacc",
-      "rev_count": 808478,
-      "rev_date": "2025-05-31T12:05:15Z",
-      "scrape_date": "2025-06-02T04:25:06.833652Z",
-      "stabilities": [
-        "unstable"
-      ],
+      "rev": "ee930f9755f58096ac6e8ca94a1887e0534e2d81",
+      "rev_count": 814309,
+      "rev_date": "2025-06-13T06:09:42Z",
+      "scrape_date": "2025-06-15T00:16:03.079252Z",
       "unfree": false,
       "version": "1.24.3",
       "outputs_to_install": [
@@ -117,16 +167,13 @@
       "description": "Go Programming language",
       "install_id": "go",
       "license": "BSD-3-Clause",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=ee930f9755f58096ac6e8ca94a1887e0534e2d81",
       "name": "go-1.24.3",
       "pname": "go",
-      "rev": "910796cabe436259a29a72e8d3f5e180fc6dfacc",
-      "rev_count": 808478,
-      "rev_date": "2025-05-31T12:05:15Z",
-      "scrape_date": "2025-06-02T04:45:29.922102Z",
-      "stabilities": [
-        "unstable"
-      ],
+      "rev": "ee930f9755f58096ac6e8ca94a1887e0534e2d81",
+      "rev_count": 814309,
+      "rev_date": "2025-06-13T06:09:42Z",
+      "scrape_date": "2025-06-15T00:35:27.892049Z",
       "unfree": false,
       "version": "1.24.3",
       "outputs_to_install": [
@@ -142,20 +189,17 @@
     {
       "attr_path": "go",
       "broken": false,
-      "derivation": "/nix/store/s39q71psw02ryk7h3aa76li6bagp6h1q-go-1.24.3.drv",
+      "derivation": "/nix/store/jfgcva919a7bz5zr781cgar6jn6vag9s-go-1.24.3.drv",
       "description": "Go Programming language",
       "install_id": "go",
       "license": "BSD-3-Clause",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=ee930f9755f58096ac6e8ca94a1887e0534e2d81",
       "name": "go-1.24.3",
       "pname": "go",
-      "rev": "910796cabe436259a29a72e8d3f5e180fc6dfacc",
-      "rev_count": 808478,
-      "rev_date": "2025-05-31T12:05:15Z",
-      "scrape_date": "2025-06-02T05:04:02.595839Z",
-      "stabilities": [
-        "unstable"
-      ],
+      "rev": "ee930f9755f58096ac6e8ca94a1887e0534e2d81",
+      "rev_count": 814309,
+      "rev_date": "2025-06-13T06:09:42Z",
+      "scrape_date": "2025-06-15T00:54:02.472326Z",
       "unfree": false,
       "version": "1.24.3",
       "outputs_to_install": [
@@ -175,16 +219,13 @@
       "description": "Go Programming language",
       "install_id": "go",
       "license": "BSD-3-Clause",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=ee930f9755f58096ac6e8ca94a1887e0534e2d81",
       "name": "go-1.24.3",
       "pname": "go",
-      "rev": "910796cabe436259a29a72e8d3f5e180fc6dfacc",
-      "rev_count": 808478,
-      "rev_date": "2025-05-31T12:05:15Z",
-      "scrape_date": "2025-06-02T05:26:12.532473Z",
-      "stabilities": [
-        "unstable"
-      ],
+      "rev": "ee930f9755f58096ac6e8ca94a1887e0534e2d81",
+      "rev_count": 814309,
+      "rev_date": "2025-06-13T06:09:42Z",
+      "scrape_date": "2025-06-15T01:16:13.381540Z",
       "unfree": false,
       "version": "1.24.3",
       "outputs_to_install": [
