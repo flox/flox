@@ -1004,10 +1004,24 @@ enum InternalCommands {
     #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
     Auth(#[bpaf(external(auth::auth))] auth::Auth),
     /// Build packages for Flox
-    #[bpaf(command, hide, footer("Run 'man flox-build' for more details."))]
+    #[bpaf(
+        command,
+        hide,
+        header(
+            "Build packages from the manifest's 'build' table, or run clean subcommand if specified."
+        ),
+        footer("Run 'man flox-build' for more details.")
+    )]
     Build(#[bpaf(external(build::build))] build::Build),
-    /// Publish packages
-    #[bpaf(command, hide, footer("Run 'man flox-publish' for more details."))]
+    /// Publish packages for Flox
+    #[bpaf(
+        command,
+        hide,
+        header(indoc!{"Publish the specified `<package>` from the environment in `<path>`, uploading
+                       artifact metadata and copying the artifacts so that it is available in the
+                       Flox Catalog."}),
+        footer("Run 'man flox-publish' for more details.")
+    )]
     Publish(#[bpaf(external(publish::publish))] publish::Publish),
     /// Upload packages
     #[bpaf(command, hide, footer("Run 'man flox-upload' for more details."))]
@@ -1099,6 +1113,18 @@ pub enum EnvironmentSelect {
     Unspecified,
 }
 
+#[derive(Debug, Default, Bpaf, Clone)]
+pub enum DirEnvironmentSelect {
+    Dir(
+        /// Path containing a .flox/ directory
+        #[bpaf(long("dir"), short('d'), argument("path"))]
+        PathBuf,
+    ),
+    #[default]
+    #[bpaf(hide)]
+    Unspecified,
+}
+
 #[derive(Debug, Error)]
 pub enum EnvironmentSelectError {
     #[error(transparent)]
@@ -1159,13 +1185,11 @@ impl EnvironmentSelect {
         message: &str,
     ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         match self {
-            EnvironmentSelect::Dir(path) => Ok(open_path(flox, path)?),
-            // If the user doesn't specify an environment, check if there's an
-            // already activated environment or an environment in the current
-            // directory.
-            EnvironmentSelect::Unspecified => match detect_environment(message)? {
-                Some(env) => Ok(env.into_concrete_environment(flox)?),
-                None => Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory)?,
+            EnvironmentSelect::Dir(path) => {
+                DirEnvironmentSelect::Dir(path.clone()).detect_concrete_environment(flox, message)
+            },
+            EnvironmentSelect::Unspecified => {
+                DirEnvironmentSelect::Unspecified.detect_concrete_environment(flox, message)
             },
             EnvironmentSelect::Remote(env_ref) => {
                 let pointer = ManagedPointer::new(
@@ -1176,6 +1200,25 @@ impl EnvironmentSelect {
 
                 let env = RemoteEnvironment::new(flox, pointer).map_err(anyhow::Error::new)?;
                 Ok(ConcreteEnvironment::Remote(env))
+            },
+        }
+    }
+}
+
+impl DirEnvironmentSelect {
+    pub fn detect_concrete_environment(
+        &self,
+        flox: &Flox,
+        message: &str,
+    ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
+        match self {
+            DirEnvironmentSelect::Dir(path) => Ok(open_path(flox, path)?),
+            // If the user doesn't specify an environment, check if there's an
+            // already activated environment or an environment in the current
+            // directory.
+            DirEnvironmentSelect::Unspecified => match detect_environment(message)? {
+                Some(env) => Ok(env.into_concrete_environment(flox)?),
+                None => Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory)?,
             },
         }
     }

@@ -51,13 +51,18 @@ pub struct Publish {
 
 #[derive(Debug, Bpaf, Clone, Default)]
 struct CacheArgs {
-    /// Which organization to publish packages to.
+    /// Specify the organization to which an artifact should be published to.
     /// Takes precedence over the default value of the user's GitHub handle.
     #[bpaf(short, long, argument("NAME"))]
     org: Option<String>,
 
-    /// Path of the key file used to sign packages before copying.
-    /// Takes precedence over a value from 'flox config'.
+    /// The private key to use in signing the package
+    /// during upload.
+    /// This is a local file path.
+    /// This option is only necessary when using a Catalog Store not provided by
+    /// Flox.
+    /// Takes precedence over the value of `publish.signing_private_key` from
+    /// 'flox config'.
     #[bpaf(long, argument("FILE"))]
     signing_private_key: Option<PathBuf>,
 }
@@ -65,7 +70,8 @@ struct CacheArgs {
 #[derive(Debug, Bpaf, Clone)]
 struct PublishTarget {
     /// The package to publish.
-    /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
+    /// Possible values are all keys under the `build` attribute in the
+    /// environment's `manifest.toml`.
     #[bpaf(positional("package"))]
     target: String,
 }

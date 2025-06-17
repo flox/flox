@@ -100,11 +100,14 @@ Note that this is a paid feature available with Flox for Teams.
 
 `-o, --org <org>`
 :   Specify the organization to which an artifact should be published to.
+    Takes precedence over the default value of the user's GitHub handle.
 
 `--signing-private-key <path>`
-:   The private key to use in signing the packge
+:   The private key to use in signing the package
     during upload.  This is a local file path. This option is only necessary
     when using a Catalog Store not provided by Flox.
+    Takes precedence over the value of `publish.signing_private_key` from
+    'flox config'.
 
 ```{.include}
 ./include/environment-options.md
