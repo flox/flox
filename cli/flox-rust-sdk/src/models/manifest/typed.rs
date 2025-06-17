@@ -876,8 +876,7 @@ pub struct BuildDescriptor {
     /// Sandbox mode for the build.
     pub sandbox: Option<BuildSandbox>,
     /// The version to assign the package.
-    #[cfg_attr(test, proptest(strategy = "optional_string(3)"))]
-    pub version: Option<String>,
+    pub version: Option<BuildVersion>,
     /// A short description of the package that will appear on FloxHub and in
     /// search results.
     #[cfg_attr(test, proptest(strategy = "optional_string(3)"))]
@@ -894,6 +893,21 @@ pub struct BuildDescriptor {
 pub enum BuildSandbox {
     Off,
     Pure,
+}
+
+/// The definition of a package built from within the environment
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case", untagged)]
+pub enum BuildVersion {
+    Pure(#[cfg_attr(test, proptest(strategy = "alphanum_string(3)"))] String),
+    File {
+        file: PathBuf,
+    },
+    Command {
+        #[cfg_attr(test, proptest(strategy = "alphanum_string(3)"))]
+        command: String,
+    },
 }
 
 #[skip_serializing_none]
@@ -1218,6 +1232,34 @@ pub mod test {
                 .into()
             )
         );
+    }
+
+    #[test]
+    fn parses_version() {
+        #[derive(Deserialize)]
+        struct VersionWrap {
+            version: BuildVersion,
+        }
+        let parse =
+            |version| toml_edit::de::from_str::<VersionWrap>(version).map(|wrap| wrap.version);
+
+        assert_eq!(
+            parse("version = '1.2.3'"),
+            Ok(BuildVersion::Pure("1.2.3".into()))
+        );
+        assert_eq!(
+            parse("version.file = 'FILE'"),
+            Ok(BuildVersion::File {
+                file: "FILE".into()
+            })
+        );
+        assert_eq!(
+            parse("version.command = 'command'"),
+            Ok(BuildVersion::Command {
+                command: "command".into()
+            })
+        );
+        assert!(parse("other = 'wont parse'").is_err())
     }
 
     #[test]

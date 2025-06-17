@@ -2203,11 +2203,19 @@ mod tests {
     }
 
     fn assert_derivation_metadata_propagated(keypath: &[&str], expected: &str, store_path: &Path) {
-        let stdout = Command::new("nix")
-            .args(["derivation", "show", store_path.to_str().unwrap()])
-            .output()
-            .unwrap()
-            .stdout;
+        let child = Command::new("nix")
+            .args([
+                "--extra-experimental-features",
+                "nix-command",
+                "derivation",
+                "show",
+                store_path.to_str().unwrap(),
+            ])
+            .stderr(Stdio::inherit())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stdout = child.wait_with_output().unwrap().stdout;
         let drv = serde_json::from_slice::<serde_json::Value>(&stdout).unwrap();
         // `nix derivation show` prints a map with the .drv path as the key
         // We just care about the value and discard the key
@@ -2222,30 +2230,44 @@ mod tests {
     #[test]
     fn build_version_propagated() {
         let pname = "foo".to_string();
-        let version = "4.2.0".to_string();
+        let version = "4.2.0";
+        let version_file = "VERSION";
 
         for sandbox_mode in ["off", "pure"].iter() {
-            let manifest = formatdoc! {r#"
-                version = 1
+            let version_specs = [
+                format!("version = '{version}'"),
+                format!("version.file = '{version_file}'"),
+                format!("version.command = 'echo {version}'"),
+                format!("version.command = 'echo $(echo {version})'"),
+            ];
 
-                [build.{pname}]
-                sandbox = "{sandbox_mode}"
-                command = """
-                    echo "foo" > $out
-                """
-                version = "{version}"
-            "#};
-            let (flox, _temp_dir_handle) = flox_instance();
-            let mut env = new_path_environment(&flox, &manifest);
-            let env_path = env.parent_path().unwrap();
-            let _git = GitCommandProvider::init(&env_path, false).unwrap();
-            let collected = assert_build_status(&flox, &mut env, &pname, None, true);
-            let result_path = env_path.join(format!("result-{pname}"));
-            let build_results = collected.build_results.unwrap();
-            assert_eq!(build_results.len(), 1);
-            assert_eq!(build_results[0].version, version);
-            let realpath = std::fs::read_link(&result_path).unwrap();
-            assert_derivation_metadata_propagated(&["env", "version"], &version, &realpath);
+            for version_spec in version_specs {
+                let manifest = formatdoc! {r#"
+                    version = 1
+
+                    [build.{pname}]
+                    sandbox = "{sandbox_mode}"
+                    command = """
+                        echo "foo" > $out
+                    """
+                    {version_spec}
+                "#};
+                let (flox, _temp_dir_handle) = flox_instance();
+                let mut env = new_path_environment(&flox, &manifest);
+                let env_path = env.parent_path().unwrap();
+
+                fs::write(env_path.join(version_file), version).unwrap();
+
+                let _git = GitCommandProvider::init(&env_path, false).unwrap();
+                let collected = assert_build_status(&flox, &mut env, &pname, None, true);
+                let result_path = env_path.join(format!("result-{pname}"));
+                let build_results = collected.build_results.unwrap();
+
+                assert_eq!(build_results.len(), 1);
+                assert_eq!(build_results[0].version, version);
+                let realpath = std::fs::read_link(&result_path).unwrap();
+                assert_derivation_metadata_propagated(&["env", "version"], version, &realpath);
+            }
         }
     }
 

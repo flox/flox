@@ -65,6 +65,12 @@ Specifying the `build.<package>.description>` and `build.<package>.version`
 fields of the build provide extra metadata that can be used by `flox install`,
 `flox search`, and `flox show` commands if the build is later published.
 
+The `build.<package>.version` field can be specified in one of the following ways:
+
+1. **as a string**: `version = "0.0.1"`
+1. **as read from a file**: `version.file = "<path>"`
+1. **as returned by a command**: `version.command = "<cmd> <args>"`
+
 # OPTIONS
 
 `<package>`
