@@ -7,7 +7,7 @@ header: "Flox User Manuals"
 
 # NAME
 
-flox-build - Build packages for Flox
+flox-build - Build packages with Flox
 
 
 # SYNOPSIS
@@ -21,9 +21,9 @@ flox [<general-options>] build
 # DESCRIPTION
 
 Build the specified `<package>` from the environment in `<path>`,
-and output build artifacts at `result-<package>` adjacent to the environment.
+and the output at `result-<package>` adjacent to the environment.
 
-## Manifest-defined artifacts
+## Manifest-defined packages
 
 Possible values for `<package>` are all keys under the `build` attribute
 in the `manifest.toml`.
@@ -52,9 +52,9 @@ In the example below, the `app` package depends on the `dep` package
 by using `${deps}/node_modules`.
 
 `flox build` creates a temporary directory for the build script
-to output build artifacts to.
+to output built packages to.
 The environment variable `out` is set to this directory,
-and the build script is expected to copy or move artifacts to `$out`.
+and the build script is expected to copy or move packages to `$out`.
 
 Upon completion of the build, the build result will be symlinked to
 `result-<package>` adjacent to the `.flox` directory that defines the package.
