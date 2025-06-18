@@ -618,8 +618,6 @@ The full set of options is shown below:
 BuildDescriptor ::= {
   command     = STRING
 , sandbox     = null | ("off" | "pure")
-, files       = null | [PATH]
-, systems     = null | [STRING, ...]
 , version     = STRING
 , description = null | STRING
 }
@@ -639,15 +637,6 @@ BuildDescriptor ::= {
     and can only access to the files currently under version control.
     Consequently, `"pure"` builds require your project
     to be under `git` version control.
-
-`files`
-:   Files that are explicitly added to the build artifact.
-    Alternatively, build scripts may manually move or copy files to `$out`.
-    The contents of `$out` will afterwards be linked to by `./result-<package>`
-
-`systems`
-:   An optional list of systems on which to build this package.
-    If omitted, the package can be built on any system.
 
 `version`
 :   The version string to attach to this build artifact.
