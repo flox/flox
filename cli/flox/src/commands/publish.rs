@@ -149,7 +149,19 @@ impl Publish {
             package,
         )?;
 
-        let build_metadata = check_build_metadata(&flox, &env_metadata, &package_metadata.package)?;
+        let auth = Auth::from_flox(&flox)?;
+        let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
+
+        // Check that we can publish before building.
+        let package_created = publish_provider
+            .create_package(&flox.catalog_client, &catalog_name)
+            .await?;
+
+        let build_metadata = check_build_metadata(
+            &flox,
+            &publish_provider.env_metadata,
+            &publish_provider.package_metadata.package,
+        )?;
 
         // CLI args take precedence over config
         let key_file = cache_args.signing_private_key.or(config
@@ -158,16 +170,19 @@ impl Publish {
             .as_ref()
             .and_then(|cfg| cfg.signing_private_key.clone()));
 
-        let auth = Auth::from_flox(&flox)?;
-        let publish_provider =
-            PublishProvider::new(env_metadata, package_metadata, build_metadata, auth);
-
         debug!(
             "publishing package: {}",
             &publish_provider.package_metadata.package
         );
         match publish_provider
-            .publish(&flox.catalog_client, &catalog_name, key_file, metadata_only)
+            .publish(
+                &flox.catalog_client,
+                &catalog_name,
+                package_created,
+                &build_metadata,
+                key_file,
+                metadata_only,
+            )
             .await
         {
             Ok(_) => {
@@ -182,6 +197,7 @@ impl Publish {
                     publish_provider
                         .wait_for_publish_completion(
                             &flox.catalog_client,
+                            &build_metadata,
                             PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS,
                             PUBLISH_COMPLETION_TIMEOUT_MILLIS,
                         )
