@@ -243,7 +243,6 @@ pre_cmd = '''
 cmd = "flox install krb5"
 
 [resolve.ld_floxlib]
-skip_if_output_exists = "envs/ld_floxlib"
 files = ["envs/ld_floxlib/manifest.toml"]
 pre_cmd = "flox init"
 ignore_cmd_errors = true
