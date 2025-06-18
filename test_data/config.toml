@@ -852,6 +852,7 @@ myhello.runtime-packages = [ "hello", "goodbye" ]
 '''
 
 [build.hello]
+skip_if_output_exists = "build/hello"
 files = ["build/hello/hello.c", "build/hello/.flox"]
 pre_cmd = '''
     rm .flox/env/manifest.lock
