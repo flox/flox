@@ -153,12 +153,12 @@ usage:
 .PHONY: $(PROJECT_TMPDIR)/check-build-prerequisites
 $(PROJECT_TMPDIR)/check-build-prerequisites:
 	@# The BUILD_RESULT_FILE must be defined and exist.
-	@$(if $(BUILD_RESULT_FILE), \
-	  $(if $(wildcard $(BUILD_RESULT_FILE)),-, \
-	    $$(error $(BUILD_RESULT_FILE) not found)), \
-	  $$(error BUILD_RESULT_FILE not defined))
+	$(if $(BUILD_RESULT_FILE), \
+	  $(if $(wildcard $(BUILD_RESULT_FILE)),, \
+	    $(error BUILD_RESULT_FILE $(BUILD_RESULT_FILE) not found), \
+	  $(error BUILD_RESULT_FILE not defined)))
 	@# Check that the BUILDTIME_NIXPKGS_URL is defined.
-	@$(if $(BUILDTIME_NIXPKGS_URL),-,$(error BUILDTIME_NIXPKGS_URL not defined))
+	$(if $(BUILDTIME_NIXPKGS_URL),,$(error BUILDTIME_NIXPKGS_URL not defined))
 	@mkdir -p $(@D)
 	@touch $@
 
