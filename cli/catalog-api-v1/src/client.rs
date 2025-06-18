@@ -37,6 +37,53 @@ pub mod types {
             }
         }
     }
+    ///`BaseCatalogInfo`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "BaseCatalogInfo",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "base_url",
+    ///    "scraped_pages",
+    ///    "stabilities"
+    ///  ],
+    ///  "properties": {
+    ///    "base_url": {
+    ///      "title": "Base Url",
+    ///      "type": "string"
+    ///    },
+    ///    "scraped_pages": {
+    ///      "title": "Scraped Pages",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PageInfo"
+    ///      }
+    ///    },
+    ///    "stabilities": {
+    ///      "title": "Stabilities",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/StabilityInfo"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct BaseCatalogInfo {
+        pub base_url: ::std::string::String,
+        pub scraped_pages: ::std::vec::Vec<PageInfo>,
+        pub stabilities: ::std::vec::Vec<StabilityInfo>,
+    }
+    impl ::std::convert::From<&BaseCatalogInfo> for BaseCatalogInfo {
+        fn from(value: &BaseCatalogInfo) -> Self {
+            value.clone()
+        }
+    }
     ///`CatalogName`
     ///
     /// <details><summary>JSON schema</summary>
@@ -1882,6 +1929,50 @@ pub mod types {
             value.clone()
         }
     }
+    ///`PageInfo`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PageInfo",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "rev",
+    ///    "rev_count",
+    ///    "stability_tags"
+    ///  ],
+    ///  "properties": {
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "rev_count": {
+    ///      "title": "Rev Count",
+    ///      "type": "integer"
+    ///    },
+    ///    "stability_tags": {
+    ///      "title": "Stability Tags",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PageInfo {
+        pub rev: ::std::string::String,
+        pub rev_count: i64,
+        pub stability_tags: ::std::vec::Vec<::std::string::String>,
+    }
+    impl ::std::convert::From<&PageInfo> for PageInfo {
+        fn from(value: &PageInfo) -> Self {
+            value.clone()
+        }
+    }
     ///`Params`
     ///
     /// <details><summary>JSON schema</summary>
@@ -2589,6 +2680,42 @@ pub mod types {
     }
     impl ::std::convert::From<&ServiceStatus> for ServiceStatus {
         fn from(value: &ServiceStatus) -> Self {
+            value.clone()
+        }
+    }
+    ///`StabilityInfo`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "StabilityInfo",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "name",
+    ///    "ref"
+    ///  ],
+    ///  "properties": {
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "ref": {
+    ///      "title": "Ref",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct StabilityInfo {
+        pub name: ::std::string::String,
+        #[serde(rename = "ref")]
+        pub ref_: ::std::string::String,
+    }
+    impl ::std::convert::From<&StabilityInfo> for StabilityInfo {
+        fn from(value: &StabilityInfo) -> Self {
             value.clone()
         }
     }
@@ -4561,6 +4688,41 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
+    /**Getbasecatalog
+
+Sends a `GET` request to `/api/v1/catalog/info/base-catalog`
+
+*/
+    pub async fn get_base_catalog_api_v1_catalog_info_base_catalog_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<types::BaseCatalogInfo>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/info/base-catalog", self.baseurl,);
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .headers(header_map)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**List of valid pkg paths
 
 Get the list of valid pkg paths for base catalog packages.
@@ -5057,10 +5219,8 @@ Sends a `POST` request to `/api/v1/catalog/store`
     /**Get status for a list of storepaths
 
 Get status for a list of storepaths
-
 Body Parameters:
 - **StoreInfoRequest**: A list of derivation paths
-
 Returns:
 - **StoreInfoResponse**: a map of derivation path to a list of store info objects
 
