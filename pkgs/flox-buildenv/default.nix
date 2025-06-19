@@ -18,6 +18,7 @@ assert (flox-interpreter == null) -> builtins.getEnv "FLOX_INTERPRETER" != null;
 let
   pname = "flox-buildenv";
   version = "0.0.1";
+  buildenvLib = ../../buildenv/buildenvLib;
   buildenv_nix = ../../buildenv/buildenv.nix;
   builder_pl = ../../buildenv/builder.pl;
   activationScripts_fallback = builtins.getEnv "FLOX_INTERPRETER";
@@ -75,4 +76,6 @@ runCommandNoCC "${pname}-${version}"
 
     cp ${buildenv_nix} "$out/lib/buildenv.nix"
     substituteAllInPlace "$out/lib/buildenv.nix"
+
+    cp -r ${buildenvLib} "$out/lib/buildenvLib"
   ''

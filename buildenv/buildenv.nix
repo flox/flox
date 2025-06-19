@@ -9,7 +9,7 @@
   serviceConfigYaml ? null,
 }:
 let
-
+  outdentScript = (import ./buildenvLib/default.nix).outdentText;
   # Ensure that `*_storePath` arguments are valid store paths
   # and declare a dependency on these paths.
   #
@@ -92,7 +92,7 @@ let
       (
         if (builtins.hasAttr "on-activate" hookSection) then
           let
-            contents = builtins.getAttr "on-activate" hookSection;
+            contents = outdentScript (builtins.getAttr "on-activate" hookSection);
           in
           if (contents != null) then
             ''
@@ -126,7 +126,7 @@ let
           shellType:
           if (builtins.hasAttr shellType profileSection) then
             let
-              contents = builtins.getAttr shellType profileSection;
+              contents = outdentScript (builtins.getAttr shellType profileSection);
             in
             if (contents != null) then
               let
@@ -163,7 +163,7 @@ let
             if (contents != null) then
               (
                 let
-                  scriptFile = builtins.toFile "build-${buildId}" contents;
+                  scriptFile = outdentScript (builtins.toFile "build-${buildId}" contents);
                 in
                 ''
                   "${coreutils}/bin/mkdir" -p $out/package-builds.d
