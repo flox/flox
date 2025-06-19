@@ -21,6 +21,27 @@ assert (srcTarball != null) -> (buildScript != null);
 let
   flox-env-package = builtins.storePath flox-env;
   build-wrapper-env-package = builtins.storePath build-wrapper-env;
+
+  # After a successful build we want to replace references to `flox-env-package`
+  # with references to `build-wrapper-env-package`
+  # (a reduced subset of the complete develop environment)
+  # in order to reduce the minimal closure of the result.
+  # Replacing paths, particularly in binaries,
+  # requires that both paths have equal lengths.
+  # Hence we create a (shallow) copy of `flox-env-package`
+  # named `developcopy-build-${pname}`.
+  #
+  # Note that we expect the name of `flox-env-package` to follow the pattern
+  # "environment-build-${pname}" and that
+  # len(developcopy-build-) ==
+  # len(environment-build-)
+  #
+  # In the name of expediency we opt for higher coupling here,
+  # but should eventually land on a more robust alternative using padding.
+  #
+  # Note further, that because `builtins.path` does not copy references,
+  # we _also_ add `flox-env-package` to the closure below.
+  #
   develop-copy-env-package = builtins.path {
     path = flox-env-package;
     name = "developcopy-build-${pname}";
