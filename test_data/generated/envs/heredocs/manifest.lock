@@ -1,0 +1,17 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "hook": {
+      "on-activate": "    cat << EOF\n    running on-activate\n    EOF\n"
+    },
+    "profile": {
+      "common": "    cat << EOF\n    running profile-common\n    EOF\n",
+      "bash": "    cat << EOF\n    running profile-bash\n    EOF\n",
+      "zsh": "    cat << EOF\n    running profile-zsh\n    EOF\n",
+      "tcsh": "    cat << EOF\n    running profile-tcsh\n    EOF\n"
+    },
+    "options": {}
+  },
+  "packages": []
+}
