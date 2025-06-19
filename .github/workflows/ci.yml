@@ -119,8 +119,11 @@ jobs:
           AWS_SECRET_ACCESS_KEY:  "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
           SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
-      - name: "Test"
+      - name: "Test NEF"
         run: nix develop -L --no-update-lock-file --command just test-nef
+        
+      - name: "Test buildenvLib"
+        run: nix develop -L --no-update-lock-file --command just test-buildenvLib
 
   cli-dev:
     name: "dev"
