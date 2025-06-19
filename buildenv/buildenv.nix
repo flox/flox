@@ -45,9 +45,9 @@ let
   manifestLockData = builtins.fromJSON (builtins.readFile manifestLock);
   manifestData = manifestLockData.manifest;
 
-  build = if (builtins.hasAttr "build" manifestData) then manifestData.build else { };
-  hook = if (builtins.hasAttr "hook" manifestData) then manifestData.hook else { };
-  profile = if (builtins.hasAttr "profile" manifestData) then manifestData.profile else { };
+  buildSection = if (builtins.hasAttr "build" manifestData) then manifestData.build else { };
+  hookSection = if (builtins.hasAttr "hook" manifestData) then manifestData.hook else { };
+  profileSection = if (builtins.hasAttr "profile" manifestData) then manifestData.profile else { };
   vars =
     if (builtins.hasAttr "vars" manifestData) then
       (builtins.toFile "envrc-vars" (
@@ -68,7 +68,7 @@ let
   environmentOutputs = [
     "runtime"
     "develop"
-  ] ++ (builtins.map (x: "build-${x}") (builtins.attrNames build));
+  ] ++ (builtins.map (buildId: "build-${buildId}") (builtins.attrNames buildSection));
 
   createManifestChunks =
     [
@@ -90,13 +90,13 @@ let
       )
       # [hook] section
       (
-        if (builtins.hasAttr "on-activate" hook) then
+        if (builtins.hasAttr "on-activate" hookSection) then
           let
-            v = builtins.getAttr "on-activate" hook;
+            contents = builtins.getAttr "on-activate" hookSection;
           in
-          if (v != null) then
+          if (contents != null) then
             ''
-              "${coreutils}/bin/cp" ${builtins.toFile "hook-on-activate" v} $out/activate.d/hook-on-activate
+              "${coreutils}/bin/cp" ${builtins.toFile "hook-on-activate" contents} $out/activate.d/hook-on-activate
             ''
           else
             ""
@@ -123,17 +123,17 @@ let
       # [profile] section
       builtins.map
         (
-          i:
-          if (builtins.hasAttr i profile) then
+          shellType:
+          if (builtins.hasAttr shellType profileSection) then
             let
-              v = builtins.getAttr i profile;
+              contents = builtins.getAttr shellType profileSection;
             in
-            if (v != null) then
+            if (contents != null) then
               let
-                f = builtins.toFile "profile-${i}" v;
+                scriptFile = builtins.toFile "profile-${shellType}" contents;
               in
               ''
-                "${coreutils}/bin/cp" ${f} $out/activate.d/profile-${i}
+                "${coreutils}/bin/cp" ${scriptFile} $out/activate.d/profile-${shellType}
               ''
             else
               ""
@@ -151,23 +151,23 @@ let
     ++ (
       # [build] section
       builtins.map (
-        i:
+        buildId:
         let
-          b = builtins.getAttr i build;
+          build = builtins.getAttr buildId buildSection;
         in
         (
-          if (builtins.hasAttr "command" b) then
+          if (builtins.hasAttr "command" build) then
             let
-              v = builtins.getAttr "command" b;
+              contents = builtins.getAttr "command" build;
             in
-            if (v != null) then
+            if (contents != null) then
               (
                 let
-                  f = builtins.toFile "build-${i}" v;
+                  scriptFile = builtins.toFile "build-${buildId}" contents;
                 in
                 ''
                   "${coreutils}/bin/mkdir" -p $out/package-builds.d
-                  "${coreutils}/bin/cp" ${f} $out/package-builds.d/${i}
+                  "${coreutils}/bin/cp" ${scriptFile} $out/package-builds.d/${buildId}
                 ''
               )
             else
@@ -175,7 +175,7 @@ let
           else
             ""
         )
-      ) (builtins.attrNames build)
+      ) (builtins.attrNames buildSection)
     );
 
   createManifestScript = builtins.toFile "create-manifest-script" (
