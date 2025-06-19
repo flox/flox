@@ -171,6 +171,9 @@ version:
 test-nef:
     nix-unit package-builder/nef/tests --arg nixpkgs-url "$COMMON_NIXPKGS_URL"
 
+test-buildenvLib:
+    nix-unit buildenv/buildenvLib/tests
+
 # Run the CLI unit tests, including impure tests
 @impure-tests regex="": build
      {{cargo_test_invocation}} {{regex}} --features "extra-tests"
