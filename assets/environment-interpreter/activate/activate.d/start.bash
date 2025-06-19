@@ -78,7 +78,9 @@ start() {
   fi
 
   # Source the hook-on-activate script if it exists.
-  if [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
+  if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
+    "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" NOT INVOKED IN BUILD MODE
+  elif [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
     # Nothing good can come from output printed to stdout in the
     # user-provided hook scripts because these can get interpreted
     # as configuration statements by the "in-place" activation
