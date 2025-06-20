@@ -8,7 +8,7 @@ use anyhow::Context;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Deserialize;
 use tempfile::TempDir;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use crate::{Cli, Error};
 
@@ -225,24 +225,30 @@ pub fn generate_category_jobs<'a>(
 ) -> Result<Vec<Job>, Error> {
     let mut jobs: Vec<Job> = vec![];
     for (name, raw_spec) in raw_specs {
-        let filename = output_dir.join(category).join(format!("{}.yaml", name));
-        if !force && filename.exists() {
-            continue;
-        }
-        if !force {
-            if let Some(explicit_check_path) = &raw_spec.skip_if_output_exists {
-                let filename = output_dir.join(explicit_check_path);
-                if filename.exists() {
+        let response_filename = output_dir.join(category).join(format!("{}.yaml", name));
+        match (force, raw_spec.skip_if_output_exists.as_ref()) {
+            (false, Some(path)) => {
+                let check_path = output_dir.join(path);
+                if check_path.exists() {
+                    trace!(name, explicit = true, path = %check_path.display(), "skipping job because output exists");
                     continue;
                 }
-            }
+            },
+            (false, None) => {
+                if response_filename.exists() {
+                    trace!(name, explicit = false, path = %response_filename.display(), "skiping job because output exists");
+                    continue;
+                }
+            },
+            (true, _) => {},
         }
+        debug!(category, name, "adding job to queue");
         let tmp_dir = TempDir::new_in(output_dir)?;
         jobs.push(Job {
             category: category.into(),
             tmp_dir,
             spec: Spec::new(name, raw_spec),
-            output_file: filename,
+            output_file: response_filename,
         });
     }
     Ok(jobs)
