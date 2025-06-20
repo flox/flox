@@ -34,6 +34,8 @@ pub const MANIFEST_OPTIONS_KEY: &str = "options";
 pub const MANIFEST_SYSTEMS_KEY: &str = "systems";
 /// Represents the `[include]` table key in manifest.toml
 pub const MANIFEST_INCLUDE_KEY: &str = "include";
+/// Represents the `[build]` table key in manifest.toml
+pub const MANIFEST_BUILD_KEY: &str = "build";
 
 /// A wrapper around a [`toml_edit::DocumentMut`]
 /// that allows modifications of the raw manifest document,
@@ -61,6 +63,7 @@ impl RawManifest {
         Self::add_profile_section(&mut manifest, customization, true);
         Self::add_services_section(&mut manifest);
         Self::add_include_section(&mut manifest);
+        Self::add_build_section(&mut manifest);
         Self::add_options_section(&mut manifest, systems, customization);
 
         RawManifest(manifest)
@@ -351,6 +354,33 @@ impl RawManifest {
                 # myservice.command = "python3 -m http.server""#});
 
         manifest.insert(MANIFEST_SERVICES_KEY, Item::Table(services_table));
+    }
+
+    /// Populates an example build section.
+    fn add_build_section(manifest: &mut DocumentMut) {
+        let mut build_table = Table::new();
+
+        build_table.decor_mut().set_prefix(indoc! {r#"
+
+
+                 ## Build and publish your own packages ------------------------------
+                 ##  $ flox build
+                 ##  $ flox publish
+                 ## ------------------------------------------------------------------
+            "#});
+
+        build_table.decor_mut().set_suffix(indoc! {r#"
+
+                # [build.myproject]
+                # description = "The coolest project ever"
+                # version = "0.0.1"
+                # command = """
+                #   mkdir -p $out/bin
+                #   cargo build --release
+                #   cp target/release/myproject $out/bin/myproject
+                # """"#});
+
+        manifest.insert(MANIFEST_BUILD_KEY, Item::Table(build_table));
     }
 
     /// Populates an example include section.
@@ -1203,6 +1233,21 @@ pub(super) mod test {
             # ]
 
 
+            ## Build and publish your own packages ------------------------------
+            ##  $ flox build
+            ##  $ flox publish
+            ## ------------------------------------------------------------------
+            [build]
+            # [build.myproject]
+            # description = "The coolest project ever"
+            # version = "0.0.1"
+            # command = """
+            #   mkdir -p $out/bin
+            #   cargo build --release
+            #   cp target/release/myproject $out/bin/myproject
+            # """
+
+
             ## Other Environment Options -----------------------------------------
             [options]
             # Systems that environment is compatible with
@@ -1310,6 +1355,21 @@ pub(super) mod test {
             # environments = [
             #     { dir = "../common" }
             # ]
+
+
+            ## Build and publish your own packages ------------------------------
+            ##  $ flox build
+            ##  $ flox publish
+            ## ------------------------------------------------------------------
+            [build]
+            # [build.myproject]
+            # description = "The coolest project ever"
+            # version = "0.0.1"
+            # command = """
+            #   mkdir -p $out/bin
+            #   cargo build --release
+            #   cp target/release/myproject $out/bin/myproject
+            # """
 
 
             ## Other Environment Options -----------------------------------------
@@ -1424,6 +1484,21 @@ pub(super) mod test {
             # ]
 
 
+            ## Build and publish your own packages ------------------------------
+            ##  $ flox build
+            ##  $ flox publish
+            ## ------------------------------------------------------------------
+            [build]
+            # [build.myproject]
+            # description = "The coolest project ever"
+            # version = "0.0.1"
+            # command = """
+            #   mkdir -p $out/bin
+            #   cargo build --release
+            #   cp target/release/myproject $out/bin/myproject
+            # """
+
+
             ## Other Environment Options -----------------------------------------
             [options]
             # Systems that environment is compatible with
@@ -1522,6 +1597,21 @@ pub(super) mod test {
             # environments = [
             #     { dir = "../common" }
             # ]
+
+
+            ## Build and publish your own packages ------------------------------
+            ##  $ flox build
+            ##  $ flox publish
+            ## ------------------------------------------------------------------
+            [build]
+            # [build.myproject]
+            # description = "The coolest project ever"
+            # version = "0.0.1"
+            # command = """
+            #   mkdir -p $out/bin
+            #   cargo build --release
+            #   cp target/release/myproject $out/bin/myproject
+            # """
 
 
             ## Other Environment Options -----------------------------------------
@@ -1624,6 +1714,21 @@ pub(super) mod test {
             # environments = [
             #     { dir = "../common" }
             # ]
+
+
+            ## Build and publish your own packages ------------------------------
+            ##  $ flox build
+            ##  $ flox publish
+            ## ------------------------------------------------------------------
+            [build]
+            # [build.myproject]
+            # description = "The coolest project ever"
+            # version = "0.0.1"
+            # command = """
+            #   mkdir -p $out/bin
+            #   cargo build --release
+            #   cp target/release/myproject $out/bin/myproject
+            # """
 
 
             ## Other Environment Options -----------------------------------------
