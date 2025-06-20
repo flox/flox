@@ -72,7 +72,7 @@ impl Build {
             SubcommandOrBuildTargets::Clean { targets } => {
                 let env = self
                     .environment
-                    .detect_concrete_environment(&flox, "Build packages of")?;
+                    .detect_concrete_environment(&flox, "Clean build files of")?;
                 environment_subcommand_metric!("build::clean", env);
 
                 Self::clean(flox, env, targets).await
@@ -80,7 +80,7 @@ impl Build {
             SubcommandOrBuildTargets::BuildTargets { targets } => {
                 let env = self
                     .environment
-                    .detect_concrete_environment(&flox, "Clean build files of")?;
+                    .detect_concrete_environment(&flox, "Build packages of")?;
                 environment_subcommand_metric!("build", env);
 
                 Self::build(flox, env, targets, self.nixpkgs_url).await
