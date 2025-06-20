@@ -636,8 +636,15 @@ define MANIFEST_BUILD_template =
 	$$(eval _count = $$(words $$(_build_closure_extra_packages)))
 	$$(eval _space = $$(shell echo $$(_count) | $(_tr) '[0-9]' '-'))
 	$$(if $$(_build_closure_extra_packages),$(_VV_) \
-	  echo -e "❌ $$(_count) packages found in $$(_build_store_path)\n" \
-	           "  $$(_space)      not found in $$($(_pvarname)_build_wrapper_env)\n" 1>&2; \
+	  echo -e "❌ ERROR: Unexpected dependencies found in package '$(_pvarname)':\n" \
+	          "\n" \
+	          "1. Remove any unneeded references (e.g. debug symbols) from your build.\n" \
+	          "2. If you’re using package groups$$(comma) move these packages into the 'toplevel' group.\n" \
+	          "3. If you’re using 'runtime-packages'$$(comma) make sure each package is listed both in\n" \
+	          "   'runtime-packages' and in the 'toplevel' group.\n" \
+	          "\n" \
+	          "$$(_count) packages found in $$(_build_store_path)\n" \
+	          "$$(_space)      not found in $$($(_pvarname)_build_wrapper_env)\n" 1>&2; \
 	  $$(intcmp 3,$$(_count),echo -e "Displaying first 3 only:\n" 1>&2; ) \
 	  $$(foreach _pkg,$$(wordlist 1,3,$$(_build_closure_extra_packages)), \
 	    ( $(_nix) why-depends --precise $$(_build_store_path) $$(_pkg) && echo ) 1>&2; ) \
