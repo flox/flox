@@ -1526,6 +1526,73 @@
         }
       }
     },
+    "/api/v1/catalog/info/base-catalog": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "Get base catalog information",
+        "operationId": "getBaseCatalog_api_v1_catalog_info_base_catalog_get",
+        "responses": {
+          "200": {
+            "description": "The properties of the base catalog, its scraped pages and available stabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaseCatalogInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/info/published-catalogs": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "Get Published Catalogs",
+        "operationId": "get_published_catalogs_api_v1_catalog_info_published_catalogs_get",
+        "responses": {
+          "200": {
+            "description": "Get statistics about published catalogs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedCatalogInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/catalog/store": {
       "post": {
         "tags": [
@@ -1579,7 +1646,7 @@
           "store"
         ],
         "summary": "Get status for a list of storepaths",
-        "description": "Get status for a list of storepaths\n\nBody Parameters:\n- **StoreInfoRequest**: A list of derivation paths\n\nReturns:\n- **StoreInfoResponse**: a map of derivation path to a list of store info objects",
+        "description": "Get status for a list of storepaths\nBody Parameters:\n- **StoreInfoRequest**: A list of derivation paths\nReturns:\n- **StoreInfoResponse**: a map of derivation path to a list of store info objects",
         "operationId": "get_storepath_status_api_v1_catalog_store_status_post",
         "requestBody": {
           "content": {
@@ -1652,6 +1719,35 @@
   },
   "components": {
     "schemas": {
+      "BaseCatalogInfo": {
+        "properties": {
+          "base_url": {
+            "type": "string",
+            "title": "Base Url"
+          },
+          "scraped_pages": {
+            "items": {
+              "$ref": "#/components/schemas/PageInfo"
+            },
+            "type": "array",
+            "title": "Scraped Pages"
+          },
+          "stabilities": {
+            "items": {
+              "$ref": "#/components/schemas/StabilityInfo"
+            },
+            "type": "array",
+            "title": "Stabilities"
+          }
+        },
+        "type": "object",
+        "required": [
+          "base_url",
+          "scraped_pages",
+          "stabilities"
+        ],
+        "title": "BaseCatalogInfo"
+      },
       "CatalogPage": {
         "properties": {
           "page": {
@@ -2556,6 +2652,32 @@
         ],
         "title": "PackagesResult"
       },
+      "PageInfo": {
+        "properties": {
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          },
+          "rev_count": {
+            "type": "integer",
+            "title": "Rev Count"
+          },
+          "stability_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stability Tags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rev",
+          "rev_count",
+          "stability_tags"
+        ],
+        "title": "PageInfo"
+      },
       "PkgPathsResult": {
         "properties": {
           "items": {
@@ -2604,6 +2726,64 @@
           "catalog_store_config"
         ],
         "title": "PublishResponse"
+      },
+      "PublishedCatalog": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "store_type": {
+            "type": "string",
+            "title": "Store Type"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created"
+          },
+          "package_ct": {
+            "type": "integer",
+            "title": "Package Ct"
+          },
+          "package_builds_ct": {
+            "type": "integer",
+            "title": "Package Builds Ct"
+          },
+          "per_package_builds_ct": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Per Package Builds Ct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "store_type",
+          "created",
+          "package_ct",
+          "package_builds_ct",
+          "per_package_builds_ct"
+        ],
+        "title": "PublishedCatalog"
+      },
+      "PublishedCatalogInfo": {
+        "properties": {
+          "catalogs": {
+            "items": {
+              "$ref": "#/components/schemas/PublishedCatalog"
+            },
+            "type": "array",
+            "title": "Catalogs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalogs"
+        ],
+        "title": "PublishedCatalogInfo"
       },
       "ResolutionMessageGeneral": {
         "properties": {
@@ -2880,6 +3060,24 @@
           "uptime_pretty"
         ],
         "title": "ServiceStatus"
+      },
+      "StabilityInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "ref": {
+            "type": "string",
+            "title": "Ref"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "ref"
+        ],
+        "title": "StabilityInfo"
       },
       "StoreInfo": {
         "properties": {

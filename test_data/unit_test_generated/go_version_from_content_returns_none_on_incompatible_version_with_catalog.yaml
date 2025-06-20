@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Fri, 06 Jun 2025 16:32:43 GMT
+    value: Fri, 20 Jun 2025 11:38:04 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,5 +14,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LwC2ujMwIAMEY1g=
-  body: '{"items":[{"name":"go","page":null,"additionl_pages":null,"messages":[{"level":"error","type":"constraints_too_tight","message":"Resolution constraints are too tight.","context":{}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''go'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''go'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''go'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''go'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''go'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''go'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
+    value: Mdg0gi1loAMEY6A=
+  body: '{"items":[{"name":"go","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"constraints_too_tight","message":"Resolution constraints are too tight.","context":{}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''go'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''go'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''go'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''go'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''go'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''go'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
