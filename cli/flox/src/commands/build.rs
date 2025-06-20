@@ -63,11 +63,6 @@ enum SubcommandOrBuildTargets {
 
 impl Build {
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        if !flox.features.build {
-            message::plain("🚧 👷 heja, a new command is in construction here, stay tuned!");
-            bail!("'build' feature is not enabled.");
-        }
-
         match self.subcommand_or_targets {
             SubcommandOrBuildTargets::Clean { targets } => {
                 let env = self
