@@ -78,11 +78,6 @@ struct PublishTarget {
 
 impl Publish {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        if !flox.features.publish {
-            message::plain("🚧 👷 heja, a new command is in construction here, stay tuned!");
-            bail!("'publish' feature is not enabled.");
-        }
-
         let env = self
             .environment
             .detect_concrete_environment(&flox, "Publish")?;
