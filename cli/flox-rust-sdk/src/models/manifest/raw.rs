@@ -342,11 +342,11 @@ impl RawManifest {
         services_table.decor_mut().set_prefix(indoc! {r#"
 
 
-                ## Services ----------------------------------------------------------
+                ## Services ---------------------------------------------------------
                 ##  $ flox services start             <- Starts all services
                 ##  $ flox services status            <- Status of running services
                 ##  $ flox activate --start-services  <- Activates & starts all
-                ## -------------------------------------------------------------------
+                ## ------------------------------------------------------------------
             "#});
 
         services_table.decor_mut().set_suffix(indoc! {r#"
@@ -1215,11 +1215,11 @@ pub(super) mod test {
             # fish = ...
 
 
-            ## Services ----------------------------------------------------------
+            ## Services ---------------------------------------------------------
             ##  $ flox services start             <- Starts all services
             ##  $ flox services status            <- Status of running services
             ##  $ flox activate --start-services  <- Activates & starts all
-            ## -------------------------------------------------------------------
+            ## ------------------------------------------------------------------
             [services]
             # myservice.command = "python3 -m http.server"
 
@@ -1339,11 +1339,11 @@ pub(super) mod test {
             # fish = ...
 
 
-            ## Services ----------------------------------------------------------
+            ## Services ---------------------------------------------------------
             ##  $ flox services start             <- Starts all services
             ##  $ flox services status            <- Status of running services
             ##  $ flox activate --start-services  <- Activates & starts all
-            ## -------------------------------------------------------------------
+            ## ------------------------------------------------------------------
             [services]
             # myservice.command = "python3 -m http.server"
 
@@ -1466,11 +1466,11 @@ pub(super) mod test {
             # fish = ...
 
 
-            ## Services ----------------------------------------------------------
+            ## Services ---------------------------------------------------------
             ##  $ flox services start             <- Starts all services
             ##  $ flox services status            <- Status of running services
             ##  $ flox activate --start-services  <- Activates & starts all
-            ## -------------------------------------------------------------------
+            ## ------------------------------------------------------------------
             [services]
             # myservice.command = "python3 -m http.server"
 
@@ -1581,11 +1581,11 @@ pub(super) mod test {
             """
 
 
-            ## Services ----------------------------------------------------------
+            ## Services ---------------------------------------------------------
             ##  $ flox services start             <- Starts all services
             ##  $ flox services status            <- Status of running services
             ##  $ flox activate --start-services  <- Activates & starts all
-            ## -------------------------------------------------------------------
+            ## ------------------------------------------------------------------
             [services]
             # myservice.command = "python3 -m http.server"
 
@@ -1698,11 +1698,11 @@ pub(super) mod test {
             # fish = ...
 
 
-            ## Services ----------------------------------------------------------
+            ## Services ---------------------------------------------------------
             ##  $ flox services start             <- Starts all services
             ##  $ flox services status            <- Status of running services
             ##  $ flox activate --start-services  <- Activates & starts all
-            ## -------------------------------------------------------------------
+            ## ------------------------------------------------------------------
             [services]
             # myservice.command = "python3 -m http.server"
 
