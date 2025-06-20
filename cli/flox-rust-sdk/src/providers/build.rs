@@ -2031,6 +2031,26 @@ mod tests {
         // Add a trailing space like this so auto-formatters don't trim trailing
         // whitespace
         let nix_log_pad = " ";
+        // TODO: Provide more targeted advice based on the current lockfile's
+        //       `runtime-packages` and `install` groups so that we don't need
+        //       to tell the user to try everything.
+        let expected_output = formatdoc! {r#"
+            ❌ ERROR: Unexpected dependencies found in package '{package_name}':
+            {nix_log_pad}
+             1. Remove any unneeded references (e.g. debug symbols) from your build.
+             2. If you’re using package groups, move these packages into the 'toplevel' group.
+             3. If you’re using 'runtime-packages', make sure each package is listed both in
+                'runtime-packages' and in the 'toplevel' group.
+            {nix_log_pad}
+        "#};
+        if !output.stderr.contains(&expected_output) {
+            pretty_assertions::assert_eq!(
+                output.stderr,
+                expected_output,
+                "didn't find expected output, diffing entire output"
+            );
+        }
+
         let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
         let expected_pattern = if cfg!(target_os = "macos") {
             formatdoc! {r#"
