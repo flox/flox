@@ -53,10 +53,7 @@ start() {
   fi
 
   # Set static environment variables from the manifest.
-  if [ -f "$FLOX_ENV/activate.d/envrc" ]; then
-    # shellcheck disable=SC1091 # from rendered environment
-    source "$FLOX_ENV/activate.d/envrc"
-  fi
+  set_manifest_vars "$FLOX_ENV"
 
   # Start the watchdog if passed a watchdog binary and state dir is not empty
   #

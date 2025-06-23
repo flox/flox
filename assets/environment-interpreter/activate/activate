@@ -47,7 +47,7 @@ source "${_activate_d}/generate-fish-startup-commands.bash"
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/generate-tcsh-startup-commands.bash"
 # shellcheck source-path=SCRIPTDIR/activate.d
-source "${_activate_d}/source-profile-d.bash"
+source "${_activate_d}/helpers.bash"
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/start.bash"
 
