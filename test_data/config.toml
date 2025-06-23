@@ -243,7 +243,6 @@ pre_cmd = '''
 cmd = "flox install krb5"
 
 [resolve.ld_floxlib]
-skip_if_output_exists = "envs/ld_floxlib"
 files = ["envs/ld_floxlib/manifest.toml"]
 pre_cmd = "flox init"
 ignore_cmd_errors = true
@@ -882,6 +881,7 @@ myhello.runtime-packages = [ "hello", "goodbye" ]
 '''
 
 [build.hello]
+skip_if_output_exists = "build/hello"
 files = ["build/hello/hello.c", "build/hello/.flox"]
 pre_cmd = '''
     rm .flox/env/manifest.lock
