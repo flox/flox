@@ -1337,7 +1337,7 @@ mod tests {
                 cat > $out/bin/{file_name} <<EOF
                     #!/usr/bin/env bash
                     exec hello
-            EOF
+                EOF
                 chmod +x $out/bin/{file_name}
             """
         "#};
@@ -1436,7 +1436,7 @@ mod tests {
                 #!/usr/bin/env bash
                 echo "${var}"
             EOF
-                chmod +x $out/{file_path}
+            chmod +x $out/{file_path}
             """
         "#};
 
@@ -1486,6 +1486,42 @@ mod tests {
 
         assert_build_status(&flox, &mut env, &package_name, None, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    #[test]
+    fn build_can_contain_heredocs() {
+        let package_name = String::from("with-heredocs");
+        let file_name = String::from("bar");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [hook]
+            on-activate = '''
+              export FOO="will not be used"
+            '''
+
+            [build.{package_name}]
+            command = """
+                mkdir $out
+                cat << EOF > $out/{file_name}
+                Triple quotes embrace
+                Multiline wisdom flows
+                Syntax peace descends
+                EOF
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+        assert_build_file(&env_path, &package_name, &file_name, indoc! {"
+            Triple quotes embrace
+            Multiline wisdom flows
+            Syntax peace descends
+        "});
     }
 
     fn build_depending_on_another_build(dep_sandbox: &str, package_sandbox: &str) {

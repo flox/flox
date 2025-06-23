@@ -1,0 +1,35 @@
+# Regression test manifest that shows
+# that (space) indented heredocs work as expected
+# as script files are outdented.
+#
+version = 1
+
+[hook]
+on-activate = '''
+    cat << EOF
+    running on-activate
+    EOF
+'''
+
+[profile]
+common = '''
+    cat << EOF
+    running profile-common
+    EOF
+'''
+bash = '''
+    cat << EOF
+    running profile-bash
+    EOF
+'''
+zsh = '''
+    cat << EOF
+    running profile-zsh
+    EOF
+'''
+# fish doesnt have heredocs
+tcsh = '''
+    cat << EOF
+    running profile-tcsh
+    EOF
+'''

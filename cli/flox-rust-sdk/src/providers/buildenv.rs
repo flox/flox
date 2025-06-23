@@ -1719,9 +1719,9 @@ mod buildenv_tests {
     }
 
     #[test]
-    fn build_on_activate_lockfile() {
+    fn build_contains_on_activate_script() {
         let buildenv = buildenv_instance();
-        let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/on-activate/manifest.lock");
+        let lockfile_path = GENERATED_DATA.join("envs/kitchen_sink/manifest.lock");
         let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
@@ -1730,6 +1730,24 @@ mod buildenv_tests {
 
         let develop = &result.develop;
         assert!(develop.join("activate.d/hook-on-activate").exists());
+    }
+
+    #[test]
+    fn build_contains_profile_scripts() {
+        let buildenv = buildenv_instance();
+        let lockfile_path = GENERATED_DATA.join("envs/kitchen_sink/manifest.lock");
+        let client = MockClient::new();
+        let result = buildenv.build(&client, &lockfile_path, None).unwrap();
+
+        for output in [&result.runtime, &result.develop] {
+            for shell in ["common", "zsh", "fish", "bash", "tcsh"] {
+                assert!(
+                    output.join(format!("activate.d/profile-{shell}")).exists(),
+                    "profile script 'activate.d/profile-{shell}' did not exist in output {}",
+                    output.display()
+                );
+            }
+        }
     }
 
     #[test]
