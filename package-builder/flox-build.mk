@@ -622,36 +622,22 @@ define MANIFEST_BUILD_template =
 	  $(_rm) -f $($(_pvarname)_result); \
 	  exit 1; \
 	fi
-	@# Also fail the build if it contains packages not found in the build
-	@# wrapper's closure.
-	$$(eval _build_store_path = $$(shell $(_readlink) $($(_pvarname)_result)))
-	# Allow the use of bashNonInteractive (formerly bash on older nixpkgs revisions)
-	$$(eval _executable_wrapper_store_path = $$(shell $(_nix) path-info --offline '$$(BUILDTIME_NIXPKGS_URL)#bashNonInteractive^out' ||  $(_nix) path-info --offline '$$(BUILDTIME_NIXPKGS_URL)#bash^out'))
-	$$(eval _build_closure_requisites = $$(shell $(_nix_store) --query --requisites $($(_pvarname)_result)/.))
-	@# BUG: $$($(_pvarname)_build_wrapper_env)/requisites.txt missing libcxx on Darwin??? Repeat the hard way ...
-	$$(eval _build_wrapper_requisites = $$(shell $(_nix_store) --query --requisites $$($(_pvarname)_build_wrapper_env)/.))
-	$$(eval _nef_requisites = \
-	  $$(if $$($(_pvarname)_buildDeps),$$(shell $(_nix_store) --query --requisites $$($(_pvarname)_buildDeps))))
-	$$(eval _build_closure_extra_packages = $$(strip \
-	  $$(filter-out $$(_build_store_path) $$(_build_wrapper_requisites) $$(_nef_requisites) $$(_executable_wrapper_store_path), \
-	    $$(_build_closure_requisites))))
-	$$(eval _count = $$(words $$(_build_closure_extra_packages)))
-	$$(eval _space = $$(shell echo $$(_count) | $(_tr) '[0-9]' '-'))
-	$$(if $$(_build_closure_extra_packages),$(_VV_) \
-	  echo -e "❌ ERROR: Unexpected dependencies found in package '$(_pvarname)':\n" \
-	          "\n" \
-	          "1. Remove any unneeded references (e.g. debug symbols) from your build.\n" \
-	          "2. If you’re using package groups$$(comma) move these packages into the 'toplevel' group.\n" \
-	          "3. If you’re using 'runtime-packages'$$(comma) make sure each package is listed both in\n" \
-	          "   'runtime-packages' and in the 'toplevel' group.\n" \
-	          "\n" \
-	          "$$(_count) packages found in $$(_build_store_path)\n" \
-	          "$$(_space)      not found in $$($(_pvarname)_build_wrapper_env)\n" 1>&2; \
-	  $$(intcmp 3,$$(_count),echo -e "Displaying first 3 only:\n" 1>&2; ) \
-	  $$(foreach _pkg,$$(wordlist 1,3,$$(_build_closure_extra_packages)), \
-	    ( $(_nix) why-depends --precise $$(_build_store_path) $$(_pkg) && echo ) 1>&2; ) \
-	  exit 1)
-	@# TODO: Strip the buildCache and log outputs of all requisites.
+	@# Then use the 'validate-build' script to:
+	@# 1. verify that the build only contains references to packages from
+	@#    a) its own "build" environment and b) any extra NEF or manifest
+	@#    build storepaths referenced in its build script (as tracked in
+	@#    "_buildDeps" and passed with "-x <dep>")
+	@# 2. scan output for path references not found within the "build"
+	@#    environment that can occur when replacing the "developcopy"
+	@#    environment at the conclusion of a manifest build
+	@# Emits diagnostics to stderr and returns nonzero result upon failure.
+	$(_V_) $(_libexec_dir)/validate-build \
+	  --build-env $$($(_pvarname)_build_wrapper_env) \
+	  --develop-env $(FLOX_ENV) \
+	  --system $(NIX_SYSTEM) \
+	  --pname $(_pname) \
+	  $$(if $$($(_pvarname)_buildDeps),$$(foreach _dep,$$($(_pvarname)_buildDeps),-x $$(_dep))) \
+	  $$(shell $(_readlink) $($(_pvarname)_result))
 
   # Create targets for cleaning up the result and log symlinks.
   $(eval $(call CLEAN_result_link_template,$($(_pvarname)_result)))
