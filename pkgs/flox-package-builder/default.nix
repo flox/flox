@@ -2,15 +2,19 @@
   bashInteractive,
   coreutils,
   daemonize,
+  findutils,
+  getopt,
   gitMinimal,
   gnugrep,
   gnused,
   gnutar,
   jq,
   nix,
+  shellcheck,
   stdenv,
   t3,
 }:
+
 stdenv.mkDerivation {
   pname = "package-builder";
   version = "1.0.0";
@@ -18,12 +22,15 @@ stdenv.mkDerivation {
     name = "package-builder-src";
     path = "${./../../package-builder}";
   };
+  nativeBuildInputs = [ shellcheck ];
   postPatch = ''
     # Need to perform substitutions within derivation for access to $out.
-    for i in build-manifest.nix flox-build.mk; do
+    for i in build-manifest.nix flox-build.mk validate-build.bash; do
       bashInteractive=${bashInteractive} \
       coreutils=${coreutils} \
       daemonize=${daemonize} \
+      findutils=${findutils} \
+      getopt=${getopt} \
       gitMinimal=${gitMinimal} \
       gnugrep=${gnugrep} \
       gnused=${gnused} \

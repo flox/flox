@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := all
 
-ALL = flox-build.mk build-manifest.nix nef/default.nix \
+ALL = validate-build flox-build.mk build-manifest.nix nef/default.nix \
   $(addprefix nef/lib/,default.nix dirToAttrs.nix extendAttrSet.nix mkOverlay.nix reflect.nix)
 
 OS := $(shell uname -s)
@@ -19,6 +19,11 @@ libsandbox.so: sandbox.c closure.o
 
 libsandbox.dylib: sandbox.c closure.o
 	$(CC) -pthread -dynamiclib $^ -o $@
+
+validate-build: validate-build.bash
+	shellcheck $<
+	cp $< $@
+	chmod +x $@
 
 .PHONY: all
 all: $(ALL)
