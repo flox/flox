@@ -367,8 +367,8 @@ impl FloxArgs {
             verbosity: self.verbosity.to_i32(),
         };
         debug!(
-            "features enabled, build={}, publish={}, upload={}",
-            flox.features.build, flox.features.publish, flox.features.upload,
+            configured = ?flox.features,
+            "feature flags"
         );
 
         // in debug mode keep the tempdir to reproduce nix commands
