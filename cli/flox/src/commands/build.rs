@@ -85,9 +85,16 @@ impl Build {
 
     #[instrument(name = "build::clean", skip_all)]
     async fn clean(flox: Flox, mut env: ConcreteEnvironment, packages: Vec<String>) -> Result<()> {
-        if let ConcreteEnvironment::Remote(_) = &env {
-            unreachable!("Cannot build from a remote environment");
-        }
+        match &env {
+            ConcreteEnvironment::Path(_) => (),
+            ConcreteEnvironment::Managed(_) => {
+                bail!("Cannot build from an environment on FloxHub.")
+            },
+            ConcreteEnvironment::Remote(_) => {
+                unreachable!("Cannot build from a remote environment")
+            },
+        };
+
         let base_dir = env.parent_path()?;
         let expression_dir = nix_expression_dir(&env); // TODO: decouple from env
         let flox_env_build_outputs = env.build(&flox)?;
@@ -114,8 +121,14 @@ impl Build {
         packages: Vec<String>,
         nixpkgs_url_override: Option<Url>,
     ) -> Result<()> {
-        if let ConcreteEnvironment::Remote(_) = &env {
-            unreachable!("Cannot build from a remote environment");
+        match &env {
+            ConcreteEnvironment::Path(_) => (),
+            ConcreteEnvironment::Managed(_) => {
+                bail!("Cannot build from an environment on FloxHub.")
+            },
+            ConcreteEnvironment::Remote(_) => {
+                unreachable!("Cannot build from a remote environment")
+            },
         };
 
         let base_dir = env.parent_path()?;
