@@ -1,0 +1,38 @@
+# ============================================================================ #
+#
+# Trigger a CI run of remote workflow in flox/flox-manifest-build-examples,
+# to exercise manifest builds against the latest changes on main.
+#
+# ---------------------------------------------------------------------------- #
+
+name: "Build manifest build examples"
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.head_ref || github.sha }}"
+  cancel-in-progress: false
+
+jobs:
+  run-manifest-build-examples:
+    name: "Build manifest build examples"
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 5
+
+    steps:
+      - name: Invoke the "Test Manifest Builds" workfow in flox/flox-manifest-build-examples
+        env:
+          GITHUB_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
+          WORKFLOW: Test Manifest Builds
+          REPO: flox/flox-manifest-build-examples
+        run: |
+          gh workflow run --repo "$REPO" "$WORKFLOW"
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #
