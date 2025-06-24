@@ -410,7 +410,7 @@ impl Activate {
         );
         exports.insert(
             FLOX_ACTIVATE_START_SERVICES_VAR,
-            start_new_process_compose.to_string(),
+            should_have_services.to_string(),
         );
         exports.insert(
             FLOX_SERVICES_SOCKET_VAR,
