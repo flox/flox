@@ -28,7 +28,7 @@ use crate::utils::errors::display_chain;
 use crate::utils::message;
 
 const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
-const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 5 * 60 * 1_000; // 5 min
+const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 5 min
 
 #[derive(Bpaf, Clone)]
 pub struct Publish {
