@@ -13,6 +13,7 @@ chrono.workspace = true
 regress.workspace = true
 regex = { workspace = true, optional = true }
 httpmock = { workspace = true, optional = true }
+sentry.workspace = true
 
 [build-dependencies]
 prettyplease.workspace = true

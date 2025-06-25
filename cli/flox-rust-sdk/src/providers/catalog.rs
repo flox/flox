@@ -1662,8 +1662,16 @@ mod tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use serde_json::json;
+    use tracing_subscriber::prelude::*;
 
     use super::*;
+
+    const SENTRY_TRACE_HEADER: &str = "sentry-trace";
+    const EMPTY_SEARCH_RESPONSE: &api_types::PackageSearchResult =
+        &api_types::PackageSearchResult {
+            items: vec![],
+            total_count: 0,
+        };
 
     fn client_config(url: &str) -> CatalogClientConfig {
         CatalogClientConfig {
@@ -1805,15 +1813,11 @@ mod tests {
     #[tokio::test]
     async fn user_agent_set_on_all_requests() {
         let expected_agent = format!("flox-cli/{}", &*FLOX_VERSION);
-        let empty_response = &api_types::PackageSearchResult {
-            items: vec![],
-            total_count: 0,
-        };
 
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
             when.header("user-agent", expected_agent);
-            then.status(200).json_body_obj(empty_response);
+            then.status(200).json_body_obj(EMPTY_SEARCH_RESPONSE);
         });
 
         let client = CatalogClient::new(client_config(server.base_url().as_str()));
@@ -1827,16 +1831,11 @@ mod tests {
         extra_headers.insert("flox-test".to_string(), "test-value".to_string());
         extra_headers.insert("flox-test2".to_string(), "test-value2".to_string());
 
-        let empty_response = &api_types::PackageSearchResult {
-            items: vec![],
-            total_count: 0,
-        };
-
         let server = MockServer::start_async().await;
         let mock = server.mock(|when, then| {
             when.header("flox-test", "test-value")
                 .and(|when| when.header("flox-test2", "test-value2"));
-            then.status(200).json_body_obj(empty_response);
+            then.status(200).json_body_obj(EMPTY_SEARCH_RESPONSE);
         });
 
         let config = CatalogClientConfig {
@@ -1849,6 +1848,63 @@ mod tests {
         let client = CatalogClient::new(config);
         let _ = client.package_versions("some-package").await;
         mock.assert();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn tracing_headers_present_when_sentry_enabled() {
+        let server = MockServer::start_async().await;
+        let client = CatalogClient::new(client_config(server.base_url().as_str()));
+
+        // The following are needed, in this order, for headers to be added:
+        //
+        // 1. Tracing subscriber with Sentry layer. This is normally initialized
+        //    globally by the CLI regardless of whether metrics and Sentry are
+        //    enabled. For this test it is scoped.
+        let subscriber =
+            tracing_subscriber::Registry::default().with(sentry::integrations::tracing::layer());
+        let _subscriber_guard = tracing::subscriber::set_default(subscriber);
+
+        let mock = server.mock(|when, then| {
+            when.header_exists(SENTRY_TRACE_HEADER); // Ensure present.
+            then.status(200).json_body_obj(EMPTY_SEARCH_RESPONSE);
+        });
+
+        // 2. Sentry client and hub. This is normally initialized globally by the
+        //    CLI only if metrics and Sentry are enabled. For this test it is
+        //    scoped.
+        sentry::test::with_captured_envelopes(|| {
+            // 3. An active span. This is normally already created by the CLI, typically
+            //    from `flox::commands`.
+            tracing::info_span!("test span").in_scope(|| {
+                let res = client.package_versions("some-package").block_on();
+                mock.assert();
+                assert!(res.is_ok(), "Expected successful response, got: {:?}", res);
+            });
+        });
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn tracing_headers_absent_when_sentry_disabled() {
+        let server = MockServer::start_async().await;
+        let client = CatalogClient::new(client_config(server.base_url().as_str()));
+
+        let subscriber =
+            tracing_subscriber::Registry::default().with(sentry::integrations::tracing::layer());
+        let _subscriber_guard = tracing::subscriber::set_default(subscriber);
+
+        let mock = server.mock(|when, then| {
+            when.header_missing(SENTRY_TRACE_HEADER); // Ensure absent.
+            then.status(200).json_body_obj(EMPTY_SEARCH_RESPONSE);
+        });
+
+        // This does the same as the previous test except for initializing the
+        // Sentry client and hub. It would give false positives if the
+        // subscriber and span weren't also present.
+        tracing::info_span!("test span").in_scope(|| {
+            let res = client.package_versions("some-package").block_on();
+            mock.assert();
+            assert!(res.is_ok(), "Expected successful response, got: {:?}", res);
+        });
     }
 
     // region: Error response handling

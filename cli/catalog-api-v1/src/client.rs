@@ -3986,6 +3986,21 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/`
             .query(&progenitor_client::QueryParam::new("name", &name))
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4037,6 +4052,21 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}`
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4088,6 +4118,21 @@ Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4140,6 +4185,21 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4199,6 +4259,21 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
             .query(&progenitor_client::QueryParam::new("name", &name))
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4257,6 +4332,21 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4312,6 +4402,21 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4374,6 +4479,21 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             .json(&body)
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4440,6 +4560,21 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             .json(&body)
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4501,6 +4636,21 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             .json(&body)
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4556,6 +4706,21 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing`
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4613,6 +4778,21 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/add-r
             .json(&body)
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4670,6 +4850,21 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/remov
             .json(&body)
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4719,6 +4914,21 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4770,6 +4980,21 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
             .json(&body)
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4808,6 +5033,21 @@ Sends a `GET` request to `/api/v1/catalog/info/base-catalog`
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4849,6 +5089,21 @@ Sends a `GET` request to `/api/v1/catalog/info/pkg-paths`
             .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4887,6 +5142,21 @@ Sends a `GET` request to `/api/v1/catalog/info/published-catalogs`
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -4942,6 +5212,21 @@ Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
             .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -5034,6 +5319,21 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -5093,6 +5393,21 @@ Sends a `GET` request to `/api/v1/catalog/search`
             .query(&progenitor_client::QueryParam::new("system", &system))
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -5142,6 +5457,21 @@ Sends a `POST` request to `/api/v1/catalog/settings/{key}`
             .query(&progenitor_client::QueryParam::new("value", &value))
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -5182,6 +5512,21 @@ Sends a `GET` request to `/api/v1/catalog/status/catalog`
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -5222,6 +5567,21 @@ Sends a `GET` request to `/api/v1/catalog/status/healthcheck`
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -5257,6 +5617,21 @@ Sends a `GET` request to `/api/v1/catalog/status/sentry-debug`
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -5294,6 +5669,21 @@ Sends a `GET` request to `/api/v1/catalog/status/service`
             )
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -5339,6 +5729,21 @@ Sends a `POST` request to `/api/v1/catalog/store`
             .json(&body)
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
@@ -5385,6 +5790,21 @@ Sends a `POST` request to `/api/v1/catalog/store/status`
             .json(&body)
             .headers(header_map)
             .build()?;
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::PreHookError(e.to_string())),
+        }
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
