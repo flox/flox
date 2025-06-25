@@ -21,20 +21,13 @@ use crate::utils::metrics::read_metrics_uuid;
 /// - Initialize a real client otherwise
 pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
     let extra_headers = {
-        // If metrics are not disabled, pass along the metrics UUID so it can be
-        // sent in catalog request headers, as well as the Sentry span info
+        // Propagate the metrics UUID to catalog-server if metrics are enabled.
         if !config.flox.disable_metrics {
             let mut metrics_headers = BTreeMap::new();
             metrics_headers.insert(
                 "flox-device-uuid".to_string(),
                 read_metrics_uuid(config).unwrap().to_string(),
             );
-
-            if let Some(span) = sentry::configure_scope(|scope| scope.get_span()) {
-                for (k, v) in span.iter_headers() {
-                    metrics_headers.insert(k.to_string(), v);
-                }
-            }
             metrics_headers
         } else {
             Default::default()

@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use openapiv3::OpenAPI;
+use syn::parse_quote;
 
 fn main() {
     let generate_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("src");
@@ -41,6 +42,19 @@ fn generator() -> progenitor::Generator {
         "crate::types::CatalogStoreConfig",
         vec![].into_iter(),
     );
+    settings.with_pre_hook_async(parse_quote! {
+        async |request: &mut ::reqwest::Request| {
+            // Propagate the trace ID to catalog-server.
+            // This will be a noop when metrics are disabled because Sentry will
+            // not have been initialized.
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request.headers_mut().append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        }
+    });
     progenitor::Generator::new(&settings)
 }
 
