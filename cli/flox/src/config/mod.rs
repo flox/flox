@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::{env, fs};
 
 use anyhow::{Context, Result};
@@ -10,7 +8,6 @@ use config::{Config as HierarchicalConfig, Environment};
 use flox_rust_sdk::flox::{EnvironmentRef, Features};
 use flox_rust_sdk::models::search::SearchLimit;
 use itertools::{Either, Itertools};
-use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tempfile::PersistError;
 use thiserror::Error;
@@ -321,61 +318,31 @@ fn raw_config_from_parts(
 }
 
 impl Config {
-    /// Creates a raw [Config] object and caches it for the lifetime of the program
-    fn raw_config(mut reload: bool) -> Result<HierarchicalConfig> {
-        static INSTANCE: OnceCell<Mutex<HierarchicalConfig>> = OnceCell::new();
+    fn parse_with(
+        flox_dirs: &BaseDirectories,
+        user_config_dir: PathBuf,
+        system_config_dir: Option<PathBuf>,
+        env: impl IntoIterator<Item = (String, String)>,
+    ) -> Result<Config> {
+        let final_config =
+            raw_config_from_parts(flox_dirs, user_config_dir, system_config_dir, env)?;
 
-        debug!(
-            "reading raw config (initialized: {initialized}, reload: {reload})",
-            initialized = INSTANCE.get().is_some()
-        );
-
-        let instance = INSTANCE.get_or_try_init(|| {
-            // If we are initializing the config for the first time,
-            // we don't need to reload right after
-            reload = false;
-
-            let flox_dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
-            let config = raw_config_from_parts(
-                &flox_dirs,
-                locate_user_config_dir(&flox_dirs)?,
-                locate_system_config_dir()?,
-                env::vars(),
-            )?;
-
-            Ok::<_, anyhow::Error>(Mutex::new(config))
-        })?;
-
-        let mut config_guard = instance.lock().expect("config mutex poisoned");
-        if reload {
-            let flox_dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
-            *config_guard = raw_config_from_parts(
-                &flox_dirs,
-                locate_user_config_dir(&flox_dirs)?,
-                locate_system_config_dir()?,
-                env::vars(),
-            )?;
-        }
-
-        Ok(config_guard.deref().clone())
-    }
-
-    /// Creates a [Config] from the environment and config file
-    ///
-    /// When running in tests, the config is reloaded on every call.
-    pub fn parse() -> Result<Config> {
-        #[cfg(test)]
-        let reload = true;
-
-        #[cfg(not(test))]
-        let reload = false;
-
-        let final_config = Self::raw_config(reload)?;
         let cli_config: Config = final_config
             .to_owned()
             .try_deserialize()
             .context("Could not parse config")?;
         Ok(cli_config)
+    }
+
+    /// Creates a [Config] from the environment and config files
+    pub fn parse() -> Result<Config> {
+        let base_directories = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
+        Self::parse_with(
+            &base_directories,
+            locate_user_config_dir(&base_directories)?,
+            locate_system_config_dir()?,
+            env::vars(),
+        )
     }
 
     /// get a value from the config
