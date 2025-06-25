@@ -7,7 +7,7 @@ use catalog_api_v1::types::{NarInfo, NarInfos, Output, Outputs, PublishResponse,
 use chrono::{DateTime, Utc};
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
-use tracing::{debug, info, instrument};
+use tracing::{debug, instrument};
 use url::Url;
 
 use super::auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
@@ -70,19 +70,8 @@ pub enum PublishError {
         BaseCatalogUrlError,
     ),
 
-    #[error(
-        "build of package(s) failed ({status})\n\
-        stderr:\n\
-        {stderr}\n\
-        \n\
-        stdout:\n\
-        {stdout}"
-    )]
-    PackageBuildError {
-        status: ExitStatus,
-        stderr: String,
-        stdout: String,
-    },
+    #[error("build of package(s) failed ({status})")]
+    PackageBuildError { status: ExitStatus },
 
     #[error("Could not identify user from authentication info")]
     Unauthenticated,
@@ -828,29 +817,19 @@ pub fn check_build_metadata(
 
     let mut output_build_results: Option<BuildResults> = None;
 
-    let mut stdout = String::new();
-    let mut stderr = String::new();
     for message in output_stream {
         match message {
             build::Output::Success(build_results) => {
                 output_build_results = Some(build_results);
             },
             build::Output::Failure(status) => {
-                return Err(PublishError::PackageBuildError {
-                    status,
-                    stderr,
-                    stdout,
-                });
+                return Err(PublishError::PackageBuildError { status });
             },
             build::Output::Stdout(line) => {
-                info!("{line}");
-                stdout.push_str(&line);
-                stdout.push('\n');
+                println!("{line}");
             },
             build::Output::Stderr(line) => {
-                stderr.push_str(&line);
-                stderr.push('\n');
-                info!("{line}");
+                eprintln!("{line}");
             },
         }
     }

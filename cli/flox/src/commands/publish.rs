@@ -19,7 +19,7 @@ use flox_rust_sdk::providers::publish::{
 use indoc::formatdoc;
 use tracing::{debug, info_span, instrument};
 
-use super::{EnvironmentSelect, environment_select};
+use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::build::packages_to_build;
 use crate::commands::ensure_floxhub_token;
 use crate::config::Config;
@@ -28,12 +28,12 @@ use crate::utils::errors::display_chain;
 use crate::utils::message;
 
 const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
-const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 5 * 60 * 1_000; // 5 min
+const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
 
 #[derive(Bpaf, Clone)]
 pub struct Publish {
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
+    #[bpaf(external(dir_environment_select), fallback(Default::default()))]
+    environment: DirEnvironmentSelect,
 
     #[bpaf(external(cache_args))]
     cache: CacheArgs,
@@ -131,7 +131,12 @@ impl Publish {
 
         let path_env = match env {
             ConcreteEnvironment::Path(path_env) => path_env,
-            _ => bail!("Unsupported environment type"),
+            ConcreteEnvironment::Managed(_) => {
+                bail!("Cannot publish from an environment on FloxHub.")
+            },
+            ConcreteEnvironment::Remote(_) => {
+                unreachable!("Cannot publish from a remote environment")
+            },
         };
 
         // Check the environment for appropriate state to build and publish
