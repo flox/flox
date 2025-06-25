@@ -2148,6 +2148,81 @@ mod tests {
         .await;
     }
 
+    /// Contrived example of a package referring to files possibly found
+    /// in the develop environment that aren't in the build closure.
+    async fn assert_nonexistent_path_check_failure(bin_name: &str, hint: &str) {
+        let package_name = String::from("my-package");
+        let build_command = formatdoc! {r#"
+            mkdir -p $out/bin
+            cat > "$out/bin/test" <<EOF
+            #!/usr/bin/env bash
+            $FLOX_ENV/bin/{bin_name}
+            EOF
+            chmod +x "$out/bin/test"
+        "#};
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+            curl.pkg-path = "curl"
+            curl.pkg-group = "not-toplevel"
+
+            [build.{package_name}]
+            runtime-packages = []
+            command = """
+            {build_command}
+            """
+        "#};
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello-curl-not-in-toplevel.yaml"))
+                .await;
+        let output = assert_build_status(&flox, &mut env, &package_name, None, false);
+
+        let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
+        let expected_pattern = formatdoc! {r#"
+            ❌ ERROR: Nonexistent path reference to '\$FLOX_ENV/bin/{bin_name}' found in package '{package_name}':
+                Hint: {hint}
+            Path referenced by: {store_path_prefix_pattern}-{package_name}-0.0.0/bin/.test-wrapped
+              Nonexistent path: {store_path_prefix_pattern}-environment-build-{package_name}/bin/{bin_name}
+        "#};
+        let re = regex::Regex::new(&expected_pattern).unwrap();
+        if !re.is_match(&output.stderr) {
+            pretty_assertions::assert_eq!(
+                output.stderr,
+                expected_pattern,
+                "didn't find expected pattern, diffing entire output"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn nonexistent_path_check_in_runtime_packages() {
+        let bin_name = String::from("hello");
+        let hint = format!("consider adding package '{bin_name}' to 'runtime-packages'");
+        assert_nonexistent_path_check_failure(&bin_name, &hint).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn nonexistent_path_check_not_in_toplevel() {
+        let bin_name = String::from("curl");
+        let hint = format!("consider moving package '{bin_name}' to 'toplevel' pkg-group");
+        assert_nonexistent_path_check_failure(&bin_name, &hint).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn nonexistent_path_check_complete_fiction() {
+        let bin_name = String::from("not-found");
+        let hint = format!(
+            "check your build script and project files for any mention of the '{bin_name}' string"
+        );
+        assert_nonexistent_path_check_failure(&bin_name, &hint).await;
+    }
+
     #[test]
     fn cleans_up_data_sandbox() {
         let package_name = String::from("foo");

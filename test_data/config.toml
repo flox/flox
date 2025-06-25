@@ -407,6 +407,9 @@ pre_cmd = "flox init"
 cmd = "flox install vim vim-full"
 ignore_cmd_errors = true # packages conflict
 
+[resolve.hello-curl-not-in-toplevel]
+pre_cmd = "flox init"
+cmd = "printf 'version=1\n[install]\n%s\n%s\n%s\n' 'hello.pkg-path = \"hello\"' 'curl.pkg-path = \"curl\"' 'curl.pkg-group = \"not-toplevel\"' | flox edit -f -"
 
 [search.hello]
 cmd = "flox search hello"
