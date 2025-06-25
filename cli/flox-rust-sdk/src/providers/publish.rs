@@ -462,7 +462,15 @@ impl ClientSideCatalogStoreConfig {
                 String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
-        serde_json::from_slice(&output.stdout).map_err(PublishError::ParseNarInfo)
+        let narinfos = serde_json::from_slice::<NarInfos>(&output.stdout)
+            .map_err(PublishError::ParseNarInfo)?;
+        if narinfos.contains_key(store_path) {
+            Ok(narinfos[store_path].clone())
+        } else {
+            Err(PublishError::GetNarInfo(formatdoc! {
+                "NAR info for store path '{store_path}' not found in response: {narinfos:?}"
+            }))
+        }
     }
 
     /// Gets the NAR info for each build output and returns it in the format
@@ -482,7 +490,7 @@ impl ClientSideCatalogStoreConfig {
                 "querying NAR info for build output"
             );
             let nar_info = Self::get_nar_info(source_url, &output.store_path, auth_netrc_path)?;
-            nar_infos.insert(output.name.clone(), nar_info);
+            nar_infos.insert(output.store_path.clone(), nar_info);
         }
         Ok(nar_infos.into())
     }
@@ -1728,5 +1736,49 @@ pub mod tests {
         let is_some_remote = remote_url == get_remote_url(&remotes, "some_remote");
         let is_other_remote = remote_url == get_remote_url(&remotes, "other_remote");
         assert!(is_some_remote || is_other_remote);
+    }
+
+    #[test]
+    fn test_get_nar_info() {
+        let token = create_test_token("test");
+        let (_key_file, cache) = local_nix_cache(&token);
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let auth_file = write_floxhub_netrc(flox.temp_dir.as_path(), &token).unwrap();
+
+        let url = Url::from_directory_path(cache.download_url().unwrap().to_file_path().unwrap())
+            .unwrap();
+
+        let mut eval_cmd = nix_base_command();
+        eval_cmd.arg("eval").arg("--raw").arg("nixpkgs#cacert");
+        let storepath = String::from_utf8(eval_cmd.output().unwrap().stdout)
+            .unwrap()
+            .trim()
+            .to_string();
+
+        let mut copy_cmd = nix_base_command();
+        copy_cmd
+            .arg("copy")
+            .arg(&storepath)
+            .arg("--to")
+            .arg(cache.upload_url().unwrap().to_string());
+        let _ = copy_cmd.output().unwrap();
+
+        let narinfo =
+            ClientSideCatalogStoreConfig::get_nar_info(&url, storepath.as_str(), &auth_file)
+                .unwrap();
+        assert!(
+            narinfo.download_hash.is_some(),
+            "Expected narinfo to have a download hash"
+        );
+        assert!(
+            narinfo.closure_download_size.is_some(),
+            "Expected narinfo to have a closure download size"
+        );
+        assert!(
+            narinfo.nar_size.is_some(),
+            "Expected narinfo to have a nar size"
+        );
+        assert!(narinfo.url.is_some(), "Expected narinfo to have a url");
     }
 }
