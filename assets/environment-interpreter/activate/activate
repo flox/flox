@@ -47,7 +47,7 @@ source "${_activate_d}/generate-fish-startup-commands.bash"
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/generate-tcsh-startup-commands.bash"
 # shellcheck source-path=SCRIPTDIR/activate.d
-source "${_activate_d}/source-profile-d.bash"
+source "${_activate_d}/helpers.bash"
 # shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/start.bash"
 
@@ -263,9 +263,11 @@ if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
     echo "build mode is only supported for running a command" >&2
     exit 1
   fi
-  # We want to run hooks without a state dir, since we'll never attach to this
-  # activation
-  start ""
+  # We don't ever need to attach, and we don't want to run hook.on-activate,
+  # so just run the parts of start.bash that we need
+  source_profile_d "$_profile_d"
+  # Set static environment variables from the manifest
+  set_manifest_vars "$FLOX_ENV"
 
   exec "$@"
 fi
