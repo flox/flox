@@ -7,7 +7,7 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::auth::Auth;
 use flox_rust_sdk::providers::build::{PackageTarget, nix_expression_dir};
-use flox_rust_sdk::providers::catalog::{BaseCatalogInfo, ClientTrait};
+use flox_rust_sdk::providers::catalog::ClientTrait;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -20,7 +20,7 @@ use indoc::formatdoc;
 use tracing::{debug, info_span, instrument};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
-use crate::commands::build::packages_to_build;
+use crate::commands::build::{base_catalog_url_for_stability_arg, packages_to_build};
 use crate::commands::ensure_floxhub_token;
 use crate::config::Config;
 use crate::environment_subcommand_metric;
@@ -159,42 +159,7 @@ impl Publish {
                 .await
                 .context("could not get information about the base catalog")?;
 
-            match stability {
-                Some(stability) => {
-                    let make_error_message = || {
-                        let available_stabilities =
-                            base_catalog_info.available_stabilities().join(", ");
-                        formatdoc! {"
-                          Stability '{stability}' does not exist (or has not yet been populated).
-                          Available stabilities are: {available_stabilities}
-                      "}
-                    };
-
-                    let url = base_catalog_info
-                        .url_for_latest_page_with_stability(&stability)
-                        .with_context(make_error_message)?;
-
-                    debug!(%url, %stability, "using page from user provided stability");
-                    url
-                },
-                None => {
-                    let make_error_message = || {
-                        let available_stabilities =
-                            base_catalog_info.available_stabilities().join(", ");
-                        formatdoc! {"
-                          The default stability {} does not exist (or has not yet been populated).
-                          Available stabilities are: {available_stabilities}
-                      ", BaseCatalogInfo::DEFAULT_STABILITY}
-                    };
-
-                    let url = base_catalog_info
-                        .url_for_latest_page_with_default_stability()
-                        .with_context(make_error_message)?;
-
-                    debug!(%url, "using page from default stability flake");
-                    url
-                },
-            }
+            base_catalog_url_for_stability_arg(stability.as_deref(), &base_catalog_info)?
         };
 
         // Check the environment for appropriate state to build and publish

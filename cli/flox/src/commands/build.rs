@@ -16,7 +16,7 @@ use flox_rust_sdk::providers::build::{
     find_toplevel_group_nixpkgs,
     nix_expression_dir,
 };
-use flox_rust_sdk::providers::catalog::{BaseCatalogInfo, ClientTrait};
+use flox_rust_sdk::providers::catalog::{BaseCatalogInfo, BaseCatalogUrl, ClientTrait};
 use futures::TryFutureExt;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -163,44 +163,15 @@ impl Build {
                 url
             },
             Some(BaseCatalogUrlSelect::Stability(stability)) => {
-                let base_catalog_info = base_catalog_info_fut.await?;
-
-                let make_error_message = || {
-                    let available_stabilities =
-                        base_catalog_info.available_stabilities().join(", ");
-                    formatdoc! {"
-                      Stability '{stability}' does not exist (or has not yet been populated).
-                      Available stabilities are: {available_stabilities}
-                  "}
-                };
-
-                let url = base_catalog_info
-                    .url_for_latest_page_with_stability(&stability)
-                    .with_context(make_error_message)?
-                    .as_flake_ref()?;
-
-                debug!(%url, "using page from '{stability}'");
-                url
+                let url = base_catalog_url_for_stability_arg(
+                    Some(&stability),
+                    &base_catalog_info_fut.await?,
+                )?;
+                url.as_flake_ref()?
             },
             None => {
-                let base_catalog_info = base_catalog_info_fut.await?;
-
-                let make_error_message = || {
-                    let available_stabilities =
-                        base_catalog_info.available_stabilities().join(", ");
-                    formatdoc! {"
-                      The default stability {} does not exist (or has not yet been populated).
-                      Available stabilities are: {available_stabilities}
-                  ", BaseCatalogInfo::DEFAULT_STABILITY}
-                };
-
-                let url = base_catalog_info
-                    .url_for_latest_page_with_default_stability()
-                    .with_context(make_error_message)?
-                    .as_flake_ref()?;
-
-                debug!(%url, "using page from default stability");
-                url
+                let url = base_catalog_url_for_stability_arg(None, &base_catalog_info_fut.await?)?;
+                url.as_flake_ref()?
             },
         };
 
@@ -291,6 +262,47 @@ impl Build {
             })
             .collect::<Result<Vec<_>>>()
     }
+}
+
+pub(crate) fn base_catalog_url_for_stability_arg(
+    stability: Option<&str>,
+    base_catalog_info: &BaseCatalogInfo,
+) -> Result<BaseCatalogUrl> {
+    let url = match stability {
+        Some(stability) => {
+            let make_error_message = || {
+                let available_stabilities = base_catalog_info.available_stabilities().join(", ");
+                formatdoc! {"
+                    Stability '{stability}' does not exist (or has not yet been populated).
+                    Available stabilities are: {available_stabilities}
+                "}
+            };
+
+            let url = base_catalog_info
+                .url_for_latest_page_with_stability(stability)
+                .with_context(make_error_message)?;
+
+            debug!(%url, %stability, "using page from user provided stability");
+            url
+        },
+        None => {
+            let make_error_message = || {
+                let available_stabilities = base_catalog_info.available_stabilities().join(", ");
+                formatdoc! {"
+                    The default stability {} does not exist (or has not yet been populated).
+                    Available stabilities are: {available_stabilities}
+                ", BaseCatalogInfo::DEFAULT_STABILITY}
+            };
+
+            let url = base_catalog_info
+                .url_for_latest_page_with_default_stability()
+                .with_context(make_error_message)?;
+
+            debug!(%url, "using page from default stability");
+            url
+        },
+    };
+    Ok(url)
 }
 
 pub(crate) fn packages_to_build<'o>(
