@@ -20,24 +20,24 @@ pub struct Config {
     /// You might use this to use the production vs. preview server, etc.
     pub vars: Option<HashMap<String, String>>,
     /// Specs for the resolve endpoint
-    pub resolve: Option<HashMap<String, RawSpec>>,
+    pub resolve: Option<HashMap<String, JobSpec>>,
     /// Specs for the search command
-    pub search: Option<HashMap<String, RawSpec>>,
+    pub search: Option<HashMap<String, JobSpec>>,
     /// Specs for the show command
-    pub show: Option<HashMap<String, RawSpec>>,
+    pub show: Option<HashMap<String, JobSpec>>,
     /// Specs for the init command
-    pub init: Option<HashMap<String, RawSpec>>,
+    pub init: Option<HashMap<String, JobSpec>>,
     /// Specs for manifest/lockfile pairs
-    pub envs: Option<HashMap<String, RawSpec>>,
+    pub envs: Option<HashMap<String, JobSpec>>,
     /// Specs for build environments
-    pub build: Option<HashMap<String, RawSpec>>,
+    pub build: Option<HashMap<String, JobSpec>>,
 }
 
 /// A spec for a single generated response file.
 ///
 /// This is what's taken straight from the config file, so it's the "value" in a "name": "value" pair.
 #[derive(Debug, Clone, Deserialize)]
-pub struct RawSpec {
+pub struct JobSpec {
     /// Check a specific path relative to the output directory rather than looking in the default
     /// location when determining whether this job needs to be re-run.
     pub skip_if_output_exists: Option<PathBuf>,
@@ -62,7 +62,7 @@ pub struct RawSpec {
 
 /// A spec for a single generated response file.
 #[derive(Debug, Clone, Deserialize)]
-pub struct Spec {
+pub struct Job {
     /// The name of the file without the extension.
     pub name: String,
     /// A command to run before the command that generates the response.
@@ -84,8 +84,8 @@ pub struct Spec {
     pub ignore_post_cmd_errors: Option<bool>,
 }
 
-impl Spec {
-    pub fn new(name: &str, raw_spec: &RawSpec) -> Self {
+impl Job {
+    pub fn new(name: &str, raw_spec: &JobSpec) -> Self {
         Self {
             name: name.into(),
             pre_cmd: raw_spec.pre_cmd.clone(),
@@ -100,10 +100,10 @@ impl Spec {
 }
 
 #[derive(Debug)]
-pub struct Job {
+pub struct JobCtx {
     pub category: String,
     pub tmp_dir: TempDir,
-    pub spec: Spec,
+    pub spec: Job,
     pub output_file: PathBuf,
 }
 
@@ -175,7 +175,7 @@ pub fn generate_jobs(
     config: &Config,
     output_dir: &Path,
     force: bool,
-) -> Result<impl Iterator<Item = Job>, Error> {
+) -> Result<impl Iterator<Item = JobCtx>, Error> {
     let mut jobs = vec![];
     if let Some(init) = config.init.as_ref() {
         jobs.push(
@@ -219,11 +219,11 @@ pub fn generate_jobs(
 /// Generates the jobs for a given category.
 pub fn generate_category_jobs<'a>(
     category: &str,
-    raw_specs: impl Iterator<Item = (&'a String, &'a RawSpec)>,
+    raw_specs: impl Iterator<Item = (&'a String, &'a JobSpec)>,
     output_dir: &Path,
     force: bool,
-) -> Result<Vec<Job>, Error> {
-    let mut jobs: Vec<Job> = vec![];
+) -> Result<Vec<JobCtx>, Error> {
+    let mut jobs: Vec<JobCtx> = vec![];
     for (name, raw_spec) in raw_specs {
         let response_filename = output_dir.join(category).join(format!("{}.yaml", name));
         match (force, raw_spec.skip_if_output_exists.as_ref()) {
@@ -244,10 +244,10 @@ pub fn generate_category_jobs<'a>(
         }
         debug!(category, name, "adding job to queue");
         let tmp_dir = TempDir::new_in(output_dir)?;
-        jobs.push(Job {
+        jobs.push(JobCtx {
             category: category.into(),
             tmp_dir,
-            spec: Spec::new(name, raw_spec),
+            spec: Job::new(name, raw_spec),
             output_file: response_filename,
         });
     }
@@ -256,7 +256,7 @@ pub fn generate_category_jobs<'a>(
 
 /// Executes the provided jobs
 pub fn execute_jobs(
-    jobs: impl Iterator<Item = Job>,
+    jobs: impl Iterator<Item = JobCtx>,
     vars: &Option<HashMap<String, String>>,
     input_dir: &Path,
     quiet: bool,
@@ -295,7 +295,7 @@ pub fn execute_jobs(
 
 /// Executes a single job
 pub fn execute_job(
-    job: &Job,
+    job: &JobCtx,
     vars: &Option<HashMap<String, String>>,
     input_dir: &Path,
 ) -> Result<(), Error> {
