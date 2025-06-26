@@ -2063,21 +2063,17 @@ mod tests {
         flox.catalog_client = catalog_replay_client(GENERATED_DATA.join(mock_file)).await;
         let output = assert_build_status(&flox, &mut env, package_name, None, false);
 
-        // Nix logs always include one space of padding even on empty lines.
-        // Add a trailing space like this so auto-formatters don't trim trailing
-        // whitespace
-        let nix_log_pad = " ";
         // TODO: Provide more targeted advice based on the current lockfile's
         //       `runtime-packages` and `install` groups so that we don't need
         //       to tell the user to try everything.
         let expected_output = formatdoc! {r#"
             ❌ ERROR: Unexpected dependencies found in package '{package_name}':
-            {nix_log_pad}
-             1. Remove any unneeded references (e.g. debug symbols) from your build.
-             2. If you’re using package groups, move these packages into the 'toplevel' group.
-             3. If you’re using 'runtime-packages', make sure each package is listed both in
-                'runtime-packages' and in the 'toplevel' group.
-            {nix_log_pad}
+
+            1. Remove any unneeded references (e.g. debug symbols) from your build.
+            2. If you’re using package groups, move these packages into the 'toplevel' group.
+            3. If you’re using 'runtime-packages', make sure each package is listed both in
+               'runtime-packages' and in the 'toplevel' group.
+
         "#};
         if !output.stderr.contains(&expected_output) {
             pretty_assertions::assert_eq!(
@@ -2090,13 +2086,13 @@ mod tests {
         let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
         let expected_pattern = if cfg!(target_os = "macos") {
             formatdoc! {r#"
-                {nix_log_pad}2 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
-                {nix_log_pad}-      not found in {store_path_prefix_pattern}-environment-build-{package_name}
+                2 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
+                       not found in {store_path_prefix_pattern}-environment-build-{package_name}
         "#}
         } else {
             formatdoc! {r#"
-                {nix_log_pad}5 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
-                {nix_log_pad}-      not found in {store_path_prefix_pattern}-environment-build-{package_name}
+                5 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
+                       not found in {store_path_prefix_pattern}-environment-build-{package_name}
 
                 Displaying first 3 only:
         "#}
@@ -2111,7 +2107,7 @@ mod tests {
     /// Packages referenced from outside `runtime-packages` trigger a build failure.
     #[tokio::test(flavor = "multi_thread")]
     async fn closure_check_runtime_packages() {
-        let package_name = String::from("mypackage");
+        let package_name = String::from("my-package");
         let build_command = closure_check_hello_command();
         let manifest = formatdoc! {r#"
             version = 1
@@ -2133,7 +2129,7 @@ mod tests {
     /// failure even when `runtime-packages` is not specified.
     #[tokio::test(flavor = "multi_thread")]
     async fn closure_check_non_toplevel_pkg_group() {
-        let package_name = String::from("mypackage");
+        let package_name = String::from("my-package");
         let build_command = closure_check_hello_command();
         let manifest = formatdoc! {r#"
             version = 1
@@ -2154,6 +2150,77 @@ mod tests {
             "envs/hello_other_pkg_group/hello_other_pkg_group.yaml",
         )
         .await;
+    }
+
+    /// Contrived example to represent a package that links against something
+    /// from the develop environment that isn't included in the build closure.
+    fn missing_files_check_hello_command() -> String {
+        indoc! {r#"
+            mkdir -p $out/bin
+            cat > "$out/bin/test" <<EOF
+            #!/usr/bin/env bash
+            $(which hello)
+            $(which hello | sed 's/hello/not-found-in-develop-env/')
+            EOF
+            chmod +x "$out/bin/test"
+        "#}
+        .to_string()
+    }
+
+    async fn assert_missing_files_check_failure(
+        manifest: &str,
+        package_name: &str,
+        mock_file: &str,
+    ) {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, manifest);
+        flox.catalog_client = catalog_replay_client(GENERATED_DATA.join(mock_file)).await;
+        let output = assert_build_status(&flox, &mut env, package_name, None, false);
+
+        let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
+        let expected_pattern = formatdoc! {r#"
+            ❌ ERROR not found: {store_path_prefix_pattern}-environment-build-{package_name}/bin/hello
+                Referenced in: {store_path_prefix_pattern}-{package_name}-0\.0\.0/bin/.test-wrapped
+                Hint: consider adding package 'hello' to 'runtime-packages'
+
+            ❌ ERROR not found: {store_path_prefix_pattern}-environment-build-{package_name}/bin/not-found-in-develop-env
+                Referenced in: {store_path_prefix_pattern}-{package_name}-0\.0\.0/bin/.test-wrapped
+                Not found in Flox environment
+
+        "#};
+        let re = regex::Regex::new(&expected_pattern).unwrap();
+        if !re.is_match(&output.stderr) {
+            pretty_assertions::assert_eq!(
+                output.stderr,
+                expected_pattern,
+                "didn't find expected pattern, diffing entire output"
+            );
+        }
+        assert!(
+            re.is_match(&output.stderr),
+            "expected STDERR to match regex",
+        );
+    }
+
+    /// Packages referenced from outside `runtime-packages` trigger a build failure.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn missing_files_check_runtime_packages() {
+        let package_name = String::from("my-package");
+        let build_command = missing_files_check_hello_command();
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+
+            [build.{package_name}]
+            runtime-packages = []
+            command = """
+            {build_command}
+            """
+        "#};
+
+        assert_missing_files_check_failure(&manifest, &package_name, "resolve/hello.yaml").await;
     }
 
     #[test]
