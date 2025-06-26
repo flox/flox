@@ -427,17 +427,17 @@ impl ClientSideCatalogStoreConfig {
     /// Constructs a `nix path-info` command that will get the NAR info for a
     /// store path from the specified store, including the optional information
     /// about the closure size of the store path.
-    fn nar_info_cmd(store_url: &Url, store_path: &str, auth_netrc_path: &Path) -> Command {
+    fn nar_info_cmd(store_url: &str, store_path: &str, auth_netrc_path: &Path) -> Command {
         let mut cmd = nix_base_command();
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         cmd.arg("--netrc-file").arg(auth_netrc_path);
         cmd.args([
             "path-info",
-            "--store",
-            store_url.as_str(),
             "--closure-size",
             "--json",
+            "--store",
+            store_url,
             store_path,
         ]);
         cmd
@@ -448,7 +448,7 @@ impl ClientSideCatalogStoreConfig {
     /// that the `nix` CLI can return.
     #[instrument(skip_all, fields(progress = format!("Collecting extra build metadata for '{store_path}'")))]
     fn get_nar_info(
-        source_url: &Url,
+        source_url: &str,
         store_path: &str,
         auth_netrc_path: &Path,
     ) -> Result<NarInfo, PublishError> {
@@ -462,7 +462,15 @@ impl ClientSideCatalogStoreConfig {
                 String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
-        serde_json::from_slice(&output.stdout).map_err(PublishError::ParseNarInfo)
+        let narinfos = serde_json::from_slice::<NarInfos>(&output.stdout)
+            .map_err(PublishError::ParseNarInfo)?;
+        if narinfos.contains_key(store_path) {
+            Ok(narinfos[store_path].clone())
+        } else {
+            Err(PublishError::GetNarInfo(formatdoc! {
+                "NAR info for store path '{store_path}' not found in response: {narinfos:?}"
+            }))
+        }
     }
 
     /// Gets the NAR info for each build output and returns it in the format
@@ -481,8 +489,9 @@ impl ClientSideCatalogStoreConfig {
                 store = source_url.as_str(),
                 "querying NAR info for build output"
             );
-            let nar_info = Self::get_nar_info(source_url, &output.store_path, auth_netrc_path)?;
-            nar_infos.insert(output.name.clone(), nar_info);
+            let nar_info =
+                Self::get_nar_info(source_url.as_str(), &output.store_path, auth_netrc_path)?;
+            nar_infos.insert(output.store_path.clone(), nar_info);
         }
         Ok(nar_infos.into())
     }
@@ -1728,5 +1737,43 @@ pub mod tests {
         let is_some_remote = remote_url == get_remote_url(&remotes, "some_remote");
         let is_other_remote = remote_url == get_remote_url(&remotes, "other_remote");
         assert!(is_some_remote || is_other_remote);
+    }
+
+    #[test]
+    fn test_get_nar_info() {
+        let token = create_test_token("test");
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let auth_file = write_floxhub_netrc(flox.temp_dir.as_path(), &token).unwrap();
+
+        // The known_store_path includes `/bin/nix`.
+        let store_path = {
+            let mut full_path = known_store_path();
+            full_path.pop(); // drop `nix`
+            full_path.pop(); // drop `bin/`
+            full_path
+        };
+        let narinfo = ClientSideCatalogStoreConfig::get_nar_info(
+            "daemon",
+            store_path.to_str().unwrap(),
+            &auth_file,
+        )
+        .unwrap();
+        assert!(
+            narinfo.closure_size.is_some(),
+            "Expected narinfo to have a closure size"
+        );
+        assert!(
+            narinfo.nar_hash.is_some(),
+            "Expected narinfo to have a nar hash"
+        );
+        assert!(
+            narinfo.nar_size.is_some(),
+            "Expected narinfo to have a nar size"
+        );
+        assert!(
+            narinfo.references.is_some(),
+            "Expected narinfo to have a references field"
+        );
     }
 }
