@@ -7,7 +7,7 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::auth::Auth;
 use flox_rust_sdk::providers::build::{PackageTarget, nix_expression_dir};
-use flox_rust_sdk::providers::catalog::mock_base_catalog_url;
+use flox_rust_sdk::providers::catalog::ClientTrait;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -20,7 +20,7 @@ use indoc::formatdoc;
 use tracing::{debug, info_span, instrument};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
-use crate::commands::build::packages_to_build;
+use crate::commands::build::{base_catalog_url_for_stability_arg, packages_to_build};
 use crate::commands::ensure_floxhub_token;
 use crate::config::Config;
 use crate::environment_subcommand_metric;
@@ -44,6 +44,9 @@ pub struct Publish {
     /// With this option present, a signing key is not required.
     #[bpaf(long, hide)]
     metadata_only: bool,
+
+    #[bpaf(long)]
+    stability: Option<String>,
 
     #[bpaf(external(publish_target), optional)]
     publish_target: Option<PublishTarget>,
@@ -94,7 +97,16 @@ impl Publish {
             &nix_expression_dir(&env),
             self.publish_target,
         )?;
-        Self::publish(config, flox, env, target, self.metadata_only, self.cache).await
+        Self::publish(
+            config,
+            flox,
+            env,
+            target,
+            self.metadata_only,
+            self.cache,
+            self.stability,
+        )
+        .await
     }
 
     fn get_publish_target(
@@ -123,6 +135,7 @@ impl Publish {
         package: PackageTarget,
         metadata_only: bool,
         cache_args: CacheArgs,
+        stability: Option<String>,
     ) -> Result<()> {
         // Fail as early as possible if the user isn't authenticated or doesn't
         // belong to an org with a catalog.
@@ -139,12 +152,22 @@ impl Publish {
             },
         };
 
+        let base_nixpkgs_url = {
+            let base_catalog_info = flox
+                .catalog_client
+                .get_base_catalog_info()
+                .await
+                .context("could not get information about the base catalog")?;
+
+            base_catalog_url_for_stability_arg(stability.as_deref(), &base_catalog_info)?
+        };
+
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
 
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
-            &mock_base_catalog_url(), // TODO: Replace with actual locked URL info from catalog server
+            &base_nixpkgs_url,
             env_metadata.toplevel_catalog_ref.as_ref(),
             package,
         )?;
