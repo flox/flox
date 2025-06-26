@@ -1,16 +1,32 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 use std::time::Duration;
 use std::vec;
 
-use anyhow::Context;
+use anyhow::{Context, bail};
+use custom::CustomJob;
+use duct::Expression;
+use env::EnvJob;
 use indicatif::{ProgressBar, ProgressStyle};
+use init::InitJob;
+use lock::LockJob;
+use resolve::ResolveJob;
+use search::SearchJob;
 use serde::Deserialize;
+use show::ShowJob;
 use tempfile::TempDir;
 use tracing::{debug, trace};
+use walkdir::WalkDir;
 
 use crate::{Cli, Error};
+mod custom;
+mod env;
+mod init;
+mod lock;
+mod resolve;
+mod search;
+mod show;
 
 /// The config file for the mock data to generate.
 #[derive(Debug, Clone, Deserialize)]
@@ -60,6 +76,10 @@ pub struct JobSpec {
     pub ignore_post_cmd_errors: Option<bool>,
 }
 
+pub trait ToJob {
+    fn to_job(&self, name: &str) -> Job;
+}
+
 /// A spec for a single generated response file.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Job {
@@ -105,6 +125,140 @@ pub struct JobCtx {
     pub tmp_dir: TempDir,
     pub spec: Job,
     pub output_file: PathBuf,
+}
+
+#[derive(Debug)]
+pub enum JobKind {
+    Resolve(ResolveJob),
+    Search(SearchJob),
+    Show(ShowJob),
+    Init(InitJob),
+    Env(EnvJob),
+    Lock(LockJob),
+    Custom(CustomJob),
+}
+
+#[derive(Debug)]
+pub struct JobCtx2 {
+    pub tmp_dir: TempDir,
+    pub category_dir: PathBuf,
+    pub category: String,
+    pub name: String,
+    pub vars: HashMap<String, String>,
+}
+
+/// Returns an error containing `stderr` if the `Output` was not a success.
+pub fn stderr_if_err(Output { status, stderr, .. }: Output) -> Result<(), Error> {
+    if !status.success() {
+        bail!(String::from_utf8_lossy(&stderr).to_string())
+    } else {
+        Ok(())
+    }
+}
+
+/// Moves the response file from `<workdir>/resp.yaml` to
+/// `test_data/<category>/<name>.yaml`
+pub fn move_response_file(resp_path: &Path, ctx: &JobCtx2) -> Result<(), Error> {
+    let dest = ctx.category_dir.join(format!("{}.yaml", ctx.name));
+    debug!(category = ctx.category, name = ctx.name, src = %resp_path.display(), dest = %dest.display(), "moving response file");
+    std::fs::copy(resp_path, dest).context("failed to move response file")?;
+    Ok(())
+}
+
+/// Mostly copied from `flox_rust_sdk`
+pub(crate) fn copy_dir_recursive(
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
+) -> Result<(), Error> {
+    if !to.as_ref().exists() {
+        std::fs::create_dir(&to).unwrap();
+    }
+    for entry in WalkDir::new(&from).into_iter().skip(1) {
+        let entry = entry.unwrap();
+        let new_path = to.as_ref().join(entry.path().strip_prefix(&from).unwrap());
+        match entry.file_type() {
+            file_type if file_type.is_dir() => {
+                std::fs::create_dir(new_path).context("failed to create new directory")?;
+            },
+            file_type if file_type.is_file() => {
+                std::fs::copy(entry.path(), &new_path).context("failed to copy file")?;
+            },
+            _ => {
+                bail!("don't try to copy symlinks, fancy pants");
+            },
+        }
+    }
+    Ok(())
+}
+
+/// Unpacks the contents of the specified directories directly into the working
+/// directory. This is analogous to `cp <input>/* .`
+pub fn unpack_inputs(
+    input_data_dir: &Path,
+    inputs: &[String],
+    workdir: &Path,
+    ctx: &JobCtx2,
+) -> Result<(), Error> {
+    for input_path in inputs.iter() {
+        let path = input_data_dir.join(input_path);
+        if !path.exists() {
+            bail!("path does not exist: {}", path.display());
+        }
+        for item in path
+            .read_dir()
+            .with_context(|| format!("failed to read directory: {}", path.display()))?
+        {
+            let item = item.context("failed to dir entry")?;
+            let item_path = item.path();
+            let suffix = item_path.strip_prefix(&path).with_context(|| {
+                format!(
+                    "failed to strip prefix {} from {}",
+                    path.display(),
+                    item_path.display()
+                )
+            })?;
+            let dest = workdir.join(suffix);
+            let file_type = item.file_type().context("failed to get file type")?;
+            if file_type.is_file() {
+                debug!(category = "init", name = ctx.name, src = %item.path().display(), dest = %dest.display(), "copying input data");
+                std::fs::copy(&path, &dest).with_context(|| {
+                    format!("failed to copy {} to {}", path.display(), dest.display())
+                })?;
+            } else if file_type.is_dir() {
+                debug!(category = "init", name = ctx.name, src = %item.path().display(), dest = %dest.display(), "copying input data");
+                copy_dir_recursive(&path, &dest).with_context(|| {
+                    format!("failed to copy {} to {}", path.display(), dest.display())
+                })?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub trait JobCommand {
+    /// Applies common options for command execution.
+    fn apply_common_options(self, workdir: &Path) -> Expression;
+    /// Applies any global variables, then clears the FloxHub token
+    fn apply_vars(self, vars: &HashMap<String, String>) -> Expression;
+    /// Applies the variable that specifies the output path for the recording.
+    fn apply_recording_vars(self, resp_path: &Path) -> Expression;
+}
+
+impl JobCommand for Expression {
+    fn apply_common_options(self, workdir: &Path) -> Expression {
+        self.stdout_capture().stderr_capture().dir(workdir)
+    }
+
+    fn apply_vars(mut self, vars: &HashMap<String, String>) -> Expression {
+        for (name, value) in vars.iter() {
+            self = self.env(name, value);
+        }
+        self.env("FLOX_FLOXHUB_TOKEN", "")
+    }
+
+    fn apply_recording_vars(self, resp_path: &Path) -> Expression {
+        self.env("_FLOX_CATALOG_DUMP_RESPONSE_FILE", resp_path)
+    }
 }
 
 /// Creates the directory structure for the output files.
@@ -379,6 +533,31 @@ fn run_pre_cmd(
     Ok(())
 }
 
+/// Runs the `pre_cmd` for a given job.
+fn run_pre_cmd2(
+    pre_cmd: &str,
+    vars: &HashMap<String, String>,
+    dir: &Path,
+    ignore_errors: bool,
+) -> Result<(), Error> {
+    let mut cmd = Command::new("bash");
+    if !ignore_errors {
+        cmd.arg("-eu");
+    }
+    cmd.arg("-c").arg(pre_cmd);
+    cmd.current_dir(dir);
+    for (key, value) in vars.iter() {
+        cmd.env(key, value);
+    }
+    debug!("pre_cmd: {:?}", cmd);
+    let output = cmd.output().context("couldn't call command")?;
+    if !output.status.success() && !ignore_errors {
+        let stderr = String::from_utf8_lossy(output.stderr.as_slice());
+        anyhow::bail!("{}", stderr);
+    }
+    Ok(())
+}
+
 /// Copies the files from the spec to the temp directory.
 fn copy_files(files: &[PathBuf], input_dir: &Path, working_dir: &Path) -> Result<(), Error> {
     for rel_path in files.iter() {
@@ -454,6 +633,36 @@ pub fn run_cmd(
     Ok(())
 }
 
+/// Runs the `cmd` for a given job.
+pub fn run_cmd2(
+    gen_cmd: &str,
+    vars: &HashMap<String, String>,
+    dir: &Path,
+    output_file: &Path,
+    ignore_errors: bool,
+) -> Result<(), Error> {
+    let mut cmd = Command::new("bash");
+    if !ignore_errors {
+        cmd.arg("-eu");
+    }
+    cmd.arg("-c").arg(gen_cmd);
+    cmd.current_dir(dir);
+    for (key, value) in vars.iter() {
+        cmd.env(key, value);
+    }
+
+    // Don't leak custom catalogs from the current user.
+    cmd.env("FLOX_FLOXHUB_TOKEN", "");
+    cmd.env("_FLOX_CATALOG_DUMP_RESPONSE_FILE", output_file);
+    debug!("cmd: {:?}", cmd);
+    let output = cmd.output().context("couldn't call command")?;
+    if !output.status.success() && !ignore_errors {
+        let stderr = String::from_utf8_lossy(output.stderr.as_slice());
+        anyhow::bail!("{}", stderr);
+    }
+    Ok(())
+}
+
 /// Runs the `post_cmd` for a given job.
 pub fn run_post_cmd(
     post_cmd: &str,
@@ -472,6 +681,33 @@ pub fn run_post_cmd(
         for (key, value) in vars.iter() {
             cmd.env(key, value);
         }
+    }
+    cmd.env("RESPONSE_FILE", output_file);
+    debug!("post_cmd: {:?}", cmd);
+    let output = cmd.output().context("couldn't call command")?;
+    if !output.status.success() && !ignore_errors {
+        let stderr = String::from_utf8_lossy(output.stderr.as_slice());
+        anyhow::bail!("{}", stderr);
+    }
+    Ok(())
+}
+
+/// Runs the `post_cmd` for a given job.
+pub fn run_post_cmd2(
+    post_cmd: &str,
+    vars: &HashMap<String, String>,
+    dir: &Path,
+    output_file: &Path,
+    ignore_errors: bool,
+) -> Result<(), Error> {
+    let mut cmd = Command::new("bash");
+    if !ignore_errors {
+        cmd.arg("-eu");
+    }
+    cmd.arg("-c").arg(post_cmd);
+    cmd.current_dir(dir);
+    for (key, value) in vars.iter() {
+        cmd.env(key, value);
     }
     cmd.env("RESPONSE_FILE", output_file);
     debug!("post_cmd: {:?}", cmd);
