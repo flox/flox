@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use anyhow::{Context, Error, bail};
+use anyhow::{Context, Error};
 use duct::cmd;
 use serde::Deserialize;
 use tracing::debug;
@@ -10,6 +10,7 @@ use crate::generate::{
     JobCommand,
     copy_dir_recursive,
     move_response_file,
+    run_cmd2,
     run_post_cmd2,
     run_pre_cmd2,
     stderr_if_err,
@@ -17,15 +18,15 @@ use crate::generate::{
 };
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct InitJob {
+pub struct CustomJob {
     pub unpack_dir_contents: Vec<String>,
-    pub auto_setup: bool,
     pub ignore_errors: Option<bool>,
     pub pre_cmd: Option<String>,
+    pub record_cmd: Option<String>,
     pub post_cmd: Option<String>,
 }
 
-pub fn run_init_job(job: &InitJob, ctx: &JobCtx2, input_data_dir: &Path) -> Result<(), Error> {
+pub fn run_resolve_job(job: &CustomJob, ctx: &JobCtx2, input_data_dir: &Path) -> Result<(), Error> {
     debug!(category = ctx.category, name = ctx.name, "starting job");
     let workdir = ctx.tmp_dir.path();
 
@@ -39,20 +40,22 @@ pub fn run_init_job(job: &InitJob, ctx: &JobCtx2, input_data_dir: &Path) -> Resu
         run_pre_cmd2(cmd, &ctx.vars, workdir, job.ignore_errors.unwrap_or(false))?;
     }
 
-    // Create the environment
-    debug!(category = ctx.category, name = ctx.name, dir = %workdir.display(), "flox init");
-    let args = if job.auto_setup {
-        vec!["init", "--auto-setup"]
-    } else {
-        vec!["init"]
-    };
+    // Run a command that will record a response if specified
     let resp_file = workdir.join("resp.yaml");
-    let cmd = duct::cmd("flox", args)
-        .apply_common_options(workdir)
-        .apply_vars(&ctx.vars)
-        .apply_recording_vars(&resp_file);
-    let output = cmd.run().context("failed to run `flox init` command")?;
-    stderr_if_err(output)?;
+    if let Some(ref cmd) = job.record_cmd {
+        debug!(
+            category = ctx.category,
+            name = ctx.name,
+            "running record_cmd"
+        );
+        run_cmd2(
+            cmd,
+            &ctx.vars,
+            workdir,
+            &resp_file,
+            job.ignore_errors.unwrap_or(false),
+        )?;
+    }
 
     // Run the post_cmd if it was specified
     if let Some(ref cmd) = job.post_cmd {
