@@ -49,6 +49,29 @@ pub struct Config {
     pub build: Option<HashMap<String, JobSpec>>,
 }
 
+/// The config file for the mock data to generate.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Config2 {
+    /// Environment variables you want set during the generation process.
+    ///
+    /// You might use this to use the production vs. preview server, etc.
+    pub vars: Option<HashMap<String, String>>,
+    /// Jobs for the resolve endpoint
+    pub resolve: Option<HashMap<String, ResolveJob>>,
+    /// Jobs for the search command
+    pub search: Option<HashMap<String, SearchJob>>,
+    /// Jobs for the show command
+    pub show: Option<HashMap<String, ShowJob>>,
+    /// Jobs for the init command
+    pub init: Option<HashMap<String, InitJob>>,
+    /// Jobs for building environments from manifests
+    pub env: Option<HashMap<String, EnvJob>>,
+    /// Jobs for producing lockfiles from manifests
+    pub lock: Option<HashMap<String, LockJob>>,
+    /// Jobs with custom handling
+    pub custom: Option<HashMap<String, CustomJob>>,
+}
+
 /// A spec for a single generated response file.
 ///
 /// This is what's taken straight from the config file, so it's the "value" in a "name": "value" pair.
@@ -138,12 +161,27 @@ pub enum JobKind {
     Custom(CustomJob),
 }
 
+/// All of the information and state necessary to run a particular job.
 #[derive(Debug)]
 pub struct JobCtx2 {
-    pub tmp_dir: TempDir,
-    pub category_dir: PathBuf,
-    pub category: String,
     pub name: String,
+    pub category: String,
+    pub tmp_dir: TempDir,
+    pub input_dir: PathBuf,
+    pub category_dir: PathBuf,
+    pub vars: HashMap<String, String>,
+}
+
+/// All of the information and state for a job that can be prepared before
+/// runtime e.g. all of `JobCtx` minus the temporary directory, which is only
+/// generated right before running the job.
+#[derive(Debug)]
+pub struct ProtoJobCtx2 {
+    pub name: String,
+    pub job: JobKind,
+    pub category: String,
+    pub input_dir: PathBuf,
+    pub category_dir: PathBuf,
     pub vars: HashMap<String, String>,
 }
 
@@ -271,14 +309,16 @@ pub fn create_output_dir(output_dir: &Path) -> Result<(), Error> {
     let search_dir = output_dir.join("search");
     let show_dir = output_dir.join("show");
     let envs_dir = output_dir.join("envs");
-    let build_dir = output_dir.join("build");
+    let lock_dir = output_dir.join("lock");
+    let custom_dir = output_dir.join("custom");
     let dirs = [
         &init_dir,
         &resolve_dir,
         &search_dir,
         &show_dir,
         &envs_dir,
-        &build_dir,
+        &lock_dir,
+        &custom_dir,
     ];
     for dir in dirs.iter() {
         if !dir.exists() {
@@ -368,6 +408,194 @@ pub fn generate_jobs(
         );
     }
     Ok(jobs.into_iter().flatten())
+}
+
+/// Generates all the jobs from the spec file.
+pub fn generate_jobs2(
+    config: &Config2,
+    input_dir: &Path,
+    output_dir: &Path,
+    force: bool,
+) -> Result<Vec<ProtoJobCtx2>, Error> {
+    let mut jobs = vec![];
+
+    let resolve_dir = output_dir.join("resolve");
+    let resolve_jobs = enumerate_output_file_jobs_to_run(
+        &config.resolve.clone().unwrap_or_default(),
+        force,
+        &resolve_dir,
+    );
+    for (name, job) in resolve_jobs {
+        let kind = JobKind::Resolve(job);
+        let ctx = ProtoJobCtx2 {
+            name,
+            job: kind,
+            category: "resolve".to_string(),
+            input_dir: input_dir.to_path_buf(),
+            category_dir: resolve_dir.clone(),
+            vars: config.vars.clone().unwrap_or_default(),
+        };
+        jobs.push(ctx);
+    }
+
+    let search_dir = output_dir.join("search");
+    let search_jobs = enumerate_output_file_jobs_to_run(
+        &config.search.clone().unwrap_or_default(),
+        force,
+        &search_dir,
+    );
+    for (name, job) in search_jobs {
+        let kind = JobKind::Search(job);
+        let ctx = ProtoJobCtx2 {
+            name,
+            job: kind,
+            category: "search".to_string(),
+            input_dir: input_dir.to_path_buf(),
+            category_dir: search_dir.clone(),
+            vars: config.vars.clone().unwrap_or_default(),
+        };
+        jobs.push(ctx);
+    }
+
+    let show_dir = output_dir.join("show");
+    let show_jobs = enumerate_output_file_jobs_to_run(
+        &config.show.clone().unwrap_or_default(),
+        force,
+        &show_dir,
+    );
+    for (name, job) in show_jobs {
+        let kind = JobKind::Show(job);
+        let ctx = ProtoJobCtx2 {
+            name,
+            job: kind,
+            category: "show".to_string(),
+            input_dir: input_dir.to_path_buf(),
+            category_dir: show_dir.clone(),
+            vars: config.vars.clone().unwrap_or_default(),
+        };
+        jobs.push(ctx);
+    }
+
+    let lock_dir = output_dir.join("lock");
+    let lock_jobs = enumerate_output_file_jobs_to_run(
+        &config.lock.clone().unwrap_or_default(),
+        force,
+        &lock_dir,
+    );
+    for (name, job) in lock_jobs {
+        let kind = JobKind::Lock(job);
+        let ctx = ProtoJobCtx2 {
+            name,
+            job: kind,
+            category: "lock".to_string(),
+            input_dir: input_dir.to_path_buf(),
+            category_dir: lock_dir.clone(),
+            vars: config.vars.clone().unwrap_or_default(),
+        };
+        jobs.push(ctx);
+    }
+
+    let env_dir = output_dir.join("env");
+    let env_jobs =
+        enumerate_output_dir_jobs_to_run(&config.env.clone().unwrap_or_default(), force, &env_dir);
+    for (name, job) in env_jobs {
+        let kind = JobKind::Env(job);
+        let ctx = ProtoJobCtx2 {
+            name,
+            job: kind,
+            category: "env".to_string(),
+            input_dir: input_dir.to_path_buf(),
+            category_dir: env_dir.clone(),
+            vars: config.vars.clone().unwrap_or_default(),
+        };
+        jobs.push(ctx);
+    }
+
+    let init_dir = output_dir.join("init");
+    let init_jobs = enumerate_output_dir_jobs_to_run(
+        &config.init.clone().unwrap_or_default(),
+        force,
+        &init_dir,
+    );
+    for (name, job) in init_jobs {
+        let kind = JobKind::Init(job);
+        let ctx = ProtoJobCtx2 {
+            name,
+            job: kind,
+            category: "init".to_string(),
+            input_dir: input_dir.to_path_buf(),
+            category_dir: init_dir.clone(),
+            vars: config.vars.clone().unwrap_or_default(),
+        };
+        jobs.push(ctx);
+    }
+
+    let custom_dir = output_dir.join("custom");
+    let custom_jobs = enumerate_output_dir_jobs_to_run(
+        &config.custom.clone().unwrap_or_default(),
+        force,
+        &custom_dir,
+    );
+    for (name, job) in custom_jobs {
+        let kind = JobKind::Custom(job);
+        let ctx = ProtoJobCtx2 {
+            name,
+            job: kind,
+            category: "custom".to_string(),
+            input_dir: input_dir.to_path_buf(),
+            category_dir: custom_dir.clone(),
+            vars: config.vars.clone().unwrap_or_default(),
+        };
+        jobs.push(ctx);
+    }
+
+    Ok(jobs)
+}
+
+/// Scans the list of jobs to see which ones need to be re-run based on whether
+/// an output from the previous run exists.
+pub fn enumerate_output_file_jobs_to_run<T: Clone>(
+    all_jobs: &HashMap<String, T>,
+    force: bool,
+    category_dir: &Path,
+) -> HashMap<String, T> {
+    if force {
+        return all_jobs.clone();
+    }
+    all_jobs
+        .iter()
+        .filter_map(|(name, job)| {
+            let output_file = category_dir.join(format!("{name}.yaml"));
+            if output_file.exists() {
+                None
+            } else {
+                Some((name.clone(), job.clone()))
+            }
+        })
+        .collect::<HashMap<_, _>>()
+}
+
+/// Scans the list of jobs to see which ones need to be re-run based on whether
+/// an output from the previous run exists.
+pub fn enumerate_output_dir_jobs_to_run<T: Clone>(
+    all_jobs: &HashMap<String, T>,
+    force: bool,
+    category_dir: &Path,
+) -> HashMap<String, T> {
+    if force {
+        return all_jobs.clone();
+    }
+    all_jobs
+        .iter()
+        .filter_map(|(name, job)| {
+            let output_file = category_dir.join(name);
+            if output_file.exists() {
+                None
+            } else {
+                Some((name.clone(), job.clone()))
+            }
+        })
+        .collect::<HashMap<_, _>>()
 }
 
 /// Generates the jobs for a given category.
