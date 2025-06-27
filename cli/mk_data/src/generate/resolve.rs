@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::path::Path;
+
 use anyhow::{Context, Error};
 use duct::cmd;
 use serde::Deserialize;
