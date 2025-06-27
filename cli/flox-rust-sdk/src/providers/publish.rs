@@ -813,12 +813,6 @@ pub fn check_build_metadata(
     let output_stream = builder.build(
         // todo: use a non-hardcoded nixpkgs url
         &mock_base_catalog_url().as_flake_ref()?,
-        env_metadata
-            .toplevel_catalog_ref
-            .as_ref()
-            .map(BaseCatalogUrl::as_flake_ref)
-            .transpose()?
-            .as_ref(),
         &built_environments.develop,
         &[pkg.name()],
         Some(false),

@@ -180,13 +180,7 @@ impl Build {
             .transpose()?;
 
         let builder = FloxBuildMk::new(&flox, &base_dir, &expression_dir, &built_environments);
-        let output = builder.build(
-            &base_nixpkgs_url,
-            dependency_nixpkgs_url.as_ref(),
-            &FLOX_INTERPRETER,
-            &target_names,
-            None,
-        )?;
+        let output = builder.build(&base_nixpkgs_url, &FLOX_INTERPRETER, &target_names, None)?;
 
         for message in output {
             match message {

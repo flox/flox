@@ -59,7 +59,6 @@ pub trait ManifestBuilder {
     fn build(
         &self,
         expression_build_nixpkgs: &Url,
-        toplevel_nixpkgs: Option<&Url>,
         flox_interpreter: &Path,
         package: &[PackageTargetName],
         build_cache: Option<bool>,
@@ -202,27 +201,25 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     /// Upon success, the builder will have built the specified packages
     /// and created links to the respective store paths in `base_dir/result-<build name>`.
     ///
+    /// A _single_ nixpkgs revision is provided as a flake-url via BUILDTIME_NIXPKGS_URL,
+    /// for use with both manifest and expression build.
+    ///
+    /// **Invariant**: the caller of this function has to ensure,
+    /// that manifest builds are always built with a compatible version of nixpkgs!
+    ///
     /// The build process will start in the background.
     /// To process the output, the caller should iterate over the returned [BuildOutput].
     /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
     fn build(
         &self,
-        expression_build_nixpkgs: &Url,
-        toplevel_nixpkgs: Option<&Url>,
+        build_nixpkgs_url: &Url,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
         build_cache: Option<bool>,
     ) -> Result<BuildOutput, ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
         command.arg("build");
-        command.arg(format!(
-            "BUILDTIME_NIXPKGS_URL={}",
-            expression_build_nixpkgs
-        ));
-
-        if let Some(toplevel_nixpkgs_url) = toplevel_nixpkgs {
-            command.arg(format!("TOPLEVEL_NIXPKGS_URL={toplevel_nixpkgs_url}"));
-        }
+        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", build_nixpkgs_url));
 
         command.arg(format!(
             "FLOX_ENV={}",
@@ -698,7 +695,6 @@ pub mod test_helpers {
         )
         .build(
             &COMMON_NIXPKGS_URL,
-            None,
             &env.rendered_env_links(flox).unwrap().development,
             &[PackageTargetName::new_unchecked(&package)],
             build_cache,
