@@ -3,7 +3,7 @@ use duct::cmd;
 use serde::Deserialize;
 use tracing::debug;
 
-use super::JobCtx2;
+use super::JobCtx;
 use crate::generate::{JobCommand, stderr_if_err};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -11,7 +11,7 @@ pub struct LockJob {
     pub manifest: String,
 }
 
-pub fn run_lock_job(job: &LockJob, ctx: &JobCtx2) -> Result<(), Error> {
+pub fn run_lock_job(job: &LockJob, ctx: &JobCtx) -> Result<(), Error> {
     debug!(category = ctx.category, name = ctx.name, "starting job");
     let workdir = ctx.tmp_dir.path();
 

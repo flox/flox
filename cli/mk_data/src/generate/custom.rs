@@ -2,8 +2,8 @@ use anyhow::{Context, Error};
 use serde::Deserialize;
 use tracing::debug;
 
-use super::JobCtx2;
-use crate::generate::{copy_dir_recursive, run_cmd2, run_post_cmd2, run_pre_cmd2, unpack_inputs};
+use super::JobCtx;
+use crate::generate::{copy_dir_recursive, run_cmd, run_post_cmd, run_pre_cmd, unpack_inputs};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CustomJob {
@@ -14,7 +14,7 @@ pub struct CustomJob {
     pub post_cmd: Option<String>,
 }
 
-pub fn run_custom_job(job: &CustomJob, ctx: &JobCtx2) -> Result<(), Error> {
+pub fn run_custom_job(job: &CustomJob, ctx: &JobCtx) -> Result<(), Error> {
     debug!(category = ctx.category, name = ctx.name, "starting job");
     let workdir = ctx.tmp_dir.path();
     let vars = {
@@ -35,7 +35,7 @@ pub fn run_custom_job(job: &CustomJob, ctx: &JobCtx2) -> Result<(), Error> {
     // Run the pre_cmd if it was specified
     if let Some(ref cmd) = job.pre_cmd {
         debug!(category = ctx.category, name = ctx.name, "running pre_cmd");
-        run_pre_cmd2(cmd, &vars, workdir, job.ignore_errors.unwrap_or(false))?;
+        run_pre_cmd(cmd, &vars, workdir, job.ignore_errors.unwrap_or(false))?;
     }
 
     // Run a command that will record a response if specified
@@ -46,7 +46,7 @@ pub fn run_custom_job(job: &CustomJob, ctx: &JobCtx2) -> Result<(), Error> {
             name = ctx.name,
             "running record_cmd"
         );
-        run_cmd2(
+        run_cmd(
             cmd,
             &vars,
             workdir,
@@ -58,7 +58,7 @@ pub fn run_custom_job(job: &CustomJob, ctx: &JobCtx2) -> Result<(), Error> {
     // Run the post_cmd if it was specified
     if let Some(ref cmd) = job.post_cmd {
         debug!(category = ctx.category, name = ctx.name, "running post_cmd");
-        run_post_cmd2(
+        run_post_cmd(
             cmd,
             &vars,
             workdir,

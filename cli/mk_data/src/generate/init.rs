@@ -2,12 +2,12 @@ use anyhow::{Context, Error};
 use serde::Deserialize;
 use tracing::debug;
 
-use super::JobCtx2;
+use super::JobCtx;
 use crate::generate::{
     JobCommand,
     copy_dir_recursive,
-    run_post_cmd2,
-    run_pre_cmd2,
+    run_post_cmd,
+    run_pre_cmd,
     stderr_if_err,
     unpack_inputs,
 };
@@ -21,7 +21,7 @@ pub struct InitJob {
     pub post_cmd: Option<String>,
 }
 
-pub fn run_init_job(job: &InitJob, ctx: &JobCtx2) -> Result<(), Error> {
+pub fn run_init_job(job: &InitJob, ctx: &JobCtx) -> Result<(), Error> {
     debug!(category = ctx.category, name = ctx.name, "starting job");
     let workdir = ctx.tmp_dir.path();
 
@@ -34,7 +34,7 @@ pub fn run_init_job(job: &InitJob, ctx: &JobCtx2) -> Result<(), Error> {
     // Run the pre_cmd if it was specified
     if let Some(ref cmd) = job.pre_cmd {
         debug!(category = ctx.category, name = ctx.name, "running pre_cmd");
-        run_pre_cmd2(cmd, &ctx.vars, workdir, job.ignore_errors.unwrap_or(false))?;
+        run_pre_cmd(cmd, &ctx.vars, workdir, job.ignore_errors.unwrap_or(false))?;
     }
 
     // Create the environment
@@ -55,7 +55,7 @@ pub fn run_init_job(job: &InitJob, ctx: &JobCtx2) -> Result<(), Error> {
     // Run the post_cmd if it was specified
     if let Some(ref cmd) = job.post_cmd {
         debug!(category = ctx.category, name = ctx.name, "running post_cmd");
-        run_post_cmd2(
+        run_post_cmd(
             cmd,
             &ctx.vars,
             workdir,
