@@ -2495,6 +2495,39 @@ mod tests {
         let (flox, tmpdir) = flox_instance();
         assert_manifest_build_succeeds(GENERATED_DATA.join("build/hello"), "hello", &flox, tmpdir);
     }
+
+    fn build_symlinks_can_refer_to_flox_env(sandbox: &str) {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "{sandbox}"
+            command = """
+                mkdir $out
+                ln -s $FLOX_ENV/bin $out/bin
+                ln -s $FLOX_ENV $out/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+        let _ = GitCommandProvider::init(&env_path, false).unwrap();
+
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+    }
+
+    #[test]
+    fn build_symlinks_can_refer_to_flox_env_sandbox_pure() {
+        build_symlinks_can_refer_to_flox_env("pure");
+    }
+
+    #[test]
+    fn build_symlinks_can_refer_to_flox_env_sandbox_off() {
+        build_symlinks_can_refer_to_flox_env("off");
+    }
 }
 
 #[cfg(test)]
