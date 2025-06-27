@@ -12,6 +12,7 @@ use flox_rust_sdk::providers::build::{
     ManifestBuilder,
     Output,
     PackageTarget,
+    PackageTargetKind,
     PackageTargets,
     find_toplevel_group_nixpkgs,
     nix_expression_dir,
@@ -153,6 +154,8 @@ impl Build {
             anyhow!(err).context("could not get information about the base catalog")
         });
 
+        check_stability_compatibility(&packages_to_build, nixpkgs_url_select.is_some())?;
+
         let toplevel_derived_url = find_toplevel_group_nixpkgs(&lockfile);
 
         let base_nixpkgs_url = match nixpkgs_url_select {
@@ -262,6 +265,30 @@ impl Build {
             })
             .collect::<Result<Vec<_>>>()
     }
+}
+
+/// Check that all packages are compatible with the selected Nixpkgs URL selection.
+pub(crate) fn check_stability_compatibility<'p>(
+    packages: impl IntoIterator<Item = &'p PackageTarget>,
+    nixpkgs_overridden: bool,
+) -> Result<()> {
+    if !nixpkgs_overridden {
+        return Ok(());
+    }
+
+    for package in packages {
+        if package.kind() == PackageTargetKind::ExpressionBuild {
+            continue;
+        }
+        bail!(formatdoc! {"
+            The '--stability' option only applies to nix expression builds.
+            '{name}' is a manifest build.
+            Omit '--stability' to build with nixpkgs compatible with the environment,
+            or pass exclusively nix expression builds.
+            ", name = package.name()
+        })
+    }
+    Ok(())
 }
 
 /// Derive the nixpkgs url to be used for builds.
@@ -402,6 +429,51 @@ mod test {
         let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
         let result = packages_to_build(&lockfile.manifest, &expressions_dir, &Vec::<String>::new());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn manifest_builds_not_allowed_with_stabilities_present() {
+        let mut packages = vec![PackageTarget::new_unchecked(
+            "manifest",
+            PackageTargetKind::ManifestBuild,
+        )];
+
+        let result = check_stability_compatibility(&packages, true);
+        assert!(result.is_err());
+
+        // the presence of expression builds doesnt change the result
+        packages.push(PackageTarget::new_unchecked(
+            "expression",
+            PackageTargetKind::ExpressionBuild,
+        ));
+
+        let result = check_stability_compatibility(&packages, true);
+        assert!(result.is_err());
+
+        // if all targets are expression builds, the check succeeds
+        let packages = packages.split_off(1);
+        let result = check_stability_compatibility(&packages, true);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn manifest_builds_allowed_with_stabilities_absent() {
+        let mut packages = vec![PackageTarget::new_unchecked(
+            "manifest",
+            PackageTargetKind::ManifestBuild,
+        )];
+
+        let result = check_stability_compatibility(&packages, false);
+        assert!(result.is_ok());
+
+        // the presence of expression builds doesnt change the result
+        packages.push(PackageTarget::new_unchecked(
+            "expression",
+            PackageTargetKind::ExpressionBuild,
+        ));
+
+        let result = check_stability_compatibility(&packages, false);
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
