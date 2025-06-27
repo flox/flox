@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use anyhow::{Context, Error};
 use serde::Deserialize;
 use tracing::debug;
@@ -6,9 +8,9 @@ use super::JobCtx;
 use crate::generate::{
     JobCommand,
     copy_dir_recursive,
+    err_with_stderr_if_err,
     run_post_cmd,
     run_pre_cmd,
-    stderr_if_err,
     unpack_inputs,
 };
 
@@ -45,12 +47,14 @@ pub fn run_init_job(job: &InitJob, ctx: &JobCtx) -> Result<(), Error> {
         vec!["init"]
     };
     let resp_file = workdir.join("resp.yaml");
-    let cmd = duct::cmd("flox", args)
+    let output = Command::new("flox")
+        .args(args)
         .apply_common_options(workdir)
         .apply_vars(&ctx.vars)
-        .apply_recording_vars(&resp_file);
-    let output = cmd.run().context("failed to run `flox init` command")?;
-    stderr_if_err(output)?;
+        .apply_recording_vars(&resp_file)
+        .output()
+        .context("failed to run `flox init` command")?;
+    err_with_stderr_if_err(output, job.ignore_errors.unwrap_or(false))?;
 
     // Run the post_cmd if it was specified
     if let Some(ref cmd) = job.post_cmd {
@@ -71,6 +75,14 @@ pub fn run_init_job(job: &InitJob, ctx: &JobCtx) -> Result<(), Error> {
         "moving to output directory"
     );
     let output_dir = ctx.category_dir.join(&ctx.name);
+    if output_dir.exists() {
+        std::fs::remove_dir_all(&output_dir).with_context(|| {
+            format!(
+                "failed to remove existing output directory: {}",
+                output_dir.display()
+            )
+        })?;
+    }
     copy_dir_recursive(workdir, &output_dir).context("failed to copy to output directory")?;
 
     Ok(())

@@ -1,10 +1,12 @@
+use std::fs::OpenOptions;
+use std::process::{Command, Stdio};
+
 use anyhow::{Context, Error};
-use duct::cmd;
 use serde::Deserialize;
 use tracing::debug;
 
 use super::JobCtx;
-use crate::generate::{JobCommand, stderr_if_err};
+use crate::generate::{JobCommand, err_with_stderr_if_err};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LockJob {
@@ -17,24 +19,33 @@ pub fn run_lock_job(job: &LockJob, ctx: &JobCtx) -> Result<(), Error> {
 
     // Create the environment
     debug!(category = ctx.category, name = ctx.name, dir = %workdir.display(), "flox init");
-    let cmd = cmd!("flox", "init")
+    let output = Command::new("flox")
+        .arg("init")
         .apply_common_options(workdir)
-        .apply_vars(&ctx.vars);
-    let output = cmd.run().context("failed to run `flox init` command")?;
-    stderr_if_err(output)?;
+        .apply_vars(&ctx.vars)
+        .output()
+        .context("failed to run `flox init` command")?;
+    err_with_stderr_if_err(output, false)?;
 
     // Build the environment with the new manifest
     let manifest_path = ctx.input_dir.join("manifests").join(&job.manifest);
     let lockfile_path = workdir.join("manifest.lock");
     debug!(category = ctx.category, name = ctx.name, manifest = %manifest_path.display(), "flox lock-manifest");
-    let output = cmd!("flox", "lock-manifest", manifest_path)
-        .dir(workdir)
-        .stderr_capture()
-        .stdout_path(&lockfile_path)
+    let output_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&lockfile_path)
+        .context("failed to create new lockfile")?;
+    let output = Command::new("flox")
+        .arg("lock-manifest")
+        .arg(manifest_path)
+        .current_dir(workdir)
+        .stderr(Stdio::piped())
+        .stdout(output_file)
         .apply_vars(&ctx.vars)
-        .run()
+        .output()
         .context("failed to run `flox lock-manifest` command")?;
-    stderr_if_err(output)?;
+    err_with_stderr_if_err(output, false)?;
 
     // Copy the lockfile to the output directory
     let dest = ctx.category_dir.join(format!("{}.lock", ctx.name));
