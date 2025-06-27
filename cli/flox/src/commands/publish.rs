@@ -21,7 +21,11 @@ use indoc::formatdoc;
 use tracing::{debug, info_span, instrument};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
-use crate::commands::build::{base_catalog_url_for_stability_arg, packages_to_build};
+use crate::commands::build::{
+    base_catalog_url_for_stability_arg,
+    check_stability_compatibility,
+    packages_to_build,
+};
 use crate::commands::ensure_floxhub_token;
 use crate::config::Config;
 use crate::environment_subcommand_metric;
@@ -153,6 +157,7 @@ impl Publish {
             },
         };
 
+        check_stability_compatibility([&package], stability.is_some())?;
 
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
