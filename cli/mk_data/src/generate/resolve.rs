@@ -40,13 +40,17 @@ pub fn run_resolve_job(job: &ResolveJob, ctx: &JobCtx2) -> Result<(), Error> {
         args.extend_from_slice(job.pkgs.as_slice());
         args
     };
-    let output = duct::cmd("flox", args)
+    let maybe_output = duct::cmd("flox", args)
         .apply_common_options(workdir)
         .apply_vars(&ctx.vars)
         .apply_recording_vars(&resp_file)
+        .unchecked()
         .run()
-        .context("failed to run `flox install` command")?;
-    stderr_if_err(output)?;
+        .context("failed to run `flox install` command");
+    if !job.ignore_errors.unwrap_or(false) {
+        let output = maybe_output?;
+        stderr_if_err(output)?;
+    }
 
     // Run the post_cmd if it was specified
     if let Some(ref cmd) = job.post_cmd {

@@ -9,6 +9,7 @@ use crate::generate::{JobCommand, move_response_file, run_post_cmd2, run_pre_cmd
 #[derive(Debug, Clone, Deserialize)]
 pub struct SearchJob {
     pub query: String,
+    pub all: Option<bool>,
     pub ignore_errors: Option<bool>,
     pub pre_cmd: Option<String>,
     pub post_cmd: Option<String>,
@@ -35,13 +36,22 @@ pub fn run_search_job(job: &SearchJob, ctx: &JobCtx2) -> Result<(), Error> {
     // Run the install command and capture the response
     debug!(category = ctx.category, name = ctx.name, "flox search");
     let resp_file = workdir.join("resp.yaml");
-    let output = cmd!("flox", "search", &job.query)
+    let args = if job.all.unwrap_or(false) {
+        vec!["search".to_string(), job.query.clone(), "--all".to_string()]
+    } else {
+        vec!["search".to_string(), job.query.clone()]
+    };
+    let maybe_output = duct::cmd("flox", args)
         .apply_common_options(workdir)
         .apply_vars(&ctx.vars)
         .apply_recording_vars(&resp_file)
+        .unchecked()
         .run()
-        .context("failed to run `flox search` command")?;
-    stderr_if_err(output)?;
+        .context("failed to run `flox search` command");
+    if !job.ignore_errors.unwrap_or(false) {
+        let output = maybe_output?;
+        stderr_if_err(output)?;
+    }
 
     // Run the post_cmd if it was specified
     if let Some(ref cmd) = job.post_cmd {

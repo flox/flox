@@ -14,7 +14,7 @@ use crate::generate::{
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct InitJob {
-    pub unpack_dir_contents: Vec<String>,
+    pub unpack_dir_contents: Option<Vec<String>>,
     pub auto_setup: bool,
     pub ignore_errors: Option<bool>,
     pub pre_cmd: Option<String>,
@@ -26,8 +26,10 @@ pub fn run_init_job(job: &InitJob, ctx: &JobCtx2) -> Result<(), Error> {
     let workdir = ctx.tmp_dir.path();
 
     // Unpack and input directories to the workdir if they were specified
-    unpack_inputs(&ctx.input_dir, &job.unpack_dir_contents, workdir, ctx)
-        .context("failed to unpack job inputs")?;
+    if let Some(ref unpack_dir_contents) = job.unpack_dir_contents {
+        unpack_inputs(&ctx.input_dir, unpack_dir_contents, workdir, ctx)
+            .context("failed to unpack job inputs")?;
+    }
 
     // Run the pre_cmd if it was specified
     if let Some(ref cmd) = job.pre_cmd {
