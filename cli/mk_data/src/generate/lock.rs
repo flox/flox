@@ -1,19 +1,17 @@
-use std::path::Path;
-
 use anyhow::{Context, Error};
 use duct::cmd;
 use serde::Deserialize;
 use tracing::debug;
 
 use super::JobCtx2;
-use crate::generate::{JobCommand, copy_dir_recursive, stderr_if_err};
+use crate::generate::{JobCommand, stderr_if_err};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LockJob {
     pub manifest: String,
 }
 
-pub fn run_lock_job(job: &LockJob, ctx: &JobCtx2, input_data_dir: &Path) -> Result<(), Error> {
+pub fn run_lock_job(job: &LockJob, ctx: &JobCtx2) -> Result<(), Error> {
     debug!(category = ctx.category, name = ctx.name, "starting job");
     let workdir = ctx.tmp_dir.path();
 
@@ -26,7 +24,7 @@ pub fn run_lock_job(job: &LockJob, ctx: &JobCtx2, input_data_dir: &Path) -> Resu
     stderr_if_err(output)?;
 
     // Build the environment with the new manifest
-    let manifest_path = input_data_dir.join("manifests").join(&job.manifest);
+    let manifest_path = ctx.input_dir.join("manifests").join(&job.manifest);
     let lockfile_path = workdir.join("manifest.lock");
     debug!(category = ctx.category, name = ctx.name, manifest = %manifest_path.display(), "flox lock-manifest");
     let output = cmd!("flox", "lock-manifest", manifest_path)

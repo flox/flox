@@ -5,16 +5,16 @@ use std::time::Duration;
 use std::vec;
 
 use anyhow::{Context, bail};
-use custom::CustomJob;
+use custom::{CustomJob, run_custom_job};
 use duct::Expression;
-use env::EnvJob;
+use env::{EnvJob, run_env_job};
 use indicatif::{ProgressBar, ProgressStyle};
-use init::InitJob;
-use lock::LockJob;
-use resolve::ResolveJob;
-use search::SearchJob;
+use init::{InitJob, run_init_job};
+use lock::{LockJob, run_lock_job};
+use resolve::{ResolveJob, run_resolve_job};
+use search::{SearchJob, run_search_job};
 use serde::Deserialize;
-use show::ShowJob;
+use show::{ShowJob, run_show_job};
 use tempfile::TempDir;
 use tracing::{debug, trace};
 use walkdir::WalkDir;
@@ -165,6 +165,7 @@ pub enum JobKind {
 #[derive(Debug)]
 pub struct JobCtx2 {
     pub name: String,
+    pub job: JobKind,
     pub category: String,
     pub tmp_dir: TempDir,
     pub input_dir: PathBuf,
@@ -183,6 +184,31 @@ pub struct ProtoJobCtx2 {
     pub input_dir: PathBuf,
     pub category_dir: PathBuf,
     pub vars: HashMap<String, String>,
+}
+
+impl ProtoJobCtx2 {
+    pub fn run(self) -> Result<(), Error> {
+        let tmp_dir =
+            TempDir::new_in(&self.category_dir).context("failed to create tempdir for job")?;
+        let ctx = JobCtx2 {
+            name: self.name,
+            job: self.job,
+            category: self.category,
+            tmp_dir,
+            input_dir: self.input_dir,
+            category_dir: self.category_dir,
+            vars: self.vars,
+        };
+        match ctx.job {
+            JobKind::Resolve(ref resolve_job) => run_resolve_job(resolve_job, &ctx),
+            JobKind::Search(ref search_job) => run_search_job(search_job, &ctx),
+            JobKind::Show(ref show_job) => run_show_job(show_job, &ctx),
+            JobKind::Init(ref init_job) => run_init_job(init_job, &ctx),
+            JobKind::Env(ref env_job) => run_env_job(env_job, &ctx),
+            JobKind::Lock(ref lock_job) => run_lock_job(lock_job, &ctx),
+            JobKind::Custom(ref custom_job) => run_custom_job(custom_job, &ctx),
+        }
+    }
 }
 
 /// Returns an error containing `stderr` if the `Output` was not a success.
@@ -666,6 +692,26 @@ pub fn execute_jobs(
         }
         execute_job(&job, vars, input_dir)
             .with_context(|| format!("failed to execute job: {}", job.spec.name))?;
+    }
+    if !quiet {
+        if let Some(s) = spinner {
+            s.finish_and_clear();
+        }
+    }
+    Ok(())
+}
+
+/// Executes the provided jobs
+pub fn execute_jobs2(jobs: Vec<ProtoJobCtx2>, quiet: bool) -> Result<(), Error> {
+    let mut spinner: Option<ProgressBar> = None;
+    if !quiet {
+        let s = indicatif::ProgressBar::new_spinner();
+        s.set_style(ProgressStyle::with_template("{spinner} {wide_msg} {prefix:>}").unwrap());
+        s.enable_steady_tick(Duration::from_millis(50));
+        spinner = Some(s);
+    }
+    for job in jobs {
+        job.run()?;
     }
     if !quiet {
         if let Some(s) = spinner {

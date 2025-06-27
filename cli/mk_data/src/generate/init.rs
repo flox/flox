@@ -1,7 +1,4 @@
-use std::path::{Path, PathBuf};
-
-use anyhow::{Context, Error, bail};
-use duct::cmd;
+use anyhow::{Context, Error};
 use serde::Deserialize;
 use tracing::debug;
 
@@ -9,7 +6,6 @@ use super::JobCtx2;
 use crate::generate::{
     JobCommand,
     copy_dir_recursive,
-    move_response_file,
     run_post_cmd2,
     run_pre_cmd2,
     stderr_if_err,
@@ -25,12 +21,12 @@ pub struct InitJob {
     pub post_cmd: Option<String>,
 }
 
-pub fn run_init_job(job: &InitJob, ctx: &JobCtx2, input_data_dir: &Path) -> Result<(), Error> {
+pub fn run_init_job(job: &InitJob, ctx: &JobCtx2) -> Result<(), Error> {
     debug!(category = ctx.category, name = ctx.name, "starting job");
     let workdir = ctx.tmp_dir.path();
 
     // Unpack and input directories to the workdir if they were specified
-    unpack_inputs(input_data_dir, &job.unpack_dir_contents, workdir, ctx)
+    unpack_inputs(&ctx.input_dir, &job.unpack_dir_contents, workdir, ctx)
         .context("failed to unpack job inputs")?;
 
     // Run the pre_cmd if it was specified
