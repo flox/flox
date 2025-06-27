@@ -16,7 +16,7 @@ use search::{SearchJob, run_search_job};
 use serde::Deserialize;
 use show::{ShowJob, run_show_job};
 use tempfile::TempDir;
-use tracing::{debug, trace};
+use tracing::debug;
 use walkdir::WalkDir;
 
 use crate::{Cli, Error};
@@ -31,27 +31,6 @@ mod show;
 /// The config file for the mock data to generate.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-    /// Environment variables you want set during the generation process.
-    ///
-    /// You might use this to use the production vs. preview server, etc.
-    pub vars: Option<HashMap<String, String>>,
-    /// Specs for the resolve endpoint
-    pub resolve: Option<HashMap<String, JobSpec>>,
-    /// Specs for the search command
-    pub search: Option<HashMap<String, JobSpec>>,
-    /// Specs for the show command
-    pub show: Option<HashMap<String, JobSpec>>,
-    /// Specs for the init command
-    pub init: Option<HashMap<String, JobSpec>>,
-    /// Specs for manifest/lockfile pairs
-    pub envs: Option<HashMap<String, JobSpec>>,
-    /// Specs for build environments
-    pub build: Option<HashMap<String, JobSpec>>,
-}
-
-/// The config file for the mock data to generate.
-#[derive(Debug, Clone, Deserialize)]
-pub struct Config2 {
     /// Environment variables you want set during the generation process.
     ///
     /// You might use this to use the production vs. preview server, etc.
@@ -72,84 +51,6 @@ pub struct Config2 {
     pub custom: Option<HashMap<String, CustomJob>>,
 }
 
-/// A spec for a single generated response file.
-///
-/// This is what's taken straight from the config file, so it's the "value" in a "name": "value" pair.
-#[derive(Debug, Clone, Deserialize)]
-pub struct JobSpec {
-    /// Check a specific path relative to the output directory rather than looking in the default
-    /// location when determining whether this job needs to be re-run.
-    pub skip_if_output_exists: Option<PathBuf>,
-    /// A command to run before the command that generates the response.
-    pub pre_cmd: Option<String>,
-    /// The command that generates the response.
-    pub cmd: String,
-    /// A command that runs after generating the response, receives a `$RESPONSE_FILE` variable
-    /// so it can modify the response after the fact.
-    pub post_cmd: Option<String>,
-    /// Files to copy into the temp directory of the job before running any commands.
-    /// These are specified relative to the `input` directory. You may also specify directories
-    /// here, in which case the entire directory will be copied.
-    pub files: Option<Vec<PathBuf>>,
-    /// Doesn't fail the job if there is an error running `pre_cmd`
-    pub ignore_pre_cmd_errors: Option<bool>,
-    /// Doesn't fail the job if there is an error running `cmd`
-    pub ignore_cmd_errors: Option<bool>,
-    /// Doesn't fail the job if there is an error running `post_cmd`
-    pub ignore_post_cmd_errors: Option<bool>,
-}
-
-pub trait ToJob {
-    fn to_job(&self, name: &str) -> Job;
-}
-
-/// A spec for a single generated response file.
-#[derive(Debug, Clone, Deserialize)]
-pub struct Job {
-    /// The name of the file without the extension.
-    pub name: String,
-    /// A command to run before the command that generates the response.
-    pub pre_cmd: Option<String>,
-    /// The command that generates the response.
-    pub cmd: String,
-    /// A command that runs after generating the response, receives a `$RESPONSE_FILE` variable
-    /// so it can modify the response after the fact.
-    pub post_cmd: Option<String>,
-    /// Files to copy into the temp directory of the job before running any commands.
-    /// These are specified relative to the `input` directory. You may also specify directories
-    /// here, in which case the entire directory will be copied.
-    pub files: Option<Vec<PathBuf>>,
-    /// Doesn't fail the job if there is an error running `pre_cmd`
-    pub ignore_pre_cmd_errors: Option<bool>,
-    /// Doesn't fail the job if there is an error running `cmd`
-    pub ignore_cmd_errors: Option<bool>,
-    /// Doesn't fail the job if there is an error running `post_cmd`
-    pub ignore_post_cmd_errors: Option<bool>,
-}
-
-impl Job {
-    pub fn new(name: &str, raw_spec: &JobSpec) -> Self {
-        Self {
-            name: name.into(),
-            pre_cmd: raw_spec.pre_cmd.clone(),
-            cmd: raw_spec.cmd.clone(),
-            post_cmd: raw_spec.post_cmd.clone(),
-            files: raw_spec.files.clone(),
-            ignore_pre_cmd_errors: raw_spec.ignore_pre_cmd_errors,
-            ignore_cmd_errors: raw_spec.ignore_cmd_errors,
-            ignore_post_cmd_errors: raw_spec.ignore_post_cmd_errors,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct JobCtx {
-    pub category: String,
-    pub tmp_dir: TempDir,
-    pub spec: Job,
-    pub output_file: PathBuf,
-}
-
 #[derive(Debug)]
 pub enum JobKind {
     Resolve(ResolveJob),
@@ -163,7 +64,7 @@ pub enum JobKind {
 
 /// All of the information and state necessary to run a particular job.
 #[derive(Debug)]
-pub struct JobCtx2 {
+pub struct JobCtx {
     pub name: String,
     pub job: JobKind,
     pub category: String,
@@ -177,7 +78,7 @@ pub struct JobCtx2 {
 /// runtime e.g. all of `JobCtx` minus the temporary directory, which is only
 /// generated right before running the job.
 #[derive(Debug)]
-pub struct ProtoJobCtx2 {
+pub struct ProtoJobCtx {
     pub name: String,
     pub job: JobKind,
     pub category: String,
@@ -186,11 +87,11 @@ pub struct ProtoJobCtx2 {
     pub vars: HashMap<String, String>,
 }
 
-impl ProtoJobCtx2 {
+impl ProtoJobCtx {
     pub fn run(self) -> Result<(), Error> {
         let tmp_dir =
             TempDir::new_in(&self.category_dir).context("failed to create tempdir for job")?;
-        let ctx = JobCtx2 {
+        let ctx = JobCtx {
             name: self.name,
             job: self.job,
             category: self.category,
@@ -222,7 +123,7 @@ pub fn stderr_if_err(Output { status, stderr, .. }: Output) -> Result<(), Error>
 
 /// Moves the response file from `<workdir>/resp.yaml` to
 /// `test_data/<category>/<name>.yaml`
-pub fn move_response_file(resp_path: &Path, ctx: &JobCtx2) -> Result<(), Error> {
+pub fn move_response_file(resp_path: &Path, ctx: &JobCtx) -> Result<(), Error> {
     let dest = ctx.category_dir.join(format!("{}.yaml", ctx.name));
     debug!(category = ctx.category, name = ctx.name, src = %resp_path.display(), dest = %dest.display(), "moving response file");
     std::fs::copy(resp_path, dest).context("failed to move response file")?;
@@ -261,7 +162,7 @@ pub fn unpack_inputs(
     input_data_dir: &Path,
     inputs: &[String],
     workdir: &Path,
-    ctx: &JobCtx2,
+    ctx: &JobCtx,
 ) -> Result<(), Error> {
     for input_path in inputs.iter() {
         let full_input_path = input_data_dir.join(input_path);
@@ -401,56 +302,10 @@ pub fn get_input_dir(args: &Cli) -> Result<PathBuf, Error> {
 /// Generates all the jobs from the spec file.
 pub fn generate_jobs(
     config: &Config,
-    output_dir: &Path,
-    force: bool,
-) -> Result<impl Iterator<Item = JobCtx>, Error> {
-    let mut jobs = vec![];
-    if let Some(init) = config.init.as_ref() {
-        jobs.push(
-            generate_category_jobs("init", init.iter(), output_dir, force)
-                .context("failed to generate init jobs")?,
-        );
-    }
-    if let Some(resolve) = config.resolve.as_ref() {
-        jobs.push(
-            generate_category_jobs("resolve", resolve.iter(), output_dir, force)
-                .context("failed to generate resolve jobs")?,
-        );
-    }
-    if let Some(search) = config.search.as_ref() {
-        jobs.push(
-            generate_category_jobs("search", search.iter(), output_dir, force)
-                .context("failed to generate search jobs")?,
-        );
-    }
-    if let Some(show) = config.show.as_ref() {
-        jobs.push(
-            generate_category_jobs("show", show.iter(), output_dir, force)
-                .context("failed to generate show jobs")?,
-        );
-    }
-    if let Some(envs) = config.envs.as_ref() {
-        jobs.push(
-            generate_category_jobs("envs", envs.iter(), output_dir, force)
-                .context("failed to generate envs jobs")?,
-        );
-    }
-    if let Some(build) = config.build.as_ref() {
-        jobs.push(
-            generate_category_jobs("build", build.iter(), output_dir, force)
-                .context("failed to generate build jobs")?,
-        );
-    }
-    Ok(jobs.into_iter().flatten())
-}
-
-/// Generates all the jobs from the spec file.
-pub fn generate_jobs2(
-    config: &Config2,
     input_dir: &Path,
     output_dir: &Path,
     force: bool,
-) -> Result<Vec<ProtoJobCtx2>, Error> {
+) -> Result<Vec<ProtoJobCtx>, Error> {
     let mut jobs = vec![];
 
     let resolve_dir = output_dir.join("resolve");
@@ -462,7 +317,7 @@ pub fn generate_jobs2(
     );
     for (name, job) in resolve_jobs {
         let kind = JobKind::Resolve(job);
-        let ctx = ProtoJobCtx2 {
+        let ctx = ProtoJobCtx {
             name,
             job: kind,
             category: "resolve".to_string(),
@@ -482,7 +337,7 @@ pub fn generate_jobs2(
     );
     for (name, job) in search_jobs {
         let kind = JobKind::Search(job);
-        let ctx = ProtoJobCtx2 {
+        let ctx = ProtoJobCtx {
             name,
             job: kind,
             category: "search".to_string(),
@@ -502,7 +357,7 @@ pub fn generate_jobs2(
     );
     for (name, job) in show_jobs {
         let kind = JobKind::Show(job);
-        let ctx = ProtoJobCtx2 {
+        let ctx = ProtoJobCtx {
             name,
             job: kind,
             category: "show".to_string(),
@@ -522,7 +377,7 @@ pub fn generate_jobs2(
     );
     for (name, job) in lock_jobs {
         let kind = JobKind::Lock(job);
-        let ctx = ProtoJobCtx2 {
+        let ctx = ProtoJobCtx {
             name,
             job: kind,
             category: "lock".to_string(),
@@ -538,7 +393,7 @@ pub fn generate_jobs2(
         enumerate_output_dir_jobs_to_run(&config.env.clone().unwrap_or_default(), force, &env_dir);
     for (name, job) in env_jobs {
         let kind = JobKind::Env(job);
-        let ctx = ProtoJobCtx2 {
+        let ctx = ProtoJobCtx {
             name,
             job: kind,
             category: "env".to_string(),
@@ -557,7 +412,7 @@ pub fn generate_jobs2(
     );
     for (name, job) in init_jobs {
         let kind = JobKind::Init(job);
-        let ctx = ProtoJobCtx2 {
+        let ctx = ProtoJobCtx {
             name,
             job: kind,
             category: "init".to_string(),
@@ -576,7 +431,7 @@ pub fn generate_jobs2(
     );
     for (name, job) in custom_jobs {
         let kind = JobKind::Custom(job);
-        let ctx = ProtoJobCtx2 {
+        let ctx = ProtoJobCtx {
             name,
             job: kind,
             category: "custom".to_string(),
@@ -637,85 +492,8 @@ pub fn enumerate_output_dir_jobs_to_run<T: Clone>(
         .collect::<HashMap<_, _>>()
 }
 
-/// Generates the jobs for a given category.
-pub fn generate_category_jobs<'a>(
-    category: &str,
-    raw_specs: impl Iterator<Item = (&'a String, &'a JobSpec)>,
-    output_dir: &Path,
-    force: bool,
-) -> Result<Vec<JobCtx>, Error> {
-    let mut jobs: Vec<JobCtx> = vec![];
-    for (name, raw_spec) in raw_specs {
-        let response_filename = output_dir.join(category).join(format!("{}.yaml", name));
-        match (force, raw_spec.skip_if_output_exists.as_ref()) {
-            (false, Some(path)) => {
-                let check_path = output_dir.join(path);
-                if check_path.exists() {
-                    trace!(name, explicit = true, path = %check_path.display(), "skipping job because output exists");
-                    continue;
-                }
-            },
-            (false, None) => {
-                if response_filename.exists() {
-                    trace!(name, explicit = false, path = %response_filename.display(), "skiping job because output exists");
-                    continue;
-                }
-            },
-            (true, _) => {},
-        }
-        debug!(category, name, "adding job to queue");
-        let tmp_dir = TempDir::new_in(output_dir)?;
-        jobs.push(JobCtx {
-            category: category.into(),
-            tmp_dir,
-            spec: Job::new(name, raw_spec),
-            output_file: response_filename,
-        });
-    }
-    Ok(jobs)
-}
-
 /// Executes the provided jobs
-pub fn execute_jobs(
-    jobs: impl Iterator<Item = JobCtx>,
-    vars: &Option<HashMap<String, String>>,
-    input_dir: &Path,
-    quiet: bool,
-) -> Result<(), Error> {
-    let mut spinner: Option<ProgressBar> = None;
-    if !quiet {
-        let s = indicatif::ProgressBar::new_spinner();
-        s.set_style(ProgressStyle::with_template("{spinner} {wide_msg} {prefix:>}").unwrap());
-        s.enable_steady_tick(Duration::from_millis(50));
-        spinner = Some(s);
-    }
-    for job in jobs {
-        debug!(
-            category = job.category,
-            name = job.spec.name,
-            "executing job"
-        );
-        if !quiet {
-            if let Some(ref s) = spinner {
-                s.set_message(format!(
-                    "Running job: category={}, name={}",
-                    &job.category, &job.spec.name
-                ));
-            }
-        }
-        execute_job(&job, vars, input_dir)
-            .with_context(|| format!("failed to execute job: {}", job.spec.name))?;
-    }
-    if !quiet {
-        if let Some(s) = spinner {
-            s.finish_and_clear();
-        }
-    }
-    Ok(())
-}
-
-/// Executes the provided jobs
-pub fn execute_jobs2(jobs: Vec<ProtoJobCtx2>, quiet: bool) -> Result<(), Error> {
+pub fn execute_jobs(jobs: Vec<ProtoJobCtx>, quiet: bool) -> Result<(), Error> {
     let mut spinner: Option<ProgressBar> = None;
     if !quiet {
         let s = indicatif::ProgressBar::new_spinner();
@@ -742,94 +520,8 @@ pub fn execute_jobs2(jobs: Vec<ProtoJobCtx2>, quiet: bool) -> Result<(), Error> 
     Ok(())
 }
 
-/// Executes a single job
-pub fn execute_job(
-    job: &JobCtx,
-    vars: &Option<HashMap<String, String>>,
-    input_dir: &Path,
-) -> Result<(), Error> {
-    if let Some(files) = job.spec.files.as_ref() {
-        debug!(
-            category = job.category,
-            name = job.spec.name,
-            "copying files"
-        );
-        copy_files(files, input_dir, job.tmp_dir.path()).context("copying files failed")?;
-    }
-    if let Some(pre_cmd) = job.spec.pre_cmd.as_ref() {
-        let ignore_errors = job.spec.ignore_pre_cmd_errors.unwrap_or(false);
-        debug!(
-            category = job.category,
-            name = job.spec.name,
-            ignore_errors,
-            "running pre_cmd"
-        );
-        run_pre_cmd(pre_cmd, vars, job.tmp_dir.path(), ignore_errors).context("pre_cmd failed")?;
-    }
-    let ignore_errors = job.spec.ignore_cmd_errors.unwrap_or(false);
-    debug!(
-        category = job.category,
-        name = job.spec.name,
-        ignore_errors,
-        "running cmd"
-    );
-    run_cmd(
-        job.spec.cmd.as_ref(),
-        vars,
-        job.tmp_dir.path(),
-        &job.output_file,
-        ignore_errors,
-    )
-    .context("cmd failed")?;
-    if let Some(post_cmd) = job.spec.post_cmd.as_ref() {
-        let ignore_errors = job.spec.ignore_post_cmd_errors.unwrap_or(false);
-        debug!(
-            category = job.category,
-            name = job.spec.name,
-            ignore_errors,
-            "running post_cmd"
-        );
-        run_post_cmd(
-            post_cmd,
-            vars,
-            job.tmp_dir.path(),
-            &job.output_file,
-            ignore_errors,
-        )
-        .context("post_cmd failed")?;
-    }
-    Ok(())
-}
-
 /// Runs the `pre_cmd` for a given job.
 fn run_pre_cmd(
-    pre_cmd: &str,
-    vars: &Option<HashMap<String, String>>,
-    dir: &Path,
-    ignore_errors: bool,
-) -> Result<(), Error> {
-    let mut cmd = Command::new("bash");
-    if !ignore_errors {
-        cmd.arg("-eu");
-    }
-    cmd.arg("-c").arg(pre_cmd);
-    cmd.current_dir(dir);
-    if let Some(vars) = vars {
-        for (key, value) in vars.iter() {
-            cmd.env(key, value);
-        }
-    }
-    debug!("pre_cmd: {:?}", cmd);
-    let output = cmd.output().context("couldn't call command")?;
-    if !output.status.success() && !ignore_errors {
-        let stderr = String::from_utf8_lossy(output.stderr.as_slice());
-        anyhow::bail!("{}", stderr);
-    }
-    Ok(())
-}
-
-/// Runs the `pre_cmd` for a given job.
-fn run_pre_cmd2(
     pre_cmd: &str,
     vars: &HashMap<String, String>,
     dir: &Path,
@@ -853,83 +545,8 @@ fn run_pre_cmd2(
     Ok(())
 }
 
-/// Copies the files from the spec to the temp directory.
-fn copy_files(files: &[PathBuf], input_dir: &Path, working_dir: &Path) -> Result<(), Error> {
-    for rel_path in files.iter() {
-        let src = input_dir.join(rel_path);
-        if !src.exists() {
-            anyhow::bail!("file does not exist: {:?}", src);
-        }
-        if src.is_file() {
-            let dest = working_dir.join(src.file_name().unwrap());
-            debug!(
-                src = traceable_path(&src),
-                dest = traceable_path(&dest),
-                "copying file"
-            );
-            std::fs::copy(&src, &dest).with_context(|| {
-                format!(
-                    "couldn't copy file: '{}' -> '{}'",
-                    src.display(),
-                    working_dir.display()
-                )
-            })?;
-            continue;
-        }
-        if src.is_dir() {
-            debug!(
-                src = traceable_path(&src),
-                dest = traceable_path(&working_dir),
-                "copying directory"
-            );
-            fs_extra::dir::copy(&src, working_dir, &fs_extra::dir::CopyOptions::default())
-                .with_context(|| {
-                    format!(
-                        "failed to copy directory: '{}' -> '{}'",
-                        src.display(),
-                        working_dir.display()
-                    )
-                })?;
-            continue;
-        }
-    }
-    Ok(())
-}
-
 /// Runs the `cmd` for a given job.
 pub fn run_cmd(
-    gen_cmd: &str,
-    vars: &Option<HashMap<String, String>>,
-    dir: &Path,
-    output_file: &Path,
-    ignore_errors: bool,
-) -> Result<(), Error> {
-    let mut cmd = Command::new("bash");
-    if !ignore_errors {
-        cmd.arg("-eu");
-    }
-    cmd.arg("-c").arg(gen_cmd);
-    cmd.current_dir(dir);
-    if let Some(vars) = vars {
-        for (key, value) in vars.iter() {
-            cmd.env(key, value);
-        }
-    }
-
-    // Don't leak custom catalogs from the current user.
-    cmd.env("FLOX_FLOXHUB_TOKEN", "");
-    cmd.env("_FLOX_CATALOG_DUMP_RESPONSE_FILE", output_file);
-    debug!("cmd: {:?}", cmd);
-    let output = cmd.output().context("couldn't call command")?;
-    if !output.status.success() && !ignore_errors {
-        let stderr = String::from_utf8_lossy(output.stderr.as_slice());
-        anyhow::bail!("{}", stderr);
-    }
-    Ok(())
-}
-
-/// Runs the `cmd` for a given job.
-pub fn run_cmd2(
     gen_cmd: &str,
     vars: &HashMap<String, String>,
     dir: &Path,
@@ -961,35 +578,6 @@ pub fn run_cmd2(
 /// Runs the `post_cmd` for a given job.
 pub fn run_post_cmd(
     post_cmd: &str,
-    vars: &Option<HashMap<String, String>>,
-    dir: &Path,
-    output_file: &Path,
-    ignore_errors: bool,
-) -> Result<(), Error> {
-    let mut cmd = Command::new("bash");
-    if !ignore_errors {
-        cmd.arg("-eu");
-    }
-    cmd.arg("-c").arg(post_cmd);
-    cmd.current_dir(dir);
-    if let Some(vars) = vars {
-        for (key, value) in vars.iter() {
-            cmd.env(key, value);
-        }
-    }
-    cmd.env("RESPONSE_FILE", output_file);
-    debug!("post_cmd: {:?}", cmd);
-    let output = cmd.output().context("couldn't call command")?;
-    if !output.status.success() && !ignore_errors {
-        let stderr = String::from_utf8_lossy(output.stderr.as_slice());
-        anyhow::bail!("{}", stderr);
-    }
-    Ok(())
-}
-
-/// Runs the `post_cmd` for a given job.
-pub fn run_post_cmd2(
-    post_cmd: &str,
     vars: &HashMap<String, String>,
     dir: &Path,
     output_file: &Path,
@@ -1012,10 +600,4 @@ pub fn run_post_cmd2(
         anyhow::bail!("{}", stderr);
     }
     Ok(())
-}
-
-/// Returns a `tracing`-compatible form of a [Path]
-pub fn traceable_path(p: impl AsRef<Path>) -> impl tracing::Value {
-    let path = p.as_ref();
-    path.display().to_string()
 }

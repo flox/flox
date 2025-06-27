@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, bail};
 use clap::Parser;
-use generate::{Config2, execute_jobs2, generate_jobs2};
+use generate::{Config, execute_jobs, generate_jobs};
 
 pub mod generate;
 
@@ -42,16 +42,16 @@ fn main() -> Result<(), Error> {
     }
     let spec_contents =
         std::fs::read_to_string(&args.config).context("failed to read config file")?;
-    let config: Config2 =
+    let config: Config =
         toml::from_str(&spec_contents).context("couldn't deserialize config file")?;
     let output_dir =
         generate::get_output_dir(&args).context("failed to determine output directory")?;
     let input_dir =
         generate::get_input_dir(&args).context("failed to determine input directory")?;
     generate::create_output_dir(&output_dir).context("failed to create output directory")?;
-    let jobs = generate_jobs2(&config, &input_dir, &output_dir, args.force)
+    let jobs = generate_jobs(&config, &input_dir, &output_dir, args.force)
         .context("failed to generate jobs from config")?;
-    execute_jobs2(jobs, args.quiet).context("failed while executing jobs")?;
+    execute_jobs(jobs, args.quiet).context("failed while executing jobs")?;
     Ok(())
 }
 
