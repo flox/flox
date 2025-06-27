@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use anyhow::{Context, Error};
 use duct::cmd;
 use serde::Deserialize;
@@ -13,7 +11,7 @@ pub struct EnvJob {
     pub manifest: String,
 }
 
-pub fn run_env_job(job: &EnvJob, ctx: &JobCtx2, input_data_dir: &Path) -> Result<(), Error> {
+pub fn run_env_job(job: &EnvJob, ctx: &JobCtx2) -> Result<(), Error> {
     debug!(category = ctx.category, name = ctx.name, "starting job");
     let workdir = ctx.tmp_dir.path();
 
@@ -26,7 +24,7 @@ pub fn run_env_job(job: &EnvJob, ctx: &JobCtx2, input_data_dir: &Path) -> Result
     stderr_if_err(output)?;
 
     // Build the environment with the new manifest
-    let manifest_path = input_data_dir.join("manifests").join(&job.manifest);
+    let manifest_path = ctx.input_dir.join("manifests").join(&job.manifest);
     let resp_file = workdir.join("resp.yaml");
     debug!(category = ctx.category, name = ctx.name, manifest = %manifest_path.display(), "flox edit -f");
     let output = cmd!("flox", "edit", "-f", manifest_path)

@@ -1,21 +1,9 @@
-use std::path::Path;
-
 use anyhow::{Context, Error};
-use duct::cmd;
 use serde::Deserialize;
 use tracing::debug;
 
 use super::JobCtx2;
-use crate::generate::{
-    JobCommand,
-    copy_dir_recursive,
-    move_response_file,
-    run_cmd2,
-    run_post_cmd2,
-    run_pre_cmd2,
-    stderr_if_err,
-    unpack_inputs,
-};
+use crate::generate::{copy_dir_recursive, run_cmd2, run_post_cmd2, run_pre_cmd2, unpack_inputs};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CustomJob {
@@ -26,12 +14,12 @@ pub struct CustomJob {
     pub post_cmd: Option<String>,
 }
 
-pub fn run_resolve_job(job: &CustomJob, ctx: &JobCtx2, input_data_dir: &Path) -> Result<(), Error> {
+pub fn run_custom_job(job: &CustomJob, ctx: &JobCtx2) -> Result<(), Error> {
     debug!(category = ctx.category, name = ctx.name, "starting job");
     let workdir = ctx.tmp_dir.path();
 
     // Unpack and input directories to the workdir if they were specified
-    unpack_inputs(input_data_dir, &job.unpack_dir_contents, workdir, ctx)
+    unpack_inputs(&ctx.input_dir, &job.unpack_dir_contents, workdir, ctx)
         .context("failed to unpack job inputs")?;
 
     // Run the pre_cmd if it was specified

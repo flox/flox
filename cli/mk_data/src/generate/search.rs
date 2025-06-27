@@ -1,5 +1,3 @@
-use std::path::{Path, PathBuf};
-
 use anyhow::{Context, Error};
 use duct::cmd;
 use serde::Deserialize;
