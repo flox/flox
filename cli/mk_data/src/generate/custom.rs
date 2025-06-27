@@ -7,7 +7,7 @@ use crate::generate::{copy_dir_recursive, run_cmd2, run_post_cmd2, run_pre_cmd2,
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CustomJob {
-    pub unpack_dir_contents: Vec<String>,
+    pub unpack_dir_contents: Option<Vec<String>>,
     pub ignore_errors: Option<bool>,
     pub pre_cmd: Option<String>,
     pub record_cmd: Option<String>,
@@ -17,15 +17,25 @@ pub struct CustomJob {
 pub fn run_custom_job(job: &CustomJob, ctx: &JobCtx2) -> Result<(), Error> {
     debug!(category = ctx.category, name = ctx.name, "starting job");
     let workdir = ctx.tmp_dir.path();
+    let vars = {
+        let mut vars = ctx.vars.clone();
+        vars.insert(
+            "INPUT_DATA".to_string(),
+            ctx.input_dir.to_string_lossy().to_string(),
+        );
+        vars
+    };
 
     // Unpack and input directories to the workdir if they were specified
-    unpack_inputs(&ctx.input_dir, &job.unpack_dir_contents, workdir, ctx)
-        .context("failed to unpack job inputs")?;
+    if let Some(ref unpack_dir_contents) = job.unpack_dir_contents {
+        unpack_inputs(&ctx.input_dir, unpack_dir_contents, workdir, ctx)
+            .context("failed to unpack job inputs")?;
+    }
 
     // Run the pre_cmd if it was specified
     if let Some(ref cmd) = job.pre_cmd {
         debug!(category = ctx.category, name = ctx.name, "running pre_cmd");
-        run_pre_cmd2(cmd, &ctx.vars, workdir, job.ignore_errors.unwrap_or(false))?;
+        run_pre_cmd2(cmd, &vars, workdir, job.ignore_errors.unwrap_or(false))?;
     }
 
     // Run a command that will record a response if specified
@@ -38,7 +48,7 @@ pub fn run_custom_job(job: &CustomJob, ctx: &JobCtx2) -> Result<(), Error> {
         );
         run_cmd2(
             cmd,
-            &ctx.vars,
+            &vars,
             workdir,
             &resp_file,
             job.ignore_errors.unwrap_or(false),
@@ -50,7 +60,7 @@ pub fn run_custom_job(job: &CustomJob, ctx: &JobCtx2) -> Result<(), Error> {
         debug!(category = ctx.category, name = ctx.name, "running post_cmd");
         run_post_cmd2(
             cmd,
-            &ctx.vars,
+            &vars,
             workdir,
             &resp_file,
             job.ignore_errors.unwrap_or(false),

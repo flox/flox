@@ -1,0 +1,4 @@
+version = 1
+install.vim.pkg-path = "vim"
+install.vim.priority = 1
+install.vim-full.pkg-path = "vim-full"

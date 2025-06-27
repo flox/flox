@@ -1,0 +1,36 @@
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+
+[vars]
+VARS_SECTION_VAR = "vars_section_var"
+
+[hook]
+on-activate = '''
+    echo "running on-activate"
+    echo "VARS_SECTION_VAR: $VARS_SECTION_VAR"
+    export HOOK_SECTION_VAR="hook_section_var"
+'''
+
+[profile]
+common = '''
+    echo "running profile-common"
+    echo "HOOK_SECTION_VAR: $HOOK_SECTION_VAR"
+'''
+bash = '''
+    alias profile_alias="echo bash"
+    export PROFILE_SECTION_VAR="profile-bash"
+'''
+zsh = '''
+    alias profile_alias="echo zsh"
+    export PROFILE_SECTION_VAR="profile-zsh"
+'''
+fish = '''
+    alias profile_alias="echo fish"
+    set -gx PROFILE_SECTION_VAR profile-fish
+'''
+tcsh = '''
+    alias profile_alias "echo tcsh"
+    export PROFILE_SECTION_VAR="profile-tcsh"
+'''

@@ -248,7 +248,7 @@ pub(crate) fn copy_dir_recursive(
                 std::fs::copy(entry.path(), &new_path).context("failed to copy file")?;
             },
             _ => {
-                bail!("don't try to copy symlinks, fancy pants");
+                // Skip symlinks
             },
         }
     }
@@ -264,20 +264,20 @@ pub fn unpack_inputs(
     ctx: &JobCtx2,
 ) -> Result<(), Error> {
     for input_path in inputs.iter() {
-        let path = input_data_dir.join(input_path);
-        if !path.exists() {
-            bail!("path does not exist: {}", path.display());
+        let full_input_path = input_data_dir.join(input_path);
+        if !full_input_path.exists() {
+            bail!("path does not exist: {}", full_input_path.display());
         }
-        for item in path
+        for item in full_input_path
             .read_dir()
-            .with_context(|| format!("failed to read directory: {}", path.display()))?
+            .with_context(|| format!("failed to read directory: {}", full_input_path.display()))?
         {
             let item = item.context("failed to dir entry")?;
             let item_path = item.path();
-            let suffix = item_path.strip_prefix(&path).with_context(|| {
+            let suffix = item_path.strip_prefix(&full_input_path).with_context(|| {
                 format!(
                     "failed to strip prefix {} from {}",
-                    path.display(),
+                    full_input_path.display(),
                     item_path.display()
                 )
             })?;
@@ -285,13 +285,21 @@ pub fn unpack_inputs(
             let file_type = item.file_type().context("failed to get file type")?;
             if file_type.is_file() {
                 debug!(category = "init", name = ctx.name, src = %item.path().display(), dest = %dest.display(), "copying input data");
-                std::fs::copy(&path, &dest).with_context(|| {
-                    format!("failed to copy {} to {}", path.display(), dest.display())
+                std::fs::copy(&item_path, &dest).with_context(|| {
+                    format!(
+                        "failed to copy {} to {}",
+                        item_path.display(),
+                        dest.display()
+                    )
                 })?;
             } else if file_type.is_dir() {
-                debug!(category = "init", name = ctx.name, src = %item.path().display(), dest = %dest.display(), "copying input data");
-                copy_dir_recursive(&path, &dest).with_context(|| {
-                    format!("failed to copy {} to {}", path.display(), dest.display())
+                debug!(category = "init", name = ctx.name, src = %item_path.display(), dest = %dest.display(), "copying input data");
+                copy_dir_recursive(&full_input_path, &dest).with_context(|| {
+                    format!(
+                        "failed to copy {} to {}",
+                        full_input_path.display(),
+                        dest.display()
+                    )
                 })?;
             }
         }
@@ -334,7 +342,7 @@ pub fn create_output_dir(output_dir: &Path) -> Result<(), Error> {
     let resolve_dir = output_dir.join("resolve");
     let search_dir = output_dir.join("search");
     let show_dir = output_dir.join("show");
-    let envs_dir = output_dir.join("envs");
+    let envs_dir = output_dir.join("env");
     let lock_dir = output_dir.join("lock");
     let custom_dir = output_dir.join("custom");
     let dirs = [
@@ -450,6 +458,7 @@ pub fn generate_jobs2(
         &config.resolve.clone().unwrap_or_default(),
         force,
         &resolve_dir,
+        "yaml",
     );
     for (name, job) in resolve_jobs {
         let kind = JobKind::Resolve(job);
@@ -469,6 +478,7 @@ pub fn generate_jobs2(
         &config.search.clone().unwrap_or_default(),
         force,
         &search_dir,
+        "yaml",
     );
     for (name, job) in search_jobs {
         let kind = JobKind::Search(job);
@@ -488,6 +498,7 @@ pub fn generate_jobs2(
         &config.show.clone().unwrap_or_default(),
         force,
         &show_dir,
+        "yaml",
     );
     for (name, job) in show_jobs {
         let kind = JobKind::Show(job);
@@ -507,6 +518,7 @@ pub fn generate_jobs2(
         &config.lock.clone().unwrap_or_default(),
         force,
         &lock_dir,
+        "lock",
     );
     for (name, job) in lock_jobs {
         let kind = JobKind::Lock(job);
@@ -584,6 +596,7 @@ pub fn enumerate_output_file_jobs_to_run<T: Clone>(
     all_jobs: &HashMap<String, T>,
     force: bool,
     category_dir: &Path,
+    extension: &str,
 ) -> HashMap<String, T> {
     if force {
         return all_jobs.clone();
@@ -591,7 +604,7 @@ pub fn enumerate_output_file_jobs_to_run<T: Clone>(
     all_jobs
         .iter()
         .filter_map(|(name, job)| {
-            let output_file = category_dir.join(format!("{name}.yaml"));
+            let output_file = category_dir.join(format!("{name}.{extension}"));
             if output_file.exists() {
                 None
             } else {
@@ -711,6 +724,14 @@ pub fn execute_jobs2(jobs: Vec<ProtoJobCtx2>, quiet: bool) -> Result<(), Error> 
         spinner = Some(s);
     }
     for job in jobs {
+        if !quiet {
+            if let Some(ref s) = spinner {
+                s.set_message(format!(
+                    "Running job: category={}, name={}",
+                    &job.category, &job.name
+                ));
+            }
+        }
         job.run()?;
     }
     if !quiet {
