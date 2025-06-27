@@ -1,10 +1,17 @@
+use std::process::Command;
+
 use anyhow::{Context, Error};
-use duct::cmd;
 use serde::Deserialize;
 use tracing::debug;
 
 use super::JobCtx;
-use crate::generate::{JobCommand, move_response_file, run_post_cmd, run_pre_cmd, stderr_if_err};
+use crate::generate::{
+    JobCommand,
+    err_with_stderr_if_err,
+    move_response_file,
+    run_post_cmd,
+    run_pre_cmd,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ShowJob {
@@ -20,11 +27,13 @@ pub fn run_show_job(job: &ShowJob, ctx: &JobCtx) -> Result<(), Error> {
 
     // Create the environment
     debug!(category = ctx.category, name = ctx.name, dir = %workdir.display(), "flox init");
-    let cmd = cmd!("flox", "init")
+    let output = Command::new("flox")
+        .arg("init")
         .apply_common_options(workdir)
-        .apply_vars(&ctx.vars);
-    let output = cmd.run().context("failed to run `flox init` command")?;
-    stderr_if_err(output)?;
+        .apply_vars(&ctx.vars)
+        .output()
+        .context("failed to run `flox init` command")?;
+    err_with_stderr_if_err(output, job.ignore_errors.unwrap_or(false))?;
 
     // Run the pre_cmd if it was specified
     if let Some(ref cmd) = job.pre_cmd {
@@ -35,13 +44,15 @@ pub fn run_show_job(job: &ShowJob, ctx: &JobCtx) -> Result<(), Error> {
     // Run the install command and capture the response
     debug!(category = ctx.category, name = ctx.name, "flox search");
     let resp_file = workdir.join("resp.yaml");
-    let output = cmd!("flox", "show", &job.query)
+    let output = Command::new("flox")
+        .arg("show")
+        .arg(&job.query)
         .apply_common_options(workdir)
         .apply_vars(&ctx.vars)
         .apply_recording_vars(&resp_file)
-        .run()
+        .output()
         .context("failed to run `flox show` command")?;
-    stderr_if_err(output)?;
+    err_with_stderr_if_err(output, job.ignore_errors.unwrap_or(false))?;
 
     // Run the post_cmd if it was specified
     if let Some(ref cmd) = job.post_cmd {

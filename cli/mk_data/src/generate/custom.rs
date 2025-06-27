@@ -74,6 +74,14 @@ pub fn run_custom_job(job: &CustomJob, ctx: &JobCtx) -> Result<(), Error> {
         "moving to output directory"
     );
     let output_dir = ctx.category_dir.join(&ctx.name);
+    if output_dir.exists() {
+        std::fs::remove_dir_all(&output_dir).with_context(|| {
+            format!(
+                "failed to remove existing output directory: {}",
+                output_dir.display()
+            )
+        })?;
+    }
     copy_dir_recursive(workdir, &output_dir).context("failed to copy to output directory")?;
 
     Ok(())

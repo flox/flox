@@ -1,10 +1,11 @@
+use std::process::Command;
+
 use anyhow::{Context, Error};
-use duct::cmd;
 use serde::Deserialize;
 use tracing::debug;
 
 use super::JobCtx;
-use crate::generate::{JobCommand, copy_dir_recursive, stderr_if_err};
+use crate::generate::{JobCommand, copy_dir_recursive, err_with_stderr_if_err};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct EnvJob {
@@ -17,23 +18,28 @@ pub fn run_env_job(job: &EnvJob, ctx: &JobCtx) -> Result<(), Error> {
 
     // Create the environment
     debug!(category = ctx.category, name = ctx.name, dir = %workdir.display(), "flox init");
-    let cmd = cmd!("flox", "init")
+    let output = Command::new("flox")
+        .arg("init")
         .apply_common_options(workdir)
-        .apply_vars(&ctx.vars);
-    let output = cmd.run().context("failed to run `flox init` command")?;
-    stderr_if_err(output)?;
+        .apply_vars(&ctx.vars)
+        .output()
+        .context("failed to run `flox init` command")?;
+    err_with_stderr_if_err(output, false)?;
 
     // Build the environment with the new manifest
     let manifest_path = ctx.input_dir.join("manifests").join(&job.manifest);
     let resp_file = workdir.join("resp.yaml");
     debug!(category = ctx.category, name = ctx.name, manifest = %manifest_path.display(), "flox edit -f");
-    let output = cmd!("flox", "edit", "-f", manifest_path)
+    let output = Command::new("flox")
+        .arg("edit")
+        .arg("-f")
+        .arg(manifest_path)
         .apply_common_options(workdir)
         .apply_vars(&ctx.vars)
         .apply_recording_vars(&resp_file)
-        .run()
+        .output()
         .context("failed to run `flox edit -f` command")?;
-    stderr_if_err(output)?;
+    err_with_stderr_if_err(output, false)?;
 
     // Copy the contents of the working directory to `test_data/<category>/<name>`
     debug!(
@@ -42,6 +48,14 @@ pub fn run_env_job(job: &EnvJob, ctx: &JobCtx) -> Result<(), Error> {
         "moving to output directory"
     );
     let output_dir = ctx.category_dir.join(&ctx.name);
+    if output_dir.exists() {
+        std::fs::remove_dir_all(&output_dir).with_context(|| {
+            format!(
+                "failed to remove existing output directory: {}",
+                output_dir.display()
+            )
+        })?;
+    }
     copy_dir_recursive(workdir, &output_dir).context("failed to copy to output directory")?;
 
     Ok(())

@@ -9,7 +9,6 @@ edition = "2024"
 anyhow.workspace = true
 clap.workspace = true
 clap_derive.workspace = true
-duct = "1.0.0"
 fs_extra.workspace = true
 indicatif.workspace = true
 serde.workspace = true

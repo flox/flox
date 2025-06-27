@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::time::Duration;
 use std::vec;
 
 use anyhow::{Context, bail};
 use custom::{CustomJob, run_custom_job};
-use duct::Expression;
 use env::{EnvJob, run_env_job};
 use indicatif::{ProgressBar, ProgressStyle};
 use init::{InitJob, run_init_job};
@@ -113,7 +112,13 @@ impl ProtoJobCtx {
 }
 
 /// Returns an error containing `stderr` if the `Output` was not a success.
-pub fn stderr_if_err(Output { status, stderr, .. }: Output) -> Result<(), Error> {
+pub fn err_with_stderr_if_err(
+    Output { status, stderr, .. }: Output,
+    ignore: bool,
+) -> Result<(), Error> {
+    if ignore {
+        return Ok(());
+    }
     if !status.success() {
         bail!(String::from_utf8_lossy(&stderr).to_string())
     } else {
@@ -210,26 +215,28 @@ pub fn unpack_inputs(
 
 pub trait JobCommand {
     /// Applies common options for command execution.
-    fn apply_common_options(self, workdir: &Path) -> Expression;
+    fn apply_common_options(&mut self, workdir: &Path) -> &mut Command;
     /// Applies any global variables, then clears the FloxHub token
-    fn apply_vars(self, vars: &HashMap<String, String>) -> Expression;
+    fn apply_vars(&mut self, vars: &HashMap<String, String>) -> &mut Command;
     /// Applies the variable that specifies the output path for the recording.
-    fn apply_recording_vars(self, resp_path: &Path) -> Expression;
+    fn apply_recording_vars(&mut self, resp_path: &Path) -> &mut Command;
 }
 
-impl JobCommand for Expression {
-    fn apply_common_options(self, workdir: &Path) -> Expression {
-        self.stdout_capture().stderr_capture().dir(workdir)
+impl JobCommand for Command {
+    fn apply_common_options(&mut self, workdir: &Path) -> &mut Command {
+        self.stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .current_dir(workdir)
     }
 
-    fn apply_vars(mut self, vars: &HashMap<String, String>) -> Expression {
+    fn apply_vars(&mut self, vars: &HashMap<String, String>) -> &mut Command {
         for (name, value) in vars.iter() {
-            self = self.env(name, value);
+            self.env(name, value);
         }
         self.env("FLOX_FLOXHUB_TOKEN", "")
     }
 
-    fn apply_recording_vars(self, resp_path: &Path) -> Expression {
+    fn apply_recording_vars(&mut self, resp_path: &Path) -> &mut Command {
         self.env("_FLOX_CATALOG_DUMP_RESPONSE_FILE", resp_path)
     }
 }
