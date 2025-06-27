@@ -1661,6 +1661,42 @@ impl BaseCatalogInfo {
             .map(|stability_info| &*stability_info.name)
             .collect()
     }
+
+    #[cfg(feature = "tests")]
+    pub fn new_mock() -> Self {
+        api_types::BaseCatalogInfo {
+            base_url: "https://mock.flox.dev".parse().unwrap(),
+            scraped_pages: [
+                api_types::PageInfo {
+                    rev: "".into(),
+                    rev_count: 3,
+                    stability_tags: ["not-default".into()].to_vec(),
+                },
+                api_types::PageInfo {
+                    rev: "".into(),
+                    rev_count: 2,
+                    stability_tags: [
+                        BaseCatalogInfo::DEFAULT_STABILITY.into(),
+                        "not-default".into(),
+                    ]
+                    .to_vec(),
+                },
+            ]
+            .to_vec(),
+            stabilities: [
+                api_types::StabilityInfo {
+                    name: BaseCatalogInfo::DEFAULT_STABILITY.into(),
+                    ref_: BaseCatalogInfo::DEFAULT_STABILITY.into(),
+                },
+                api_types::StabilityInfo {
+                    name: "not-default".into(),
+                    ref_: "not-default".into(),
+                },
+            ]
+            .to_vec(),
+        }
+        .into()
+    }
 }
 
 pub mod test_helpers {

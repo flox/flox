@@ -20,7 +20,7 @@ use flox_rust_sdk::providers::catalog::{BaseCatalogInfo, BaseCatalogUrl, ClientT
 use futures::TryFutureExt;
 use indoc::formatdoc;
 use itertools::Itertools;
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument};
 use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
@@ -148,14 +148,12 @@ impl Build {
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
         let packages_to_build = packages_to_build(&lockfile.manifest, &expression_dir, &packages)?;
-        let target_names = packages_to_build
-            .iter()
-            .map(|target| target.name())
-            .collect::<Vec<_>>();
 
         let base_catalog_info_fut = flox.catalog_client.get_base_catalog_info().map_err(|err| {
             anyhow!(err).context("could not get information about the base catalog")
         });
+
+        let toplevel_derived_url = find_toplevel_group_nixpkgs(&lockfile);
 
         let base_nixpkgs_url = match nixpkgs_url_select {
             Some(BaseCatalogUrlSelect::NixpkgsUrl(url)) => {
@@ -165,19 +163,27 @@ impl Build {
             Some(BaseCatalogUrlSelect::Stability(stability)) => {
                 let url = base_catalog_url_for_stability_arg(
                     Some(&stability),
-                    &base_catalog_info_fut.await?,
-                )?;
+                    base_catalog_info_fut,
+                    toplevel_derived_url.as_ref(),
+                )
+                .await?;
                 url.as_flake_ref()?
             },
             None => {
-                let url = base_catalog_url_for_stability_arg(None, &base_catalog_info_fut.await?)?;
+                let url = base_catalog_url_for_stability_arg(
+                    None,
+                    base_catalog_info_fut,
+                    toplevel_derived_url.as_ref(),
+                )
+                .await?;
                 url.as_flake_ref()?
             },
         };
 
-        let dependency_nixpkgs_url = find_toplevel_group_nixpkgs(&lockfile)
-            .map(|catalog_ref| catalog_ref.as_flake_ref())
-            .transpose()?;
+        let target_names = packages_to_build
+            .iter()
+            .map(|target| target.name())
+            .collect::<Vec<_>>();
 
         let builder = FloxBuildMk::new(&flox, &base_dir, &expression_dir, &built_environments);
         let output = builder.build(&base_nixpkgs_url, &FLOX_INTERPRETER, &target_names, None)?;
@@ -258,12 +264,18 @@ impl Build {
     }
 }
 
-pub(crate) fn base_catalog_url_for_stability_arg(
+/// Derive the nixpkgs url to be used for builds.
+/// If a stability is provided, try to retrieve a url for that stability from the catalog.
+/// Else, if we can derive a stability from the toplevel group of the environment, use that.
+/// Otherwise attrr
+pub(crate) async fn base_catalog_url_for_stability_arg(
     stability: Option<&str>,
-    base_catalog_info: &BaseCatalogInfo,
+    base_catalog_info_fut: impl IntoFuture<Output = Result<BaseCatalogInfo>>,
+    toplevel_derived_url: Option<&BaseCatalogUrl>,
 ) -> Result<BaseCatalogUrl> {
-    let url = match stability {
-        Some(stability) => {
+    let url = match (stability, toplevel_derived_url) {
+        (Some(stability), _) => {
+            let base_catalog_info = base_catalog_info_fut.await?;
             let make_error_message = || {
                 let available_stabilities = base_catalog_info.available_stabilities().join(", ");
                 formatdoc! {"
@@ -276,10 +288,16 @@ pub(crate) fn base_catalog_url_for_stability_arg(
                 .url_for_latest_page_with_stability(stability)
                 .with_context(make_error_message)?;
 
-            debug!(%url, %stability, "using page from user provided stability");
+            info!(%url, %stability, "using page from user provided stability");
             url
         },
-        None => {
+        (None, Some(toplevel_derived_url)) => {
+            info!(url=%toplevel_derived_url, "using nixpkgs derived from toplevel group");
+            toplevel_derived_url.clone()
+        },
+        (None, None) => {
+            let base_catalog_info = base_catalog_info_fut.await?;
+
             let make_error_message = || {
                 let available_stabilities = base_catalog_info.available_stabilities().join(", ");
                 formatdoc! {"
@@ -292,7 +310,7 @@ pub(crate) fn base_catalog_url_for_stability_arg(
                 .url_for_latest_page_with_default_stability()
                 .with_context(make_error_message)?;
 
-            debug!(%url, "using page from default stability");
+            info!(%url, "using page from default stability");
             url
         },
     };
@@ -384,5 +402,66 @@ mod test {
         let lockfile: Lockfile = env.lockfile(&flox).unwrap().into();
         let result = packages_to_build(&lockfile.manifest, &expressions_dir, &Vec::<String>::new());
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn prefer_explicit_stability_over_toplevel() {
+        let mock_base_catalog_info = BaseCatalogInfo::new_mock();
+
+        let actual_without_toplevel = base_catalog_url_for_stability_arg(
+            Some("not-default"),
+            async { Ok(mock_base_catalog_info.clone()) },
+            None,
+        )
+        .await
+        .unwrap();
+
+        let actual_with_toplevel = base_catalog_url_for_stability_arg(
+            Some("not-default"),
+            async { Ok(mock_base_catalog_info.clone()) },
+            Some(&BaseCatalogUrl::from("dont expect this")),
+        )
+        .await
+        .unwrap();
+
+        let expected_url = mock_base_catalog_info
+            .url_for_latest_page_with_stability("not-default")
+            .unwrap();
+
+        assert_eq!(actual_without_toplevel, expected_url);
+        assert_eq!(actual_with_toplevel, expected_url);
+    }
+
+    #[tokio::test]
+    async fn prefer_toplevel_over_implicit_stability() {
+        let expected_url = BaseCatalogUrl::from("expect this");
+
+        let actual_with_toplevel = base_catalog_url_for_stability_arg(
+            None,
+            async { unreachable!("with a toplevel we don't query for stabilities") },
+            Some(&expected_url),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(actual_with_toplevel, expected_url);
+    }
+
+    #[tokio::test]
+    async fn prefer_implicit_stability_without_toplevel() {
+        let mock_base_catalog_info = BaseCatalogInfo::new_mock();
+
+        let actual_with_toplevel = base_catalog_url_for_stability_arg(
+            None,
+            async { Ok(mock_base_catalog_info.clone()) },
+            None,
+        )
+        .await
+        .unwrap();
+
+        let expected_url = mock_base_catalog_info
+            .url_for_latest_page_with_default_stability()
+            .unwrap();
+        assert_eq!(actual_with_toplevel, expected_url);
     }
 }
