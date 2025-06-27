@@ -2399,8 +2399,8 @@ mod tests {
         assert_eq!(drv_value, expected);
     }
 
-    #[test]
-    fn build_version_propagated() {
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_version_propagated() {
         let pname = "foo".to_string();
         let version = "4.2.0";
         let version_file = "VERSION";
@@ -2411,11 +2411,16 @@ mod tests {
                 format!("version.file = '{version_file}'"),
                 format!("version.command = 'echo {version}'"),
                 format!("version.command = 'echo $(echo {version})'"),
+                // Verify that the command is invoked from within the activated
+                // environment with access to the "hello" command.
+                format!("version.command = 'hello >/dev/null && echo {version}'"),
             ];
 
             for version_spec in version_specs {
                 let manifest = formatdoc! {r#"
                     version = 1
+                    [install]
+                    hello.pkg-path = "hello"
 
                     [build.{pname}]
                     sandbox = "{sandbox_mode}"
@@ -2424,13 +2429,15 @@ mod tests {
                     """
                     {version_spec}
                 "#};
-                let (flox, _temp_dir_handle) = flox_instance();
+                let (mut flox, _temp_dir_handle) = flox_instance();
                 let mut env = new_path_environment(&flox, &manifest);
                 let env_path = env.parent_path().unwrap();
 
                 fs::write(env_path.join(version_file), version).unwrap();
 
                 let _git = GitCommandProvider::init(&env_path, false).unwrap();
+                flox.catalog_client =
+                    catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
                 let collected = assert_build_status(&flox, &mut env, &pname, None, true);
                 let result_path = env_path.join(format!("result-{pname}"));
                 let build_results = collected.build_results.unwrap();

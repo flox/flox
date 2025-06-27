@@ -683,7 +683,9 @@ define JSON_VERSION_TO_COMMAND_jq =
     if type == "object" then (
       to_entries[] | \
       if .key == "file" then "$(_cat) \(.value)" else (
-        if .key == "command" then .value else (
+        if .key == "command" then (
+          "$(FLOX_ENV)/activate -c \(.value | @sh)"
+        ) else (
           "unknown version type: \(.key)" | halt_error(1)
         ) end
       ) end
