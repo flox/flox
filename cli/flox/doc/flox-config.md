@@ -30,14 +30,15 @@ Config values are read from the following sources in order of descending priorit
    All config options may be set by prefixing with `FLOX_` and using
    SCREAMING_SNAKE_CASE.
    For example, `disable_metrics` may be set with `FLOX_DISABLE_METRICS=true`.
-1. User customizations from `$FLOX_CONFIG_DIR/flox.toml` if set or else
-   `$XDG_CONFIG_HOME/flox/flox.toml`.
-1. User customizations from `flox/flox.toml` in any of `$XDG_CONFIG_DIRS`.
-1. System settings from `/etc/flox.toml`.
-1. `flox` provided defaults.
+2. User customizations from `$FLOX_CONFIG_DIR/flox.toml` if set,
+   otherwise `flox/flox.toml` in `$XDG_CONFIG_HOME` or any of `$XDG_CONFIG_DIRS`,
+   wherever it is found first.
+3. System settings from `/etc/flox.toml` or `FLOX_SYSTEM_CONFIG_DIR/flox.toml`.
+4. `flox` provided defaults.
 
-`flox config` commands that mutate configuration always write to
-`${FLOX_CONFIG_DIR:-$XDG_CONFIG_HOME}/flox/flox.toml`.
+`flox config` commands that mutate configuration always write to the user config file
+determined in step 2.
+
 
 ## Key Format
 
