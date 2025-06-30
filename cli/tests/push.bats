@@ -18,7 +18,7 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 }
 
 project_teardown() {
@@ -146,7 +146,6 @@ function update_dummy_env() {
   "$FLOX_BIN" init --name "test"
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.yaml"
   "$FLOX_BIN" install emacs
-  # export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 
   # Also uses the `emacs` resolution since it makes sure the manifest is locked before pushing
   run "$FLOX_BIN" push --owner owner
@@ -170,7 +169,7 @@ function update_dummy_env() {
 
   # Create an environment owner/test on machine_b and force-push it to floxhub
   pushd "machine_b" > /dev/null || return
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
   "$FLOX_BIN" init --name "test"
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.yaml"
   "$FLOX_BIN" install emacs
@@ -181,7 +180,7 @@ function update_dummy_env() {
 
   # Pull the environment owner/test on machine_c and check that it has the emacs package
   pushd "machine_c" > /dev/null || return
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
   "$FLOX_BIN" pull --remote owner/test
   run "$FLOX_BIN" list --name
   assert_success

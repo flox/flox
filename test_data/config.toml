@@ -395,7 +395,7 @@ record_cmd = '''
     flox install zlib
 '''
 
-[custom.pypthon_requirements_zlib]
+[custom.python_requirements_zlib]
 unpack_dir_contents = [ "init/python/common", "init/python/requirements" ]
 pre_cmd = '''
     flox init --auto-setup
@@ -412,4 +412,12 @@ pre_cmd = '''
 '''
 record_cmd = '''
     flox install hello
+'''
+
+[custom.heredocs]
+pre_cmd = '''
+    flox init
+'''
+record_cmd = '''
+    flox edit -f "$INPUT_DATA/manifests/heredocs.toml"
 '''

@@ -27,7 +27,7 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 }
 
 project_teardown() {
@@ -71,12 +71,12 @@ teardown() {
   # Files copied from the store are read-only
   chmod -R +w .
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_poetry.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_poetry/resp.yaml" \
     run "$FLOX_BIN" init --auto-setup
   assert_success
   assert_output --partial "'poetry' installed"
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_poetry_zlib.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/python_poetry_zlib/resp.yaml" \
     "$FLOX_BIN" install zlib
 
   run "$FLOX_BIN" activate -- python -m project
@@ -91,11 +91,11 @@ teardown() {
   # Files copied from the store are read-only
   chmod -R +w .
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_pyproject_pip.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_pyproject_pip/resp.yaml" \
     run "$FLOX_BIN" init --auto-setup
   assert_success
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_pyproject_pip_zlib.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/python_pyproject_pip_zlib/resp.yaml" \
     "$FLOX_BIN" install zlib
 
   run "$FLOX_BIN" activate -- python -m project
@@ -110,12 +110,11 @@ teardown() {
   # Files copied from the store are read-only
   chmod -R +w .
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requirements.yaml" \
-    run "$FLOX_BIN" init --auto-setup
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requirements/resp.yaml" run "$FLOX_BIN" init --auto-setup
   assert_success
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requirements_zlib.yaml" \
-    "$FLOX_BIN" install zlib
+  # /Users/zmitchell/.nix-profile/bin/wezterm
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/python_requirements_zlib/resp.yaml" "$FLOX_BIN" install zlib
 
   run "$FLOX_BIN" activate -- python -m project
   assert_success
@@ -128,7 +127,7 @@ teardown() {
   NAME="name"
   echo "requests" > requirements.txt
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests/resp.yaml" \
     "$FLOX_BIN" init --auto-setup --name "$NAME"
   FLOX_SHELL="bash" run "$FLOX_BIN" activate -- type deactivate
   assert_success
@@ -141,7 +140,7 @@ teardown() {
   NAME="name"
   echo "requests" > requirements.txt
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests/resp.yaml" \
     "$FLOX_BIN" init --auto-setup --name "$NAME"
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- type deactivate
   assert_success
@@ -154,7 +153,7 @@ teardown() {
   NAME="name"
   echo "requests" > requirements.txt
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests/resp.yaml" \
     "$FLOX_BIN" init --auto-setup --name "$NAME"
   FLOX_SHELL="fish" run "$FLOX_BIN" activate -- type deactivate
   assert_success
@@ -167,7 +166,7 @@ teardown() {
   NAME="name"
   echo "requests" > requirements.txt
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests/resp.yaml" \
     "$FLOX_BIN" init --auto-setup --name "$NAME"
   FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- which deactivate
   assert_success

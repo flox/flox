@@ -34,7 +34,7 @@ setup() {
   project_setup
   floxhub_setup "owner"
 
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 
   export UNSUPPORTED_SYSTEM_PROMPT="The environment you are trying to pull is not yet compatible with your system ($NIX_SYSTEM)."
   export UNSUPPORTED_PACKAGE_PROMPT="The environment you are trying to pull could not be built locally."
@@ -211,7 +211,7 @@ function add_incompatible_package() {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 
   # pull a fresh environment
   "$FLOX_BIN" pull --remote owner/name
@@ -226,7 +226,7 @@ function add_incompatible_package() {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 
   # dummy remote as we are not actually pulling anything
   run "$FLOX_BIN" pull --remote owner/name
@@ -242,7 +242,7 @@ function add_incompatible_package() {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 
   "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
 
@@ -255,7 +255,7 @@ function add_incompatible_package() {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 
   run "$FLOX_BIN" pull --remote owner/name --dir ./inner
   assert_success
@@ -270,7 +270,7 @@ function add_incompatible_package() {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 
   "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   LOCKED_BEFORE=$(cat .flox/env.lock | jq -r '.rev')
@@ -292,7 +292,7 @@ function add_incompatible_package() {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 
   "$FLOX_BIN" pull --remote owner/name --dir ./inner # dummy remote as we are not actually pulling anything
   LOCKED_BEFORE=$(cat ./inner/.flox/env.lock | jq -r '.rev')
@@ -314,14 +314,14 @@ function add_incompatible_package() {
 
   mkdir first second
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml" \
     "$FLOX_BIN" pull --remote owner/name --dir first
   LOCKED_FIRST_BEFORE=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
   update_dummy_env "owner" "name"
   LOCKED_FIRST_AFTER=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml" \
     "$FLOX_BIN" pull --remote owner/name --dir second
   LOCKED_SECOND=$(cat ./second/.flox/env.lock | jq -r '.rev')
 
