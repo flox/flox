@@ -6,16 +6,16 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 03 Jun 2025 17:26:25 GMT
+    value: Tue, 01 Jul 2025 01:13:21 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '370'
+    value: '1485'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LmR6Pjb2oAMEazg=
-  body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.not_found_for_all_systems","message":"The attr_path bpftrace is not found for all the requested systems, suggest limiting systems to (aarch64-linux,x86_64-linux).","context":{"attr_path":"bpftrace","install_id":"bpftrace","valid_systems":"aarch64-linux,x86_64-linux"}}]}]}'
+    value: NAVnwgmIoAMES2Q=
+  body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.not_found_for_all_systems","message":"The attr_path bpftrace is not found for all the requested systems, suggest limiting systems to (aarch64-linux,x86_64-linux).","context":{"attr_path":"bpftrace","install_id":"bpftrace","valid_systems":"aarch64-linux,x86_64-linux"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
 ---
 when:
   path: /api/v1/catalog/resolve
@@ -25,13 +25,13 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 03 Jun 2025 17:26:25 GMT
+    value: Tue, 01 Jul 2025 01:13:21 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '1965'
+    value: '1988'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LmR6TjXZIAMES-g=
-  body: '{"items":[{"name":"toplevel","page":{"page":808478,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"bpftrace","pkg_path":"bpftrace","derivation":"/nix/store/b2mvhrf8v9hhp6rs1namcsvmbjvp7a8w-bpftrace-0.23.3.drv","name":"bpftrace-0.23.3","pname":"bpftrace","version":"0.23.3","system":"aarch64-linux","outputs":[{"name":"man","store_path":"/nix/store/5g876zvczhvcm2rmm4kf7ypsay9br7m5-bpftrace-0.23.3-man"},{"name":"out","store_path":"/nix/store/dhm044aqk7xjh0i87lcglrccf2flwg12-bpftrace-0.23.3"}],"outputs_to_install":["man","out"],"description":"High-level tracing language for Linux eBPF","license":"Apache-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc","rev":"910796cabe436259a29a72e8d3f5e180fc6dfacc","rev_count":808478,"rev_date":"2025-05-31T12:05:15Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-06-02T04:45:28.372249Z","cache_uri":null,"install_id":"bpftrace"},{"catalog":"nixpkgs","attr_path":"bpftrace","pkg_path":"bpftrace","derivation":"/nix/store/xq9q6304xbbzg3ix7bsnq0ndxdvbvsrq-bpftrace-0.23.3.drv","name":"bpftrace-0.23.3","pname":"bpftrace","version":"0.23.3","system":"x86_64-linux","outputs":[{"name":"man","store_path":"/nix/store/jdby50gkka4qp1x4d5j5j79myicvbxxa-bpftrace-0.23.3-man"},{"name":"out","store_path":"/nix/store/7jv2l2rfxlr69d08vca5bandsrvm85p5-bpftrace-0.23.3"}],"outputs_to_install":["man","out"],"description":"High-level tracing language for Linux eBPF","license":"Apache-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc","rev":"910796cabe436259a29a72e8d3f5e180fc6dfacc","rev_count":808478,"rev_date":"2025-05-31T12:05:15Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-06-02T05:26:10.768235Z","cache_uri":null,"install_id":"bpftrace"}],"messages":[],"complete":true},"messages":[]}]}'
+    value: NAVnyhjMIAMES0Q=
+  body: '{"items":[{"name":"toplevel","page":{"page":822156,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"bpftrace","pkg_path":"bpftrace","derivation":"/nix/store/zdrg2b31rxlwjxlf2i7n2xp78p8dkfph-bpftrace-0.23.5.drv","name":"bpftrace-0.23.5","pname":"bpftrace","version":"0.23.5","system":"aarch64-linux","outputs":[{"name":"man","store_path":"/nix/store/988ipr6firc3yby9jkixfvakdrybnf9m-bpftrace-0.23.5-man"},{"name":"out","store_path":"/nix/store/7nv61f0pb599pm9c614f3ikr1baidgk6-bpftrace-0.23.5"}],"outputs_to_install":["man","out"],"description":"High-level tracing language for Linux eBPF","license":"Apache-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=30e2e2857ba47844aa71991daa6ed1fc678bcbb7","rev":"30e2e2857ba47844aa71991daa6ed1fc678bcbb7","rev_count":822156,"rev_date":"2025-06-27T08:03:01Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-06-29T05:19:53.487468Z","cache_uri":null,"install_id":"bpftrace"},{"catalog":"nixpkgs","attr_path":"bpftrace","pkg_path":"bpftrace","derivation":"/nix/store/0v3126q49dm7gv2ny0868cjxs739fhys-bpftrace-0.23.5.drv","name":"bpftrace-0.23.5","pname":"bpftrace","version":"0.23.5","system":"x86_64-linux","outputs":[{"name":"man","store_path":"/nix/store/bxqzcm1qbfs4lb8v38c541wnrmn6j56d-bpftrace-0.23.5-man"},{"name":"out","store_path":"/nix/store/ih0lwj6hyhjfl26pv7sgxxs305mzjsyv-bpftrace-0.23.5"}],"outputs_to_install":["man","out"],"description":"High-level tracing language for Linux eBPF","license":"Apache-2.0","locked_url":"https://github.com/flox/nixpkgs?rev=30e2e2857ba47844aa71991daa6ed1fc678bcbb7","rev":"30e2e2857ba47844aa71991daa6ed1fc678bcbb7","rev_count":822156,"rev_date":"2025-06-27T08:03:01Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-06-29T06:00:01.591159Z","cache_uri":null,"install_id":"bpftrace"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'

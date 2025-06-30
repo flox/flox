@@ -132,7 +132,7 @@ version:
 # TODO: should unit test regeneration respect -f?
 @gen-data +mk_data_args="": (mk-data mk_data_args) gen-unit-data
 
-@mk-data +mk_data_args="": build-data-gen build-cli md
+@mk-data +mk_data_args="": build-data-gen build-cli (md mk_data_args)
 
 # The same as mk-data, but faster to type, and doesn't rebuild stuff
 @md +mk_data_args="":
