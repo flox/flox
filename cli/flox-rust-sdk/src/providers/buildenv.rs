@@ -1671,7 +1671,7 @@ mod buildenv_tests {
 
     static BUILDENV_RESULT_SIMPLE_PACKAGE: LazyLock<BuildEnvOutputs> = LazyLock::new(|| {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/hello/manifest.lock");
+        let lockfile_path = GENERATED_DATA.join("custom/hello/.flox/env/manifest.lock");
         let client = MockClient::new();
         buildenv.build(&client, &lockfile_path, None).unwrap()
     });
@@ -1714,7 +1714,7 @@ mod buildenv_tests {
     #[test]
     fn build_contains_build_script_and_output() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-noop/manifest.lock");
+        let lockfile_path = GENERATED_DATA.join("env/build-noop/.flox/env/manifest.lock");
         let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
@@ -1730,7 +1730,7 @@ mod buildenv_tests {
     #[test]
     fn build_contains_on_activate_script() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/kitchen_sink/manifest.lock");
+        let lockfile_path = GENERATED_DATA.join("env/kitchen_sink/.flox/env/manifest.lock");
         let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
@@ -1744,7 +1744,7 @@ mod buildenv_tests {
     #[test]
     fn build_contains_profile_scripts() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/kitchen_sink/manifest.lock");
+        let lockfile_path = GENERATED_DATA.join("env/kitchen_sink/.flox/env/manifest.lock");
         let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
@@ -1796,7 +1796,7 @@ mod buildenv_tests {
     #[test]
     fn detects_conflicting_packages() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict.yaml");
+        let lockfile_path = GENERATED_DATA.join("lock/vim-vim-full-conflict.lock");
         let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("conflicting packages should fail to build");
@@ -1819,7 +1819,7 @@ mod buildenv_tests {
     #[test]
     fn resolves_conflicting_packages_with_priority() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/vim-vim-full-conflict-resolved.yaml");
+        let lockfile_path = GENERATED_DATA.join("lock/vim-vim-full-conflict-resolved.lock");
         let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None);
         assert!(
@@ -1861,7 +1861,7 @@ mod buildenv_tests {
     #[test]
     fn verify_build_closure_contains_only_toplevel_packages() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-all-toplevel.yaml");
+        let lockfile_path = GENERATED_DATA.join("lock/build-runtime-all-toplevel.lock");
         let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
@@ -1885,7 +1885,7 @@ mod buildenv_tests {
     #[test]
     fn verify_build_closure_contains_only_hello_with_runtime_packages_attribute() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-only-hello.yaml");
+        let lockfile_path = GENERATED_DATA.join("lock/build-runtime-packages-only-hello.lock");
         let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None).unwrap();
 
@@ -1909,7 +1909,7 @@ mod buildenv_tests {
     #[test]
     fn verify_build_closure_can_only_select_toplevel_packages_from_runtime_packages_attribute() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-toplevel.yaml");
+        let lockfile_path = GENERATED_DATA.join("lock/build-runtime-packages-not-toplevel.lock");
         let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("build should fail if non-toplevel packages are selected");
@@ -1931,7 +1931,7 @@ mod buildenv_tests {
     #[test]
     fn verify_build_closure_cannot_select_nonexistent_packages_in_runtime_packages_attribute() {
         let buildenv = buildenv_instance();
-        let lockfile_path = GENERATED_DATA.join("envs/build-runtime-packages-not-found.yaml");
+        let lockfile_path = GENERATED_DATA.join("lock/build-runtime-packages-not-found.lock");
         let client = MockClient::new();
         let result = buildenv.build(&client, &lockfile_path, None);
         let err = result.expect_err("build should fail if nonexistent packages are selected");

@@ -468,7 +468,7 @@ mod tests {
         // Create a remote environment "owner/name"
         let environment = mock_managed_environment_from_env_files(
             &flox,
-            GENERATED_DATA.join("envs").join("hello"),
+            GENERATED_DATA.join("custom/hello"),
             owner,
         );
 
