@@ -262,8 +262,8 @@ fn locate_user_config_dir(flox_dirs: &BaseDirectories) -> Result<PathBuf> {
 /// a user config file and environment variables.
 fn raw_config_from_parts(
     flox_dirs: &BaseDirectories,
-    user_config_dir: PathBuf,
-    system_config_dir: Option<PathBuf>,
+    user_config_dir: &Path,
+    system_config_dir: Option<&Path>,
     env: impl IntoIterator<Item = (String, String)>,
 ) -> Result<HierarchicalConfig> {
     let cache_dir = flox_dirs.get_cache_home();
@@ -320,8 +320,8 @@ fn raw_config_from_parts(
 impl Config {
     fn parse_with(
         flox_dirs: &BaseDirectories,
-        user_config_dir: PathBuf,
-        system_config_dir: Option<PathBuf>,
+        user_config_dir: &Path,
+        system_config_dir: Option<&Path>,
         env: impl IntoIterator<Item = (String, String)>,
     ) -> Result<Config> {
         let final_config =
@@ -339,8 +339,8 @@ impl Config {
         let base_directories = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
         Self::parse_with(
             &base_directories,
-            locate_user_config_dir(&base_directories)?,
-            locate_system_config_dir()?,
+            &locate_user_config_dir(&base_directories)?,
+            locate_system_config_dir()?.as_deref(),
             env::vars(),
         )
     }
@@ -486,8 +486,15 @@ fn mk_environment(envs: &mut Vec<(String, String)>, prefix: &str) -> Environment
 #[cfg(test)]
 mod tests {
 
-    use indoc::indoc;
+    use std::num::NonZero;
+
+    use indoc::{formatdoc, indoc};
     use proptest::prelude::*;
+
+    // TODO: update the `xdg` crate and build `BaseDirectories` by hand with known (test) paths
+    fn mock_flox_dirs() -> BaseDirectories {
+        BaseDirectories::new().unwrap()
+    }
 
     use super::*;
 
@@ -525,6 +532,125 @@ mod tests {
                 unsafe { env::remove_var(FLOX_CONFIG_DIR_VAR) };
             },
         );
+    }
+
+    #[test]
+    fn set_by_system_config() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let system_config_dir = tempfile::tempdir().unwrap();
+
+        let floxhub_url = "https://testhub.flox.dev";
+        let disable_metrics = true;
+        let search_limit = NonZero::new(42).unwrap();
+
+        fs::write(
+            system_config_dir.path().join(FLOX_CONFIG_FILE),
+            formatdoc! {"
+            floxhub_url = '{floxhub_url}'
+            disable_metrics = {disable_metrics}
+            search_limit = {search_limit}
+        "},
+        )
+        .unwrap();
+
+        // todo: fix mocks to avoid pulling in user config
+        fs::write(user_config_dir.path().join(FLOX_CONFIG_FILE), "").unwrap();
+
+        let config = Config::parse_with(
+            &mock_flox_dirs(),
+            user_config_dir.path(),
+            Some(system_config_dir.path()),
+            [],
+        )
+        .unwrap();
+
+        assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
+        assert!(config.flox.disable_metrics);
+        assert_eq!(config.flox.search_limit, Some(search_limit));
+    }
+
+    #[test]
+    fn user_config_overrides_system() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let system_config_dir = tempfile::tempdir().unwrap();
+
+        let floxhub_url = "https://testhub.flox.dev";
+        let disable_metrics = true;
+        let search_limit = NonZero::new(42).unwrap();
+
+        fs::write(user_config_dir.path().join(FLOX_CONFIG_FILE), formatdoc! {"
+            floxhub_url = '{floxhub_url}'
+            disable_metrics = {disable_metrics}
+            search_limit = {search_limit}
+        "})
+        .unwrap();
+
+        fs::write(
+            system_config_dir.path().join(FLOX_CONFIG_FILE),
+            formatdoc! {"
+            floxhub_url = 'https://system.flox.dev'
+            disable_metrics = false
+            search_limit = 24
+        "},
+        )
+        .unwrap();
+
+        let config = Config::parse_with(
+            &mock_flox_dirs(),
+            user_config_dir.path(),
+            Some(system_config_dir.path()),
+            [],
+        )
+        .unwrap();
+
+        assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
+        assert!(config.flox.disable_metrics);
+        assert_eq!(config.flox.search_limit, Some(search_limit));
+    }
+
+    #[test]
+    fn env_overrides_user_and_system() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let system_config_dir = tempfile::tempdir().unwrap();
+
+        let floxhub_url = "https://env.flox.dev";
+        let disable_metrics = true;
+        let search_limit = NonZero::new(42).unwrap();
+
+        fs::write(user_config_dir.path().join(FLOX_CONFIG_FILE), formatdoc! {"
+            floxhub_url = 'https://user.flox.dev'
+            disable_metrics = false
+            search_limit = 12
+        "})
+        .unwrap();
+
+        fs::write(
+            system_config_dir.path().join(FLOX_CONFIG_FILE),
+            formatdoc! {"
+            floxhub_url = 'https://system.flox.dev'
+            disable_metrics = false
+            search_limit = 24
+        "},
+        )
+        .unwrap();
+
+        let env = [
+            ("FLOX_FLOXHUB_URL".into(), floxhub_url.to_owned()),
+            ("FLOX_DISABLE_METRICS".into(), format!("{disable_metrics}")),
+            ("FLOX_SEARCH_LIMIT".into(), format!("{search_limit}")),
+        ];
+
+        let config = Config::parse_with(
+            &mock_flox_dirs(),
+            user_config_dir.path(),
+            Some(system_config_dir.path()),
+            env,
+        )
+        .unwrap();
+
+        assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
+        assert!(config.flox.disable_metrics);
+        assert_eq!(config.flox.search_limit, Some(search_limit));
     }
 
     #[test]
