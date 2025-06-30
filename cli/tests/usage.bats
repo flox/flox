@@ -28,6 +28,7 @@ project_teardown() {
 
 setup_file() {
   common_file_setup
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 }
 
 teardown_file() {

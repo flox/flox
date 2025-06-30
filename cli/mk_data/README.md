@@ -19,85 +19,135 @@ Options:
   -h, --help             Print help
 ```
 
-## Config file
-
-The `[vars]` section is special in that it doesn't specify jobs to run or
-generate output.
+## Output
 
 The directory structure generated is as follows:
 ```
 <root>/
-    init/
-        <job_name>.json
     resolve/
-        <job_name>.json
+        <job_name>.yaml
     search/
-        <job_name>.json
+        <job_name>.yaml
     show/
-        <job_name>.json
-    envs/
+        <job_name>.yaml
+    lock/
+        <job_name>.lock
+    env/
         <job_name>/
-            <job_name.json>
-            manifest.toml
-            manifest.lock
+            .flox/*
+            resp.yaml
+    init/
+        <job_name>/
+            .flox/*
+            resp.yaml
+    custom/
+        <job_name>/
+            .flox/*
+            resp.yaml
 ```
 
-The only real exception here is that the directories in the `envs` section
-are created manually using the job config.
+This structure means that in order to mark a job as needing to be re-run, you just need to delete one thing: either the `<job name>.(yaml | lock)` file, or the `<job name>` directory depending on the job type.
 
-### Job config
+## Job config
 
 Each job is executed in a temporary directory inside the output directory.
+Each job category also has a category-specific configuration syntax as describe below.
 
-The config for a job is as follows:
-```
-files                  := [str] | null
-pre_cmd                := str | null
-cmd                    := str | null
-post_cmd               := str | null
-ignore_pre_cmd_errors  := bool | null
-ignore_cmd_errors      := bool | null
-ignore_post_cmd_errors := bool | null
-skip_if_output_exists  := str | null
-```
-where `*cmd`s are run by Bash.
+Most of the jobs have the same flow and are noted where they differ:
+- Run `flox init` (implicit)
+- Run `pre_cmd`
+- Run the category-specific command (implicit)
+- Run `post_cmd`
+- If `ignore_errors` is specified, errors in the category-specific command, `pre_cmd`, and `post_cmd` are ignored.
 
-Semantics:
-- If `skip_if_output_exists` is `<path>`, then `$output_dir/<path>` is checked and if it exists the job is skipped.
-    - This is necessary if the job puts output in a place other than `<category>/<name>.json`.
-- `files` are relative paths specified relative to the input data directory.
-- `files` are copied from the input data directory into the working directory before anything else happens.
-- `pre_cmd` executes next, but no response file is generated during execution.
-- `cmd` is executed next, and a response file is generated.
-- `post_cmd` is executed next, but no response file is generated.
+### Resolve
+
+```
+pkgs          := [ str ]
+pre_cmd       := str | null
+post_cmd      := str | null
+ignore_errors := bool | null
+```
+
+Runs a `flox install` command with `pkgs` as the argument, so you can also list `-i` as a "package" and it will also work.
+
+### Search
+
+```
+query         := str
+all           := bool | null
+pre_cmd       := str | null
+post_cmd      := str | null
+ignore_errors := bool | null
+```
+
+Runs a `flox search` with `query` as the argument.
+
+### Show
+
+```
+query         := str
+pre_cmd       := str | null
+post_cmd      := str | null
+ignore_errors := bool | null
+```
+
+Runs a `flox show` with `query` as the argument.
+
+### Lock
+
+```
+manifest := str
+```
+
+Runs a `flox lock-manifest` with `manifest`, where the string provided to `manifest` is the name of a manifest in `INPUT_DATA/manifests`.
+
+### Env
+
+```
+manifest := str
+```
+
+Runs a `flox edit -f` with `manifest`, where the string provided to `manifest` is the name of a manifest in `INPUT_DATA/manifests`.
+
+### Init
+
+```
+unpack_dir_contents := [ str ] | null
+auto_setup          := bool | null
+pre_cmd             := str | null
+post_cmd            := str | null
+ignore_errors       := bool | null
+```
+
+Since the point of this job is to run `flox init`, there is no implicit `flox init` step run before `pre_cmd`.
+Instead, the flow looks like this:
+- Unpack the contents of each directory in `unpack_dir_contents` into the current directory.
+- Run `pre_cmd`.
+- Run `flox init` (implicit)
+- Run `post_cmd`
+
+The strings provided to `unpack_dir_contents` are specified relative to `INPUT_DATA`.
+
+### Custom
+
+```
+unpack_dir_contents := [ str ] | null
+pre_cmd             := str | null
+record_cmd          := str | null
+post_cmd            := str | null
+ignore_errors       := bool | null
+```
+
+This job is for things that don't fit nicely into the other categories, so it allows more flexibility.
+There is also no implicit `flox init` step, so if you need an environment, you must add that via `pre_cmd`.
+`record_cmd` is executed between `pre_cmd` and `post_cmd` and is the command whose responses are recorded if desired.
+
+## Environment variables
+
+- Session-wide environment variables may be set with the `[vars]` section.
 - `$RESPONSE_FILE` contains the path to the generated response file and is available inside `post_cmd` for post-processing of response files.
-
-Any error encountered while copying files or running commands will fail the job
-unless the appropriate `ignore_*_errors` field is set.
-If you expect a command to fail and still want to record the response, you should
-run the command as `cmd || true`.
-
-### `[vars]`
-Contains environment variables that are set for all jobs.
-This is useful if you want to set a particular catalog server URL e.g. preview vs. production.
-
-### `[resolve]`
-Intended to hold jobs that hit the `/resolve` endpoint, which is mostly installs.
-
-### `[search]` and `[show]`
-Intended to hold jobs using `flox search` and `flox show`.
-
-### `[init]`
-Intended to hold jobs that call `flox init`.
-This section makes heavy use of `files` and `pre_cmd` to put language-specific
-files in the right place before calling `flox init --auto-setup`.
-
-### `[envs]`
-Intended to hold jobs that lock manifests.
-The idea here is to start providing manifest/lockfile pairs that can be used
-as fixtures in other tests without needing to build environments all the time.
-These tests manually move files around into directories named after the job
-and record the manifest, lockfile, and response recorded during resolution.
+- `$INPUT_DATA` is available inside all commands of `[custom]` jobs.
 
 ## Is it pretty?
 Yes, it has a spinner, but if you're a scrooge or a log file you can turn it off

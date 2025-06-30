@@ -20,7 +20,7 @@ project_setup() {
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
 
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 }
 
 project_teardown() {
@@ -67,7 +67,7 @@ init_env() {
 
 @test "'flox list' lists packages of environment in the current dir; shows different paths" {
   init_env
-  cp "$GENERATED_DATA"/envs/pip/* "$PROJECT_DIR/.flox/env"
+  cp -r "$GENERATED_DATA"/env/pip/.flox "$PROJECT_DIR/"
 
   run "$FLOX_BIN" list
   assert_success
@@ -80,7 +80,7 @@ EOF
   init_env
 
   # install hello with `greeting` as the iid.
-  cp "$GENERATED_DATA"/envs/hello_as_greeting/* "$PROJECT_DIR/.flox/env"
+  cp -r "$GENERATED_DATA"/env/hello_as_greeting/.flox "$PROJECT_DIR/"
 
   run "$FLOX_BIN" list
   assert_success
@@ -98,7 +98,7 @@ EOF
   # Mock env with `hello` installed for all systems
   # and `htop` for no system to emulate a package not installed
   # for the current system on all systems.
-  cp "$GENERATED_DATA"/envs/hello_and_htop_for_no_system/* "$PROJECT_DIR/.flox/env"
+  cp -r "$GENERATED_DATA"/env/hello_and_htop_for_no_system/.flox "$PROJECT_DIR/"
 
   run "$FLOX_BIN" list -n
   assert_success
@@ -114,7 +114,7 @@ EOF
 
   # `influxdb2 does not have a version attribute set in nixpkgs (2024-02-19)
   # todo: replace with a more predicatable/smaller example
-  cp "$GENERATED_DATA"/envs/influxdb2/* "$PROJECT_DIR/.flox/env"
+  cp -r "$GENERATED_DATA"/env/influxdb2/.flox "$PROJECT_DIR/"
 
   run "$FLOX_BIN" list
   assert_success

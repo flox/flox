@@ -37,7 +37,7 @@ setup() {
   common_test_setup
   setup_isolated_flox
   project_setup
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 }
 teardown() {
   project_teardown
@@ -153,7 +153,7 @@ EOF
 }
 
 @test "'flox install' overrides install ID with '-i'" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/hello_as_greeting/hello_as_greeting.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/env/hello_as_greeting/resp.yaml"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install -i greeting hello
@@ -163,7 +163,7 @@ EOF
 }
 
 @test "'flox install' overrides install ID with '--id'" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/hello_as_greeting/hello_as_greeting.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/env/hello_as_greeting/resp.yaml"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install --id greeting hello

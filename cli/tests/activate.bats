@@ -147,7 +147,7 @@ setup() {
   # todo: still needed now that there is no pkgdb?
   setup_isolated_flox
 
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 }
 teardown() {
   # fifo is in PROJECT_DIR and keeps watchdog running,
@@ -1495,7 +1495,7 @@ EOF
 @test "indented heredocs in the manifest are outdented (bash)" {
   project_setup
 
-  cp -r "$GENERATED_DATA"/envs/heredocs/* .flox/env/
+  cp -r "$GENERATED_DATA"/custom/heredocs/.flox .
 
   FLOX_SHELL="bash" NO_COLOR=1 \
   run "$FLOX_BIN" activate -- true
@@ -1509,7 +1509,7 @@ EOF
 @test "indented heredocs in the manifest are outdented (zsh)" {
   project_setup
 
-  cp -r "$GENERATED_DATA"/envs/heredocs/* .flox/env/
+  cp -r "$GENERATED_DATA"/custom/heredocs/.flox .
 
   FLOX_SHELL="zsh" NO_COLOR=1 \
   run "$FLOX_BIN" activate -- true
@@ -1525,7 +1525,7 @@ EOF
 @test "indented heredocs in the manifest are outdented (tcsh)" {
   project_setup
 
-  cp -r "$GENERATED_DATA"/envs/heredocs/* .flox/env/
+  cp -r "$GENERATED_DATA"/custom/heredocs/.flox .
 
   FLOX_SHELL="tcsh" NO_COLOR=1 \
   run "$FLOX_BIN" activate -- true

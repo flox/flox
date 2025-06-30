@@ -39,7 +39,7 @@ setup() {
   common_test_setup
   setup_isolated_flox
 
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 }
 
 teardown() {
