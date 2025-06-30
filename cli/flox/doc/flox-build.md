@@ -15,6 +15,7 @@ flox-build - Build packages with Flox
 ```
 flox [<general-options>] build
      [-d=<path>]
+     [--stability <stability>]
      [<package>]...
 ```
 
@@ -93,6 +94,11 @@ The `build.<package>.version` field can be specified in one of the following way
 :   The package(s) to build.
     Possible values are all keys under the `build` attribute
     in the environment's `manifest.toml`.
+
+`--stability <stability>`
+:   Perform a nix expression build using a base package set of the given stability
+    as tracked by the catalog server.
+    Can not be used with manifest base builds.
 
 
 ```{.include}

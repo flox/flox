@@ -41,7 +41,18 @@ pub struct Build {
 #[derive(Debug, Clone, Bpaf)]
 enum BaseCatalogUrlSelect {
     NixpkgsUrl(#[bpaf(long("nixpkgs-url"), argument("url"), hide)] Url),
-    Stability(#[bpaf(long("stability"), argument("stability"))] String),
+    Stability(
+        #[bpaf(
+            long("stability"),
+            argument("stability"),
+            help(
+                "Perform a nix expression build using a base package set of the given stability\n\
+                as tracked by the catalog server.\n\
+                Can not be used with manifest base builds."
+            )
+        )]
+        String,
+    ),
 }
 
 #[derive(Debug, Bpaf, Clone)]

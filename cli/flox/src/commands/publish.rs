@@ -50,7 +50,14 @@ pub struct Publish {
     #[bpaf(long, hide)]
     metadata_only: bool,
 
-    #[bpaf(long)]
+    #[bpaf(
+        long,
+        help(
+            "Perform a nix expression build using a base package set of the given stability\n\
+            as tracked by the catalog server.\n\
+            Can not be used with manifest base builds."
+        )
+    )]
     stability: Option<String>,
 
     #[bpaf(external(publish_target), optional)]
