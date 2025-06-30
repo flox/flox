@@ -1,0 +1,265 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "boost": {
+        "pkg-path": "boost"
+      },
+      "gcc": {
+        "pkg-path": "gcc"
+      }
+    },
+    "options": {}
+  },
+  "packages": [
+    {
+      "attr_path": "boost",
+      "broken": false,
+      "derivation": "/nix/store/a2m8cyzss7yfv9rd5ll3fk6g6laashfv-boost-1.87.0.drv",
+      "description": "Collection of C++ libraries",
+      "install_id": "boost",
+      "license": "BSL-1.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "name": "boost-1.87.0",
+      "pname": "boost",
+      "rev": "dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "rev_count": 836203,
+      "rev_date": "2025-07-28T09:26:29Z",
+      "scrape_date": "2025-07-30T00:28:04.822462Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.87.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/qlyqf7bms1a5rqg8c4wnq45jx8y4bxym-boost-1.87.0-dev",
+        "out": "/nix/store/k2jijzzyp3cfal9z5c7wpj5clks4dl87-boost-1.87.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "boost",
+      "broken": false,
+      "derivation": "/nix/store/igy4mfzxmz0xvkc54wyga2g5g2p8s18l-boost-1.87.0.drv",
+      "description": "Collection of C++ libraries",
+      "install_id": "boost",
+      "license": "BSL-1.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "name": "boost-1.87.0",
+      "pname": "boost",
+      "rev": "dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "rev_count": 836203,
+      "rev_date": "2025-07-28T09:26:29Z",
+      "scrape_date": "2025-07-30T00:47:40.346736Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.87.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/hfrpfy6zm89cjx3xlsfp888w73648kac-boost-1.87.0-dev",
+        "out": "/nix/store/l564i4mydnliwg78vwzvxqmsr4arff9i-boost-1.87.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "boost",
+      "broken": false,
+      "derivation": "/nix/store/nkk06q22w6pmgr74kilxvd11wbryw9ar-boost-1.87.0.drv",
+      "description": "Collection of C++ libraries",
+      "install_id": "boost",
+      "license": "BSL-1.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "name": "boost-1.87.0",
+      "pname": "boost",
+      "rev": "dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "rev_count": 836203,
+      "rev_date": "2025-07-28T09:26:29Z",
+      "scrape_date": "2025-07-30T01:07:25.130533Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.87.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/6fl9x728sq040lg1j8hp0rcssn1sgq42-boost-1.87.0-dev",
+        "out": "/nix/store/7jq3j5dfx7a95w236wcq848kqp3rs65y-boost-1.87.0"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "boost",
+      "broken": false,
+      "derivation": "/nix/store/f4x7jbxrrhad1xdqbn8h03k0ra24xkrq-boost-1.87.0.drv",
+      "description": "Collection of C++ libraries",
+      "install_id": "boost",
+      "license": "BSL-1.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "name": "boost-1.87.0",
+      "pname": "boost",
+      "rev": "dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "rev_count": 836203,
+      "rev_date": "2025-07-28T09:26:29Z",
+      "scrape_date": "2025-07-30T01:31:20.207886Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.87.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/qq7jg4v62ckjb1adax7nl5nvk0jr5487-boost-1.87.0-dev",
+        "out": "/nix/store/ik9a1dn4229hirklndxb5cz1fp4z8md0-boost-1.87.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gcc",
+      "broken": false,
+      "derivation": "/nix/store/l4dnyfm1qrawzv30p292ncd4imlmd8nd-gcc-wrapper-14.3.0.drv",
+      "description": "GNU Compiler Collection, version 14.3.0 (wrapper script)",
+      "install_id": "gcc",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "name": "gcc-wrapper-14.3.0",
+      "pname": "gcc",
+      "rev": "dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "rev_count": 836203,
+      "rev_date": "2025-07-28T09:26:29Z",
+      "scrape_date": "2025-07-30T00:28:05.472340Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "14.3.0",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/3cxzv8ycx3r89s3mb285macagd5nhgd5-gcc-wrapper-14.3.0-info",
+        "man": "/nix/store/y07limdp8iawb4c48hqa9j7qzx7a7lh8-gcc-wrapper-14.3.0-man",
+        "out": "/nix/store/dn7kjba1csgmq2snyxxv4qp0qfz4yl4c-gcc-wrapper-14.3.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gcc",
+      "broken": false,
+      "derivation": "/nix/store/jwzm380gzmzmjprxf1k1qlkv4y2dmcr2-gcc-wrapper-14.3.0.drv",
+      "description": "GNU Compiler Collection, version 14.3.0 (wrapper script)",
+      "install_id": "gcc",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "name": "gcc-wrapper-14.3.0",
+      "pname": "gcc",
+      "rev": "dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "rev_count": 836203,
+      "rev_date": "2025-07-28T09:26:29Z",
+      "scrape_date": "2025-07-30T00:47:41.425856Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "14.3.0",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/g38fw909lkir925zw1mzxg6mgwls95hc-gcc-wrapper-14.3.0-info",
+        "man": "/nix/store/m74yzciid5w40c1y526j1xvg67xc9skg-gcc-wrapper-14.3.0-man",
+        "out": "/nix/store/0r34311s7lka3iisjvhdaqpblqyk6g9f-gcc-wrapper-14.3.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gcc",
+      "broken": false,
+      "derivation": "/nix/store/x8nyfwqh0wcyg41mq9l3rik2f76lyv2s-gcc-wrapper-14.3.0.drv",
+      "description": "GNU Compiler Collection, version 14.3.0 (wrapper script)",
+      "install_id": "gcc",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "name": "gcc-wrapper-14.3.0",
+      "pname": "gcc",
+      "rev": "dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "rev_count": 836203,
+      "rev_date": "2025-07-28T09:26:29Z",
+      "scrape_date": "2025-07-30T01:07:25.786747Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "14.3.0",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/8vi0blv6kssib3v6xymz7lrlz53fgax9-gcc-wrapper-14.3.0-info",
+        "man": "/nix/store/9j7k3csl0pasb7w3g491j4pshrl8dqwy-gcc-wrapper-14.3.0-man",
+        "out": "/nix/store/ssn9sk3cjravh2lh2p95a6m1yxcddnb4-gcc-wrapper-14.3.0"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gcc",
+      "broken": false,
+      "derivation": "/nix/store/n788bcf27q73r0pk73a61ayc7vq9rxip-gcc-wrapper-14.3.0.drv",
+      "description": "GNU Compiler Collection, version 14.3.0 (wrapper script)",
+      "install_id": "gcc",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "name": "gcc-wrapper-14.3.0",
+      "pname": "gcc",
+      "rev": "dc9637876d0dcc8c9e5e22986b857632effeb727",
+      "rev_count": 836203,
+      "rev_date": "2025-07-28T09:26:29Z",
+      "scrape_date": "2025-07-30T01:31:21.406493Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "14.3.0",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/2r31f7wxsq5qdbl6d3dx03rwgxyhvvry-gcc-wrapper-14.3.0-info",
+        "man": "/nix/store/jiivm432bvnzhrnsf8xr9115z7b2l5x2-gcc-wrapper-14.3.0-man",
+        "out": "/nix/store/67x7pknz0qa2j16x02idf0x98lpcspah-gcc-wrapper-14.3.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

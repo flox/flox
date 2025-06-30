@@ -6,13 +6,13 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 03 Jun 2025 17:26:11 GMT
+    value: Wed, 30 Jul 2025 17:01:10 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '454'
+    value: '1569'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LmR4GhDjoAMESeA=
-  body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.systems_not_on_same_page","message":"The attr_path darwin.ps is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,x86_64-darwin), (x86_64-darwin).","context":{"attr_path":"darwin.ps","install_id":"ps","system_groupings":"(aarch64-darwin,x86_64-darwin), (x86_64-darwin)"}}]}]}'
+    value: OiFplhkUoAMEbgg=
+  body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.systems_not_on_same_page","message":"The attr_path darwin.ps is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,x86_64-darwin), (x86_64-darwin).","context":{"attr_path":"darwin.ps","install_id":"ps","system_groupings":"(aarch64-darwin,x86_64-darwin), (x86_64-darwin)"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'

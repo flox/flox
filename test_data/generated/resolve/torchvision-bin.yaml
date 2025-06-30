@@ -6,13 +6,13 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 03 Jun 2025 17:25:51 GMT
+    value: Wed, 30 Jul 2025 17:02:52 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '815'
+    value: '1930'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LmR1AgJuIAMESsg=
-  body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.systems_not_on_same_page","message":"The attr_path python311Packages.torchvision-bin is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,aarch64-linux,x86_64-linux), (aarch64-darwin,aarch64-linux), (aarch64-linux,x86_64-linux), (aarch64-darwin,x86_64-darwin,x86_64-linux), (aarch64-darwin,x86_64-linux), (x86_64-linux).","context":{"attr_path":"python311Packages.torchvision-bin","install_id":"torchvision-bin","system_groupings":"(aarch64-darwin,aarch64-linux,x86_64-linux), (aarch64-darwin,aarch64-linux), (aarch64-linux,x86_64-linux), (aarch64-darwin,x86_64-darwin,x86_64-linux), (aarch64-darwin,x86_64-linux), (x86_64-linux)"}}]}]}'
+    value: OiF5bguFoAMEb5Q=
+  body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.systems_not_on_same_page","message":"The attr_path python311Packages.torchvision-bin is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,aarch64-linux,x86_64-linux), (aarch64-darwin,aarch64-linux), (aarch64-linux,x86_64-linux), (aarch64-darwin,x86_64-darwin,x86_64-linux), (aarch64-darwin,x86_64-linux), (x86_64-linux).","context":{"attr_path":"python311Packages.torchvision-bin","install_id":"torchvision-bin","system_groupings":"(aarch64-darwin,aarch64-linux,x86_64-linux), (aarch64-darwin,aarch64-linux), (aarch64-linux,x86_64-linux), (aarch64-darwin,x86_64-darwin,x86_64-linux), (aarch64-darwin,x86_64-linux), (x86_64-linux)"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'

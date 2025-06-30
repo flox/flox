@@ -5,22 +5,22 @@ then:
   status: 200
   header:
     - name: date
-      value: Tue, 03 Jun 2025 17:26:28 GMT
+      value: Wed, 30 Jul 2025 17:03:08 GMT
     - name: content-type
       value: application/json
     - name: server
       value: uvicorn
     - name: apigw-requestid
-      value: LmR6pjg0oAMEaxg=
+      value: OiF7_itnIAMEbdw=
   body: '{"total_count":10,"items":[{"attr_path":"python","catalog":null,"pkg_path":"python","name":"python-2.7.18.8","pname":"python","version":"2.7.18.8","description":"High-level
-    dynamically-typed programming language","stabilities":[],"system":"x86_64-linux"},{"attr_path":"gpython","catalog":null,"pkg_path":"gpython","name":"gpython-0.2.0","pname":"gpython","version":"0.2.0","description":"Python
-    interpreter written in Go","stabilities":[],"system":"x86_64-linux"},{"attr_path":"python2","catalog":null,"pkg_path":"python2","name":"python-2.7.18.8","pname":"python2","version":"2.7.18.8","description":"High-level
-    dynamically-typed programming language","stabilities":[],"system":"x86_64-linux"},{"attr_path":"python3","catalog":null,"pkg_path":"python3","name":"python3-3.12.10","pname":"python3","version":"3.12.10","description":"High-level
-    dynamically-typed programming language","stabilities":[],"system":"x86_64-linux"},{"attr_path":"python27","catalog":null,"pkg_path":"python27","name":"python-2.7.18.8","pname":"python27","version":"2.7.18.8","description":"High-level
-    dynamically-typed programming language","stabilities":[],"system":"x86_64-linux"},{"attr_path":"python36","catalog":null,"pkg_path":"python36","name":"python3-3.6.14","pname":"python36","version":"python3-3.6.14","description":"A
-    high-level dynamically-typed programming language","stabilities":[],"system":"x86_64-linux"},{"attr_path":"python37","catalog":null,"pkg_path":"python37","name":"python3-3.7.16","pname":"python37","version":"python3-3.7.16","description":"A
-    high-level dynamically-typed programming language","stabilities":[],"system":"x86_64-linux"},{"attr_path":"python38","catalog":null,"pkg_path":"python38","name":"python3-3.8.18","pname":"python38","version":"python3-3.8.18","description":"A
-    high-level dynamically-typed programming language","stabilities":[],"system":"x86_64-linux"},{"attr_path":"python39","catalog":null,"pkg_path":"python39","name":"python3-3.9.21","pname":"python39","version":"python3-3.9.21","description":"High-level
-    dynamically-typed programming language","stabilities":[],"system":"x86_64-linux"},{"attr_path":"python-qt","catalog":null,"pkg_path":"python-qt","name":"python-qt-3.6.0","pname":"python-qt","version":"3.6.0","description":"PythonQt
+    dynamically-typed programming language","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"gpython","catalog":null,"pkg_path":"gpython","name":"gpython-0.2.0","pname":"gpython","version":"0.2.0","description":"Python
+    interpreter written in Go","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"python2","catalog":null,"pkg_path":"python2","name":"python-2.7.18.8","pname":"python2","version":"2.7.18.8","description":"High-level
+    dynamically-typed programming language","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"python3","catalog":null,"pkg_path":"python3","name":"python3-3.13.5","pname":"python3","version":"3.13.5","description":"High-level
+    dynamically-typed programming language","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"python27","catalog":null,"pkg_path":"python27","name":"python-2.7.18.8","pname":"python27","version":"2.7.18.8","description":"High-level
+    dynamically-typed programming language","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"python36","catalog":null,"pkg_path":"python36","name":"python3-3.6.14","pname":"python36","version":"python3-3.6.14","description":"A
+    high-level dynamically-typed programming language","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"python37","catalog":null,"pkg_path":"python37","name":"python3-3.7.16","pname":"python37","version":"python3-3.7.16","description":"A
+    high-level dynamically-typed programming language","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"python38","catalog":null,"pkg_path":"python38","name":"python3-3.8.18","pname":"python38","version":"python3-3.8.18","description":"A
+    high-level dynamically-typed programming language","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"python39","catalog":null,"pkg_path":"python39","name":"python3-3.9.21","pname":"python39","version":"python3-3.9.21","description":"High-level
+    dynamically-typed programming language","stabilities":[],"system":"aarch64-darwin"},{"attr_path":"python-qt","catalog":null,"pkg_path":"python-qt","name":"python-qt-3.6.1","pname":"python-qt","version":"3.6.1","description":"PythonQt
     is a dynamic Python binding for the Qt framework. It offers an easy way to embed
-    the Python scripting language into your C++ Qt applications","stabilities":[],"system":"x86_64-linux"}]}'
+    the Python scripting language into your C++ Qt applications","stabilities":[],"system":"aarch64-darwin"}]}'

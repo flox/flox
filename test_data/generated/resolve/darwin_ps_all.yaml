@@ -6,16 +6,16 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 03 Jun 2025 17:25:55 GMT
+    value: Wed, 30 Jul 2025 17:01:13 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '370'
+    value: '1485'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LmR1mhH7oAMESVw=
-  body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"attr_path_not_found.not_found_for_all_systems","message":"The attr_path darwin.ps is not found for all the requested systems, suggest limiting systems to (aarch64-darwin,x86_64-darwin).","context":{"attr_path":"darwin.ps","install_id":"ps","valid_systems":"aarch64-darwin,x86_64-darwin"}}]}]}'
+    value: OiFqEgYWoAMEbSg=
+  body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"attr_path_not_found.not_found_for_all_systems","message":"The attr_path darwin.ps is not found for all the requested systems, suggest limiting systems to (aarch64-darwin,x86_64-darwin).","context":{"attr_path":"darwin.ps","install_id":"ps","valid_systems":"aarch64-darwin,x86_64-darwin"}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'
 ---
 when:
   path: /api/v1/catalog/resolve
@@ -25,13 +25,13 @@ then:
   status: 200
   header:
   - name: date
-    value: Tue, 03 Jun 2025 17:25:56 GMT
+    value: Wed, 30 Jul 2025 17:01:13 GMT
   - name: content-type
     value: application/json
   - name: content-length
-    value: '2107'
+    value: '2130'
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: LmR1si47oAMES4g=
-  body: '{"items":[{"name":"toplevel","page":{"page":808478,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/vrb7dszkv0y2xw6avkkln97ssifqnwrp-adv_cmds-231.drv","name":"adv_cmds-231","pname":"ps","version":"231","system":"aarch64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/ikl4ybibh079nifrfx38l5zhqipms05c-adv_cmds-231-ps"},{"name":"man","store_path":"/nix/store/g5xdh8dxp45zsr66ldvczaf0hq1ycbxy-adv_cmds-231-man"},{"name":"out","store_path":"/nix/store/40d4f1jfq9cna873cx305cmazi23xygf-adv_cmds-231"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc","rev":"910796cabe436259a29a72e8d3f5e180fc6dfacc","rev_count":808478,"rev_date":"2025-05-31T12:05:15Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-06-02T04:26:15.621075Z","cache_uri":null,"install_id":"ps"},{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/sin5vkf3kxxzzadhradd2rpz90rc88bg-adv_cmds-231.drv","name":"adv_cmds-231","pname":"ps","version":"231","system":"x86_64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/hypl8yx7hk22k2mpc9a2zp82w6gk33qi-adv_cmds-231-ps"},{"name":"man","store_path":"/nix/store/xpsj7hgj4fppsfa7dcv8bwi3a0552zwn-adv_cmds-231-man"},{"name":"out","store_path":"/nix/store/36f6am5v4rzg39rz9b6p9vx4g8ri4rf8-adv_cmds-231"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=910796cabe436259a29a72e8d3f5e180fc6dfacc","rev":"910796cabe436259a29a72e8d3f5e180fc6dfacc","rev_count":808478,"rev_date":"2025-05-31T12:05:15Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-06-02T05:05:13.677230Z","cache_uri":null,"install_id":"ps"}],"messages":[],"complete":true},"messages":[]}]}'
+    value: OiFqFjv1oAMEbyQ=
+  body: '{"items":[{"name":"toplevel","page":{"page":836203,"url":"","packages":[{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/lccinh4ivca9l43629jzpy4yiily13b3-adv_cmds-231.drv","name":"adv_cmds-231","pname":"ps","version":"231","system":"aarch64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/1lwj5fs20x8kvchwzvdqviavqdn973vp-adv_cmds-231-ps"},{"name":"man","store_path":"/nix/store/298am9lzwbwzd8rjgy1yqdp3kwcivih5-adv_cmds-231-man"},{"name":"out","store_path":"/nix/store/13i6w4pv6j2hccg2134m4sd9csrnanmy-adv_cmds-231"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=dc9637876d0dcc8c9e5e22986b857632effeb727","rev":"dc9637876d0dcc8c9e5e22986b857632effeb727","rev_count":836203,"rev_date":"2025-07-28T09:26:29Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-07-30T00:29:16.094355Z","cache_uri":null,"install_id":"ps"},{"catalog":"nixpkgs","attr_path":"darwin.ps","pkg_path":"darwin.ps","derivation":"/nix/store/m1l0a05pkg08rj134zkc44s2h09dwrll-adv_cmds-231.drv","name":"adv_cmds-231","pname":"ps","version":"231","system":"x86_64-darwin","outputs":[{"name":"ps","store_path":"/nix/store/g5qlpy9pwhgrr8zsxyrfjvjdb1rah9d7-adv_cmds-231-ps"},{"name":"man","store_path":"/nix/store/g71yrdpn2hfbr2kpncix9mja9rrl8wrp-adv_cmds-231-man"},{"name":"out","store_path":"/nix/store/badxhb503xjhfra0g7y26g9k2gigvkym-adv_cmds-231"}],"outputs_to_install":["man","out"],"description":"Advanced commands package for Darwin","license":"[ APSL-1.0, APSL-2.0 ]","locked_url":"https://github.com/flox/nixpkgs?rev=dc9637876d0dcc8c9e5e22986b857632effeb727","rev":"dc9637876d0dcc8c9e5e22986b857632effeb727","rev_count":836203,"rev_date":"2025-07-28T09:26:29Z","broken":false,"insecure":false,"unfree":false,"missing_builds":false,"stabilities":["unstable"],"scrape_date":"2025-07-30T01:08:36.811308Z","cache_uri":null,"install_id":"ps"}],"messages":[],"complete":true},"candidate_pages":null,"messages":[]}]}'

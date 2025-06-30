@@ -1,0 +1,20 @@
+version = 1
+
+[install]
+requests.pkg-path = "python313Packages.requests"
+python3.pkg-path = "python3"
+
+[build.print-modules]
+command = """
+  mkdir -p $out/bin
+  cat > "$out/bin/print-modules" <<'EOF'
+#!/usr/bin/env python3
+import requests
+print(requests.__path__)
+try:
+    import toml
+except:
+    print("Cannot import toml")
+EOF
+  chmod +x "$out/bin/print-modules"
+"""
