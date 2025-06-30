@@ -184,7 +184,7 @@ mod tests {
 
         let environment = new_named_path_environment_from_env_files(
             &flox,
-            GENERATED_DATA.join("envs/hello"),
+            GENERATED_DATA.join("custom/hello"),
             "name",
         );
 

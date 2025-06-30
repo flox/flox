@@ -261,7 +261,7 @@ mod tests {
         let (flox, _tempdir) = flox_instance();
 
         let mut environment =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("custom/hello"));
 
         let upgrade_information =
             UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
@@ -300,7 +300,7 @@ mod tests {
         let (flox, _tempdir) = flox_instance();
 
         let environment =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("custom/hello"));
 
         let upgrade_information =
             UpgradeInformationGuard::read_in(environment.cache_path().unwrap()).unwrap();
@@ -328,7 +328,7 @@ mod tests {
         let (mut flox, _tempdir) = flox_instance();
 
         let environment =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("custom/hello"));
 
         // required to read the upgrade information after being moved in the following line.
         let cache_path = environment.cache_path().unwrap();
