@@ -59,7 +59,7 @@ impl StartOrAttachArgs {
     pub fn handle_inner(
         &self,
         runtime_dir: &Path,
-        attach_fn: impl FnOnce(&Path, LockFile, &str, i32) -> Result<(), Error>,
+        attach_fn: impl FnOnce(Activations, &Path, LockFile, &str, i32) -> Result<(), Error>,
         start_fn: impl FnOnce(
             Activations,
             PathBuf,
@@ -83,8 +83,15 @@ impl StartOrAttachArgs {
         let (activation_id, attaching) =
             match activations.activation_for_store_path(&self.store_path) {
                 Some(activation) => {
-                    attach_fn(&activations_json_path, lock, &self.store_path, self.pid)?;
-                    (activation.id(), true)
+                    let activation_id = activation.id();
+                    attach_fn(
+                        activations,
+                        &activations_json_path,
+                        lock,
+                        &self.store_path,
+                        self.pid,
+                    )?;
+                    (activation_id, true)
                 },
                 None => {
                     let id = start_fn(
@@ -114,17 +121,17 @@ impl StartOrAttachArgs {
 }
 
 fn attach(
+    activations: Activations,
     activations_json_path: &Path,
     lock: fslock::LockFile,
     store_path: &str,
     pid: i32,
 ) -> Result<(), Error> {
-    // Drop the lock to allow the activation to be updated by other processes
-    drop(lock);
-
     let attach_expiration = OffsetDateTime::now_utc() + Duration::seconds(10);
     wait_for_activation_ready_and_attach_pid(
+        activations,
         activations_json_path,
+        lock,
         store_path,
         attach_expiration,
         pid,
@@ -165,22 +172,32 @@ fn start(
 /// If the activation startup process fails, exit with an error.
 /// In either case, the activation can likely just be restarted.
 fn wait_for_activation_ready_and_attach_pid(
+    mut activations: Activations,
     activations_json_path: &Path,
+    lock: LockFile,
     store_path: &str,
     attach_expiration: OffsetDateTime,
     attaching_pid: i32,
 ) -> Result<(), anyhow::Error> {
+    let mut lock = lock;
     loop {
         let ready = check_for_activation_ready_and_attach_pid(
+            &mut activations,
             activations_json_path,
             store_path,
+            lock,
             attaching_pid,
             attach_expiration,
             OffsetDateTime::now_utc(),
         )?;
 
-        if ready {
-            break;
+        match ready {
+            Ready::True => {
+                break;
+            },
+            Ready::False(returned_lock) => {
+                lock = returned_lock;
+            },
         }
 
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -188,36 +205,43 @@ fn wait_for_activation_ready_and_attach_pid(
     Ok(())
 }
 
+/// Whether an activation is ready to be attached to.
+/// This is used to move back the lock;
+/// when the activation isn't ready, the lock has to be returned.
+#[derive(Debug)]
+enum Ready {
+    True,
+    False(fslock::LockFile),
+}
+
 fn check_for_activation_ready_and_attach_pid(
+    activations: &mut Activations,
     activations_json_path: &Path,
     store_path: &str,
+    lock: LockFile,
     attaching_pid: i32,
     attach_expiration: OffsetDateTime,
     now: OffsetDateTime,
-) -> Result<bool, anyhow::Error> {
-    let (activations, lock) = activations::read_activations_json(activations_json_path)?;
-    let Some(activations) = activations else {
-        anyhow::bail!("Expected an existing activations.json file");
-    };
-
-    let mut activations = activations.check_version()?;
-
+) -> Result<Ready, anyhow::Error> {
+    // I took a look at passing the activation down from handle_inner,
+    // but it borrows activations,
+    // so rather than dealing with lifetimes just call
+    // activation_for_store_path_mut again.
     let activation = activations
         .activation_for_store_path_mut(store_path)
-        .context("Prior activation of the environment completed before it could be attached to.")
-        .map_err(RestartableFailure)?;
+        .expect("Couldn't find activation for store_path we already checked exists.");
 
     if activation.ready() {
         activation.attach_pid(attaching_pid, None);
-        activations::write_activations_json(&activations, activations_json_path, lock)?;
-        return Ok(true);
+        activations::write_activations_json(activations, activations_json_path, lock)?;
+        return Ok(Ready::True);
     }
 
     if !activation.startup_process_running() {
         // Remove the deadlock so that a retry can proceed with a new start.
         let id = activation.id();
         activations.remove_activation(id);
-        activations::write_activations_json(&activations, activations_json_path, lock)?;
+        activations::write_activations_json(activations, activations_json_path, lock)?;
         return Err(RestartableFailure(anyhow::anyhow!(indoc! {"
             Prior activation of the environment failed to start, or completed.
         "}))
@@ -232,7 +256,7 @@ fn check_for_activation_ready_and_attach_pid(
             Try again after the previous activation of the environment has completed.
         "});
     }
-    Ok(false)
+    Ok(Ready::False(lock))
 }
 
 #[derive(Debug)]
