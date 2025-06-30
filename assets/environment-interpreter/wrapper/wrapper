@@ -37,7 +37,7 @@ set -euo pipefail
 _activate_d="__OUT__/activate.d"
 _profile_d="__OUT__/etc/profile.d"
 # shellcheck source-path=SCRIPTDIR/activate.d
-source "${_activate_d}/source-profile-d.bash"
+source "${_activate_d}/helpers.bash"
 
 # Top-level Flox environment activation script.
 
@@ -122,10 +122,7 @@ export PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin:$PATH"
 
 if [ "${SET_VARS-}" = "1" ]; then
  # Set static environment variables from the manifest.
- if [ -f "$FLOX_ENV/activate.d/envrc" ]; then
-   # shellcheck disable=SC1091 # from rendered environment
-   source "$FLOX_ENV/activate.d/envrc"
- fi
+ set_vars "$FLOX_ENV"
 fi
 
 # source profile.d scripts

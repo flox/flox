@@ -22,3 +22,14 @@ function source_profile_d {
     source "$_profile_d/$profile_script"
   done
 }
+
+# set_manifest_vars <flox_env>
+#
+# Set static environment variables from the manifest.
+function set_manifest_vars {
+  local _flox_env="${1?}"
+  if [ -f "$_flox_env/activate.d/envrc" ]; then
+    # shellcheck disable=SC1091 # from rendered environment
+    source "$_flox_env/activate.d/envrc"
+  fi
+}
