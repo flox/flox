@@ -42,12 +42,12 @@ impl StartOrAttachArgs {
             };
 
             if let Some(restartable_failure) = err.downcast_ref::<RestartableFailure>() {
-                eprintln!("{restartable_failure}");
+                debug!("{restartable_failure}");
                 retries -= 1;
                 if retries == 0 {
                     return Err(err);
                 }
-                eprintln!("Retrying ...");
+                debug!("Retrying ...");
                 continue;
             }
 
@@ -119,7 +119,13 @@ fn attach(
     store_path: &str,
     pid: i32,
 ) -> Result<(), Error> {
-    // Drop the lock to allow the activation to be updated by other processes
+    // It doesn't really make sense to drop the lock when first attempting to
+    // attach since we're about to immediately re-acquire it.
+    // But wait_for_activation_ready_and_attach_pid has to poll for a starting
+    // activation to complete,
+    // so it will have to drop the lock each time it sleeps.
+    // It's simpler to make it acquire the lock every time rather than trying to
+    // special case the first iteration.
     drop(lock);
 
     let attach_expiration = OffsetDateTime::now_utc() + Duration::seconds(10);
