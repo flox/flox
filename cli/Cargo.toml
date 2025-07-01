@@ -45,7 +45,7 @@ httpmock = { git = "https://github.com/flox/httpmock.git", branch = "flox/remove
     "record",
 ] }
 indent = "0.1.1"
-indexmap = { version = "2.9.0", features = ["serde"] }
+indexmap = { version = "2.10.0", features = ["serde"] }
 indoc = "2.0.6"
 inquire = "0.6.0"
 indicatif = "0.17"
