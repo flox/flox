@@ -3,7 +3,6 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::Context;
 use clap::Args;
 use flox_core::activations::{self, Activations};
 use fslock::LockFile;
@@ -301,7 +300,7 @@ mod tests {
 
         args.handle_inner(
             runtime_dir.path(),
-            |_, _, _, _| Ok(()),
+            |_, _, _, _, _| Ok(()),
             |_, _, _, _, _, _, _| panic!("start should not be called"),
             &mut output,
         )
@@ -342,7 +341,7 @@ mod tests {
         let id = "1".to_string();
         args.handle_inner(
             runtime_dir.path(),
-            |_, _, _, _| panic!("attach should not be called"),
+            |_, _, _, _, _| panic!("attach should not be called"),
             |_, _, _, _, _, _, _| Ok(id.clone()),
             &mut output,
         )
@@ -377,16 +376,21 @@ mod tests {
         });
 
         let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
+        let (activations, lock) =
+            activations::read_activations_json(&activations_json_path).unwrap();
+        let mut activations = activations.unwrap().check_version().unwrap();
 
         let ready = check_for_activation_ready_and_attach_pid(
+            &mut activations,
             &activations_json_path,
             store_path,
+            lock,
             attaching_pid,
             attach_expiration,
             now,
         )
         .expect("check_for_activation_ready_and_attach_pid should succeed with not ready");
-        assert!(!ready);
+        assert!(matches!(ready, Ready::False(_)));
     }
 
     /// When the activation is ready, the attaching PID should be attached to the activation,
@@ -411,17 +415,22 @@ mod tests {
         });
 
         let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
+        let (activations, lock) =
+            activations::read_activations_json(&activations_json_path).unwrap();
+        let mut activations = activations.unwrap().check_version().unwrap();
 
         let ready = check_for_activation_ready_and_attach_pid(
+            &mut activations,
             &activations_json_path,
             store_path,
+            lock,
             attaching_pid,
             attach_expiration,
             now,
         )
-        .expect("check_for_activation_ready_and_attach_pid should succeed with not ready");
+        .expect("check_for_activation_ready_and_attach_pid should succeed with ready");
 
-        assert!(ready, "Activation should be ready");
+        assert!(matches!(ready, Ready::True), "Activation should be ready");
 
         read_activations(runtime_dir, flox_env, |activations| {
             let activation = activations.activation_for_store_path(store_path).unwrap();
@@ -456,10 +465,15 @@ mod tests {
         });
 
         let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
+        let (activations, lock) =
+            activations::read_activations_json(&activations_json_path).unwrap();
+        let mut activations = activations.unwrap().check_version().unwrap();
 
         let result = check_for_activation_ready_and_attach_pid(
+            &mut activations,
             &activations_json_path,
             store_path,
+            lock,
             attaching_pid,
             attach_expiration,
             now,
@@ -505,10 +519,15 @@ mod tests {
         });
 
         let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
+        let (activations, lock) =
+            activations::read_activations_json(&activations_json_path).unwrap();
+        let mut activations = activations.unwrap().check_version().unwrap();
 
         let result = check_for_activation_ready_and_attach_pid(
+            &mut activations,
             &activations_json_path,
             store_path,
+            lock,
             attaching_pid,
             attach_expiration,
             now,
