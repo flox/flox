@@ -16,7 +16,8 @@ flox-publish - Publish packages for Flox
 flox [<general-options>] publish
      [-d=<path>]
      [-o=<org>]
-     [--signing-private-key]
+     [--signing-private-key <path>]
+     [--stability <stability>]
      [<package>]...
 ```
 
@@ -108,6 +109,11 @@ Note that this is a paid feature available with Flox for Teams.
     when using a Catalog Store not provided by Flox.
     Takes precedence over the value of `publish.signing_private_key` from
     'flox config'.
+
+`--stability <stability>`
+:   Perform a nix expression build using a base package set of the given stability
+    as tracked by the catalog server.
+    Can not be used with manifest base builds.
 
 ```{.include}
 ./include/dir-environment-options.md

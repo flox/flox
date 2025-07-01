@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -16,11 +16,16 @@ use flox_rust_sdk::providers::publish::{
     check_environment_metadata,
     check_package_metadata,
 };
+use futures::TryFutureExt;
 use indoc::formatdoc;
 use tracing::{debug, info_span, instrument};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
-use crate::commands::build::{base_catalog_url_for_stability_arg, packages_to_build};
+use crate::commands::build::{
+    base_catalog_url_for_stability_arg,
+    check_stability_compatibility,
+    packages_to_build,
+};
 use crate::commands::ensure_floxhub_token;
 use crate::config::Config;
 use crate::environment_subcommand_metric;
@@ -45,7 +50,14 @@ pub struct Publish {
     #[bpaf(long, hide)]
     metadata_only: bool,
 
-    #[bpaf(long)]
+    #[bpaf(
+        long,
+        help(
+            "Perform a nix expression build using a base package set of the given stability\n\
+            as tracked by the catalog server.\n\
+            Can not be used with manifest base builds."
+        )
+    )]
     stability: Option<String>,
 
     #[bpaf(external(publish_target), optional)]
@@ -152,18 +164,24 @@ impl Publish {
             },
         };
 
-        let base_nixpkgs_url = {
-            let base_catalog_info = flox
-                .catalog_client
-                .get_base_catalog_info()
-                .await
-                .context("could not get information about the base catalog")?;
-
-            base_catalog_url_for_stability_arg(stability.as_deref(), &base_catalog_info)?
-        };
+        check_stability_compatibility([&package], stability.is_some())?;
 
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
+
+        let base_nixpkgs_url = {
+            let base_catalog_info_fut =
+                flox.catalog_client.get_base_catalog_info().map_err(|err| {
+                    anyhow!(err).context("could not get information about the base catalog")
+                });
+
+            base_catalog_url_for_stability_arg(
+                stability.as_deref(),
+                base_catalog_info_fut,
+                env_metadata.toplevel_catalog_ref.as_ref(),
+            )
+            .await?
+        };
 
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
