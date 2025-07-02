@@ -625,13 +625,15 @@ define MANIFEST_BUILD_template =
 	@# Also fail the build if it contains packages not found in the build
 	@# wrapper's closure.
 	$$(eval _build_store_path = $$(shell $(_readlink) $($(_pvarname)_result)))
+	# Allow the use of bashNonInteractive (formerly bash on older nixpkgs revisions)
+	$$(eval _executable_wrapper_store_path = $$(shell $(_nix) path-info --offline '$$(BUILDTIME_NIXPKGS_URL)#bashNonInteractive^out' ||  $(_nix) path-info --offline '$$(BUILDTIME_NIXPKGS_URL)#bash^out'))
 	$$(eval _build_closure_requisites = $$(shell $(_nix_store) --query --requisites $($(_pvarname)_result)/.))
 	@# BUG: $$($(_pvarname)_build_wrapper_env)/requisites.txt missing libcxx on Darwin??? Repeat the hard way ...
 	$$(eval _build_wrapper_requisites = $$(shell $(_nix_store) --query --requisites $$($(_pvarname)_build_wrapper_env)/.))
 	$$(eval _nef_requisites = \
 	  $$(if $$($(_pvarname)_buildDeps),$$(shell $(_nix_store) --query --requisites $$($(_pvarname)_buildDeps))))
 	$$(eval _build_closure_extra_packages = $$(strip \
-	  $$(filter-out $$(_build_store_path) $$(_build_wrapper_requisites) $$(_nef_requisites), \
+	  $$(filter-out $$(_build_store_path) $$(_build_wrapper_requisites) $$(_nef_requisites) $$(_executable_wrapper_store_path), \
 	    $$(_build_closure_requisites))))
 	$$(eval _count = $$(words $$(_build_closure_extra_packages)))
 	$$(eval _space = $$(shell echo $$(_count) | $(_tr) '[0-9]' '-'))
