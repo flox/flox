@@ -355,9 +355,8 @@ impl Generations<ReadWrite<'_>> {
         description: String,
     ) -> Result<(), GenerationsError> {
         // Returns the highest numbered generation so we know which number to assign
-        // the new one. We don't support rollbacks or checking out specific generations
-        // yet, but this protects against potentially overwriting another generation if
-        // you're currently on e.g. 2, but the latest is 5.
+        // the new one. This protects against potentially overwriting another
+        // generation if you're currently on e.g. 2, but the latest is 5.
         //
         // Keys should all be numbers, but if they aren't we provide a default value.
         let max = self
@@ -371,35 +370,37 @@ impl Generations<ReadWrite<'_>> {
         self.register_generation(environment, *max + 1, description, true)
     }
 
-    /// Switch to a provided generation.
+    /// Switch to a provided generation to either roll backwards or forwards.
     ///
-    /// Fails if the generation does not exist.
-    ///
-    /// This method will not perform any validation of the generation switched to.
-    /// If validation (e.g. proving that the environment builds) is required,
-    /// it should first be realized using [Self::realize_generation].
-    #[allow(unused)]
-    fn set_current_generation(&mut self, generation: usize) -> Result<(), GenerationsError> {
+    /// Fails if the generation does not exist or is already the current generation.
+    pub fn set_current_generation(
+        &mut self,
+        generation: GenerationId,
+    ) -> Result<(GenerationId, SingleGenerationMetadata), GenerationsError> {
         let mut metadata = self.metadata()?;
 
-        let generation_metadata = metadata.generations.contains_key(&generation.into());
-        if !generation_metadata {
-            return Err(GenerationsError::GenerationNotFound(generation));
+        if Some(&generation) == metadata.current_gen.as_ref() {
+            return Err(GenerationsError::RollbackToCurrentGeneration);
         }
 
-        metadata.current_gen = Some(generation.into());
+        let Some(new_generation_metadata) = metadata.generations.get(&generation).cloned() else {
+            return Err(GenerationsError::GenerationNotFound(*generation));
+        };
 
+        metadata.current_gen = Some(generation.clone());
         write_metadata_file(metadata, self.repo.path())?;
 
         self.repo
             .add(&[Path::new(GENERATIONS_METADATA_FILE)])
-            .unwrap();
+            .map_err(GenerationsError::StageChanges)?;
         self.repo
             .commit(&format!("Set current generation to {}", generation))
-            .unwrap();
-        self.repo.push("origin", false).unwrap();
+            .map_err(GenerationsError::CommitChanges)?;
+        self.repo
+            .push("origin", false)
+            .map_err(GenerationsError::CompleteTransaction)?;
 
-        Ok(())
+        Ok((generation, new_generation_metadata))
     }
 }
 
@@ -432,6 +433,8 @@ pub enum GenerationsError {
     GenerationNotFound(usize),
     #[error("no generations found in environment")]
     NoGenerations,
+    #[error("cannot rollback to current generation")]
+    RollbackToCurrentGeneration,
     // endregion
 
     // region: repo/transaction
@@ -571,6 +574,100 @@ pub struct GenerationId(usize);
 
 #[cfg(test)]
 mod tests {
-    // todo: tests for this will be easier with the `init` method implemented
-    // in https://github.com/flox/flox/pull/563
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::Environment;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment;
+
+    const GEN_ID_1: GenerationId = GenerationId(1);
+    const GEN_ID_2: GenerationId = GenerationId(2);
+
+    fn setup_two_generations() -> (Generations, TempDir) {
+        let (flox, tempdir) = flox_instance();
+        let env = new_path_environment(&flox, "version = 1");
+        let env_name = env.name();
+        let mut core_env = env.into_core_environment().unwrap();
+
+        let floxmeta_checkedout_path = tempfile::tempdir_in(&tempdir).unwrap().keep();
+        let floxmeta_temp_path = tempfile::tempdir_in(&tempdir).unwrap().keep();
+
+        let mut generations = Generations::init(
+            GitCommandOptions::default(),
+            floxmeta_checkedout_path,
+            floxmeta_temp_path,
+            "some-branch".to_string(),
+            &env_name,
+        )
+        .unwrap();
+
+        let mut generations_rw = generations.writable(&tempdir).unwrap();
+        generations_rw
+            .add_generation(&mut core_env, "First generation".to_string())
+            .unwrap();
+        generations_rw
+            .add_generation(&mut core_env, "Second generation".to_string())
+            .unwrap();
+        assert_eq!(
+            generations_rw.metadata().unwrap().current_gen,
+            Some(GEN_ID_2),
+            "should be at second generation"
+        );
+
+        (generations, tempdir)
+    }
+
+    #[test]
+    fn set_current_generation_backwards_and_forwards() {
+        let (mut generations, tempdir) = setup_two_generations();
+        let mut generations_rw = generations.writable(&tempdir).unwrap();
+
+        assert_eq!(
+            generations_rw.metadata().unwrap().current_gen,
+            Some(GEN_ID_2),
+            "should start at second generation"
+        );
+
+        generations_rw.set_current_generation(GEN_ID_1).unwrap();
+        assert_eq!(
+            generations_rw.metadata().unwrap().current_gen,
+            Some(GEN_ID_1),
+            "should roll back to first generation"
+        );
+
+        generations_rw.set_current_generation(GEN_ID_2).unwrap();
+        assert_eq!(
+            generations_rw.metadata().unwrap().current_gen,
+            Some(GEN_ID_2),
+            "should roll forwards to second generation"
+        );
+    }
+
+    #[test]
+    fn set_current_generation_not_found() {
+        let (mut generations, tempdir) = setup_two_generations();
+        let mut generations_rw = generations.writable(&tempdir).unwrap();
+
+        let res = generations_rw.set_current_generation(GenerationId(10));
+        assert!(
+            matches!(res, Err(GenerationsError::GenerationNotFound(10))),
+            "should error when setting nonexistent generation, got: {:?}",
+            res
+        );
+    }
+
+    #[test]
+    fn set_current_generation_already_current() {
+        let (mut generations, tempdir) = setup_two_generations();
+        let mut generations_rw = generations.writable(&tempdir).unwrap();
+
+        let current_gen = generations_rw.metadata().unwrap().current_gen.unwrap();
+        let res = generations_rw.set_current_generation(current_gen);
+        assert!(
+            matches!(res, Err(GenerationsError::RollbackToCurrentGeneration)),
+            "should error when setting current generation, got: {:?}",
+            res
+        );
+    }
 }
