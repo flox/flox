@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use catalog_api_v1::types::{NarInfo, NarInfos, Output, Outputs, PublishResponse, SystemEnum};
 use chrono::{DateTime, Utc};
+use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use thiserror::Error;
 use tracing::{debug, instrument};
@@ -881,6 +882,7 @@ pub fn build_repo_err(msg: &str) -> PublishError {
 /// - The repo has a remote configured.
 /// - The tracked source files are clean.
 /// - The current revision is the latest one on the remote.
+#[instrument(skip_all, fields(progress = "Checking repository state"))]
 fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, PublishError> {
     let status = git
         .status()
@@ -892,9 +894,8 @@ fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, Publi
         ));
     }
 
-    // Check whether the current branch is tracking a remote branch, and if so,
-    // get information about that tracked remote.
     let remote_url = url_for_remote_containing_current_rev(git, &status)?;
+    debug!(?remote_url, "Found remote for current revision");
 
     Ok(LockedUrlInfo {
         url: remote_url,
@@ -908,86 +909,53 @@ fn url_for_remote_containing_current_rev(
     git: &impl GitProvider,
     status: &StatusInfo,
 ) -> Result<String, PublishError> {
-    match git.get_current_branch_remote_info() {
-        Ok(tracked_remote_info) => {
-            match git.rev_exists_on_remote(&status.rev, &tracked_remote_info.name) {
-                Ok(exists) => {
-                    // Note: strictly speaking this checks that there is a tracked
-                    //       remote branch, and that the revision exists on the
-                    //       remote that the tracked branch is on, but does not check
-                    //       that the revision is on the tracked branch.
-                    if exists {
-                        git.remote_url(&tracked_remote_info.name)
-                            .map_err(|_| build_repo_err("Failed to get URL for remote."))
-                    } else {
-                        Err(build_repo_err(
-                            "Current revision not found on tracked remote branch.",
-                        ))
-                    }
-                },
-                // Something failed while trying to talk to the remote.
-                Err(_) => Err(build_repo_err(
-                    "Failed while trying to locate current revision on remote repository.",
-                )),
-            }
-        },
-        Err(_) => {
-            // Try to identify whether the revision exists on a remote even though
-            // it's not tracking a remote branch.
-            let remote_names = git.remotes()?;
-            match remote_names.len() {
-                // If there are no remotes configured, that's an error we want the
-                // user to address.
-                0 => Err(build_repo_err(
-                    "The repository must have at least one remote configured.",
-                )),
-                // If there's only a single remote configured, use that.
-                1 => {
-                    let only_remote = remote_names
-                        .first()
-                        .expect("already check that at least one remote exists");
-                    match git.rev_exists_on_remote(&status.rev, only_remote) {
-                        Ok(exists) => {
-                            if exists {
-                                git.remote_url(only_remote)
-                                    .map_err(|_| build_repo_err("Failed to get URL for remote."))
-                            } else {
-                                Err(build_repo_err(
-                                    "Current revision not found on remote repository.",
-                                ))
-                            }
-                        },
-                        // Something failed while trying to talk to the remote.
-                        Err(_) => Err(build_repo_err(
-                            "Failed while trying to locate current revision on remote.",
-                        )),
-                    }
-                },
-                // Otherwise, we need to inspect the remotes and apply some heuristics
-                // to determine which one to use (if it contains the revision). One
-                // heuristic is to prefer remotes named "upstream" and "origin" since
-                // those are more likely to be what the canonical repository is.
-                _ => {
-                    const PREFERRED_REMOTE_NAMES: [&str; 2] = ["upstream", "origin"];
-                    let mut chosen_remote = None;
-                    for remote_name in PREFERRED_REMOTE_NAMES.iter() {
-                        if let Ok(true) = git.rev_exists_on_remote(&status.rev, remote_name) {
-                            chosen_remote = Some(remote_name);
-                            break;
-                        }
-                    }
-                    if let Some(remote_name) = chosen_remote {
-                        Ok(git.remote_url(remote_name)?.to_string())
-                    } else {
-                        // If the user doesn't have a remote named "upstream" or "origin",
-                        // we don't really have any other information we can use to decide
-                        // which remote to use, so just pick one.
-                        Ok(git.remote_url(&remote_names[0])?.to_string())
-                    }
-                },
-            }
-        },
+    let remote_names = git.remotes()?;
+    if remote_names.is_empty() {
+        return Err(build_repo_err(
+            "The repository must have at least one remote configured.",
+        ));
     }
+
+    // A revision may be present on multiple remotes so we want to take the one
+    // that's most canonical and likely to persist, e.g. if a repo has been
+    // forked without adding any commits then we should favour the upstream
+    // instead of the fork.
+    //
+    // Check the configured remotes, once each, in order of..
+    let mut ordered_remotes = IndexSet::new();
+    // 1. Tracked remote for branch, if configured.
+    if let Ok(tracked_remote) = git.get_current_branch_remote_info() {
+        ordered_remotes.insert(tracked_remote.name);
+    }
+    // 2. Preferred remotes, if they are present.
+    for preferred_remote in ["upstream", "origin"] {
+        let name = preferred_remote.to_string();
+        if remote_names.contains(&name) {
+            ordered_remotes.insert(name);
+        }
+    }
+    // 3. Any remaining remotes that haven't already been added.
+    //    The order of these is not guaranteed to be stable.
+    ordered_remotes.extend(remote_names.clone());
+
+    for remote_name in ordered_remotes {
+        if git
+            .rev_exists_on_remote(&status.rev, &remote_name)
+            // Continue checking other remotes if this remote is misconfigured.
+            .unwrap_or_else(|err| {
+                debug!(%err, remote_name, "Failed to check if current revision exists on remote");
+                false
+            })
+        {
+            return git
+                .remote_url(&remote_name)
+                .map_err(|_| build_repo_err("Failed to get remote URL for the current revision."));
+        }
+    }
+
+    Err(build_repo_err(
+        "Current revision not found on any remote repositories.",
+    ))
 }
 
 pub fn check_environment_metadata(
@@ -1620,7 +1588,11 @@ pub mod tests {
             .unwrap();
         // Make this repo track the upstream `main` branch
         let mut cmd = build_repo.new_command();
-        cmd.args(["branch", "-u", &format!("{}/{}", remote_name, branch_name)]);
+        cmd.args([
+            "branch",
+            "--set-upstream-to",
+            &format!("{}/{}", remote_name, branch_name),
+        ]);
         GitCommandProvider::run_command(&mut cmd).unwrap();
         let remote_url =
             url_for_remote_containing_current_rev(&build_repo, &build_repo.status().unwrap())
@@ -1629,17 +1601,35 @@ pub mod tests {
     }
 
     #[test]
-    fn finds_single_untracked_remote() {
+    fn falls_back_to_untracked_remote() {
         let remote_name = "some_remote";
         let branch_name = "some_branch";
         let (build_repo, _tempdir) = init_temp_repo(false);
+        let remotes = create_remotes(&build_repo, &[remote_name, "other_remote"]);
+
+        // Push to a tracking remote, to mimic a freshly cloned non-fork.
         commit_file(&build_repo, "foo");
-        let status = build_repo.status().unwrap();
-        build_repo.create_branch(branch_name, &status.rev).unwrap();
-        let remotes = create_remotes(&build_repo, &[remote_name]);
+        build_repo
+            .create_branch(branch_name, &build_repo.status().unwrap().rev)
+            .unwrap();
+        build_repo.checkout(branch_name, false).unwrap();
+        build_repo
+            .push_ref("other_remote", branch_name, false)
+            .unwrap();
+        let mut tracking_cmd = build_repo.new_command();
+        tracking_cmd.args([
+            "branch",
+            "--set-upstream-to",
+            &format!("{}/{}", "other_remote", branch_name),
+        ]);
+        GitCommandProvider::run_command(&mut tracking_cmd).unwrap();
+
+        // Commit and push a new rev to a different remote, to mimic a fork.
+        commit_file(&build_repo, "bar");
         build_repo
             .push_ref(remote_name, branch_name, false)
             .unwrap();
+
         let remote_url =
             url_for_remote_containing_current_rev(&build_repo, &build_repo.status().unwrap())
                 .unwrap();
@@ -1712,7 +1702,7 @@ pub mod tests {
     }
 
     #[test]
-    fn falls_back_to_some_remote() {
+    fn falls_back_to_any_pushed_remote() {
         let branch_name = "some_branch";
         let (build_repo, _tempdir) = init_temp_repo(false);
         commit_file(&build_repo, "foo");
@@ -1731,6 +1721,22 @@ pub mod tests {
         let is_some_remote = remote_url == get_remote_url(&remotes, "some_remote");
         let is_other_remote = remote_url == get_remote_url(&remotes, "other_remote");
         assert!(is_some_remote || is_other_remote);
+    }
+
+    #[test]
+    fn error_when_not_pushed_to_any_remote() {
+        let branch_name = "some_branch";
+        let (build_repo, _tempdir) = init_temp_repo(false);
+        commit_file(&build_repo, "foo");
+        let status = build_repo.status().unwrap();
+        build_repo.create_branch(branch_name, &status.rev).unwrap();
+        create_remotes(&build_repo, &["some_remote", "other_remote"]);
+        let err = url_for_remote_containing_current_rev(&build_repo, &build_repo.status().unwrap())
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            build_repo_err("Current revision not found on any remote repositories.").to_string()
+        )
     }
 
     #[test]
