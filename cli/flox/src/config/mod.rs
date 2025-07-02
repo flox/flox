@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::{env, fs};
 
 use anyhow::{Context, Result};
@@ -10,7 +8,6 @@ use config::{Config as HierarchicalConfig, Environment};
 use flox_rust_sdk::flox::{EnvironmentRef, Features};
 use flox_rust_sdk::models::search::SearchLimit;
 use itertools::{Either, Itertools};
-use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tempfile::PersistError;
 use thiserror::Error;
@@ -189,130 +186,163 @@ pub enum ReadWriteError {
     Persist(#[from] PersistError),
 }
 
-impl Config {
-    /// Creates a raw [Config] object and caches it for the lifetime of the program
-    fn raw_config(mut reload: bool) -> Result<HierarchicalConfig> {
-        static INSTANCE: OnceCell<Mutex<HierarchicalConfig>> = OnceCell::new();
+/// Locates the system wide flox config dir.
+///
+/// By default that is `/etc`.
+/// The directory can be overridden by the user via the environment variable
+/// `$FLOX_SYSTEM_CONFIG_DIR`.
+///
+/// IFF `$FLOX_SYSTEM_CONFIG_DIR` is set to an empty string, system config will be ignored.
+fn locate_system_config_dir() -> Result<Option<PathBuf>> {
+    // TODO: make constant
+    match env::var("FLOX_SYSTEM_CONFIG_DIR").ok() {
+        Some(path) if path.is_empty() => Ok(None),
+        Some(path) => Ok(Some(path.into())),
+        None => Ok(Some(PathBuf::from("/etc"))),
+    }
+}
 
-        debug!(
-            "reading raw config (initialized: {initialized}, reload: {reload})",
-            initialized = INSTANCE.get().is_some()
-        );
+/// Locates the user specific config dir.
+///
+/// The implementation probes for config files in relevant xdg dirs in order:
+/// $XDG_CONFIG_HOME/flox/flox.toml
+/// for dir in $XDG_CONFIG_DIRS: $dir/flox/flox.toml
+///
+/// The first occurrence determines the config_dir.
+/// If no config file was found, this function defaults to $XDG_CONFIG_HOME/flox.
+///
+/// IFF $FLOX_CONFIG_DIR is set to a non-empty string,
+/// its value will be used as the user config dir instead.
+fn locate_user_config_dir(flox_dirs: &BaseDirectories) -> Result<PathBuf> {
+    let user_config_dir = env::var(FLOX_CONFIG_DIR_VAR).ok();
 
-        fn read_raw_config() -> Result<HierarchicalConfig> {
-            let flox_dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
-
-            let cache_dir = flox_dirs.get_cache_home();
-            let data_dir = flox_dirs.get_data_home();
-            let state_dir = flox_dirs.get_state_home();
-
-            let config_dir = match env::var(FLOX_CONFIG_DIR_VAR) {
-                Ok(v) => {
-                    debug!("`${FLOX_CONFIG_DIR_VAR}` set: {v}");
-                    fs::create_dir_all(&v)
-                        .context(format!("Could not create config directory: {v:?}"))?;
-                    v.into()
-                },
-                Err(_) => {
-                    let config_dir = flox_dirs.get_config_home();
-                    debug!("`${FLOX_CONFIG_DIR_VAR}` not set, using {config_dir:?}");
-                    fs::create_dir_all(&config_dir)
-                        .context(format!("Could not create config directory: {config_dir:?}"))?;
-                    let config_dir = config_dir
-                        .canonicalize()
-                        .context("Could not canonicalize config directory '{config_dir:?}'")?;
-
-                    // Allow subshells to find the same config dir.
-                    // TODO: decide if its worth modifying the env for this.
-                    // SAFTEY: config initially read when there is no concurrent access to env variables.
-                    unsafe {
-                        env::set_var(FLOX_CONFIG_DIR_VAR, &config_dir);
-                    }
-                    config_dir
-                },
+    let config_dir = match user_config_dir {
+        Some(path) if !path.is_empty() => {
+            debug!(?path, "Global config directory overridden");
+            fs::create_dir_all(&path)
+                .context(format!("Could not create config directory: {path:?}"))?;
+            path.into()
+        },
+        None | Some(_ /* empty */) => {
+            let config_dir = if let Some(existing_xdg_based_config) =
+                // Look for flox/flox.toml in $XDG_CONFIG_HOME and then $XDG_CONFIG_DIRS
+                flox_dirs.find_config_file(FLOX_CONFIG_FILE)
+            {
+                debug!(file=?existing_xdg_based_config, "found existing config file");
+                existing_xdg_based_config
+                    .parent()
+                    .expect("filename is always appended to a directory")
+                    .to_path_buf()
+            } else {
+                debug!("no user config file found");
+                // fall back to `XDG_CONFIG_HOME/flox`
+                flox_dirs.get_config_home()
             };
 
-            let mut builder = HierarchicalConfig::builder()
-                .set_default("default_substituter", "https://cache.floxdev.com/")?
-                .set_default("cache_dir", cache_dir.to_str().unwrap())?
-                .set_default("data_dir", data_dir.to_str().unwrap())?
-                .set_default("state_dir", state_dir.to_str().unwrap())?
-                // Config dir is added to the config for completeness;
-                // the config file cannot change the config dir.
-                .set_override("config_dir", config_dir.to_str().unwrap())?;
+            fs::create_dir_all(&config_dir)
+                .context(format!("Could not create config directory: {config_dir:?}"))?;
+            let config_dir = config_dir
+                .canonicalize()
+                .context("Could not canonicalize config directory '{config_dir:?}'")?;
 
-            // read from /etc
-            builder = builder.add_source(
-                config::File::from(PathBuf::from("/etc").join(FLOX_CONFIG_FILE))
-                    .format(config::FileFormat::Toml)
-                    .required(false),
-            );
-
-            // look for files in XDG_CONFIG_DIRS locations
-            for file in flox_dirs.find_config_files(FLOX_CONFIG_FILE) {
-                builder =
-                    builder.add_source(config::File::from(file).format(config::FileFormat::Toml));
+            // Allow subshells to find the same config dir.
+            // TODO: decide if its worth modifying the env for this.
+            // SAFTEY: config initially read when there is no concurrent access to env variables.
+            unsafe {
+                env::set_var(FLOX_CONFIG_DIR_VAR, &config_dir);
             }
+            config_dir
+        },
+    };
 
-            // Add explicit FLOX_CONFIG_DIR file last
-            builder = builder.add_source(
-                config::File::from(config_dir.join(FLOX_CONFIG_FILE))
-                    .format(config::FileFormat::Toml)
-                    .required(false),
-            );
+    Ok(config_dir)
+}
 
-            // override via env variables
-            let mut flox_envs = env::vars()
-                .filter_map(|(k, v)| k.strip_prefix("FLOX_").map(|k| (k.to_owned(), v)))
-                .collect::<Vec<_>>();
+/// Reads a [HierarchicalConfig] from an optional system config file,
+/// a user config file and environment variables.
+fn raw_config_from_parts(
+    flox_dirs: &BaseDirectories,
+    user_config_dir: &Path,
+    system_config_dir: Option<&Path>,
+    env: impl IntoIterator<Item = (String, String)>,
+) -> Result<HierarchicalConfig> {
+    let cache_dir = flox_dirs.get_cache_home();
+    let data_dir = flox_dirs.get_data_home();
+    let state_dir = flox_dirs.get_state_home();
 
-            let builder = builder
-                .add_source(mk_environment(&mut flox_envs, "NIX"))
-                .add_source(mk_environment(&mut flox_envs, "GITHUB"))
-                .add_source(mk_environment(&mut flox_envs, "FEATURES"))
-                .add_source(
-                    Environment::default()
-                        .source(Some(HashMap::from_iter(flox_envs)))
-                        .try_parsing(true),
-                );
+    let config_dir = user_config_dir;
 
-            let final_config = builder.build()?;
-            Ok(final_config)
-        }
+    let mut builder = HierarchicalConfig::builder()
+        .set_default("default_substituter", "https://cache.floxdev.com/")?
+        .set_default("cache_dir", cache_dir.to_str().unwrap())?
+        .set_default("data_dir", data_dir.to_str().unwrap())?
+        .set_default("state_dir", state_dir.to_str().unwrap())?
+        // Config dir is added to the config for completeness;
+        // the config file cannot change the config dir.
+        .set_override("config_dir", config_dir.to_str().unwrap())?;
+    // Read System Config first
+    if let Some(system_config_dir) = system_config_dir {
+        builder = builder.add_source(
+            config::File::from(system_config_dir.join(FLOX_CONFIG_FILE))
+                .format(config::FileFormat::Toml)
+                .required(false),
+        );
+    };
 
-        let instance = INSTANCE.get_or_try_init(|| {
-            // If we are initializing the config for the first time,
-            // we don't need to reload right after
-            reload = false;
-            let config = read_raw_config()?;
+    // Read User Config
+    builder = builder.add_source(
+        config::File::from(config_dir.join(FLOX_CONFIG_FILE))
+            .format(config::FileFormat::Toml)
+            .required(false),
+    );
 
-            Ok::<_, anyhow::Error>(Mutex::new(config))
-        })?;
+    // Override via env variables
+    let builder = {
+        let mut flox_envs = env
+            .into_iter()
+            .filter_map(|(k, v)| k.strip_prefix("FLOX_").map(|k| (k.to_owned(), v)))
+            .collect::<Vec<_>>();
+        builder
+            .add_source(mk_environment(&mut flox_envs, "NIX"))
+            .add_source(mk_environment(&mut flox_envs, "GITHUB"))
+            .add_source(mk_environment(&mut flox_envs, "FEATURES"))
+            .add_source(
+                Environment::default()
+                    .source(Some(HashMap::from_iter(flox_envs)))
+                    .try_parsing(true),
+            )
+    };
 
-        let mut config_guard = instance.lock().expect("config mutex poisoned");
-        if reload {
-            *config_guard = read_raw_config()?;
-        }
+    let final_config = builder.build()?;
+    Ok(final_config)
+}
 
-        Ok(config_guard.deref().clone())
-    }
+impl Config {
+    fn parse_with(
+        flox_dirs: &BaseDirectories,
+        user_config_dir: &Path,
+        system_config_dir: Option<&Path>,
+        env: impl IntoIterator<Item = (String, String)>,
+    ) -> Result<Config> {
+        let final_config =
+            raw_config_from_parts(flox_dirs, user_config_dir, system_config_dir, env)?;
 
-    /// Creates a [Config] from the environment and config file
-    ///
-    /// When running in tests, the config is reloaded on every call.
-    pub fn parse() -> Result<Config> {
-        #[cfg(test)]
-        let reload = true;
-
-        #[cfg(not(test))]
-        let reload = false;
-
-        let final_config = Self::raw_config(reload)?;
         let cli_config: Config = final_config
             .to_owned()
             .try_deserialize()
             .context("Could not parse config")?;
         Ok(cli_config)
+    }
+
+    /// Creates a [Config] from the environment and config files
+    pub fn parse() -> Result<Config> {
+        let base_directories = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
+        Self::parse_with(
+            &base_directories,
+            &locate_user_config_dir(&base_directories)?,
+            locate_system_config_dir()?.as_deref(),
+            env::vars(),
+        )
     }
 
     /// get a value from the config
@@ -456,8 +486,15 @@ fn mk_environment(envs: &mut Vec<(String, String)>, prefix: &str) -> Environment
 #[cfg(test)]
 mod tests {
 
-    use indoc::indoc;
+    use std::num::NonZero;
+
+    use indoc::{formatdoc, indoc};
     use proptest::prelude::*;
+
+    // TODO: update the `xdg` crate and build `BaseDirectories` by hand with known (test) paths
+    fn mock_flox_dirs() -> BaseDirectories {
+        BaseDirectories::new().unwrap()
+    }
 
     use super::*;
 
@@ -495,6 +532,125 @@ mod tests {
                 unsafe { env::remove_var(FLOX_CONFIG_DIR_VAR) };
             },
         );
+    }
+
+    #[test]
+    fn set_by_system_config() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let system_config_dir = tempfile::tempdir().unwrap();
+
+        let floxhub_url = "https://testhub.flox.dev";
+        let disable_metrics = true;
+        let search_limit = NonZero::new(42).unwrap();
+
+        fs::write(
+            system_config_dir.path().join(FLOX_CONFIG_FILE),
+            formatdoc! {"
+            floxhub_url = '{floxhub_url}'
+            disable_metrics = {disable_metrics}
+            search_limit = {search_limit}
+        "},
+        )
+        .unwrap();
+
+        // todo: fix mocks to avoid pulling in user config
+        fs::write(user_config_dir.path().join(FLOX_CONFIG_FILE), "").unwrap();
+
+        let config = Config::parse_with(
+            &mock_flox_dirs(),
+            user_config_dir.path(),
+            Some(system_config_dir.path()),
+            [],
+        )
+        .unwrap();
+
+        assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
+        assert!(config.flox.disable_metrics);
+        assert_eq!(config.flox.search_limit, Some(search_limit));
+    }
+
+    #[test]
+    fn user_config_overrides_system() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let system_config_dir = tempfile::tempdir().unwrap();
+
+        let floxhub_url = "https://testhub.flox.dev";
+        let disable_metrics = true;
+        let search_limit = NonZero::new(42).unwrap();
+
+        fs::write(user_config_dir.path().join(FLOX_CONFIG_FILE), formatdoc! {"
+            floxhub_url = '{floxhub_url}'
+            disable_metrics = {disable_metrics}
+            search_limit = {search_limit}
+        "})
+        .unwrap();
+
+        fs::write(
+            system_config_dir.path().join(FLOX_CONFIG_FILE),
+            formatdoc! {"
+            floxhub_url = 'https://system.flox.dev'
+            disable_metrics = false
+            search_limit = 24
+        "},
+        )
+        .unwrap();
+
+        let config = Config::parse_with(
+            &mock_flox_dirs(),
+            user_config_dir.path(),
+            Some(system_config_dir.path()),
+            [],
+        )
+        .unwrap();
+
+        assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
+        assert!(config.flox.disable_metrics);
+        assert_eq!(config.flox.search_limit, Some(search_limit));
+    }
+
+    #[test]
+    fn env_overrides_user_and_system() {
+        let user_config_dir = tempfile::tempdir().unwrap();
+        let system_config_dir = tempfile::tempdir().unwrap();
+
+        let floxhub_url = "https://env.flox.dev";
+        let disable_metrics = true;
+        let search_limit = NonZero::new(42).unwrap();
+
+        fs::write(user_config_dir.path().join(FLOX_CONFIG_FILE), formatdoc! {"
+            floxhub_url = 'https://user.flox.dev'
+            disable_metrics = false
+            search_limit = 12
+        "})
+        .unwrap();
+
+        fs::write(
+            system_config_dir.path().join(FLOX_CONFIG_FILE),
+            formatdoc! {"
+            floxhub_url = 'https://system.flox.dev'
+            disable_metrics = false
+            search_limit = 24
+        "},
+        )
+        .unwrap();
+
+        let env = [
+            ("FLOX_FLOXHUB_URL".into(), floxhub_url.to_owned()),
+            ("FLOX_DISABLE_METRICS".into(), format!("{disable_metrics}")),
+            ("FLOX_SEARCH_LIMIT".into(), format!("{search_limit}")),
+        ];
+
+        let config = Config::parse_with(
+            &mock_flox_dirs(),
+            user_config_dir.path(),
+            Some(system_config_dir.path()),
+            env,
+        )
+        .unwrap();
+
+        assert_eq!(config.flox.floxhub_url, Some(floxhub_url.parse().unwrap()));
+        assert!(config.flox.disable_metrics);
+        assert_eq!(config.flox.search_limit, Some(search_limit));
     }
 
     #[test]
