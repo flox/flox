@@ -882,6 +882,7 @@ pub fn build_repo_err(msg: &str) -> PublishError {
 /// - The repo has a remote configured.
 /// - The tracked source files are clean.
 /// - The current revision is the latest one on the remote.
+#[instrument(skip_all, fields(progress = "Checking repository state"))]
 fn gather_build_repo_meta(git: &impl GitProvider) -> Result<LockedUrlInfo, PublishError> {
     let status = git
         .status()
