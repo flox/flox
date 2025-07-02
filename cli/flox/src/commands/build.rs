@@ -18,10 +18,11 @@ use flox_rust_sdk::providers::build::{
     nix_expression_dir,
 };
 use flox_rust_sdk::providers::catalog::{BaseCatalogInfo, BaseCatalogUrl, ClientTrait};
+use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use futures::TryFutureExt;
 use indoc::formatdoc;
 use itertools::Itertools;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument, trace};
 use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
@@ -166,6 +167,7 @@ impl Build {
         });
 
         check_stability_compatibility(&packages_to_build, nixpkgs_url_select.is_some())?;
+        check_git_repo_for_expression_builds(&packages_to_build, &base_dir)?;
 
         let toplevel_derived_url = find_toplevel_group_nixpkgs(&lockfile);
 
@@ -299,6 +301,33 @@ pub(crate) fn check_stability_compatibility<'p>(
             ", name = package.name()
         })
     }
+    Ok(())
+}
+
+fn check_git_repo_for_expression_builds<'p>(
+    packages_to_build: impl IntoIterator<Item = &'p PackageTarget>,
+    base_dir: &Path,
+) -> Result<()> {
+    let mut expression_builds = packages_to_build
+        .into_iter()
+        .filter(|target| target.kind() == PackageTargetKind::ExpressionBuild)
+        .peekable();
+
+    if expression_builds.peek().is_none() {
+        return Ok(());
+    }
+
+    let expression_builds_formatted = expression_builds.map(|target| target.name()).join(", ");
+
+    if let Err(err) = GitCommandProvider::discover(base_dir) {
+        trace!(%err, "git discovery error");
+
+        bail!(formatdoc! {"
+            Building nix expression build(s) ({expression_builds_formatted}) requires git version control.
+            Only git tracked files (including the expressions themselves) will be available during nix expression builds.
+        "});
+    };
+
     Ok(())
 }
 
@@ -546,5 +575,34 @@ mod test {
             .url_for_latest_page_with_default_stability()
             .unwrap();
         assert_eq!(actual_with_toplevel, expected_url);
+    }
+
+    #[test]
+    fn expression_builds_require_git_repo() {
+        let packages = vec![PackageTarget::new_unchecked(
+            "expression",
+            PackageTargetKind::ExpressionBuild,
+        )];
+        let base_dir = tempfile::tempdir().unwrap();
+
+        let result = check_git_repo_for_expression_builds(&packages, base_dir.path());
+        assert!(result.is_err());
+
+        let _git = GitCommandProvider::init(base_dir.path(), false).unwrap();
+
+        let result = check_git_repo_for_expression_builds(&packages, base_dir.path());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn manifest_builds_do_not_require_git_repo() {
+        let packages = vec![PackageTarget::new_unchecked(
+            "manifest",
+            PackageTargetKind::ManifestBuild,
+        )];
+        let base_dir = tempfile::tempdir().unwrap();
+
+        let result = check_git_repo_for_expression_builds(&packages, base_dir.path());
+        assert!(result.is_ok());
     }
 }
