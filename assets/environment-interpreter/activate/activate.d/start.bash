@@ -40,7 +40,7 @@ start() {
   # shellcheck disable=SC2154 # set in the main `activate` script
   if [ "$_FLOX_ENV_ACTIVATION_MODE" = "dev" ]; then
     # shellcheck disable=SC1090 # from rendered environment
-    source_profile_d "$_profile_d"
+    source_profile_d "$_profile_d" "$_FLOX_ENV_ACTIVATION_MODE" "$FLOX_ENV_DIRS"
   else
     # shellcheck disable=SC1091 # from rendered environment
     source "$_profile_d/0100_common-run-mode-paths.sh"
