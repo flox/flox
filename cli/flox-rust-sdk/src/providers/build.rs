@@ -2059,21 +2059,17 @@ mod tests {
         flox.catalog_client = catalog_replay_client(GENERATED_DATA.join(mock_file)).await;
         let output = assert_build_status(&flox, &mut env, package_name, None, false);
 
-        // Nix logs always include one space of padding even on empty lines.
-        // Add a trailing space like this so auto-formatters don't trim trailing
-        // whitespace
-        let nix_log_pad = " ";
         // TODO: Provide more targeted advice based on the current lockfile's
         //       `runtime-packages` and `install` groups so that we don't need
         //       to tell the user to try everything.
         let expected_output = formatdoc! {r#"
             ❌ ERROR: Unexpected dependencies found in package '{package_name}':
-            {nix_log_pad}
-             1. Remove any unneeded references (e.g. debug symbols) from your build.
-             2. If you’re using package groups, move these packages into the 'toplevel' group.
-             3. If you’re using 'runtime-packages', make sure each package is listed both in
-                'runtime-packages' and in the 'toplevel' group.
-            {nix_log_pad}
+
+            1. Remove any unneeded references (e.g. debug symbols) from your build.
+            2. If you’re using package groups, move these packages into the 'toplevel' group.
+            3. If you’re using 'runtime-packages', make sure each package is listed both in
+               'runtime-packages' and in the 'toplevel' group.
+
         "#};
         if !output.stderr.contains(&expected_output) {
             pretty_assertions::assert_eq!(
@@ -2086,13 +2082,13 @@ mod tests {
         let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
         let expected_pattern = if cfg!(target_os = "macos") {
             formatdoc! {r#"
-                {nix_log_pad}2 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
-                {nix_log_pad}-      not found in {store_path_prefix_pattern}-environment-build-{package_name}
+                2 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
+                       not found in {store_path_prefix_pattern}-environment-build-{package_name}
         "#}
         } else {
             formatdoc! {r#"
-                {nix_log_pad}5 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
-                {nix_log_pad}-      not found in {store_path_prefix_pattern}-environment-build-{package_name}
+                5 packages found in {store_path_prefix_pattern}-{package_name}-0\.0\.0
+                       not found in {store_path_prefix_pattern}-environment-build-{package_name}
 
                 Displaying first 3 only:
         "#}
@@ -2107,7 +2103,7 @@ mod tests {
     /// Packages referenced from outside `runtime-packages` trigger a build failure.
     #[tokio::test(flavor = "multi_thread")]
     async fn closure_check_runtime_packages() {
-        let package_name = String::from("mypackage");
+        let package_name = String::from("my-package");
         let build_command = closure_check_hello_command();
         let manifest = formatdoc! {r#"
             version = 1
@@ -2129,7 +2125,7 @@ mod tests {
     /// failure even when `runtime-packages` is not specified.
     #[tokio::test(flavor = "multi_thread")]
     async fn closure_check_non_toplevel_pkg_group() {
-        let package_name = String::from("mypackage");
+        let package_name = String::from("my-package");
         let build_command = closure_check_hello_command();
         let manifest = formatdoc! {r#"
             version = 1
@@ -2150,6 +2146,81 @@ mod tests {
             "envs/hello_other_pkg_group/hello_other_pkg_group.yaml",
         )
         .await;
+    }
+
+    /// Contrived example of a package referring to files possibly found
+    /// in the develop environment that aren't in the build closure.
+    async fn assert_nonexistent_path_check_failure(bin_name: &str, hint: &str) {
+        let package_name = String::from("my-package");
+        let build_command = formatdoc! {r#"
+            mkdir -p $out/bin
+            cat > "$out/bin/test" <<EOF
+            #!/usr/bin/env bash
+            $FLOX_ENV/bin/{bin_name}
+            EOF
+            chmod +x "$out/bin/test"
+        "#};
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+            curl.pkg-path = "curl"
+            curl.pkg-group = "not-toplevel"
+
+            [build.{package_name}]
+            runtime-packages = []
+            command = """
+            {build_command}
+            """
+        "#};
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello-curl-not-in-toplevel.yaml"))
+                .await;
+        let output = assert_build_status(&flox, &mut env, &package_name, None, false);
+
+        let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
+        let expected_pattern = formatdoc! {r#"
+            ❌ ERROR: Nonexistent path reference to '\$FLOX_ENV/bin/{bin_name}' found in package '{package_name}':
+                Hint: {hint}
+            Path referenced by: {store_path_prefix_pattern}-{package_name}-0.0.0/bin/.test-wrapped
+              Nonexistent path: {store_path_prefix_pattern}-environment-build-{package_name}/bin/{bin_name}
+        "#};
+        let re = regex::Regex::new(&expected_pattern).unwrap();
+        if !re.is_match(&output.stderr) {
+            pretty_assertions::assert_eq!(
+                output.stderr,
+                expected_pattern,
+                "didn't find expected pattern, diffing entire output"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn nonexistent_path_check_in_runtime_packages() {
+        let bin_name = String::from("hello");
+        let hint = format!("consider adding package '{bin_name}' to 'runtime-packages'");
+        assert_nonexistent_path_check_failure(&bin_name, &hint).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn nonexistent_path_check_not_in_toplevel() {
+        let bin_name = String::from("curl");
+        let hint = format!("consider moving package '{bin_name}' to 'toplevel' pkg-group");
+        assert_nonexistent_path_check_failure(&bin_name, &hint).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn nonexistent_path_check_complete_fiction() {
+        let bin_name = String::from("not-found");
+        let hint = format!(
+            "check your build script and project files for any mention of the '{bin_name}' string"
+        );
+        assert_nonexistent_path_check_failure(&bin_name, &hint).await;
     }
 
     #[test]

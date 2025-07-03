@@ -127,9 +127,15 @@ runCommandNoCC "flox-interpreter"
       $build_executable_wrapper/activate.d/* \
       $build_executable_wrapper/etc/profile.d/*
 
-    # Finally check the formatting of the scripts with shfmt.
+    # Check the formatting of the scripts with shfmt.
     cp ${editorconfig} $build_executable_wrapper/.editorconfig
     # This will only catch extensions and shebangs that `shfmt --find` knows about.
     ${shfmt}/bin/shfmt --diff $build_executable_wrapper
     rm $build_executable_wrapper/.editorconfig
+
+    # Create helper symlink from libexec/bash for use wrapping executables
+    # in build-manifest.nix. Name it `build-wrapper-bash` to avoid collisions
+    # with other packages that may provide a `libexec/bash` file.
+    mkdir -p $build_executable_wrapper/libexec
+    ln -s ${bash}/bin/bash $build_executable_wrapper/libexec/build-wrapper-bash
   ''
