@@ -90,6 +90,7 @@ pkgs.runCommandNoCC name
     nativeBuildInputs =
       with pkgs;
       [
+        cpio
         findutils
         gnutar
         gnused
@@ -129,9 +130,11 @@ pkgs.runCommandNoCC name
             # to the output directory, rewriting path references as we go.
             if [ -d ${install-prefix-contents} ]; then
               mkdir $out
-              tar -C ${install-prefix-contents} -c --mode=u+w -f - . | \
+              ( cd ${install-prefix-contents} && find . -print0 | \
+                cpio --null --create --format newc ) | \
                 sed --binary "s%${install-prefix}%$out%g" | \
-                tar -C $out -xf -
+                ( cd $out && cpio --extract --make-directories --preserve-modification-time \
+                  --unconditional --no-absolute-filenames --quiet && chmod -R u+w . )
             else
               cp ${install-prefix-contents} $out
               sed --binary "s%${install-prefix}%$out%g" $out
@@ -227,9 +230,11 @@ pkgs.runCommandNoCC name
             mv "$out" "$TMPDIR/$bn"
             if [ -d "$TMPDIR/$bn" ]; then
               mkdir "$out"
-              tar -C "$TMPDIR/$bn" -c --mode=u+w -f - . | \
+              ( cd "$TMPDIR/$bn" && find . -print0 | \
+                cpio --null --create --format newc ) | \
                 sed --binary "s%${develop-copy-env-package}%${build-wrapper-env-package}%g" | \
-                tar -C "$out" -xf -
+                ( cd $out && cpio --extract --make-directories --preserve-modification-time \
+                  --unconditional --no-absolute-filenames --quiet && chmod -R u+w . )
             else
               sed --binary "s%${develop-copy-env-package}%${build-wrapper-env-package}%g" < "$TMPDIR/$bn" > "$out"
             fi

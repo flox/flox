@@ -1,6 +1,7 @@
 {
   bashInteractive,
   coreutils,
+  cpio,
   daemonize,
   findutils,
   getopt,
@@ -28,6 +29,7 @@ stdenv.mkDerivation {
     for i in build-manifest.nix flox-build.mk validate-build.bash; do
       bashInteractive=${bashInteractive} \
       coreutils=${coreutils} \
+      cpio=${cpio} \
       daemonize=${daemonize} \
       findutils=${findutils} \
       getopt=${getopt} \
