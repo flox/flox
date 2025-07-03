@@ -57,7 +57,15 @@
         {
           "nix" =
             let
-              recursionGuardError = (throw "'${lib.showAttrPath attrPath'}' defines itself");
+              recursionGuardError =
+                let
+                  attrPathStr = lib.showAttrPath attrPath';
+                in
+                throw ''
+                  Circular dependency on '${attrPathStr}' detected.
+                  '${attrPathStr}' transitively imports itself
+                  and there was no previous value that could be provided.
+                '';
 
               # Find or build a `callPackage` function that replaces infinite recursion erros with an error
               callPackage =

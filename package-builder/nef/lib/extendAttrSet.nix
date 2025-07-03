@@ -32,7 +32,10 @@
         else if packageSet ? extend then
           packageSet.extend overlay
         else
-          throw "dont know how to extend ${lib.showAttrPath attrPath}";
+          throw ''
+            Cannot extend '${lib.showAttrPath attrPath}', since it is not a supported package set.
+            Package sets must be attrsets created with `makeScope` or `makeExtensible`.
+          '';
     in
     extendedAttrSet;
 }
