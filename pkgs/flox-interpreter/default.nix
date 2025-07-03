@@ -133,9 +133,10 @@ runCommandNoCC "flox-interpreter"
     ${shfmt}/bin/shfmt --diff $build_executable_wrapper
     rm $build_executable_wrapper/.editorconfig
 
-    # Create helper symlink from libexec/bash for use wrapping executables
-    # in build-manifest.nix. Name it `build-wrapper-bash` to avoid collisions
-    # with other packages that may provide a `libexec/bash` file.
-    mkdir -p $build_executable_wrapper/libexec
-    ln -s ${bash}/bin/bash $build_executable_wrapper/libexec/build-wrapper-bash
+    # Create helper symlinks from `sbin/{sh,bash}` for use wrapping
+    # executables in build-manifest.nix. Put them in `/sbin` to avoid
+    # collisions with other packages that may provide these files.
+    mkdir -p $build_executable_wrapper/sbin
+    ln -s ${bash}/bin/bash $build_executable_wrapper/sbin/bash
+    ln -s ${bash}/bin/bash $build_executable_wrapper/sbin/sh
   ''

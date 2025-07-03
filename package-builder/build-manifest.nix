@@ -73,7 +73,7 @@ let
   # Custom version of makeWrapper that overrides the choice of shell
   # to be the same as that used for the build wrapper environment.
   makeBuildWrapper = pkgs.makeWrapper.overrideAttrs (oldAttrs: {
-    shell = build-wrapper-env-package + "/libexec/build-wrapper-bash";
+    shell = build-wrapper-env-package + "/sbin/bash";
   });
 in
 pkgs.runCommandNoCC name
@@ -307,12 +307,15 @@ pkgs.runCommandNoCC name
       fi
 
       for prog in ''${bin[@]} ''${sbin[@]} ''${libexec[@]}; do
-        # Start by patching shebangs in executables, making sure to prefer the
-        # build wrapper environment over the "develop" environment. Note that
-        # the paths substituted come from executables found in `$PATH` at the
-        # time that this function is invoked, so we automatically patch with
-        # paths found in $FLOX_ENV.
-        patchShebangs "$prog"
+        # Start by patching shebangs in executables, making sure to prefer
+        # interpreters found in the build wrapper environment over the ones
+        # provided by Nix in the process of performing this evaluation.
+        # Note that the paths substituted by `patchShebangs()` are derived
+        # from PATH as it is invoked, so we prepend to the PATH prior to
+        # invocation to ensure we all substituted values have the best
+        # possible chance of coming from the build wrapper environment.
+        PATH="${build-wrapper-env-package}/sbin:${build-wrapper-env-package}/bin:$PATH" \
+          patchShebangs "$prog"
 
         # Wrap contents of executables with ${build-wrapper-env-package}/wrapper
         if [ -L "$prog" ]; then
