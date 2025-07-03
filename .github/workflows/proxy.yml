@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - uses: "actions/checkout@v4"
-      - uses: "nixbuild/nix-quick-install-action@v30"
+      - uses: "nixbuild/nix-quick-install-action@v31"
 
       - name: "setup ssh"
         run: |
