@@ -2,6 +2,7 @@
   nixpkgs-url ? "nixpkgs",
   nixpkgs-flake ? builtins.getFlake nixpkgs-url,
   pkgs-dir,
+  git-subdir ? null,
   system ? builtins.currentSystem or null,
 }:
 let
@@ -12,7 +13,15 @@ let
       allowInsecure = true;
     };
   };
-  pkgsDir = pkgs-dir;
+  pkgsDir =
+    if git-subdir != null then
+      let
+        tree = builtins.fetchTree "git+file://${pkgs-dir}";
+      in
+      "${tree.outPath}/${git-subdir}"
+
+    else
+      pkgs-dir;
 
   lib = nixpkgs.lib.extend libOverlay;
   libOverlay = (import ./lib).overlay;
@@ -26,9 +35,9 @@ let
 
   # different forms of identifiers for the collected packages
   # including Make `targets`
-  collectedAttrPaths = lib.nef.reflect.collectAttrPaths [ ] collectedPackages;
+  collectedAttrPaths = lib.nef.reflect.collectAttrPaths collectedPackages;
   reflect = {
-    attrPaths = lib.nef.reflect.attrPathStrings collectedAttrPaths;
+    attrPaths = collectedAttrPaths;
     targets = lib.nef.reflect.makeTargets collectedAttrPaths;
   };
 

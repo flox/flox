@@ -88,7 +88,7 @@ ifeq (,$(_FLOX_PKGDB_VERBOSITY))
 endif
 
 # Invoke nix with the required experimental features enabled.
-_nix := $(_nix) --extra-experimental-features "flakes nix-command" $(intcmp 0,$(_FLOX_PKGDB_VERBOSITY),--trace-verbose)
+_nix := $(_nix) --extra-experimental-features "flakes nix-command fetch-tree" $(intcmp 0,$(_FLOX_PKGDB_VERBOSITY),--trace-verbose)
 
 # Ensure we use the Nix-provided SHELL.
 SHELL := $(_bash) $(intcmp 2,$(_FLOX_PKGDB_VERBOSITY),-x)
@@ -120,11 +120,34 @@ MANIFEST_BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
 ifeq (,$(NIX_EXPRESSION_DIR))
   $(error NIX_EXPRESSION_DIR not defined)
 endif
+
+NIX_EXPRESSION_GIT_ROOT := \
+  $(shell $(_git) -C '$(NIX_EXPRESSION_DIR)' rev-parse --show-toplevel 2> /dev/null || echo)
+
+NIX_EXPRESSION_GIT_SUBDIR := \
+  $(shell $(_git) -C '$(NIX_EXPRESSION_DIR)' rev-parse --show-prefix 2> /dev/null || echo)
+
+
+ifeq (,$(NIX_EXPRESSION_DIR))
+  $(error NIX_EXPRESSION_DIR not defined)
+endif
+
+# If there is no git root,
+ifeq (,$(NIX_EXPRESSION_GIT_ROOT))
+  NIX_EXPRESSION_DIR_ARGS := \
+    --arg pkgs-dir '$(NIX_EXPRESSION_DIR)'
+else
+  NIX_EXPRESSION_DIR_ARGS := \
+    --argstr pkgs-dir '$(NIX_EXPRESSION_GIT_ROOT)' \
+    --argstr git-subdir '$(NIX_EXPRESSION_GIT_SUBDIR)'
+endif
+
+
 NIX_EXPRESSION_BUILDS := \
   $(shell $(_nix) eval \
     --argstr nixpkgs-url '$(BUILDTIME_NIXPKGS_URL)' \
     --argstr system $(NIX_SYSTEM) \
-    --argstr pkgs-dir $(NIX_EXPRESSION_DIR) \
+    $(NIX_EXPRESSION_DIR_ARGS) \
     --file $(_nef) \
     reflect.targets --raw)
 
@@ -699,12 +722,13 @@ define NIX_EXPRESSION_BUILD_template =
   $(eval _pvarname = $(subst -,_,$(_pname)))
 
   # Start by evaluating the build
+
   $($(_pvarname)_evalJSON): $(PROJECT_TMPDIR)/check-build-prerequisites
 	$(_V_) $(_mkdir) -p $$(@D)
 	$(_V_) $(_nix) eval -L --file $(_nef) \
 	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  --argstr system $(NIX_SYSTEM) \
-	  --argstr pkgs-dir $(NIX_EXPRESSION_DIR) \
+	  $(NIX_EXPRESSION_DIR_ARGS) \
 	  --json \
 	  --apply 'pkg: { \
 	    drvPath = pkg.drvPath; \
