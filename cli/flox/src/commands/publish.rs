@@ -23,6 +23,7 @@ use tracing::{debug, info_span, instrument};
 use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::build::{
     base_catalog_url_for_stability_arg,
+    check_git_tracking_for_expression_builds,
     check_stability_compatibility,
     packages_to_build,
 };
@@ -97,23 +98,12 @@ impl Publish {
             .environment
             .detect_concrete_environment(&flox, "Publish")?;
         environment_subcommand_metric!("publish", env);
-        // If the environment isn't locked, locking it will modify the lockfile,
-        // which will mean the repo will have uncommitted changes.
-        // Instead of locking and erroring later on, error now.
-        let Some(lockfile) = env.existing_lockfile(&flox)? else {
-            bail!(build_repo_err("Environment must be locked."));
-        };
 
-        let target = Self::get_publish_target(
-            &lockfile.manifest,
-            &nix_expression_dir(&env),
-            self.publish_target,
-        )?;
         Self::publish(
             config,
             flox,
             env,
-            target,
+            self.publish_target,
             self.metadata_only,
             self.cache,
             self.stability,
@@ -144,7 +134,7 @@ impl Publish {
         config: Config,
         mut flox: Flox,
         env: ConcreteEnvironment,
-        package: PackageTarget,
+        package_arg: Option<PublishTarget>,
         metadata_only: bool,
         cache_args: CacheArgs,
         stability: Option<String>,
@@ -164,7 +154,21 @@ impl Publish {
             },
         };
 
+        // If the environment isn't locked, locking it will modify the lockfile,
+        // which will mean the repo will have uncommitted changes.
+        // Instead of locking and erroring later on, error now.
+        let Some(lockfile) = path_env.existing_lockfile(&flox)? else {
+            bail!(build_repo_err("Environment must be locked."));
+        };
+
+        let expression_dir = nix_expression_dir(&path_env);
+        let package = Self::get_publish_target(&lockfile.manifest, &expression_dir, package_arg)?;
+
         check_stability_compatibility([&package], stability.is_some())?;
+        // Note: when publishsing an expression build,
+        // this causes us to discover the containing git repo twice.
+        // While slightly redundant it outweighs the complexity of reusing git instances.
+        check_git_tracking_for_expression_builds([&package], &expression_dir)?;
 
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
