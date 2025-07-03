@@ -60,5 +60,5 @@
             Package sets must be attrsets created with `makeScope` or `makeExtensible`.
           '';
     in
-    extendedAttrSet;
+    builtins.addErrorContext "while extending package set '${lib.showAttrPath attrPath}'" extendedAttrSet;
 }
