@@ -880,7 +880,7 @@ mod upgrade_notification_tests {
         let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("custom/hello"));
         let mut environment = ConcreteEnvironment::Path(environment);
 
         tracing::subscriber::with_default(subscriber, || {
@@ -929,7 +929,7 @@ mod upgrade_notification_tests {
         let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("custom/hello"));
         let mut environment = ConcreteEnvironment::Path(environment);
 
         let mut active = ActiveEnvironments::default();
@@ -961,7 +961,7 @@ mod upgrade_notification_tests {
 
         let environment = new_named_path_environment_from_env_files(
             &flox,
-            GENERATED_DATA.join("envs/hello"),
+            GENERATED_DATA.join("custom/hello"),
             "name",
         );
         let mut environment = ConcreteEnvironment::Path(environment);
@@ -987,7 +987,7 @@ mod upgrade_notification_tests {
         let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("custom/hello"));
         let mut environment = ConcreteEnvironment::Path(environment);
 
         {
@@ -1026,7 +1026,7 @@ mod upgrade_notification_tests {
         let (subscriber, writer) = test_subscriber_message_only();
 
         let environment =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("custom/hello"));
         let mut environment = ConcreteEnvironment::Path(environment);
 
         {

@@ -1782,8 +1782,7 @@ mod tests {
         let source_name = String::from("main.go");
 
         let (flox, _temp_dir_handle) = flox_instance();
-        let mut env =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/go_gcc"));
+        let mut env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("env/go_gcc"));
         let env_path = env.parent_path().unwrap();
 
         let base_manifest = env.manifest_contents(&flox).unwrap();
@@ -1862,7 +1861,7 @@ mod tests {
 
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/gcc_boost"));
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("env/gcc_boost"));
         let env_path = env.parent_path().unwrap();
 
         let base_manifest = env.manifest_contents(&flox).unwrap();
@@ -1937,7 +1936,7 @@ mod tests {
 
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/gcc_boost"));
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("env/gcc_boost"));
         let env_path = env.parent_path().unwrap();
 
         let base_manifest = env.manifest_contents(&flox).unwrap();
@@ -2147,7 +2146,7 @@ mod tests {
         assert_closure_check_failure(
             &manifest,
             &package_name,
-            "envs/hello_other_pkg_group/hello_other_pkg_group.yaml",
+            "env/hello_other_pkg_group/resp.yaml",
         )
         .await;
     }
@@ -2491,12 +2490,6 @@ mod tests {
     #[test]
     fn build_does_not_run_profile_sandbox_pure() {
         build_does_not_run_profile(true);
-    }
-
-    #[test]
-    fn hello_world_builds() {
-        let (flox, tmpdir) = flox_instance();
-        assert_manifest_build_succeeds(GENERATED_DATA.join("build/hello"), "hello", &flox, tmpdir);
     }
 }
 

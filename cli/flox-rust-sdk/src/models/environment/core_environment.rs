@@ -1124,6 +1124,7 @@ pub mod test_helpers {
     use super::*;
     use crate::flox::Flox;
     use crate::models::environment::fetcher::test_helpers::mock_include_fetcher;
+    use crate::models::environment::{DOT_FLOX, ENV_DIR_NAME};
 
     #[cfg(target_os = "macos")]
     pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
@@ -1169,13 +1170,25 @@ pub mod test_helpers {
         CoreEnvironment::new(&env_path, mock_include_fetcher())
     }
 
-    pub fn new_core_environment_from_env_files(
+    pub fn new_core_environment_from_existing_env(
         flox: &Flox,
-        env_files_dir: impl AsRef<Path>,
+        dot_flox_parent_dir: impl AsRef<Path>,
     ) -> CoreEnvironment {
-        let env_files_dir = env_files_dir.as_ref();
-        let manifest_contents = fs::read_to_string(env_files_dir.join(MANIFEST_FILENAME)).unwrap();
-        let lockfile_contents = fs::read_to_string(env_files_dir.join(LOCKFILE_FILENAME)).unwrap();
+        let dot_flox_parent_dir = dot_flox_parent_dir.as_ref();
+        let manifest_contents = fs::read_to_string(
+            dot_flox_parent_dir
+                .join(DOT_FLOX)
+                .join(ENV_DIR_NAME)
+                .join(MANIFEST_FILENAME),
+        )
+        .unwrap();
+        let lockfile_contents = fs::read_to_string(
+            dot_flox_parent_dir
+                .join(DOT_FLOX)
+                .join(ENV_DIR_NAME)
+                .join(LOCKFILE_FILENAME),
+        )
+        .unwrap();
         new_core_environment_with_lockfile(flox, &manifest_contents, &lockfile_contents)
     }
 }
@@ -1189,12 +1202,16 @@ mod tests {
     use indoc::indoc;
     use pretty_assertions::assert_eq;
     use tempfile::{TempDir, tempdir_in};
-    use test_helpers::{new_core_environment_from_env_files, new_core_environment_with_lockfile};
+    use test_helpers::{
+        new_core_environment_from_existing_env,
+        new_core_environment_with_lockfile,
+    };
     use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
 
     use self::test_helpers::new_core_environment;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::{DOT_FLOX, ENV_DIR_NAME};
     use crate::models::manifest::raw::CatalogPackage;
     use crate::providers::catalog;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
@@ -1468,7 +1485,7 @@ mod tests {
     fn v1_does_not_need_relock() {
         let (flox, _temp_dir_handle) = flox_instance();
         let environment =
-            new_core_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+            new_core_environment_from_existing_env(&flox, GENERATED_DATA.join("custom/hello"));
         assert!(environment.lockfile_if_up_to_date().unwrap().is_some());
     }
 
@@ -1477,8 +1494,14 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let manifest_contents =
             fs::read_to_string(MANUALLY_GENERATED.join("empty").join(MANIFEST_FILENAME)).unwrap();
-        let lockfile_contents =
-            fs::read_to_string(GENERATED_DATA.join("envs/hello").join(LOCKFILE_FILENAME)).unwrap();
+        let lockfile_contents = fs::read_to_string(
+            GENERATED_DATA
+                .join("custom/hello")
+                .join(DOT_FLOX)
+                .join(ENV_DIR_NAME)
+                .join(LOCKFILE_FILENAME),
+        )
+        .unwrap();
         let environment =
             new_core_environment_with_lockfile(&flox, &manifest_contents, &lockfile_contents);
         assert!(environment.lockfile_if_up_to_date().unwrap().is_none());
@@ -1488,7 +1511,7 @@ mod tests {
     fn lock_does_not_write_lockfile_if_unchanged() {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut environment =
-            new_core_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+            new_core_environment_from_existing_env(&flox, GENERATED_DATA.join("custom/hello"));
 
         let mtime_original = environment
             .lockfile_path()
@@ -1516,7 +1539,7 @@ mod tests {
     fn lock_writes_if_contents_change() {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut environment =
-            new_core_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+            new_core_environment_from_existing_env(&flox, GENERATED_DATA.join("custom/hello"));
 
         // add some whitespace to the file, that simulates different original content
         // we subsequently expect the file to be modified

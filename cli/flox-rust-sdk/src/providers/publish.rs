@@ -1042,7 +1042,7 @@ pub mod tests {
         PackageTarget::new_unchecked(EXAMPLE_PACKAGE_NAME, PackageTargetKind::ManifestBuild)
     });
 
-    const EXAMPLE_MANIFEST: &str = "envs/publish-simple";
+    const EXAMPLE_MANIFEST: &str = "env/publish-simple";
 
     use std::io::Write;
     use std::sync::LazyLock;

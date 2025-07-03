@@ -592,9 +592,12 @@ impl PathEnvironment {
 }
 
 pub mod test_helpers {
+    use std::str::FromStr;
+
     use tempfile::tempdir_in;
 
     use super::*;
+    use crate::models::environment::{ConcreteEnvironment, copy_dir_recursive, open_path};
 
     pub fn new_path_environment_in(
         flox: &Flox,
@@ -664,35 +667,25 @@ pub mod test_helpers {
         dot_flox_parent_path: impl AsRef<Path>,
         name: Option<&str>,
     ) -> PathEnvironment {
-        let env_files_dir = env_files_dir.as_ref();
-        let manifest_contents = fs::read_to_string(env_files_dir.join(MANIFEST_FILENAME)).unwrap();
-        let lockfile_contents = fs::read_to_string(env_files_dir.join(LOCKFILE_FILENAME)).unwrap();
-        let pointer = PathPointer::new(
-            name.unwrap_or_else(|| {
-                dot_flox_parent_path
-                    .as_ref()
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-            })
-            .parse()
-            .unwrap(),
-        );
-        PathEnvironment::write_new_unchecked(
-            flox,
-            pointer.clone(),
-            &dot_flox_parent_path,
-            &manifest_contents,
+        let dot_flox_parent_path = dot_flox_parent_path.as_ref();
+        copy_dir_recursive(
+            env_files_dir.as_ref().join(".flox"),
+            dot_flox_parent_path.join(".flox"),
+            true,
         )
         .unwrap();
-        let dot_flox_path =
-            CanonicalPath::new(dot_flox_parent_path.as_ref().join(DOT_FLOX)).unwrap();
-        let env_dir = dot_flox_path.join(ENV_DIR_NAME);
-        let lockfile_path = env_dir.join(LOCKFILE_FILENAME);
-        fs::write(lockfile_path, lockfile_contents).unwrap();
-        new_path_environment(flox, &manifest_contents);
-        PathEnvironment::open(flox, pointer, dot_flox_path).unwrap()
+
+        let ConcreteEnvironment::Path(mut path_env) =
+            open_path(flox, dot_flox_parent_path).unwrap()
+        else {
+            panic!("environment wasn't a path environment");
+        };
+        if let Some(new_name) = name {
+            path_env
+                .rename(EnvironmentName::from_str(new_name).unwrap())
+                .unwrap();
+        }
+        path_env
     }
 }
 

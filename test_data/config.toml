@@ -1,67 +1,55 @@
 [vars]
-[resolve.empty]
-# Not actually a resolve response, just have to put it somewhere
-skip_if_output_exists = "empty.yaml"
-cmd = '''
-cat > empty.yaml <<EOF
-when:
-then:
-EOF
-'''
-post_cmd = '''
-    main_output_dir="$(dirname $(dirname $RESPONSE_FILE))"
-    mv empty.yaml "$main_output_dir/empty.yaml"
-'''
 
-[resolve.failed_resolution]
-pre_cmd = '''
-    flox init
-'''
-cmd = "flox install definitely-not-a-package"
-ignore_cmd_errors = true
+################################################################################
+# Resolve
+################################################################################
 
-[resolve.almonds]
-pre_cmd = '''
-  flox init
-'''
-cmd = "flox install almonds"
-
+[resolve]
+failed_resolution = { pkgs = [ "definitely-not-a-package" ], ignore_errors = true }
+almonds.pkgs = [ "almonds" ]
 # Install a package that doesn't exist and that doesn't have suggestions
-[resolve.badpkg]
-pre_cmd = "flox init"
-cmd = "flox install badpkg"
-ignore_cmd_errors = true
-
+badpkg = { pkgs = [ "badpkg" ], ignore_errors = true }
 # Install multiple packages that don't exist
-[resolve.badpkg1_badpkg2]
-pre_cmd = "flox init"
-cmd = "flox install badpkg1 badpkg2"
-ignore_cmd_errors = true
-
+badpkg1_badpkg2 = { pkgs = [ "badpkg1", "badpkg2" ], ignore_errors = true }
 # Install a package that doesn't exist and a another that does only exist on Linux
-[resolve.badpkg_bpftrace]
-pre_cmd = "flox init"
-cmd = "flox install badpkg bpftrace"
-ignore_cmd_errors = true
-
+badpkg_bpftrace = { pkgs = [ "badpkg", "bpftrace" ], ignore_errors = true }
 # Install a package that only exists on Linux
-[resolve.bpftrace]
-pre_cmd = "flox init"
-cmd = "flox install bpftrace"
-
+bpftrace.pkgs = [ "bpftrace" ]
 # Install multiple packages that only exist on Linux
-[resolve.bpftrace_systemd]
-pre_cmd = "flox init"
-cmd = "flox install bpftrace systemd"
-ignore_cmd_errors = true
-
-[resolve.curl_hello]
-pre_cmd = "flox init"
-cmd = "flox install curl hello"
+bpftrace_systemd = { pkgs = [ "bpftrace", "systemd" ], ignore_errors = true }
+curl_hello.pkgs = [ "curl", "hello" ]
+emacs.pkgs = [ "emacs" ]
+emacs_vim.pkgs = [ "emacs", "vim" ]
+gzip.pkgs = [ "gzip" ]
+influxdb2.pkgs = [ "influxdb2" ]
+daemonize.pkgs = [ "daemonize" ]
+# This is used to trigger the "only install for some systems" code path
+darwin_ps_all = { pkgs = [ "darwin.ps" ], ignore_errors = true }
+fish_3_2_2.pkgs = [ "fish@3.2.2" ]
+hello.pkgs = [ "hello" ]
+hello_unfree.pkgs = [ "hello-unfree" ]
+jupyterlabs_widgets.pkgs = [ "jupyter", "python312Packages.jupyterlab-widgets"]
+jupyterlabs_git.pkgs = [ "jupyter", "python312Packages.jupyterlab-git"]
+go.pkgs = [ "go" ]
+# Attempts an install for a package that doesn't exist but that *does* have suggestions
+node_suggestions = { pkgs = [ "node" ], ignore_errors = true }
+old_node = { pkgs = [ "nodejs@14.16.1" ], ignore_errors = true }
+package_suggestions = { pkgs = [ "package" ], ignore_errors = true }
+python2.pkgs = [ "python2" ]
+python3.pkgs = [ "python3" ]
+python3_pip.pkgs = [ "-i", "pip", "python311Packages.pip", "python3" ]
+"python311Packages.pip".pkgs = [ "python311Packages.pip" ]
+redis.pkgs = [ "redis", "netcat" ]
+"rubyPackages_3_2.rails".pkgs = [ "rubyPackages_3_2.rails" ]
+rust-lib-src.pkgs = [ "rustPlatform.rustLibSrc" ]
+tabula = { pkgs = [ "tabula" ], ignore_errors = true } # tabula is broken
+torchvision-bin = { pkgs = [ "python311Packages.torchvision-bin" ], ignore_errors = true }
+webmention_ripgrep_rails.pkgs = [ "-i", "foo", "rubyPackages_3_2.webmention", "ripgrep", "-i", "bar", "rubyPackages_3_2.rails"]
+vim.pkgs = [ "vim" ]
+vim-vim-full-conflict = { pkgs = [ "vim", "vim-full" ], ignore_errors = true } # packages conflict
 
 [resolve.curl_hello_bumped_revs]
-pre_cmd = "flox init"
-cmd = "flox install curl hello"
+pkgs = [ "curl", "hello" ]
 post_cmd = '''
     yq -r '.then.body' "$RESPONSE_FILE" > body.json
     # Update the page and revision but keep the same derivations.
@@ -86,73 +74,36 @@ post_cmd = '''
 '''
 
 [resolve.curl_after_hello]
-pre_cmd = "flox init && flox install hello"
-cmd = "flox install curl"
-
-[resolve.emacs]
-pre_cmd = "flox init"
-cmd = "flox install emacs"
-
-[resolve.emacs_vim]
-pre_cmd = "flox init"
-cmd = "flox install emacs vim"
-
-[resolve.gzip]
-pre_cmd = "flox init"
-cmd = "flox install gzip"
+pre_cmd = "flox install hello"
+pkgs = [ "curl" ]
 
 [resolve.glibc]
 pre_cmd = '''
-    flox init
     tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux" ]' .flox/env/manifest.toml
 '''
-cmd = "flox install glibc"
-ignore_cmd_errors = true # build will fail on macos, that's fine
+pkgs = [ "glibc" ]
+ignore_errors = true # build will fail on macos, that's fine
 
 [resolve.glibc_incompatible]
 pre_cmd = '''
-    flox init
-    tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux" ]' .flox/env/manifest.toml
+    tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux", "aarch64-darwin" ]' .flox/env/manifest.toml
 '''
-cmd = '''
- tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux", "aarch64-darwin" ]' .flox/env/manifest.toml
- flox install glibc || true
-'''
-ignore_cmd_errors = true # build will fail on macos, that's fine
-
-[resolve.influxdb2]
-pre_cmd = "flox init"
-cmd = "flox install influxdb2"
-
-[resolve.daemonize]
-pre_cmd = "flox init"
-cmd = "flox install daemonize"
-
-# This is used to trigger the "only install for some systems" code path
-[resolve.darwin_ps_all]
-pre_cmd = '''
-    flox init
-'''
-cmd = "flox install darwin.ps"
-ignore_cmd_errors = true # build will fail on linux, that's fine
+pkgs = [ "glibc" ]
+ignore_errors = true # build will fail on macos, that's fine
 
 [resolve.darwin_ps]
 pre_cmd = '''
-    flox init
     tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin" ]' .flox/env/manifest.toml
 '''
-cmd = "flox install darwin.ps"
-ignore_cmd_errors = true # build will fail on linux, that's fine
+pkgs = [ "darwin.ps" ]
+ignore_errors = true # build will fail on linux, that's fine
 
 [resolve.darwin_ps_incompatible]
 pre_cmd = '''
-    flox init
-'''
-cmd = '''
     tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin", "aarch64-linux" ]' .flox/env/manifest.toml
-    flox install darwin.ps
 '''
-ignore_cmd_errors = true # build will fail on linux, that's fine
+pkgs = [ "darwin.ps" ]
+ignore_errors = true # build will fail on linux, that's fine
 
 # Generate a response with an "unkown" type of error.
 # Instead of forcing an "unknown" type of error from the catalog server
@@ -161,13 +112,9 @@ ignore_cmd_errors = true # build will fail on linux, that's fine
 # knowing that there is only 1 response.
 [resolve.darwin_ps_incompatible_transform_error_to_unknown]
 pre_cmd = '''
-    flox init
-'''
-cmd = '''
     tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin", "aarch64-linux" ]' .flox/env/manifest.toml
-    flox install darwin.ps
 '''
-ignore_cmd_errors = true # build will fail on linux, that's fine
+pkgs = [ "darwin.ps" ]
 post_cmd = '''
     yq -r '.then.body' "$RESPONSE_FILE" | \
         jq -c '
@@ -181,6 +128,7 @@ post_cmd = '''
         "$RESPONSE_FILE" > tmp.yaml
     mv tmp.yaml "$RESPONSE_FILE"
 '''
+ignore_errors = true # build will fail on linux, that's fine
 
 # Generate a response with an "general" type of error.
 # Instead of forcing an "general" type of error from the catalog server
@@ -189,13 +137,9 @@ post_cmd = '''
 # knowing that there is only 1 response.
 [resolve.darwin_ps_incompatible_transform_error_to_general]
 pre_cmd = '''
-    flox init
-'''
-cmd = '''
     tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin", "aarch64-linux" ]' .flox/env/manifest.toml
-    flox install darwin.ps
 '''
-ignore_cmd_errors = true # build will fail on linux, that's fine
+pkgs = [ "darwin.ps" ]
 post_cmd = '''
     yq -r '.then.body' "$RESPONSE_FILE" | \
         jq -c '
@@ -209,54 +153,10 @@ post_cmd = '''
         "$RESPONSE_FILE" > tmp.yaml
     mv tmp.yaml "$RESPONSE_FILE"
 '''
-
-[resolve.fish_3_2_2]
-pre_cmd = "flox init"
-cmd = "flox install fish@3.2.2"
-
-[resolve.hello]
-pre_cmd = "flox init"
-cmd = "flox install hello"
-
-[resolve.hello_unfree]
-pre_cmd = "flox init"
-cmd = "flox install hello-unfree"
-
-[resolve.jupyterlabs_widgets]
-pre_cmd = "flox init"
-cmd = "flox install jupyter python312Packages.jupyterlab-widgets"
-
-[resolve.jupyterlabs_git]
-pre_cmd = "flox init"
-cmd = "flox install jupyter python312Packages.jupyterlab-git"
-
-[resolve.go]
-pre_cmd = "flox init"
-cmd = "flox install go"
-
-[resolve.krb5_after_prereqs_installed]
-files = ["envs/krb5_prereqs/manifest.toml"]
-pre_cmd = '''
-    flox init
-    flox edit -f manifest.toml
-'''
-cmd = "flox install krb5"
-
-[resolve.ld_floxlib]
-files = ["envs/ld_floxlib/manifest.toml"]
-pre_cmd = "flox init"
-ignore_cmd_errors = true
-cmd = "flox edit -f manifest.toml"
-
-# Attempts an install for a package that doesn't exist but that *does* have suggestions
-[resolve.node_suggestions]
-pre_cmd = "flox init"
-cmd = "flox install node"
-ignore_cmd_errors = true
+ignore_errors = true # build will fail on linux, that's fine
 
 [resolve.old_hello]
-pre_cmd = "flox init"
-cmd = "flox install hello"
+pkgs = [ "hello" ]
 post_cmd = '''
     yq -r '.then.body' "$RESPONSE_FILE" | \
         jq -c '
@@ -274,8 +174,7 @@ post_cmd = '''
 '''
 
 [resolve.old_linux_hello]
-pre_cmd = "flox init"
-cmd = "flox install hello"
+pkgs = [ "hello" ]
 post_cmd = '''
     yq -r '.then.body' "$RESPONSE_FILE" | \
         jq -c '
@@ -293,8 +192,7 @@ post_cmd = '''
 '''
 
 [resolve.old_darwin_hello]
-pre_cmd = "flox init"
-cmd = "flox install hello"
+pkgs = [ "hello" ]
 post_cmd = '''
     yq -r '.then.body' "$RESPONSE_FILE" | \
         jq -c '
@@ -313,10 +211,9 @@ post_cmd = '''
 
 [resolve.hello_buggy_unfree_server_response]
 pre_cmd = '''
-    flox init
     tomlq --in-place --toml-output '.options.allow.unfree = false' .flox/env/manifest.toml
 '''
-cmd = "flox install hello"
+pkgs = [ "hello" ]
 post_cmd = '''
     yq -r '.then.body' "$RESPONSE_FILE" | \
         jq -c '
@@ -330,99 +227,29 @@ post_cmd = '''
     mv tmp.yaml "$RESPONSE_FILE"
 '''
 
-
-# Install a specific version of Node that doesn't exist on x86_64-darwin
-# so we get "constraints too tight" as a resolution message
-[resolve.old_node]
-pre_cmd = "flox init"
-cmd = "flox install nodejs@14.16.1"
-ignore_cmd_errors = true
-
-# Try to install a package that doesn't exist, but that *does* have suggestions
-[resolve.package_suggestions]
-pre_cmd = "flox init"
-cmd = "flox install package"
-ignore_cmd_errors = true
-
-# This is useful for testing insecure packages
-[resolve.python2]
-pre_cmd = "flox init"
-cmd = "flox install python2"
-
-[resolve.python3]
-pre_cmd = "flox init"
-cmd = "flox install python3"
-
-[resolve.python3_pip]
-pre_cmd = "flox init"
-cmd = "flox install -i pip python311Packages.pip python3"
-
-[resolve."python311Packages.pip"]
-pre_cmd = "flox init"
-cmd = "flox install python311Packages.pip"
-
-[resolve.redis]
-pre_cmd = "flox init"
-cmd = "flox install redis netcat"
-
-[resolve."rubyPackages_3_2.rails"]
-pre_cmd = "flox init"
-cmd = "flox install rubyPackages_3_2.rails"
-
-[resolve.rust-lib-src]
-pre_cmd = "flox init"
-cmd = "flox install rustPlatform.rustLibSrc"
-
-[resolve.tabula]
-pre_cmd = "flox init"
-cmd = "flox install tabula"
-ignore_cmd_errors = true # tabula is broken
-
 # resolve.tabula_allowed is likely redundant and at least for the time being
 # generates the same JSON as resolve.tabula.
 # But broken is included in the resolution request,
 # so include it here in case the server changes behavior.
 [resolve.tabula_allowed]
 pre_cmd = '''
-    flox init
     tomlq --in-place --toml-output '.options.allow.broken = true' .flox/env/manifest.toml
 '''
-cmd = "flox install tabula"
+pkgs = [ "tabula" ]
 
-[resolve.torchvision-bin]
-pre_cmd = "flox init"
-cmd = "flox install python311Packages.torchvision-bin"
-ignore_cmd_errors = true
+################################################################################
+# Search
+################################################################################
 
-[resolve.webmention_ripgrep_rails]
-pre_cmd = "flox init"
-cmd = "flox install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails"
-
-[resolve.vim]
-pre_cmd = "flox init"
-cmd = "flox install vim"
-
-[resolve.vim-vim-full-conflict]
-pre_cmd = "flox init"
-cmd = "flox install vim vim-full"
-ignore_cmd_errors = true # packages conflict
-
-
-[search.hello]
-cmd = "flox search hello"
-
-[search.python]
-cmd = "flox search python"
-
-[search.surely_doesnt_exist]
-# This command is intended to fail, it still dumps a useful response
-cmd = "flox search surely_doesnt_exist || true"
-
-[search.ello_all]
-cmd = "flox search ello --all"
+[search]
+hello.query = "hello"
+python.query = "python"
+surely_doesnt_exist = { query = "surely_doesnt_exist", ignore_errors = true }
+ello_all = { query = "ello", all = true }
+java_suggestions.query = "java"
 
 [search.exactly_ten]
-cmd = "flox search python"
+query = "python"
 post_cmd = '''
     yq -r '.then.body' "$RESPONSE_FILE" | \
         jq -c '
@@ -436,468 +263,161 @@ post_cmd = '''
     mv tmp.yaml "$RESPONSE_FILE"
 '''
 
-[search.java_suggestions]
-cmd = "flox search java"
+################################################################################
+# Show
+################################################################################
 
-[show.hello]
-cmd = "flox show hello"
+[show]
+hello.query = "hello"
+flask.query = "python310Packages.flask"
 
-[show.flask]
-cmd = "flox show python310Packages.flask"
+################################################################################
+# Init
+################################################################################
 
 [init.go]
-files = ["init/go/common", "init/go/module"]
-pre_cmd = '''
-    cp -r {common,module}/* .
-'''
-cmd = "flox init --auto-setup"
+unpack_dir_contents = [ "init/go/common", "init/go/module" ]
+auto_setup = true
 
 [init.nodejs_20]
-files = ["init/node/nodejs_20"]
-pre_cmd = '''
-    cp -r nodejs_20/* .
-'''
-cmd = "flox init --auto-setup"
+unpack_dir_contents = [ "init/node/nodejs_20" ]
+auto_setup = true
 
 [init.nodejs_lt_24]
-files = ["init/node/nodejs_lt_24"]
-pre_cmd = '''
-    cp -r nodejs_lt_24/* .
-'''
-cmd = "flox init --auto-setup"
+unpack_dir_contents = [ "init/node/nodejs_lt_24" ]
+auto_setup = true
 
 [init.node_npm]
-files = ["init/node/npm"]
-pre_cmd = '''
-    cp -r npm/* .
-'''
-cmd = "flox init --auto-setup"
+unpack_dir_contents = [ "init/node/npm" ]
+auto_setup = true
 
 [init.yarn_1x]
-files = ["init/node/yarn_1x"]
-pre_cmd = '''
-    cp -r yarn_1x/* .
-'''
-cmd = "flox init --auto-setup"
+unpack_dir_contents = [ "init/node/yarn_1x" ]
+auto_setup = true
 
 [init.yarn_berry]
-files = ["init/node/yarn_berry"]
-pre_cmd = '''
-    cp -r yarn_berry/* .
-'''
-cmd = "flox init --auto-setup"
+unpack_dir_contents = [ "init/node/yarn_berry" ]
+auto_setup = true
 
 [init.python_poetry]
-files = ["init/python/common", "init/python/poetry"]
-pre_cmd = '''
-    cp -r {common,poetry}/* .
-'''
-cmd = "flox init --auto-setup"
-
-[init.python_poetry_zlib]
-files = ["init/python/common", "init/python/poetry"]
-pre_cmd = '''
-    cp -r {common,poetry}/* .
-    flox init --auto-setup
-'''
-cmd = "flox install zlib"
+unpack_dir_contents = ["init/python/common", "init/python/poetry"]
+auto_setup = true
 
 [init.python_pyproject_pip]
-files = ["init/python/common", "init/python/pyproject-pip"]
-pre_cmd = '''
-    cp -r {common,pyproject-pip}/* .
-'''
-cmd = "flox init --auto-setup"
-
-[init.python_pyproject_pip_zlib]
-files = ["init/python/common", "init/python/pyproject-pip"]
-pre_cmd = '''
-    cp -r {common,pyproject-pip}/* .
-    flox init --auto-setup
-'''
-cmd = "flox install zlib"
+unpack_dir_contents = ["init/python/common", "init/python/pyproject-pip"]
+auto_setup = true
 
 [init.python_requirements]
-files = ["init/python/common", "init/python/requirements"]
-pre_cmd = '''
-    cp -r {common,requirements}/* .
-'''
-cmd = "flox init --auto-setup"
-
-[init.python_requirements_zlib]
-files = ["init/python/common", "init/python/requirements"]
-pre_cmd = '''
-    cp -r {common,requirements}/* .
-    flox init --auto-setup
-'''
-cmd = "flox install zlib"
+unpack_dir_contents = ["init/python/common", "init/python/requirements"]
+auto_setup = true
 
 [init.python_requests]
 pre_cmd = '''
-    echo requests > requirements.txt
+    echo "requests" > requirements.txt
 '''
-cmd = "flox init --auto-setup"
+auto_setup = true
 
-[envs.go_gcc]
-skip_if_output_exists = "envs/go_gcc"
-files = ["envs/go_gcc/manifest.toml"]
-pre_cmd = "flox init"
-cmd = "flox edit -f manifest.toml"
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/go_gcc"
-    mkdir -p "$env_dir"
-    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-'''
+################################################################################
+# Envs
+################################################################################
 
-[envs.gcc_boost]
-skip_if_output_exists = "envs/gcc_boost"
-files = ["envs/gcc_boost/manifest.toml"]
-pre_cmd = "flox init"
-cmd = "flox edit -f manifest.toml"
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/gcc_boost"
-    mkdir -p "$env_dir"
-    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-'''
+[env]
+go_gcc.manifest = "go_gcc.toml"
+gcc_boost.manifest = "gcc_boost.toml"
+kitchen_sink.manifest = "kitchen_sink.toml"
+krb5_prereqs.manifest = "krb5_prereqs.toml"
+hello_other_pkg_group.manifest = "hello_other_pkg_group.toml"
+hello_as_greeting.manifest = "hello_as_greeting.toml"
+hello_and_htop_for_no_system.manifest = "hello_and_htop_for_no_system.toml"
+influxdb2.manifest = "influxdb2.toml"
+pip.manifest = "pip.toml"
+build-noop.manifest = "build_noop.toml"
+publish-simple.manifest = "publish_simple.toml"
 
-[envs.kitchen_sink]
-skip_if_output_exists = "envs/kitchen_sink"
-files = ["envs/kitchen_sink/manifest.toml"]
-pre_cmd = "flox init"
-cmd = "flox edit -f manifest.toml"
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/kitchen_sink"
-    mkdir -p "$env_dir"
-    cp manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
-'''
+################################################################################
+# Lock
+################################################################################
 
-[envs.heredocs]
-skip_if_output_exists = "envs/heredocs"
-files = ["envs/heredocs/manifest.toml"]
-pre_cmd = "flox init"
-cmd = "flox edit -f manifest.toml"
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/heredocs"
-    mkdir -p "$env_dir"
-    cp manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
-'''
+[lock]
+hello-unfree-lock.manifest = "hello_unfree_lock.toml"
+vim-vim-full-conflict.manifest = "vim_vim_full_conflict.toml"
+vim-vim-full-conflict-resolved.manifest = "vim_vim_full_conflict_resolved.toml"
+build-runtime-all-toplevel.manifest = "build_runtime_all_toplevel.toml"
+build-runtime-packages-only-hello.manifest = "build_runtime_packages_only_hello.toml"
+build-runtime-packages-not-toplevel.manifest = "build_runtime_packages_not_toplevel.toml"
+build-runtime-packages-not-found.manifest = "build_runtime_packages_not_found.toml"
 
-[envs.krb5_prereqs]
-skip_if_output_exists = "envs/krb5_prereqs"
-files = ["envs/krb5_prereqs/manifest.toml"]
-pre_cmd = "flox init"
-cmd = "flox edit -f manifest.toml"
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/krb5_prereqs"
-    mkdir -p "$env_dir"
-    cp manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
-'''
+################################################################################
+# Custom
+################################################################################
 
-[envs.hello]
-skip_if_output_exists = "envs/hello"
-pre_cmd = "flox init"
-cmd = "flox install hello"
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/hello"
-    mkdir -p "$env_dir"
-    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
-'''
-
-# Use to test a package in a non-toplevel pkg-group
-[envs.hello_other_pkg_group]
-skip_if_output_exists = "envs/hello_other_pkg_group"
-files = ["envs/hello_other_pkg_group/manifest.toml"]
-pre_cmd = "flox init"
-cmd = "flox edit -f manifest.toml"
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/hello_other_pkg_group"
-    mkdir -p "$env_dir"
-    cp manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
-'''
-
-# Used in install and list tests for packages whose install IDs != pkg-path
-[envs.hello_as_greeting]
-skip_if_output_exists = "envs/hello_as_greeting"
-files = ["envs/hello_as_greeting/manifest.toml"]
-pre_cmd = "flox init"
-cmd = "flox edit -f manifest.toml"
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/hello_as_greeting"
-    mkdir -p "$env_dir"
-    cp manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
-'''
-
-# Used for list tests that only display packages for the current system
-[envs.hello_and_htop_for_no_system]
-skip_if_output_exists = "envs/hello_and_htop_for_no_system"
-files = ["envs/hello_and_htop_for_no_system/manifest.toml"]
-pre_cmd = "flox init"
-cmd = "flox edit -f manifest.toml"
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/hello_and_htop_for_no_system"
-    mkdir -p "$env_dir"
-    cp manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
-'''
-
-# This is used as a package that doesn't have a version
-[envs.influxdb2]
-skip_if_output_exists = "envs/influxdb2"
-files = ["envs/influxdb2/manifest.toml"]
-pre_cmd = "flox init"
-cmd = "flox edit -f manifest.toml"
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/influxdb2"
-    mkdir -p "$env_dir"
-    cp manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
-'''
-
-# Used in list tests to show the full pkg-path (pip)
-[envs.pip]
-skip_if_output_exists = "envs/pip"
-files = ["envs/pip/manifest.toml"]
-pre_cmd = "flox init"
-cmd = "flox edit -f manifest.toml"
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/pip"
-    mkdir -p "$env_dir"
-    cp manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
-'''
-
-[envs.build-noop]
-skip_if_output_exists = "envs/build-noop"
-pre_cmd = "flox init"
-cmd = '''
-echo '
-version = 1
-[build]
-hello.command = "echo hello"
-' | flox edit -f -
-'''
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/build-noop"
-    mkdir -p "$env_dir"
-    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-'''
-
-[envs.publish-simple]
-skip_if_output_exists = "envs/publish-simple"
-pre_cmd = "flox init"
-cmd = '''
-echo '
-version = 1
-[install]
-hello.pkg-path = "hello"
-
-[build]
-mypkg.description = "Some sample package description from our tests"
-mypkg.version = "1.0.2a"
-mypkg.command = """
-    mkdir -p $out/bin
-    echo -n "!#/bin/sh" > $out/bin/mypkg
-    echo -n "echo Happy Floxing!" > $out/bin/mypkg
-    chmod +x $out/bin/mypkg
-"""
-' | flox edit -f -
-'''
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/publish-simple"
-    mkdir -p "$env_dir"
-    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-'''
-
-# lock (and only lock) hello-unfree
-# used to test buildenv's ability to build unfree packages
-[envs.hello-unfree-lock]
-cmd = "true # no-op"
-post_cmd = '''
-echo '
-version = 1
-install.hello-unfree.pkg-path = "hello-unfree"
-' | flox lock-manifest - > "$RESPONSE_FILE"
-'''
-
-# lock (and only lock) tabula
-# used to test buildenv's ability to build broken packages
-[envs.tabula-lock]
-cmd = "true # no-op"
-post_cmd = '''
-echo '
-version = 1
-install.tabula.pkg-path = "tabula"
-options.allow.broken = true
-' | flox lock-manifest - > "$RESPONSE_FILE"
-'''
-
-[envs.vim-vim-full-conflict]
-cmd = "true # no-op"
-post_cmd = '''
-echo '
-version = 1
-install.vim.pkg-path = "vim"
-install.vim-full.pkg-path = "vim-full"
-' | flox lock-manifest - > "$RESPONSE_FILE"
-'''
-
-[envs.vim-vim-full-conflict-resolved]
-cmd = "true # no-op"
-post_cmd = '''
-echo '
-version = 1
-install.vim.pkg-path = "vim"
-install.vim.priority = 1
-install.vim-full.pkg-path = "vim-full"
-' | flox lock-manifest - > "$RESPONSE_FILE"
-'''
-
-
-
-# used by buildenv tests
-[envs.build-runtime-all-toplevel]
-cmd = "true # no-op"
-post_cmd = '''
-echo '
-version = 1
-
-[install]
-hello.pkg-path = "hello"
-coreutils.pkg-path = "coreutils"
-vim.pkg-path = "vim"
-vim.pkg-group = "not-toplevel"
-
-[build]
-myhello.command = """
-    mkdir -p $out/bin
-    echo echo hello foo > $out/bin/hello
-    echo exec hello >> $out/bin/hello
-    chmod +x $out/bin/hello
-"""
-' | flox lock-manifest - > "$RESPONSE_FILE"
-'''
-
-# used by buildenv tests
-[envs.build-runtime-packages-only-hello]
-cmd = "true # no-op"
-post_cmd = '''
-echo '
-version = 1
-
-[install]
-hello.pkg-path = "hello"
-coreutils.pkg-path = "coreutils"
-vim.pkg-path = "vim"
-vim.pkg-group = "not-toplevel"
-
-[build]
-myhello.command = """
-    mkdir -p $out/bin
-    echo echo hello foo > $out/bin/hello
-    echo exec hello >> $out/bin/hello
-    chmod +x $out/bin/hello
-"""
-myhello.runtime-packages = [ "hello" ]
-' | flox lock-manifest - > "$RESPONSE_FILE"
-'''
-
-# used by buildenv tests
-[envs.build-runtime-packages-not-toplevel]
-cmd = "true # no-op"
-post_cmd = '''
-echo '
-version = 1
-
-[install]
-hello.pkg-path = "hello"
-coreutils.pkg-path = "coreutils"
-vim.pkg-path = "vim"
-vim.pkg-group = "not-toplevel"
-
-[build]
-
-myhello.command = """
-  mkdir -p $out/bin
-  echo echo hello foo > $out/bin/hello
-  echo exec hello >> $out/bin/hello
-  chmod +x $out/bin/hello
-"""
-myhello.runtime-packages = [ "hello", "vim" ]
-' | flox lock-manifest - > "$RESPONSE_FILE"
-'''
-
-
-# used by buildenv tests
-[envs.build-runtime-packages-not-found]
-cmd = "true # no-op"
-post_cmd = '''
-echo '
-version = 1
-
-[install]
-hello.pkg-path = "hello"
-
-[build]
-myhello.command = """
-  mkdir -p $out/bin
-  echo echo hello foo > $out/bin/hello
-  echo exec hello >> $out/bin/hello
-  chmod +x $out/bin/hello
-"""
-myhello.runtime-packages = [ "hello", "goodbye" ]
-' | flox lock-manifest - > "$RESPONSE_FILE"
-'''
-
-[build.hello]
-skip_if_output_exists = "build/hello"
-files = ["build/hello/hello.c", "build/hello/.flox"]
+[custom.empty]
 pre_cmd = '''
-    rm .flox/env/manifest.lock
+cat > resp.yaml <<EOF
+when:
+then:
+EOF
 '''
-cmd = '''
-    # re-resolve and build
-    flox lock-manifest .flox/env/manifest.toml > .flox/env/manifest.lock
+
+[custom.krb5_after_prereqs_installed]
+pre_cmd = '''
+    flox init
+    flox edit -f "$INPUT_DATA/manifests/krb5_prereqs.toml"
 '''
-post_cmd = '''
-    build_output_dir="$(dirname "$RESPONSE_FILE")"
-    build_name="$(basename -s .yaml "$RESPONSE_FILE")"
-    resp_file="$(basename "$RESPONSE_FILE")"
-    build_dir="$build_output_dir/$build_name"
-    mkdir -p "$build_dir"
-    mv "$RESPONSE_FILE" "$build_dir/$resp_file"
-    cp -R .flox "$build_dir/.flox"
-    # Copy over any source files
-    cp hello.c "$build_dir/hello.c"
+record_cmd = '''
+    flox install krb5
+'''
+
+[custom.ld_floxlib]
+pre_cmd = '''
+    flox init
+'''
+record_cmd = '''
+    flox edit -f "$INPUT_DATA/manifests/ld_floxlib.toml"
+'''
+ignore_errors = true # don't know why, it has here before
+
+[custom.python_poetry_zlib]
+unpack_dir_contents = [ "init/python/common", "init/python/poetry" ]
+pre_cmd = '''
+    flox init --auto-setup
+'''
+record_cmd = '''
+    flox install zlib
+'''
+
+[custom.python_pyproject_pip_zlib]
+unpack_dir_contents = [ "init/python/common", "init/python/pyproject-pip" ]
+pre_cmd = '''
+    flox init --auto-setup
+'''
+record_cmd = '''
+    flox install zlib
+'''
+
+[custom.python_requirements_zlib]
+unpack_dir_contents = [ "init/python/common", "init/python/requirements" ]
+pre_cmd = '''
+    flox init --auto-setup
+'''
+record_cmd = '''
+    flox install zlib
+'''
+
+# I think the only way this is different from resolve.hello is that you get
+# the manifest and lockfile
+[custom.hello]
+pre_cmd = '''
+    flox init
+'''
+record_cmd = '''
+    flox install hello
+'''
+
+[custom.heredocs]
+pre_cmd = '''
+    flox init
+'''
+record_cmd = '''
+    flox edit -f "$INPUT_DATA/manifests/heredocs.toml"
 '''

@@ -23,7 +23,7 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 }
 
 project_teardown() {
@@ -41,7 +41,7 @@ setup() {
   common_test_setup
   setup_isolated_flox
   project_setup
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml"
 }
 teardown() {
   project_teardown
@@ -137,7 +137,7 @@ function old_hello_response_version() {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.yaml" "$FLOX_BIN" install curl hello
 
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/empty/resp.yaml" \
     run "$FLOX_BIN" upgrade hello
   assert_failure
   assert_line "❌ ERROR: 'hello' is a package in the group 'toplevel' with multiple packages."
