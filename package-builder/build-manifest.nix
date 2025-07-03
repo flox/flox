@@ -69,6 +69,12 @@ let
     ${dollar_out_bin_copy_hints}
   '';
   name = "${pname}-${version}";
+
+  # Custom version of makeWrapper that overrides the choice of shell
+  # to be the same as that used for the build wrapper environment.
+  makeBuildWrapper = pkgs.makeWrapper.overrideAttrs (oldAttrs: {
+    shell = build-wrapper-env-package + "/libexec/build-wrapper-bash";
+  });
 in
 pkgs.runCommandNoCC name
   {
@@ -87,9 +93,9 @@ pkgs.runCommandNoCC name
         findutils
         gnutar
         gnused
-        makeWrapper
         t3
       ]
+      ++ [ makeBuildWrapper ] # provides makeShellWrapper()
       ++ pkgs.stdenv.defaultNativeBuildInputs
       ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ darwin.autoSignDarwinBinariesHook ];
     outputs =
@@ -302,7 +308,10 @@ pkgs.runCommandNoCC name
 
       for prog in ''${bin[@]} ''${sbin[@]} ''${libexec[@]}; do
         # Start by patching shebangs in executables, making sure to prefer the
-        # build wrapper environment over the "develop" environment.
+        # build wrapper environment over the "develop" environment. Note that
+        # the paths substituted come from executables found in `$PATH` at the
+        # time that this function is invoked, so we automatically patch with
+        # paths found in $FLOX_ENV.
         patchShebangs "$prog"
 
         # Wrap contents of executables with ${build-wrapper-env-package}/wrapper
