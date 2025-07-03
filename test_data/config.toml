@@ -389,6 +389,10 @@ pre_cmd = '''
 '''
 cmd = "flox install tabula"
 
+[resolve.python-toml]
+pre_cmd = "flox init"
+cmd = "flox install python313Packages.toml"
+
 [resolve.torchvision-bin]
 pre_cmd = "flox init"
 cmd = "flox install python311Packages.torchvision-bin"
@@ -549,6 +553,19 @@ cmd = "flox edit -f manifest.toml"
 post_cmd = '''
     envs_output_dir="$(dirname $RESPONSE_FILE)"
     env_dir="$envs_output_dir/bash"
+    mkdir -p "$env_dir"
+    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+'''
+
+[envs.build_with_requests]
+skip_if_output_exists = "envs/build_with_requests"
+files = ["envs/build_with_requests/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/build_with_requests"
     mkdir -p "$env_dir"
     cp .flox/env/manifest.toml "$env_dir/manifest.toml"
     cp .flox/env/manifest.lock "$env_dir/manifest.lock"
