@@ -84,18 +84,6 @@ let
     in
     do { attrPath = [ ]; } attrsFromDirTop;
 
-  /**
-    This function converts a list of attrPaths to a space separated string,
-    for use as makeTargets.
-
-    ```
-    makeTargets :: [ [String] ] -> [String]
-    ```
-  */
-  attrPathStrings =
-    # list of attrpaths e.g. result from `lib.nef.reflect.collectAttrPaths
-    collectAttrPaths: map (x: (lib.showAttrPath x.attrPath)) collectAttrPaths;
-
   /*
     This function produces `make` targets from a list of attrPaths.
     The result is a single string with _space separated_ targets,
@@ -130,7 +118,6 @@ in
 
   inherit
     collectAttrPaths
-    attrPathStrings
     makeTargets
     ;
 
