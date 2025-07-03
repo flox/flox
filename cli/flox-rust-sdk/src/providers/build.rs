@@ -2596,6 +2596,56 @@ mod tests {
         build_does_not_run_profile(true);
     }
 
+    fn build_patch_shebangs_prefers_build_env(sandbox: bool) {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = """
+                mkdir -p $out/bin
+                cat > $out/bin/{file_name} <<EOF
+                #!/usr/bin/env bash
+                echo "Hello, World!"
+                EOF
+                chmod +x $out/bin/{file_name}
+            """
+            sandbox = "{}"
+        "#, if sandbox { "pure" } else { "off" }};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        if sandbox {
+            let _git = GitCommandProvider::init(&env_path, false).unwrap();
+        }
+
+        let output = assert_build_status(&flox, &mut env, &package_name, None, true);
+
+        let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
+        let expected_pattern = formatdoc! {r##"
+            interpreter directive changed from "#!/usr/bin/env bash" to "{store_path_prefix_pattern}-environment-build-{package_name}/sbin/bash"
+        "##};
+        let re = regex::Regex::new(&expected_pattern).unwrap();
+        assert!(
+            re.is_match(&output.stderr),
+            "expected STDERR to match regex",
+        );
+    }
+
+    #[test]
+    fn build_patch_shebangs_prefers_build_env_sandbox_off() {
+        build_patch_shebangs_prefers_build_env(false);
+    }
+
+    #[test]
+    fn build_patch_shebangs_prefers_build_env_sandbox_pure() {
+        build_patch_shebangs_prefers_build_env(true);
+    }
+
     #[test]
     fn hello_world_builds() {
         let (flox, tmpdir) = flox_instance();
