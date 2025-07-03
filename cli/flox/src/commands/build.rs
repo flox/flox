@@ -1,5 +1,6 @@
 use std::env;
 use std::path::Path;
+use std::process::Stdio;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
@@ -167,7 +168,7 @@ impl Build {
         });
 
         check_stability_compatibility(&packages_to_build, nixpkgs_url_select.is_some())?;
-        check_git_repo_for_expression_builds(&packages_to_build, &base_dir)?;
+        check_git_tracking_for_expression_builds(&packages_to_build, &expression_dir)?;
 
         let toplevel_derived_url = find_toplevel_group_nixpkgs(&lockfile);
 
@@ -290,7 +291,7 @@ pub(crate) fn check_stability_compatibility<'p>(
     }
 
     for package in packages {
-        if package.kind() == PackageTargetKind::ExpressionBuild {
+        if package.kind().is_expression_build() {
             continue;
         }
         bail!(formatdoc! {"
@@ -304,29 +305,72 @@ pub(crate) fn check_stability_compatibility<'p>(
     Ok(())
 }
 
-fn check_git_repo_for_expression_builds<'p>(
+/// Enforce the existence of a git repository when building nix expressions,
+/// to avoid costly and potentially insecure copies to the nix store.
+/// Additionally, ensure that the expression files are tracked by git,
+/// so that they are guaranteed to be found by the build subsystem,
+/// which filters any untracked sources
+/// allowing us to provide cleaner messaging on the way.
+pub(crate) fn check_git_tracking_for_expression_builds<'p>(
     packages_to_build: impl IntoIterator<Item = &'p PackageTarget>,
-    base_dir: &Path,
+    expression_dir: &Path,
 ) -> Result<()> {
     let mut expression_builds = packages_to_build
         .into_iter()
-        .filter(|target| target.kind() == PackageTargetKind::ExpressionBuild)
+        .filter(|target| target.kind().is_expression_build())
         .peekable();
 
     if expression_builds.peek().is_none() {
         return Ok(());
     }
 
-    let expression_builds_formatted = expression_builds.map(|target| target.name()).join(", ");
+    let expression_builds: Vec<_> = expression_builds
+        .map(|target| {
+            let PackageTargetKind::ExpressionBuild(metadata) = target.kind() else {
+                unreachable!("kind checked above");
+            };
+            (target.name(), metadata)
+        })
+        .collect();
 
-    if let Err(err) = GitCommandProvider::discover(base_dir) {
-        trace!(%err, "git discovery error");
+    let expression_builds_formatted = expression_builds
+        .iter()
+        .map(|(name, _)| format!("  - {name}"))
+        .join("\n");
 
-        bail!(formatdoc! {"
-            Building nix expression build(s) ({expression_builds_formatted}) requires git version control.
-            Only git tracked files (including the expressions themselves) will be available during nix expression builds.
-        "});
+    let git = match GitCommandProvider::discover(expression_dir) {
+        Err(err) => {
+            trace!(%err, "git discovery error");
+
+            bail!(formatdoc! {"
+                Building nix expression build(s) requires git version control.
+                Only git tracked files (including the expressions themselves) will be available during nix expression builds.
+
+                Expression build(s):
+                {expression_builds_formatted}
+            "});
+        },
+        Ok(git) => git,
     };
+    for (name, metadata) in expression_builds {
+        let mut cmd = git.new_command();
+        let file_path = expression_dir.join(&metadata.rel_file_path);
+
+        cmd.arg("ls-files").arg("--error-unmatch").arg(&file_path);
+        cmd.stderr(Stdio::null());
+        cmd.stdout(Stdio::null());
+
+        let status = cmd.status()?;
+        if !status.success() {
+            bail!(formatdoc! {"
+               The Nix expression for '{name}' does not appear to be tracked by git.
+               Only git tracked files (including the expressions themselves) will be available during nix expression builds.
+
+               Nix expression: '{name}' defined in '{file_path}'
+               ", file_path = file_path.display()
+            });
+        }
+    }
 
     Ok(())
 }
@@ -412,8 +456,11 @@ pub(crate) fn packages_to_build<'o>(
 
 #[cfg(test)]
 mod test {
+    use std::fs::File;
+
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
+    use flox_rust_sdk::providers::build::ExpressionBuildMetadata;
     use flox_rust_sdk::providers::build::test_helpers::prepare_nix_expressions_in;
     use flox_rust_sdk::providers::nix::test_helpers::known_store_path;
     use tempfile::tempdir_in;
@@ -484,7 +531,9 @@ mod test {
         // the presence of expression builds doesnt change the result
         packages.push(PackageTarget::new_unchecked(
             "expression",
-            PackageTargetKind::ExpressionBuild,
+            PackageTargetKind::ExpressionBuild(ExpressionBuildMetadata {
+                rel_file_path: Default::default(),
+            }),
         ));
 
         let result = check_stability_compatibility(&packages, true);
@@ -509,7 +558,9 @@ mod test {
         // the presence of expression builds doesnt change the result
         packages.push(PackageTarget::new_unchecked(
             "expression",
-            PackageTargetKind::ExpressionBuild,
+            PackageTargetKind::ExpressionBuild(ExpressionBuildMetadata {
+                rel_file_path: Default::default(),
+            }),
         ));
 
         let result = check_stability_compatibility(&packages, false);
@@ -579,18 +630,29 @@ mod test {
 
     #[test]
     fn expression_builds_require_git_repo() {
+        let base_dir = tempfile::tempdir().unwrap();
+        let rel_file_path = Path::new("./expression.nix");
+        let abs_file_path = base_dir.path().join(rel_file_path);
+        File::create(&abs_file_path).unwrap();
+
         let packages = vec![PackageTarget::new_unchecked(
             "expression",
-            PackageTargetKind::ExpressionBuild,
+            PackageTargetKind::ExpressionBuild(ExpressionBuildMetadata {
+                rel_file_path: rel_file_path.to_path_buf(),
+            }),
         )];
-        let base_dir = tempfile::tempdir().unwrap();
 
-        let result = check_git_repo_for_expression_builds(&packages, base_dir.path());
+        // fail without a git repository containing the expression dir
+        let result = check_git_tracking_for_expression_builds(&packages, base_dir.path());
         assert!(result.is_err());
 
-        let _git = GitCommandProvider::init(base_dir.path(), false).unwrap();
+        // fail if the expression isn't tracked
+        let git = GitCommandProvider::init(base_dir.path(), false).unwrap();
+        let result = check_git_tracking_for_expression_builds(&packages, base_dir.path());
+        assert!(result.is_err(), "expression needs to be tracked");
 
-        let result = check_git_repo_for_expression_builds(&packages, base_dir.path());
+        git.add(&[rel_file_path]).unwrap();
+        let result = check_git_tracking_for_expression_builds(&packages, base_dir.path());
         assert!(result.is_ok());
     }
 
@@ -602,7 +664,7 @@ mod test {
         )];
         let base_dir = tempfile::tempdir().unwrap();
 
-        let result = check_git_repo_for_expression_builds(&packages, base_dir.path());
+        let result = check_git_tracking_for_expression_builds(&packages, base_dir.path());
         assert!(result.is_ok());
     }
 }

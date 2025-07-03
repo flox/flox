@@ -125,7 +125,7 @@ NIX_EXPRESSION_GIT_ROOT := \
   $(shell $(_git) -C '$(NIX_EXPRESSION_DIR)' rev-parse --show-toplevel 2> /dev/null || echo)
 
 NIX_EXPRESSION_GIT_SUBDIR := \
-  -$(shell $(_git) -C '$(NIX_EXPRESSION_DIR)' rev-parse --show-prefix 2> /dev/null || echo)
+  $(shell $(_git) -C '$(NIX_EXPRESSION_DIR)' rev-parse --show-prefix 2> /dev/null || echo)
 
 
 ifeq (,$(NIX_EXPRESSION_DIR))

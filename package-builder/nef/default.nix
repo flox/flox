@@ -35,9 +35,9 @@ let
 
   # different forms of identifiers for the collected packages
   # including Make `targets`
-  collectedAttrPaths = lib.nef.reflect.collectAttrPaths [ ] collectedPackages;
+  collectedAttrPaths = lib.nef.reflect.collectAttrPaths collectedPackages;
   reflect = {
-    attrPaths = lib.nef.reflect.attrPathStrings collectedAttrPaths;
+    attrPaths = collectedAttrPaths;
     targets = lib.nef.reflect.makeTargets collectedAttrPaths;
   };
 

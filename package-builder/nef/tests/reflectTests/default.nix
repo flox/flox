@@ -1,7 +1,8 @@
 { lib }:
 let
-  collect = test: lib.nef.reflect.collectAttrPaths [ ] (lib.nef.dirToAttrs "${./testData}/${test}");
+  baseDir = "${./testData}";
   reflect = lib.nef.reflect;
+  collect = test: reflect.collectAttrPaths (lib.nef.dirToAttrs "${baseDir}/${test}");
 in
 
 {
@@ -12,7 +13,7 @@ in
 
   "test: reflect make targets for nested packages" = {
     expr = reflect.makeTargets (collect "nested");
-    expected = "nestedPkgs.nestedPkg toplevelPkg";
+    expected = "nestedPkgs.nestedPkg nestedPkgs.otherNestedPkg toplevelPkg";
   };
 
   # while correct, these kind of quoting tends to casuse issues
@@ -32,4 +33,35 @@ in
     expr = reflect.makeTargets (collect "specialCharacters");
     expected = "\"@at\" \"libc++\" \"with space\"";
   };
+
+  "test: collect includes paths" = {
+    expr = collect "nested";
+    expected = [
+      {
+        attrPath = [
+          "nestedPkgs"
+          "nestedPkg"
+        ];
+        attrPathStr = "nestedPkgs.nestedPkg";
+        absFilePath = "${baseDir}/nested/nestedPkgs/nestedPkg.nix";
+        relFilePath = "nestedPkgs/nestedPkg.nix";
+      }
+      {
+        attrPath = [
+          "nestedPkgs"
+          "otherNestedPkg"
+        ];
+        attrPathStr = "nestedPkgs.otherNestedPkg";
+        absFilePath = "${baseDir}/nested/nestedPkgs/otherNestedPkg/default.nix";
+        relFilePath = "nestedPkgs/otherNestedPkg/default.nix";
+      }
+      {
+        attrPath = [ "toplevelPkg" ];
+        attrPathStr = "toplevelPkg";
+        absFilePath = "${baseDir}/nested/toplevelPkg.nix";
+        relFilePath = "toplevelPkg.nix";
+      }
+    ];
+  };
+
 }

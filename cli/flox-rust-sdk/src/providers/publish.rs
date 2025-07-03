@@ -1009,7 +1009,7 @@ pub fn check_package_metadata(
     // We should not need this, and allow for no base catalog page dependency.
     // But for now, requiring it simplifies resolution and model updates
     // significantly.
-    let base_catalog_ref = if pkg.kind() == PackageTargetKind::ManifestBuild {
+    let base_catalog_ref = if pkg.kind() == &PackageTargetKind::ManifestBuild {
         toplevel_catalog_ref.cloned().ok_or_else(|| {
             PublishError::UnsupportedEnvironmentState("No packages in toplevel group".to_string())
         })?

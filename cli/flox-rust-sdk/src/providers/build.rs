@@ -457,7 +457,17 @@ pub fn find_toplevel_group_nixpkgs(lockfile: &Lockfile) -> Option<BaseCatalogUrl
 /// ```
 ///
 /// will expose the packages `foo`, `bar`, `fizz.buzz`.
-fn get_nix_expression_targets(expression_dir: &Path) -> Result<Vec<String>, ManifestBuilderError> {
+fn get_nix_expression_targets(
+    expression_dir: &Path,
+) -> Result<Vec<(String, ExpressionBuildMetadata)>, ManifestBuilderError> {
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct NefTargetReflect {
+        attr_path_str: String,
+        #[serde(flatten)]
+        metadata: ExpressionBuildMetadata,
+    }
+
     let output = nix_base_command()
         .arg("eval")
         .args(["--argstr", "nixpkgs-url", COMMON_NIXPKGS_URL.as_str()])
@@ -477,8 +487,11 @@ fn get_nix_expression_targets(expression_dir: &Path) -> Result<Vec<String>, Mani
         ))?
     }
 
-    let attr_paths = serde_json::from_slice(&output.stdout)
-        .map_err(|e| ManifestBuilderError::ListNixExpressions(e.to_string()))?;
+    let attr_paths = serde_json::from_slice::<Vec<NefTargetReflect>>(&output.stdout)
+        .map_err(|e| ManifestBuilderError::ListNixExpressions(e.to_string()))?
+        .into_iter()
+        .map(|reflect| (reflect.attr_path_str, reflect.metadata))
+        .collect();
 
     Ok(attr_paths)
 }
@@ -496,6 +509,12 @@ impl PackageTargetError {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExpressionBuildMetadata {
+    pub rel_file_path: PathBuf,
+}
+
 /// The kind of a package target,
 /// i.e. whether a pacakge is sourced from the manifest or a nix expression.
 ///
@@ -506,10 +525,20 @@ impl PackageTargetError {
 /// from the installed packages in the  top-level group
 /// for manifest builds, while expression builds
 /// are assigned their base nixpkgs url in coordination with the catalog API
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageTargetKind {
-    ExpressionBuild,
+    ExpressionBuild(ExpressionBuildMetadata),
     ManifestBuild,
+}
+
+impl PackageTargetKind {
+    pub fn is_expression_build(&self) -> bool {
+        matches!(self, PackageTargetKind::ExpressionBuild(_))
+    }
+
+    pub fn is_manifest_build(&self) -> bool {
+        matches!(self, PackageTargetKind::ManifestBuild)
+    }
 }
 
 /// A wrapper type for the name of package targets.
@@ -550,8 +579,8 @@ impl PackageTarget {
         PackageTargetName(&self.name)
     }
 
-    pub fn kind(&self) -> PackageTargetKind {
-        self.kind
+    pub fn kind(&self) -> &PackageTargetKind {
+        &self.kind
     }
 
     #[cfg(any(test, feature = "tests"))]
@@ -594,7 +623,7 @@ impl PackageTargets {
                 .map(|(name, _)| (name.to_string(), PackageTargetKind::ManifestBuild)),
         );
 
-        for expression_build_target in nix_expression_packages {
+        for (expression_build_target, expression_build_metadata) in nix_expression_packages {
             if targets.contains_key(&expression_build_target) {
                 return Err(PackageTargetError::new(formatdoc! {"
                     '{expression_build_target}' is defined in the manifest and as a Nix expression.
@@ -604,7 +633,10 @@ impl PackageTargets {
                 }));
             }
 
-            targets.insert(expression_build_target, PackageTargetKind::ExpressionBuild);
+            targets.insert(
+                expression_build_target,
+                PackageTargetKind::ExpressionBuild(expression_build_metadata),
+            );
         }
 
         Ok(PackageTargets { targets })
@@ -630,7 +662,7 @@ impl PackageTargets {
                 })?;
                 Ok(PackageTarget {
                     name: name.to_string(),
-                    kind: *kind,
+                    kind: kind.clone(),
                 })
             })
             .collect()
@@ -642,7 +674,7 @@ impl PackageTargets {
             .iter()
             .map(|(name, kind)| PackageTarget {
                 name: name.to_string(),
-                kind: *kind,
+                kind: kind.clone(),
             })
             .collect()
     }
