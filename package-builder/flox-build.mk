@@ -461,7 +461,6 @@ define BUILD_local_template =
 	  --argstr flox-env "$(FLOX_ENV)" \
 	  --argstr build-wrapper-env "$$($(_pvarname)_build_wrapper_env)" \
 	  --argstr install-prefix "$($(_pvarname)_out)" \
-	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  $$(if $$($(_pvarname)_buildDeps),--arg buildDeps '[$$($(_pvarname)_buildDeps)]') \
 	  --out-link "result-$(_pname)" \
 	  --json '^*' > $$@
@@ -538,7 +537,6 @@ define BUILD_nix_sandbox_template =
 	  --argstr srcTarball "$($(_pvarname)_src_tar)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
 	  --argstr build-wrapper-env "$$($(_pvarname)_build_wrapper_env)" \
-	  --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	  $$(if $$($(_pvarname)_buildDeps),--arg buildDeps '[$$($(_pvarname)_buildDeps)]') \
 	  --argstr buildScript "$($(_pvarname)_buildScript)" \
 	  $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
