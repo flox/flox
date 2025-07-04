@@ -62,8 +62,10 @@ in
   #
   # nix eval -f <nef> --argstr pkgs-dir <PATH> --argstr system <SYSTEM> pkgs.<attrPath>
   pkgs =
-    assert lib.assertMsg (system != null)
-      "system missing, needs top be provided with `--argstr system <SYSTEM>` or by running with `--impure`";
+    assert lib.assertMsg (system != null) ''
+      'system' argument missing.
+      Evaluate with `--argstr system <SYSTEM>` or with `--impure` to use the current system.
+    '';
     extendedNixpkgs;
 
 }
