@@ -1,0 +1,4 @@
+version=1
+
+[install]
+bash.pkg-path = "bashNonInteractive"
