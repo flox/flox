@@ -77,6 +77,8 @@
               pkgsFor = final;
             }
           );
+          nixpkgsInputLockedURL =
+            nixpkgsInput: "github:flox/nixpkgs/${nixpkgsInput.rev}?narHash=${nixpkgsInput.narHash}";
         in
         {
           # Generates a `.git/hooks/pre-commit' script.
@@ -97,12 +99,12 @@
           rust-toolchain = final.fenix.stable;
 
           rust-external-deps = callPackage ./pkgs/rust-external-deps { };
-          rust-internal-deps = callPackage ./pkgs/rust-internal-deps { };
+          rust-internal-deps = callPackage ./pkgs/rust-internal-deps { inherit nixpkgsInputLockedURL; };
 
           # (Linux-only) LD_AUDIT library for using dynamic libraries in Flox envs.
           ld-floxlib = callPackage ./pkgs/ld-floxlib { };
           flox-src = callPackage ./pkgs/flox-src { };
-          flox-interpreter = callPackage ./pkgs/flox-interpreter { };
+          flox-interpreter = callPackage ./pkgs/flox-interpreter { inherit nixpkgsInputLockedURL; };
           flox-package-builder = callPackage ./pkgs/flox-package-builder { };
 
           # Package Database Utilities: scrape, search, and resolve.

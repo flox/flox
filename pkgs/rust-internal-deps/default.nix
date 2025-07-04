@@ -9,6 +9,7 @@
   gnumake,
   inputs,
   lib,
+  nixpkgsInputLockedURL,
   nix,
   pkgsFor,
   process-compose,
@@ -40,7 +41,7 @@ let
       # they should be
       # a) bundled at buildtime if possible (binaries/packages)
       # b) use this version of nixpkgs i.e. (nix library utils such as `lib` and `runCommand`)
-      COMMON_NIXPKGS_URL = "github:flox/nixpkgs/${inputs.nixpkgs.rev}?narHash=${inputs.nixpkgs.narHash}";
+      COMMON_NIXPKGS_URL = nixpkgsInputLockedURL inputs.nixpkgs;
       # Some tests need a URL in https format
       TESTING_BASE_CATALOG_URL = "https://github.com/flox/nixpkgs?rev=${inputs.nixpkgs.rev}";
 

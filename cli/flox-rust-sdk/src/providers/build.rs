@@ -2605,8 +2605,13 @@ mod tests {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
 
-        let manifest = formatdoc! {r#"
-            version = 1
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/bash"));
+        let env_path = env.parent_path().unwrap();
+
+        let base_manifest = env.manifest_contents(&flox).unwrap();
+        let build_manifest = formatdoc! {r#"
+            {base_manifest}
 
             [build.{package_name}]
             command = """
@@ -2619,10 +2624,7 @@ mod tests {
             """
             sandbox = "{}"
         "#, if sandbox { "pure" } else { "off" }};
-
-        let (flox, _temp_dir_handle) = flox_instance();
-        let mut env = new_path_environment(&flox, &manifest);
-        let env_path = env.parent_path().unwrap();
+        env.edit(&flox, build_manifest).unwrap();
 
         if sandbox {
             let _git = GitCommandProvider::init(&env_path, false).unwrap();
@@ -2632,7 +2634,7 @@ mod tests {
 
         let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
         let expected_pattern = formatdoc! {r##"
-            interpreter directive changed from "#!/usr/bin/env bash" to "{store_path_prefix_pattern}-environment-build-{package_name}/sbin/bash"
+            interpreter directive changed from "#!/usr/bin/env bash" to "{store_path_prefix_pattern}-environment-build-{package_name}/bin/bash"
         "##};
         let re = regex::Regex::new(&expected_pattern).unwrap();
         assert!(
@@ -2649,6 +2651,60 @@ mod tests {
     #[test]
     fn build_patch_shebangs_prefers_build_env_sandbox_pure() {
         build_patch_shebangs_prefers_build_env(true);
+    }
+
+    /// Test that patchShebangs is able to substitute the path for `cat`
+    /// as provided by Nix runCommmand by way of the `coreutils` package.
+    /// If it uses a version of `coreutils` from a different nixpkgs
+    /// revision then the build will fail the closure check, and
+    /// `assert_build_status()` will flag the error accordingly.
+    fn build_patch_shebangs_falls_back_to_correct_nixpkgs(sandbox: bool) {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = """
+                mkdir -p $out/bin
+                cat > $out/bin/{file_name} <<EOF
+                #!/usr/bin/env cat
+                echo "Hello, World!"
+                EOF
+                chmod +x $out/bin/{file_name}
+            """
+            sandbox = "{}"
+        "#, if sandbox { "pure" } else { "off" }};
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        if sandbox {
+            let _git = GitCommandProvider::init(&env_path, false).unwrap();
+        }
+
+        let output = assert_build_status(&flox, &mut env, &package_name, None, true);
+
+        let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
+        let expected_pattern = formatdoc! {r##"
+            interpreter directive changed from "#!/usr/bin/env cat" to "{store_path_prefix_pattern}-coreutils-[\d.]*/bin/cat"
+        "##};
+        let re = regex::Regex::new(&expected_pattern).unwrap();
+        assert!(
+            re.is_match(&output.stderr),
+            "expected STDERR to match regex",
+        );
+    }
+
+    #[test]
+    fn build_patch_shebangs_falls_back_to_correct_nixpkgs_sandbox_off() {
+        build_patch_shebangs_falls_back_to_correct_nixpkgs(false);
+    }
+
+    #[test]
+    fn build_patch_shebangs_falls_back_to_correct_nixpkgs_sandbox_pure() {
+        build_patch_shebangs_falls_back_to_correct_nixpkgs(true);
     }
 
     #[test]

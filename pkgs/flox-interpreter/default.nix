@@ -7,8 +7,10 @@
   getopt,
   gnused,
   iconv,
+  inputs,
   jq,
   ld-floxlib,
+  nixpkgsInputLockedURL,
   nawk,
   process-compose,
   runCommandNoCC,
@@ -133,10 +135,10 @@ runCommandNoCC "flox-interpreter"
     ${shfmt}/bin/shfmt --diff $build_executable_wrapper
     rm $build_executable_wrapper/.editorconfig
 
-    # Create helper symlinks from `sbin/{sh,bash}` for use wrapping
-    # executables in build-manifest.nix. Put them in `/sbin` to avoid
-    # collisions with other packages that may provide these files.
-    mkdir -p $build_executable_wrapper/sbin
-    ln -s ${bash}/bin/bash $build_executable_wrapper/sbin/bash
-    ln -s ${bash}/bin/bash $build_executable_wrapper/sbin/sh
+    # Finally, leave a breadcrumb to document the nixpkgs URL used to build
+    # this version of the interpreter. This, together with the URL found
+    # within an environment's `manifest.toml` will determine the [potentially]
+    # two nixpkgs URLs used to build a given package.
+    echo "${nixpkgsInputLockedURL inputs.nixpkgs}" > $out/nixpkgs-url
+    cp $out/nixpkgs-url $build_executable_wrapper/nixpkgs-url
   ''
