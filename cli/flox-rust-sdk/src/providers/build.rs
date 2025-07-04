@@ -2601,6 +2601,54 @@ mod tests {
         let (flox, tmpdir) = flox_instance();
         assert_manifest_build_succeeds(GENERATED_DATA.join("build/hello"), "hello", &flox, tmpdir);
     }
+
+    async fn build_symlinks_can_refer_to_flox_env(sandbox: &str) {
+        let package_name = String::from("foo");
+        let manifest = formatdoc! {r#"
+            version = 1
+            [install]
+            hello.pkg-path = "hello"
+
+            [build.{package_name}]
+            sandbox = "{sandbox}"
+            command = """
+                mkdir -p $out/bin
+                ln -s $FLOX_ENV/bin/hello $out/bin
+            """
+        "#};
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+        let _ = GitCommandProvider::init(&env_path, false).unwrap();
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join("hello");
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            "Hello, world!"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_symlinks_can_refer_to_flox_env_sandbox_pure() {
+        build_symlinks_can_refer_to_flox_env("pure").await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_symlinks_can_refer_to_flox_env_sandbox_off() {
+        build_symlinks_can_refer_to_flox_env("off").await;
+    }
 }
 
 #[cfg(test)]

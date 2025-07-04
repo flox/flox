@@ -31,7 +31,9 @@ comma := ,
 # Substitute Nix store paths for packages required by this Makefile.
 __bashInteractive := @bashInteractive@
 __coreutils := @coreutils@
+__cpio := @cpio@
 __daemonize := @daemonize@
+__findutils := @findutils@
 __gitMinimal := @gitMinimal@
 __gnugrep := @gnugrep@
 __gnused := @gnused@
@@ -48,10 +50,13 @@ __t3 := @t3@
 __package_bin = $(if $(filter @%@,$(1)),$(2),$(1)/bin/$(2))
 _bash := $(call __package_bin,$(__bashInteractive),bash)
 _cat := $(call __package_bin,$(__coreutils),cat)
+_chmod := $(call __package_bin,$(__coreutils),chmod)
 _cp := $(call __package_bin,$(__coreutils),cp)
+_cpio := $(call __package_bin,$(__cpio),cpio)
 _cut := $(call __package_bin,$(__coreutils),cut)
 _daemonize := $(call __package_bin,$(__daemonize),daemonize)
 _env := $(call __package_bin,$(__coreutils),env)
+_find := $(call __package_bin,$(__findutils),find)
 _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
 _head := $(call __package_bin,$(__coreutils),head)
@@ -432,15 +437,17 @@ define BUILD_local_template =
 	    $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $$<
 	@#
 	@# Finally, rewrite references to temporary build wrapper in "out",
-	@# making sure to render the substituted output in the same location
+	@# making sure to return the substituted output to the same location
 	@# in which it was built.
 	@#
 	$(_VV_) if [ -d "$($(_pvarname)_out)" ]; then \
 	  $(_mkdir) -p $($(_pvarname)_out).new && \
 	  set -o pipefail && \
-	    $(_tar) -C $($(_pvarname)_out) -c --mode=u+w -f - . | \
+	    ( cd $($(_pvarname)_out) && $(_find) . -print0 | \
+	      $(_cpio) --null --create --format newc ) | \
 	    $(_sed) --binary "s%$$($(_pvarname)_develop_copy_env)%$$($(_pvarname)_build_wrapper_env)%g" | \
-	    $(_tar) -C $($(_pvarname)_out).new -xf - && \
+	    ( cd $($(_pvarname)_out).new && $(_cpio) --extract --make-directories --preserve-modification-time \
+	      --unconditional --no-absolute-filenames --quiet && $(_chmod) -R u+w . ) && \
 	  $(_rm) -rf $($(_pvarname)_out) && \
 	  $(_mv) $($(_pvarname)_out).new $($(_pvarname)_out); \
 	fi
