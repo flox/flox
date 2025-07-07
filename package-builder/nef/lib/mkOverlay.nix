@@ -39,7 +39,7 @@
   mkOverlay =
     # current attr path for messaging
     attrPath:
-    # Current scope, i.e. the unionm of all parent attr sets
+    # Current scope, i.e. the union of all parent attr sets
     # Used to create a `callPackage` function when nixpkgs does not
     # via either `makeScope` or a custom `callPackage`.
     currentScope:
@@ -52,12 +52,18 @@
         name: value:
         let
           attrPath' = attrPath ++ [ name ];
+          attrPathStr = lib.showAttrPath attrPath';
         in
 
         {
           "nix" =
             let
-              recursionGuardError = (throw "'${lib.showAttrPath attrPath'}' defines itself");
+              recursionGuardError = throw ''
+                Circular dependency detected.
+                The package '${attrPathStr}' defined in ${value.path} directly or transitively imports itself.
+                For example by requesting a dependency '${name}'.
+                An expression can only access its own attribute path to override its existing value.
+              '';
 
               # Find or build a `callPackage` function that replaces infinite recursion erros with an error
               callPackage =
@@ -101,13 +107,20 @@
                       ${name} = prev.${name} or recursionGuardError;
                     }
                   );
+
+              errorContext =
+                let
+                  replacingOrDefining = if builtins.hasAttr name prev then "replacing" else "defining";
+                in
+                "while ${replacingOrDefining} '${attrPathStr}' by evaluating '${value.path}'";
             in
-            callPackage value.path { };
+            builtins.addErrorContext errorContext (callPackage value.path { });
 
           "directory" =
             # Try extend an existing attrset or create a new scope
             let
-              attrSet = if builtins.hasAttr name prev then prev.${name} else lib.makeScope prev.newScope (_: { });
+              attrSet =
+                if builtins.hasAttr name prev then prev.${name} else lib.makeScope final.newScope (_: { });
             in
             nef.extendAttrSet attrPath' (currentScope // final) attrSet value;
         }
