@@ -2657,6 +2657,65 @@ mod tests {
         assert_manifest_build_succeeds(GENERATED_DATA.join("build/hello"), "hello", &flox, tmpdir);
     }
 
+    /// Test that patchShebangs is able to substitute the path for `cat`
+    /// as provided by Nix runCommmand by way of the `coreutils` package.
+    /// If it uses a version of `coreutils` from a different nixpkgs
+    /// revision then the build will fail the closure check, and
+    /// `assert_build_status()` will flag the error accordingly.
+    fn build_do_not_eval_with_nixpkgs_from_toplevel(sandbox: bool) {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        // hello@2.10 sets toplevel to an old nixpkgs revision that will
+        // cause the closure check to fail if build-manifest.nix pulls in
+        // `bash` from the toplevel nixpkgs.
+        let mut env =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/old_hello"));
+        let env_path = env.parent_path().unwrap();
+
+        let base_manifest = env.manifest_contents(&flox).unwrap();
+        let build_manifest = formatdoc! {r##"
+            {base_manifest}
+
+            [build.{package_name}]
+            command = """
+                mkdir -p $out/bin
+                echo "#!/usr/bin/env bash" > $out/bin/{file_name}
+                type -p hello >> $out/bin/{file_name}
+                chmod +x $out/bin/{file_name}
+            """
+            sandbox = "{}"
+        "##, if sandbox { "pure" } else { "off" }};
+        env.edit(&flox, build_manifest).unwrap();
+
+        if sandbox {
+            let _git = GitCommandProvider::init(&env_path, false).unwrap();
+        }
+
+        let output = assert_build_status(&flox, &mut env, &package_name, None, true);
+
+        let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
+        let expected_pattern = formatdoc! {r##"
+            {store_path_prefix_pattern}-{package_name}-0.0.0/bin/{file_name}: interpreter directive changed from "#!/usr/bin/env bash" to "{store_path_prefix_pattern}-bash-.*/bin/bash"
+        "##};
+        let re = regex::Regex::new(&expected_pattern).unwrap();
+        assert!(
+            re.is_match(&output.stderr),
+            "expected STDERR to match regex",
+        );
+    }
+
+    #[test]
+    fn build_do_not_eval_with_nixpkgs_from_toplevel_sandbox_off() {
+        build_do_not_eval_with_nixpkgs_from_toplevel(false);
+    }
+
+    #[test]
+    fn build_do_not_eval_with_nixpkgs_from_toplevel_sandbox_pure() {
+        build_do_not_eval_with_nixpkgs_from_toplevel(true);
+    }
+
     async fn build_symlinks_can_refer_to_flox_env(sandbox: &str) {
         let package_name = String::from("foo");
         let manifest = formatdoc! {r#"
