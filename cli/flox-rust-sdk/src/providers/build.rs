@@ -719,6 +719,11 @@ pub mod test_helpers {
         build_cache: Option<bool>,
         expect_success: bool,
     ) -> CollectedOutput {
+        let toplevel_or_common_nixpkgs =
+            find_toplevel_group_nixpkgs(&env.lockfile(flox).unwrap().into())
+                .map(|toplevel_nixpkgs| toplevel_nixpkgs.as_flake_ref().unwrap())
+                .unwrap_or_else(|| COMMON_NIXPKGS_URL.clone());
+
         let output_stream = FloxBuildMk::new(
             flox,
             &env.parent_path().unwrap(),
@@ -726,7 +731,7 @@ pub mod test_helpers {
             &env.build(flox).unwrap(),
         )
         .build(
-            &COMMON_NIXPKGS_URL,
+            &toplevel_or_common_nixpkgs,
             &env.rendered_env_links(flox).unwrap().development,
             &[PackageTargetName::new_unchecked(&package)],
             build_cache,
