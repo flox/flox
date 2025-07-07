@@ -1,8 +1,4 @@
 {
-  # nixpkgs providing `lib` and `stdenv` (`runCommand`)
-  # this is overridden to point to the nixpkgs used to build flox by the caller
-  nixpkgs-url ? "github:flox/nixpkgs/stable",
-  pkgs ? (builtins.getFlake nixpkgs-url).legacyPackages.${builtins.currentSystem},
   pname,
   version,
   flox-env, # environment from which package is built
@@ -19,6 +15,17 @@ assert (buildCache != null) -> (buildScript != null);
 # srcTarball is only required with a build script
 assert (srcTarball != null) -> (buildScript != null);
 let
+  # Start by defining the locked nixpkgs flakeref for the `pkgs` attrset from
+  # which `lib` and `stdenv` (`runCommand`) are derived. We use the exact
+  # `nixpkgs-url` used to build the `flox-interpreter` package to ensure that
+  # we use the same versions of packages already found in that closure.
+  nixpkgs-url = builtins.replaceStrings [ "\n" ] [ "" ] (
+    builtins.readFile "${build-wrapper-env}/nixpkgs-url"
+  );
+  pkgs = (builtins.getFlake nixpkgs-url).legacyPackages.${builtins.currentSystem};
+
+  # From here on refer to the flox-env and build-wrapper-env inputs as
+  # storepaths only.
   flox-env-package = builtins.storePath flox-env;
   build-wrapper-env-package = builtins.storePath build-wrapper-env;
 
@@ -70,11 +77,6 @@ let
   '';
   name = "${pname}-${version}";
 
-  # Custom version of makeWrapper that overrides the choice of shell
-  # to be the same as that used for the build wrapper environment.
-  makeBuildWrapper = pkgs.makeWrapper.overrideAttrs (oldAttrs: {
-    shell = build-wrapper-env-package + "/sbin/bash";
-  });
 in
 pkgs.runCommandNoCC name
   {
@@ -94,9 +96,9 @@ pkgs.runCommandNoCC name
         findutils
         gnutar
         gnused
+        makeWrapper
         t3
       ]
-      ++ [ makeBuildWrapper ] # provides makeShellWrapper()
       ++ pkgs.stdenv.defaultNativeBuildInputs
       ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ darwin.autoSignDarwinBinariesHook ];
     outputs =

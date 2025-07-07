@@ -1,0 +1,152 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "bash": {
+        "pkg-path": "bashNonInteractive"
+      }
+    },
+    "options": {}
+  },
+  "packages": [
+    {
+      "attr_path": "bashNonInteractive",
+      "broken": false,
+      "derivation": "/nix/store/cm2161i35pk8bz79h1cn2w6yil30k6xf-bash-5.2p37.drv",
+      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
+      "install_id": "bash",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=30e2e2857ba47844aa71991daa6ed1fc678bcbb7",
+      "name": "bash-5.2p37",
+      "pname": "bashNonInteractive",
+      "rev": "30e2e2857ba47844aa71991daa6ed1fc678bcbb7",
+      "rev_count": 822156,
+      "rev_date": "2025-06-27T08:03:01Z",
+      "scrape_date": "2025-06-29T04:56:13.692525Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.2p37",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/h7xc8q6gggf3agd837r0nhjd8n15rv3c-bash-5.2p37-dev",
+        "doc": "/nix/store/jq7fqh5wclg2f0cvzvqxx4klm9zscczj-bash-5.2p37-doc",
+        "info": "/nix/store/2izzsi59g539j84qgghzx50506jqdpsm-bash-5.2p37-info",
+        "man": "/nix/store/mxzbnzsf97b792xrcg3krkbv7qlmph8r-bash-5.2p37-man",
+        "out": "/nix/store/nravshvfviv75plf26nwfwzg8ldl3z8s-bash-5.2p37"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "bashNonInteractive",
+      "broken": false,
+      "derivation": "/nix/store/58ja5b0w3gbv4c9fjrs9dnyk7asd9djy-bash-5.2p37.drv",
+      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
+      "install_id": "bash",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=30e2e2857ba47844aa71991daa6ed1fc678bcbb7",
+      "name": "bash-5.2p37",
+      "pname": "bashNonInteractive",
+      "rev": "30e2e2857ba47844aa71991daa6ed1fc678bcbb7",
+      "rev_count": 822156,
+      "rev_date": "2025-06-27T08:03:01Z",
+      "scrape_date": "2025-06-29T05:19:53.427772Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.2p37",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/k1qld8lhdb0hlsq2yyr0gbp92b9ix7w7-bash-5.2p37-debug",
+        "dev": "/nix/store/29bzqq8w04j6z4z2fmjyn31sfsi47a90-bash-5.2p37-dev",
+        "doc": "/nix/store/wlkiy9jvgvacal1q09bmjx7lk3z7mz4p-bash-5.2p37-doc",
+        "info": "/nix/store/rfxvk5fnc7h5zhavji1r6kclnfzf9pqg-bash-5.2p37-info",
+        "man": "/nix/store/a1w2w9sn2glqg1l1yv0b24gf1pi758c7-bash-5.2p37-man",
+        "out": "/nix/store/840zd1vd2kqwsraq0xfyrsrnrvsancjf-bash-5.2p37"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "bashNonInteractive",
+      "broken": false,
+      "derivation": "/nix/store/sj31baca890sycb9754i2ckp9z49zx7w-bash-5.2p37.drv",
+      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
+      "install_id": "bash",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=30e2e2857ba47844aa71991daa6ed1fc678bcbb7",
+      "name": "bash-5.2p37",
+      "pname": "bashNonInteractive",
+      "rev": "30e2e2857ba47844aa71991daa6ed1fc678bcbb7",
+      "rev_count": 822156,
+      "rev_date": "2025-06-27T08:03:01Z",
+      "scrape_date": "2025-06-29T05:38:12.313689Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.2p37",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/zr7qcs47mrag55nhln4xb33bn98qm24r-bash-5.2p37-dev",
+        "doc": "/nix/store/928rf6sf1kqsxi6m35p159jk0jya0rhp-bash-5.2p37-doc",
+        "info": "/nix/store/h73m25x606vj9sfvn0b9kxqkhkn47ql0-bash-5.2p37-info",
+        "man": "/nix/store/f4a91gyaqv36xyscdh6jslvzyl610vdy-bash-5.2p37-man",
+        "out": "/nix/store/bzk59iv9qh7p5zi6r3j4cdgws61ggwij-bash-5.2p37"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "bashNonInteractive",
+      "broken": false,
+      "derivation": "/nix/store/c8dsr967ap3j1l01l565w926bahlxpmc-bash-5.2p37.drv",
+      "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
+      "install_id": "bash",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=30e2e2857ba47844aa71991daa6ed1fc678bcbb7",
+      "name": "bash-5.2p37",
+      "pname": "bashNonInteractive",
+      "rev": "30e2e2857ba47844aa71991daa6ed1fc678bcbb7",
+      "rev_count": 822156,
+      "rev_date": "2025-06-27T08:03:01Z",
+      "scrape_date": "2025-06-29T06:00:01.521939Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.2p37",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/9jgn2zlm760h1s7kyx193d4hppwa3lvd-bash-5.2p37-debug",
+        "dev": "/nix/store/qwy57kinl4wndgpsinbwqk26zi4q3p18-bash-5.2p37-dev",
+        "doc": "/nix/store/l0fqjkzfyxna7zy1j0sv1ar0v1hp70va-bash-5.2p37-doc",
+        "info": "/nix/store/l3sgc84isrrncx6aczywv9q747y9k6q8-bash-5.2p37-info",
+        "man": "/nix/store/7ykvk6nrqnladnasy57jr5ha7vv8qff5-bash-5.2p37-man",
+        "out": "/nix/store/00zrahbb32nzawrmv9sjxn36h7qk9vrs-bash-5.2p37"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

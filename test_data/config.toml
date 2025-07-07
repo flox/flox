@@ -541,6 +541,19 @@ pre_cmd = '''
 '''
 cmd = "flox init --auto-setup"
 
+[envs.bash]
+skip_if_output_exists = "envs/bash"
+files = ["envs/bash/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/bash"
+    mkdir -p "$env_dir"
+    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+'''
+
 [envs.go_gcc]
 skip_if_output_exists = "envs/go_gcc"
 files = ["envs/go_gcc/manifest.toml"]
@@ -903,4 +916,17 @@ post_cmd = '''
     cp -R .flox "$build_dir/.flox"
     # Copy over any source files
     cp hello.c "$build_dir/hello.c"
+'''
+
+[envs.old_hello]
+skip_if_output_exists = "envs/old_hello"
+files = ["envs/old_hello/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/old_hello"
+    mkdir -p "$env_dir"
+    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
 '''
