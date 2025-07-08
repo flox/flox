@@ -884,7 +884,9 @@ pub mod test_helpers {
 #[serial_test::file_serial(build)]
 mod tests {
     use std::fs::{self};
+    use std::os::unix::fs::PermissionsExt;
 
+    use anyhow::Context;
     use indoc::{formatdoc, indoc};
 
     use super::test_helpers::*;
@@ -2828,6 +2830,92 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn build_symlinks_can_refer_to_flox_env_sandbox_off() {
         build_symlinks_can_refer_to_flox_env("off").await;
+    }
+
+    fn build_has_access_to_user_provided_path(sandbox: bool) {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let (flox, tmpdir) = flox_instance();
+
+        // Create tmpdir/testbin and put a script in it.
+        let test_script_name = String::from("test-script-in-PATH");
+        let test_script_output = String::from("123456");
+        let test_bin = tmpdir.path().join("test-bin");
+        fs::create_dir_all(&test_bin).unwrap();
+        let test_script_path = test_bin.join(&test_script_name);
+        fs::write(
+            &test_script_path,
+            format!("#!/usr/bin/env bash\necho {test_script_output}"),
+        )
+        .unwrap();
+        // Make the script executable.
+        fs::set_permissions(&test_script_path, fs::Permissions::from_mode(0o755)).unwrap();
+
+        // Construct a PATH string with test_bin first.
+        let path_var = std::env::var("PATH").context("Could not read PATH variable");
+        let test_bin_first_path = format!(
+            "{}:{}",
+            test_bin.to_string_lossy(),
+            path_var.unwrap_or_default()
+        );
+
+        // Create a manifest that uses the script in the build command.
+        let manifest = formatdoc! {r##"
+            version = 1
+
+            [build.{package_name}]
+            command = """
+              echo "Expecting to find '{test_script_name}' in PATH"
+              mkdir -p $out/bin
+              echo "#!/usr/bin/env bash" > $out/bin/{file_name}
+              type -p {test_script_name} >> $out/bin/{file_name}
+              chmod +x $out/bin/{file_name}
+            """
+            sandbox = "{}"
+        "##, if sandbox { "pure" } else { "off" }}; // [sic] sandbox can be "warn" and "enforce" too
+
+        // Build package.
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        if sandbox {
+            let _git = GitCommandProvider::init(&env_path, false).unwrap();
+        }
+
+        // Perform build with the modified PATH.
+        temp_env::with_var("PATH", Some(&test_bin_first_path), || {
+            assert_build_status(&flox, &mut env, &package_name, None, !sandbox)
+        });
+
+        // The pure build not expected to succeed.
+        if sandbox {
+            return;
+        }
+
+        // Confirm script emits the expected output, referencing script from PATH.
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            test_script_output,
+        );
+    }
+
+    #[test]
+    fn build_has_access_to_user_provided_path_sandbox_off() {
+        build_has_access_to_user_provided_path(false);
+    }
+
+    #[test]
+    fn build_does_not_have_access_to_user_provided_path_sandbox_pure() {
+        build_has_access_to_user_provided_path(true);
     }
 }
 
