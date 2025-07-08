@@ -2779,6 +2779,42 @@ EOF
   assert_line --partial "$EXPECTED_GIT"      # from inner
 }
 
+@test "profile: CMAKE_PREFIX_PATH not modified when cmake is not installed" {
+  project_setup
+
+  # Shouldn't be set by default.
+  run --separate-stderr "$FLOX_BIN" activate -- \
+    bash -c 'echo "CMAKE_PREFIX_PATH is: $CMAKE_PREFIX_PATH"'
+  assert_success
+  assert_output "CMAKE_PREFIX_PATH is: "
+
+  # Should respect existing variable from outside activation.
+  CMAKE_PREFIX_PATH="/fakepath" run --separate-stderr "$FLOX_BIN" activate -- \
+    bash -c 'echo "CMAKE_PREFIX_PATH is: $CMAKE_PREFIX_PATH"'
+  assert_success
+  assert_output "CMAKE_PREFIX_PATH is: /fakepath"
+}
+
+@test "profile: CMAKE_PREFIX_PATH is modified when cmake is installed" {
+  # We don't need an environment, but we do need wait_for_watchdogs to have a
+  # PROJECT_DIR to look for
+  project_setup_common
+
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/cmake-gnumake.yaml" \
+    run "$FLOX_BIN" install cmake gnumake
+  assert_success
+
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    if [ "$CMAKE_PREFIX_PATH" != "$FLOX_ENV" ]; then
+      echo "CMAKE_PREFIX_PATH was not set as expected" >&3
+      exit 1
+    fi
+EOF
+)
+  assert_success
+}
+
 @test "activate works with fish 3.2.2" {
   if [ "$NIX_SYSTEM" == aarch64-linux ]; then
     # running fish at all on aarch64-linux throws:
