@@ -2995,6 +2995,76 @@ mod tests {
     fn build_has_access_to_stdenv_packages_sandbox_pure() {
         build_has_access_to_stdenv_packages(true);
     }
+
+    async fn build_result_only_has_runtime_packages(sandbox: bool) {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+            [install]
+            hello.pkg-path = "hello"
+            curl.pkg-path = "curl"
+            curl.pkg-group = "not-toplevel"
+
+            [build.{package_name}]
+            command = """
+                mkdir -p $out/bin
+                cat > $out/bin/{file_name} <<EOF
+                #!/usr/bin/env bash -x
+                hello_path="\\$(type -p hello || echo notfound)"
+                if [ "\\$hello_path" != "$FLOX_ENV/bin/hello" ]; then
+                    echo "hello not found in build environment" 1>&2
+                    exit 1
+                fi
+                curl_path="\\$(type -p curl || echo notfound)"
+                # Insert quotes in the middle of the path to prevent the existence
+                # check from failing the build on account of a missing path.
+                if [ "\\$curl_path" == "$FLOX_ENV/bin""/curl" ]; then
+                    echo "curl found at '\\$curl_path' but should not be in the build environment" 1>&2
+                    exit 1
+                fi
+                EOF
+                chmod +x $out/bin/{file_name}
+            """
+            runtime-packages = [ "hello" ]
+            sandbox = "{}"
+        "#, if sandbox { "pure" } else { "off" }};
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        if sandbox {
+            let _git = GitCommandProvider::init(&env_path, false).unwrap();
+        }
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello-curl-not-in-toplevel.yaml"))
+                .await;
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+
+        // Confirm script runs successfully.
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_result_only_has_runtime_packages_sandbox_off() {
+        build_result_only_has_runtime_packages(false).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_result_only_has_runtime_packages_sandbox_pure() {
+        build_result_only_has_runtime_packages(true).await;
+    }
 }
 
 #[cfg(test)]
