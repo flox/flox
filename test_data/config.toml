@@ -55,6 +55,10 @@ pre_cmd = "flox init"
 cmd = "flox install bpftrace systemd"
 ignore_cmd_errors = true
 
+[resolve.cmake-gnumake]
+pre_cmd = "flox init"
+cmd = "flox install cmake gnumake"
+
 [resolve.curl_hello]
 pre_cmd = "flox init"
 cmd = "flox install curl hello"
