@@ -2907,6 +2907,96 @@ mod tests {
     fn build_has_access_to_user_provided_path_sandbox_pure() {
         build_has_access_to_user_provided_path(true);
     }
+
+    fn build_has_access_to_stdenv_packages(sandbox: bool) {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let (flox, _tmpdir) = flox_instance();
+
+        let manifest = formatdoc! {r##"
+            version = 1
+
+            [build.{package_name}]
+            command = """
+              # The Rust '.*' regex doesn't match multiple lines, so turn off
+              # shell tracing so that all we get from the build is the output.
+              set +x
+              # Report where we find a representative executable from each pkg.
+              # Print this to stdout so that we can assert it in the test, but
+              # do not embed these paths in the output because those packages
+              # are not expected to be present in the final closure.
+              for i in bash cat find grep sed; do
+                path="$(type -p $i)"
+                echo "found $i in $path"
+              done
+              # Create a valid executable in $out/bin for a clean build.
+              mkdir -p $out/bin
+              echo true > $out/bin/{file_name}
+              chmod +x $out/bin/{file_name}
+            """
+            sandbox = "{}"
+        "##, if sandbox { "pure" } else { "off" }}; // [sic] sandbox can be "warn" and "enforce" too
+
+        // Build package.
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        if sandbox {
+            let _git = GitCommandProvider::init(&env_path, false).unwrap();
+        }
+
+        // Perform build.
+        let output = assert_build_status(&flox, &mut env, &package_name, None, true);
+
+        // Look for expected output in build.
+        let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
+        let expected_pattern = formatdoc! {r#"
+            .*found bash in {store_path_prefix_pattern}-bash-[\w\d.-]*/bin/bash.*
+            .*found cat in {store_path_prefix_pattern}-coreutils-[\w\d.-]*/bin/cat.*
+            .*found find in {store_path_prefix_pattern}-findutils-[\w\d.-]*/bin/find.*
+            .*found grep in {store_path_prefix_pattern}-gnugrep-[\w\d.-]*/bin/grep.*
+            .*found sed in {store_path_prefix_pattern}-gnused-[\w\d.-]*/bin/sed.*
+        "#};
+        let re = regex::Regex::new(&expected_pattern).unwrap();
+
+        // Assert that the expected output is present in the build output.
+        // Note that this output will appear in the stdout for the local
+        // build and stderr for the sandbox build.
+        let output_stream = if sandbox {
+            output.stderr
+        } else {
+            output.stdout
+        };
+        if !re.is_match(&output_stream) {
+            pretty_assertions::assert_eq!(
+                output_stream,
+                expected_pattern,
+                "didn't find expected pattern, diffing entire output"
+            );
+        }
+
+        // Confirm script emits the expected (empty) output.
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim_end(), "");
+    }
+
+    #[test]
+    fn build_has_access_to_stdenv_packages_sandbox_off() {
+        build_has_access_to_stdenv_packages(false);
+    }
+
+    #[test]
+    fn build_has_access_to_stdenv_packages_sandbox_pure() {
+        build_has_access_to_stdenv_packages(true);
+    }
 }
 
 #[cfg(test)]
