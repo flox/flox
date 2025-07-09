@@ -951,3 +951,30 @@ post_cmd = '''
     cp .flox/env/manifest.toml "$env_dir/manifest.toml"
     cp .flox/env/manifest.lock "$env_dir/manifest.lock"
 '''
+
+[build.hello-cmake]
+skip_if_output_exists = "build/hello-cmake"
+files = [
+    "build/hello-cmake/CMakeLists.txt",
+    "build/hello-cmake/hello.in",
+    "build/hello-cmake/HelloTarget",
+    "build/hello-cmake/.flox"
+]
+pre_cmd = '''
+    rm .flox/env/manifest.lock
+'''
+cmd = '''
+    # re-resolve and build
+    flox lock-manifest .flox/env/manifest.toml > .flox/env/manifest.lock
+'''
+post_cmd = '''
+    build_output_dir="$(dirname "$RESPONSE_FILE")"
+    build_name="$(basename -s .yaml "$RESPONSE_FILE")"
+    resp_file="$(basename "$RESPONSE_FILE")"
+    build_dir="$build_output_dir/$build_name"
+    mkdir -p "$build_dir"
+    mv "$RESPONSE_FILE" "$build_dir/$resp_file"
+    cp -R .flox "$build_dir/.flox"
+    # Copy over any source files
+    cp -r CMakeLists.txt hello.in HelloTarget "$build_dir"
+'''
