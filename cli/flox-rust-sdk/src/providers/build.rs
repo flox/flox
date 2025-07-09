@@ -1507,29 +1507,31 @@ mod tests {
     fn build_does_not_use_hook_from_manifest() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
-        let file_content = String::from("");
 
         let manifest = formatdoc! {r#"
             version = 1
 
             [hook]
             on-activate = '''
-              export FOO="will not be used"
+                # Touch a file as side effect of running hook.
+                touch {file_name}
             '''
 
             [build.{package_name}]
             command = """
                 mkdir $out
-                echo -n "$FOO" > $out/{file_name}
+                if [ -e "{file_name}" ]; then
+                    echo "Hook ran, but this should not happen."
+                    exit 1
+                fi
+                touch $out/{file_name}
             """
         "#};
 
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
-        let env_path = env.parent_path().unwrap();
 
         assert_build_status(&flox, &mut env, &package_name, None, true);
-        assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
     #[test]
