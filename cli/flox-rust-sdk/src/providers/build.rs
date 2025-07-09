@@ -892,11 +892,11 @@ mod tests {
     use super::test_helpers::*;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
-    use crate::models::environment::Environment;
     use crate::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
     };
+    use crate::models::environment::{Environment, copy_dir_recursive};
     use crate::providers::catalog::GENERATED_DATA;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::git::{GitCommandProvider, GitProvider};
@@ -3064,6 +3064,108 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn build_result_only_has_runtime_packages_sandbox_pure() {
         build_result_only_has_runtime_packages(true).await;
+    }
+
+    /// Test that cmake can make use of the CMAKE_PREFIX_PATH variable as
+    /// set by etc-profiles.
+    async fn build_can_use_cmake(sandbox: bool) {
+        let package_name = String::from("hello-cmake");
+        // from: test_data/input_data/build/hello-cmake/HelloTarget/share/hello/HelloTarget.cmake
+        let file_name = String::from("hello.txt");
+        // from: test_data/input_data/build/hello-cmake/hello.in
+        let file_content = String::from("Hello, world!\n");
+
+        // Start by initializing a flox instance and tmpdir.
+        let (mut flox, _temp_dir_handle) = flox_instance();
+
+        // We have to materialize the environment at test time because of the
+        // requirement to install by storepath, so we start copying in the
+        // build environment which is comprised of source code and an empty
+        // flox environment.
+        let path = GENERATED_DATA.join("build/hello-cmake");
+        let path: &Path = path.as_ref();
+        copy_dir_recursive(path, &flox.temp_dir, true).unwrap();
+
+        // Import the HelloTarget directory as a package to be installed.
+        let output = Command::new("nix")
+            .current_dir(&flox.temp_dir)
+            .args([
+                "--extra-experimental-features",
+                "nix-command",
+                "store",
+                "add",
+                "HelloTarget",
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // stdout contains the full store path of the added package and a
+        // trailing newline. Strip the newline to get the path to install.
+        let hello_target_pkg = String::from_utf8_lossy(&output.stdout);
+        let hello_target_pkg = hello_target_pkg.trim_end();
+
+        // Materialize the environment, including the HelloTarget package.
+        let system = env!("system");
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            cmake.pkg-path = "cmake"
+            # Nix build of cmake does not include gnumake as a dependency?
+            gnumake.pkg-path = "gnumake"
+            # Install HelloTarget package by store path for the test.
+            HelloTarget.store-path = "{hello_target_pkg}"
+            HelloTarget.systems = ["{system}"]
+
+            [build.hello-cmake]
+            command = '''
+              mkdir build && cd build
+              cmake .. && cmake --build .
+              mkdir $out && cp {file_name} $out
+            '''
+            sandbox = "{}"
+        "#, if sandbox { "pure" } else { "off" }}; // [sic] sandbox can be "warn" and "enforce" too
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/cmake-gnumake.yaml")).await;
+
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        // Rename the source files from flox.temp_dir to env_path.
+        let source_files = ["CMakeLists.txt", "hello.in"];
+        for file in source_files {
+            let src = flox.temp_dir.join(file);
+            let dst = env_path.join(file);
+            fs::rename(src, dst)
+                .unwrap_or_else(|_| panic!("Failed to rename {file} to {env_path:?}"));
+        }
+
+        // Add the source files to git, if required.
+        if sandbox {
+            let git = GitCommandProvider::init(&env_path, false).unwrap();
+            for file in source_files {
+                git.add(&[&PathBuf::from(file)]).unwrap();
+            }
+        }
+
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+        assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_can_use_cmake_sandbox_off() {
+        build_can_use_cmake(false).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_can_use_cmake_sandbox_pure() {
+        build_can_use_cmake(true).await;
     }
 }
 
