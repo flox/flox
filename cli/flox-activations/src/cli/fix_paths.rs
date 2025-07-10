@@ -70,6 +70,7 @@ impl FixPathsArgs {
 
 /// Adds subdirectories of FLOX_ENV_DIRS to the front of the provided list
 /// of directories.
+/// If suffixes is empty, adds each dir in FLOX_ENV_DIRS directly.
 pub fn prepend_dirs_to_pathlike_var(
     flox_env_dirs: &[PathBuf],
     suffixes: &[&str],
@@ -83,11 +84,18 @@ pub fn prepend_dirs_to_pathlike_var(
     // PATH, you'll get those directories in reverse order of activation, so
     // we iterate in reverse order while prepending.
     for dir in flox_env_dirs.iter().rev() {
-        for suffix in suffixes.iter().rev() {
-            let new_dir = dir.join(suffix);
-            // Insert returns `true` if the value was _newly_ inserted
-            if dir_set.insert(new_dir.clone()) {
-                dirs.push_front(new_dir)
+        if suffixes.is_empty() {
+            // If no suffixes, add the directory directly
+            if dir_set.insert(dir.clone()) {
+                dirs.push_front(dir.clone())
+            }
+        } else {
+            for suffix in suffixes.iter().rev() {
+                let new_dir = dir.join(suffix);
+                // Insert returns `true` if the value was _newly_ inserted
+                if dir_set.insert(new_dir.clone()) {
+                    dirs.push_front(new_dir)
+                }
             }
         }
     }
