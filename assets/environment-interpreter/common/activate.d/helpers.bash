@@ -1,11 +1,11 @@
-# source_profile_d <profile.d directory> <FLOX_ENV_ACTIVATION_MODE> <FLOX_ENV_DIRS>
+# source_profile_d <profile.d directory> <profile variable mode> <FLOX_ENV_DIRS>
 #
 # source all scripts in <profile.d directory>
-# FLOX_ENV_DIRS may be empty when in wrapper mode
+# FLOX_ENV_DIRS may be empty when in set mode
 function source_profile_d {
   local _profile_d="${1?}"
   shift
-  local _flox_env_activation_mode="${1?}"
+  local _profile_variable_mode="${1?}"
   shift
   local _flox_env_dirs="${1?}"
   shift
@@ -29,7 +29,7 @@ function source_profile_d {
 
   # shellcheck disable=SC1091 # from rendered environment
   source "$_profile_d/profile.d.functions"
-  setup_python "$_flox_env_activation_mode" "$_flox_env_dirs"
+  setup_python "$_profile_variable_mode" "$_flox_env_dirs"
   unset -f setup_python
 }
 

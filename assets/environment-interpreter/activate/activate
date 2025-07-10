@@ -265,7 +265,7 @@ if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
   fi
   # We don't ever need to attach, and we don't want to run hook.on-activate,
   # so just run the parts of start.bash that we need
-  source_profile_d "$_profile_d" "$_FLOX_ENV_ACTIVATION_MODE" "$FLOX_ENV_DIRS"
+  source_profile_d "$_profile_d" "set" "$FLOX_ENV_DIRS"
   # Set static environment variables from the manifest
   set_manifest_vars "$FLOX_ENV"
 
