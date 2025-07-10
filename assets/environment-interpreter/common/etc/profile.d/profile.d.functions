@@ -51,3 +51,27 @@ function setup_python {
 EOF
   fi
 }
+
+# cmake requires the CMAKE_PREFIX_PATH variable in order to locate libraries
+# and include files
+function setup_cmake {
+  local _profile_variable_mode="${1?}"
+  shift
+  local _flox_env_dirs="${1?}"
+  shift
+  if [[ "$_profile_variable_mode" != "set" && -z "$_flox_env_dirs" ]]; then
+    echo "Error: _flox_env_dirs cannot be empty when not in 'set' mode" >&2
+    exit 1
+  fi
+
+
+  # Only run if `cmake' is installed to the environment.
+  if [[ -x "$FLOX_ENV/bin/cmake" ]]; then
+    if [ "$_profile_variable_mode" = "set" ]; then
+      CMAKE_PREFIX_PATH="$FLOX_ENV"
+    else
+      CMAKE_PREFIX_PATH="$($_flox_activations prepend-and-dedup --env-dirs "$_flox_env_dirs" --path-like "${CMAKE_PREFIX_PATH:-}")"
+    fi
+    export CMAKE_PREFIX_PATH
+  fi
+}
