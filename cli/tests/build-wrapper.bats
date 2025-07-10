@@ -103,7 +103,7 @@ EOF
 
   "$FLOX_BIN" init -d consumer
   "$FLOX_BIN" install -d consumer ./result-print-modules/bin/print-modules
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/toml.yaml" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python-toml.yaml" \
     "$FLOX_BIN" install -d consumer python313Packages.toml
 
   # Double check toml module can be found with environment activated

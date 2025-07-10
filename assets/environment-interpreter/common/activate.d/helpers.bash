@@ -1,6 +1,7 @@
-# source_profile_d <profile.d directory> <activation mode>
+# source_profile_d <profile.d directory> <FLOX_ENV_ACTIVATION_MODE> <FLOX_ENV_DIRS>
 #
 # source all scripts in <profile.d directory>
+# FLOX_ENV_DIRS may be empty when in wrapper mode
 function source_profile_d {
   local _profile_d="${1?}"
   shift

@@ -389,10 +389,9 @@ pre_cmd = '''
 '''
 cmd = "flox install tabula"
 
-[resolve.toml]
+[resolve.python-toml]
 pre_cmd = "flox init"
 cmd = "flox install python313Packages.toml"
-
 
 [resolve.torchvision-bin]
 pre_cmd = "flox init"
