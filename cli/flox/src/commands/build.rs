@@ -215,17 +215,20 @@ impl Build {
             .flatten_ok()
             .collect::<Result<Vec<_>, _>>()?;
 
-        if links_to_print.len() > 1 {
-            message::created(formatdoc!(
-                "Builds completed successfully.
-                            Outputs created: {}",
-                links_to_print.join(", ")
-            ));
-        } else {
-            message::created(format!(
-                "Build completed successfully. Output created: {}",
-                links_to_print[0]
-            ));
+        let success_prefix = "Builds completed successfully.";
+
+        match links_to_print.as_slice() {
+            // This case shouldnt occur with the current FloxBuildMk backend,
+            // which either errors earlier if nothing will be built,
+            // or produces at least one link.
+            // Handle anyway for completeness and to avoid erros in case the above changes.
+            [] => message::info(format!("{success_prefix} No outputs created")),
+            [link] => message::created(format!("{success_prefix}. Output created: {link}",)),
+            links => message::created(formatdoc! {"
+                {success_prefix}
+                Outputs created: {}",
+                links.join(", ")
+            }),
         }
 
         Ok(())
