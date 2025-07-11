@@ -174,7 +174,7 @@ impl WireTap<()> {
                     Ok(0) => break,
                     Ok(_) => {
                         let line = String::from_utf8_lossy(&line_buf).into_owned();
-                        tap_fn(&mut context, line.trim_end());
+                        tap_fn(&mut context, line.trim_end_matches("\n"));
 
                         line_buf.clear();
                     },

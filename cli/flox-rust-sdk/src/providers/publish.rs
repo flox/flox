@@ -14,7 +14,6 @@ use url::Url;
 use super::auth::{AuthError, AuthProvider, CatalogAuth, NixCopyAuth};
 use super::build::{
     BuildResult,
-    BuildResults,
     FloxBuildMk,
     ManifestBuilder,
     ManifestBuilderError,
@@ -41,7 +40,6 @@ use crate::models::environment::{Environment, EnvironmentError, open_path};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::Inner;
 use crate::providers::auth::catalog_auth_to_envs;
-use crate::providers::build;
 use crate::providers::catalog::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
 use crate::providers::git::GitProvider;
 use crate::providers::nix::nix_base_command;
@@ -811,7 +809,7 @@ pub fn check_build_metadata(
     let builder = FloxBuildMk::new(flox, &base_dir, &expression_dir, &built_environments);
 
     // Build the package and collect the outputs
-    let output_stream = builder.build(
+    let build_results = builder.build(
         // todo: use a non-hardcoded nixpkgs url
         &mock_base_catalog_url().as_flake_ref()?,
         &built_environments.develop,
@@ -819,28 +817,6 @@ pub fn check_build_metadata(
         Some(false),
     )?;
 
-    let mut output_build_results: Option<BuildResults> = None;
-
-    for message in output_stream {
-        match message {
-            build::Output::Success(build_results) => {
-                output_build_results = Some(build_results);
-            },
-            build::Output::Failure(status) => {
-                return Err(PublishError::PackageBuildError { status });
-            },
-            build::Output::Stdout(line) => {
-                println!("{line}");
-            },
-            build::Output::Stderr(line) => {
-                eprintln!("{line}");
-            },
-        }
-    }
-
-    let build_results = output_build_results.ok_or(PublishError::NonexistentOutputs(
-        "No results returned from build command.".to_string(),
-    ))?;
     if build_results.len() != 1 {
         return Err(PublishError::NonexistentOutputs(
             "No results returned from build command.".to_string(),

@@ -11,7 +11,6 @@ use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::build::{
     FloxBuildMk,
     ManifestBuilder,
-    Output,
     PackageTarget,
     PackageTargetKind,
     PackageTargets,
@@ -203,44 +202,33 @@ impl Build {
             .collect::<Vec<_>>();
 
         let builder = FloxBuildMk::new(&flox, &base_dir, &expression_dir, &built_environments);
-        let output = builder.build(&base_nixpkgs_url, &FLOX_INTERPRETER, &target_names, None)?;
+        let results = builder.build(&base_nixpkgs_url, &FLOX_INTERPRETER, &target_names, None)?;
 
-        for message in output {
-            match message {
-                Output::Stdout(line) => println!("{line}"),
-                Output::Stderr(line) => eprintln!("{line}"),
-                Output::Success(results) => {
-                    let current_dir = env::current_dir()
-                        .context("could not get current directory")?
-                        .canonicalize()
-                        .context("could not canonicalize current directory")?;
+        let current_dir = env::current_dir()
+            .context("could not get current directory")?
+            .canonicalize()
+            .context("could not canonicalize current directory")?;
 
-                    let links_to_print = results
-                        .iter()
-                        .map(|package| {
-                            Self::format_result_links(package.result_links.keys(), &current_dir)
-                        })
-                        .flatten_ok()
-                        .collect::<Result<Vec<_>, _>>()?;
+        let links_to_print = results
+            .iter()
+            .map(|package| Self::format_result_links(package.result_links.keys(), &current_dir))
+            .flatten_ok()
+            .collect::<Result<Vec<_>, _>>()?;
 
-                    if links_to_print.len() > 1 {
-                        message::created(formatdoc!(
-                            "Builds completed successfully.
-                            Outputs created: {}",
-                            links_to_print.join(", ")
-                        ));
-                    } else {
-                        message::created(format!(
-                            "Build completed successfully. Output created: {}",
-                            links_to_print[0]
-                        ));
-                    }
-                    break;
-                },
-                Output::Failure(status) => {
-                    bail!("Build failed with status: {status}");
-                },
-            }
+        let success_prefix = "Builds completed successfully.";
+
+        match links_to_print.as_slice() {
+            // This case shouldnt occur with the current FloxBuildMk backend,
+            // which either errors earlier if nothing will be built,
+            // or produces at least one link.
+            // Handle anyway for completeness and to avoid erros in case the above changes.
+            [] => message::info(format!("{success_prefix} No outputs created")),
+            [link] => message::created(format!("{success_prefix}. Output created: {link}",)),
+            links => message::created(formatdoc! {"
+                {success_prefix}
+                Outputs created: {}",
+                links.join(", ")
+            }),
         }
 
         Ok(())
