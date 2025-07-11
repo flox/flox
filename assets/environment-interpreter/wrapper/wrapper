@@ -126,7 +126,7 @@ if [ "${SET_VARS-}" = "1" ]; then
 fi
 
 # source profile.d scripts
-source_profile_d "$_profile_d"
+source_profile_d "$_profile_d" "set" ""
 
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END
 
