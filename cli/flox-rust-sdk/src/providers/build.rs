@@ -1,17 +1,15 @@
 use std::collections::{BTreeMap, HashMap};
-use std::io::BufRead;
+use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
-use std::sync::mpsc::Receiver;
-use std::{env, thread};
 
 use indoc::formatdoc;
 use itertools::Itertools;
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 use thiserror::Error;
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 use url::Url;
 
 use super::buildenv::{BuildEnvOutputs, BuiltStorePath};
@@ -21,7 +19,7 @@ use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError};
 use crate::models::lockfile::Lockfile;
 use crate::models::manifest::typed::{DEFAULT_GROUP_NAME, Inner, Manifest};
-use crate::utils::CommandExt;
+use crate::utils::{CommandExt, ReaderExt};
 
 pub const FLOX_RUNTIME_DIR_VAR: &str = "FLOX_RUNTIME_DIR";
 
@@ -57,14 +55,14 @@ pub trait ManifestBuilder {
     /// To process the output, the caller should iterate over the returned [BuildOutput].
     /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
     fn build(
-        &self,
+        self,
         expression_build_nixpkgs: &Url,
         flox_interpreter: &Path,
         package: &[PackageTargetName],
         build_cache: Option<bool>,
-    ) -> Result<BuildOutput, ManifestBuilderError>;
+    ) -> Result<BuildResults, ManifestBuilderError>;
 
-    fn clean(&self, package: &[PackageTargetName]) -> Result<(), ManifestBuilderError>;
+    fn clean(self, package: &[PackageTargetName]) -> Result<(), ManifestBuilderError>;
 }
 
 #[derive(Debug, Error)]
@@ -75,35 +73,23 @@ pub enum ManifestBuilderError {
     #[error("failed to create file for build results")]
     CreateBuildResultFile(#[source] std::io::Error),
 
+    #[error("failed to read file for build results")]
+    ReadBuildResultFile(#[source] std::io::Error),
+
+    #[error("failed to parse file for build results")]
+    ParseBuildResultFile(#[source] serde_json::Error),
+
     #[error("failed to call nix to eval NEF")]
     CallNef(#[source] std::io::Error),
 
     #[error("failed to list available nix expressions to build: {0}")]
     ListNixExpressions(String),
 
-    #[error("failed to clean up build artifacts: {stderr}")]
-    RunClean {
-        stdout: String,
-        stderr: String,
-        status: ExitStatus,
-    },
-}
+    #[error("failed to clean up build artifacts: {status}")]
+    RunClean { status: ExitStatus },
 
-#[derive(Debug)]
-pub enum Output {
-    /// A line of stdout output from the build process.
-    Stdout(String),
-    /// A line of stderr output from the build process.
-    Stderr(String),
-    /// The build process has successfully and produced the given [BuildResults].
-    Success(BuildResults),
-    /// The build process has failed with the given exit status.
-    /// On error `flox-build.mk` will not produce a build result file,
-    /// so we don't have build results to return.
-    /// Todo: we may want to recombine [Output::Failure] and [Output::Success]
-    /// eventually if `flox-build.mk` is updated to always produce a build result file,
-    /// e.g. containing error context for the failing builds.
-    Failure(ExitStatus),
+    #[error("Build failed")]
+    BuildFailure,
 }
 
 #[derive(Debug, PartialEq, Deserialize, Default, derive_more::Deref)]
@@ -124,24 +110,6 @@ pub struct BuildResult {
     pub result_links: BTreeMap<PathBuf, PathBuf>,
 }
 
-/// Output received from an ongoing build process.
-/// Callers of [ManifestBuilder::build] should iterate over this type
-/// to process the output of the build process and await its completion.
-#[must_use = "The build process is started in the background.
-To process the output and wait for the process to finish,
-iterate over the returned BuildOutput."]
-pub struct BuildOutput {
-    receiver: Receiver<Output>,
-}
-
-impl Iterator for BuildOutput {
-    type Item = Output;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.receiver.recv().ok()
-    }
-}
-
 /// A manifest builder that uses the [FLOX_BUILD_MK] makefile to build packages.
 pub struct FloxBuildMk<'args> {
     verbosity: i32,
@@ -153,6 +121,12 @@ pub struct FloxBuildMk<'args> {
     base_dir: &'args Path,
     expression_dir: &'args Path,
     built_environments: &'args BuildEnvOutputs,
+
+    // Optional buffers that collect output.
+    // Without these set std{out,err} of the underlying make call
+    // are inherited from the current process.
+    stdout_buffer: Option<&'args mut String>,
+    stderr_buffer: Option<&'args mut String>,
 }
 
 impl FloxBuildMk<'_> {
@@ -169,6 +143,32 @@ impl FloxBuildMk<'_> {
             base_dir,
             expression_dir,
             built_environments,
+            stdout_buffer: None,
+            stderr_buffer: None,
+        }
+    }
+
+    /// Create a new instance with std{out,err} piped into buffers
+    /// instead of inherited from the current process.
+    /// Useful for testing or when one wants to delibrately call the subsystem
+    /// without its output forwarded.
+    pub fn new_with_buffers<'args>(
+        flox: &'args Flox,
+        base_dir: &'args Path,
+        expression_dir: &'args Path,
+        built_environments: &'args BuildEnvOutputs,
+        stdout: &'args mut String,
+        stderr: &'args mut String,
+    ) -> FloxBuildMk<'args> {
+        FloxBuildMk {
+            verbosity: flox.verbosity,
+            temp_dir: &flox.temp_dir,
+            runtime_dir: &flox.runtime_dir,
+            base_dir,
+            expression_dir,
+            built_environments,
+            stdout_buffer: Some(stdout),
+            stderr_buffer: Some(stderr),
         }
     }
 
@@ -211,12 +211,12 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     /// To process the output, the caller should iterate over the returned [BuildOutput].
     /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
     fn build(
-        &self,
+        self,
         build_nixpkgs_url: &Url,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
         build_cache: Option<bool>,
-    ) -> Result<BuildOutput, ManifestBuilderError> {
+    ) -> Result<BuildResults, ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
         command.arg("build");
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", build_nixpkgs_url));
@@ -264,8 +264,13 @@ impl ManifestBuilder for FloxBuildMk<'_> {
         // this since it's also passed for `flox activate`
         command.env(FLOX_RUNTIME_DIR_VAR, self.runtime_dir);
 
-        command.stdout(Stdio::piped());
-        command.stderr(Stdio::piped());
+        if self.stdout_buffer.is_some() {
+            command.stdout(Stdio::piped());
+        }
+
+        if self.stderr_buffer.is_some() {
+            command.stderr(Stdio::piped());
+        }
 
         debug!(command = %command.display(), "running manifest build target");
 
@@ -273,55 +278,52 @@ impl ManifestBuilder for FloxBuildMk<'_> {
             .spawn()
             .map_err(ManifestBuilderError::CallBuilderError)?;
 
-        let (sender, receiver) = std::sync::mpsc::channel();
-        let stdout_sender = sender.clone();
-        let stderr_sender = sender.clone();
-        let command_status_sender = sender;
-
-        let stdout = child.stdout.take().unwrap();
-        std::thread::spawn(move || {
-            let stdout = std::io::BufReader::new(stdout);
-            read_output_to_channel(stdout, stdout_sender, Output::Stdout);
+        // setup `WireTap` for stdout
+        let stdout_tap_context = self.stdout_buffer.map(|buffer| {
+            let stdout = child
+                .stdout
+                .take()
+                .expect("STDOUT is piped when stdout_buffer is provided");
+            let tap = stdout.tap_lines(|_| {});
+            (tap, buffer)
         });
 
-        let stderr = child.stderr.take().unwrap();
-        std::thread::spawn(move || {
-            let stderr = std::io::BufReader::new(stderr);
-            read_output_to_channel(stderr, stderr_sender, Output::Stderr);
+        // setup `WireTap` for stderr
+        let stderr_tap_context = self.stderr_buffer.map(|buffer| {
+            let stderr = child
+                .stderr
+                .take()
+                .expect("STDERR is piped when stdout_buffer is provided");
+            let tap = stderr.tap_lines(|_| {});
+            (tap, buffer)
         });
 
-        thread::spawn(move || {
-            let status = child.wait().expect("failed to wait on child");
+        // **After** taps have been started for std{out,err},
+        // read until EOF on both outputs, i.e. wait until the process terminates.
+        if let Some((tap, buffer)) = stdout_tap_context {
+            *buffer = tap.wait()
+        }
+        if let Some((tap, buffer)) = stderr_tap_context {
+            *buffer = tap.wait()
+        }
 
-            // `flox-build.mk` will not produce/write to a build result file on failure.
-            if !status.success() {
-                let _ = command_status_sender.send(Output::Failure(status));
-                return;
-            }
+        let status = child
+            .wait()
+            .map_err(ManifestBuilderError::CallBuilderError)?;
 
-            // TODO: should we bubble up errors through the channel?
-            let build_results = 'results: {
-                let build_results = match std::fs::read_to_string(&build_result_path) {
-                    Ok(build_results) => build_results,
-                    Err(e) => {
-                        error!("failed to read build results file at {build_result_path:?}: {e}");
-                        break 'results BuildResults::default();
-                    },
-                };
+        if !status.success() {
+            return Err(ManifestBuilderError::BuildFailure);
+        }
 
-                match serde_json::from_str(&build_results) {
-                    Ok(build_results) => build_results,
-                    Err(e) => {
-                        error!("failed to parse build results: {e}");
-                        BuildResults::default()
-                    },
-                }
-            };
+        // TODO: should we bubble up errors through the channel?
 
-            let _ = command_status_sender.send(Output::Success(build_results));
-        });
+        let build_results = std::fs::read_to_string(&build_result_path)
+            .map_err(ManifestBuilderError::ReadBuildResultFile)?;
 
-        Ok(BuildOutput { receiver })
+        let build_results = serde_json::from_str(&build_results)
+            .map_err(ManifestBuilderError::ParseBuildResultFile)?;
+
+        Ok(build_results)
     }
 
     /// Clean build artifacts for `packages` defined in the environment
@@ -338,7 +340,7 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     /// * the `result-<package>` and `result-<package>-buildCache` store links in `base_dir`
     /// * the store paths linked to by the `result-<package>` links
     /// * the temporary build directories for the specified packages
-    fn clean(&self, packages: &[PackageTargetName]) -> Result<(), ManifestBuilderError> {
+    fn clean(self, packages: &[PackageTargetName]) -> Result<(), ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
         // Required to identify NEF builds.
         command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*COMMON_NIXPKGS_URL));
@@ -364,48 +366,56 @@ impl ManifestBuilder for FloxBuildMk<'_> {
 
         debug!(command=%command.display(), "running manifest clean target");
 
-        let output = command
-            .output()
+        if self.stdout_buffer.is_some() {
+            command.stdout(Stdio::piped());
+        }
+
+        if self.stderr_buffer.is_some() {
+            command.stderr(Stdio::piped());
+        }
+
+        let mut child = command
+            .spawn()
             .map_err(ManifestBuilderError::CallBuilderError)?;
-        let status = output.status;
+
+        // setup `WireTap` for stdout
+        let stdout_tap_context = self.stdout_buffer.map(|buffer| {
+            let stdout = child
+                .stdout
+                .take()
+                .expect("STDOUT is piped when stdout_buffer is provided");
+            let tap = stdout.tap_lines(|_| {});
+            (tap, buffer)
+        });
+
+        // setup `WireTap` for stderr
+        let stderr_tap_context = self.stderr_buffer.map(|buffer| {
+            let stderr = child
+                .stderr
+                .take()
+                .expect("STDERR is piped when stdout_buffer is provided");
+            let tap = stderr.tap_lines(|_| {});
+            (tap, buffer)
+        });
+
+        // **After** taps have been started for std{out,err},
+        // read until EOF on both outputs, i.e. wait until the process terminates.
+        if let Some((tap, buffer)) = stdout_tap_context {
+            *buffer = tap.wait()
+        }
+        if let Some((tap, buffer)) = stderr_tap_context {
+            *buffer = tap.wait()
+        }
+
+        let status = child
+            .wait()
+            .map_err(ManifestBuilderError::CallBuilderError)?;
 
         if !status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-
-            debug!(%status, %stderr, %stdout, "failed to clean build artifacts");
-
-            return Err(ManifestBuilderError::RunClean {
-                stdout,
-                stderr,
-                status,
-            });
+            return Err(ManifestBuilderError::RunClean { status });
         }
 
         Ok(())
-    }
-}
-
-/// Read output from a reader and send it to a channel
-/// until the reader is exhausted or the receiver is dropped.
-fn read_output_to_channel(
-    reader: impl BufRead,
-    sender: std::sync::mpsc::Sender<Output>,
-    mk_output: impl Fn(String) -> Output,
-) {
-    for line in reader.lines() {
-        let line = match line {
-            Err(e) => {
-                warn!("failed to read line: {e}");
-                continue;
-            },
-            Ok(line) => line,
-        };
-
-        let Ok(_) = sender.send(mk_output(line)) else {
-            // if the receiver is dropped, we can stop reading
-            break;
-        };
     }
 }
 
@@ -724,44 +734,34 @@ pub mod test_helpers {
                 .map(|toplevel_nixpkgs| toplevel_nixpkgs.as_flake_ref().unwrap())
                 .unwrap_or_else(|| COMMON_NIXPKGS_URL.clone());
 
-        let output_stream = FloxBuildMk::new(
+        let mut output_stdout = String::new();
+        let mut output_stderr = String::new();
+
+        let output_build_results = FloxBuildMk::new_with_buffers(
             flox,
             &env.parent_path().unwrap(),
             expression_dir,
             &env.build(flox).unwrap(),
+            &mut output_stdout,
+            &mut output_stderr,
         )
         .build(
             &toplevel_or_common_nixpkgs,
             &env.rendered_env_links(flox).unwrap().development,
             &[PackageTargetName::new_unchecked(&package)],
             build_cache,
-        )
-        .unwrap();
+        );
 
-        let mut output_stdout = String::new();
-        let mut output_stderr = String::new();
-        let mut output_build_results = None;
-        for message in output_stream {
-            match message {
-                Output::Success(build_results) => {
-                    assert!(expect_success, "expected build to fail");
-                    let _ = output_build_results.insert(build_results);
-                },
-                Output::Failure(_) => {
-                    assert!(!expect_success, "expected build to succeed");
-                },
-                Output::Stdout(line) => {
-                    println!("stdout: {line}"); // To debug failing tests
-                    output_stdout.push_str(&line);
-                    output_stdout.push('\n');
-                },
-                Output::Stderr(line) => {
-                    println!("stderr: {line}"); // To debug failing tests
-                    output_stderr.push_str(&line);
-                    output_stderr.push('\n');
-                },
-            }
-        }
+        let output_build_results = match output_build_results {
+            Ok(_) if !expect_success => {
+                panic!("expected build to fail");
+            },
+            Ok(result) => Some(result),
+            Err(err) if expect_success => {
+                panic!("expected build to succeed, got {err}")
+            },
+            Err(_) => None,
+        };
 
         CollectedOutput {
             build_results: output_build_results,
@@ -791,11 +791,13 @@ pub mod test_helpers {
     }
 
     pub fn assert_clean_success(flox: &Flox, env: &mut PathEnvironment, package_names: &[&str]) {
-        let err = FloxBuildMk::new(
+        let err = FloxBuildMk::new_with_buffers(
             flox,
             &env.parent_path().unwrap(),
             &nix_expression_dir(env),
             &env.build(flox).unwrap(),
+            &mut String::new(),
+            &mut String::new(),
         )
         .clean(
             &package_names
@@ -2758,7 +2760,8 @@ mod tests {
         let re = regex::Regex::new(&expected_pattern).unwrap();
         assert!(
             re.is_match(&output.stderr),
-            "expected STDERR to match regex",
+            "expected STDERR to match {re}: {}",
+            output.stderr
         );
     }
 
