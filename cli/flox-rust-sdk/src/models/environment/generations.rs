@@ -501,6 +501,12 @@ fn write_metadata_file(
     Ok(())
 }
 
+/// Environments that support generations.
+pub trait GenerationsEnvironment {
+    /// Return all generations metadata for the environment.
+    fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError>;
+}
+
 /// flox environment metadata for managed environments
 ///
 /// Managed environments support rolling back to previous generations.

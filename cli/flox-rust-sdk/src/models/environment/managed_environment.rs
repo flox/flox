@@ -9,7 +9,12 @@ use tracing::{debug, instrument};
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::fetcher::IncludeFetcher;
-use super::generations::{Generations, GenerationsError};
+use super::generations::{
+    AllGenerationsMetadata,
+    Generations,
+    GenerationsEnvironment,
+    GenerationsError,
+};
 use super::path_environment::PathEnvironment;
 use super::{
     CACHE_DIR_NAME,
@@ -556,6 +561,12 @@ impl Environment for ManagedEnvironment {
     /// should be created
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         services_socket_path(&self.path_hash(), flox)
+    }
+}
+
+impl GenerationsEnvironment for ManagedEnvironment {
+    fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError> {
+        self.generations().metadata()
     }
 }
 
@@ -1142,7 +1153,7 @@ impl ManagedEnvironment {
         &self.pointer
     }
 
-    fn generations(&self) -> Generations {
+    pub(crate) fn generations(&self) -> Generations {
         Generations::new(
             self.floxmeta.git.clone(),
             branch_name(&self.pointer, &self.path),

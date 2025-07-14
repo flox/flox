@@ -6,6 +6,7 @@ use tracing::{debug, instrument};
 
 use super::core_environment::UpgradeResult;
 use super::fetcher::IncludeFetcher;
+use super::generations::{AllGenerationsMetadata, GenerationsEnvironment, GenerationsError};
 use super::managed_environment::{ManagedEnvironment, ManagedEnvironmentError};
 use super::{
     CanonicalPath,
@@ -408,6 +409,12 @@ impl Environment for RemoteEnvironment {
 
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         self.inner.services_socket_path(flox)
+    }
+}
+
+impl GenerationsEnvironment for RemoteEnvironment {
+    fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError> {
+        self.inner.generations_metadata()
     }
 }
 
