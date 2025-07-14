@@ -6,7 +6,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::auth::Auth;
-use flox_rust_sdk::providers::build::{PackageTarget, nix_expression_dir};
+use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget, nix_expression_dir};
 use flox_rust_sdk::providers::catalog::ClientTrait;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
@@ -26,6 +26,8 @@ use crate::commands::build::{
     check_git_tracking_for_expression_builds,
     check_stability_compatibility,
     packages_to_build,
+    prefetch_expression_build_flake_ref,
+    prefetch_flake_ref,
 };
 use crate::commands::ensure_floxhub_token;
 use crate::config::Config;
@@ -160,8 +162,11 @@ impl Publish {
         let Some(lockfile) = path_env.existing_lockfile(&flox)? else {
             bail!(build_repo_err("Environment must be locked."));
         };
-
         let expression_dir = nix_expression_dir(&path_env);
+
+        // Used for non building expressions and manifest builds
+        prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
+
         let package = Self::get_publish_target(&lockfile.manifest, &expression_dir, package_arg)?;
 
         check_stability_compatibility([&package], stability.is_some())?;
@@ -186,6 +191,8 @@ impl Publish {
             )
             .await?
         };
+
+        prefetch_expression_build_flake_ref([&package], &base_nixpkgs_url.as_flake_ref()?)?;
 
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,

@@ -41,7 +41,7 @@ static GNUMAKE_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
         .into()
 });
 
-pub(super) static COMMON_NIXPKGS_URL: LazyLock<Url> = LazyLock::new(|| {
+pub static COMMON_NIXPKGS_URL: LazyLock<Url> = LazyLock::new(|| {
     std::env::var("COMMON_NIXPKGS_URL")
         .as_deref()
         .unwrap_or(env!("COMMON_NIXPKGS_URL"))
