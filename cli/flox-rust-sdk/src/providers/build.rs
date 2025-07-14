@@ -207,19 +207,23 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     /// **Invariant**: the caller of this function has to ensure,
     /// that manifest builds are always built with a compatible version of nixpkgs!
     ///
-    /// The build process will start in the background.
-    /// To process the output, the caller should iterate over the returned [BuildOutput].
-    /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
+    /// **Invariant**: the caller is expected to prevent mixed builds
+    /// of manifest and expression build if `expression_build_nixpkgs_url`
+    /// is different from the environments toplevel group,
+    /// i.e. manifest builds and expression builds would use incompatible nixpkgs.
     fn build(
         self,
-        build_nixpkgs_url: &Url,
+        expression_build_nixpkgs_url: &Url,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
         build_cache: Option<bool>,
     ) -> Result<BuildResults, ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
         command.arg("build");
-        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", build_nixpkgs_url));
+        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*COMMON_NIXPKGS_URL));
+        command.arg(format!(
+            "EXPRESSION_BUILD_NIXPKGS_URL={expression_build_nixpkgs_url}"
+        ));
 
         command.arg(format!(
             "FLOX_ENV={}",

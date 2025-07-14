@@ -7,10 +7,8 @@
   getopt,
   gnused,
   iconv,
-  inputs,
   jq,
   ld-floxlib,
-  nixpkgsInputLockedURL,
   nawk,
   process-compose,
   runCommandNoCC,
@@ -134,11 +132,4 @@ runCommandNoCC "flox-interpreter"
     # This will only catch extensions and shebangs that `shfmt --find` knows about.
     ${shfmt}/bin/shfmt --diff $build_executable_wrapper
     rm $build_executable_wrapper/.editorconfig
-
-    # Finally, leave a breadcrumb to document the nixpkgs URL used to build
-    # this version of the interpreter. This, together with the URL found
-    # within an environment's `manifest.toml` will determine the [potentially]
-    # two nixpkgs URLs used to build a given package.
-    echo "${nixpkgsInputLockedURL inputs.nixpkgs}" > $out/nixpkgs-url
-    cp $out/nixpkgs-url $build_executable_wrapper/nixpkgs-url
   ''
