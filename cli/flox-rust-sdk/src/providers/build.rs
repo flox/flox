@@ -758,7 +758,10 @@ pub mod test_helpers {
             },
             Ok(result) => Some(result),
             Err(err) if expect_success => {
-                panic!("expected build to succeed, got {err}")
+                panic!("{}", formatdoc! {"
+                    expected build to succeed: {err}
+                    stderr: {output_stderr}
+                "})
             },
             Err(_) => None,
         };
