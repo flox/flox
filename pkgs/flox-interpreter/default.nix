@@ -15,14 +15,43 @@
   shellcheck,
   shfmt,
   stdenv,
-  substituteAllFiles,
+  substituteAll,
   util-linuxMinimal,
 }:
+
 # We need to ensure that the flox-activations package is available.
 # If it's not, we'll use the binary from the environment.
 # Build or evaluate this package with `--option pure-eval false`.
 assert (flox-activations == null) -> builtins.getEnv "FLOX_ACTIVATIONS_BIN" != null;
 let
+  # Borrowed from previous implementation of substituteAllFiles.
+  substituteAllFiles =
+    args:
+    stdenv.mkDerivation (
+      {
+        name = if args ? name then args.name else baseNameOf (toString args.src);
+        builder = builtins.toFile "builder.sh" ''
+          set -o pipefail
+
+          eval "$preInstall"
+
+          args=
+
+          pushd "$src"
+          echo -ne "${builtins.concatStringsSep "\\0" args.files}" | xargs -0 -n1 -I {} -- find {} -type f -print0 | while read -d "" line; do
+            mkdir -p "$out/$(dirname "$line")"
+            substituteAll "$line" "$out/$line"
+          done
+          popd
+
+          eval "$postInstall"
+        '';
+        preferLocalBuild = true;
+        allowSubstitutes = false;
+      }
+      // args
+    );
+
   environment-interpreter-with-paths = substituteAllFiles {
     src = ../../assets/environment-interpreter;
     files = [ "." ]; # Perform recursive substitution on all files.

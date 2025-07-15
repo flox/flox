@@ -1,5 +1,4 @@
 {
-  darwin,
   hostPlatform,
   inputs,
   lib,
@@ -28,16 +27,10 @@ let
     src = craneLib.cleanCargoSource (craneLib.path flox-src);
 
     # runtime dependencies of the dependent crates
-    buildInputs =
-      [
-        # reqwest -> hyper -> openssl-sys
-        openssl.dev
-      ]
-      ++ lib.optional hostPlatform.isDarwin [
-        darwin.libiconv
-        darwin.libobjc
-        darwin.apple_sdk.frameworks.SystemConfiguration
-      ];
+    buildInputs = [
+      # reqwest -> hyper -> openssl-sys
+      openssl.dev
+    ];
 
     nativeBuildInputs = [ pkg-config ];
   };
