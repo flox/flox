@@ -47,7 +47,7 @@ indent = "0.1.1"
 indexmap = { version = "2.10.0", features = ["serde"] }
 indoc = "2.0.6"
 inquire = "0.6.0"
-indicatif = "0.17"
+indicatif = "0.18"
 itertools = "0.12.1"
 jsonwebtoken = "9.3"
 log = { version = "0.4.27", features = ["kv"] }

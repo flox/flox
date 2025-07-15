@@ -1030,7 +1030,7 @@ dependencies = [
  "futures",
  "indent",
  "indexmap 2.10.0",
- "indicatif 0.17.12",
+ "indicatif",
  "indoc",
  "inquire",
  "itertools",
@@ -1934,19 +1934,6 @@ dependencies = [
 
 [[package]]
 name = "indicatif"
-version = "0.17.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4adb2ee6ad319a912210a36e56e3623555817bcc877a7e6e8802d1d69c4d8056"
-dependencies = [
- "console",
- "portable-atomic",
- "unicode-width 0.2.0",
- "unit-prefix",
- "web-time",
-]
-
-[[package]]
-name = "indicatif"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70a646d946d06bedbbc4cac4c218acf4bbf2d87757a784857025f4d447e4e1cd"
@@ -2200,7 +2187,7 @@ dependencies = [
  "clap",
  "clap_derive",
  "fs_extra",
- "indicatif 0.17.12",
+ "indicatif",
  "serde",
  "tempfile",
  "toml",
@@ -4172,7 +4159,7 @@ version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c714cc8fc46db04fcfddbd274c6ef59bebb1b435155984e7c6e89c3ce66f200"
 dependencies = [
- "indicatif 0.18.0",
+ "indicatif",
  "tracing",
  "tracing-core",
  "tracing-subscriber",
