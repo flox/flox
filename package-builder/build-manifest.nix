@@ -1,6 +1,7 @@
 {
   pname,
   version,
+  nixpkgs-url,
   flox-env, # environment from which package is built
   build-wrapper-env, # environment with which to wrap contents of bin, sbin
   install-prefix ? null, # optional
@@ -15,13 +16,6 @@ assert (buildCache != null) -> (buildScript != null);
 # srcTarball is only required with a build script
 assert (srcTarball != null) -> (buildScript != null);
 let
-  # Start by defining the locked nixpkgs flakeref for the `pkgs` attrset from
-  # which `lib` and `stdenv` (`runCommand`) are derived. We use the exact
-  # `nixpkgs-url` used to build the `flox-interpreter` package to ensure that
-  # we use the same versions of packages already found in that closure.
-  nixpkgs-url = builtins.replaceStrings [ "\n" ] [ "" ] (
-    builtins.readFile "${build-wrapper-env}/nixpkgs-url"
-  );
   pkgs = (builtins.getFlake nixpkgs-url).legacyPackages.${builtins.currentSystem};
 
   # From here on refer to the flox-env and build-wrapper-env inputs as

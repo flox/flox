@@ -41,7 +41,7 @@ static GNUMAKE_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
         .into()
 });
 
-pub(super) static COMMON_NIXPKGS_URL: LazyLock<Url> = LazyLock::new(|| {
+pub static COMMON_NIXPKGS_URL: LazyLock<Url> = LazyLock::new(|| {
     std::env::var("COMMON_NIXPKGS_URL")
         .as_deref()
         .unwrap_or(env!("COMMON_NIXPKGS_URL"))
@@ -207,19 +207,23 @@ impl ManifestBuilder for FloxBuildMk<'_> {
     /// **Invariant**: the caller of this function has to ensure,
     /// that manifest builds are always built with a compatible version of nixpkgs!
     ///
-    /// The build process will start in the background.
-    /// To process the output, the caller should iterate over the returned [BuildOutput].
-    /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
+    /// **Invariant**: the caller is expected to prevent mixed builds
+    /// of manifest and expression build if `expression_build_nixpkgs_url`
+    /// is different from the environments toplevel group,
+    /// i.e. manifest builds and expression builds would use incompatible nixpkgs.
     fn build(
         self,
-        build_nixpkgs_url: &Url,
+        expression_build_nixpkgs_url: &Url,
         flox_interpreter: &Path,
         packages: &[PackageTargetName],
         build_cache: Option<bool>,
     ) -> Result<BuildResults, ManifestBuilderError> {
         let mut command = self.base_command(self.base_dir);
         command.arg("build");
-        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", build_nixpkgs_url));
+        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*COMMON_NIXPKGS_URL));
+        command.arg(format!(
+            "EXPRESSION_BUILD_NIXPKGS_URL={expression_build_nixpkgs_url}"
+        ));
 
         command.arg(format!(
             "FLOX_ENV={}",
@@ -758,7 +762,10 @@ pub mod test_helpers {
             },
             Ok(result) => Some(result),
             Err(err) if expect_success => {
-                panic!("expected build to succeed, got {err}")
+                panic!("{}", formatdoc! {"
+                    expected build to succeed: {err}
+                    stderr: {output_stderr}
+                "})
             },
             Err(_) => None,
         };

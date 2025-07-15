@@ -104,7 +104,7 @@
           # (Linux-only) LD_AUDIT library for using dynamic libraries in Flox envs.
           ld-floxlib = callPackage ./pkgs/ld-floxlib { };
           flox-src = callPackage ./pkgs/flox-src { };
-          flox-interpreter = callPackage ./pkgs/flox-interpreter { inherit nixpkgsInputLockedURL; };
+          flox-interpreter = callPackage ./pkgs/flox-interpreter { };
           flox-package-builder = callPackage ./pkgs/flox-package-builder { };
 
           # Package Database Utilities: scrape, search, and resolve.

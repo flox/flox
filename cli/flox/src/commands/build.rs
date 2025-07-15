@@ -9,6 +9,7 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::build::{
+    COMMON_NIXPKGS_URL,
     FloxBuildMk,
     ManifestBuilder,
     PackageTarget,
@@ -19,9 +20,12 @@ use flox_rust_sdk::providers::build::{
 };
 use flox_rust_sdk::providers::catalog::{BaseCatalogInfo, BaseCatalogUrl, ClientTrait};
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
+use flox_rust_sdk::providers::nix;
+use flox_rust_sdk::utils::CommandExt;
 use futures::TryFutureExt;
 use indoc::formatdoc;
 use itertools::Itertools;
+use thiserror::Error;
 use tracing::{debug, info, instrument, trace};
 use url::Url;
 
@@ -160,6 +164,9 @@ impl Build {
 
         let lockfile: Lockfile = env.lockfile(&flox)?.into();
 
+        // Used for non building expressions and manifest builds
+        prefetch_flake_ref(&COMMON_NIXPKGS_URL)?;
+
         let packages_to_build = packages_to_build(&lockfile.manifest, &expression_dir, &packages)?;
 
         let base_catalog_info_fut = flox.catalog_client.get_base_catalog_info().map_err(|err| {
@@ -195,6 +202,8 @@ impl Build {
                 url.as_flake_ref()?
             },
         };
+
+        prefetch_expression_build_flake_ref(&packages_to_build, &base_nixpkgs_url)?;
 
         let target_names = packages_to_build
             .iter()
@@ -361,6 +370,57 @@ pub(crate) fn check_git_tracking_for_expression_builds<'p>(
     }
 
     Ok(())
+}
+
+/// Download the source tree denoted by a flake reference into the Nix store.
+///
+/// This is used to download the nixpkgs we depend on during a flox build
+/// at a known time i.e. within the cli/rust context.
+/// We do this to a) avoid silent delays during the actual build execution,
+/// due to nixpkgs downloads, and b) provide better messaging
+/// about what flox spends time on during the build.
+#[instrument(skip_all, fields(%flakeref, progress = format!("Downloading Nix build tools from '{flakeref}'")))]
+pub(crate) fn prefetch_flake_ref(flakeref: &Url) -> Result<(), PrefetchError> {
+    let mut cmd = nix::nix_base_command();
+    cmd.args(["flake", "prefetch", flakeref.as_str()]);
+
+    debug!(cmd = %cmd.display(), "running prefetch command");
+    let output = cmd.output().map_err(PrefetchError::CallNixFlakePrefetch)?;
+
+    if !output.status.success() {
+        return Err(PrefetchError::PrefetchFailed {
+            flakeref: flakeref.clone(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        });
+    }
+
+    Ok(())
+}
+
+pub(crate) fn prefetch_expression_build_flake_ref<'p>(
+    packages_to_build: impl IntoIterator<Item = &'p PackageTarget>,
+    flakeref: &Url,
+) -> Result<(), PrefetchError> {
+    if packages_to_build
+        .into_iter()
+        .any(|p| p.kind().is_expression_build())
+    {
+        return prefetch_flake_ref(flakeref);
+    }
+
+    debug!("No expression build target, skipping prefetch of {flakeref}");
+    Ok(())
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum PrefetchError {
+    #[error("Failed to call 'nix flake prefetch'")]
+    CallNixFlakePrefetch(#[source] std::io::Error),
+    #[error(
+        "Failed to download Nix build tools from '{flakeref}'\n\
+        {stderr}"
+    )]
+    PrefetchFailed { flakeref: Url, stderr: String },
 }
 
 /// Derive the nixpkgs url to be used for builds.
