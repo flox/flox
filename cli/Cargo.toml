@@ -20,7 +20,7 @@ blake3 = "1.8.2"
 bpaf = { version = "0.9.20", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.41", features = ["serde"] }
-clap = { version = "4.5.40", features = ["derive"] }
+clap = { version = "4.5.41", features = ["derive"] }
 clap_derive = "4.5.4"
 close_fds = "0.3"
 config = { version = "0.15", default-features = false, features = ["toml"] }
@@ -60,7 +60,7 @@ progenitor-client = "0.10"
 proptest = "1.7.0"
 proptest-derive = "0.5.1"
 regex = "1.10"
-regress = "0.10.3"
+regress = "0.10.4"
 reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
 semver = "1.0.26"
 sentry = { version = "0.32.3", features = [
@@ -86,11 +86,11 @@ textwrap = { version = "0.16.2", features = ["terminal_size"] }
 thiserror = "2"
 time = { version = "0.3", features = ["serde", "formatting"] }
 tokio = { version = "1", features = ["full"] }
-toml = "0.8.23"
+toml = "0.9.2"
 toml_edit = { version = "0.22", features = ["serde"] }
 tracing = "0.1"
 tracing-appender = "0.2"
-tracing-indicatif = "0.3.9"
+tracing-indicatif = "0.3.10"
 tracing-log = { version = "0.2", features = [] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2.5", features = ["serde"] }
