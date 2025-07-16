@@ -66,7 +66,7 @@ impl Push {
 
         match dot_flox.pointer {
             EnvironmentPointer::Managed(managed_pointer) => {
-                let message = Self::push_message(&managed_pointer, self.force, true);
+                let message = Self::push_message(&managed_pointer, self.force, true)?;
 
                 Self::push_managed_env(&flox, managed_pointer, &dot_flox.path, self.force)?;
 
@@ -93,7 +93,7 @@ impl Push {
                     self.force,
                 )?;
 
-                message::updated(Self::push_message(env.pointer(), self.force, false));
+                message::updated(Self::push_message(env.pointer(), self.force, false)?);
             },
         }
         Ok(())
@@ -177,11 +177,10 @@ impl Push {
     }
 
     /// Construct a message for pushing an environment to FloxHub.
-    ///
-    /// todo: add FloxHub base url when it's available
-    fn push_message(env: &ManagedPointer, force: bool, new: bool) -> String {
+    fn push_message(env: &ManagedPointer, force: bool, new: bool) -> Result<String> {
         let owner = &env.owner;
         let name = &env.name;
+        let url = &env.floxhub_url()?;
 
         let force_prefix = if force { "force " } else { "" };
         let heading = if new {
@@ -190,12 +189,12 @@ impl Push {
             format!("Updates to {name} successfully {force_prefix}pushed to FloxHub")
         };
 
-        formatdoc! {"
+        Ok(formatdoc! {"
             {heading}
 
             View or edit the environment at: {url}
             Use this environment from another machine: 'flox activate -r {owner}/{name}'
             Make a copy of this environment: 'flox pull {owner}/{name}'
-        "}
+        "})
     }
 }

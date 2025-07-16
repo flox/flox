@@ -93,7 +93,7 @@ teardown() {
   assert_output - << EOF
 ✅ Updates to ${name} successfully force pushed to FloxHub
 
-View or edit the environment at: https://hub.flox.dev/${OWNER}/${name}
+View or edit the environment at: https://hub.preview.flox.dev/${OWNER}/${name}
 Use this environment from another machine: 'flox activate -r ${OWNER}/${name}'
 Make a copy of this environment: 'flox pull ${OWNER}/${name}'
 EOF

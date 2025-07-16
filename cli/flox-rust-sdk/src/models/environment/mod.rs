@@ -11,7 +11,7 @@ use remote_environment::RemoteEnvironment;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::debug;
-use url::Url;
+use url::{ParseError, Url};
 use walkdir::WalkDir;
 
 use self::managed_environment::ManagedEnvironmentError;
@@ -369,6 +369,12 @@ impl ManagedPointer {
             floxhub_git_url_override: floxhub.git_url_override().cloned(),
             version: Version::<1>,
         }
+    }
+
+    /// URL for the environment on FloxHub.
+    pub fn floxhub_url(&self) -> Result<Url, ParseError> {
+        self.floxhub_base_url
+            .join(&format!("{}/{}", self.owner, self.name))
     }
 }
 
@@ -1012,6 +1018,29 @@ mod test {
                 name: EnvironmentName::from_str("name").unwrap(),
                 version: Version::<1> {},
             })
+        );
+    }
+
+    #[test]
+    fn floxhub_url_for_pointer() {
+        let mut managed_pointer = ManagedPointer {
+            name: EnvironmentName::from_str("name").unwrap(),
+            owner: EnvironmentOwner::from_str("owner").unwrap(),
+            floxhub_base_url: Url::from_str("https://example.com/").unwrap(),
+            floxhub_git_url_override: None,
+            version: Version::<1> {},
+        };
+        assert_eq!(
+            managed_pointer.floxhub_url().unwrap().as_str(),
+            "https://example.com/owner/name",
+            "should construct a URL for the environment",
+        );
+
+        managed_pointer.floxhub_base_url = Url::from_str("https://example.com/base/").unwrap();
+        assert_eq!(
+            managed_pointer.floxhub_url().unwrap().as_str(),
+            "https://example.com/base/owner/name",
+            "should respect additional paths in the base URL",
         );
     }
 
