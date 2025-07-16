@@ -90,7 +90,13 @@ teardown() {
     "$FLOX_BIN" install hello
   run "$FLOX_BIN" push --owner "$OWNER" --force
   assert_success
-  assert_output --partial "pushed to FloxHub (forced)"
+  assert_output - << EOF
+✅ Updates to ${name} successfully force pushed to FloxHub
+
+View or edit the environment at: https://hub.flox.dev/${OWNER}/${name}
+Use this environment from another machine: 'flox activate -r ${OWNER}/${name}'
+Make a copy of this environment: 'flox pull ${OWNER}/${name}'
+EOF
 }
 
 # This should pull the environment created by the previous run on a different
