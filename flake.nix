@@ -62,6 +62,8 @@
 
           cpp-semver = final.callPackage ./pkgs/cpp-semver { };
 
+          process-compose = final.callPackage ./pkgs/process-compose { inherit (prev) process-compose; };
+
         })
         inputs.fenix.overlays.default
       ];
