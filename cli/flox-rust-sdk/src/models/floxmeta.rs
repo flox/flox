@@ -66,7 +66,7 @@ impl FloxMeta {
         let token = flox.floxhub_token.as_ref();
 
         let floxhub = Floxhub::new(
-            pointer.floxhub_url.to_owned(),
+            pointer.floxhub_base_url.to_owned(),
             pointer.floxhub_git_url_override.clone(),
         )
         .map_err(FloxMetaError::FloxhubError)?;
@@ -121,7 +121,7 @@ impl FloxMeta {
         let token = flox.floxhub_token.as_ref();
 
         let floxhub = Floxhub::new(
-            pointer.floxhub_url.to_owned(),
+            pointer.floxhub_base_url.to_owned(),
             pointer.floxhub_git_url_override.clone(),
         )
         .map_err(FloxMetaError::FloxhubError)?;
@@ -165,7 +165,7 @@ impl FloxMeta {
         let token = flox.floxhub_token.as_ref();
 
         let floxhub = Floxhub::new(
-            pointer.floxhub_url.to_owned(),
+            pointer.floxhub_base_url.to_owned(),
             pointer.floxhub_git_url_override.clone(),
         )
         .map_err(FloxMetaError::FloxhubError)?;

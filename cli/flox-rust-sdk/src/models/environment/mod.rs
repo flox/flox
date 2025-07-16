@@ -350,8 +350,9 @@ impl PathPointer {
 pub struct ManagedPointer {
     pub owner: EnvironmentOwner,
     pub name: EnvironmentName,
+    #[serde(rename = "floxhub_url")]
     #[cfg_attr(test, proptest(value = "crate::flox::DEFAULT_FLOXHUB_URL.clone()"))]
-    pub floxhub_url: Url,
+    pub floxhub_base_url: Url,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, proptest(value = "None"))]
     pub floxhub_git_url_override: Option<Url>,
@@ -364,7 +365,7 @@ impl ManagedPointer {
         Self {
             name,
             owner,
-            floxhub_url: floxhub.base_url().clone(),
+            floxhub_base_url: floxhub.base_url().clone(),
             floxhub_git_url_override: floxhub.git_url_override().cloned(),
             version: Version::<1>,
         }
@@ -959,7 +960,7 @@ mod test {
         EnvironmentPointer::Managed(ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
-            floxhub_url: DEFAULT_FLOXHUB_URL.clone(),
+            floxhub_base_url: DEFAULT_FLOXHUB_URL.clone(),
             floxhub_git_url_override: None,
             version: Version::<1> {},
         })
@@ -970,7 +971,7 @@ mod test {
         let managed_pointer = EnvironmentPointer::Managed(ManagedPointer {
             name: EnvironmentName::from_str("name").unwrap(),
             owner: EnvironmentOwner::from_str("owner").unwrap(),
-            floxhub_url: DEFAULT_FLOXHUB_URL.clone(),
+            floxhub_base_url: DEFAULT_FLOXHUB_URL.clone(),
             floxhub_git_url_override: None,
             version: Version::<1> {},
         });
