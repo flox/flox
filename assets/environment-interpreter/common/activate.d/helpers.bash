@@ -31,6 +31,8 @@ function source_profile_d {
   source "$_profile_d/profile.d.functions"
   setup_python "$_profile_variable_mode" "$_flox_env_dirs"
   unset -f setup_python
+  setup_cmake "$_profile_variable_mode" "$_flox_env_dirs"
+  unset -f setup_cmake
 }
 
 # set_manifest_vars <flox_env>
