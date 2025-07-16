@@ -106,7 +106,7 @@ create_and_start_podman_machine() {
   # For some of these calls you need to not only close FD 3, but also FD 4.
   # I have no idea why.
   echo "Creating podman machine" >&3
-  podman machine init -v /tmp:/tmp -v /Users:/Users -v /private:/private flox-containerize-vm 3>&- 4>&-
+  podman machine init -v /private/tmp:/private/tmp -v /Users:/Users -v /private:/private flox-containerize-vm 3>&- 4>&-
   echo "Starting podman machine" >&3
   podman machine start flox-containerize-vm 3>&- 4>&-
 }
