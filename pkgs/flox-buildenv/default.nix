@@ -40,7 +40,6 @@ let
       export LOCALE_ARCHIVE="''${LOCALE_ARCHIVE:-${glibcLocalesUtf8}/lib/locale/locale-archive}"
     ''
     + lib.optionalString stdenv.isDarwin ''
-      export NIX_COREFOUNDATION_RPATH="''${NIX_COREFOUNDATION_RPATH:-"${darwin.CF}/Library/Frameworks"}"
       export PATH_LOCALE="''${PATH_LOCALE:-${darwin.locale}/share/locale}"
     ''
     + ''

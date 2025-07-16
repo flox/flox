@@ -62,7 +62,6 @@ let
       NIX_TARGET_SYSTEM = targetPlatform.system;
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
-      NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";
       PATH_LOCALE = "${darwin.locale}/share/locale";
     }
     // lib.optionalAttrs hostPlatform.isLinux {
