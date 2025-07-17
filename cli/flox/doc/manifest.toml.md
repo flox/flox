@@ -618,8 +618,16 @@ The full set of options is shown below:
 BuildDescriptor ::= {
   command     = STRING
 , sandbox     = null | ("off" | "pure")
-, version     = STRING
+, version     = STRING | VersionFile | VersionCommand
 , description = null | STRING
+}
+
+VersionFile ::= {
+  file = STRING
+}
+
+VersionCommand ::= {
+  command = STRING
 }
 ```
 
@@ -639,7 +647,12 @@ BuildDescriptor ::= {
     to be under `git` version control.
 
 `version`
-:   The version string to attach to this build artifact.
+:   The version to attach to this build artifact.
+    This may be specifed in one of the following ways:
+
+    1. **as a string**: `version = "0.0.1"`
+    1. **as read from a file**: `version.file = "<path>"`
+    1. **as returned by a command**: `version.command = "<cmd> <args>"`
 
 `description`
 :   The description string to attach to this build artifact.
