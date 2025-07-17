@@ -29,6 +29,7 @@
   # Avoid management of 'nixpkgs' and other flake inputs
   # since we will add nix-unit via an overlay to make use of our nix patches.
   inputs.nix-unit.url = "github:nix-community/nix-unit";
+  inputs.nix-unit.inputs.nixpkgs.follows = "nixpkgs";
 
   # -------------------------------------------------------------------------- #
 
@@ -60,6 +61,8 @@
           nix = final.callPackage ./pkgs/nix { };
 
           cpp-semver = final.callPackage ./pkgs/cpp-semver { };
+
+          process-compose = final.callPackage ./pkgs/process-compose { inherit (prev) process-compose; };
 
         })
         inputs.fenix.overlays.default

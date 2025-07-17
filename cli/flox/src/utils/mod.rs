@@ -53,13 +53,9 @@ pub fn default_nix_env_vars() -> std::collections::HashMap<&'static str, String>
 
     env_map.insert("NIX_SSL_CERT_FILE", ssl_cert_file);
 
-    // on macos use buildtime NIX_COREFOUNDATION_RPATH and PATH_LOCALE
+    // on macos use buildtime PATH_LOCALE
     #[cfg(target_os = "macos")]
     {
-        env_map.insert(
-            "NIX_COREFOUNDATION_RPATH",
-            env!("NIX_COREFOUNDATION_RPATH").to_string(),
-        );
         env_map.insert("PATH_LOCALE", env!("PATH_LOCALE").to_string());
     }
 

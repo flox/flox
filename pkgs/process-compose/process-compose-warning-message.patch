@@ -1,0 +1,13 @@
+diff --git a/src/config/config.go b/src/config/config.go
+index 4858d9d..9534006 100644
+--- a/src/config/config.go
++++ b/src/config/config.go
+@@ -115,7 +115,7 @@ func getProcConfigDir() string {
+ 	}
+ 	xdgPcHome, err := xdg.SearchConfigFile(configHome)
+ 	if err != nil {
+-		log.Warn().Err(err).Msg("Path not found for process compose config home")
++		// log.Warn().Err(err).Msg("Path not found for process compose config home")
+ 	}
+ 	return xdgPcHome
+ }

@@ -30,7 +30,6 @@ nixVersions."${nixVersion}".overrideAttrs (prev: {
   # Apply patch files.
   patches = prev.patches ++ [
     (builtins.path { path = ./patches/seekable_http.patch; })
-    (builtins.path { path = ./patches/ghsa-g948-229j-48j3-2.28.patch; })
   ];
 
   postFixup = ''

@@ -359,7 +359,6 @@ pub struct ProcessState {
     restarts: u64,
     pub exit_code: i32,
     pub pid: u64,
-    #[serde(skip_serializing, rename = "IsRunning")]
     pub is_running: bool,
 }
 
