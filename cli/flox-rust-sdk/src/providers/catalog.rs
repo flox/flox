@@ -1794,6 +1794,51 @@ pub mod test_helpers {
 
         client.reset_mocks(responses);
     }
+
+    /// Create a catalog with the given name and config.
+    ///
+    /// Will continue with config and not return an error if the catalog already exists.
+    pub async fn create_catalog_with_config(
+        client: &Client,
+        name: &str,
+        config: &CatalogStoreConfig,
+    ) -> Result<(), CatalogClientError> {
+        let Client::Catalog(client) = client else {
+            panic!("can only be used with a CatalogClient");
+        };
+
+        // TODO: Change `catalog-server` to use `CatalogName` instead of `Name`.
+        let name_name = api_types::Name::from_str(name).map_err(|_e| {
+            CatalogClientError::APIError(APIError::InvalidRequest(
+                format!("catalog name {} does not meet API requirements.", name).to_string(),
+            ))
+        })?;
+        let catalog_name = str_to_catalog_name(name)?;
+
+        match client
+            .client
+            .create_catalog_api_v1_catalog_catalogs_post(&name_name)
+            .await
+        {
+            Ok(_) => {},
+            // Continue if already exists.
+            Err(e) if e.status() == Some(StatusCode::CONFLICT) => {},
+            Err(e) => {
+                return Err(CatalogClientError::APIError(e));
+            },
+        }
+
+        client
+            .client
+            .set_catalog_store_config_api_v1_catalog_catalogs_catalog_name_store_config_put(
+                &catalog_name,
+                config,
+            )
+            .await
+            .map_err(CatalogClientError::APIError)?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
