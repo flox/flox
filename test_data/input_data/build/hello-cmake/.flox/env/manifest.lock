@@ -1,0 +1,270 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "cmake": {
+        "pkg-path": "cmake"
+      },
+      "gnumake": {
+        "pkg-path": "gnumake"
+      }
+    },
+    "options": {},
+    "build": {
+      "hello": {
+        "command": "  rm -rf build\n  mkdir build\n  cd build\n  cmake ..\n  cmake --build .\n  expected=\"Hello, World!\"\n  result=\"$(cat hello.txt)\"\n  if [ \"$result\" != \"$expected\" ]; then\n    echo \"Test failed: expected '$expected', got '$result'\"\n    exit 1\n  fi\n  mkdir $out\n  cp hello.txt $out\n"
+      }
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "cmake",
+      "broken": false,
+      "derivation": "/nix/store/hy8wcxkn64ppwbxxfxfxk2bfx71bn9vd-cmake-3.31.7.drv",
+      "description": "Cross-platform, open-source build system generator",
+      "install_id": "cmake",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "name": "cmake-3.31.7",
+      "pname": "cmake",
+      "rev": "1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "rev_count": 826054,
+      "rev_date": "2025-07-06T08:59:25Z",
+      "scrape_date": "2025-07-08T05:14:34.713807Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.31.7",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/6m8dh17b5ylql37wnkwjcag45i8nk2by-cmake-3.31.7"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "cmake",
+      "broken": false,
+      "derivation": "/nix/store/a2bk4b22wfsw7gg5q6vzz8chfv0lfy3n-cmake-3.31.7.drv",
+      "description": "Cross-platform, open-source build system generator",
+      "install_id": "cmake",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "name": "cmake-3.31.7",
+      "pname": "cmake",
+      "rev": "1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "rev_count": 826054,
+      "rev_date": "2025-07-06T08:59:25Z",
+      "scrape_date": "2025-07-08T05:34:25.182281Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.31.7",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/wslbda40qdg2a5wv7zhfnazzncc1x5hp-cmake-3.31.7-debug",
+        "out": "/nix/store/a59mkjs49qqcrc3kb5zvjn1sbad150sh-cmake-3.31.7"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "cmake",
+      "broken": false,
+      "derivation": "/nix/store/49s10b531k19bqlzh15r56xja650pfva-cmake-3.31.7.drv",
+      "description": "Cross-platform, open-source build system generator",
+      "install_id": "cmake",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "name": "cmake-3.31.7",
+      "pname": "cmake",
+      "rev": "1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "rev_count": 826054,
+      "rev_date": "2025-07-06T08:59:25Z",
+      "scrape_date": "2025-07-08T05:52:52.240700Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.31.7",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/0ywb0vafxr8glh4baja4b44cz8ag8zkr-cmake-3.31.7"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "cmake",
+      "broken": false,
+      "derivation": "/nix/store/lik9ff49mxmg4018qjp7b3k17ql692m4-cmake-3.31.7.drv",
+      "description": "Cross-platform, open-source build system generator",
+      "install_id": "cmake",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "name": "cmake-3.31.7",
+      "pname": "cmake",
+      "rev": "1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "rev_count": 826054,
+      "rev_date": "2025-07-06T08:59:25Z",
+      "scrape_date": "2025-07-08T06:14:16.950102Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.31.7",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/bvc8hzcj7w43nd7hyqfgj9lyj1n5kqkk-cmake-3.31.7-debug",
+        "out": "/nix/store/dx4bdrs7mq3jfviqhszrc7l35ps9kg64-cmake-3.31.7"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gnumake",
+      "broken": false,
+      "derivation": "/nix/store/60nhk5npja6szd4xm89zfmhf645bvyi4-gnumake-4.4.1.drv",
+      "description": "Tool to control the generation of non-source files from sources",
+      "install_id": "gnumake",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "name": "gnumake-4.4.1",
+      "pname": "gnumake",
+      "rev": "1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "rev_count": 826054,
+      "rev_date": "2025-07-06T08:59:25Z",
+      "scrape_date": "2025-07-08T05:14:35.331677Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.4.1",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/39c179hnw4w0y9pikjxm9zvrsq9wxs6q-gnumake-4.4.1-info",
+        "man": "/nix/store/dk7vh49s82kl68y3pv4b5glmz31xh255-gnumake-4.4.1-man",
+        "out": "/nix/store/r7m07s173xa5nlii49999m0666i4sh27-gnumake-4.4.1"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gnumake",
+      "broken": false,
+      "derivation": "/nix/store/k2iilkq7739pfi8zl1xg0v0ylb01whd4-gnumake-4.4.1.drv",
+      "description": "Tool to control the generation of non-source files from sources",
+      "install_id": "gnumake",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "name": "gnumake-4.4.1",
+      "pname": "gnumake",
+      "rev": "1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "rev_count": 826054,
+      "rev_date": "2025-07-06T08:59:25Z",
+      "scrape_date": "2025-07-08T05:34:26.508198Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.4.1",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/5n3plbn2w3my72ji83f3ffg1rykcj09m-gnumake-4.4.1-debug",
+        "info": "/nix/store/yahicgkv1xprlqv6nlgzdyfivqmghpbi-gnumake-4.4.1-info",
+        "man": "/nix/store/8p351d8fiirsppiz0mmjanp4k40k8fb5-gnumake-4.4.1-man",
+        "out": "/nix/store/1yr3fp9z2a6bnfxyrg9r9a50cn0fgs1c-gnumake-4.4.1"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gnumake",
+      "broken": false,
+      "derivation": "/nix/store/2zbz7220kfc9q6fqag14habfqnzf8hay-gnumake-4.4.1.drv",
+      "description": "Tool to control the generation of non-source files from sources",
+      "install_id": "gnumake",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "name": "gnumake-4.4.1",
+      "pname": "gnumake",
+      "rev": "1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "rev_count": 826054,
+      "rev_date": "2025-07-06T08:59:25Z",
+      "scrape_date": "2025-07-08T05:52:52.891672Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.4.1",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/27x32j1ild76cv8aw3v89x0vzkz57g9b-gnumake-4.4.1-info",
+        "man": "/nix/store/fhf8z0n0qdrzim6jckj0kib749skibp7-gnumake-4.4.1-man",
+        "out": "/nix/store/m9l6dyxvkzlawlsb56gmj40ahlvhyg02-gnumake-4.4.1"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gnumake",
+      "broken": false,
+      "derivation": "/nix/store/4ag52d8v19ncbqgpj6h2zw0fqy6lfa4d-gnumake-4.4.1.drv",
+      "description": "Tool to control the generation of non-source files from sources",
+      "install_id": "gnumake",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "name": "gnumake-4.4.1",
+      "pname": "gnumake",
+      "rev": "1fd8bada0b6117e6c7eb54aad5813023eed37ccb",
+      "rev_count": 826054,
+      "rev_date": "2025-07-06T08:59:25Z",
+      "scrape_date": "2025-07-08T06:14:18.440603Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.4.1",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/6z5kdrm4iz98knwcf6bzkrrdnfc0y521-gnumake-4.4.1-debug",
+        "info": "/nix/store/qjwiip462nkv8dand7zql6np4plzk8rq-gnumake-4.4.1-info",
+        "man": "/nix/store/ylv36wr8356r4ff02nlw1h70cigx582h-gnumake-4.4.1-man",
+        "out": "/nix/store/20ljlr4fvln0pd2xcrhy6bm27bk1dnc7-gnumake-4.4.1"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}
