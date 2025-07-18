@@ -48,6 +48,13 @@ nixVersions."${nixVersion}".overrideAttrs (prev: {
     # Note: remove for Nix >= v2.29
     (builtins.path { path = ./patches/pr_12642_libfetchers_git_shallow_clone_cache.patch; })
 
+    # <https://github.com/NixOS/nix/pull/12580> was merged into master in february,
+    # but remained unreleased until Nix 2.29.
+    # For the same reason as the above,
+    # backport this until we bump our base packages to contain Nix >= 2.29 as stable.
+    #
+    # Note: remove for Nix >= v2.29
+    (builtins.path { path = ./patches/pr_12580_host-in-locked-github-url.2.24.11.patch; })
   ];
 
   postFixup = ''
