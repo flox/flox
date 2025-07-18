@@ -461,7 +461,7 @@ impl DotFlox {
 /// Unlike [ConcreteEnvironment], this type does not hold a concrete instance any environment,
 /// but rather fully qualified metadata to create an instance from.
 ///
-/// * for [PathEnvironment] and [ManagedEnvironment] that's the path to their `.flox` and `.flox/pointer.json`
+/// * for [PathEnvironment] and [ManagedEnvironment] that's the path to their `.flox` and `.flox/env.json`
 /// * for [RemoteEnvironment] that's the [ManagedPointer] to the remote environment
 ///
 /// Serialized as is into [FLOX_ACTIVE_ENVIRONMENTS_VAR] to be able to reopen environments.
