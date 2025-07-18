@@ -17,7 +17,8 @@ use flox_rust_sdk::providers::catalog::{
     PackageGroup,
     PackageResolutionInfo,
 };
-use indoc::formatdoc;
+use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
+use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
 use tracing::{debug, info_span, instrument};
 
@@ -139,6 +140,8 @@ impl Init {
             PathEnvironment::init(PathPointer::new(env_name), &dir, &customization, &flox)?
         };
 
+        let env_in_git_repo = GitCommandProvider::discover(&dir).is_ok();
+
         message::created(format!(
             "Created environment '{name}' ({system})",
             name = env.name(),
@@ -150,15 +153,29 @@ impl Init {
                 message::package_installed(&PackageToInstall::Catalog(package), &description);
             }
         }
-        message::plain(formatdoc! {"
+
+        message::plain(indoc! {"
 
             Next:
               $ flox search <package>    <- Search for a package
               $ flox install <package>   <- Install a package into an environment
               $ flox activate            <- Enter the environment
-              $ flox edit                <- Add environment variables and shell hooks
-            "
+              $ flox edit                <- Add environment variables and shell hooks"
         });
+
+        // Don't recommend `flox push` if the env is in a git repo because they
+        // can already git track it and there's a higher likelihood of using
+        // build+publish, subsets of which require a git repo, and don't work
+        // with remote environments.
+        if !env_in_git_repo {
+            let hint_indentation = "  ";
+            message::plain(formatdoc! {"
+                {}$ flox push                <- Use the environment from other machines or
+                                                share it with someone on FloxHub"
+            , hint_indentation});
+        }
+
+        message::plain("");
         Ok(())
     }
 
