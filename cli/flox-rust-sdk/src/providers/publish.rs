@@ -142,15 +142,18 @@ pub struct LockedUrlInfo {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CheckedEnvironmentMetadata {
     pub lockfile: Lockfile,
-    // This is the local root path of the repo containing the environment
+    /// The local path of the root of the repo containing the environment.
     pub repo_root_path: PathBuf,
-    // This is the path to the parent of .flox for the build environment relative to the repo_root_path
+
+    /// The path to the parent of .flox for the build environment relative to the `repo_root_path`.
     pub rel_project_path: PathBuf,
 
-    // The build repo reference is always present
+    /// A URL pointing at a remote repository. This is required to be present
+    /// for reproducibility purposes.
     pub build_repo_ref: LockedUrlInfo,
 
-    // There may or may not be a locked base catalog reference in the environment
+    /// A locked Nixpkgs reference for the `toplevel` package group, which
+    /// may be absent when the user has no packages installed.
     pub toplevel_catalog_ref: Option<BaseCatalogUrl>,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
@@ -1314,6 +1317,12 @@ pub mod tests {
         CheckedEnvironmentMetadata,
         PackageMetadata,
     ) {
+        // TODO: https://github.com/flox/flox/issues/3179
+        // Use a page available available on whichever catalog-server instance we're using.
+        let stable_nixpkgs_ref = BaseCatalogUrl::from(
+            "https://github.com/flox/nixpkgs?rev=693bc46d169f5af9c992095736e82c3488bf7dbb",
+        );
+
         let build_metadata = CheckedBuildMetadata {
             name: "dummy".to_string(),
             pname: "dummy".to_string(),
@@ -1333,7 +1342,7 @@ pub mod tests {
             repo_root_path: PathBuf::new(),
             rel_project_path: PathBuf::new(),
 
-            toplevel_catalog_ref: Some(mock_base_catalog_url()),
+            toplevel_catalog_ref: Some(stable_nixpkgs_ref.clone()),
             build_repo_ref: LockedUrlInfo {
                 url: "dummy".to_string(),
                 rev: "dummy".to_string(),
@@ -1345,7 +1354,7 @@ pub mod tests {
         };
 
         let package_metadata = PackageMetadata {
-            base_catalog_ref: mock_base_catalog_url(),
+            base_catalog_ref: stable_nixpkgs_ref,
             package: EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
             description: "dummy".to_string(),
             _private: (),
