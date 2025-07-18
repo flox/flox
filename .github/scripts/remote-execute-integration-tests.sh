@@ -14,10 +14,7 @@ function render_remote_cmd() {
 }
 export -f render_remote_cmd
 
-function upload_report_to_buildkite() {
-  # Don't do anything if we're not in the merge queue or on main
-  ! [[ 'merge_group' == "$GITHUB_EVENT_NAME" || 'main' == "$GITHUB_REF_NAME" ]] && return 0
-
+function cleanup_report() {
   local -r git_commit_message="$(git log -1 --pretty=format:"%s")"
   local -r report_path_on_remote="$(awk '{ if ($1 == "TESTS_DIR:") { print $2 } }' output.txt)/report.xml"
 
@@ -27,33 +24,8 @@ function upload_report_to_buildkite() {
     -o "UserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" \
     "github@[$REMOTE_SERVER_ADDRESS]:$report_path_on_remote" \
     ./report.xml
-
-  # Remove all non-valid XML characters. We set -CSDA to make Perl use UTF8 for
-  # its I/O and -p to make it loop over the whole file.
-  perl -CSDA -pe 's/[^\P{C}\t\n\r]//g' ./report.xml > ./report-stripped.xml
-
-  local -r report_path="$PWD/report-stripped.xml"
-
-  curl \
-    -X POST \
-    --fail-with-body \
-    -H "Authorization: Token token=\"$BUILDKITE_ANALYTICS_TOKEN\"" \
-    -F "data=@$report_path" \
-    -F "format=junit" \
-    -F "run_env[CI]=github_actions" \
-    -F "run_env[key]=$GITHUB_ACTION-$GITHUB_RUN_NUMBER-$GITHUB_RUN_ATTEMPT" \
-    -F "run_env[number]=$GITHUB_RUN_NUMBER" \
-    -F "run_env[branch]=$GITHUB_REF" \
-    -F "run_env[commit_sha]=$GITHUB_SHA" \
-    -F "run_env[message]=$git_commit_message" \
-    -F "run_env[url]=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-    -F "tags[architecture]=$MATRIX_SYSTEM" \
-    -F "tags[nix_flakeref]=github:flox/flox/$GITHUB_SHA" \
-    -F "tags[nix_attribute]=packages.$MATRIX_SYSTEM.flox-cli-tests" \
-    https://analytics-api.buildkite.com/v1/uploads \
-    || true
 }
-trap 'upload_report_to_buildkite' EXIT
+trap 'cleanup_report' EXIT
 
 function main() {
   git clean -xfd
