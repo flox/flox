@@ -14,18 +14,15 @@ function render_remote_cmd() {
 }
 export -f render_remote_cmd
 
-function cleanup_report() {
-  local -r git_commit_message="$(git log -1 --pretty=format:"%s")"
-  local -r report_path_on_remote="$(awk '{ if ($1 == "TESTS_DIR:") { print $2 } }' output.txt)/report.xml"
-
+function retrieve_report_from_remote() {
   # Square bracket due to IPv6 being used to address the remote builderes via TailScale.
+  local -r report_path_on_remote="$(awk '{ if ($1 == "TESTS_DIR:") { print $2 } }' output.txt)/report.xml"
   scp \
     -6 \
     -o "UserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" \
     "github@[$REMOTE_SERVER_ADDRESS]:$report_path_on_remote" \
     ./report.xml
 }
-trap 'cleanup_report' EXIT
 
 function main() {
   git clean -xfd
@@ -39,5 +36,8 @@ function main() {
     -o "UserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" \
     "$(render_remote_cmd)" \
     | tee output.txt
+
+  # Retrive report.xml
+  retrieve_report_from_remote
 }
 main "$@"
