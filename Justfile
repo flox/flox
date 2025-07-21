@@ -140,6 +140,23 @@ version:
 
 @gen-unit-data: (unit-tests "--filterset 'not test(providers::build::tests)'" "true")
 
+gen-ud floxhub_repo_path:
+    #!/usr/bin/env bash
+    pushd "{{floxhub_repo_path}}" > /dev/null
+    _FLOX_BASE_CATALOG_REF="$(flox activate -- just catalog-server::latest-rev)"
+    popd > /dev/null
+    if [ -z "$_FLOX_BASE_CATALOG_REF" ]; then
+        echo "Local FloxHub services aren't running"
+        exit 1
+    fi
+    export _FLOX_BASE_CATALOG_REF="$_FLOX_BASE_CATALOG_REF"
+    export _FLOX_OAUTH_AUTH_URL="https://auth.dev.flox.dev/authorize"
+    export _FLOX_OAUTH_TOKEN_URL="https://auth.dev.flox.dev/oauth/token"
+    export _FLOX_OAUTH_DEVICE_AUTH_URL="https://auth.dev.flox.dev/oauth/device/code"
+    tmp_config_path="$(mktemp -d)"
+    export FLOX_CONFIG_DIR="$tmp_config_path"
+    export _FLOX_UNIT_TEST_RECORD=true
+    {{cargo_test_invocation}} --filterset 'not test(providers::build::tests)'
 
 # ---------------------------------------------------------------------------- #
 
