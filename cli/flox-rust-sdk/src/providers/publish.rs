@@ -1037,7 +1037,10 @@ pub mod tests {
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::lockfile::Lockfile;
     use crate::providers::auth::{Auth, write_floxhub_netrc};
-    use crate::providers::catalog::test_helpers::reset_mocks;
+    use crate::providers::catalog::test_helpers::{
+        auto_recording_catalog_client_for_authed_local_services,
+        reset_mocks,
+    };
     use crate::providers::catalog::{
         GENERATED_DATA,
         MockClient,
@@ -1317,10 +1320,15 @@ pub mod tests {
         CheckedEnvironmentMetadata,
         PackageMetadata,
     ) {
-        // TODO: https://github.com/flox/flox/issues/3179
-        // Use a page available available on whichever catalog-server instance we're using.
+        // Copied from a running instance of the floxhub repo environment's
+        // catalog-server.
+        // TODO(zmitchell, 2025-07-23): we need a better way to get this
+        //     revision. We can set an environment variable during mock
+        //     generation, but that variable won't be available at other times.
+        let nixpkgs_rev = "5e0ca22929f3342b19569b21b2f3462f053e497b";
         let stable_nixpkgs_ref = BaseCatalogUrl::from(
-            "https://github.com/flox/nixpkgs?rev=693bc46d169f5af9c992095736e82c3488bf7dbb",
+            std::env::var("DUMMY_NIXPKGS_URL")
+                .unwrap_or(format!("github:flox/nixpkgs?rev{nixpkgs_rev}")),
         );
 
         let build_metadata = CheckedBuildMetadata {

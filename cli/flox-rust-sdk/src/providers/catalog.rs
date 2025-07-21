@@ -1763,7 +1763,8 @@ pub mod test_helpers {
     /// allow the `MockServer` to run in another thread.
     pub fn auto_recording_catalog_client(filename: &str) -> Client {
         let auth = Auth::from_tempdir_and_token(TempDir::new().unwrap(), None);
-        auto_recording_client_inner(filename, DEFAULT_CATALOG_URL, &auth)
+        let record = get_record_directive();
+        auto_recording_client_inner(filename, DEFAULT_CATALOG_URL, &auth, record)
     }
 
     /// Similar to [auto_recording_catalog_client] but authenticates against a dev
@@ -1772,32 +1773,45 @@ pub mod test_helpers {
     /// appropriate token and client.
     ///
     /// Should only be used for tests that require authentication.
-    pub fn auto_recording_catalog_client_authed_dev(
+    pub fn auto_recording_catalog_client_for_authed_local_services(
         mut flox: Flox,
         filename: &str,
     ) -> (Flox, Auth) {
-        let token = if std::env::var("_FLOX_UNIT_TEST_RECORD") == Ok("true".to_string()) {
-            FloxhubToken::from_str(&std::env::var("_FLOX_UNIT_TEST_RECORD_TOKEN").unwrap()).unwrap()
-        } else {
-            create_test_token("test")
+        let record = get_record_directive();
+        let token = match record {
+            RecordMockData::Missing | RecordMockData::Force => FloxhubToken::from_str(
+                &std::env::var("_FLOX_UNIT_TEST_RECORD_TOKEN")
+                    .expect("_FLOX_UNIT_TEST_RECORD_TOKEN is unset"),
+            )
+            .expect("couldn't parse FloxHub token"),
+            RecordMockData::False => create_test_token("test"),
         };
 
         flox.floxhub_token = Some(token);
         let auth = Auth::from_flox(&flox).unwrap();
         let base_url = "http://localhost:8000";
-        let client = auto_recording_client_inner(filename, base_url, &auth);
+        let client = auto_recording_client_inner(filename, base_url, &auth, record);
         flox.catalog_client = client;
 
         (flox, auth)
     }
 
     /// Generic handler for creating a mock catalog client.
-    fn auto_recording_client_inner(filename: &str, base_url: &str, auth: &Auth) -> Client {
-        let record = get_record_directive();
+    fn auto_recording_client_inner(
+        filename: &str,
+        base_url: &str,
+        auth: &Auth,
+        record: RecordMockData,
+    ) -> Client {
         let mut path = UNIT_TEST_GENERATED.join(filename);
         path.set_extension("yaml");
         let (mock_mode, catalog_url) = match record {
             RecordMockData::Missing => {
+                // TODO(zmitchell, 2025-07-23): it would be convenient if we
+                // also detected empty mock files as "missing" since a failed
+                // test will create the file but won't get a chance to write
+                // the contents (which is good, we don't want a recording of
+                // a failed test).
                 if path.exists() {
                     // Use an existing recording
                     (
