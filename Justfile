@@ -140,7 +140,7 @@ version:
 
 @gen-unit-data: (unit-tests "--filterset 'not test(providers::build::tests)'" "true")
 
-gen-ud floxhub_repo_path:
+gen-ud floxhub_repo_path force="":
     #!/usr/bin/env bash
     pushd "{{floxhub_repo_path}}" > /dev/null
     _FLOX_BASE_CATALOG_REF="$(flox activate -- just catalog-server::latest-rev)"
@@ -156,6 +156,11 @@ gen-ud floxhub_repo_path:
     tmp_config_path="$(mktemp -d)"
     export FLOX_CONFIG_DIR="$tmp_config_path"
     export _FLOX_UNIT_TEST_RECORD=true
+    if [ "{{force}}" = "true" ]; then
+        export _FLOX_UNIT_TEST_RECORD="force"
+    else
+        export _FLOX_UNIT_TEST_RECORD="missing"
+    fi
     {{cargo_test_invocation}} --filterset 'not test(providers::build::tests)'
 
 # ---------------------------------------------------------------------------- #

@@ -1710,6 +1710,35 @@ pub mod test_helpers {
     pub static UNIT_TEST_GENERATED: LazyLock<PathBuf> =
         LazyLock::new(|| PathBuf::from(std::env::var("UNIT_TEST_GENERATED").unwrap()));
 
+    /// Whether to record mock data and in which situations.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    enum RecordMockData {
+        /// Only record new mock data if it's missing.
+        Missing,
+        /// Don't record new mock data.
+        #[default]
+        False,
+        /// Re-record all mock data.
+        Force,
+    }
+
+    /// Returns in which circumstances mock data should be recorded based on
+    /// the value of the `_FLOX_UNIT_TEST_RECORD` environment variable.
+    ///
+    /// Values of "missing", "true", or "1" will generate a recording for a
+    /// missing mock. An unset variable or a value of "false" will only replay
+    /// existing recordings. The value "force" will unconditionally regenerate
+    /// mock data. Any other value will cause a panic.
+    fn get_record_directive() -> RecordMockData {
+        let s = std::env::var("_FLOX_UNIT_TEST_RECORD").unwrap_or_default();
+        match s.as_str() {
+            "true" | "missing" | "1" => RecordMockData::Missing,
+            "" | "false" => RecordMockData::False,
+            "force" => RecordMockData::Force,
+            _ => panic!("invalid value of _FLOX_UNIT_TEST_RECORD"),
+        }
+    }
+
     /// Create a mock client that will replay from a given file.
     ///
     /// Tests must be run with `#[tokio::test(flavor = "multi_thread")]` to
@@ -1764,18 +1793,34 @@ pub mod test_helpers {
 
     /// Generic handler for creating a mock catalog client.
     fn auto_recording_client_inner(filename: &str, base_url: &str, auth: &Auth) -> Client {
+        let record = get_record_directive();
         let mut path = UNIT_TEST_GENERATED.join(filename);
         path.set_extension("yaml");
-        let (mock_mode, catalog_url) =
-            if std::env::var("_FLOX_UNIT_TEST_RECORD") == Ok("true".to_string()) {
-                // Generate against prod
-                (CatalogMockMode::Record(path), base_url.to_string())
-            } else {
+        let (mock_mode, catalog_url) = match record {
+            RecordMockData::Missing => {
+                if path.exists() {
+                    // Use an existing recording
+                    (
+                        CatalogMockMode::Replay(path),
+                        "https://not_used".to_string(),
+                    )
+                } else {
+                    // Generate a new recording
+                    (CatalogMockMode::Record(path), base_url.to_string())
+                }
+            },
+            RecordMockData::False => {
+                // Use an existing recording
                 (
                     CatalogMockMode::Replay(path),
                     "https://not_used".to_string(),
                 )
-            };
+            },
+            RecordMockData::Force => {
+                // Regenerate existing recording
+                (CatalogMockMode::Record(path), base_url.to_string())
+            },
+        };
 
         let catalog_config = CatalogClientConfig {
             catalog_url,
