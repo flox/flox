@@ -82,9 +82,14 @@
               );
               validEntries = lib.filter (v: (v ? value && v.value != null && v.value != { })) entries;
 
-              # Regular files should be preferred over directories, so that e.g.
-              # foo.nix can be used to declare a further import of the foo directory
-              entryAttrs = lib.listToAttrs (lib.sort (a: b: a.value.type == "regular") validEntries);
+              # Regular files should be preferred over directories,
+              # and `<package>.nix` should be preferred over `foo/default.nix`,
+              # so that `<package>.nix` can declare further import of the `<package>/` directory.
+              entryAttrs = lib.listToAttrs (
+                lib.sort (
+                  a: b: a.value.type == "nix" || a.name == b.name && !lib.hasSuffix "default.nix" a.value.path
+                ) validEntries
+              );
 
             in
             if builtins.length validEntries > 0 then

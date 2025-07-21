@@ -36,7 +36,21 @@
     in
     {
       expr = fooPath;
-      expected = "${rootPath}/foo/default.nix"; # should be "${rootPath}/foo.nix"
+      expected = "${rootPath}/foo.nix";
+    };
+
+  "test: <package>.nix shadows <package> dir" =
+    let
+      root = lib.nef.dirToAttrs "${./testData/collectionPrecedence}";
+      rootPath = root.path;
+      bar = root.entries.bar;
+    in
+    {
+      expr = bar;
+      expected = {
+        path = "${rootPath}/bar.nix";
+        type = "nix";
+      };
     };
 
   "test: collecting does not eval" = {
