@@ -28,6 +28,17 @@
     expected = true;
   };
 
+  "test: <package>.nix takes precedence" =
+    let
+      root = lib.nef.dirToAttrs "${./testData/collectionPrecedence}";
+      rootPath = root.path;
+      fooPath = root.entries.foo.path;
+    in
+    {
+      expr = fooPath;
+      expected = "${rootPath}/foo/default.nix"; # should be "${rootPath}/foo.nix"
+    };
+
   "test: collecting does not eval" = {
     expr = builtins.deepSeq (lib.nef.dirToAttrs ./testData/pkgs).entries.lazyEval true;
     expected = true;
