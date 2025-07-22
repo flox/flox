@@ -1046,6 +1046,7 @@ pub mod tests {
         MockClient,
         PublishResponse,
         Response,
+        get_base_nixpkgs_url,
         mock_base_catalog_url,
     };
     use crate::providers::git::tests::{
@@ -1768,5 +1769,21 @@ pub mod tests {
             narinfo.references.is_some(),
             "Expected narinfo to have a references field"
         );
+    }
+
+    // This test isn't really for testing publish functionality, but instead
+    // for testing that we've hooked up local services correctly for generating
+    // publish test mocks.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn retrieves_base_catalog_url() {
+        let (_build_meta, env_meta, _pkg_meta) = dummy_publish_metadata();
+        let (flox, _tmpdir) = flox_instance();
+        let (flox, _auth) = auto_recording_catalog_client_for_authed_local_services(
+            flox,
+            "get_base_catalog_nixpkgs_url",
+        );
+        let _url = get_base_nixpkgs_url(&flox, Some("stable"), &env_meta)
+            .await
+            .unwrap();
     }
 }

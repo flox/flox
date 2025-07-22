@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::auth::Auth;
 use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget, nix_expression_dir};
-use flox_rust_sdk::providers::catalog::ClientTrait;
+use flox_rust_sdk::providers::catalog::get_base_nixpkgs_url;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -16,15 +16,13 @@ use flox_rust_sdk::providers::publish::{
     check_environment_metadata,
     check_package_metadata,
 };
-use futures::TryFutureExt;
 use indoc::formatdoc;
 use tracing::{debug, info_span, instrument};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::build::{
-    base_catalog_url_for_stability_arg,
     check_git_tracking_for_expression_builds,
-    check_stability_compatibility,
+    disallow_stability_flag_for_manifest_builds,
     packages_to_build,
     prefetch_expression_build_flake_ref,
     prefetch_flake_ref,
@@ -169,7 +167,7 @@ impl Publish {
 
         let package = Self::get_publish_target(&lockfile.manifest, &expression_dir, package_arg)?;
 
-        check_stability_compatibility([&package], stability.is_some())?;
+        disallow_stability_flag_for_manifest_builds([&package], stability.is_some())?;
         // Note: when publishsing an expression build,
         // this causes us to discover the containing git repo twice.
         // While slightly redundant it outweighs the complexity of reusing git instances.
@@ -178,19 +176,8 @@ impl Publish {
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
 
-        let base_nixpkgs_url = {
-            let base_catalog_info_fut =
-                flox.catalog_client.get_base_catalog_info().map_err(|err| {
-                    anyhow!(err).context("could not get information about the base catalog")
-                });
-
-            base_catalog_url_for_stability_arg(
-                stability.as_deref(),
-                base_catalog_info_fut,
-                env_metadata.toplevel_catalog_ref.as_ref(),
-            )
-            .await?
-        };
+        let base_nixpkgs_url =
+            get_base_nixpkgs_url(&flox, stability.as_deref(), &env_metadata).await?;
 
         prefetch_expression_build_flake_ref([&package], &base_nixpkgs_url.as_flake_ref()?)?;
 

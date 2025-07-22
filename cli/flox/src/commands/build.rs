@@ -2,7 +2,7 @@ use std::env;
 use std::path::Path;
 use std::process::Stdio;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
@@ -18,15 +18,14 @@ use flox_rust_sdk::providers::build::{
     find_toplevel_group_nixpkgs,
     nix_expression_dir,
 };
-use flox_rust_sdk::providers::catalog::{BaseCatalogInfo, BaseCatalogUrl, ClientTrait};
+use flox_rust_sdk::providers::catalog::{ClientTrait, base_catalog_url_for_stability_arg};
 use flox_rust_sdk::providers::git::{GitCommandProvider, GitProvider};
 use flox_rust_sdk::providers::nix;
 use flox_rust_sdk::utils::CommandExt;
-use futures::TryFutureExt;
 use indoc::formatdoc;
 use itertools::Itertools;
 use thiserror::Error;
-use tracing::{debug, info, instrument, trace};
+use tracing::{debug, instrument, trace};
 use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
@@ -169,11 +168,12 @@ impl Build {
 
         let packages_to_build = packages_to_build(&lockfile.manifest, &expression_dir, &packages)?;
 
-        let base_catalog_info_fut = flox.catalog_client.get_base_catalog_info().map_err(|err| {
-            anyhow!(err).context("could not get information about the base catalog")
-        });
+        let base_catalog_info_fut = flox.catalog_client.get_base_catalog_info();
 
-        check_stability_compatibility(&packages_to_build, nixpkgs_url_select.is_some())?;
+        disallow_stability_flag_for_manifest_builds(
+            &packages_to_build,
+            nixpkgs_url_select.is_some(),
+        )?;
         check_git_tracking_for_expression_builds(&packages_to_build, &expression_dir)?;
 
         let toplevel_derived_url = find_toplevel_group_nixpkgs(&lockfile);
@@ -198,7 +198,8 @@ impl Build {
                     base_catalog_info_fut,
                     toplevel_derived_url.as_ref(),
                 )
-                .await?;
+                .await
+                .context("could not get information about the base catalog")?;
                 url.as_flake_ref()?
             },
         };
@@ -279,7 +280,7 @@ impl Build {
 }
 
 /// Check that all packages are compatible with the selected Nixpkgs URL selection.
-pub(crate) fn check_stability_compatibility<'p>(
+pub(crate) fn disallow_stability_flag_for_manifest_builds<'p>(
     packages: impl IntoIterator<Item = &'p PackageTarget>,
     nixpkgs_overridden: bool,
 ) -> Result<()> {
@@ -423,59 +424,6 @@ pub(crate) enum PrefetchError {
     PrefetchFailed { flakeref: Url, stderr: String },
 }
 
-/// Derive the nixpkgs url to be used for builds.
-/// If a stability is provided, try to retrieve a url for that stability from the catalog.
-/// Else, if we can derive a stability from the toplevel group of the environment, use that.
-/// Otherwise attrr
-pub(crate) async fn base_catalog_url_for_stability_arg(
-    stability: Option<&str>,
-    base_catalog_info_fut: impl IntoFuture<Output = Result<BaseCatalogInfo>>,
-    toplevel_derived_url: Option<&BaseCatalogUrl>,
-) -> Result<BaseCatalogUrl> {
-    let url = match (stability, toplevel_derived_url) {
-        (Some(stability), _) => {
-            let base_catalog_info = base_catalog_info_fut.await?;
-            let make_error_message = || {
-                let available_stabilities = base_catalog_info.available_stabilities().join(", ");
-                formatdoc! {"
-                    Stability '{stability}' does not exist (or has not yet been populated).
-                    Available stabilities are: {available_stabilities}
-                "}
-            };
-
-            let url = base_catalog_info
-                .url_for_latest_page_with_stability(stability)
-                .with_context(make_error_message)?;
-
-            info!(%url, %stability, "using page from user provided stability");
-            url
-        },
-        (None, Some(toplevel_derived_url)) => {
-            info!(url=%toplevel_derived_url, "using nixpkgs derived from toplevel group");
-            toplevel_derived_url.clone()
-        },
-        (None, None) => {
-            let base_catalog_info = base_catalog_info_fut.await?;
-
-            let make_error_message = || {
-                let available_stabilities = base_catalog_info.available_stabilities().join(", ");
-                formatdoc! {"
-                    The default stability {} does not exist (or has not yet been populated).
-                    Available stabilities are: {available_stabilities}
-                ", BaseCatalogInfo::DEFAULT_STABILITY}
-            };
-
-            let url = base_catalog_info
-                .url_for_latest_page_with_default_stability()
-                .with_context(make_error_message)?;
-
-            info!(%url, "using page from default stability");
-            url
-        },
-    };
-    Ok(url)
-}
-
 pub(crate) fn packages_to_build<'o>(
     manifest: &'o Manifest,
     expression_dir: &'o Path,
@@ -510,6 +458,7 @@ mod test {
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
     use flox_rust_sdk::providers::build::ExpressionBuildMetadata;
     use flox_rust_sdk::providers::build::test_helpers::prepare_nix_expressions_in;
+    use flox_rust_sdk::providers::catalog::{BaseCatalogInfo, BaseCatalogUrl};
     use flox_rust_sdk::providers::nix::test_helpers::known_store_path;
     use tempfile::tempdir_in;
 
@@ -573,7 +522,7 @@ mod test {
             PackageTargetKind::ManifestBuild,
         )];
 
-        let result = check_stability_compatibility(&packages, true);
+        let result = disallow_stability_flag_for_manifest_builds(&packages, true);
         assert!(result.is_err());
 
         // the presence of expression builds doesnt change the result
@@ -584,12 +533,12 @@ mod test {
             }),
         ));
 
-        let result = check_stability_compatibility(&packages, true);
+        let result = disallow_stability_flag_for_manifest_builds(&packages, true);
         assert!(result.is_err());
 
         // if all targets are expression builds, the check succeeds
         let packages = packages.split_off(1);
-        let result = check_stability_compatibility(&packages, true);
+        let result = disallow_stability_flag_for_manifest_builds(&packages, true);
         assert!(result.is_ok());
     }
 
@@ -600,7 +549,7 @@ mod test {
             PackageTargetKind::ManifestBuild,
         )];
 
-        let result = check_stability_compatibility(&packages, false);
+        let result = disallow_stability_flag_for_manifest_builds(&packages, false);
         assert!(result.is_ok());
 
         // the presence of expression builds doesnt change the result
@@ -611,7 +560,7 @@ mod test {
             }),
         ));
 
-        let result = check_stability_compatibility(&packages, false);
+        let result = disallow_stability_flag_for_manifest_builds(&packages, false);
         assert!(result.is_ok());
     }
 

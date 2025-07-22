@@ -22,15 +22,17 @@ use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
 use httpmock::{MockServer, RecordingID};
+use indoc::formatdoc;
 use reqwest::StatusCode;
 use reqwest::header::{self, HeaderMap};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument};
 use url::Url;
 
+use super::publish::CheckedEnvironmentMetadata;
 use crate::data::System;
-use crate::flox::FLOX_VERSION;
+use crate::flox::{FLOX_VERSION, Flox};
 use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
 use crate::utils::IN_CI;
 
@@ -1118,6 +1120,8 @@ pub enum CatalogClientError {
     UnsupportedSystem(#[source] api_error::ConversionError),
     #[error("{}", fmt_api_error(.0))]
     APIError(APIError<api_types::ErrorResponse>),
+    #[error("{}", .0)]
+    StabilityError(String),
 }
 
 /// Extension trait for converting API errors into our client errors.
@@ -1697,6 +1701,75 @@ impl BaseCatalogInfo {
         }
         .into()
     }
+}
+
+/// Derive the nixpkgs url to be used for builds.
+/// If a stability is provided, try to retrieve a url for that stability from the catalog.
+/// Else, if we can derive a stability from the toplevel group of the environment, use that.
+/// Otherwise attrr
+pub async fn base_catalog_url_for_stability_arg(
+    stability: Option<&str>,
+    base_catalog_info_fut: impl IntoFuture<Output = Result<BaseCatalogInfo, CatalogClientError>>,
+    toplevel_derived_url: Option<&BaseCatalogUrl>,
+) -> Result<BaseCatalogUrl, CatalogClientError> {
+    let url = match (stability, toplevel_derived_url) {
+        (Some(stability), _) => {
+            let base_catalog_info = base_catalog_info_fut.await?;
+            let make_error_message = || {
+                let available_stabilities = base_catalog_info.available_stabilities().join(", ");
+                formatdoc! {"
+                    Stability '{stability}' does not exist (or has not yet been populated).
+                    Available stabilities are: {available_stabilities}
+                "}
+            };
+
+            let url = base_catalog_info
+                .url_for_latest_page_with_stability(stability)
+                .ok_or_else(|| CatalogClientError::StabilityError(make_error_message()))?;
+
+            info!(%url, %stability, "using page from user provided stability");
+            url
+        },
+        (None, Some(toplevel_derived_url)) => {
+            info!(url=%toplevel_derived_url, "using nixpkgs derived from toplevel group");
+            toplevel_derived_url.clone()
+        },
+        (None, None) => {
+            let base_catalog_info = base_catalog_info_fut.await?;
+
+            let make_error_message = || {
+                let available_stabilities = base_catalog_info.available_stabilities().join(", ");
+                formatdoc! {"
+                    The default stability {} does not exist (or has not yet been populated).
+                    Available stabilities are: {available_stabilities}
+                ", BaseCatalogInfo::DEFAULT_STABILITY}
+            };
+
+            let url = base_catalog_info
+                .url_for_latest_page_with_default_stability()
+                .ok_or_else(|| CatalogClientError::StabilityError(make_error_message()))?;
+
+            info!(%url, "using page from default stability");
+            url
+        },
+    };
+    Ok(url)
+}
+
+/// Returns the nixpkgs URL used for builds and publishes.
+pub async fn get_base_nixpkgs_url(
+    flox: &Flox,
+    stability: Option<&str>,
+    env_metadata: &CheckedEnvironmentMetadata,
+) -> Result<BaseCatalogUrl, CatalogClientError> {
+    let base_catalog_info_fut = flox.catalog_client.get_base_catalog_info();
+
+    base_catalog_url_for_stability_arg(
+        stability,
+        base_catalog_info_fut,
+        env_metadata.toplevel_catalog_ref.as_ref(),
+    )
+    .await
 }
 
 pub mod test_helpers {
