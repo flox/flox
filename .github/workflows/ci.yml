@@ -42,7 +42,6 @@ env:
 
 jobs:
 
-
   nix-plugins-dev:
     name: "Nix Plugins"
     runs-on: ${{ matrix.os }}
@@ -121,7 +120,7 @@ jobs:
 
       - name: "Test NEF"
         run: nix develop -L --no-update-lock-file --command just test-nef
-        
+
       - name: "Test buildenvLib"
         run: nix develop -L --no-update-lock-file --command just test-buildenvLib
 
@@ -129,6 +128,9 @@ jobs:
     name: "dev"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
+
+    permissions:
+      id-token: write  # Needed for CodeCov
 
     strategy:
       fail-fast: false
@@ -191,30 +193,14 @@ jobs:
         run: nix develop -L --no-update-lock-file --command just impure-tests
 
       - name: "Upload CLI Unit Test Results"
-        if: ${{ (matrix.test-tags == '!activate,!containerize,!catalog') && (github.event_name == 'merge_group') }}
-        env:
-          BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_RUST_UNIT_TESTS_TOKEN }}
-        run: |
-          system="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
-          curl \
-            -X POST \
-            --fail-with-body \
-            -H "Authorization: Token token=\"$BUILDKITE_ANALYTICS_TOKEN\"" \
-            -F "data=@cli/target/nextest/ci/junit.xml" \
-            -F "format=junit" \
-            -F "run_env[CI]=github_actions" \
-            -F "run_env[key]=$GITHUB_ACTION-$GITHUB_RUN_NUMBER-$GITHUB_RUN_ATTEMPT" \
-            -F "run_env[number]=$GITHUB_RUN_NUMBER" \
-            -F "run_env[branch]=$GITHUB_REF" \
-            -F "run_env[commit_sha]=$GITHUB_SHA" \
-            -F "run_env[message]=$(git log -1 --pretty=format:"%s")" \
-            -F "run_env[url]=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            -F "tags[architecture]=$system" \
-            -F "tags[nix_flakeref]=github:flox/flox/$GITHUB_SHA" \
-            -F "tags[nix_attribute]=devShells.$system.default" \
-            https://analytics-api.buildkite.com/v1/uploads \
-            || true
-
+        uses: "codecov/test-results-action@v1"
+        if: ${{ matrix.test-tags == '!activate,!containerize,!catalog' }}
+        with:
+          disable_search: true
+          files: "./cli/target/nextest/ci/junit.xml"
+          flags: "dev-unittests, ${{ matrix.test-tags }}, ${{ matrix.os }}"
+          verbose: true
+          use_oidc: true
 
       # This differs from `nix-build-bats-tests` in that:
       #   - a cargo-built debug binary is used, like you would in local development
@@ -225,12 +211,24 @@ jobs:
           AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.MANAGED_AUTH0_FLOX_DEV_CLIENT_SECRET }}"
           FLOX_CI_RUNNER: "github-${{ matrix.os }}"
         run: |
+          mkdir -p ./test-results
           nix develop -L --no-update-lock-file --command just integ-tests --\
-            --filter-tags '"${{ matrix.test-tags }}"'
+            --filter-tags '"${{ matrix.test-tags }}"' \
+            --report-formatter junit \
+            --output $PWD/test-results
 
       - name: "Capture process tree for failing tests"
         if: ${{ failure() }}
         run: nix develop -L --no-update-lock-file --command pstree
+
+      - name: "Upload CLI Integration Test Results"
+        uses: "codecov/test-results-action@v1"
+        with:
+          disable_search: true
+          files: "./test-results/report.xml"
+          flags: "dev-integration-tests, ${{ matrix.test-tags }}, ${{ matrix.os }}"
+          verbose: true
+          use_oidc: true
 
   nix-build:
     name: "Nix build"
@@ -317,7 +315,6 @@ jobs:
             FLOX_VERSION="${FLOX_VERSION:=$(git describe)}"
             FLOX_VERSION="${FLOX_VERSION:1}"
             echo "flox-version=$FLOX_VERSION" >> $GITHUB_OUTPUT
-
 
   trigger-flox-installers-workflow:
     name: "Build installers"
@@ -411,6 +408,9 @@ jobs:
     runs-on: "ubuntu-latest"
     timeout-minutes: 90
 
+    permissions:
+      id-token: write  # Needed for CodeCov
+
     needs:
       - "nix-build"
 
@@ -429,6 +429,7 @@ jobs:
           # Skip containerize tests on this runner because it's actually Rosetta on aarch64-darwin
           - system: "x86_64-darwin"
             test-tags: "containerize"
+
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
@@ -458,7 +459,15 @@ jobs:
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30
         env:
-          BUILDKITE_ANALYTICS_TOKEN: ${{ secrets.BUILDKITE_INTEGRATION_TESTS_TOKEN }}
           MATRIX_SYSTEM: ${{ matrix.system }}
           MATRIX_TEST_TAGS: ${{ matrix.test-tags }}
         run: ./.github/scripts/remote-execute-integration-tests.sh
+
+      - name: "Upload Bats Tests results"
+        uses: "codecov/test-results-action@v1"
+        with:
+          disable_search: true
+          files: "./report.xml"
+          flags: "nix-integration-tests, ${{ matrix.test-tags }}, ${{ matrix.system }}"
+          verbose: true
+          use_oidc: true
