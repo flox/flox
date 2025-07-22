@@ -75,6 +75,10 @@ generate_fish_startup_commands() {
   echo "$_flox_activations set-env-dirs --shell fish --flox-env \"$_FLOX_ENV\" --env-dirs \"\$FLOX_ENV_DIRS\" | source;"
   echo "set -gx MANPATH (if set -q MANPATH; echo \"\$MANPATH\"; else; echo empty; end);"
   echo "$_flox_activations fix-paths --shell fish --env-dirs \"\$FLOX_ENV_DIRS\" --path \"\$PATH\" --manpath \"\$MANPATH\" | source;"
+  # Source library of shell-specific functions prior to calling the
+  # `flox-activations profile-scripts` command which depends on the
+  # `source_once()` function.
+  echo "source '$_activate_d/functions.fish';"
   echo "$_flox_activations profile-scripts --shell fish --env-dirs \"\$FLOX_ENV_DIRS\" | source;"
 
   # fish does not use hashing in the same way bash does, so there's

@@ -76,6 +76,10 @@ generate_tcsh_startup_commands() {
   echo "eval \"\`'$_flox_activations' set-env-dirs --shell tcsh --flox-env '$_FLOX_ENV' --env-dirs \$FLOX_ENV_DIRS:q\`\";"
   echo 'if (! $?MANPATH) setenv MANPATH "empty";'
   echo "eval \"\`'$_flox_activations' fix-paths --shell tcsh --env-dirs \$FLOX_ENV_DIRS:q --path \$PATH:q --manpath \$MANPATH:q\`\";"
+  # Source library of shell-specific functions prior to calling the
+  # `flox-activations profile-scripts` command which depends on the
+  # `source_once()` function.
+  echo "source '$_activate_d/functions.tcsh';"
   echo "eval \"\`'$_flox_activations' profile-scripts --shell tcsh --env-dirs \$FLOX_ENV_DIRS:q\`\";"
 
   # Disable command hashing to allow for newly installed flox packages

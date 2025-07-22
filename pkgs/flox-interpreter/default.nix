@@ -123,13 +123,19 @@ runCommandNoCC "flox-interpreter"
       $out/activate.d/generate-fish-startup-commands.bash \
       $out/activate.d/generate-tcsh-startup-commands.bash \
       $out/activate.d/set-prompt.bash \
+      $out/activate.d/functions.bash \
       $out/activate.d/helpers.bash \
       $out/etc/profile.d/*
 
     # Finally check the formatting of the scripts with shfmt.
     cp ${editorconfig} $out/.editorconfig
     # This will only catch extensions and shebangs that `shfmt --find` knows about.
+    # BUG: shfmt trips over ZSH syntax so we briefly move any zsh files out of the way.
+    # See Dan's efforts to fix this in: https://github.com/mvdan/sh/pull/1101
+    mv $out/activate.d/functions.zsh $out/activate.d/functions.zsh.outoftheway
     ${shfmt}/bin/shfmt --diff $out
+    # Restore the zsh file.
+    mv $out/activate.d/functions.zsh.outoftheway $out/activate.d/functions.zsh
     rm $out/.editorconfig
 
     # Next create the (lesser) "wrapper" output.

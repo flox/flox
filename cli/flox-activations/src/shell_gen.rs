@@ -24,5 +24,5 @@ impl std::str::FromStr for Shell {
 }
 
 pub fn source_file(path: &Path) -> String {
-    format!("source '{}';", path.display())
+    format!("source_once '{}';", path.display())
 }

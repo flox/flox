@@ -77,6 +77,11 @@ fi
 source <("$_flox_activations" set-env-dirs --shell zsh --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
 source <("$_flox_activations" fix-paths --shell zsh --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
 
+# Source library of shell-specific functions prior to calling the
+# `flox-activations profile-scripts` command which depends on the
+# `source_once()` function.
+source "$_activate_d/functions.zsh";
+
 # Our ZDOTDIR startup files source user RC files that may modify FLOX_ENV_DIRS,
 # and then _flox_env_helper may fix it up.
 # If this happens, we want to respect those modifications,

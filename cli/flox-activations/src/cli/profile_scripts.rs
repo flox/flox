@@ -76,10 +76,10 @@ mod test {
         let dirs = "newer:older";
         let cmds = source_profile_scripts_cmds(dirs, "bash", |_| true);
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-bash';".to_string(),
-            "source 'newer/activate.d/profile-common';".to_string(),
-            "source 'newer/activate.d/profile-bash';".to_string(),
+            "source_once 'older/activate.d/profile-common';".to_string(),
+            "source_once 'older/activate.d/profile-bash';".to_string(),
+            "source_once 'newer/activate.d/profile-common';".to_string(),
+            "source_once 'newer/activate.d/profile-bash';".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -89,10 +89,10 @@ mod test {
         let dirs = "newer:older";
         let cmds = source_profile_scripts_cmds(dirs, "zsh", |_| true);
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-zsh';".to_string(),
-            "source 'newer/activate.d/profile-common';".to_string(),
-            "source 'newer/activate.d/profile-zsh';".to_string(),
+            "source_once 'older/activate.d/profile-common';".to_string(),
+            "source_once 'older/activate.d/profile-zsh';".to_string(),
+            "source_once 'newer/activate.d/profile-common';".to_string(),
+            "source_once 'newer/activate.d/profile-zsh';".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -102,10 +102,10 @@ mod test {
         let dirs = "newer:older";
         let cmds = source_profile_scripts_cmds(dirs, "tcsh", |_| true);
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-tcsh';".to_string(),
-            "source 'newer/activate.d/profile-common';".to_string(),
-            "source 'newer/activate.d/profile-tcsh';".to_string(),
+            "source_once 'older/activate.d/profile-common';".to_string(),
+            "source_once 'older/activate.d/profile-tcsh';".to_string(),
+            "source_once 'newer/activate.d/profile-common';".to_string(),
+            "source_once 'newer/activate.d/profile-tcsh';".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -115,10 +115,10 @@ mod test {
         let dirs = "newer:older";
         let cmds = source_profile_scripts_cmds(dirs, "fish", |_| true);
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-fish';".to_string(),
-            "source 'newer/activate.d/profile-common';".to_string(),
-            "source 'newer/activate.d/profile-fish';".to_string(),
+            "source_once 'older/activate.d/profile-common';".to_string(),
+            "source_once 'older/activate.d/profile-fish';".to_string(),
+            "source_once 'newer/activate.d/profile-common';".to_string(),
+            "source_once 'newer/activate.d/profile-fish';".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -130,9 +130,9 @@ mod test {
             p != Path::new("newer/activate.d/profile-common")
         });
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-bash';".to_string(),
-            "source 'newer/activate.d/profile-bash';".to_string(),
+            "source_once 'older/activate.d/profile-common';".to_string(),
+            "source_once 'older/activate.d/profile-bash';".to_string(),
+            "source_once 'newer/activate.d/profile-bash';".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -144,9 +144,9 @@ mod test {
             p != Path::new("newer/activate.d/profile-common")
         });
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-zsh';".to_string(),
-            "source 'newer/activate.d/profile-zsh';".to_string(),
+            "source_once 'older/activate.d/profile-common';".to_string(),
+            "source_once 'older/activate.d/profile-zsh';".to_string(),
+            "source_once 'newer/activate.d/profile-zsh';".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -158,9 +158,9 @@ mod test {
             p != Path::new("newer/activate.d/profile-common")
         });
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-tcsh';".to_string(),
-            "source 'newer/activate.d/profile-tcsh';".to_string(),
+            "source_once 'older/activate.d/profile-common';".to_string(),
+            "source_once 'older/activate.d/profile-tcsh';".to_string(),
+            "source_once 'newer/activate.d/profile-tcsh';".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -172,9 +172,9 @@ mod test {
             p != Path::new("newer/activate.d/profile-common")
         });
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-fish';".to_string(),
-            "source 'newer/activate.d/profile-fish';".to_string(),
+            "source_once 'older/activate.d/profile-common';".to_string(),
+            "source_once 'older/activate.d/profile-fish';".to_string(),
+            "source_once 'newer/activate.d/profile-fish';".to_string(),
         ];
         assert_eq!(expected, cmds);
     }

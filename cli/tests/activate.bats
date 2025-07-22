@@ -860,7 +860,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:hook,activate:hook:bash
-@test "bash: activate runs profile twice in nested activation" {
+@test "bash: activate runs profile only once with repeated in-place activation" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -877,15 +877,21 @@ EOF
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
   cat <<'EOF' | bash
-    output="$(FLOX_SHELL="bash" eval "$("$FLOX_BIN" activate)")"
-    [[ "$output" == *"sourcing profile.bash"* ]]
-    output="$(FLOX_SHELL="bash" eval "$("$FLOX_BIN" activate)")"
-    [[ "$output" == *"sourcing profile.bash"* ]]
+    eval "$($FLOX_BIN activate)" > "$PROJECT_DIR/output_1" 2>&1
+    if ! grep -q "sourcing profile.bash" "$PROJECT_DIR/output_1"; then
+      echo "Profile script was not sourced, which is not expected."
+      exit 1
+    fi
+    eval "$($FLOX_BIN activate)" > "$PROJECT_DIR/output_2" 2>&1
+    if grep -q "sourcing profile.bash" "$PROJECT_DIR/output_2"; then
+      echo "Profile script was sourced again, which is not expected."
+      exit 1
+    fi
 EOF
 }
 
 # bats test_tags=activate,activate:hook,activate:hook:fish
-@test "fish: activate runs profile twice in nested activation" {
+@test "fish: activate runs profile only once with repeated in-place activation" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -904,12 +910,12 @@ EOF
     set output "$(eval "$("$FLOX_BIN" activate)")"
     echo "$output" | string match "sourcing profile.fish"
     set output "$(eval "$("$FLOX_BIN" activate)")"
-    echo "$output" | string match "sourcing profile.fish"
+    echo "$output" | not string match "sourcing profile.fish"
 EOF
 }
 
 # bats test_tags=activate,activate:hook,activate:hook:tcsh
-@test "tcsh: activate runs profile twice in nested activation" {
+@test "tcsh: activate runs profile only once with repeated in-place activation" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -926,13 +932,23 @@ EOF
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
   cat <<'EOF' | tcsh
-    eval "`$FLOX_BIN activate`" |& grep -q "sourcing profile.tcsh"
-    eval "`$FLOX_BIN activate`" |& grep -q "sourcing profile.tcsh"
+    eval "`$FLOX_BIN activate`" >& "$PROJECT_DIR/output_1"
+    grep -q "sourcing profile.tcsh" "$PROJECT_DIR/output_1"
+    if ($? != 0) then
+      echo "Profile script was not sourced, which is not expected."
+      exit 1
+    endif
+    eval "`$FLOX_BIN activate`" >& "$PROJECT_DIR/output_2"
+    grep -q "sourcing profile.tcsh" "$PROJECT_DIR/output_2"
+    if ($? == 0) then
+      echo "Profile script was sourced again, which is not expected."
+      exit 1
+    endif
 EOF
 }
 
 # bats test_tags=activate,activate:hook,activate:hook:zsh
-@test "zsh: activate runs profile twice in nested activation" {
+@test "zsh: activate runs profile only once with repeated in-place activation" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -948,10 +964,16 @@ EOF
 
   # TODO: this gives unhelpful failures
   cat <<'EOF' | zsh
-    output="$(FLOX_SHELL="zsh" eval "$("$FLOX_BIN" activate)")"
-    [[ "$output" == *"sourcing profile.zsh"* ]]
-    output="$(FLOX_SHELL="zsh" eval "$("$FLOX_BIN" activate)")"
-    [[ "$output" == *"sourcing profile.zsh"* ]]
+    eval "$($FLOX_BIN activate)" > "$PROJECT_DIR/output_1" 2>&1
+    if ! grep -q "sourcing profile.zsh" "$PROJECT_DIR/output_1"; then
+      echo "Profile script was not sourced, which is not expected."
+      exit 1
+    fi
+    eval "$($FLOX_BIN activate)" > "$PROJECT_DIR/output_2" 2>&1
+    if grep -q "sourcing profile.zsh" "$PROJECT_DIR/output_2"; then
+      echo "Profile script was sourced again, which is not expected."
+      exit 1
+    fi
 EOF
 }
 
@@ -3301,10 +3323,10 @@ FISH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS="$(cat << "EOF"
 
   [profile]
   common = """
-    set PROFILE_COMMON "profile.common var"
+    set -g PROFILE_COMMON "profile.common var"
   """
   fish = """
-    set PROFILE_fish "profile.fish var"
+    set -g PROFILE_fish "profile.fish var"
   """
 EOF
 )"
