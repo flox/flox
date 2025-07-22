@@ -21,19 +21,19 @@
 <h3 align="center">
    &emsp;
    <a href="https://discourse.flox.dev"><b>Discourse</b></a>
-   &emsp; | &emsp; 
+   &emsp; | &emsp;
    <a href="https://flox.dev/docs"><b>Documentation</b></a>
-   &emsp; | &emsp; 
+   &emsp; | &emsp;
    <a href="https://flox.dev/blog"><b>Blog</b></a>
-   &emsp; | &emsp;  
+   &emsp; | &emsp;
    <a href="https://twitter.com/floxdevelopment"><b>Twitter</b></a>
-   &emsp; | &emsp; 
+   &emsp; | &emsp;
    <a href="https://go.flox.dev/slack"><b>Slack</b></a>
    &emsp;
 </h3>
 
 <p align="center">
-  <a href="https://github.com/flox/flox/blob/main/LICENSE"> 
+  <a href="https://github.com/flox/flox/blob/main/LICENSE">
     <img alt="GitHub" src="https://img.shields.io/github/license/flox/flox?style=flat-square">
   </a>
   <a href="https://github.com/flox/flox/blob/main/CONTRIBUTING.md">
@@ -45,7 +45,7 @@
   </a>
 </p>
 
-[Flox][website] is a virtual environment and package manager all in one. With Flox you 
+[Flox][website] is a virtual environment and package manager all in one. With Flox you
 create environments that layer and replace dependencies just where
 it matters, making them portable across the full software lifecycle.
 
@@ -59,7 +59,7 @@ With `flox` you can:<br/>
 &rarr; [... and much more][docs]<br/>
 
 <div align="center">
-  <a href="https://flox.dev/docs/install-flox">
+  <a href="https://flox.dev/docs/install-flox/install/">
     <img alt="install flox" src="https://img.shields.io/badge/Install-flox-brightgreen?style=for-the-badge"/>
   </a>
 </div>
