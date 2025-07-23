@@ -96,7 +96,26 @@ teardown() {
   run "$FLOX_BIN" init
   assert_success
 
-  assert_output - <<EOF
+  assert_output - << EOF
+✨ Created environment 'test' ($NIX_SYSTEM)
+
+Next:
+  $ flox search <package>    <- Search for a package
+  $ flox install <package>   <- Install a package into an environment
+  $ flox activate            <- Enter the environment
+  $ flox edit                <- Add environment variables and shell hooks
+  $ flox push                <- Use the environment from other machines or
+                                share it with someone on FloxHub
+EOF
+
+}
+
+@test "c7: tips omit 'flox push' when within a git repo" {
+  git init --quiet
+  run "$FLOX_BIN" init
+  assert_success
+
+  assert_output - << EOF
 ✨ Created environment 'test' ($NIX_SYSTEM)
 
 Next:
