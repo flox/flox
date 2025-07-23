@@ -860,7 +860,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:hook,activate:hook:bash
-@test "bash: activate runs profile twice in nested activation" {
+@test "bash: activate runs profile only once with repeated in-place activation" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -877,15 +877,21 @@ EOF
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
   cat <<'EOF' | bash
-    output="$(FLOX_SHELL="bash" eval "$("$FLOX_BIN" activate)")"
-    [[ "$output" == *"sourcing profile.bash"* ]]
-    output="$(FLOX_SHELL="bash" eval "$("$FLOX_BIN" activate)")"
-    [[ "$output" == *"sourcing profile.bash"* ]]
+    eval "$($FLOX_BIN activate)" > "$PROJECT_DIR/output_1" 2>&1
+    if ! grep -q "sourcing profile.bash" "$PROJECT_DIR/output_1"; then
+      echo "Profile script was not sourced, which is not expected."
+      exit 1
+    fi
+    eval "$($FLOX_BIN activate)" > "$PROJECT_DIR/output_2" 2>&1
+    if grep -q "sourcing profile.bash" "$PROJECT_DIR/output_2"; then
+      echo "Profile script was sourced again, which is not expected."
+      exit 1
+    fi
 EOF
 }
 
 # bats test_tags=activate,activate:hook,activate:hook:fish
-@test "fish: activate runs profile twice in nested activation" {
+@test "fish: activate runs profile only once with repeated in-place activation" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -904,12 +910,12 @@ EOF
     set output "$(eval "$("$FLOX_BIN" activate)")"
     echo "$output" | string match "sourcing profile.fish"
     set output "$(eval "$("$FLOX_BIN" activate)")"
-    echo "$output" | string match "sourcing profile.fish"
+    echo "$output" | not string match "sourcing profile.fish"
 EOF
 }
 
 # bats test_tags=activate,activate:hook,activate:hook:tcsh
-@test "tcsh: activate runs profile twice in nested activation" {
+@test "tcsh: activate runs profile only once with repeated in-place activation" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -926,13 +932,23 @@ EOF
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
   cat <<'EOF' | tcsh
-    eval "`$FLOX_BIN activate`" |& grep -q "sourcing profile.tcsh"
-    eval "`$FLOX_BIN activate`" |& grep -q "sourcing profile.tcsh"
+    eval "`$FLOX_BIN activate`" >& "$PROJECT_DIR/output_1"
+    grep -q "sourcing profile.tcsh" "$PROJECT_DIR/output_1"
+    if ($? != 0) then
+      echo "Profile script was not sourced, which is not expected."
+      exit 1
+    endif
+    eval "`$FLOX_BIN activate`" >& "$PROJECT_DIR/output_2"
+    grep -q "sourcing profile.tcsh" "$PROJECT_DIR/output_2"
+    if ($? == 0) then
+      echo "Profile script was sourced again, which is not expected."
+      exit 1
+    endif
 EOF
 }
 
 # bats test_tags=activate,activate:hook,activate:hook:zsh
-@test "zsh: activate runs profile twice in nested activation" {
+@test "zsh: activate runs profile only once with repeated in-place activation" {
   project_setup
 
   MANIFEST_CONTENTS="$(cat << "EOF"
@@ -948,10 +964,16 @@ EOF
 
   # TODO: this gives unhelpful failures
   cat <<'EOF' | zsh
-    output="$(FLOX_SHELL="zsh" eval "$("$FLOX_BIN" activate)")"
-    [[ "$output" == *"sourcing profile.zsh"* ]]
-    output="$(FLOX_SHELL="zsh" eval "$("$FLOX_BIN" activate)")"
-    [[ "$output" == *"sourcing profile.zsh"* ]]
+    eval "$($FLOX_BIN activate)" > "$PROJECT_DIR/output_1" 2>&1
+    if ! grep -q "sourcing profile.zsh" "$PROJECT_DIR/output_1"; then
+      echo "Profile script was not sourced, which is not expected."
+      exit 1
+    fi
+    eval "$($FLOX_BIN activate)" > "$PROJECT_DIR/output_2" 2>&1
+    if grep -q "sourcing profile.zsh" "$PROJECT_DIR/output_2"; then
+      echo "Profile script was sourced again, which is not expected."
+      exit 1
+    fi
 EOF
 }
 
@@ -3301,10 +3323,10 @@ FISH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS="$(cat << "EOF"
 
   [profile]
   common = """
-    set PROFILE_COMMON "profile.common var"
+    set -g PROFILE_COMMON "profile.common var"
   """
   fish = """
-    set PROFILE_fish "profile.fish var"
+    set -g PROFILE_fish "profile.fish var"
   """
 EOF
 )"
@@ -5000,4 +5022,175 @@ check_nested_activation_repairs_path_and_manpath() {
 # bats test_tags=activate:fish,activate:nested
 @test "fish: in-place: nested activation repairs (MAN)PATH" {
   check_nested_activation_repairs_path_and_manpath fish eval
+}
+
+# With an in-place activation in dotfiles, an interactive activation should only
+# run profile scripts once.
+profile_scripts_only_run_once() {
+  local shell="${1?}"
+
+  "$FLOX_BIN" init -d "$PROJECT_DIR/default"
+  case "$shell" in
+    bash)
+      cat > "${HOME}/.bashrc" <<EOF
+eval "\$("$FLOX_BIN" activate -d "$PROJECT_DIR/default")"
+EOF
+      ;;
+    fish)
+      cat > "${HOME}/.config/fish/config.fish" <<EOF
+"$FLOX_BIN" activate -d "$PROJECT_DIR/default" | source
+EOF
+      ;;
+    tcsh)
+      cat > "${HOME}/.tcshrc" <<EOF
+eval "\`$FLOX_BIN activate -d $PROJECT_DIR/default\`"
+EOF
+      ;;
+    zsh)
+      cat > "${HOME}/.zshenv" <<EOF
+eval "\$("$FLOX_BIN" activate -d "$PROJECT_DIR/default")"
+EOF
+      ;;
+    *)
+      echo "Unsupported shell: ${shell}"
+      exit 1
+      ;;
+  esac
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS="$(cat << EOF
+    version = 1
+    [profile]
+    $shell = """
+      echo "project profile.$shell"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d project -f -
+
+  _FLOX_SHELL_FORCE="$shell" \
+    run "$FLOX_BIN" activate -d project -- true
+  assert_success
+  assert_output - <<EOF
+project profile.$shell
+EOF
+}
+
+@test "bash: profile scripts only run once with activation in dotfiles" {
+  project_setup_common
+  profile_scripts_only_run_once bash
+}
+
+@test "fish: profile scripts only run once with activation in dotfiles" {
+  project_setup_common
+  profile_scripts_only_run_once fish
+}
+
+@test "tcsh: profile scripts only run once with activation in dotfiles" {
+  project_setup_common
+  profile_scripts_only_run_once tcsh
+}
+
+@test "zsh: profile scripts only run once with activation in dotfiles" {
+  project_setup_common
+  profile_scripts_only_run_once zsh
+}
+
+# With an in-place activation in dotfiles, shell variables should be set when a
+# subshell is started from within an activation.
+# Test with shell variables instead of aliases since we can't use an interactive
+# shell for bash
+shell_vars_preserved_in_subshells() {
+  local shell="${1?}"
+
+  "$FLOX_BIN" init -d "$PROJECT_DIR/default"
+  case "$shell" in
+    bash)
+      # We use a non-interactive Bash invocation below, so use .bash_profile
+      rm "${HOME}/.bashrc"
+      cat > "${HOME}/.bash_profile" <<EOF
+eval "\$("$FLOX_BIN" activate -d "$PROJECT_DIR/default")"
+EOF
+      set_shell_var='shell_var="hello from project"'
+      ;;
+    fish)
+      cat > "${HOME}/.config/fish/config.fish" <<EOF
+"$FLOX_BIN" activate -d "$PROJECT_DIR/default" | source
+EOF
+      set_shell_var='set -g shell_var "hello from project"'
+      ;;
+    tcsh)
+      cat > "${HOME}/.tcshrc" <<EOF
+eval "\`$FLOX_BIN activate -d $PROJECT_DIR/default\`"
+EOF
+      set_shell_var='set shell_var = "hello from project"'
+      ;;
+    zsh)
+      cat > "${HOME}/.zshenv" <<EOF
+eval "\$("$FLOX_BIN" activate -d "$PROJECT_DIR/default")"
+EOF
+      set_shell_var='typeset -g shell_var="hello from project"'
+      # We don't want extra output
+      rm "${HOME}/.zshrc"
+      ;;
+    *)
+      echo "Unsupported shell: ${shell}"
+      exit 1
+      ;;
+  esac
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS="$(cat << EOF
+    version = 1
+    [profile]
+    $shell = """
+      echo "project profile.$shell"
+      $set_shell_var
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d project -f -
+
+  if [[ "$shell" == "bash" ]]; then
+    # Use a login shell instead of an interactive one because of the /dev/tty
+    # issue
+    _FLOX_SHELL_FORCE="$shell" \
+      run "$FLOX_BIN" activate -d project -- "$shell" -lc 'echo "$shell_var"'
+  elif [[ "$shell" == "tcsh" ]]; then
+    # tcsh does not parse the following:
+    #   % tcsh -m -c 'tcsh -ic "echo \"$shell_var\""'
+    #   Unmatched '"'.
+    # ... so we skip the quoting of $shell_var below.
+    _FLOX_SHELL_FORCE="$shell" \
+      run "$FLOX_BIN" activate -d project -- "$shell" -ic "echo \$shell_var"
+  else
+    _FLOX_SHELL_FORCE="$shell" \
+      run "$FLOX_BIN" activate -d project -- "$shell" -ic 'echo "$shell_var"'
+  fi
+  assert_success
+  assert_output - <<EOF
+project profile.$shell
+project profile.$shell
+hello from project
+EOF
+}
+
+@test "bash: shell variables are preserved in subshells" {
+  project_setup_common
+  shell_vars_preserved_in_subshells bash
+}
+
+@test "fish: shell variables are preserved in subshells" {
+  project_setup_common
+  shell_vars_preserved_in_subshells fish
+}
+
+@test "tcsh: shell variables are preserved in subshells" {
+  project_setup_common
+  shell_vars_preserved_in_subshells tcsh
+}
+
+@test "zsh: shell variables are preserved in subshells" {
+  project_setup_common
+  shell_vars_preserved_in_subshells zsh
 }
