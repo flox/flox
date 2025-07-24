@@ -20,6 +20,9 @@ pub struct ProfileScriptsArgs {
         long,
         help = "A list of FLOX_ENV directories that have already been sourced"
     )]
+    // If not provided, defaults to an empty string. This is required for tcsh in
+    // particular that is unable to pass empty arguments on the command line.
+    #[clap(default_value = "")]
     pub already_sourced_env_dirs: String,
 }
 

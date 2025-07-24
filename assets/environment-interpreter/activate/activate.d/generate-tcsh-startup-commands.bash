@@ -76,10 +76,16 @@ generate_tcsh_startup_commands() {
   echo "eval \"\`'$_flox_activations' set-env-dirs --shell tcsh --flox-env '$_FLOX_ENV' --env-dirs \$FLOX_ENV_DIRS:q\`\";"
   echo 'if (! $?MANPATH) setenv MANPATH "empty";'
   echo "eval \"\`'$_flox_activations' fix-paths --shell tcsh --env-dirs \$FLOX_ENV_DIRS:q --path \$PATH:q --manpath \$MANPATH:q\`\";"
-  echo 'if (! $?_FLOX_SOURCED_PROFILE_SCRIPTS) set _FLOX_SOURCED_PROFILE_SCRIPTS = "";'
-  # Quote _FLOX_SOURCED_PROFILE_SCRIPTS instead of quoting since tcsh doesn't
-  # pass an argument at all for an unquoted empty string
-  echo "eval \"\`'$_flox_activations' profile-scripts --shell tcsh --already-sourced-env-dirs \"\$_FLOX_SOURCED_PROFILE_SCRIPTS\" --env-dirs \$FLOX_ENV_DIRS:q\`\";"
+
+  # Modern versions of tcsh support the ":Q" modifier for passing empty args
+  # on the command line, but versions prior to 6.23 do not have a way to do
+  # that, so to support these versions we will instead avoid passing the
+  # --already-sourced-env-dirs argument altogether when there is no default
+  # value to be passed.
+  printf "%s;\n%s;\n%s;\n" \
+    "set _already_sourced_args = ()" \
+    "if (\$?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs \`echo \$_FLOX_SOURCED_PROFILE_SCRIPTS:q\` )" \
+    "eval \"\`'$_flox_activations' profile-scripts --shell tcsh --env-dirs \$FLOX_ENV_DIRS:q \$_already_sourced_args:q\`\""
 
   # Disable command hashing to allow for newly installed flox packages
   # to be found immediately. We do this as the very last thing because
