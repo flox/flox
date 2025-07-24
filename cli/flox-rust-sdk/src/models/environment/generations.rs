@@ -528,6 +528,20 @@ pub struct AllGenerationsMetadata {
     version: Version<1>,
 }
 
+impl AllGenerationsMetadata {
+    #[cfg(feature = "tests")]
+    pub fn new(
+        current_gen: GenerationId,
+        generations: impl IntoIterator<Item = (GenerationId, SingleGenerationMetadata)>,
+    ) -> Self {
+        AllGenerationsMetadata {
+            current_gen: Some(current_gen),
+            generations: BTreeMap::from_iter(generations),
+            version: Default::default(),
+        }
+    }
+}
+
 /// Metadata for a single generation of an environment
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
