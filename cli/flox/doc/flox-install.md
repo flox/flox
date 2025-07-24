@@ -38,7 +38,7 @@ long as the build succeeds.
 You may also specify packages to be installed via
 [`flox-edit(1)`](./flox-edit.md),
 which allows specifying a variety of options for package installation.
-See [`manfifest-toml(1)`](./manifest.toml.md) for more details on the available
+See [`manifest-toml(1)`](./manifest.toml.md) for more details on the available
 options.
 
 ## Install ID
@@ -79,7 +79,7 @@ reference.
 
     Alternatively, an arbitrary Nix flake installable,
     or store path may be specified.
-    See [`manfifest-toml(1)`](./manifest.toml.md) for more details.
+    See [`manifest-toml(1)`](./manifest.toml.md) for more details.
 
 
 ```{.include}
