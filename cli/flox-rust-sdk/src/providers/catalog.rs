@@ -1118,6 +1118,8 @@ pub enum CatalogClientError {
     APIError(APIError<api_types::ErrorResponse>),
     #[error("{}", .0)]
     StabilityError(String),
+    #[error("{}", .0)]
+    Other(String),
 }
 
 /// Extension trait for converting API errors into our client errors.
@@ -1772,8 +1774,8 @@ pub mod test_helpers {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::flox::test_helpers::create_test_token;
-    use crate::flox::{Flox, FloxhubToken};
+    use crate::flox::Flox;
+    use crate::flox::test_helpers::test_token_from_floxhub_test_users_file;
     use crate::providers::auth::{Auth, AuthProvider};
 
     pub static UNIT_TEST_GENERATED: LazyLock<PathBuf> =
@@ -1838,23 +1840,18 @@ pub mod test_helpers {
 
     /// Similar to [auto_recording_catalog_client] but authenticates against a dev
     /// instance of the catalog-server using a token from
-    /// `_FLOX_UNIT_TEST_RECORD_TOKEN` and updates [Flox] to have the
-    /// appropriate token and client.
-    ///
-    /// Should only be used for tests that require authentication.
     pub fn auto_recording_catalog_client_for_authed_local_services(
         mut flox: Flox,
         filename: &str,
     ) -> (Flox, Auth) {
         let record = get_record_directive();
-        let token = match record {
-            RecordMockData::Missing | RecordMockData::Force => FloxhubToken::from_str(
-                &std::env::var("_FLOX_UNIT_TEST_RECORD_TOKEN")
-                    .expect("_FLOX_UNIT_TEST_RECORD_TOKEN is unset"),
-            )
-            .expect("couldn't parse FloxHub token"),
-            RecordMockData::False => create_test_token("test"),
-        };
+
+        // FloxHub can load test users from a file, so we read the
+        // corresponding token from that file. Just make sure you start
+        // FloxHub with _FLOXHUB_TEST_USER_ROLES pointed at this file.
+        // The username will be `test<hash>` where `<hash>` is generated
+        // from the token at runtime on the FloxHub side.
+        let token = test_token_from_floxhub_test_users_file();
 
         flox.floxhub_token = Some(token);
         let auth = Auth::from_flox(&flox).unwrap();
@@ -1930,6 +1927,7 @@ pub mod test_helpers {
         client: &Client,
         name: &str,
         config: &CatalogStoreConfig,
+        exists_ok: bool,
     ) -> Result<(), CatalogClientError> {
         let Client::Catalog(client) = client else {
             panic!("can only be used with a CatalogClient");
@@ -1938,14 +1936,21 @@ pub mod test_helpers {
         // This also performs validation that the name meets the catalog name requirements.
         let catalog_name = str_to_catalog_name(name)?;
 
-        match client
+        let resp = client
             .client
             .create_catalog_api_v1_catalog_catalogs_post(&catalog_name)
-            .await
-        {
+            .await;
+        match resp {
             Ok(_) => {},
             // Continue if already exists.
-            Err(e) if e.status() == Some(StatusCode::CONFLICT) => {},
+            Err(e) if e.status() == Some(StatusCode::CONFLICT) => {
+                if !exists_ok {
+                    return Err(CatalogClientError::Other(
+                        "catalog already existed".to_string(),
+                    ));
+                }
+                // return Ok(());
+            },
             Err(e) => {
                 return Err(CatalogClientError::APIError(e));
             },
@@ -1961,6 +1966,22 @@ pub mod test_helpers {
             .map_err(CatalogClientError::APIError)?;
 
         Ok(())
+    }
+
+    pub const TEST_READ_WRITE_CATALOG_NAME: &str = "publish_tests_read_write";
+    pub const TEST_READ_ONLY_CATALOG_NAME: &str = "publish_tests_read_only";
+
+    /// Ensures that the test org catalog exists, ignoring errors that arise from
+    /// trying to create it when it already exists.
+    pub async fn ensure_test_catalogs_exist(client: &Client) {
+        let config = CatalogStoreConfig::MetaOnly;
+        create_catalog_with_config(client, TEST_READ_WRITE_CATALOG_NAME, &config, true)
+            .await
+            .expect("failed to create read/write test catalog");
+        let config = CatalogStoreConfig::MetaOnly;
+        create_catalog_with_config(client, TEST_READ_ONLY_CATALOG_NAME, &config, true)
+            .await
+            .expect("failed to create read only test catalog");
     }
 }
 
@@ -1979,6 +2000,11 @@ mod tests {
     use tracing_subscriber::prelude::*;
 
     use super::*;
+    use crate::flox::test_helpers::flox_instance;
+    use crate::providers::catalog::test_helpers::{
+        auto_recording_catalog_client_for_authed_local_services,
+        create_catalog_with_config,
+    };
 
     const SENTRY_TRACE_HEADER: &str = "sentry-trace";
     const EMPTY_SEARCH_RESPONSE: &api_types::PackageSearchResult =
@@ -2499,5 +2525,45 @@ mod tests {
         let context = [("valid_systems".to_string(), "".to_string())].into();
         let systems = ResolutionMessage::valid_systems_from_context(&context);
         assert_eq!(systems, Vec::<String>::new());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn creates_new_catalog() {
+        let (flox, _tmpdir) = flox_instance();
+        let (flox, _auth) =
+            auto_recording_catalog_client_for_authed_local_services(flox, "creates_new_catalog");
+        let catalog_name_raw = "dummy_unused_catalog";
+        // Makes two calls:
+        // - POST to /catalog/catalogs?name=<catalog_name_raw>
+        // - PUT to /catalog/catalogs/<catalog_name_raw>/store/config
+        create_catalog_with_config(
+            &flox.catalog_client,
+            catalog_name_raw,
+            &CatalogStoreConfig::MetaOnly,
+            false,
+        )
+        .await
+        .expect("request to create new catalog failed");
+        // FIXME(zmitchell, 2025-07-25): I wanted to test that trying to create the
+        // catalog a second time returns 409, but for some reason I get back a
+        // success, which makes this fail. I haven't been able to tell if that's an
+        // error on the catalog-server side or a problem with httpmock where the
+        // path of the request matches perfectly.
+        // let Client::Catalog(client) = flox.catalog_client else {
+        //     panic!("need a real catalog client");
+        // };
+        // let name = api_types::Name::from_str(catalog_name_raw).expect("invalid catalog name");
+        // let resp = client
+        //     .client
+        //     .create_catalog_api_v1_catalog_catalogs_post(&name)
+        //     .await;
+        // eprintln!("response: {:?}", resp);
+        // match resp {
+        //     Ok(_) => panic!("catalog wasn't created the first time"),
+        //     Err(e) if e.status() == Some(StatusCode::CONFLICT) => {},
+        //     Err(e) => {
+        //         panic!("encountered other error: {}", e)
+        //     },
+        // }
     }
 }

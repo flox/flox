@@ -1,0 +1,10 @@
+[
+  {
+    "token": "publish_test_mock_generator",
+    "handle": "test_user",
+    "roles": {
+      "publish_tests_read_write": ["Reader", "Writer"],
+      "publish_tests_read_only": ["Reader"]
+    }
+  }
+]

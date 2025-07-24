@@ -112,7 +112,7 @@ pub enum PublishError {
 /// Modeling the behavior as a trait allows us to swap out the provider, e.g. a mock for testing.
 #[allow(async_fn_in_trait)]
 pub trait Publisher {
-    async fn create_package(
+    async fn create_package_and_possibly_user_catalog(
         &self,
         client: &Client,
         catalog_name: &str,
@@ -539,7 +539,7 @@ where
 {
     /// Ensure that a package is created and, by proxy, that the user has
     /// permission to publish it.
-    async fn create_package(
+    async fn create_package_and_possibly_user_catalog(
         &self,
         client: &Client,
         catalog_name: &str,
@@ -1045,7 +1045,11 @@ pub mod tests {
     use crate::models::lockfile::Lockfile;
     use crate::providers::auth::{Auth, write_floxhub_netrc};
     use crate::providers::catalog::test_helpers::{
+        TEST_READ_ONLY_CATALOG_NAME,
+        TEST_READ_WRITE_CATALOG_NAME,
+        UNIT_TEST_GENERATED,
         auto_recording_catalog_client_for_authed_local_services,
+        ensure_test_catalogs_exist,
         reset_mocks,
     };
     use crate::providers::catalog::{
@@ -1302,7 +1306,7 @@ pub mod tests {
         ]);
 
         let package_created = publish_provider
-            .create_package(&flox.catalog_client, &catalog_name)
+            .create_package_and_possibly_user_catalog(&flox.catalog_client, &catalog_name)
             .await
             .unwrap();
         let res = publish_provider
@@ -1328,16 +1332,14 @@ pub mod tests {
         CheckedEnvironmentMetadata,
         PackageMetadata,
     ) {
-        // Copied from a running instance of the floxhub repo environment's
-        // catalog-server.
-        // TODO(zmitchell, 2025-07-23): we need a better way to get this
-        //     revision. We can set an environment variable during mock
-        //     generation, but that variable won't be available at other times.
-        let nixpkgs_rev = "5e0ca22929f3342b19569b21b2f3462f053e497b";
-        let stable_nixpkgs_ref = BaseCatalogUrl::from(
-            std::env::var("DUMMY_NIXPKGS_URL")
-                .unwrap_or(format!("github:flox/nixpkgs?rev{nixpkgs_rev}")),
-        );
+        // A bare revision is written to this file when generating the mocks.
+        let nixpkgs_rev =
+            std::fs::read_to_string(UNIT_TEST_GENERATED.join("latest_dev_catalog_rev.txt"))
+                .expect("failed to read catalog rev file")
+                .trim()
+                .to_string();
+        let base_catalog_url = format!("https://github.com/flox/nixpkgs?rev={nixpkgs_rev}");
+        let catalog_page_nixpkgs_https_url = BaseCatalogUrl::from(base_catalog_url);
 
         let build_metadata = CheckedBuildMetadata {
             name: "dummy".to_string(),
@@ -1358,19 +1360,19 @@ pub mod tests {
             repo_root_path: PathBuf::new(),
             rel_project_path: PathBuf::new(),
 
-            toplevel_catalog_ref: Some(stable_nixpkgs_ref.clone()),
+            toplevel_catalog_ref: Some(catalog_page_nixpkgs_https_url.clone()),
             build_repo_ref: LockedUrlInfo {
                 url: "dummy".to_string(),
                 rev: "dummy".to_string(),
                 rev_count: 0,
-                rev_date: Utc::now(),
+                rev_date: "2025-01-01T12:00:00Z".parse::<DateTime<Utc>>().unwrap(),
             },
 
             _private: (),
         };
 
         let package_metadata = PackageMetadata {
-            base_catalog_ref: stable_nixpkgs_ref,
+            base_catalog_ref: catalog_page_nixpkgs_https_url,
             package: EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
             description: "dummy".to_string(),
             _private: (),
@@ -1408,7 +1410,7 @@ pub mod tests {
         ]);
 
         let package_created = publish_provider
-            .create_package(&client, &catalog_name)
+            .create_package_and_possibly_user_catalog(&client, &catalog_name)
             .await
             .unwrap();
 
@@ -1551,7 +1553,7 @@ pub mod tests {
         ]);
 
         let package_created = publish_provider
-            .create_package(&flox.catalog_client, &catalog_name)
+            .create_package_and_possibly_user_catalog(&flox.catalog_client, &catalog_name)
             .await
             .unwrap();
 
@@ -1792,5 +1794,186 @@ pub mod tests {
         let _url = get_base_nixpkgs_url(&flox, Some("stable"), &env_meta)
             .await
             .unwrap();
+    }
+
+    // This test ensures that a user's default catalog gets created inline
+    // if it doesn't already exist so that individual users can publish
+    // without first needing to pay and create an organization.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn publishes_new_package_for_users_default_catalog() {
+        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata();
+        let (flox, _tmpdir) = flox_instance();
+        let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
+            flox,
+            "publish_provider_publishes_package_in_users_catalog",
+        );
+        let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
+        let packaged_created_guard = publish_provider
+            .create_package_and_possibly_user_catalog(
+                &flox.catalog_client,
+                flox.floxhub_token
+                    .expect("expected token to be present")
+                    .handle(),
+            )
+            .await
+            .unwrap();
+        publish_provider
+            .publish(
+                &flox.catalog_client,
+                TEST_READ_WRITE_CATALOG_NAME,
+                packaged_created_guard,
+                &build_meta,
+                None,
+                true,
+            )
+            .await
+            .expect("failed to do publish");
+    }
+
+    // This test ensures that a user is able to publish to a catalog other than
+    // their personal catalog assuming (1) the catalog already exists, and
+    // (2) they have write permissions.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn publishes_new_package_for_org_catalog() {
+        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata();
+        let (flox, _tmpdir) = flox_instance();
+        let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
+            flox,
+            "publish_provider_creates_package_in_org_catalog",
+        );
+        ensure_test_catalogs_exist(&flox.catalog_client).await;
+        let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
+        let packaged_created_guard = publish_provider
+            .create_package_and_possibly_user_catalog(
+                &flox.catalog_client,
+                // This catalog name matches one that the test user has r/w
+                // access to as defined in `floxhub_test_users.json`.
+                TEST_READ_WRITE_CATALOG_NAME,
+            )
+            .await
+            .unwrap();
+        publish_provider
+            .publish(
+                &flox.catalog_client,
+                TEST_READ_WRITE_CATALOG_NAME,
+                packaged_created_guard,
+                &build_meta,
+                None,
+                true,
+            )
+            .await
+            .expect("failed to do publish");
+    }
+
+    // This test ensures that a user gets an error when trying to publish to a
+    // catalog that they have read-only access to.
+    // FIXME(zmitchell, 2025-07-25): this test fails because somehow the user
+    // with read-only access is able to publish.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn error_publishing_to_read_only_catalog() {
+        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata();
+        let (flox, _tmpdir) = flox_instance();
+        let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
+            flox,
+            "publish_provider_error_when_user_only_has_read_access_to_catalog",
+        );
+        ensure_test_catalogs_exist(&flox.catalog_client).await;
+        let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
+        let guard = publish_provider
+            .create_package_and_possibly_user_catalog(
+                &flox.catalog_client,
+                // This catalog name matches one that the test user has r/w
+                // access to as defined in `floxhub_test_users.json`.
+                TEST_READ_ONLY_CATALOG_NAME,
+            )
+            .await
+            .unwrap();
+        let res = publish_provider
+            .publish(
+                &flox.catalog_client,
+                TEST_READ_ONLY_CATALOG_NAME,
+                guard,
+                &build_meta,
+                None,
+                true,
+            )
+            .await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn repeat_publish_succeeds() {
+        // This test is ensuring that you can publish a package with the same
+        // metadata more than once. Whether that makes sense is a separate
+        // concern, so this test is just identifying current behavior.
+        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata();
+        let (flox, _tmpdir) = flox_instance();
+        let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
+            flox,
+            "repeat_publish_of_existing_package_succeeds",
+        );
+        ensure_test_catalogs_exist(&flox.catalog_client).await;
+        let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
+        let packaged_created_guard = publish_provider
+            .create_package_and_possibly_user_catalog(
+                &flox.catalog_client,
+                flox.floxhub_token
+                    .expect("expected token to be present")
+                    .handle(),
+            )
+            .await
+            .unwrap();
+        publish_provider
+            .publish(
+                &flox.catalog_client,
+                TEST_READ_WRITE_CATALOG_NAME,
+                packaged_created_guard,
+                &build_meta,
+                None,
+                true,
+            )
+            .await
+            .expect("failed to do publish");
+        publish_provider
+            .publish(
+                &flox.catalog_client,
+                TEST_READ_WRITE_CATALOG_NAME,
+                // The guard is consumed by the publish, so we need to create
+                // a new one.
+                PackageCreatedGuard { _private: () },
+                &build_meta,
+                None,
+                true,
+            )
+            .await
+            .expect("failed to do publish");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn error_publishing_nonexistent_package() {
+        // This test is ensuring that you get an error if you haven't called
+        // `create_package`. We have a guard that prevents this, so again this
+        // test is just ensuring that we've correctly identified the current
+        // behavior.
+        let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata();
+        let (flox, _tmpdir) = flox_instance();
+        let (flox, auth) = auto_recording_catalog_client_for_authed_local_services(
+            flox,
+            "error_from_publish_provider_when_publishing_package_not_yet_created",
+        );
+        let publish_provider = PublishProvider::new(env_meta, pkg_meta, auth);
+        let res = publish_provider
+            .publish(
+                &flox.catalog_client,
+                flox.floxhub_token
+                    .expect("expected token to exist")
+                    .handle(),
+                PackageCreatedGuard { _private: () },
+                &build_meta,
+                None,
+                true,
+            )
+            .await;
+        assert!(res.is_err());
     }
 }

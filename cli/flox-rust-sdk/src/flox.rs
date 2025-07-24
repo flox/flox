@@ -256,6 +256,7 @@ pub mod test_helpers {
 
     use self::catalog::MockClient;
     use super::*;
+    use crate::providers::catalog::test_helpers::UNIT_TEST_GENERATED;
     use crate::providers::flake_installable_locker::{
         InstallableLockerImpl,
         InstallableLockerMock,
@@ -278,6 +279,35 @@ pub mod test_helpers {
         .unwrap();
 
         FloxhubToken::from_str(&token).unwrap()
+    }
+
+    pub fn test_token_from_floxhub_test_users_file() -> FloxhubToken {
+        let test_user_file_path = UNIT_TEST_GENERATED
+            .parent()
+            .unwrap()
+            .join("floxhub_test_users.json");
+        let contents =
+            std::fs::read_to_string(test_user_file_path).expect("couldn't open test user file");
+        let json: serde_json::Value =
+            serde_json::from_str(&contents).expect("couldn't parse test user file");
+        let token = json
+            .get(0)
+            .and_then(|obj| obj.get("token"))
+            .expect("couldn't extract token from test user file")
+            .as_str()
+            .unwrap()
+            .to_string();
+        let handle = json
+            .get(0)
+            .and_then(|obj| obj.get("handle"))
+            .expect("couldn't get user handle from test user file")
+            .as_str()
+            .unwrap()
+            .to_string();
+        FloxhubToken {
+            token,
+            token_data: FloxTokenClaims { handle },
+        }
     }
 
     pub fn flox_instance() -> (Flox, TempDir) {
