@@ -8,6 +8,7 @@ mod edit;
 mod envs;
 mod gc;
 mod general;
+mod generations;
 mod include;
 mod init;
 mod install;
@@ -962,6 +963,15 @@ enum AdditionalCommands {
         )]
         include::IncludeCommands,
     ),
+    /// Interact with environment generations
+    #[bpaf(command, hide)]
+    Generations(
+        #[bpaf(
+            external(generations::generations_commands),
+            fallback(generations::GenerationsCommands::Help)
+        )]
+        generations::GenerationsCommands,
+    ),
 }
 
 impl AdditionalCommands {
@@ -980,6 +990,7 @@ impl AdditionalCommands {
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
             AdditionalCommands::Gc(args) => args.handle(flox)?,
             AdditionalCommands::Include(args) => args.handle(flox).await?,
+            AdditionalCommands::Generations(args) => args.handle(config, flox)?,
         }
         Ok(())
     }
