@@ -8,6 +8,7 @@ mod edit;
 mod envs;
 mod gc;
 mod general;
+mod generations;
 mod include;
 mod init;
 mod install;
@@ -390,7 +391,7 @@ impl FloxArgs {
             Commands::Manage(args) => args.handle(flox).await,
             Commands::Use(args) => args.handle(config, flox).await,
             Commands::Discover(args) => args.handle(config, flox).await,
-            Commands::Modify(args) => args.handle(flox).await,
+            Commands::Modify(args) => args.handle(config, flox).await,
             Commands::Share(args) => args.handle(config, flox).await,
             Commands::Admin(args) => args.handle(config, flox).await,
             Commands::Internal(args) => args.handle(flox).await,
@@ -949,10 +950,20 @@ enum ModifyCommands {
         footer("Run 'man flox-uninstall' for more details.")
     )]
     Uninstall(#[bpaf(external(uninstall::uninstall))] uninstall::Uninstall),
+
+    /// Interact with environment generations
+    #[bpaf(command, hide)]
+    Generations(
+        #[bpaf(
+            external(generations::generations_commands),
+            fallback(generations::GenerationsCommands::Help)
+        )]
+        generations::GenerationsCommands,
+    ),
 }
 
 impl ModifyCommands {
-    async fn handle(self, flox: Flox) -> Result<()> {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             ModifyCommands::Install(args) => args.handle(flox).await?,
             ModifyCommands::List(args) => args.handle(flox).await?,
@@ -960,6 +971,7 @@ impl ModifyCommands {
             ModifyCommands::Include(args) => args.handle(flox).await?,
             ModifyCommands::Upgrade(args) => args.handle(flox).await?,
             ModifyCommands::Uninstall(args) => args.handle(flox).await?,
+            ModifyCommands::Generations(args) => args.handle(config, flox)?,
         }
         Ok(())
     }
