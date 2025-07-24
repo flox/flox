@@ -1,0 +1,15 @@
+when:
+  path: /api/v1/catalog/info/base-catalog
+  method: GET
+then:
+  status: 200
+  header:
+  - name: date
+    value: Wed, 23 Jul 2025 23:46:32 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '1020'
+  - name: content-type
+    value: application/json
+  body: '{"base_url":"https://github.com/flox/nixpkgs","scraped_pages":[{"rev":"5e0ca22929f3342b19569b21b2f3462f053e497b","rev_count":664135,"stability_tags":["unstable"]},{"rev":"cb9a96f23c491c081b38eab96d22fa958043c9fa","rev_count":662544,"stability_tags":["staging","unstable"]},{"rev":"9f918d616c5321ad374ae6cb5ea89c9e04bf3e58","rev_count":660624,"stability_tags":["staging","unstable"]},{"rev":"dc14ed91132ee3a26255d01d8fd0c1f5bff27b2f","rev_count":656713,"stability_tags":["stable","staging","unstable"]},{"rev":"b60ebf54c15553b393d144357375ea956f89e9a9","rev_count":639882,"stability_tags":["stable","staging","unstable"]},{"rev":"3eaeaeb6b1e08a016380c279f8846e0bd8808916","rev_count":629267,"stability_tags":["lts","stable","staging","unstable"]},{"rev":"612f97239e2cc474c13c9dafa0df378058c5ad8d","rev_count":574351,"stability_tags":["lts","stable","staging","unstable"]}],"stabilities":[{"name":"unstable","ref":"unstable"},{"name":"staging","ref":"staging"},{"name":"stable","ref":"stable"},{"name":"lts","ref":"lts"}]}'

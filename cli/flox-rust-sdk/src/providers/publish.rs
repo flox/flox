@@ -142,15 +142,18 @@ pub struct LockedUrlInfo {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CheckedEnvironmentMetadata {
     pub lockfile: Lockfile,
-    // This is the local root path of the repo containing the environment
+    /// The local path of the root of the repo containing the environment.
     pub repo_root_path: PathBuf,
-    // This is the path to the parent of .flox for the build environment relative to the repo_root_path
+
+    /// The path to the parent of .flox for the build environment relative to the `repo_root_path`.
     pub rel_project_path: PathBuf,
 
-    // The build repo reference is always present
+    /// A URL pointing at a remote repository. This is required to be present
+    /// for reproducibility purposes.
     pub build_repo_ref: LockedUrlInfo,
 
-    // There may or may not be a locked base catalog reference in the environment
+    /// A locked Nixpkgs reference for the `toplevel` package group, which
+    /// may be absent when the user has no packages installed.
     pub toplevel_catalog_ref: Option<BaseCatalogUrl>,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
@@ -1034,12 +1037,16 @@ pub mod tests {
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files_in;
     use crate::models::lockfile::Lockfile;
     use crate::providers::auth::{Auth, write_floxhub_netrc};
-    use crate::providers::catalog::test_helpers::reset_mocks;
+    use crate::providers::catalog::test_helpers::{
+        auto_recording_catalog_client_for_authed_local_services,
+        reset_mocks,
+    };
     use crate::providers::catalog::{
         GENERATED_DATA,
         MockClient,
         PublishResponse,
         Response,
+        get_base_nixpkgs_url,
         mock_base_catalog_url,
     };
     use crate::providers::git::tests::{
@@ -1314,6 +1321,17 @@ pub mod tests {
         CheckedEnvironmentMetadata,
         PackageMetadata,
     ) {
+        // Copied from a running instance of the floxhub repo environment's
+        // catalog-server.
+        // TODO(zmitchell, 2025-07-23): we need a better way to get this
+        //     revision. We can set an environment variable during mock
+        //     generation, but that variable won't be available at other times.
+        let nixpkgs_rev = "5e0ca22929f3342b19569b21b2f3462f053e497b";
+        let stable_nixpkgs_ref = BaseCatalogUrl::from(
+            std::env::var("DUMMY_NIXPKGS_URL")
+                .unwrap_or(format!("github:flox/nixpkgs?rev{nixpkgs_rev}")),
+        );
+
         let build_metadata = CheckedBuildMetadata {
             name: "dummy".to_string(),
             pname: "dummy".to_string(),
@@ -1333,7 +1351,7 @@ pub mod tests {
             repo_root_path: PathBuf::new(),
             rel_project_path: PathBuf::new(),
 
-            toplevel_catalog_ref: Some(mock_base_catalog_url()),
+            toplevel_catalog_ref: Some(stable_nixpkgs_ref.clone()),
             build_repo_ref: LockedUrlInfo {
                 url: "dummy".to_string(),
                 rev: "dummy".to_string(),
@@ -1345,7 +1363,7 @@ pub mod tests {
         };
 
         let package_metadata = PackageMetadata {
-            base_catalog_ref: mock_base_catalog_url(),
+            base_catalog_ref: stable_nixpkgs_ref,
             package: EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
             description: "dummy".to_string(),
             _private: (),
@@ -1751,5 +1769,21 @@ pub mod tests {
             narinfo.references.is_some(),
             "Expected narinfo to have a references field"
         );
+    }
+
+    // This test isn't really for testing publish functionality, but instead
+    // for testing that we've hooked up local services correctly for generating
+    // publish test mocks.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn retrieves_base_catalog_url() {
+        let (_build_meta, env_meta, _pkg_meta) = dummy_publish_metadata();
+        let (flox, _tmpdir) = flox_instance();
+        let (flox, _auth) = auto_recording_catalog_client_for_authed_local_services(
+            flox,
+            "get_base_catalog_nixpkgs_url",
+        );
+        let _url = get_base_nixpkgs_url(&flox, Some("stable"), &env_meta)
+            .await
+            .unwrap();
     }
 }

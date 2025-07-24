@@ -129,8 +129,7 @@ version:
     pushd cli; cargo build -p mk_data; popd
 
 # Generate test data
-# TODO: should unit test regeneration respect -f?
-@gen-data +mk_data_args="": (mk-data mk_data_args) gen-unit-data
+@gen-data floxhub_path +mk_data_args="": (mk-data mk_data_args) (gen-unit-data floxhub_path)
 
 @mk-data +mk_data_args="": build-data-gen build-cli md
 
@@ -138,8 +137,62 @@ version:
 @md +mk_data_args="":
     mkdata="$PWD/cli/target/debug/mk_data"; pushd test_data; "$mkdata" {{mk_data_args}} config.toml; popd
 
-@gen-unit-data: (unit-tests "--filterset 'not test(providers::build::tests)'" "true")
+gen-unit-data-no-publish force="":
+    #!/usr/bin/env bash
 
+    set -e
+
+    if [ "{{force}}" = "true" ]; then
+        export _FLOX_UNIT_TEST_RECORD="force"
+    else
+        export _FLOX_UNIT_TEST_RECORD="missing"
+    fi
+
+    # Use remote services for non-publish tests
+    {{cargo_test_invocation}} --filterset 'not (test(providers::build::tests) | test(providers::publish) | test(commands::publish))'
+
+gen-unit-data-for-publish floxhub_repo_path reauth="" force="":
+    #!/usr/bin/env bash
+
+    # Use local services for publish tests, must already be running.
+    # In the FloxHub repo, run:
+    # flox activate -- just catalog-server::serve-all
+
+    set -euo pipefail
+
+    # Get the latest Nixpkgs revision that exists in the catalog
+    nixpkgs_rev="$(curl -X 'GET' --silent 'http://localhost:8000/api/v1/catalog/info/base-catalog' -H 'accept: application/json' | jq .scraped_pages[0].rev | tr -d "'\"")"
+    if [ -z "$nixpkgs_rev" ]; then
+        echo "failed to communicate with floxhub services"
+        exit 1
+    fi
+    export DUMMY_NIXPKGS_URL="github:flox/nixpkgs?rev=$nixpkgs_rev"
+
+    # Grab configuration variables from the FloxHub repo's environment
+    export _FLOX_OAUTH_AUTH_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_AUTH_URL')"
+    export _FLOX_OAUTH_TOKEN_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_TOKEN_URL')"
+    export _FLOX_OAUTH_DEVICE_AUTH_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_DEVICE_AUTH_URL')"
+    export _FLOX_OAUTH_CLIENT_ID="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_CLIENT_ID')"
+    export FLOX_CONFIG_DIR="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $FLOX_CONFIG_DIR')"
+
+    # Set the recording variable based on Justfile arguments
+    export _FLOX_UNIT_TEST_RECORD=true
+    if [ "{{force}}" = "true" ]; then
+        export _FLOX_UNIT_TEST_RECORD="force"
+    else
+        export _FLOX_UNIT_TEST_RECORD="missing"
+    fi
+
+    # Log in against the local services if necessary
+    if [ -n "{{reauth}}" ]; then
+        flox auth login
+    fi
+    export _FLOX_UNIT_TEST_RECORD_TOKEN=$(awk '$1 == "floxhub_token" {gsub("\"", "", $3); print $3}' "$FLOX_CONFIG_DIR"/flox.toml)
+
+    # Run the tests that will regenerate the mocks
+    {{cargo_test_invocation}} --filterset 'test(providers::publish) | test(commands::publish)'
+
+@gen-unit-data floxhub_path: gen-unit-data-no-publish (gen-unit-data-for-publish floxhub_path)
 
 # ---------------------------------------------------------------------------- #
 

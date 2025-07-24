@@ -22,15 +22,17 @@ use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
 use httpmock::{MockServer, RecordingID};
+use indoc::formatdoc;
 use reqwest::StatusCode;
 use reqwest::header::{self, HeaderMap};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument};
 use url::Url;
 
+use super::publish::CheckedEnvironmentMetadata;
 use crate::data::System;
-use crate::flox::FLOX_VERSION;
+use crate::flox::{FLOX_VERSION, Flox};
 use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
 use crate::utils::IN_CI;
 
@@ -1118,6 +1120,8 @@ pub enum CatalogClientError {
     UnsupportedSystem(#[source] api_error::ConversionError),
     #[error("{}", fmt_api_error(.0))]
     APIError(APIError<api_types::ErrorResponse>),
+    #[error("{}", .0)]
+    StabilityError(String),
 }
 
 /// Extension trait for converting API errors into our client errors.
@@ -1699,11 +1703,114 @@ impl BaseCatalogInfo {
     }
 }
 
+/// Derive the nixpkgs url to be used for builds.
+/// If a stability is provided, try to retrieve a url for that stability from the catalog.
+/// Else, if we can derive a stability from the toplevel group of the environment, use that.
+/// Otherwise attrr
+pub async fn base_catalog_url_for_stability_arg(
+    stability: Option<&str>,
+    base_catalog_info_fut: impl IntoFuture<Output = Result<BaseCatalogInfo, CatalogClientError>>,
+    toplevel_derived_url: Option<&BaseCatalogUrl>,
+) -> Result<BaseCatalogUrl, CatalogClientError> {
+    let url = match (stability, toplevel_derived_url) {
+        (Some(stability), _) => {
+            let base_catalog_info = base_catalog_info_fut.await?;
+            let make_error_message = || {
+                let available_stabilities = base_catalog_info.available_stabilities().join(", ");
+                formatdoc! {"
+                    Stability '{stability}' does not exist (or has not yet been populated).
+                    Available stabilities are: {available_stabilities}
+                "}
+            };
+
+            let url = base_catalog_info
+                .url_for_latest_page_with_stability(stability)
+                .ok_or_else(|| CatalogClientError::StabilityError(make_error_message()))?;
+
+            info!(%url, %stability, "using page from user provided stability");
+            url
+        },
+        (None, Some(toplevel_derived_url)) => {
+            info!(url=%toplevel_derived_url, "using nixpkgs derived from toplevel group");
+            toplevel_derived_url.clone()
+        },
+        (None, None) => {
+            let base_catalog_info = base_catalog_info_fut.await?;
+
+            let make_error_message = || {
+                let available_stabilities = base_catalog_info.available_stabilities().join(", ");
+                formatdoc! {"
+                    The default stability {} does not exist (or has not yet been populated).
+                    Available stabilities are: {available_stabilities}
+                ", BaseCatalogInfo::DEFAULT_STABILITY}
+            };
+
+            let url = base_catalog_info
+                .url_for_latest_page_with_default_stability()
+                .ok_or_else(|| CatalogClientError::StabilityError(make_error_message()))?;
+
+            info!(%url, "using page from default stability");
+            url
+        },
+    };
+    Ok(url)
+}
+
+/// Returns the nixpkgs URL used for builds and publishes.
+pub async fn get_base_nixpkgs_url(
+    flox: &Flox,
+    stability: Option<&str>,
+    env_metadata: &CheckedEnvironmentMetadata,
+) -> Result<BaseCatalogUrl, CatalogClientError> {
+    let base_catalog_info_fut = flox.catalog_client.get_base_catalog_info();
+
+    base_catalog_url_for_stability_arg(
+        stability,
+        base_catalog_info_fut,
+        env_metadata.toplevel_catalog_ref.as_ref(),
+    )
+    .await
+}
+
 pub mod test_helpers {
+    use tempfile::TempDir;
+
     use super::*;
+    use crate::flox::test_helpers::create_test_token;
+    use crate::flox::{Flox, FloxhubToken};
+    use crate::providers::auth::{Auth, AuthProvider};
 
     pub static UNIT_TEST_GENERATED: LazyLock<PathBuf> =
         LazyLock::new(|| PathBuf::from(std::env::var("UNIT_TEST_GENERATED").unwrap()));
+
+    /// Whether to record mock data and in which situations.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    enum RecordMockData {
+        /// Only record new mock data if it's missing.
+        Missing,
+        /// Don't record new mock data.
+        #[default]
+        False,
+        /// Re-record all mock data.
+        Force,
+    }
+
+    /// Returns in which circumstances mock data should be recorded based on
+    /// the value of the `_FLOX_UNIT_TEST_RECORD` environment variable.
+    ///
+    /// Values of "missing", "true", or "1" will generate a recording for a
+    /// missing mock. An unset variable or a value of "false" will only replay
+    /// existing recordings. The value "force" will unconditionally regenerate
+    /// mock data. Any other value will cause a panic.
+    fn get_record_directive() -> RecordMockData {
+        let s = std::env::var("_FLOX_UNIT_TEST_RECORD").unwrap_or_default();
+        match s.as_str() {
+            "true" | "missing" | "1" => RecordMockData::Missing,
+            "" | "false" => RecordMockData::False,
+            "force" => RecordMockData::Force,
+            _ => panic!("invalid value of _FLOX_UNIT_TEST_RECORD"),
+        }
+    }
 
     /// Create a mock client that will replay from a given file.
     ///
@@ -1728,25 +1835,83 @@ pub mod test_helpers {
     /// Tests must be run with `#[tokio::test(flavor = "multi_thread")]` to
     /// allow the `MockServer` to run in another thread.
     pub fn auto_recording_catalog_client(filename: &str) -> Client {
+        let auth = Auth::from_tempdir_and_token(TempDir::new().unwrap(), None);
+        let record = get_record_directive();
+        auto_recording_client_inner(filename, DEFAULT_CATALOG_URL, &auth, record)
+    }
+
+    /// Similar to [auto_recording_catalog_client] but authenticates against a dev
+    /// instance of the catalog-server using a token from
+    /// `_FLOX_UNIT_TEST_RECORD_TOKEN` and updates [Flox] to have the
+    /// appropriate token and client.
+    ///
+    /// Should only be used for tests that require authentication.
+    pub fn auto_recording_catalog_client_for_authed_local_services(
+        mut flox: Flox,
+        filename: &str,
+    ) -> (Flox, Auth) {
+        let record = get_record_directive();
+        let token = match record {
+            RecordMockData::Missing | RecordMockData::Force => FloxhubToken::from_str(
+                &std::env::var("_FLOX_UNIT_TEST_RECORD_TOKEN")
+                    .expect("_FLOX_UNIT_TEST_RECORD_TOKEN is unset"),
+            )
+            .expect("couldn't parse FloxHub token"),
+            RecordMockData::False => create_test_token("test"),
+        };
+
+        flox.floxhub_token = Some(token);
+        let auth = Auth::from_flox(&flox).unwrap();
+        let base_url = "http://localhost:8000";
+        let client = auto_recording_client_inner(filename, base_url, &auth, record);
+        flox.catalog_client = client;
+
+        (flox, auth)
+    }
+
+    /// Generic handler for creating a mock catalog client.
+    fn auto_recording_client_inner(
+        filename: &str,
+        base_url: &str,
+        auth: &Auth,
+        record: RecordMockData,
+    ) -> Client {
         let mut path = UNIT_TEST_GENERATED.join(filename);
         path.set_extension("yaml");
-        let (mock_mode, catalog_url) =
-            if std::env::var("_FLOX_UNIT_TEST_RECORD") == Ok("true".to_string()) {
-                // Generate against prod
-                (
-                    CatalogMockMode::Record(path),
-                    DEFAULT_CATALOG_URL.to_string(),
-                )
-            } else {
+        let (mock_mode, catalog_url) = match record {
+            RecordMockData::Missing => {
+                // TODO(zmitchell, 2025-07-23): it would be convenient if we
+                // also detected empty mock files as "missing" since a failed
+                // test will create the file but won't get a chance to write
+                // the contents (which is good, we don't want a recording of
+                // a failed test).
+                if path.exists() {
+                    // Use an existing recording
+                    (
+                        CatalogMockMode::Replay(path),
+                        "https://not_used".to_string(),
+                    )
+                } else {
+                    // Generate a new recording
+                    (CatalogMockMode::Record(path), base_url.to_string())
+                }
+            },
+            RecordMockData::False => {
+                // Use an existing recording
                 (
                     CatalogMockMode::Replay(path),
                     "https://not_used".to_string(),
                 )
-            };
+            },
+            RecordMockData::Force => {
+                // Regenerate existing recording
+                (CatalogMockMode::Record(path), base_url.to_string())
+            },
+        };
 
         let catalog_config = CatalogClientConfig {
             catalog_url,
-            floxhub_token: None,
+            floxhub_token: auth.token().map(|token| token.secret().to_string()),
             extra_headers: Default::default(),
             mock_mode,
         };
@@ -1760,6 +1925,51 @@ pub mod test_helpers {
         };
 
         client.reset_mocks(responses);
+    }
+
+    /// Create a catalog with the given name and config.
+    ///
+    /// Will continue with config and not return an error if the catalog already exists.
+    pub async fn create_catalog_with_config(
+        client: &Client,
+        name: &str,
+        config: &CatalogStoreConfig,
+    ) -> Result<(), CatalogClientError> {
+        let Client::Catalog(client) = client else {
+            panic!("can only be used with a CatalogClient");
+        };
+
+        // TODO: Change `catalog-server` to use `CatalogName` instead of `Name`.
+        let name_name = api_types::Name::from_str(name).map_err(|_e| {
+            CatalogClientError::APIError(APIError::InvalidRequest(
+                format!("catalog name {} does not meet API requirements.", name).to_string(),
+            ))
+        })?;
+        let catalog_name = str_to_catalog_name(name)?;
+
+        match client
+            .client
+            .create_catalog_api_v1_catalog_catalogs_post(&name_name)
+            .await
+        {
+            Ok(_) => {},
+            // Continue if already exists.
+            Err(e) if e.status() == Some(StatusCode::CONFLICT) => {},
+            Err(e) => {
+                return Err(CatalogClientError::APIError(e));
+            },
+        }
+
+        client
+            .client
+            .set_catalog_store_config_api_v1_catalog_catalogs_catalog_name_store_config_put(
+                &catalog_name,
+                config,
+            )
+            .await
+            .map_err(CatalogClientError::APIError)?;
+
+        Ok(())
     }
 }
 
