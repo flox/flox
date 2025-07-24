@@ -884,17 +884,19 @@ pub mod test_helpers {
 #[serial_test::file_serial(build)]
 mod tests {
     use std::fs::{self};
+    use std::os::unix::fs::PermissionsExt;
 
+    use anyhow::Context;
     use indoc::{formatdoc, indoc};
 
     use super::test_helpers::*;
     use super::*;
     use crate::flox::test_helpers::flox_instance;
-    use crate::models::environment::Environment;
     use crate::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
     };
+    use crate::models::environment::{Environment, copy_dir_recursive};
     use crate::providers::catalog::GENERATED_DATA;
     use crate::providers::catalog::test_helpers::catalog_replay_client;
     use crate::providers::git::{GitCommandProvider, GitProvider};
@@ -1505,29 +1507,31 @@ mod tests {
     fn build_does_not_use_hook_from_manifest() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
-        let file_content = String::from("");
 
         let manifest = formatdoc! {r#"
             version = 1
 
             [hook]
             on-activate = '''
-              export FOO="will not be used"
+                # Touch a file as side effect of running hook.
+                touch {file_name}
             '''
 
             [build.{package_name}]
             command = """
                 mkdir $out
-                echo -n "$FOO" > $out/{file_name}
+                if [ -e "{file_name}" ]; then
+                    echo "Hook ran, but this should not happen."
+                    exit 1
+                fi
+                touch $out/{file_name}
             """
         "#};
 
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
-        let env_path = env.parent_path().unwrap();
 
         assert_build_status(&flox, &mut env, &package_name, None, true);
-        assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
 
     #[test]
@@ -2828,6 +2832,342 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn build_symlinks_can_refer_to_flox_env_sandbox_off() {
         build_symlinks_can_refer_to_flox_env("off").await;
+    }
+
+    fn build_has_access_to_user_provided_path(sandbox: bool) {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let (flox, tmpdir) = flox_instance();
+
+        // Create tmpdir/testbin and put a script in it.
+        let test_script_name = String::from("test-script-in-PATH");
+        let test_script_output = String::from("123456");
+        let test_bin = tmpdir.path().join("test-bin");
+        fs::create_dir_all(&test_bin).unwrap();
+        let test_script_path = test_bin.join(&test_script_name);
+        fs::write(
+            &test_script_path,
+            format!("#!/usr/bin/env bash\necho {test_script_output}"),
+        )
+        .unwrap();
+        // Make the script executable.
+        fs::set_permissions(&test_script_path, fs::Permissions::from_mode(0o755)).unwrap();
+
+        // Construct a PATH string with test_bin first.
+        let path_var = std::env::var("PATH").context("Could not read PATH variable");
+        let test_bin_first_path = format!(
+            "{}:{}",
+            test_bin.to_string_lossy(),
+            path_var.unwrap_or_default()
+        );
+
+        // Create a manifest that uses the script in the build command.
+        let manifest = formatdoc! {r##"
+            version = 1
+
+            [build.{package_name}]
+            command = """
+              echo "Expecting to find '{test_script_name}' in PATH"
+              mkdir -p $out/bin
+              echo "#!/usr/bin/env bash" > $out/bin/{file_name}
+              type -p {test_script_name} >> $out/bin/{file_name}
+              chmod +x $out/bin/{file_name}
+            """
+            sandbox = "{}"
+        "##, if sandbox { "pure" } else { "off" }}; // [sic] sandbox can be "warn" and "enforce" too
+
+        // Build package.
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        if sandbox {
+            let _git = GitCommandProvider::init(&env_path, false).unwrap();
+        }
+
+        // Perform build with the modified PATH.
+        temp_env::with_var("PATH", Some(&test_bin_first_path), || {
+            assert_build_status(&flox, &mut env, &package_name, None, !sandbox)
+        });
+
+        // The pure build not expected to succeed.
+        if sandbox {
+            return;
+        }
+
+        // Confirm script emits the expected output, referencing script from PATH.
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            test_script_output,
+        );
+    }
+
+    #[test]
+    fn build_has_access_to_user_provided_path_sandbox_off() {
+        build_has_access_to_user_provided_path(false);
+    }
+
+    #[test]
+    fn build_does_not_have_access_to_user_provided_path_sandbox_pure() {
+        build_has_access_to_user_provided_path(true);
+    }
+
+    fn build_has_access_to_stdenv_packages(sandbox: bool) {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let (flox, _tmpdir) = flox_instance();
+
+        let manifest = formatdoc! {r##"
+            version = 1
+
+            [build.{package_name}]
+            command = """
+              # The Rust '.*' regex doesn't match multiple lines, so turn off
+              # shell tracing so that all we get from the build is the output.
+              set +x
+              # Report where we find a representative executable from each pkg.
+              # Print this to stdout so that we can assert it in the test, but
+              # do not embed these paths in the output because those packages
+              # are not expected to be present in the final closure.
+              for i in bash cat find grep sed; do
+                path="$(type -p $i)"
+                echo "found $i in $path"
+              done
+              # Create a valid executable in $out/bin for a clean build.
+              mkdir -p $out/bin
+              echo true > $out/bin/{file_name}
+              chmod +x $out/bin/{file_name}
+            """
+            sandbox = "{}"
+        "##, if sandbox { "pure" } else { "off" }}; // [sic] sandbox can be "warn" and "enforce" too
+
+        // Build package.
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        if sandbox {
+            let _git = GitCommandProvider::init(&env_path, false).unwrap();
+        }
+
+        // Perform build.
+        let output = assert_build_status(&flox, &mut env, &package_name, None, true);
+
+        // Look for expected output in build.
+        let store_path_prefix_pattern = r"/nix/store/[\w]{32}";
+        let expected_pattern = formatdoc! {r#"
+            .*found bash in {store_path_prefix_pattern}-bash-[\w\d.-]*/bin/bash.*
+            .*found cat in {store_path_prefix_pattern}-coreutils-[\w\d.-]*/bin/cat.*
+            .*found find in {store_path_prefix_pattern}-findutils-[\w\d.-]*/bin/find.*
+            .*found grep in {store_path_prefix_pattern}-gnugrep-[\w\d.-]*/bin/grep.*
+            .*found sed in {store_path_prefix_pattern}-gnused-[\w\d.-]*/bin/sed.*
+        "#};
+        let re = regex::Regex::new(&expected_pattern).unwrap();
+
+        // Assert that the expected output is present in the build output.
+        // Note that this output will appear in the stdout for the local
+        // build and stderr for the sandbox build.
+        let output_stream = if sandbox {
+            output.stderr
+        } else {
+            output.stdout
+        };
+        if !re.is_match(&output_stream) {
+            pretty_assertions::assert_eq!(
+                output_stream,
+                expected_pattern,
+                "didn't find expected pattern, diffing entire output"
+            );
+        }
+    }
+
+    #[test]
+    fn build_has_access_to_stdenv_packages_sandbox_off() {
+        build_has_access_to_stdenv_packages(false);
+    }
+
+    #[test]
+    fn build_has_access_to_stdenv_packages_sandbox_pure() {
+        build_has_access_to_stdenv_packages(true);
+    }
+
+    async fn build_result_only_has_runtime_packages(sandbox: bool) {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+            [install]
+            hello.pkg-path = "hello"
+            curl.pkg-path = "curl"
+            curl.pkg-group = "not-toplevel"
+
+            [build.{package_name}]
+            command = """
+                mkdir -p $out/bin
+                cat > $out/bin/{file_name} <<EOF
+                #!/usr/bin/env bash -x
+                hello_path="\\$(type -p hello || echo notfound)"
+                if [ "\\$hello_path" != "$FLOX_ENV/bin/hello" ]; then
+                    echo "hello not found in build environment" 1>&2
+                    exit 1
+                fi
+                curl_path="\\$(type -p curl || echo notfound)"
+                # Insert quotes in the middle of the path to prevent the existence
+                # check from failing the build on account of a missing path.
+                if [ "\\$curl_path" == "$FLOX_ENV/bin""/curl" ]; then
+                    echo "curl found at '\\$curl_path' but should not be in the build environment" 1>&2
+                    exit 1
+                fi
+                EOF
+                chmod +x $out/bin/{file_name}
+            """
+            runtime-packages = [ "hello" ]
+            sandbox = "{}"
+        "#, if sandbox { "pure" } else { "off" }};
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        if sandbox {
+            let _git = GitCommandProvider::init(&env_path, false).unwrap();
+        }
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello-curl-not-in-toplevel.yaml"))
+                .await;
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+
+        // Confirm script runs successfully.
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_result_only_has_runtime_packages_sandbox_off() {
+        build_result_only_has_runtime_packages(false).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_result_only_has_runtime_packages_sandbox_pure() {
+        build_result_only_has_runtime_packages(true).await;
+    }
+
+    /// Test that cmake can make use of the CMAKE_PREFIX_PATH variable as
+    /// set by etc-profiles.
+    async fn build_can_use_cmake(sandbox: bool) {
+        let package_name = String::from("hello-cmake");
+        // from: test_data/input_data/build/hello-cmake/HelloTarget/share/hello/HelloTarget.cmake
+        let file_name = String::from("hello.txt");
+        // from: test_data/input_data/build/hello-cmake/hello.in
+        let file_content = String::from("Hello, world!\n");
+
+        // Start by initializing a flox instance and tmpdir.
+        let (mut flox, _temp_dir_handle) = flox_instance();
+
+        // We have to materialize the environment at test time because of the
+        // requirement to install by storepath, so we start copying in the
+        // build environment which is comprised of source code and an empty
+        // flox environment.
+        let path = GENERATED_DATA.join("build/hello-cmake");
+        let path: &Path = path.as_ref();
+        copy_dir_recursive(path, &flox.temp_dir, true).unwrap();
+
+        // Import the HelloTarget directory as a package to be installed.
+        let output = Command::new("nix")
+            .current_dir(&flox.temp_dir)
+            .args([
+                "--extra-experimental-features",
+                "nix-command",
+                "store",
+                "add",
+                "HelloTarget",
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // stdout contains the full store path of the added package and a
+        // trailing newline. Strip the newline to get the path to install.
+        let hello_target_pkg = String::from_utf8_lossy(&output.stdout);
+        let hello_target_pkg = hello_target_pkg.trim_end();
+
+        // Materialize the environment, including the HelloTarget package.
+        let system = env!("system");
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            cmake.pkg-path = "cmake"
+            # Nix build of cmake does not include gnumake as a dependency?
+            gnumake.pkg-path = "gnumake"
+            # Install HelloTarget package by store path for the test.
+            HelloTarget.store-path = "{hello_target_pkg}"
+            HelloTarget.systems = ["{system}"]
+
+            [build.hello-cmake]
+            command = '''
+              mkdir build && cd build
+              cmake .. && cmake --build .
+              mkdir $out && cp {file_name} $out
+            '''
+            sandbox = "{}"
+        "#, if sandbox { "pure" } else { "off" }}; // [sic] sandbox can be "warn" and "enforce" too
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/cmake-gnumake.yaml")).await;
+
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        // Rename the source files from flox.temp_dir to env_path.
+        let source_files = ["CMakeLists.txt", "hello.in"];
+        for file in source_files {
+            let src = flox.temp_dir.join(file);
+            let dst = env_path.join(file);
+            fs::rename(src, dst)
+                .unwrap_or_else(|_| panic!("Failed to rename {file} to {env_path:?}"));
+        }
+
+        // Add the source files to git, if required.
+        if sandbox {
+            let git = GitCommandProvider::init(&env_path, false).unwrap();
+            for file in source_files {
+                git.add(&[&PathBuf::from(file)]).unwrap();
+            }
+        }
+
+        assert_build_status(&flox, &mut env, &package_name, None, true);
+        assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_can_use_cmake_sandbox_off() {
+        build_can_use_cmake(false).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn build_can_use_cmake_sandbox_pure() {
+        build_can_use_cmake(true).await;
     }
 }
 
