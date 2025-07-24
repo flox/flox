@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use catalog_api_v1::types::{MessageLevel, SystemEnum};
+use catalog_api_v1::types::{MessageLevel, PackageSystem};
 #[cfg(test)]
 use flox_test_utils::proptest::{alphanum_string, chrono_strat};
 use indent::{indent_all_by, indent_by};
@@ -286,8 +286,8 @@ impl LockedPackageCatalog {
         } = package;
 
         let outputs = outputs
-            .into_iter()
-            .map(|output| (output.name, output.store_path))
+            .iter()
+            .map(|output| (output.name.clone(), output.store_path.clone()))
             .collect::<BTreeMap<_, _>>();
 
         let priority = descriptor.priority.unwrap_or(DEFAULT_PRIORITY);
@@ -1115,7 +1115,7 @@ impl Lockfile {
     /// Those are expected to be locked separately.
     ///
     /// Greenkeeping: this function seem to return a [Result]
-    /// only due to parsing [System] strings to [SystemEnum].
+    /// only due to parsing [System] strings to [PackageSystem].
     /// If we restricted systems earlier with a common `System` type,
     /// fallible conversions like that would be unnecessary,
     /// or would be pushed higher up.
@@ -1200,7 +1200,7 @@ impl Lockfile {
                     .iter()
                     .sorted()
                     .map(|s| {
-                        SystemEnum::from_str(s)
+                        PackageSystem::from_str(s)
                             .map_err(|_| ResolveError::UnrecognizedSystem(s.to_string()))
                     })
                     .collect::<Result<Vec<_>, _>>()?
@@ -1739,7 +1739,7 @@ pub mod test_helpers {
         let descriptor = PackageDescriptorCatalog {
             pkg_path: name.to_string(),
             pkg_group: group.map(|s| s.to_string()),
-            systems: Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
+            systems: Some(vec![PackageSystem::Aarch64Darwin.to_string()]),
             version: None,
             priority: None,
         }
@@ -1768,7 +1768,7 @@ pub mod test_helpers {
             stabilities: None,
             unfree: None,
             version: "".to_string(),
-            system: SystemEnum::Aarch64Darwin.to_string(),
+            system: PackageSystem::Aarch64Darwin.to_string(),
             group: group.unwrap_or(DEFAULT_GROUP_NAME).to_string(),
             priority: 5,
         };
@@ -1821,14 +1821,14 @@ pub mod test_helpers {
 
         let descriptor = PackageDescriptorStorePath {
             store_path: format!("/nix/store/{}", name),
-            systems: Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
+            systems: Some(vec![PackageSystem::Aarch64Darwin.to_string()]),
             priority: None,
         };
 
         let locked = LockedPackageStorePath {
             install_id: install_id.clone(),
             store_path: format!("/nix/store/{}", name),
-            system: SystemEnum::Aarch64Darwin.to_string(),
+            system: PackageSystem::Aarch64Darwin.to_string(),
             priority: DEFAULT_PRIORITY,
         };
         (install_id, descriptor, locked)
@@ -1882,7 +1882,7 @@ pub(crate) mod tests {
     use std::vec;
 
     use catalog::MsgUnknown;
-    use catalog_api_v1::types::Output;
+    use catalog_api_v1::types::{PackageOutput, PackageOutputs};
     use indoc::indoc;
     use pollster::FutureExt;
     use pretty_assertions::assert_eq;
@@ -1961,7 +1961,7 @@ pub(crate) mod tests {
                 allow_unfree: None,
                 allowed_licenses: None,
                 allow_missing_builds: None,
-                systems: vec![SystemEnum::Aarch64Darwin],
+                systems: vec![PackageSystem::Aarch64Darwin],
             }],
         }]
     });
@@ -1996,7 +1996,7 @@ pub(crate) mod tests {
                 stabilities: Some(vec!["stability".to_string()]),
                 unfree: Some(false),
                 version: "version".to_string(),
-                system: SystemEnum::Aarch64Darwin.to_string(),
+                system: PackageSystem::Aarch64Darwin.to_string(),
                 group: "group".to_string(),
                 priority: 5,
             }
@@ -2045,7 +2045,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::Aarch64Darwin],
+                    systems: vec![PackageSystem::Aarch64Darwin],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -2058,7 +2058,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::X8664Linux],
+                    systems: vec![PackageSystem::X8664Linux],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -2071,7 +2071,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::Aarch64Darwin],
+                    systems: vec![PackageSystem::Aarch64Darwin],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -2084,7 +2084,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::X8664Linux],
+                    systems: vec![PackageSystem::X8664Linux],
                 },
             ],
         }];
@@ -2128,7 +2128,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::Aarch64Darwin],
+                    systems: vec![PackageSystem::Aarch64Darwin],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -2141,7 +2141,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::Aarch64Darwin],
+                    systems: vec![PackageSystem::Aarch64Darwin],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -2154,7 +2154,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::X8664Linux],
+                    systems: vec![PackageSystem::X8664Linux],
                 },
             ],
         }];
@@ -2230,7 +2230,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::Aarch64Darwin],
+                    systems: vec![PackageSystem::Aarch64Darwin],
                 }],
             },
             PackageGroup {
@@ -2246,7 +2246,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::Aarch64Darwin],
+                    systems: vec![PackageSystem::Aarch64Darwin],
                 }],
             },
         ];
@@ -2296,7 +2296,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::Aarch64Darwin],
+                    systems: vec![PackageSystem::Aarch64Darwin],
                 },
                 // The unlocked package should not have a derivation
                 PackageDescriptor {
@@ -2310,7 +2310,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::Aarch64Darwin],
+                    systems: vec![PackageSystem::Aarch64Darwin],
                 },
             ],
         }];
@@ -2464,7 +2464,7 @@ pub(crate) mod tests {
 
         let expected_params = vec![PackageGroup {
             name: DEFAULT_GROUP_NAME.to_string(),
-            descriptors: [SystemEnum::Aarch64Darwin, SystemEnum::X8664Linux]
+            descriptors: [PackageSystem::Aarch64Darwin, PackageSystem::X8664Linux]
                 .map(|system| {
                     [PackageDescriptor {
                         allow_pre_releases: None,
@@ -2594,10 +2594,10 @@ pub(crate) mod tests {
                     license: Some("license".to_string()),
                     locked_url: "locked_url".to_string(),
                     name: "hello".to_string(),
-                    outputs: vec![Output {
+                    outputs: PackageOutputs(vec![PackageOutput {
                         name: "name".to_string(),
                         store_path: "store_path".to_string(),
-                    }],
+                    }]),
                     outputs_to_install: Some(vec!["name".to_string()]),
                     pname: "pname".to_string(),
                     rev: "rev".to_string(),
@@ -2613,7 +2613,7 @@ pub(crate) mod tests {
                     stabilities: Some(vec!["stability".to_string()]),
                     unfree: Some(false),
                     version: "version".to_string(),
-                    system: SystemEnum::Aarch64Darwin,
+                    system: PackageSystem::Aarch64Darwin,
                     cache_uri: None,
                     missing_builds: None,
                 }]),
@@ -2912,10 +2912,10 @@ pub(crate) mod tests {
             .collect::<Vec<_>>();
 
         let expected_systems = [
-            SystemEnum::Aarch64Darwin,
-            SystemEnum::Aarch64Linux,
-            SystemEnum::X8664Darwin,
-            SystemEnum::X8664Linux,
+            PackageSystem::Aarch64Darwin,
+            PackageSystem::Aarch64Linux,
+            PackageSystem::X8664Darwin,
+            PackageSystem::X8664Linux,
         ];
 
         assert_eq!(&*systems, expected_systems.as_slice());
@@ -2982,7 +2982,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::Aarch64Darwin,],
+                    systems: vec![PackageSystem::Aarch64Darwin,],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -2995,7 +2995,7 @@ pub(crate) mod tests {
                     allow_unfree: None,
                     allowed_licenses: None,
                     allow_missing_builds: None,
-                    systems: vec![SystemEnum::Aarch64Darwin,],
+                    systems: vec![PackageSystem::Aarch64Darwin,],
                 }
             ],
         }]);
@@ -3015,7 +3015,7 @@ pub(crate) mod tests {
 
         assert_eq!(
             systems,
-            &Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
+            &Some(vec![PackageSystem::Aarch64Darwin.to_string()]),
             "`fake_package` should set the system to [`Aarch64Darwin`]"
         );
 
@@ -3026,13 +3026,13 @@ pub(crate) mod tests {
                 .systems
                 .as_mut()
                 .unwrap()
-                .push(SystemEnum::Aarch64Linux.to_string());
+                .push(PackageSystem::Aarch64Linux.to_string());
         } else {
             panic!("Expected a catalog descriptor");
         };
 
         let foo_locked_second_system = LockedPackageCatalog {
-            system: SystemEnum::Aarch64Linux.to_string(),
+            system: PackageSystem::Aarch64Linux.to_string(),
             ..foo_locked.clone()
         };
 
@@ -3065,7 +3065,7 @@ pub(crate) mod tests {
         assert_eq!(groups[0].descriptors.len(), 1, "Expected only 1 descriptor");
         assert_eq!(
             groups[0].descriptors[0].systems,
-            vec![SystemEnum::Aarch64Darwin,],
+            vec![PackageSystem::Aarch64Darwin,],
             "Expected only the Darwin system to be present"
         );
 
@@ -3091,7 +3091,7 @@ pub(crate) mod tests {
                 .systems
                 .as_mut()
                 .unwrap()
-                .push(SystemEnum::Aarch64Linux.to_string());
+                .push(PackageSystem::Aarch64Linux.to_string());
         } else {
             panic!("Expected a catalog descriptor");
         };
@@ -3125,10 +3125,10 @@ pub(crate) mod tests {
             "Expected descriptors for two systems"
         );
         assert_eq!(groups[0].descriptors[0].systems, vec![
-            SystemEnum::Aarch64Darwin
+            PackageSystem::Aarch64Darwin
         ]);
         assert_eq!(groups[0].descriptors[1].systems, vec![
-            SystemEnum::Aarch64Linux
+            PackageSystem::Aarch64Linux
         ]);
 
         let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
@@ -3213,7 +3213,7 @@ pub(crate) mod tests {
 
         let foo_locked_system_1 = foo_locked.clone();
         let mut foo_locked_system_2 = foo_locked;
-        foo_locked_system_2.locked_installable.system = SystemEnum::Aarch64Linux.to_string();
+        foo_locked_system_2.locked_installable.system = PackageSystem::Aarch64Linux.to_string();
 
         let mut manifest = Manifest::default();
         manifest.options.systems = Some(vec![system.to_string()]);
@@ -3290,7 +3290,7 @@ pub(crate) mod tests {
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
         let mut manifest = Manifest::default();
-        manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
+        manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
         manifest
             .install
             .inner_mut()
@@ -3365,7 +3365,7 @@ pub(crate) mod tests {
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
         let mut manifest = Manifest::default();
-        manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
+        manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
         manifest.install.inner_mut().insert(
             "hello".to_string(),
             ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
@@ -3409,7 +3409,7 @@ pub(crate) mod tests {
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
         let mut manifest = Manifest::default();
-        manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
+        manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
         manifest
             .install
             .inner_mut()
@@ -3448,7 +3448,7 @@ pub(crate) mod tests {
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
 
         let mut manifest = Manifest::default();
-        manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
+        manifest.options.systems = Some(vec![PackageSystem::Aarch64Darwin.to_string()]);
         manifest
             .install
             .inner_mut()
@@ -3720,11 +3720,11 @@ pub(crate) mod tests {
             fake_catalog_package_lock("baz", Some("group2"));
 
         if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = baz_descriptor {
-            descriptor.systems = Some(vec![SystemEnum::Aarch64Linux.to_string()]);
+            descriptor.systems = Some(vec![PackageSystem::Aarch64Linux.to_string()]);
         } else {
             panic!("Expected a catalog descriptor");
         };
-        baz_locked.system = SystemEnum::Aarch64Linux.to_string();
+        baz_locked.system = PackageSystem::Aarch64Linux.to_string();
 
         let mut manifest = Manifest::default();
         manifest
@@ -3752,7 +3752,7 @@ pub(crate) mod tests {
         };
 
         let actual = locked
-            .list_packages(&SystemEnum::Aarch64Darwin.to_string())
+            .list_packages(&PackageSystem::Aarch64Darwin.to_string())
             .unwrap();
         let expected = [
             PackageToList::Catalog(
@@ -3774,7 +3774,7 @@ pub(crate) mod tests {
         let (foo_iid, foo_descriptor, foo_locked) = fake_flake_installable_lock("foo");
         let (baz_iid, baz_descriptor, mut baz_locked) = fake_flake_installable_lock("baz");
 
-        baz_locked.locked_installable.system = SystemEnum::Aarch64Linux.to_string();
+        baz_locked.locked_installable.system = PackageSystem::Aarch64Linux.to_string();
 
         let mut manifest = Manifest::default();
         manifest
@@ -3794,7 +3794,7 @@ pub(crate) mod tests {
         };
 
         let actual = locked
-            .list_packages(&SystemEnum::Aarch64Darwin.to_string())
+            .list_packages(&PackageSystem::Aarch64Darwin.to_string())
             .unwrap();
         let expected = [
             PackageToList::Flake(foo_descriptor, foo_locked), // baz is not in the list because it is not available for the requested system
@@ -3808,7 +3808,7 @@ pub(crate) mod tests {
         let (foo_iid, foo_descriptor, foo_locked) = fake_store_path_lock("foo");
         let (baz_iid, baz_descriptor, mut baz_locked) = fake_store_path_lock("baz");
 
-        baz_locked.system = SystemEnum::Aarch64Linux.to_string();
+        baz_locked.system = PackageSystem::Aarch64Linux.to_string();
 
         let mut manifest = Manifest::default();
         manifest
@@ -3828,7 +3828,7 @@ pub(crate) mod tests {
         };
 
         let actual = locked
-            .list_packages(&SystemEnum::Aarch64Darwin.to_string())
+            .list_packages(&PackageSystem::Aarch64Darwin.to_string())
             .unwrap();
         let expected = [
             PackageToList::StorePath(foo_locked), // baz is not in the list because it is not available for the requested system

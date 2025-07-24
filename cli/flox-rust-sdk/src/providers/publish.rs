@@ -3,7 +3,14 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::str::FromStr;
 
-use catalog_api_v1::types::{NarInfo, NarInfos, Output, Outputs, PublishResponse, SystemEnum};
+use catalog_api_v1::types::{
+    NarInfo,
+    NarInfos,
+    PackageOutput,
+    PackageOutputs,
+    PackageSystem,
+    PublishInfoResponseCatalog,
+};
 use chrono::{DateTime, Utc};
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
@@ -168,10 +175,10 @@ pub struct CheckedBuildMetadata {
     // Define metadata coming from the build, e.g. outpaths
     pub name: String,
     pub pname: String,
-    pub outputs: catalog_api_v1::types::Outputs,
+    pub outputs: catalog_api_v1::types::PackageOutputs,
     pub outputs_to_install: Vec<String>,
     pub drv_path: String,
-    pub system: SystemEnum,
+    pub system: PackageSystem,
 
     pub version: Option<String>,
 
@@ -280,7 +287,7 @@ impl ClientSideCatalogStoreConfig {
     /// upload the build outputs and their NAR infos or skip the upload entirely.
     pub fn maybe_upload_artifacts(
         &self,
-        build_outputs: &[Output],
+        build_outputs: &[PackageOutput],
     ) -> Result<Option<NarInfos>, PublishError> {
         if build_outputs.is_empty() {
             debug!(reason = "no build outputs", "skipping artifact upload");
@@ -348,7 +355,7 @@ impl ClientSideCatalogStoreConfig {
         destination_url: &Url,
         signing_key_path: Option<&Path>,
         nix_copy_auth: &Option<NixCopyAuth>,
-        build_outputs: &[Output],
+        build_outputs: &[PackageOutput],
     ) -> Result<(), PublishError> {
         for output in build_outputs.iter() {
             debug!(
@@ -481,7 +488,7 @@ impl ClientSideCatalogStoreConfig {
     fn get_build_output_nar_infos(
         source_url: &Url,
         auth_netrc_path: &Path,
-        build_outputs: &[Output],
+        build_outputs: &[PackageOutput],
     ) -> Result<NarInfos, PublishError> {
         let mut nar_infos = HashMap::new();
         for output in build_outputs.iter() {
@@ -686,7 +693,7 @@ fn get_client_side_catalog_store_config(
     metadata_only: bool,
     key_file: Option<PathBuf>,
     auth_netrc_path: impl AsRef<Path>,
-    publish_response: PublishResponse,
+    publish_response: PublishInfoResponseCatalog,
 ) -> Result<ClientSideCatalogStoreConfig, PublishError> {
     if metadata_only {
         return Ok(ClientSideCatalogStoreConfig::MetadataOnly);
@@ -743,14 +750,14 @@ fn get_client_side_catalog_store_config(
 
 fn check_build_metadata_from_build_result(
     build_result: &BuildResult,
-    system: SystemEnum,
+    system: PackageSystem,
 ) -> Result<CheckedBuildMetadata, PublishError> {
-    let outputs = Outputs(
+    let outputs = PackageOutputs(
         build_result
             .outputs
             .clone()
             .into_iter()
-            .map(|(output_name, output_path)| Output {
+            .map(|(output_name, output_path)| PackageOutput {
                 name: output_name,
                 store_path: output_path.to_string_lossy().to_string(),
             })
@@ -829,7 +836,7 @@ pub fn check_build_metadata(
 
     let metadata = check_build_metadata_from_build_result(
         build_result,
-        SystemEnum::from_str(flox.system.as_str()).map_err(|_e| {
+        PackageSystem::from_str(flox.system.as_str()).map_err(|_e| {
             PublishError::UnsupportedEnvironmentState("Invalid system".to_string())
         })?,
     )?;
@@ -1335,13 +1342,13 @@ pub mod tests {
         let build_metadata = CheckedBuildMetadata {
             name: "dummy".to_string(),
             pname: "dummy".to_string(),
-            outputs: Outputs(vec![Output {
+            outputs: PackageOutputs(vec![PackageOutput {
                 name: "out".to_string(),
                 store_path: known_store_path().to_string_lossy().to_string(),
             }]),
             outputs_to_install: vec![],
             drv_path: "dummy".to_string(),
-            system: SystemEnum::X8664Linux,
+            system: PackageSystem::X8664Linux,
             version: Some("1.0.0".to_string()),
             _private: (),
         };
