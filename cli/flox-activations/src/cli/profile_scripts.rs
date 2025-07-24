@@ -4,7 +4,7 @@ use clap::Args;
 use log::debug;
 
 use super::separate_dir_list;
-use crate::shell_gen::source_file;
+use crate::shell_gen::{Shell, source_file};
 
 #[derive(Debug, Args)]
 pub struct ProfileScriptsArgs {
@@ -15,7 +15,7 @@ pub struct ProfileScriptsArgs {
     )]
     pub env_dirs: String,
     #[arg(short, long, help = "Which shell syntax to emit")]
-    pub shell: String,
+    pub shell: Shell,
 }
 
 impl ProfileScriptsArgs {
@@ -45,7 +45,7 @@ impl ProfileScriptsArgs {
 /// This is mostly useful so that you don't need to specifically create files to test this functionality.
 fn source_profile_scripts_cmds(
     env_dirs: &str,
-    shell: &str,
+    shell: &Shell,
     path_predicate: impl Fn(&Path) -> bool,
 ) -> Vec<String> {
     let dirs = separate_dir_list(env_dirs);
@@ -74,7 +74,7 @@ mod test {
     #[test]
     fn bash_all_exist_correct_order() {
         let dirs = "newer:older";
-        let cmds = source_profile_scripts_cmds(dirs, "bash", |_| true);
+        let cmds = source_profile_scripts_cmds(dirs, &Shell::Bash, |_| true);
         let expected = vec![
             "source 'older/activate.d/profile-common';".to_string(),
             "source 'older/activate.d/profile-bash';".to_string(),
@@ -87,7 +87,7 @@ mod test {
     #[test]
     fn zsh_all_exist_correct_order() {
         let dirs = "newer:older";
-        let cmds = source_profile_scripts_cmds(dirs, "zsh", |_| true);
+        let cmds = source_profile_scripts_cmds(dirs, &Shell::Zsh, |_| true);
         let expected = vec![
             "source 'older/activate.d/profile-common';".to_string(),
             "source 'older/activate.d/profile-zsh';".to_string(),
@@ -100,7 +100,7 @@ mod test {
     #[test]
     fn tcsh_all_exist_correct_order() {
         let dirs = "newer:older";
-        let cmds = source_profile_scripts_cmds(dirs, "tcsh", |_| true);
+        let cmds = source_profile_scripts_cmds(dirs, &Shell::Tcsh, |_| true);
         let expected = vec![
             "source 'older/activate.d/profile-common';".to_string(),
             "source 'older/activate.d/profile-tcsh';".to_string(),
@@ -113,7 +113,7 @@ mod test {
     #[test]
     fn fish_all_exist_correct_order() {
         let dirs = "newer:older";
-        let cmds = source_profile_scripts_cmds(dirs, "fish", |_| true);
+        let cmds = source_profile_scripts_cmds(dirs, &Shell::Fish, |_| true);
         let expected = vec![
             "source 'older/activate.d/profile-common';".to_string(),
             "source 'older/activate.d/profile-fish';".to_string(),
@@ -126,7 +126,7 @@ mod test {
     #[test]
     fn bash_some_exist() {
         let dirs = "newer:older";
-        let cmds = source_profile_scripts_cmds(dirs, "bash", |p| {
+        let cmds = source_profile_scripts_cmds(dirs, &Shell::Bash, |p| {
             p != Path::new("newer/activate.d/profile-common")
         });
         let expected = vec![
@@ -140,7 +140,7 @@ mod test {
     #[test]
     fn zsh_some_exist() {
         let dirs = "newer:older";
-        let cmds = source_profile_scripts_cmds(dirs, "zsh", |p| {
+        let cmds = source_profile_scripts_cmds(dirs, &Shell::Zsh, |p| {
             p != Path::new("newer/activate.d/profile-common")
         });
         let expected = vec![
@@ -154,7 +154,7 @@ mod test {
     #[test]
     fn tcsh_some_exist() {
         let dirs = "newer:older";
-        let cmds = source_profile_scripts_cmds(dirs, "tcsh", |p| {
+        let cmds = source_profile_scripts_cmds(dirs, &Shell::Tcsh, |p| {
             p != Path::new("newer/activate.d/profile-common")
         });
         let expected = vec![
@@ -168,7 +168,7 @@ mod test {
     #[test]
     fn fish_some_exist() {
         let dirs = "newer:older";
-        let cmds = source_profile_scripts_cmds(dirs, "fish", |p| {
+        let cmds = source_profile_scripts_cmds(dirs, &Shell::Fish, |p| {
             p != Path::new("newer/activate.d/profile-common")
         });
         let expected = vec![
