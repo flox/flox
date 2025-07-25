@@ -9,7 +9,13 @@ use tracing::{debug, instrument};
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::fetcher::IncludeFetcher;
-use super::generations::{AllGenerationsMetadata, Generations, GenerationsError, GenerationsExt};
+use super::generations::{
+    AllGenerationsMetadata,
+    GenerationId,
+    Generations,
+    GenerationsError,
+    GenerationsExt,
+};
 use super::path_environment::PathEnvironment;
 use super::{
     CACHE_DIR_NAME,
@@ -562,6 +568,22 @@ impl Environment for ManagedEnvironment {
 impl GenerationsExt for ManagedEnvironment {
     fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError> {
         self.generations().metadata()
+    }
+
+    fn switch_generation(
+        &mut self,
+        flox: &Flox,
+        generation: GenerationId,
+    ) -> Result<(), EnvironmentError> {
+        let mut generations = self.generations();
+        let mut generations = generations
+            .writable(&flox.temp_dir)
+            .map_err(ManagedEnvironmentError::Generations)?;
+
+        generations
+            .set_current_generation(generation)
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
+        Ok(())
     }
 }
 

@@ -32,8 +32,14 @@ use super::core_environment::CoreEnvironment;
 use super::fetcher::IncludeFetcher;
 use super::managed_environment::ManagedEnvironment;
 use super::remote_environment::RemoteEnvironment;
-use super::{ConcreteEnvironment, ENV_DIR_NAME, LOCKFILE_FILENAME, copy_dir_recursive};
-use crate::flox::EnvironmentName;
+use super::{
+    ConcreteEnvironment,
+    ENV_DIR_NAME,
+    EnvironmentError,
+    LOCKFILE_FILENAME,
+    copy_dir_recursive,
+};
+use crate::flox::{EnvironmentName, Flox};
 use crate::models::environment::{MANIFEST_FILENAME, UninitializedEnvironment};
 use crate::providers::git::{
     GitCommandError,
@@ -519,6 +525,12 @@ fn write_metadata_file(
 pub trait GenerationsExt {
     /// Return all generations metadata for the environment.
     fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError>;
+
+    fn switch_generation(
+        &mut self,
+        flox: &Flox,
+        generation: GenerationId,
+    ) -> Result<(), EnvironmentError>;
 }
 
 /// Combined type for environments supporting generations,
