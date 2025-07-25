@@ -44,7 +44,7 @@ EOF
 }
 
 @test "f?: 'flox --help' has 0 exit code" {
-  run "$FLOX_BIN"
+  run "$FLOX_BIN" --help
   assert_success
 }
 
