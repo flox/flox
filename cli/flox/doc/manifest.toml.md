@@ -616,10 +616,12 @@ See `flox-build(1)` for more details.
 The full set of options is shown below:
 ```
 BuildDescriptor ::= {
-  command     = STRING
-, sandbox     = null | ("off" | "pure")
-, version     = STRING | VersionFile | VersionCommand
-, description = null | STRING
+  command          = STRING
+, sandbox          = null | ("off" | "pure")
+, version          = null | STRING | VersionFile | VersionCommand
+, description      = null | STRING
+, runtime-packages = null | [<STRING>, ...]
+, license          = null | [<STRING>, ...]
 }
 
 VersionFile ::= {
@@ -656,6 +658,19 @@ VersionCommand ::= {
 
 `description`
 :   The description string to attach to this build artifact.
+
+`runtime-packages`
+:   A list of install IDs from the `[install]` section of the manifest, used to
+    restrict what dependencies are provided to the built package at runtime.
+    By default all packages from the default package group are included as
+    runtime dependencies.
+    If this option is specified, only the listed packages are included.
+
+`license`
+:   A list of licenses that apply to the package.
+    After publishing a package, this metadata is used when installing the
+    package into another environment if that environment sets
+    `options.allow.licenses`.
 
 ## `[options]`
 
