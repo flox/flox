@@ -22,8 +22,12 @@ flox [<general-options>] activate
 
 # DESCRIPTION
 
-Sets environment variables and aliases, runs hooks, starts services,
-and adds `bin` directories to your `$PATH`.
+Configures a shell with everything defined by the environment:
+
+* Downloads packages and adds their `bin` directories to your `$PATH`.
+* Sets environment variables and aliases.
+* Runs hooks.
+* Starts services (if `--start-services` is specified).
 
 `flox activate` may run in one of three modes:
 
