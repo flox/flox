@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use chrono::{DateTime, Utc};
+use enum_dispatch::enum_dispatch;
 use flox_core::Version;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
@@ -29,9 +30,11 @@ use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;
 use super::fetcher::IncludeFetcher;
-use super::{ENV_DIR_NAME, LOCKFILE_FILENAME, copy_dir_recursive};
+use super::managed_environment::ManagedEnvironment;
+use super::remote_environment::RemoteEnvironment;
+use super::{ConcreteEnvironment, ENV_DIR_NAME, LOCKFILE_FILENAME, copy_dir_recursive};
 use crate::flox::EnvironmentName;
-use crate::models::environment::MANIFEST_FILENAME;
+use crate::models::environment::{MANIFEST_FILENAME, UninitializedEnvironment};
 use crate::providers::git::{
     GitCommandError,
     GitCommandOptions,
@@ -406,6 +409,12 @@ impl Generations<ReadWrite<'_>> {
 
 #[derive(Debug, Error)]
 pub enum GenerationsError {
+    #[error(
+        "Generations are only available for environments pushed to floxhub.\n\
+        The environment {0} is a local only environment."
+    )]
+    UnsupportedEnvironment(String),
+
     // region: initialization errors
     #[error("could not initialize generations repo")]
     InitRepo(#[source] GitCommandError),
@@ -501,10 +510,50 @@ fn write_metadata_file(
     Ok(())
 }
 
-/// Environments that support generations.
-pub trait GenerationsEnvironment {
+/// Generation related methods for environments that support generations.
+/// In practice that's [ManagedEnvironment] and [RemoteEnvironment].
+/// We use a cummon trait to ensure common and consistent functionality
+/// and allow static dispatch from [GenerationsEnvironment]
+/// to the concrete implementations.
+#[enum_dispatch]
+pub trait GenerationsExt {
     /// Return all generations metadata for the environment.
     fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError>;
+}
+
+/// Combined type for environments supporting generations,
+/// i.e. local or remote managed environemnts.
+/// We use this in addition to the [GenerationsExt] trait,
+/// to avoid forcing `dyn compatibility` on [GenerationsExt],
+/// and repeated deconstruction of [ConcreteEnvironment]s,
+/// similarly to how/why we wrap all [Environment] implementations
+/// under [ConcreteEnvironment].
+///
+/// To be created either via [ConcreteEnvironment::try_into],
+/// or the [Into] implementations for the subjects.
+#[derive(Debug)]
+#[enum_dispatch(GenerationsExt, Environment)]
+pub enum GenerationsEnvironment {
+    Managed(ManagedEnvironment),
+    Remote(RemoteEnvironment),
+}
+
+impl TryFrom<ConcreteEnvironment> for GenerationsEnvironment {
+    type Error = GenerationsError;
+
+    fn try_from(env: ConcreteEnvironment) -> std::result::Result<Self, Self::Error> {
+        let env = match env {
+            ConcreteEnvironment::Path(_) => {
+                let description =
+                    UninitializedEnvironment::from_concrete_environment(&env).bare_description();
+                return Err(GenerationsError::UnsupportedEnvironment(description));
+            },
+            ConcreteEnvironment::Managed(env) => env.into(),
+            ConcreteEnvironment::Remote(env) => env.into(),
+        };
+
+        Ok(env)
+    }
 }
 
 /// flox environment metadata for managed environments

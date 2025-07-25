@@ -5,13 +5,15 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
     AllGenerationsMetadata,
+    GenerationsEnvironment,
+    GenerationsExt,
     SingleGenerationMetadata,
 };
 use tracing::instrument;
 
-use super::try_get_generations_metadata;
 use crate::commands::{EnvironmentSelect, environment_select};
 
+/// Arguments for the `flox generations list` command
 #[derive(Bpaf, Debug, Clone)]
 pub struct List {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -21,13 +23,18 @@ pub struct List {
 impl List {
     #[instrument(name = "list", skip_all)]
     pub fn handle(self, flox: Flox) -> Result<()> {
-        let env = self.environment.to_concrete_environment(&flox)?;
-        let metadata = try_get_generations_metadata(&env)?;
+        let env: GenerationsEnvironment = self
+            .environment
+            .to_concrete_environment(&flox)?
+            .try_into()?;
+        let metadata = env.generations_metadata()?;
         println!("{}", DisplayAllMetadata(&metadata));
         Ok(())
     }
 }
 
+/// Formatter container for [SingleGenerationMetadata].
+/// Implements CLI/command specific formatting.
 struct DisplayMetadata<'m> {
     metadata: &'m SingleGenerationMetadata,
 }
@@ -43,6 +50,13 @@ impl Display for DisplayMetadata<'_> {
     }
 }
 
+/// Formatter container for [AllGenerationsMetadata].
+/// List formatting of generation data, following the template
+///
+/// ```text
+/// * <generation id>[ (current)]:
+///   <generation metadata>          # implemented by [DisplayMetadata] above
+/// ```
 struct DisplayAllMetadata<'m>(&'m AllGenerationsMetadata);
 impl Display for DisplayAllMetadata<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
