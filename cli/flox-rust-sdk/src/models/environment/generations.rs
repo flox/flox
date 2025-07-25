@@ -396,7 +396,7 @@ impl Generations<ReadWrite<'_>> {
             return Err(GenerationsError::GenerationNotFound(*generation));
         };
 
-        metadata.current_gen = Some(generation.clone());
+        metadata.current_gen = Some(generation);
         write_metadata_file(metadata, self.repo.path())?;
 
         self.repo
@@ -638,6 +638,7 @@ impl SingleGenerationMetadata {
 #[derive(
     Debug,
     Clone,
+    Copy,
     PartialEq,
     Eq,
     PartialOrd,
