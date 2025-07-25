@@ -12,6 +12,7 @@ use flox_rust_sdk::models::environment::generations::{
 use tracing::instrument;
 
 use crate::commands::{EnvironmentSelect, environment_select};
+use crate::environment_subcommand_metric;
 
 /// Arguments for the `flox generations list` command
 #[derive(Bpaf, Debug, Clone)]
@@ -23,10 +24,10 @@ pub struct List {
 impl List {
     #[instrument(name = "list", skip_all)]
     pub fn handle(self, flox: Flox) -> Result<()> {
-        let env: GenerationsEnvironment = self
-            .environment
-            .to_concrete_environment(&flox)?
-            .try_into()?;
+        let env = self.environment.to_concrete_environment(&flox)?;
+        environment_subcommand_metric!("generations::rollback", env);
+        let env: GenerationsEnvironment = env.try_into()?;
+
         let metadata = env.generations_metadata()?;
         println!("{}", DisplayAllMetadata(&metadata));
         Ok(())
