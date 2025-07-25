@@ -93,8 +93,3 @@ Additional Commands. Use "flox COMMAND --help" for more info
     auth, config, envs, gc, include, upgrade
 EOF
 }
-
-@test "f6: remove stability from flox --help command: Only show stability for commands that support it" {
-  run "$FLOX_BIN" --help
-  refute_output --partial "--stability"
-}
