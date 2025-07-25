@@ -334,6 +334,15 @@ where
             for location in locations {
                 // nix copy
                 let mut copy_command = nix_base_command();
+                let location_url = match &location.url {
+                    Some(url) => url,
+                    None => {
+                        return Err(BuildEnvError::NixCopyError(format!(
+                            "Missing store location URL for package '{}'",
+                            locked.install_id
+                        )));
+                    },
+                };
                 copy_command.arg("copy");
                 // auth.is_some() corresponds to Publisher store type
                 // auth.is_none() corresponds to NixCopy
@@ -343,7 +352,7 @@ where
                     copy_command.envs(catalog_auth_to_envs(auth).map_err(BuildEnvError::Auth)?);
                 } else {
                     // We don't need a floxhub token for the NixOS public cache
-                    if store_needs_auth(&location.url) {
+                    if store_needs_auth(location_url) {
                         // Don't attempt to get the token until we need it,
                         // and cache the netrc path so that we don't make the same
                         // file over and over again.
@@ -369,7 +378,7 @@ where
                         }
                     }
                 }
-                copy_command.arg("--from").arg(&location.url).arg(path);
+                copy_command.arg("--from").arg(location_url).arg(path);
                 debug!(cmd=%copy_command.display(), "trying to copy published package");
                 let output = copy_command
                     .output()
@@ -385,10 +394,10 @@ where
                         auth_error = Some(BuildEnvError::NixCopyError(stderr.to_string()));
                     }
                     // If we failed, log the error and try the next location.
-                    debug!(%path, %location.url, %stderr, "Failed to copy package from store");
+                    debug!(%path, %location_url, %stderr, "Failed to copy package from store");
                 } else {
                     // If we succeeded, then we can continue with the next path
-                    debug!(%path, %location.url, "Succesfully copied package from store");
+                    debug!(%path, %location_url, "Succesfully copied package from store");
 
                     // TODO: there is a real but very short period between the successful copy
                     // and setting the gc root in which the path _could_ be collected as garbage,
@@ -1308,14 +1317,14 @@ mod realise_nixpkgs_tests {
         resp.items.insert(real_storepath_str.to_string(), vec![
             // Put something invalid first, to test that we try all locations
             StoreInfo {
-                url: "blasphemy*".to_string(),
+                url: Some("blasphemy*".to_string()),
                 auth: None,
                 catalog: None,
                 package: None,
                 public_keys: None,
             },
             StoreInfo {
-                url: "daemon".to_string(),
+                url: Some("daemon".to_string()),
                 auth: None,
                 catalog: None,
                 package: None,
@@ -1349,7 +1358,7 @@ mod realise_nixpkgs_tests {
                 //     url: "blasphemy*".to_string(),
                 // },
                 StoreInfo {
-                    url: "daemon".to_string(),
+                    url: Some("daemon".to_string()),
                     auth: None,
                     catalog: None,
                     package: None,

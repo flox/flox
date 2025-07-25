@@ -1,9 +1,10 @@
 {
   "openapi": "3.0.2",
   "info": {
-    "title": "Flox Catalog Service",
-    "description": "\n# Flox Catalog Service API\n\n![packages](https://api.preview.flox.dev/api/v1/catalog/status/badges/packages.svg)\n",
-    "version": "vundefined",
+    "title": "Floxhub Catalog Server",
+    "summary": "Catalog Server API for Floxhub",
+    "description": "\n# Floxhub Catalog Service API\n\n![packages](https://api.preview.flox.dev/api/v1/catalog/status/badges/packages.svg)\n",
+    "version": "unknown",
     "x-logo": {
       "url": "https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png"
     }
@@ -20,6 +21,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -28,7 +32,7 @@
             "in": "query",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/SystemEnum"
+              "$ref": "#/components/schemas/PackageSystem"
             }
           },
           {
@@ -108,6 +112,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -186,6 +193,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -410,6 +420,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -420,7 +433,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           }
         ],
@@ -469,6 +484,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -479,7 +497,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           }
         ],
@@ -526,6 +546,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -536,7 +559,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           }
         ],
@@ -583,6 +608,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -593,7 +621,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           },
           {
@@ -602,8 +632,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}",
-              "title": "Name"
+              "pattern": "[a-zA-Z0-9.\\-_]{3,128}",
+              "title": "Package Name",
+              "name": "package_name",
+              "example": "curl"
             }
           }
         ],
@@ -680,6 +712,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -690,7 +725,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           }
         ],
@@ -739,6 +776,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -749,7 +789,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           },
           {
@@ -758,8 +800,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}",
-              "title": "Package Name"
+              "pattern": "[a-zA-Z0-9.\\-_]{3,128}",
+              "title": "Package Name",
+              "name": "package_name",
+              "example": "curl"
             }
           }
         ],
@@ -803,11 +847,14 @@
           "catalogs"
         ],
         "summary": "Request access and info to publish a package",
-        "description": "Request access and informatin to publish a package to this catalog.\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **PublishRequest**: The information needed to publish to the catalog\nReturns:\n- **PublishRequestResponse**",
+        "description": "Request access and informatin to publish a package to this catalog.\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **PublishInfoRequest**: The information needed to publish to the catalog\nReturns:\n- **PublishRequestResponse**",
         "operationId": "publish_request_api_v1_catalog_catalogs__catalog_name__packages__package_name__publish_info_post",
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -818,7 +865,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           },
           {
@@ -827,8 +876,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}",
-              "title": "Package Name"
+              "pattern": "[a-zA-Z0-9.\\-_]{3,128}",
+              "title": "Package Name",
+              "name": "package_name",
+              "example": "curl"
             }
           }
         ],
@@ -837,7 +888,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PublishRequest"
+                "$ref": "#/components/schemas/PublishInfoRequest"
               }
             }
           }
@@ -848,7 +899,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PublishResponse"
+                  "$ref": "#/components/schemas/PublishInfoResponseCatalog"
                 }
               }
             }
@@ -892,11 +943,14 @@
           "catalogs"
         ],
         "summary": "Submit a build of a particular package",
-        "description": "Create or update a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **UserBuildPublish**: The build info to submit\n\nReturns:\n- **UserBuildCreationResponse**",
+        "description": "Create or update a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **UserBuildPublish**: The build info to submit\n\nReturns:\n- **PackageBuildResponse**",
         "operationId": "create_package_build_api_v1_catalog_catalogs__catalog_name__packages__package_name__builds_post",
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -907,7 +961,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           },
           {
@@ -916,8 +972,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}",
-              "title": "Package Name"
+              "pattern": "[a-zA-Z0-9.\\-_]{3,128}",
+              "title": "Package Name",
+              "name": "package_name",
+              "example": "curl"
             }
           }
         ],
@@ -937,7 +995,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserBuildCreationResponse"
+                  "$ref": "#/components/schemas/PackageBuildResponse"
                 }
               }
             }
@@ -947,7 +1005,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserBuildCreationResponse"
+                  "$ref": "#/components/schemas/PackageBuildResponse"
                 }
               }
             }
@@ -989,11 +1047,14 @@
           "catalogs"
         ],
         "summary": "Update a build of a particular package",
-        "description": "Create or update a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **UserBuildPublish**: The build info to submit\n\nReturns:\n- **UserBuildCreationResponse**",
+        "description": "Create or update a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **UserBuildPublish**: The build info to submit\n\nReturns:\n- **PackageBuildResponse**",
         "operationId": "create_package_build_api_v1_catalog_catalogs__catalog_name__packages__package_name__builds_put",
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -1004,7 +1065,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           },
           {
@@ -1013,8 +1076,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}",
-              "title": "Package Name"
+              "pattern": "[a-zA-Z0-9.\\-_]{3,128}",
+              "title": "Package Name",
+              "name": "package_name",
+              "example": "curl"
             }
           }
         ],
@@ -1034,7 +1099,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserBuildCreationResponse"
+                  "$ref": "#/components/schemas/PackageBuildResponse"
                 }
               }
             }
@@ -1044,7 +1109,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserBuildCreationResponse"
+                  "$ref": "#/components/schemas/PackageBuildResponse"
                 }
               }
             }
@@ -1091,6 +1156,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -1101,7 +1169,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           },
           {
@@ -1110,8 +1180,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}",
-              "title": "Package Name"
+              "pattern": "[a-zA-Z0-9.\\-_]{3,128}",
+              "title": "Package Name",
+              "name": "package_name",
+              "example": "curl"
             }
           }
         ],
@@ -1160,6 +1232,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -1170,7 +1245,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           }
         ],
@@ -1219,6 +1296,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -1229,7 +1309,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           }
         ],
@@ -1288,6 +1370,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -1298,7 +1383,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           }
         ],
@@ -1357,6 +1444,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -1367,7 +1457,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           }
         ],
@@ -1414,6 +1506,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ],
         "parameters": [
@@ -1424,7 +1519,9 @@
             "schema": {
               "type": "string",
               "pattern": "[a-zA-Z0-9\\-_]{3,64}",
-              "title": "Catalog Name"
+              "title": "Catalog Name",
+              "name": "catalog_name",
+              "example": "mycatalog"
             }
           }
         ],
@@ -1589,6 +1686,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ]
       }
@@ -1636,6 +1736,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ]
       }
@@ -1683,6 +1786,9 @@
         "security": [
           {
             "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
           }
         ]
       }
@@ -2180,30 +2286,10 @@
         "type": "object",
         "title": "NarInfos"
       },
-      "Output": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "store_path": {
-            "type": "string",
-            "title": "Store Path"
-          }
-        },
+      "PackageBuildResponse": {
+        "properties": {},
         "type": "object",
-        "required": [
-          "name",
-          "store_path"
-        ],
-        "title": "Output"
-      },
-      "Outputs": {
-        "items": {
-          "$ref": "#/components/schemas/Output"
-        },
-        "type": "array",
-        "title": "Outputs"
+        "title": "PackageBuildResponse"
       },
       "PackageDescriptor": {
         "properties": {
@@ -2217,7 +2303,7 @@
           },
           "systems": {
             "items": {
-              "$ref": "#/components/schemas/SystemEnum"
+              "$ref": "#/components/schemas/PackageSystem"
             },
             "type": "array",
             "title": "Systems"
@@ -2425,7 +2511,7 @@
             "title": "Stabilities"
           },
           "system": {
-            "$ref": "#/components/schemas/SystemEnum"
+            "$ref": "#/components/schemas/PackageSystem"
           }
         },
         "type": "object",
@@ -2443,6 +2529,7 @@
         "title": "PackageInfoSearch",
         "example": {
           "attr_path": "foo.bar.curl",
+          "catalog": "nixpkgs",
           "description": "A very nice Item",
           "name": "curl",
           "pkg_path": "foo.bar.curl",
@@ -2451,8 +2538,34 @@
             "stable",
             "unstable"
           ],
-          "system": "x86_64-linux"
+          "system": "x86_64-linux",
+          "version": "1.0"
         }
+      },
+      "PackageOutput": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "store_path": {
+            "type": "string",
+            "title": "Store Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "store_path"
+        ],
+        "title": "PackageOutput"
+      },
+      "PackageOutputs": {
+        "items": {
+          "$ref": "#/components/schemas/PackageOutput"
+        },
+        "type": "array",
+        "title": "PackageOutputs"
       },
       "PackageResolutionInfo": {
         "properties": {
@@ -2486,14 +2599,10 @@
             "title": "Version"
           },
           "system": {
-            "$ref": "#/components/schemas/SystemEnum"
+            "$ref": "#/components/schemas/PackageSystem"
           },
           "outputs": {
-            "items": {
-              "$ref": "#/components/schemas/Output"
-            },
-            "type": "array",
-            "title": "Outputs"
+            "$ref": "#/components/schemas/PackageOutputs"
           },
           "outputs_to_install": {
             "title": "Outputs To Install",
@@ -2619,6 +2728,7 @@
         "example": [
           {
             "attr_path": "foo.bar.curl",
+            "catalog": "nixpkgs",
             "description": "A very nice Item",
             "name": "curl",
             "pkg_path": "foo.bar.curl",
@@ -2627,9 +2737,21 @@
               "stable",
               "unstable"
             ],
-            "system": "x86_64-linux"
+            "system": "x86_64-linux",
+            "version": "1.0"
           }
         ]
+      },
+      "PackageSystem": {
+        "type": "string",
+        "enum": [
+          "aarch64-darwin",
+          "aarch64-linux",
+          "x86_64-darwin",
+          "x86_64-linux",
+          "invalid"
+        ],
+        "title": "PackageSystem"
       },
       "PackagesResult": {
         "properties": {
@@ -2699,12 +2821,12 @@
         ],
         "title": "PkgPathsResult"
       },
-      "PublishRequest": {
+      "PublishInfoRequest": {
         "properties": {},
         "type": "object",
-        "title": "PublishRequest"
+        "title": "PublishInfoRequest"
       },
-      "PublishResponse": {
+      "PublishInfoResponseCatalog": {
         "properties": {
           "ingress_uri": {
             "title": "Ingress Uri",
@@ -2725,7 +2847,7 @@
         "required": [
           "catalog_store_config"
         ],
-        "title": "PublishResponse"
+        "title": "PublishInfoResponseCatalog"
       },
       "PublishedCatalog": {
         "properties": {
@@ -2846,14 +2968,10 @@
             "title": "Version"
           },
           "system": {
-            "$ref": "#/components/schemas/SystemEnum"
+            "$ref": "#/components/schemas/PackageSystem"
           },
           "outputs": {
-            "items": {
-              "$ref": "#/components/schemas/Output"
-            },
-            "type": "array",
-            "title": "Outputs"
+            "$ref": "#/components/schemas/PackageOutputs"
           },
           "outputs_to_install": {
             "title": "Outputs To Install",
@@ -3082,8 +3200,9 @@
       "StoreInfo": {
         "properties": {
           "url": {
-            "type": "string",
-            "title": "Url"
+            "title": "Url",
+            "nullable": true,
+            "type": "string"
           },
           "auth": {
             "title": "Auth",
@@ -3111,22 +3230,10 @@
           }
         },
         "type": "object",
-        "required": [
-          "url"
-        ],
         "title": "StoreInfo"
       },
       "StoreInfoRequest": {
         "properties": {
-          "drv_paths": {
-            "title": "Drv Paths",
-            "deprecated": true,
-            "nullable": true,
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "outpaths": {
             "items": {
               "type": "string"
@@ -3202,17 +3309,6 @@
         ],
         "title": "StorepathStatusResponse"
       },
-      "SystemEnum": {
-        "type": "string",
-        "enum": [
-          "aarch64-darwin",
-          "aarch64-linux",
-          "x86_64-darwin",
-          "x86_64-linux",
-          "invalid"
-        ],
-        "title": "SystemEnum"
-      },
       "UserBuild": {
         "properties": {
           "url": {
@@ -3277,17 +3373,6 @@
           "rev_date": "2021-09-01T00:00:00Z",
           "url": "https://github.com/org/example"
         }
-      },
-      "UserBuildCreationResponse": {
-        "properties": {
-          "store": {
-            "deprecated": true,
-            "nullable": true,
-            "$ref": "#/components/schemas/StoreInfo"
-          }
-        },
-        "type": "object",
-        "title": "UserBuildCreationResponse"
       },
       "UserBuildList": {
         "properties": {
@@ -3420,7 +3505,7 @@
             "title": "Drv Path"
           },
           "system": {
-            "$ref": "#/components/schemas/SystemEnum"
+            "$ref": "#/components/schemas/PackageSystem"
           },
           "name": {
             "type": "string",
@@ -3431,7 +3516,7 @@
             "title": "Description"
           },
           "outputs": {
-            "$ref": "#/components/schemas/Outputs"
+            "$ref": "#/components/schemas/PackageOutputs"
           },
           "outputs_to_install": {
             "title": "Outputs To Install",
@@ -3499,7 +3584,7 @@
             "title": "Drv Path"
           },
           "system": {
-            "$ref": "#/components/schemas/SystemEnum"
+            "$ref": "#/components/schemas/PackageSystem"
           },
           "name": {
             "type": "string",
@@ -3510,7 +3595,7 @@
             "title": "Description"
           },
           "outputs": {
-            "$ref": "#/components/schemas/Outputs"
+            "$ref": "#/components/schemas/PackageOutputs"
           },
           "outputs_to_install": {
             "title": "Outputs To Install",
@@ -3636,7 +3721,7 @@
             "default": "in Go"
           },
           "search_system": {
-            "$ref": "#/components/schemas/SystemEnum",
+            "$ref": "#/components/schemas/PackageSystem",
             "default": "x86_64-linux"
           },
           "resolve_package": {
@@ -3646,7 +3731,7 @@
           },
           "resolve_systems": {
             "items": {
-              "$ref": "#/components/schemas/SystemEnum"
+              "$ref": "#/components/schemas/PackageSystem"
             },
             "type": "array",
             "title": "Resolve Systems",
@@ -3663,6 +3748,10 @@
       "HTTPBearer": {
         "type": "http",
         "scheme": "bearer"
+      },
+      "HTTPBasic": {
+        "type": "http",
+        "scheme": "basic"
       }
     }
   }

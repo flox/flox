@@ -404,7 +404,7 @@ impl MockClient {
     }
 }
 
-pub type PublishResponse = api_types::PublishResponse;
+pub type PublishResponse = api_types::PublishInfoResponseCatalog;
 pub type UserBuildInfo = api_types::UserBuild;
 pub type UserBuildPublish = api_types::UserBuildPublish;
 pub type UserDerivationInfo = api_types::UserDerivationInput;
@@ -652,7 +652,7 @@ impl ClientTrait for CatalogClient {
         let catalog = str_to_catalog_name(catalog_name)?;
         let package = str_to_package_name(package_name)?;
         // Body contents aren't important for this request.
-        let body = api_types::PublishRequest(serde_json::Map::new());
+        let body = api_types::PublishInfoRequest(serde_json::Map::new());
         self.client.publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post(&catalog, &package, &body)
             .await
             .map_api_error()
@@ -678,7 +678,7 @@ impl ClientTrait for CatalogClient {
                 .to_string(),
             ))
         })?;
-        let package = api_types::Name::from_str(package_name.as_ref()).map_err(|_e| {
+        let package = api_types::PackageName::from_str(package_name.as_ref()).map_err(|_e| {
             CatalogClientError::APIError(APIError::InvalidRequest(
                 format!(
                     "package name {} does not meet API requirements.",
@@ -724,9 +724,6 @@ impl ClientTrait for CatalogClient {
     ) -> Result<HashMap<String, Vec<StoreInfo>>, CatalogClientError> {
         let body = StoreInfoRequest {
             outpaths: derivations.iter().map(|s| s.to_string()).collect(),
-            // drv_paths is deprecated, renamed to outpaths.  We'll drop it from
-            // the model eventually.
-            drv_paths: None,
         };
         let response = self
             .client
@@ -744,7 +741,6 @@ impl ClientTrait for CatalogClient {
         store_paths: &[String],
     ) -> Result<bool, CatalogClientError> {
         let req = StoreInfoRequest {
-            drv_paths: None,
             outpaths: store_paths.to_vec(),
         };
         let statuses = self
@@ -1098,7 +1094,7 @@ pub type ApiErrorResponse = api_types::ErrorResponse;
 pub type ApiErrorResponseValue = ResponseValue<ApiErrorResponse>;
 
 /// An alias so the flox crate doesn't have to depend on the catalog-api crate
-pub type SystemEnum = api_types::SystemEnum;
+pub type SystemEnum = api_types::PackageSystem;
 
 /// All available systems.
 pub static ALL_SYSTEMS: [SystemEnum; 4] = [
@@ -1939,17 +1935,12 @@ pub mod test_helpers {
             panic!("can only be used with a CatalogClient");
         };
 
-        // TODO: Change `catalog-server` to use `CatalogName` instead of `Name`.
-        let name_name = api_types::Name::from_str(name).map_err(|_e| {
-            CatalogClientError::APIError(APIError::InvalidRequest(
-                format!("catalog name {} does not meet API requirements.", name).to_string(),
-            ))
-        })?;
+        // This also performs validation that the name meets the catalog name requirements.
         let catalog_name = str_to_catalog_name(name)?;
 
         match client
             .client
-            .create_catalog_api_v1_catalog_catalogs_post(&name_name)
+            .create_catalog_api_v1_catalog_catalogs_post(&catalog_name)
             .await
         {
             Ok(_) => {},

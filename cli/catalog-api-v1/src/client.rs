@@ -91,6 +91,9 @@ pub mod types {
     /// ```json
     ///{
     ///  "title": "Catalog Name",
+    ///  "examples": [
+    ///    "mycatalog"
+    ///  ],
     ///  "type": "string",
     ///  "pattern": "[a-zA-Z0-9\\-_]{3,64}"
     ///}
@@ -761,88 +764,6 @@ pub mod types {
             value.parse()
         }
     }
-    ///`Name`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "Name",
-    ///  "type": "string",
-    ///  "pattern": "[a-zA-Z0-9\\-_]{3,64}"
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Serialize, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-    #[serde(transparent)]
-    pub struct Name(::std::string::String);
-    impl ::std::ops::Deref for Name {
-        type Target = ::std::string::String;
-        fn deref(&self) -> &::std::string::String {
-            &self.0
-        }
-    }
-    impl ::std::convert::From<Name> for ::std::string::String {
-        fn from(value: Name) -> Self {
-            value.0
-        }
-    }
-    impl ::std::convert::From<&Name> for Name {
-        fn from(value: &Name) -> Self {
-            value.clone()
-        }
-    }
-    impl ::std::str::FromStr for Name {
-        type Err = self::error::ConversionError;
-        fn from_str(
-            value: &str,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            if regress::Regex::new("[a-zA-Z0-9\\-_]{3,64}")
-                .unwrap()
-                .find(value)
-                .is_none()
-            {
-                return Err("doesn't match pattern \"[a-zA-Z0-9\\-_]{3,64}\"".into());
-            }
-            Ok(Self(value.to_string()))
-        }
-    }
-    impl ::std::convert::TryFrom<&str> for Name {
-        type Error = self::error::ConversionError;
-        fn try_from(
-            value: &str,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl ::std::convert::TryFrom<&::std::string::String> for Name {
-        type Error = self::error::ConversionError;
-        fn try_from(
-            value: &::std::string::String,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl ::std::convert::TryFrom<::std::string::String> for Name {
-        type Error = self::error::ConversionError;
-        fn try_from(
-            value: ::std::string::String,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl<'de> ::serde::Deserialize<'de> for Name {
-        fn deserialize<D>(deserializer: D) -> ::std::result::Result<Self, D::Error>
-        where
-            D: ::serde::Deserializer<'de>,
-        {
-            ::std::string::String::deserialize(deserializer)?
-                .parse()
-                .map_err(|e: self::error::ConversionError| {
-                    <D::Error as ::serde::de::Error>::custom(e.to_string())
-                })
-        }
-    }
     ///`NarInfo`
     ///
     /// <details><summary>JSON schema</summary>
@@ -1097,76 +1018,47 @@ pub mod types {
             Self(value)
         }
     }
-    ///`Output`
+    ///`PackageBuildResponse`
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
-    ///  "title": "Output",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "name",
-    ///    "store_path"
-    ///  ],
-    ///  "properties": {
-    ///    "name": {
-    ///      "title": "Name",
-    ///      "type": "string"
-    ///    },
-    ///    "store_path": {
-    ///      "title": "Store Path",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct Output {
-        pub name: ::std::string::String,
-        pub store_path: ::std::string::String,
-    }
-    impl ::std::convert::From<&Output> for Output {
-        fn from(value: &Output) -> Self {
-            value.clone()
-        }
-    }
-    ///`Outputs`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "Outputs",
-    ///  "type": "array",
-    ///  "items": {
-    ///    "$ref": "#/components/schemas/Output"
-    ///  }
+    ///  "title": "PackageBuildResponse",
+    ///  "type": "object"
     ///}
     /// ```
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     #[serde(transparent)]
-    pub struct Outputs(pub ::std::vec::Vec<Output>);
-    impl ::std::ops::Deref for Outputs {
-        type Target = ::std::vec::Vec<Output>;
-        fn deref(&self) -> &::std::vec::Vec<Output> {
+    pub struct PackageBuildResponse(
+        pub ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    );
+    impl ::std::ops::Deref for PackageBuildResponse {
+        type Target = ::serde_json::Map<::std::string::String, ::serde_json::Value>;
+        fn deref(
+            &self,
+        ) -> &::serde_json::Map<::std::string::String, ::serde_json::Value> {
             &self.0
         }
     }
-    impl ::std::convert::From<Outputs> for ::std::vec::Vec<Output> {
-        fn from(value: Outputs) -> Self {
+    impl ::std::convert::From<PackageBuildResponse>
+    for ::serde_json::Map<::std::string::String, ::serde_json::Value> {
+        fn from(value: PackageBuildResponse) -> Self {
             value.0
         }
     }
-    impl ::std::convert::From<&Outputs> for Outputs {
-        fn from(value: &Outputs) -> Self {
+    impl ::std::convert::From<&PackageBuildResponse> for PackageBuildResponse {
+        fn from(value: &PackageBuildResponse) -> Self {
             value.clone()
         }
     }
-    impl ::std::convert::From<::std::vec::Vec<Output>> for Outputs {
-        fn from(value: ::std::vec::Vec<Output>) -> Self {
+    impl ::std::convert::From<
+        ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+    > for PackageBuildResponse {
+        fn from(
+            value: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
+        ) -> Self {
             Self(value)
         }
     }
@@ -1261,7 +1153,7 @@ pub mod types {
     ///      "title": "Systems",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/SystemEnum"
+    ///        "$ref": "#/components/schemas/PackageSystem"
     ///      }
     ///    },
     ///    "version": {
@@ -1295,7 +1187,7 @@ pub mod types {
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub derivation: ::std::option::Option<::std::string::String>,
         pub install_id: ::std::string::String,
-        pub systems: ::std::vec::Vec<SystemEnum>,
+        pub systems: ::std::vec::Vec<PackageSystem>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub version: ::std::option::Option<::std::string::String>,
     }
@@ -1453,6 +1345,7 @@ pub mod types {
     ///  "examples": [
     ///    {
     ///      "attr_path": "foo.bar.curl",
+    ///      "catalog": "nixpkgs",
     ///      "description": "A very nice Item",
     ///      "name": "curl",
     ///      "pkg_path": "foo.bar.curl",
@@ -1461,7 +1354,8 @@ pub mod types {
     ///        "stable",
     ///        "unstable"
     ///      ],
-    ///      "system": "x86_64-linux"
+    ///      "system": "x86_64-linux",
+    ///      "version": "1.0"
     ///    }
     ///  ],
     ///  "type": "object",
@@ -1515,7 +1409,7 @@ pub mod types {
     ///      }
     ///    },
     ///    "system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///      "$ref": "#/components/schemas/PackageSystem"
     ///    },
     ///    "version": {
     ///      "title": "Version",
@@ -1538,7 +1432,7 @@ pub mod types {
         pub pkg_path: ::std::string::String,
         pub pname: ::std::string::String,
         pub stabilities: ::std::vec::Vec<::std::string::String>,
-        pub system: SystemEnum,
+        pub system: PackageSystem,
         ///While version should always be present, (and is required in the PackageResolutionInfo model), there are cases where it has been historically optional and thus is carried forward here.  Published derivations have an Optional version and this same model is used for both published derivations and base catalog derivations.  For this reason we cannot make it required here until/if we unify those models and ensure every derivation does in fact have a version.
         pub version: ::std::option::Option<::std::string::String>,
     }
@@ -1554,8 +1448,11 @@ pub mod types {
     /// ```json
     ///{
     ///  "title": "Package Name",
+    ///  "examples": [
+    ///    "curl"
+    ///  ],
     ///  "type": "string",
-    ///  "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}"
+    ///  "pattern": "[a-zA-Z0-9.\\-_]{3,128}"
     ///}
     /// ```
     /// </details>
@@ -1583,12 +1480,12 @@ pub mod types {
         fn from_str(
             value: &str,
         ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            if regress::Regex::new("[a-zA-Z0-9\\.\\-_]{3,128}")
+            if regress::Regex::new("[a-zA-Z0-9.\\-_]{3,128}")
                 .unwrap()
                 .find(value)
                 .is_none()
             {
-                return Err("doesn't match pattern \"[a-zA-Z0-9\\.\\-_]{3,128}\"".into());
+                return Err("doesn't match pattern \"[a-zA-Z0-9.\\-_]{3,128}\"".into());
             }
             Ok(Self(value.to_string()))
         }
@@ -1627,6 +1524,79 @@ pub mod types {
                 .map_err(|e: self::error::ConversionError| {
                     <D::Error as ::serde::de::Error>::custom(e.to_string())
                 })
+        }
+    }
+    ///`PackageOutput`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageOutput",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "name",
+    ///    "store_path"
+    ///  ],
+    ///  "properties": {
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "store_path": {
+    ///      "title": "Store Path",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageOutput {
+        pub name: ::std::string::String,
+        pub store_path: ::std::string::String,
+    }
+    impl ::std::convert::From<&PackageOutput> for PackageOutput {
+        fn from(value: &PackageOutput) -> Self {
+            value.clone()
+        }
+    }
+    ///`PackageOutputs`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageOutputs",
+    ///  "type": "array",
+    ///  "items": {
+    ///    "$ref": "#/components/schemas/PackageOutput"
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    #[serde(transparent)]
+    pub struct PackageOutputs(pub ::std::vec::Vec<PackageOutput>);
+    impl ::std::ops::Deref for PackageOutputs {
+        type Target = ::std::vec::Vec<PackageOutput>;
+        fn deref(&self) -> &::std::vec::Vec<PackageOutput> {
+            &self.0
+        }
+    }
+    impl ::std::convert::From<PackageOutputs> for ::std::vec::Vec<PackageOutput> {
+        fn from(value: PackageOutputs) -> Self {
+            value.0
+        }
+    }
+    impl ::std::convert::From<&PackageOutputs> for PackageOutputs {
+        fn from(value: &PackageOutputs) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::convert::From<::std::vec::Vec<PackageOutput>> for PackageOutputs {
+        fn from(value: ::std::vec::Vec<PackageOutput>) -> Self {
+            Self(value)
         }
     }
     ///`PackageResolutionInfo`
@@ -1727,11 +1697,7 @@ pub mod types {
     ///      "type": "string"
     ///    },
     ///    "outputs": {
-    ///      "title": "Outputs",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/Output"
-    ///      }
+    ///      "$ref": "#/components/schemas/PackageOutputs"
     ///    },
     ///    "outputs_to_install": {
     ///      "title": "Outputs To Install",
@@ -1783,7 +1749,7 @@ pub mod types {
     ///      }
     ///    },
     ///    "system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///      "$ref": "#/components/schemas/PackageSystem"
     ///    },
     ///    "unfree": {
     ///      "title": "Unfree",
@@ -1815,7 +1781,7 @@ pub mod types {
         pub locked_url: ::std::string::String,
         pub missing_builds: ::std::option::Option<bool>,
         pub name: ::std::string::String,
-        pub outputs: ::std::vec::Vec<Output>,
+        pub outputs: PackageOutputs,
         pub outputs_to_install: ::std::option::Option<
             ::std::vec::Vec<::std::string::String>,
         >,
@@ -1828,7 +1794,7 @@ pub mod types {
             ::chrono::DateTime<::chrono::offset::Utc>,
         >,
         pub stabilities: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
-        pub system: SystemEnum,
+        pub system: PackageSystem,
         pub unfree: ::std::option::Option<bool>,
         pub version: ::std::string::String,
     }
@@ -1848,6 +1814,7 @@ pub mod types {
     ///    [
     ///      {
     ///        "attr_path": "foo.bar.curl",
+    ///        "catalog": "nixpkgs",
     ///        "description": "A very nice Item",
     ///        "name": "curl",
     ///        "pkg_path": "foo.bar.curl",
@@ -1856,7 +1823,8 @@ pub mod types {
     ///          "stable",
     ///          "unstable"
     ///        ],
-    ///        "system": "x86_64-linux"
+    ///        "system": "x86_64-linux",
+    ///        "version": "1.0"
     ///      }
     ///    ]
     ///  ],
@@ -1889,6 +1857,103 @@ pub mod types {
     impl ::std::convert::From<&PackageSearchResult> for PackageSearchResult {
         fn from(value: &PackageSearchResult) -> Self {
             value.clone()
+        }
+    }
+    ///`PackageSystem`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageSystem",
+    ///  "type": "string",
+    ///  "enum": [
+    ///    "aarch64-darwin",
+    ///    "aarch64-linux",
+    ///    "x86_64-darwin",
+    ///    "x86_64-linux",
+    ///    "invalid"
+    ///  ]
+    ///}
+    /// ```
+    /// </details>
+    #[derive(
+        ::serde::Deserialize,
+        ::serde::Serialize,
+        Clone,
+        Copy,
+        Debug,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd
+    )]
+    pub enum PackageSystem {
+        #[serde(rename = "aarch64-darwin")]
+        Aarch64Darwin,
+        #[serde(rename = "aarch64-linux")]
+        Aarch64Linux,
+        #[serde(rename = "x86_64-darwin")]
+        X8664Darwin,
+        #[serde(rename = "x86_64-linux")]
+        X8664Linux,
+        #[serde(rename = "invalid")]
+        Invalid,
+    }
+    impl ::std::convert::From<&Self> for PackageSystem {
+        fn from(value: &PackageSystem) -> Self {
+            value.clone()
+        }
+    }
+    impl ::std::fmt::Display for PackageSystem {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+            match *self {
+                Self::Aarch64Darwin => write!(f, "aarch64-darwin"),
+                Self::Aarch64Linux => write!(f, "aarch64-linux"),
+                Self::X8664Darwin => write!(f, "x86_64-darwin"),
+                Self::X8664Linux => write!(f, "x86_64-linux"),
+                Self::Invalid => write!(f, "invalid"),
+            }
+        }
+    }
+    impl ::std::str::FromStr for PackageSystem {
+        type Err = self::error::ConversionError;
+        fn from_str(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            match value {
+                "aarch64-darwin" => Ok(Self::Aarch64Darwin),
+                "aarch64-linux" => Ok(Self::Aarch64Linux),
+                "x86_64-darwin" => Ok(Self::X8664Darwin),
+                "x86_64-linux" => Ok(Self::X8664Linux),
+                "invalid" => Ok(Self::Invalid),
+                _ => Err("invalid value".into()),
+            }
+        }
+    }
+    impl ::std::convert::TryFrom<&str> for PackageSystem {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &str,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<&::std::string::String> for PackageSystem {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: &::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl ::std::convert::TryFrom<::std::string::String> for PackageSystem {
+        type Error = self::error::ConversionError;
+        fn try_from(
+            value: ::std::string::String,
+        ) -> ::std::result::Result<Self, self::error::ConversionError> {
+            value.parse()
         }
     }
     ///`PackagesResult`
@@ -1994,11 +2059,11 @@ pub mod types {
     ///      ],
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/SystemEnum"
+    ///        "$ref": "#/components/schemas/PackageSystem"
     ///      }
     ///    },
     ///    "search_system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///      "$ref": "#/components/schemas/PackageSystem"
     ///    },
     ///    "search_term": {
     ///      "title": "Search Term",
@@ -2019,9 +2084,9 @@ pub mod types {
         #[serde(default = "defaults::params_resolve_package")]
         pub resolve_package: ::std::string::String,
         #[serde(default = "defaults::params_resolve_systems")]
-        pub resolve_systems: ::std::vec::Vec<SystemEnum>,
+        pub resolve_systems: ::std::vec::Vec<PackageSystem>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub search_system: ::std::option::Option<SystemEnum>,
+        pub search_system: ::std::option::Option<PackageSystem>,
         #[serde(default = "defaults::params_search_term")]
         pub search_term: ::std::string::String,
         #[serde(default = "defaults::params_show_term")]
@@ -2081,23 +2146,23 @@ pub mod types {
             value.clone()
         }
     }
-    ///`PublishRequest`
+    ///`PublishInfoRequest`
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
-    ///  "title": "PublishRequest",
+    ///  "title": "PublishInfoRequest",
     ///  "type": "object"
     ///}
     /// ```
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     #[serde(transparent)]
-    pub struct PublishRequest(
+    pub struct PublishInfoRequest(
         pub ::serde_json::Map<::std::string::String, ::serde_json::Value>,
     );
-    impl ::std::ops::Deref for PublishRequest {
+    impl ::std::ops::Deref for PublishInfoRequest {
         type Target = ::serde_json::Map<::std::string::String, ::serde_json::Value>;
         fn deref(
             &self,
@@ -2105,33 +2170,33 @@ pub mod types {
             &self.0
         }
     }
-    impl ::std::convert::From<PublishRequest>
+    impl ::std::convert::From<PublishInfoRequest>
     for ::serde_json::Map<::std::string::String, ::serde_json::Value> {
-        fn from(value: PublishRequest) -> Self {
+        fn from(value: PublishInfoRequest) -> Self {
             value.0
         }
     }
-    impl ::std::convert::From<&PublishRequest> for PublishRequest {
-        fn from(value: &PublishRequest) -> Self {
+    impl ::std::convert::From<&PublishInfoRequest> for PublishInfoRequest {
+        fn from(value: &PublishInfoRequest) -> Self {
             value.clone()
         }
     }
     impl ::std::convert::From<
         ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-    > for PublishRequest {
+    > for PublishInfoRequest {
         fn from(
             value: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
         ) -> Self {
             Self(value)
         }
     }
-    ///`PublishResponse`
+    ///`PublishInfoResponseCatalog`
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
-    ///  "title": "PublishResponse",
+    ///  "title": "PublishInfoResponseCatalog",
     ///  "type": "object",
     ///  "required": [
     ///    "catalog_store_config"
@@ -2160,7 +2225,7 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct PublishResponse {
+    pub struct PublishInfoResponseCatalog {
         pub catalog_store_config: crate::types::CatalogStoreConfig,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub ingress_auth: ::std::option::Option<
@@ -2169,8 +2234,9 @@ pub mod types {
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub ingress_uri: ::std::option::Option<::std::string::String>,
     }
-    impl ::std::convert::From<&PublishResponse> for PublishResponse {
-        fn from(value: &PublishResponse) -> Self {
+    impl ::std::convert::From<&PublishInfoResponseCatalog>
+    for PublishInfoResponseCatalog {
+        fn from(value: &PublishInfoResponseCatalog) -> Self {
             value.clone()
         }
     }
@@ -2424,11 +2490,7 @@ pub mod types {
     ///      "type": "string"
     ///    },
     ///    "outputs": {
-    ///      "title": "Outputs",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/Output"
-    ///      }
+    ///      "$ref": "#/components/schemas/PackageOutputs"
     ///    },
     ///    "outputs_to_install": {
     ///      "title": "Outputs To Install",
@@ -2480,7 +2542,7 @@ pub mod types {
     ///      }
     ///    },
     ///    "system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///      "$ref": "#/components/schemas/PackageSystem"
     ///    },
     ///    "unfree": {
     ///      "title": "Unfree",
@@ -2513,7 +2575,7 @@ pub mod types {
         pub locked_url: ::std::string::String,
         pub missing_builds: ::std::option::Option<bool>,
         pub name: ::std::string::String,
-        pub outputs: ::std::vec::Vec<Output>,
+        pub outputs: PackageOutputs,
         pub outputs_to_install: ::std::option::Option<
             ::std::vec::Vec<::std::string::String>,
         >,
@@ -2526,7 +2588,7 @@ pub mod types {
             ::chrono::DateTime<::chrono::offset::Utc>,
         >,
         pub stabilities: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
-        pub system: SystemEnum,
+        pub system: PackageSystem,
         pub unfree: ::std::option::Option<bool>,
         pub version: ::std::string::String,
     }
@@ -2822,9 +2884,6 @@ pub mod types {
     ///{
     ///  "title": "StoreInfo",
     ///  "type": "object",
-    ///  "required": [
-    ///    "url"
-    ///  ],
     ///  "properties": {
     ///    "auth": {
     ///      "title": "Auth",
@@ -2860,7 +2919,10 @@ pub mod types {
     ///    },
     ///    "url": {
     ///      "title": "Url",
-    ///      "type": "string"
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    }
     ///  }
     ///}
@@ -2878,11 +2940,23 @@ pub mod types {
         pub package: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub public_keys: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
-        pub url: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub url: ::std::option::Option<::std::string::String>,
     }
     impl ::std::convert::From<&StoreInfo> for StoreInfo {
         fn from(value: &StoreInfo) -> Self {
             value.clone()
+        }
+    }
+    impl ::std::default::Default for StoreInfo {
+        fn default() -> Self {
+            Self {
+                auth: Default::default(),
+                catalog: Default::default(),
+                package: Default::default(),
+                public_keys: Default::default(),
+                url: Default::default(),
+            }
         }
     }
     ///`StoreInfoRequest`
@@ -2897,17 +2971,6 @@ pub mod types {
     ///    "outpaths"
     ///  ],
     ///  "properties": {
-    ///    "drv_paths": {
-    ///      "title": "Drv Paths",
-    ///      "deprecated": true,
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    },
     ///    "outpaths": {
     ///      "title": "Outpaths",
     ///      "type": "array",
@@ -2921,8 +2984,6 @@ pub mod types {
     /// </details>
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct StoreInfoRequest {
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub drv_paths: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
         pub outpaths: ::std::vec::Vec<::std::string::String>,
     }
     impl ::std::convert::From<&StoreInfoRequest> for StoreInfoRequest {
@@ -3047,103 +3108,6 @@ pub mod types {
             value.clone()
         }
     }
-    ///`SystemEnum`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "SystemEnum",
-    ///  "type": "string",
-    ///  "enum": [
-    ///    "aarch64-darwin",
-    ///    "aarch64-linux",
-    ///    "x86_64-darwin",
-    ///    "x86_64-linux",
-    ///    "invalid"
-    ///  ]
-    ///}
-    /// ```
-    /// </details>
-    #[derive(
-        ::serde::Deserialize,
-        ::serde::Serialize,
-        Clone,
-        Copy,
-        Debug,
-        Eq,
-        Hash,
-        Ord,
-        PartialEq,
-        PartialOrd
-    )]
-    pub enum SystemEnum {
-        #[serde(rename = "aarch64-darwin")]
-        Aarch64Darwin,
-        #[serde(rename = "aarch64-linux")]
-        Aarch64Linux,
-        #[serde(rename = "x86_64-darwin")]
-        X8664Darwin,
-        #[serde(rename = "x86_64-linux")]
-        X8664Linux,
-        #[serde(rename = "invalid")]
-        Invalid,
-    }
-    impl ::std::convert::From<&Self> for SystemEnum {
-        fn from(value: &SystemEnum) -> Self {
-            value.clone()
-        }
-    }
-    impl ::std::fmt::Display for SystemEnum {
-        fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-            match *self {
-                Self::Aarch64Darwin => write!(f, "aarch64-darwin"),
-                Self::Aarch64Linux => write!(f, "aarch64-linux"),
-                Self::X8664Darwin => write!(f, "x86_64-darwin"),
-                Self::X8664Linux => write!(f, "x86_64-linux"),
-                Self::Invalid => write!(f, "invalid"),
-            }
-        }
-    }
-    impl ::std::str::FromStr for SystemEnum {
-        type Err = self::error::ConversionError;
-        fn from_str(
-            value: &str,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            match value {
-                "aarch64-darwin" => Ok(Self::Aarch64Darwin),
-                "aarch64-linux" => Ok(Self::Aarch64Linux),
-                "x86_64-darwin" => Ok(Self::X8664Darwin),
-                "x86_64-linux" => Ok(Self::X8664Linux),
-                "invalid" => Ok(Self::Invalid),
-                _ => Err("invalid value".into()),
-            }
-        }
-    }
-    impl ::std::convert::TryFrom<&str> for SystemEnum {
-        type Error = self::error::ConversionError;
-        fn try_from(
-            value: &str,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl ::std::convert::TryFrom<&::std::string::String> for SystemEnum {
-        type Error = self::error::ConversionError;
-        fn try_from(
-            value: &::std::string::String,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl ::std::convert::TryFrom<::std::string::String> for SystemEnum {
-        type Error = self::error::ConversionError;
-        fn try_from(
-            value: ::std::string::String,
-        ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
     ///`UserBuild`
     ///
     /// <details><summary>JSON schema</summary>
@@ -3237,37 +3201,6 @@ pub mod types {
     impl ::std::convert::From<&UserBuild> for UserBuild {
         fn from(value: &UserBuild) -> Self {
             value.clone()
-        }
-    }
-    ///`UserBuildCreationResponse`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "UserBuildCreationResponse",
-    ///  "type": "object",
-    ///  "properties": {
-    ///    "store": {
-    ///      "$ref": "#/components/schemas/StoreInfo"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct UserBuildCreationResponse {
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub store: ::std::option::Option<StoreInfo>,
-    }
-    impl ::std::convert::From<&UserBuildCreationResponse> for UserBuildCreationResponse {
-        fn from(value: &UserBuildCreationResponse) -> Self {
-            value.clone()
-        }
-    }
-    impl ::std::default::Default for UserBuildCreationResponse {
-        fn default() -> Self {
-            Self { store: Default::default() }
         }
     }
     ///`UserBuildList`
@@ -3531,7 +3464,7 @@ pub mod types {
     ///      "type": "string"
     ///    },
     ///    "outputs": {
-    ///      "$ref": "#/components/schemas/Outputs"
+    ///      "$ref": "#/components/schemas/PackageOutputs"
     ///    },
     ///    "outputs_to_install": {
     ///      "title": "Outputs To Install",
@@ -3551,7 +3484,7 @@ pub mod types {
     ///      ]
     ///    },
     ///    "system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///      "$ref": "#/components/schemas/PackageSystem"
     ///    },
     ///    "unfree": {
     ///      "title": "Unfree",
@@ -3580,14 +3513,14 @@ pub mod types {
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub license: ::std::option::Option<::std::string::String>,
         pub name: ::std::string::String,
-        pub outputs: Outputs,
+        pub outputs: PackageOutputs,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub outputs_to_install: ::std::option::Option<
             ::std::vec::Vec<::std::string::String>,
         >,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub pname: ::std::option::Option<::std::string::String>,
-        pub system: SystemEnum,
+        pub system: PackageSystem,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub unfree: ::std::option::Option<bool>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -3658,7 +3591,7 @@ pub mod types {
     ///      "type": "string"
     ///    },
     ///    "outputs": {
-    ///      "$ref": "#/components/schemas/Outputs"
+    ///      "$ref": "#/components/schemas/PackageOutputs"
     ///    },
     ///    "outputs_to_install": {
     ///      "title": "Outputs To Install",
@@ -3678,7 +3611,7 @@ pub mod types {
     ///      ]
     ///    },
     ///    "system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///      "$ref": "#/components/schemas/PackageSystem"
     ///    },
     ///    "unfree": {
     ///      "title": "Unfree",
@@ -3707,14 +3640,14 @@ pub mod types {
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub license: ::std::option::Option<::std::string::String>,
         pub name: ::std::string::String,
-        pub outputs: Outputs,
+        pub outputs: PackageOutputs,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub outputs_to_install: ::std::option::Option<
             ::std::vec::Vec<::std::string::String>,
         >,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub pname: ::std::option::Option<::std::string::String>,
-        pub system: SystemEnum,
+        pub system: PackageSystem,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub unfree: ::std::option::Option<bool>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
@@ -3878,8 +3811,8 @@ pub mod types {
         pub(super) fn params_resolve_package() -> ::std::string::String {
             "cowsay".to_string()
         }
-        pub(super) fn params_resolve_systems() -> ::std::vec::Vec<super::SystemEnum> {
-            vec![super::SystemEnum::X8664Linux]
+        pub(super) fn params_resolve_systems() -> ::std::vec::Vec<super::PackageSystem> {
+            vec![super::PackageSystem::X8664Linux]
         }
         pub(super) fn params_search_term() -> ::std::string::String {
             "in Go".to_string()
@@ -3890,15 +3823,15 @@ pub mod types {
     }
 }
 #[derive(Clone, Debug)]
-/**Client for Flox Catalog Service
+/**Client for Floxhub Catalog Server
 
 
-# Flox Catalog Service API
+# Floxhub Catalog Service API
 
 ![packages](https://api.preview.flox.dev/api/v1/catalog/status/badges/packages.svg)
 
 
-Version: vundefined*/
+Version: unknown*/
 pub struct Client {
     pub(crate) baseurl: String,
     pub(crate) client: reqwest::Client,
@@ -3944,7 +3877,7 @@ impl Client {
     /// This string is pulled directly from the source OpenAPI
     /// document and may be in any format the API selects.
     pub fn api_version(&self) -> &'static str {
-        "vundefined"
+        "unknown"
     }
 }
 #[allow(clippy::all)]
@@ -3966,7 +3899,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/`
 */
     pub async fn create_catalog_api_v1_catalog_catalogs_post<'a>(
         &'a self,
-        name: &'a types::Name,
+        name: &'a types::CatalogName,
     ) -> Result<ResponseValue<types::UserCatalog>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/catalogs/", self.baseurl,);
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
@@ -4234,7 +4167,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
     >(
         &'a self,
         catalog_name: &'a types::CatalogName,
-        name: &'a types::Name,
+        name: &'a types::PackageName,
         body: &'a types::UserPackageCreate,
     ) -> Result<ResponseValue<types::UserPackage>, Error<types::ErrorResponse>> {
         let url = format!(
@@ -4441,7 +4374,7 @@ Body Content:
 - **UserBuildPublish**: The build info to submit
 
 Returns:
-- **UserBuildCreationResponse**
+- **PackageBuildResponse**
 
 Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/builds`
 
@@ -4454,7 +4387,7 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         package_name: &'a types::PackageName,
         body: &'a types::UserBuildPublish,
     ) -> Result<
-        ResponseValue<types::UserBuildCreationResponse>,
+        ResponseValue<types::PackageBuildResponse>,
         Error<types::ErrorResponse>,
     > {
         let url = format!(
@@ -4522,7 +4455,7 @@ Body Content:
 - **UserBuildPublish**: The build info to submit
 
 Returns:
-- **UserBuildCreationResponse**
+- **PackageBuildResponse**
 
 Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/builds`
 
@@ -4535,7 +4468,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         package_name: &'a types::PackageName,
         body: &'a types::UserBuildPublish,
     ) -> Result<
-        ResponseValue<types::UserBuildCreationResponse>,
+        ResponseValue<types::PackageBuildResponse>,
         Error<types::ErrorResponse>,
     > {
         let url = format!(
@@ -4599,7 +4532,7 @@ Path Parameters:
 - **catalog_name**: The name of the catalog
 - **package_name**: The name of the package
 Body Content:
-- **PublishRequest**: The information needed to publish to the catalog
+- **PublishInfoRequest**: The information needed to publish to the catalog
 Returns:
 - **PublishRequestResponse**
 
@@ -4612,8 +4545,11 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         &'a self,
         catalog_name: &'a types::CatalogName,
         package_name: &'a types::PackageName,
-        body: &'a types::PublishRequest,
-    ) -> Result<ResponseValue<types::PublishResponse>, Error<types::ErrorResponse>> {
+        body: &'a types::PublishInfoRequest,
+    ) -> Result<
+        ResponseValue<types::PublishInfoResponseCatalog>,
+        Error<types::ErrorResponse>,
+    > {
         let url = format!(
             "{}/api/v1/catalog/catalogs/{}/packages/{}/publish/info", self.baseurl,
             encode_path(& catalog_name.to_string()), encode_path(& package_name
@@ -5369,7 +5305,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
         page: Option<i64>,
         page_size: Option<i64>,
         search_term: Option<&'a types::SearchTerm>,
-        system: types::SystemEnum,
+        system: types::PackageSystem,
     ) -> Result<ResponseValue<types::PackageSearchResult>, Error<types::ErrorResponse>> {
         let url = format!("{}/api/v1/catalog/search", self.baseurl,);
         let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
