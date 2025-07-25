@@ -90,18 +90,18 @@ mod tests {
     fn mock_generations() -> AllGenerationsMetadata {
         AllGenerationsMetadata::new(2.into(), [
             (1.into(), SingleGenerationMetadata {
-                created: DateTime::default(),
+                created: DateTime::default() + chrono::Duration::hours(1),
                 last_active: None,
                 description: "Generation 1 description".to_string(),
             }),
             (2.into(), SingleGenerationMetadata {
-                created: DateTime::default(),
-                last_active: Some(DateTime::default()),
+                created: DateTime::default() + chrono::Duration::hours(2),
+                last_active: Some(DateTime::default() + chrono::Duration::hours(4)),
                 description: "Generation 2 description".to_string(),
             }),
             (3.into(), SingleGenerationMetadata {
-                created: DateTime::default(),
-                last_active: Some(DateTime::default()),
+                created: DateTime::default() + chrono::Duration::hours(3),
+                last_active: Some(DateTime::default() + chrono::Duration::hours(3)),
                 description: "Generation 3 description".to_string(),
             }),
         ])
@@ -154,17 +154,17 @@ mod tests {
         let expected = indoc! {"
             * 1:
               Description: Generation 1 description
-              Created: 1970-01-01 00:00:00 UTC
+              Created: 1970-01-01 01:00:00 UTC
 
             * 2 (current):
               Description: Generation 2 description
-              Created: 1970-01-01 00:00:00 UTC
-              Last Active: 1970-01-01 00:00:00 UTC
+              Created: 1970-01-01 02:00:00 UTC
+              Last Active: 1970-01-01 04:00:00 UTC
 
             * 3:
               Description: Generation 3 description
-              Created: 1970-01-01 00:00:00 UTC
-              Last Active: 1970-01-01 00:00:00 UTC"
+              Created: 1970-01-01 03:00:00 UTC
+              Last Active: 1970-01-01 03:00:00 UTC"
         };
 
         assert_eq!(actual, expected);
