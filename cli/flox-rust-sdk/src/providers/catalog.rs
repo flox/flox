@@ -1935,17 +1935,12 @@ pub mod test_helpers {
             panic!("can only be used with a CatalogClient");
         };
 
-        // TODO: Change `catalog-server` to use `CatalogName` instead of `Name`.
-        let name_name = api_types::Name::from_str(name).map_err(|_e| {
-            CatalogClientError::APIError(APIError::InvalidRequest(
-                format!("catalog name {} does not meet API requirements.", name).to_string(),
-            ))
-        })?;
+        // This also performs validation that the name meets the catalog name requirements.
         let catalog_name = str_to_catalog_name(name)?;
 
         match client
             .client
-            .create_catalog_api_v1_catalog_catalogs_post(&name_name)
+            .create_catalog_api_v1_catalog_catalogs_post(&catalog_name)
             .await
         {
             Ok(_) => {},
