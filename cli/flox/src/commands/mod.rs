@@ -20,7 +20,6 @@ mod search;
 mod services;
 mod show;
 mod uninstall;
-mod update;
 mod upgrade;
 mod upload;
 
@@ -914,9 +913,6 @@ enum AdditionalCommands {
     Documentation(
         #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
     ),
-    /// Update environment's base catalog or the global base catalog
-    #[bpaf(command, hide, footer("Run 'man flox-update' for more details."))]
-    Update(#[bpaf(external(update::update))] update::Update),
     /// Upgrade packages in an environment
     #[bpaf(command, hide, footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
         When no arguments are specified,
@@ -976,7 +972,6 @@ impl AdditionalCommands {
             AdditionalCommands::Config(args) => args.handle(config, flox).await?,
             AdditionalCommands::Documentation(args) => args.handle(),
             AdditionalCommands::Envs(args) => args.handle(flox)?,
-            AdditionalCommands::Update(args) => args.handle(flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
             AdditionalCommands::Gc(args) => args.handle(flox)?,
             AdditionalCommands::Include(args) => args.handle(flox).await?,
