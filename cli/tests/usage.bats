@@ -48,48 +48,44 @@ EOF
   assert_success
 }
 
-@test "f2: command grouping changes 1: 'Local Development Commands' listed in order" {
-  run --separate-stderr "$FLOX_BIN" --help
-  line=4
-  assert_line -n "$line" --regexp '^Local Development Commands'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    init[ ]+[\w .,]+'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    activate[ ]+[\w .,]+'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    search[ ]+[\w .,]+'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    show[ ]+[\w .,]+'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    install, i[ ]+[\w .,]+'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    uninstall[ ]+[\w .,]+'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    edit[ ]+[\w .,]+'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    list, l[ ]+[\w .,]+'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    delete[ ]+[\w .,]+'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    services[ ]+[\w .,]+'
-}
-
-@test "f3: command grouping changes 2: 'Sharing Commands' listed in order" {
+@test "f2: commands are grouped by action and ordered by use" {
   run "$FLOX_BIN" --help
-  line=15
-  assert_line -n "$line" --regexp '^Sharing Commands'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    push[ ]+[\w .,]+'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    pull[ ]+[\w .,]+'
-  line=$((line + 1))
-  assert_line -n "$line" --regexp '^    containerize[ ]+[\w .,]+'
-}
 
-@test "f5: command grouping changes 3: move lesser used or not polished commands to 'Additional Commands' section with help tip." {
-  run "$FLOX_BIN" --help
-  assert_output --partial - << EOF
+  assert_output - << 'EOF'
+Flox is a virtual environment and package manager all in one.
+
+With Flox you create environments that layer and replace dependencies just where
+it matters, making them portable across the full software lifecycle.
+
+Usage: flox [[-v]... | -q] [-V] [COMMAND ...]
+
+Local Development Commands
+    init           Create an environment in the current directory
+    activate       Enter the environment, type 'exit' to leave
+    search         Search for system or library packages to install
+    show           Show details about a single package
+    install, i     Install packages into an environment
+    uninstall      Uninstall installed packages from an environment
+    edit           Edit declarative environment configuration file
+    list, l        List packages installed in an environment
+    delete         Delete an environment
+    services       Interact with services
+
+Sharing Commands
+    push           Send an environment to FloxHub
+    pull           Pull an environment from FloxHub
+    containerize   Containerize an environment
+
 Additional Commands. Use "flox COMMAND --help" for more info
-    auth, config, envs, gc, include, upgrade
+    auth, config, envs, gc, include, upgrade 
+
+Available options:
+    -v, --verbose  Increase logging verbosity
+                   Invoke multiple times for increasing detail.
+    -q, --quiet    Silence logs except for errors
+    -V, --version  Print the version of the program
+    -h, --help     Prints help information
+
+Run 'man flox' for more details.
 EOF
 }
