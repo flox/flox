@@ -75,7 +75,8 @@ generate_fish_startup_commands() {
   echo "$_flox_activations set-env-dirs --shell fish --flox-env \"$_FLOX_ENV\" --env-dirs \"\$FLOX_ENV_DIRS\" | source;"
   echo "set -gx MANPATH (if set -q MANPATH; echo \"\$MANPATH\"; else; echo empty; end);"
   echo "$_flox_activations fix-paths --shell fish --env-dirs \"\$FLOX_ENV_DIRS\" --path \"\$PATH\" --manpath \"\$MANPATH\" | source;"
-  echo "$_flox_activations profile-scripts --shell fish --env-dirs \"\$FLOX_ENV_DIRS\" | source;"
+  echo "set -g  _FLOX_SOURCED_PROFILE_SCRIPTS (if set -q _FLOX_SOURCED_PROFILE_SCRIPTS; echo \"\$_FLOX_SOURCED_PROFILE_SCRIPTS\"; else; echo ""; end);"
+  echo "$_flox_activations profile-scripts --shell fish --already-sourced-env-dirs  \"\$_FLOX_SOURCED_PROFILE_SCRIPTS\" --env-dirs \"\$FLOX_ENV_DIRS\" | source;"
 
   # fish does not use hashing in the same way bash does, so there's
   # nothing to be done here by way of that requirement.
