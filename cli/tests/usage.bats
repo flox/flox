@@ -32,16 +32,14 @@ teardown() {
 @test "f1: simplify flox 'no command' info" {
   run "$FLOX_BIN"
   assert_success
-  # FLOX_VERSION is set by the `flox run` command
-  # and thus deviates from the expected version.
-  assert_output --regexp - << EOF
-flox version \d+.\d+.\d+-.+
+  # Specific version is tested in `version.bats`
+  assert_output --partial "flox version "
+  assert_output --partial - << 'EOF'
+Usage: flox OPTIONS (init|activate|search|install|...) [--help]
 
-Usage: flox OPTIONS \(init|activate|search|install|\.\.\.\) \[--help\]
+Use 'flox --help' for full list of commands and more information
 
-Use "flox --help" for full list of commands and more information
-
-First time\? Create an environment with "flox init"
+First time? Create an environment with 'flox init'
 EOF
 }
 
