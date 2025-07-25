@@ -59,25 +59,38 @@ it matters, making them portable across the full software lifecycle.
 
 Usage: flox [[-v]... | -q] [-V] [COMMAND ...]
 
-Local Development Commands
+Manage environments
     init           Create an environment in the current directory
-    activate       Enter the environment, type 'exit' to leave
-    search         Search for system or library packages to install
-    show           Show details about a single package
-    install, i     Install packages into an environment
-    uninstall      Uninstall installed packages from an environment
-    edit           Edit declarative environment configuration file
-    list, l        List packages installed in an environment
+    envs           Show active and available environments
     delete         Delete an environment
+
+Use environments
+    activate       Enter the environment, type 'exit' to leave
     services       Interact with services
 
-Sharing Commands
+Discover packages
+    search         Search for system or library packages to install
+    show           Show details about a single package
+
+Modify environments
+    install, i     Install packages into an environment
+    list, l        List packages installed in an environment
+    edit           Edit declarative environment configuration file
+    include        Compose environments together
+    upgrade        Upgrade packages in an environment
+    uninstall      Uninstall installed packages from an environment
+
+Share with others
+    build          Build packages for Flox
+    publish        Publish packages for Flox
     push           Send an environment to FloxHub
     pull           Pull an environment from FloxHub
     containerize   Containerize an environment
 
-Additional Commands. Use "flox COMMAND --help" for more info
-    auth, config, envs, gc, include, upgrade 
+Administration
+    auth           FloxHub authentication commands
+    config         View and set configuration options
+    gc             Garbage collects any data for deleted environments.
 
 Available options:
     -v, --verbose  Increase logging verbosity
