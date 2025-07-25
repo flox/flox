@@ -27,7 +27,7 @@ use crate::utils::metrics::{
 pub struct ResetMetrics {}
 impl ResetMetrics {
     #[instrument(name = "reset-metrics", skip_all)]
-    pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("reset-metrics");
         let mut metrics_lock = LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
         tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;

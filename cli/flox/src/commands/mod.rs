@@ -20,7 +20,6 @@ mod search;
 mod services;
 mod show;
 mod uninstall;
-mod update;
 mod upgrade;
 mod upload;
 
@@ -107,11 +106,6 @@ static FLOX_DESCRIPTION: &'_ str = indoc! {"
     With Flox you create environments that layer and replace dependencies just where it matters,
     making them portable across the full software lifecycle."
 };
-
-/// Manually documented commands that are to keep the help text short
-const ADDITIONAL_COMMANDS: &str = indoc! {"
-    auth, config, envs, gc, include, upgrade
-"};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
     Vec::len(&x)
@@ -393,10 +387,13 @@ impl FloxArgs {
                 group.handle();
                 Ok(())
             },
-            Commands::Development(group) => group.handle(config, flox).await,
-            Commands::Sharing(group) => group.handle(config, flox).await,
-            Commands::Additional(group) => group.handle(config, flox).await,
-            Commands::Internal(group) => group.handle(config, flox).await,
+            Commands::Manage(args) => args.handle(flox).await,
+            Commands::Use(args) => args.handle(config, flox).await,
+            Commands::Discover(args) => args.handle(config, flox).await,
+            Commands::Modify(args) => args.handle(flox).await,
+            Commands::Share(args) => args.handle(config, flox).await,
+            Commands::Admin(args) => args.handle(config, flox).await,
+            Commands::Internal(args) => args.handle(flox).await,
         };
 
         // This will print the update notification after output from a successful
@@ -761,9 +758,14 @@ enum Commands {
     /// Prints help information
     #[bpaf(command, hide)]
     Help(#[bpaf(external(help))] Help),
-    Development(#[bpaf(external(local_development_commands))] LocalDevelopmentCommands),
-    Sharing(#[bpaf(external(sharing_commands))] SharingCommands),
-    Additional(#[bpaf(external(additional_commands))] AdditionalCommands),
+
+    Manage(#[bpaf(external(manage_commands))] ManageCommands),
+    Use(#[bpaf(external(use_commands))] UseCommands),
+    Discover(#[bpaf(external(discover_commands))] DiscoverCommands),
+    Modify(#[bpaf(external(modify_commands))] ModifyCommands),
+    Share(#[bpaf(external(share_commands))] ShareCommands),
+    Admin(#[bpaf(external(admin_commands))] AdminCommands),
+
     Internal(#[bpaf(external(internal_commands))] InternalCommands),
 }
 
@@ -792,9 +794,9 @@ impl Help {
     }
 }
 
-/// Local Development Commands
+/// Manage environments
 #[derive(Bpaf, Clone)]
-enum LocalDevelopmentCommands {
+enum ManageCommands {
     /// Create an environment in the current directory
     #[bpaf(
         command,
@@ -802,6 +804,34 @@ enum LocalDevelopmentCommands {
         footer("Run 'man flox-init' for more details.")
     )]
     Init(#[bpaf(external(init::init))] init::Init),
+
+    /// Show active and available environments
+    #[bpaf(command, footer("Run 'man flox-envs' for more details."))]
+    Envs(#[bpaf(external(envs::envs))] envs::Envs),
+
+    /// Delete an environment
+    #[bpaf(
+        command,
+        long("destroy"),
+        footer("Run 'man flox-delete' for more details.")
+    )]
+    Delete(#[bpaf(external(delete::delete))] delete::Delete),
+}
+
+impl ManageCommands {
+    async fn handle(self, flox: Flox) -> Result<()> {
+        match self {
+            ManageCommands::Init(args) => args.handle(flox).await?,
+            ManageCommands::Envs(args) => args.handle(flox)?,
+            ManageCommands::Delete(args) => args.handle(flox).await?,
+        }
+        Ok(())
+    }
+}
+
+/// Use environments
+#[derive(Bpaf, Clone)]
+enum UseCommands {
     /// Enter the environment, type 'exit' to leave
     #[bpaf(
         command,
@@ -815,45 +845,7 @@ enum LocalDevelopmentCommands {
         footer("Run 'man flox-activate' for more details.")
     )]
     Activate(#[bpaf(external(activate::activate))] activate::Activate),
-    /// Search for system or library packages to install
-    #[bpaf(command, footer("Run 'man flox-search' for more details."))]
-    Search(#[bpaf(external(search::search))] search::Search),
-    /// Show details about a single package
-    #[bpaf(command, long("show"), footer("Run 'man flox-show' for more details."))]
-    Show(#[bpaf(external(show::show))] show::Show),
-    /// Install packages into an environment
-    #[bpaf(
-        command,
-        short('i'),
-        footer("Run 'man flox-install' for more details.")
-    )]
-    Install(#[bpaf(external(install::install))] install::Install),
-    /// Uninstall installed packages from an environment
-    #[bpaf(
-        command,
-        long("remove"),
-        long("rm"),
-        footer("Run 'man flox-uninstall' for more details.")
-    )]
-    Uninstall(#[bpaf(external(uninstall::uninstall))] uninstall::Uninstall),
-    /// Edit declarative environment configuration file
-    #[bpaf(command, footer("Run 'man flox-edit' for more details."))]
-    Edit(#[bpaf(external(edit::edit))] edit::Edit),
-    /// List packages installed in an environment
-    #[bpaf(
-        command,
-        long("list"),
-        short('l'),
-        footer("Run 'man flox-list' for more details.")
-    )]
-    List(#[bpaf(external(list::list))] list::List),
-    /// Delete an environment
-    #[bpaf(
-        command,
-        long("destroy"),
-        footer("Run 'man flox-delete' for more details.")
-    )]
-    Delete(#[bpaf(external(delete::delete))] delete::Delete),
+
     /// Interact with services
     #[bpaf(command)]
     Services(
@@ -865,60 +857,74 @@ enum LocalDevelopmentCommands {
     ),
 }
 
-impl LocalDevelopmentCommands {
+impl UseCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Activate(args) => args.handle(config, flox).await?,
-            LocalDevelopmentCommands::Edit(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Install(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Uninstall(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::List(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Search(args) => args.handle(config, flox).await?,
-            LocalDevelopmentCommands::Show(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Delete(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Services(args) => args.handle(config, flox).await?,
+            UseCommands::Activate(args) => args.handle(config, flox).await?,
+            UseCommands::Services(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
 }
 
-/// Sharing Commands
+/// Discover packages
 #[derive(Bpaf, Clone)]
-enum SharingCommands {
-    /// Send an environment to FloxHub
-    #[bpaf(command, footer("Run 'man flox-push' for more details."))]
-    Push(#[bpaf(external(push::push))] push::Push),
-    /// Pull an environment from FloxHub
-    #[bpaf(command, footer("Run 'man flox-pull' for more details."))]
-    Pull(#[bpaf(external(pull::pull))] pull::Pull),
-    /// Containerize an environment
-    #[bpaf(command, footer("Run 'man flox-containerize' for more details."))]
-    Containerize(#[bpaf(external(containerize::containerize))] containerize::Containerize),
+enum DiscoverCommands {
+    /// Search for system or library packages to install
+    #[bpaf(command, footer("Run 'man flox-search' for more details."))]
+    Search(#[bpaf(external(search::search))] search::Search),
+
+    /// Show details about a single package
+    #[bpaf(command, long("show"), footer("Run 'man flox-show' for more details."))]
+    Show(#[bpaf(external(show::show))] show::Show),
 }
 
-impl SharingCommands {
-    async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
+impl DiscoverCommands {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
-            SharingCommands::Push(args) => args.handle(flox).await?,
-            SharingCommands::Pull(args) => args.handle(flox).await?,
-            SharingCommands::Containerize(args) => args.handle(flox).await?,
+            DiscoverCommands::Search(args) => args.handle(config, flox).await?,
+            DiscoverCommands::Show(args) => args.handle(flox).await?,
         }
         Ok(())
     }
 }
 
-/// Additional Commands. Use "flox COMMAND --help" for more info
+/// Modify environments
 #[derive(Bpaf, Clone)]
-enum AdditionalCommands {
-    Documentation(
-        #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
+enum ModifyCommands {
+    /// Install packages into an environment
+    #[bpaf(
+        command,
+        short('i'),
+        footer("Run 'man flox-install' for more details.")
+    )]
+    Install(#[bpaf(external(install::install))] install::Install),
+
+    /// List packages installed in an environment
+    #[bpaf(
+        command,
+        long("list"),
+        short('l'),
+        footer("Run 'man flox-list' for more details.")
+    )]
+    List(#[bpaf(external(list::list))] list::List),
+
+    /// Edit declarative environment configuration file
+    #[bpaf(command, footer("Run 'man flox-edit' for more details."))]
+    Edit(#[bpaf(external(edit::edit))] edit::Edit),
+
+    /// Compose environments together
+    #[bpaf(command)]
+    Include(
+        #[bpaf(
+            external(include::include_commands),
+            fallback(include::IncludeCommands::Help)
+        )]
+        include::IncludeCommands,
     ),
-    /// Update environment's base catalog or the global base catalog
-    #[bpaf(command, hide, footer("Run 'man flox-update' for more details."))]
-    Update(#[bpaf(external(update::update))] update::Update),
+
     /// Upgrade packages in an environment
-    #[bpaf(command, hide, footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
+    #[bpaf(command, footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
         When no arguments are specified,
         all packages in the environment are upgraded if possible.
         A package is upgraded if its version, build configuration,
@@ -934,101 +940,130 @@ enum AdditionalCommands {
         if it is not in a group with any other packages.
     "}))]
     Upgrade(#[bpaf(external(upgrade::upgrade))] upgrade::Upgrade),
-    /// View and set configuration options
-    #[bpaf(command, hide, footer("Run 'man flox-config' for more details."))]
-    Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
 
-    /// Show active and available environments
-    #[bpaf(command, hide, footer("Run 'man flox-envs' for more details."))]
-    Envs(#[bpaf(external(envs::envs))] envs::Envs),
-
-    /// Garbage collects any data for deleted environments.
+    /// Uninstall installed packages from an environment
     #[bpaf(
         command,
-        hide,
-        header(
-            "This both deletes data managed by Flox and runs garbage collection on the Nix store."
-        ),
-        footer("Run 'man flox-gc' for more details.")
+        long("remove"),
+        long("rm"),
+        footer("Run 'man flox-uninstall' for more details.")
     )]
-    Gc(#[bpaf(external(gc::gc))] gc::Gc),
-
-    /// Interact with included environments
-    #[bpaf(command, hide)]
-    Include(
-        #[bpaf(
-            external(include::include_commands),
-            fallback(include::IncludeCommands::Help)
-        )]
-        include::IncludeCommands,
-    ),
+    Uninstall(#[bpaf(external(uninstall::uninstall))] uninstall::Uninstall),
 }
 
-impl AdditionalCommands {
-    fn documentation() -> impl Parser<AdditionalCommandsDocumentation> {
-        bpaf::literal(ADDITIONAL_COMMANDS)
-            .hide_usage()
-            .map(|_| AdditionalCommandsDocumentation)
-    }
-
-    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+impl ModifyCommands {
+    async fn handle(self, flox: Flox) -> Result<()> {
         match self {
-            AdditionalCommands::Config(args) => args.handle(config, flox).await?,
-            AdditionalCommands::Documentation(args) => args.handle(),
-            AdditionalCommands::Envs(args) => args.handle(flox)?,
-            AdditionalCommands::Update(args) => args.handle(flox).await?,
-            AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
-            AdditionalCommands::Gc(args) => args.handle(flox)?,
-            AdditionalCommands::Include(args) => args.handle(flox).await?,
+            ModifyCommands::Install(args) => args.handle(flox).await?,
+            ModifyCommands::List(args) => args.handle(flox).await?,
+            ModifyCommands::Edit(args) => args.handle(flox).await?,
+            ModifyCommands::Include(args) => args.handle(flox).await?,
+            ModifyCommands::Upgrade(args) => args.handle(flox).await?,
+            ModifyCommands::Uninstall(args) => args.handle(flox).await?,
         }
         Ok(())
     }
 }
 
-#[derive(Clone)]
-struct AdditionalCommandsDocumentation;
-impl AdditionalCommandsDocumentation {
-    fn handle(self) {
-        println!("🥚");
-    }
-}
-
-/// Additional Commands. Use "flox COMMAND --help" for more info
+/// Share with others
 #[derive(Bpaf, Clone)]
-#[bpaf(hide)]
-enum InternalCommands {
-    /// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
-    #[bpaf(command("reset-metrics"))]
-    ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
-    /// FloxHub authentication commands
-    #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
-    Auth(#[bpaf(external(auth::auth))] auth::Auth),
+enum ShareCommands {
     /// Build packages for Flox
     #[bpaf(
         command,
-        hide,
+        // TODO: NEF
         header(
             "Build packages from the manifest's 'build' table, or run clean subcommand if specified."
         ),
         footer("Run 'man flox-build' for more details.")
     )]
     Build(#[bpaf(external(build::build))] build::Build),
+
     /// Publish packages for Flox
     #[bpaf(
         command,
-        hide,
         header(indoc!{"Publish the specified `<package>` from the environment in `<path>`, uploading
                        artifact metadata and copying the artifacts so that it is available in the
                        Flox Catalog."}),
         footer("Run 'man flox-publish' for more details.")
     )]
     Publish(#[bpaf(external(publish::publish))] publish::Publish),
+
+    /// Send an environment to FloxHub
+    #[bpaf(command, footer("Run 'man flox-push' for more details."))]
+    Push(#[bpaf(external(push::push))] push::Push),
+
+    /// Pull an environment from FloxHub
+    #[bpaf(command, footer("Run 'man flox-pull' for more details."))]
+    Pull(#[bpaf(external(pull::pull))] pull::Pull),
+
+    /// Containerize an environment
+    #[bpaf(command, footer("Run 'man flox-containerize' for more details."))]
+    Containerize(#[bpaf(external(containerize::containerize))] containerize::Containerize),
+}
+
+impl ShareCommands {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        match self {
+            ShareCommands::Build(args) => args.handle(flox).await?,
+            ShareCommands::Publish(args) => args.handle(config, flox).await?,
+            ShareCommands::Push(args) => args.handle(flox).await?,
+            ShareCommands::Pull(args) => args.handle(flox).await?,
+            ShareCommands::Containerize(args) => args.handle(flox).await?,
+        }
+        Ok(())
+    }
+}
+
+/// Administration
+#[derive(Bpaf, Clone)]
+enum AdminCommands {
+    /// FloxHub authentication commands
+    #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
+    Auth(#[bpaf(external(auth::auth))] auth::Auth),
+
+    /// View and set configuration options
+    #[bpaf(command, footer("Run 'man flox-config' for more details."))]
+    Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
+
+    /// Garbage collects any data for deleted environments.
+    #[bpaf(
+        command,
+        header(
+            "This both deletes data managed by Flox and runs garbage collection on the Nix store."
+        ),
+        footer("Run 'man flox-gc' for more details.")
+    )]
+    Gc(#[bpaf(external(gc::gc))] gc::Gc),
+}
+
+impl AdminCommands {
+    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        match self {
+            AdminCommands::Auth(args) => args.handle(config, flox).await?,
+            AdminCommands::Config(args) => args.handle(config, flox).await?,
+            AdminCommands::Gc(args) => args.handle(flox)?,
+        }
+        Ok(())
+    }
+}
+
+/// Internal commands that aren't documented or supported for public use.
+#[derive(Bpaf, Clone)]
+#[bpaf(hide)]
+enum InternalCommands {
+    /// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
+    #[bpaf(command("reset-metrics"), hide)]
+    ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
+
     /// Upload packages
     #[bpaf(command, hide, footer("Run 'man flox-upload' for more details."))]
     Upload(#[bpaf(external(upload::upload))] upload::Upload),
+
     /// Lock a manifest file
     #[bpaf(command, hide)]
     LockManifest(#[bpaf(external(lock_manifest::lock_manifest))] lock_manifest::LockManifest),
+
     /// Check for environmet upgrades
     #[bpaf(command, hide)]
     CheckForUpgrades(
@@ -1038,12 +1073,9 @@ enum InternalCommands {
 }
 
 impl InternalCommands {
-    async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+    async fn handle(self, flox: Flox) -> Result<()> {
         match self {
-            InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
-            InternalCommands::Auth(args) => args.handle(config, flox).await?,
-            InternalCommands::Build(args) => args.handle(flox).await?,
-            InternalCommands::Publish(args) => args.handle(config, flox).await?,
+            InternalCommands::ResetMetrics(args) => args.handle(flox).await?,
             InternalCommands::Upload(args) => args.handle(flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
