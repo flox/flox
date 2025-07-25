@@ -1,13 +1,13 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use list::List;
 use tracing::instrument;
 
 use super::display_help;
 use crate::config::Config;
 
 mod list;
+mod rollback;
 
 /// Generations Commands.
 #[derive(Debug, Clone, Bpaf)]
@@ -18,7 +18,11 @@ pub enum GenerationsCommands {
 
     /// List generations of the selected environment
     #[bpaf(command)]
-    List(#[bpaf(external(list::list))] List),
+    List(#[bpaf(external(list::list))] list::List),
+
+    /// Rollback the most recent changes or reset the to a an arbitrary generation.
+    #[bpaf(command)]
+    Rollback(#[bpaf(external(rollback::rollback))] rollback::Rollback),
 }
 
 impl GenerationsCommands {
@@ -29,6 +33,7 @@ impl GenerationsCommands {
                 display_help(Some("generations".to_string()));
             },
             GenerationsCommands::List(args) => args.handle(flox)?,
+            GenerationsCommands::Rollback(args) => args.handle(flox)?,
         }
 
         Ok(())
