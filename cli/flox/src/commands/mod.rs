@@ -6,6 +6,7 @@ mod containerize;
 mod delete;
 mod edit;
 mod envs;
+mod exit;
 mod gc;
 mod general;
 mod include;
@@ -962,6 +963,10 @@ enum AdditionalCommands {
         )]
         include::IncludeCommands,
     ),
+
+    /// Print information how to exit environment
+    #[bpaf(command, hide)]
+    Exit(#[bpaf(external(exit::exit))] exit::Exit),
 }
 
 impl AdditionalCommands {
@@ -980,6 +985,7 @@ impl AdditionalCommands {
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
             AdditionalCommands::Gc(args) => args.handle(flox)?,
             AdditionalCommands::Include(args) => args.handle(flox).await?,
+            AdditionalCommands::Exit(args) => args.handle(flox)?,
         }
         Ok(())
     }
