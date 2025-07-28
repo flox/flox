@@ -3201,14 +3201,7 @@ mod tests {
         git.add(&[&deleted_file_path]).unwrap();
         fs::remove_file(&deleted_file_path).unwrap();
 
-        let output = assert_build_status(&flox, &mut env, package_name, None, false);
-        assert!(
-            output.stderr.contains(&format!(
-                "/bin/tar: {deleted_file_name}: Cannot stat: No such file or directory"
-            )),
-            "stderr: {}",
-            output.stderr
-        )
+        assert_build_status(&flox, &mut env, package_name, None, true);
     }
 }
 
