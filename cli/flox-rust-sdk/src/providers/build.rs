@@ -3353,4 +3353,48 @@ mod nef_tests {
             true,
         );
     }
+
+    #[test]
+    fn manifest_builds_can_depend_on_nef() {
+        // Bug: pname and attr_path need to match
+        let pname_expression = "foo";
+        let attr_path_expression = "foo";
+        let pname_manifest_build = "bar";
+
+        let (flox, tempdir) = flox_instance();
+
+        // Create a manifest (may be empty)
+        let manifest = formatdoc! {r#"
+            version = 1
+            [build.{pname_manifest_build}]
+            command = '''
+                cat ${{{attr_path_expression}}} | rev > $out
+            '''
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        // Create expressions
+        let expressions_dir =
+            prepare_nix_expressions_in(&tempdir, &[(&[attr_path_expression], &formatdoc! {r#"
+            {{runCommand}}: runCommand "{pname_expression}" {{}} ''
+                echo "123" >> $out
+            ''
+            "#})]);
+
+        // build
+        let _collected = assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_dir,
+            pname_manifest_build,
+            None,
+            true,
+        );
+
+        // assert results
+        let result_path = env_path.join(format!("result-{pname_manifest_build}"));
+        let content = fs::read_to_string(result_path).unwrap();
+        assert_eq!(content, "321\n");
+    }
 }
