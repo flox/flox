@@ -1589,7 +1589,7 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 [[package]]
 name = "httpmock"
 version = "0.8.0-beta.1"
-source = "git+https://github.com/flox/httpmock.git?branch=flox%2Fremove_recording_struct#84956ea0e3ab4cc44919e4a06862644b58c09469"
+source = "git+https://github.com/flox/httpmock.git?branch=flox%2Fbetter-errors#0e476653929e8db7794bf5780bf952fb62c55fb1"
 dependencies = [
  "assert-json-diff",
  "async-object-pool",
