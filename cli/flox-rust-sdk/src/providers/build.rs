@@ -3244,8 +3244,11 @@ mod nef_tests {
             {{runCommand}}: runCommand "{pname}" {{
                 version = "1.0.1";
                 pname = "not-{pname}";
+                outputs = ["out" "man" "lib"];
             }} ''
                 echo -n "Hello, World!" >> $out
+                touch $man
+                touch $lib
             ''
             "#})]);
 
@@ -3265,5 +3268,8 @@ mod nef_tests {
         assert_eq!(build_results[0].name, pname);
         assert_eq!(build_results[0].pname, format!("not-{pname}"));
         assert_eq!(build_results[0].version, "1.0.1");
+        for output in ["out", "lib", "man"] {
+            assert!(build_results[0].outputs.contains_key(output));
+        }
     }
 }
