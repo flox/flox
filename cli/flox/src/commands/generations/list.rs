@@ -5,11 +5,12 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
     AllGenerationsMetadata,
+    GenerationsEnvironment,
+    GenerationsExt,
     SingleGenerationMetadata,
 };
 use tracing::instrument;
 
-use super::try_get_generations_metadata;
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
 
@@ -25,7 +26,10 @@ impl List {
     pub fn handle(self, flox: Flox) -> Result<()> {
         let env = self.environment.to_concrete_environment(&flox)?;
         environment_subcommand_metric!("generations::list", env);
-        let metadata = try_get_generations_metadata(&env)?;
+
+        let env: GenerationsEnvironment = env.try_into()?;
+        let metadata = env.generations_metadata()?;
+
         println!("{}", DisplayAllMetadata(&metadata));
         Ok(())
     }

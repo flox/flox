@@ -9,12 +9,7 @@ use tracing::{debug, instrument};
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::fetcher::IncludeFetcher;
-use super::generations::{
-    AllGenerationsMetadata,
-    Generations,
-    GenerationsEnvironment,
-    GenerationsError,
-};
+use super::generations::{AllGenerationsMetadata, Generations, GenerationsError, GenerationsExt};
 use super::path_environment::PathEnvironment;
 use super::{
     CACHE_DIR_NAME,
@@ -564,7 +559,7 @@ impl Environment for ManagedEnvironment {
     }
 }
 
-impl GenerationsEnvironment for ManagedEnvironment {
+impl GenerationsExt for ManagedEnvironment {
     fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError> {
         self.generations().metadata()
     }
