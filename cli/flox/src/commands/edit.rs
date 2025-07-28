@@ -187,7 +187,7 @@ impl Edit {
         let reactivate_required_note = indoc::indoc! {"
             Your manifest has changes that cannot be automatically applied.
 
-            Please 'exit' the environment and run 'flox activate' to see these changes.
+            Please 'exit' the shell and run 'flox activate' to see these changes.
        "};
 
         match result {
