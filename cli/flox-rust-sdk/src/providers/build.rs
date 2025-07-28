@@ -3309,4 +3309,48 @@ mod nef_tests {
         // currently an implication of using `nix eval --file` but may change in the future
         assert_eq!(content, "impure");
     }
+
+    #[test]
+    fn nef_builds_built_lazily() {
+        let eval_success = "eval-success".to_string();
+        let eval_failure = "eval-failure".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        // Create a manifest (may be empty)
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // Create expressions
+        let expressions_dir = prepare_nix_expressions_in(&tempdir, &[
+            (&[&eval_success], indoc! {r#"
+            {runCommand}: runCommand "{eval_success}" {} ''
+                touch $out
+            ''
+            "#}),
+            (&[&eval_failure], r#"{}: throw "eval failure""#),
+        ]);
+
+        // build fails with eval failure
+        assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_dir,
+            &eval_failure,
+            None,
+            false,
+        );
+
+        // build succeeds if eval failure is in another expression
+        assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_dir,
+            &eval_success,
+            None,
+            true,
+        );
+    }
 }
