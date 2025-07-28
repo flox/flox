@@ -983,10 +983,9 @@ enum ShareCommands {
     /// Build packages for Flox
     #[bpaf(
         command,
-        // TODO: NEF
-        header(
-            "Build packages from the manifest's 'build' table, or run clean subcommand if specified."
-        ),
+        header(indoc!{"Build packages from the manifest's 'build' table, Nix
+                       expression files in '.flox/pkgs/', or run 'clean'
+                       subcommand if specified."}),
         footer("Run 'man flox-build' for more details.")
     )]
     Build(#[bpaf(external(build::build))] build::Build),
