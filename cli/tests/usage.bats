@@ -12,24 +12,42 @@ load test_support.bash
 
 # ---------------------------------------------------------------------------- #
 
-setup_file() {
-  common_file_setup
+project_setup() {
+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
+  rm -rf "$PROJECT_DIR"
+  mkdir -p "$PROJECT_DIR"
+  pushd "$PROJECT_DIR" > /dev/null || return
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.yaml"
 }
 
+project_teardown() {
+  popd > /dev/null || return
+  rm -rf "${PROJECT_DIR?}"
+  unset PROJECT_DIR
+}
+
+setup_file() {
+  common_file_setup
+}
+
 teardown_file() {
-  unset _FLOX_USE_CATALOG_MOCK
   common_file_teardown
 }
 
 setup() {
   common_test_setup
+  project_setup
 }
 teardown() {
   common_test_teardown
+  project_teardown
 }
 
 @test "f1: simplify flox 'no command' info" {
+  # There are three variations of this message but for simplicity we only test
+  # with at least one inactivate environment.
+  "$FLOX_BIN" init
+
   run "$FLOX_BIN"
   assert_success
   # Specific version is tested in `version.bats`
@@ -39,7 +57,7 @@ Usage: flox OPTIONS (init|activate|search|install|...) [--help]
 
 Use 'flox --help' for full list of commands and more information
 
-First time? Create an environment with 'flox init'
+No active environments. Use 'flox envs' to list all environments.
 EOF
 }
 
