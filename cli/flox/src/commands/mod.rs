@@ -6,6 +6,7 @@ mod containerize;
 mod delete;
 mod edit;
 mod envs;
+mod exit;
 mod gc;
 mod general;
 mod include;
@@ -1070,6 +1071,10 @@ enum InternalCommands {
         #[bpaf(external(check_for_upgrades::check_for_upgrades))]
         check_for_upgrades::CheckForUpgrades,
     ),
+
+    /// Print information how to exit environment
+    #[bpaf(command, long("exit"), long("deactivate"), hide)]
+    Exit(#[bpaf(external(exit::exit))] exit::Exit),
 }
 
 impl InternalCommands {
@@ -1079,6 +1084,7 @@ impl InternalCommands {
             InternalCommands::Upload(args) => args.handle(flox).await?,
             InternalCommands::LockManifest(args) => args.handle(flox).await?,
             InternalCommands::CheckForUpgrades(args) => args.handle(flox).await?,
+            InternalCommands::Exit(args) => args.handle(flox)?,
         }
         Ok(())
     }
