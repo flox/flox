@@ -6,24 +6,24 @@ then:
   status: 200
   header:
   - name: date
-    value: Sat, 26 Jul 2025 00:48:47 GMT
+    value: Mon, 28 Jul 2025 20:11:45 GMT
   - name: server
     value: uvicorn
   - name: content-length
     value: '716'
   - name: content-type
     value: application/json
-  body: '{"ingress_uri":"s3://ingress-cache/cache/test_user?endpoint=http://0.0.0.0:53073&scheme=http","ingress_auth":{"aws-s3":{"envs":{"AWS_ACCESS_KEY_ID":"ASIARZPUZDIKASUILLTX","AWS_SECRET_ACCESS_KEY":"BpTVMZKMv1Ajq3Nzqob9ztyMKc693qFx8YjVr/Uh","AWS_SESSION_TOKEN":"FQoGZXIvYXdzEBYaDV4FeQ8plGCZPP1TdyTfd/W0G6Gm1mx8skmcEh7ETCr77tO1oScQwuKAPX5Zqge+vef9RRWF4EDkL6+jXvvwCiPm0Ml2DApVLLp5Faf41l163pZStVXu2y7TMNeVnOZ+XZBlMR9K/y8jY1H33ovSz87jWM3IkbG5cx+HHBgApY9BBea02AkHVD+3VU9G5Wr+pwwRnZcL6pCm5oKsSQQ+gzsp8xEpj+cbq9T9OZbLsn7as1x5IQNbbQYqNB/LATt9YndzEzQNGa2kcgTrTdHEVjwYZNPXa7r5C0V71BKcbmz+D+ak2AQu/FZUkL18z+zmJzx8l//BAWcqHPRSjNM=","AWS_REGION":"us-east-1"}}},"catalog_store_config":{"store_type":"publisher","publisher_url":null}}'
+  body: '{"ingress_uri":"s3://ingress-cache/cache/test_user?endpoint=http://0.0.0.0:49687&scheme=http","ingress_auth":{"aws-s3":{"envs":{"AWS_ACCESS_KEY_ID":"ASIARZPUZDIKO6BTUSHB","AWS_SECRET_ACCESS_KEY":"q/a1ICCT5tDsDtM3LjhD7QMoVxQpSdhoJ9fIzNs5","AWS_SESSION_TOKEN":"FQoGZXIvYXdzEBYaDf9kL1+LY4r0oHbt3j3sAYRaualV+zyt8c77D4AmbJUcQiE40J4hsbusPPEtOMp3Et2uV45XZ3RPoNeI2m82KdfXk7hdgoacd95su0460xA3di8sMH08UhgSWuNwUnBwV05Bdoa8qP7n/PvpKPHZcjA/uKMNuQ1Z2nAG/Pi9MM8MynkzVltFLJ9ySwGX6mGpqQVbsWikThfS7MwyNJ69CdK+9MR3kw9k5ZAfWPdPV4n21/GRVDRa/00d3jUi6Dtgqdkch3FnkxE986NaYIwasKJfqfApGDLn01KbQa0VfnxK+kg9sD7TX3CEUorEpojUK+4RcPMWn45EmuEAgvM=","AWS_REGION":"us-east-1"}}},"catalog_store_config":{"store_type":"publisher","publisher_url":null}}'
 ---
 when:
   path: /api/v1/catalog/catalogs/test_user/packages/mypkg/builds
   method: POST
-  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"dummy","outputs":[{"name":"out","store_path":"/nix/store/lk96sazr6xh9j0a3xim20189mh31nshn-nix-2.28.3/bin/nix"}],"outputs_to_install":[],"pname":"dummy","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
+  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"dummy","outputs":[{"name":"out","store_path":"/nix/store/qx59vcr73ysfysjaysk8w8j3hd65kv84-nix-2.28.3/bin/nix"}],"outputs_to_install":[],"pname":"dummy","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
 then:
   status: 404
   header:
   - name: date
-    value: Sat, 26 Jul 2025 00:48:47 GMT
+    value: Mon, 28 Jul 2025 20:11:45 GMT
   - name: server
     value: uvicorn
   - name: content-length
