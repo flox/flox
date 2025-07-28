@@ -55,6 +55,8 @@ nixVersions."${nixVersion}".overrideAttrs (prev: {
     #
     # Note: remove for Nix >= v2.29
     (builtins.path { path = ./patches/pr_12580_host-in-locked-github-url.2.24.11.patch; })
+
+    (builtins.path { path = ./patches/pr_13340_db_lock_permission_error.patch; })
   ];
 
   postFixup = ''
