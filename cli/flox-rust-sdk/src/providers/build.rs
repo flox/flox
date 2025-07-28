@@ -3272,4 +3272,41 @@ mod nef_tests {
             assert!(build_results[0].outputs.contains_key(output));
         }
     }
+
+    #[test]
+    fn nef_builds_use_impure_evaluation() {
+        let pname = "foo".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        // Create a manifest (may be empty)
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        // Create expressions
+        let expressions_dir = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
+            {runCommand}: runCommand "{pname}" {} ''
+                echo -n "${if builtins ? currentSystem then "impure" else "pure-eval"}" >> $out
+            ''
+            "#})]);
+
+        // build
+        let _collected = assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_dir,
+            &pname,
+            None,
+            true,
+        );
+
+        // assert results
+        let result_path = env_path.join(format!("result-{pname}"));
+        let content = fs::read_to_string(result_path).unwrap();
+        // currently an implication of using `nix eval --file` but may change in the future
+        assert_eq!(content, "impure");
+    }
 }
