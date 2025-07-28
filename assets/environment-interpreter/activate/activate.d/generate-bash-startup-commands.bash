@@ -79,7 +79,7 @@ generate_bash_startup_commands() {
   # RC files to perform activations.
   echo "eval \"\$('$_flox_activations' set-env-dirs --shell bash --flox-env \"$_FLOX_ENV\" --env-dirs \"\${FLOX_ENV_DIRS:-}\")\";"
   echo "eval \"\$('$_flox_activations' fix-paths --shell bash --env-dirs \"\$FLOX_ENV_DIRS\" --path \"\$PATH\" --manpath \"\${MANPATH:-}\")\";"
-  echo "eval \"\$('$_flox_activations' profile-scripts --shell bash --env-dirs \"\${FLOX_ENV_DIRS:-}\")\";"
+  echo "eval \"\$('$_flox_activations' profile-scripts --shell bash --already-sourced-env-dirs \"\${_FLOX_SOURCED_PROFILE_SCRIPTS:-}\" --env-dirs \"\${FLOX_ENV_DIRS:-}\")\";"
 
   # Disable command hashing to allow for newly installed flox packages
   # to be found immediately. We do this as the very last thing because
