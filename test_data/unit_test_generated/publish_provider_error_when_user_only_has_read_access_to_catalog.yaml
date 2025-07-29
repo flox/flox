@@ -5,14 +5,14 @@ then:
   status: 201
   header:
   - name: date
-    value: Mon, 28 Jul 2025 20:11:45 GMT
+    value: Tue, 29 Jul 2025 01:26:18 GMT
   - name: server
     value: uvicorn
   - name: content-length
     value: '117'
   - name: content-type
     value: application/json
-  body: '{"id":4,"name":"publish_tests_read_write","created_at":"2025-07-28T14:11:46.291015-06:00","owner_handle":"test_user"}'
+  body: '{"id":3,"name":"publish_tests_read_write","created_at":"2025-07-28T19:26:19.446515-06:00","owner_handle":"test_user"}'
 ---
 when:
   path: /api/v1/catalog/catalogs/publish_tests_read_write/store/config
@@ -22,7 +22,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 28 Jul 2025 20:11:45 GMT
+    value: Tue, 29 Jul 2025 01:26:18 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -38,14 +38,14 @@ then:
   status: 201
   header:
   - name: date
-    value: Mon, 28 Jul 2025 20:11:45 GMT
+    value: Tue, 29 Jul 2025 01:26:18 GMT
   - name: server
     value: uvicorn
   - name: content-length
     value: '116'
   - name: content-type
     value: application/json
-  body: '{"id":5,"name":"publish_tests_read_only","created_at":"2025-07-28T14:11:46.327884-06:00","owner_handle":"test_user"}'
+  body: '{"id":5,"name":"publish_tests_read_only","created_at":"2025-07-28T19:26:19.488438-06:00","owner_handle":"test_user"}'
 ---
 when:
   path: /api/v1/catalog/catalogs/publish_tests_read_only/store/config
@@ -55,7 +55,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 28 Jul 2025 20:11:45 GMT
+    value: Tue, 29 Jul 2025 01:26:18 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -72,7 +72,7 @@ then:
   status: 201
   header:
   - name: date
-    value: Mon, 28 Jul 2025 20:11:45 GMT
+    value: Tue, 29 Jul 2025 01:26:18 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -89,7 +89,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Mon, 28 Jul 2025 20:11:45 GMT
+    value: Tue, 29 Jul 2025 01:26:18 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -101,12 +101,12 @@ then:
 when:
   path: /api/v1/catalog/catalogs/publish_tests_read_only/packages/mypkg/builds
   method: POST
-  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"dummy","outputs":[{"name":"out","store_path":"/nix/store/qx59vcr73ysfysjaysk8w8j3hd65kv84-nix-2.28.3/bin/nix"}],"outputs_to_install":[],"pname":"dummy","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
+  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"dummy","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"outputs_to_install":[],"pname":"dummy","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
 then:
   status: 201
   header:
   - name: date
-    value: Mon, 28 Jul 2025 20:11:45 GMT
+    value: Tue, 29 Jul 2025 01:26:18 GMT
   - name: server
     value: uvicorn
   - name: content-length

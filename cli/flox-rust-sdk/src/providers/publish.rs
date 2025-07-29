@@ -1346,7 +1346,7 @@ pub mod tests {
             pname: "dummy".to_string(),
             outputs: PackageOutputs(vec![PackageOutput {
                 name: "out".to_string(),
-                store_path: known_store_path().to_string_lossy().to_string(),
+                store_path: "/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo".to_string(),
             }]),
             outputs_to_install: vec![],
             drv_path: "dummy".to_string(),
