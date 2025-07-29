@@ -3244,8 +3244,11 @@ mod nef_tests {
             {{runCommand}}: runCommand "{pname}" {{
                 version = "1.0.1";
                 pname = "not-{pname}";
+                outputs = ["out" "man" "lib"];
             }} ''
                 echo -n "Hello, World!" >> $out
+                touch $man
+                touch $lib
             ''
             "#})]);
 
@@ -3265,5 +3268,133 @@ mod nef_tests {
         assert_eq!(build_results[0].name, pname);
         assert_eq!(build_results[0].pname, format!("not-{pname}"));
         assert_eq!(build_results[0].version, "1.0.1");
+        for output in ["out", "lib", "man"] {
+            assert!(build_results[0].outputs.contains_key(output));
+        }
+    }
+
+    #[test]
+    fn nef_builds_use_impure_evaluation() {
+        let pname = "foo".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        // Create a manifest (may be empty)
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        // Create expressions
+        let expressions_dir = prepare_nix_expressions_in(&tempdir, &[(&[&pname], indoc! {r#"
+            {runCommand}: runCommand "{pname}" {} ''
+                echo -n "${if builtins ? currentSystem then "impure" else "pure-eval"}" >> $out
+            ''
+            "#})]);
+
+        // build
+        let _collected = assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_dir,
+            &pname,
+            None,
+            true,
+        );
+
+        // assert results
+        let result_path = env_path.join(format!("result-{pname}"));
+        let content = fs::read_to_string(result_path).unwrap();
+        // currently an implication of using `nix eval --file` but may change in the future
+        assert_eq!(content, "impure");
+    }
+
+    #[test]
+    fn nef_builds_built_lazily() {
+        let eval_success = "eval-success".to_string();
+        let eval_failure = "eval-failure".to_string();
+
+        let (flox, tempdir) = flox_instance();
+
+        // Create a manifest (may be empty)
+        let manifest = formatdoc! {r#"
+            version = 1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+
+        // Create expressions
+        let expressions_dir = prepare_nix_expressions_in(&tempdir, &[
+            (&[&eval_success], indoc! {r#"
+            {runCommand}: runCommand "{eval_success}" {} ''
+                touch $out
+            ''
+            "#}),
+            (&[&eval_failure], r#"{}: throw "eval failure""#),
+        ]);
+
+        // build fails with eval failure
+        assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_dir,
+            &eval_failure,
+            None,
+            false,
+        );
+
+        // build succeeds if eval failure is in another expression
+        assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_dir,
+            &eval_success,
+            None,
+            true,
+        );
+    }
+
+    #[test]
+    fn manifest_builds_can_depend_on_nef() {
+        // Bug: pname and attr_path need to match
+        let pname_expression = "foo";
+        let attr_path_expression = "foo";
+        let pname_manifest_build = "bar";
+
+        let (flox, tempdir) = flox_instance();
+
+        // Create a manifest (may be empty)
+        let manifest = formatdoc! {r#"
+            version = 1
+            [build.{pname_manifest_build}]
+            command = '''
+                cat ${{{attr_path_expression}}} | rev > $out
+            '''
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        // Create expressions
+        let expressions_dir =
+            prepare_nix_expressions_in(&tempdir, &[(&[attr_path_expression], &formatdoc! {r#"
+            {{runCommand}}: runCommand "{pname_expression}" {{}} ''
+                echo "123" >> $out
+            ''
+            "#})]);
+
+        // build
+        let _collected = assert_build_status_with_nix_expr(
+            &flox,
+            &mut env,
+            &expressions_dir,
+            pname_manifest_build,
+            None,
+            true,
+        );
+
+        // assert results
+        let result_path = env_path.join(format!("result-{pname_manifest_build}"));
+        let content = fs::read_to_string(result_path).unwrap();
+        assert_eq!(content, "321\n");
     }
 }
