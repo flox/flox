@@ -15,7 +15,14 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
-use flox_core::activations::{Activations, AttachedPid, UncheckedVersion, read_activations_json};
+use flox_core::activations::{
+    Activations,
+    AttachedPid,
+    CheckedVersion,
+    UncheckedVersion,
+    read_activations_json,
+    write_activations_json,
+};
 use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
 use time::OffsetDateTime;
@@ -42,6 +49,13 @@ pub trait Watcher {
     /// Instructs the watcher to update the list of PIDs that it's watching
     /// by reading the environment registry (for now).
     fn update_watchlist(&mut self, hold_lock: bool) -> Result<Option<LockedActivations>, Error>;
+    /// Writes the current activation PIDs back out to `activations.json`
+    /// while holding a lock on it.
+    fn update_activations_file(
+        &self,
+        activations: Activations<CheckedVersion>,
+        lock: LockFile,
+    ) -> Result<(), Error>;
     /// Returns true if the watcher determines that it's time to perform
     /// cleanup.
     fn should_clean_up(&self) -> Result<bool, Error>;
@@ -92,7 +106,20 @@ impl PidWatcher {
 impl Watcher for PidWatcher {
     fn wait_for_termination(&mut self) -> Result<WaitResult, Error> {
         loop {
+            let old_pids = self.pids_watching.clone();
             self.update_watchlist(false)?;
+            if self.pids_watching != old_pids {
+                // If the running activations have changed, write the new PIDs
+                // back to `activations.json` so that we don't monitor PIDs
+                // that have terminated on the next loop iteration.
+                let (activations, lockfile) = self.update_watchlist(true)?.ok_or(
+                    anyhow::anyhow!("update_watchlist always returns Some when hold_lock is true"),
+                )?;
+                // NOTE(zmitchell, 2025-07-28): at some point we'll have to handle migrations here
+                // if there are updates to the `activations.json` schema.
+                let activations = activations.check_version()?;
+                self.update_activations_file(activations, lockfile)?;
+            }
             if self.should_clean_up()? {
                 // Don't hold the lock during normal polling to avoid contention
                 // But when we're actually ready to cleanup, we need to hold the lock
@@ -150,6 +177,15 @@ impl Watcher for PidWatcher {
         self.pids_watching.extend(all_attached_pids);
         self.prune_terminations();
         Ok(maybe_locked_activations)
+    }
+
+    /// Update the `activations.json` file with the current list of running PIDs.
+    fn update_activations_file(
+        &self,
+        activations: Activations<CheckedVersion>,
+        lock: LockFile,
+    ) -> Result<(), Error> {
+        write_activations_json(&activations, &self.activations_json_path, lock)
     }
 
     /// Returns true if the watcher is not currently watching any PIDs.
