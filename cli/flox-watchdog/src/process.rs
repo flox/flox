@@ -203,7 +203,7 @@ pub mod test {
     use std::path::PathBuf;
     use std::process::{Child, Command};
     use std::sync::Arc;
-    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     use flox_activations::cli::attach::{AttachArgs, AttachExclusiveArgs};
     use flox_activations::cli::{SetReadyArgs, StartOrAttachArgs};
@@ -331,6 +331,99 @@ pub mod test {
             wait_result
         });
         assert!(matches!(wait_result, WaitResult::CleanUp(_)));
+    }
+
+    #[test]
+    fn terminated_pids_removed_from_activations_file() {
+        let runtime_dir = tempfile::tempdir().unwrap();
+        let flox_env = PathBuf::from("flox_env");
+        let store_path = "store_path".to_string();
+
+        let proc1 = start_process();
+        let pid1 = proc1.id() as i32;
+        let start_or_attach_pid1 = StartOrAttachArgs {
+            pid: pid1,
+            flox_env: flox_env.clone(),
+            store_path: store_path.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
+        };
+        let activation_id = start_or_attach_pid1.handle().unwrap();
+        let set_ready_pid1 = SetReadyArgs {
+            id: activation_id.clone(),
+            flox_env: flox_env.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
+        };
+        set_ready_pid1.handle().unwrap();
+
+        let proc2 = start_process();
+        let pid2 = proc2.id() as i32;
+        let start_or_attach_pid2 = StartOrAttachArgs {
+            pid: pid2,
+            flox_env: flox_env.clone(),
+            store_path: store_path.clone(),
+            runtime_dir: runtime_dir.path().to_path_buf(),
+        };
+        let activation_id_2 = start_or_attach_pid2.handle().unwrap();
+        assert_eq!(activation_id, activation_id_2);
+
+        let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
+
+        // Grab the existing activations before starting the PidWatcher so we
+        // can compare against the state after one of the processes has died.
+        let (maybe_initial_activations, lockfile) =
+            read_activations_json(&activations_json_path).expect("failed to read activations.json");
+        let Some(initial_activations_unchecked) = maybe_initial_activations else {
+            panic!("no activations were initially recorded")
+        };
+        let initial_activations = initial_activations_unchecked.check_version().unwrap();
+        let initial_pids = initial_activations
+            .activation_for_store_path(&store_path)
+            .expect("there was no activation for this store path")
+            .attached_pids()
+            .iter()
+            .map(|pid| pid.pid)
+            .collect::<Vec<_>>();
+        assert!(initial_pids.contains(&pid1));
+        assert!(initial_pids.contains(&pid2));
+        drop(lockfile); // Prevents a deadlock
+        stop_process(proc1);
+
+        let (terminate_flag, cleanup_flag) = shutdown_flags();
+        let mut watcher = PidWatcher::new(
+            activations_json_path.clone(),
+            activation_id,
+            terminate_flag.clone(),
+            cleanup_flag,
+        );
+        let maybe_final_activations = std::thread::scope(move |s| {
+            let watcher_thread = s.spawn(move || watcher.wait_for_termination().unwrap());
+            // This wait is just to let the watcher update its watchlist
+            // and realize that one of the processes has exited.
+            std::thread::sleep(2 * WATCHER_SLEEP_INTERVAL);
+            let (activations, lockfile) = read_activations_json(&activations_json_path)
+                .expect("failed to read actiations.json");
+            drop(lockfile);
+            terminate_flag.store(true, Ordering::SeqCst);
+            stop_process(proc2);
+            watcher_thread
+                .join()
+                .expect("watcher thread didn't exit cleanly");
+            activations
+        });
+        let Some(final_activations_unchecked) = maybe_final_activations else {
+            panic!("no activations found at the end")
+        };
+        let final_pids = final_activations_unchecked
+            .check_version()
+            .unwrap()
+            .activation_for_store_path(&store_path)
+            .expect("there was no activation for this store path")
+            .attached_pids()
+            .iter()
+            .map(|pid| pid.pid)
+            .collect::<Vec<_>>();
+        // Check that the other process was observed to still be running.
+        assert!(final_pids.contains(&pid2));
     }
 
     #[test]
