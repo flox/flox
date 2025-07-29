@@ -8,6 +8,7 @@ use crate::config::Config;
 
 mod list;
 mod rollback;
+mod switch;
 
 /// Generations Commands.
 #[derive(Debug, Clone, Bpaf)]
@@ -23,6 +24,10 @@ pub enum GenerationsCommands {
     /// Switch to the last active generation
     #[bpaf(command)]
     Rollback(#[bpaf(external(rollback::rollback))] rollback::Rollback),
+
+    /// Switch to the provided generation
+    #[bpaf(command)]
+    Switch(#[bpaf(external(switch::switch))] switch::Switch),
 }
 
 impl GenerationsCommands {
@@ -34,6 +39,7 @@ impl GenerationsCommands {
             },
             GenerationsCommands::List(args) => args.handle(flox)?,
             GenerationsCommands::Rollback(args) => args.handle(flox)?,
+            GenerationsCommands::Switch(args) => args.handle(flox)?,
         }
 
         Ok(())
