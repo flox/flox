@@ -39,7 +39,7 @@ http = "1.3.1"
 # git pending:
 # - https://github.com/alexliesenfeld/httpmock/issues/127
 # - https://github.com/alexliesenfeld/httpmock/pull/131
-httpmock = { git = "https://github.com/flox/httpmock.git", branch = "flox/better-errors", default-features = false, features = [
+httpmock = { git = "https://github.com/flox/httpmock.git", default-features = false, features = [
     "proxy",
     "record",
 ] }
