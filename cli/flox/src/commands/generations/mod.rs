@@ -45,3 +45,43 @@ impl GenerationsCommands {
         Ok(())
     }
 }
+
+#[cfg(test)]
+pub(super) mod test_helpers {
+    use chrono::DateTime;
+    use flox_rust_sdk::models::environment::generations::{
+        AllGenerationsMetadata,
+        GenerationId,
+        SingleGenerationMetadata,
+    };
+
+    pub(super) fn mock_generations(active: GenerationId) -> AllGenerationsMetadata {
+        let active_ts = Some(DateTime::default() + chrono::Duration::hours(4));
+
+        AllGenerationsMetadata::new(active, [
+            (1.into(), SingleGenerationMetadata {
+                created: DateTime::default() + chrono::Duration::hours(1),
+                last_active: if active == 1.into() { active_ts } else { None },
+                description: "Generation 1 description".to_string(),
+            }),
+            (2.into(), SingleGenerationMetadata {
+                created: DateTime::default() + chrono::Duration::hours(2),
+                last_active: if active == 2.into() {
+                    active_ts
+                } else {
+                    Some(DateTime::default() + chrono::Duration::hours(2))
+                },
+                description: "Generation 2 description".to_string(),
+            }),
+            (3.into(), SingleGenerationMetadata {
+                created: DateTime::default() + chrono::Duration::hours(3),
+                last_active: if active == 3.into() {
+                    active_ts
+                } else {
+                    Some(DateTime::default() + chrono::Duration::hours(3))
+                },
+                description: "Generation 3 description".to_string(),
+            }),
+        ])
+    }
+}
