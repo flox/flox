@@ -1589,7 +1589,7 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 [[package]]
 name = "httpmock"
 version = "0.8.0-beta.1"
-source = "git+https://github.com/flox/httpmock.git?branch=flox%2Fbetter-errors#0e476653929e8db7794bf5780bf952fb62c55fb1"
+source = "git+https://github.com/flox/httpmock.git?branch=flox%2Fbetter-errors#991b3f74557ad770a01ba0b55acea1c711836273"
 dependencies = [
  "assert-json-diff",
  "async-object-pool",
@@ -4606,7 +4606,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
