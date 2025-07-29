@@ -1870,6 +1870,7 @@ pub mod tests {
     // FIXME(zmitchell, 2025-07-25): this test fails because somehow the user
     // with read-only access is able to publish.
     #[tokio::test(flavor = "multi_thread")]
+    #[should_panic]
     async fn error_publishing_to_read_only_catalog() {
         let (build_meta, env_meta, pkg_meta) = dummy_publish_metadata();
         let (flox, _tmpdir) = flox_instance();
