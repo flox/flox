@@ -1,10 +1,15 @@
 [
   {
     "token": "publish_test_mock_generator",
-    "handle": "test_user",
+    "handle": "test_user_with_existing_catalogs",
     "roles": {
       "publish_tests_read_write": ["Reader", "Writer"],
       "publish_tests_read_only": ["Reader"]
     }
+  },
+  {
+    "token": "publish_test_mock_generator2",
+    "handle": "test_user_no_catalogs",
+    "roles": {}
   }
 ]

@@ -1,46 +1,46 @@
 when:
-  path: /api/v1/catalog/catalogs/test_user/packages
+  path: /api/v1/catalog/catalogs/test_user_no_catalogs/packages
   method: POST
   body: '{"original_url":"dummy"}'
 then:
   status: 201
   header:
   - name: date
-    value: Tue, 29 Jul 2025 01:26:19 GMT
+    value: Wed, 30 Jul 2025 02:17:47 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '58'
+    value: '71'
   - name: content-type
     value: application/json
-  body: '{"catalog":"test_user","name":"mypkg","original_url":null}'
+  body: '{"catalog":"test_user_no_catalogs","name":"mypkg3","original_url":null}'
 ---
 when:
-  path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/mypkg/publish/info
+  path: /api/v1/catalog/catalogs/test_user_no_catalogs/packages/mypkg3/publish/info
   method: POST
   body: '{}'
 then:
   status: 200
   header:
   - name: date
-    value: Tue, 29 Jul 2025 01:26:19 GMT
+    value: Wed, 30 Jul 2025 02:17:48 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '90'
+    value: '728'
   - name: content-type
     value: application/json
-  body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"meta-only"}}'
+  body: '{"ingress_uri":"s3://ingress-cache/cache/test_user_no_catalogs?endpoint=http://0.0.0.0:53255&scheme=http","ingress_auth":{"aws-s3":{"envs":{"AWS_ACCESS_KEY_ID":"ASIARZPUZDIKCFZIFOG3","AWS_SECRET_ACCESS_KEY":"ZowozZLQTjC7gou2o56QLD6l16Nad7pFwoHgu93B","AWS_SESSION_TOKEN":"FQoGZXIvYXdzEBYaDjrVA3yzjhBDlOgq6vIJXU18pX3/qguHFQbC+HIrqt6A7BgqKBPUKkDUn7AkUisfk1I2HIsNK2bBHjJ3EWPFSwRcjZOiWwPVV2go1qn7ivFIBz0cLx5PMWg/S8PGYgZhFDjqaRdQJY17UWLgDe5vm+bnxKvNyTNoL7kmEcSiNc6+wi3hrS4Y5gGFJZbE0g08alMRozCDBchQRn0SQEu1m1pXMJJKbf6/lZ2LdsG7wep6jccdDsBUQd6qa52krxV0NtUPfLi/N04M1BRV9W1u+jJCzOCOqHjPj8+qWDoijHaDTlgbtf+fbUQ84429hVRksBBTckFaVl3RnN9JVxk=","AWS_REGION":"us-east-1"}}},"catalog_store_config":{"store_type":"publisher","publisher_url":null}}'
 ---
 when:
-  path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/mypkg/builds
+  path: /api/v1/catalog/catalogs/test_user_no_catalogs/packages/mypkg3/builds
   method: POST
-  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"dummy","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"outputs_to_install":[],"pname":"dummy","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
+  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg3","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"outputs_to_install":[],"pname":"mypkg3","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
 then:
-  status: 200
+  status: 201
   header:
   - name: date
-    value: Tue, 29 Jul 2025 01:26:19 GMT
+    value: Wed, 30 Jul 2025 02:17:48 GMT
   - name: server
     value: uvicorn
   - name: content-length

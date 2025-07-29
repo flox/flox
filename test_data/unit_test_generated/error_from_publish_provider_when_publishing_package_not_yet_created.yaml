@@ -1,33 +1,33 @@
 when:
-  path: /api/v1/catalog/catalogs/test_user/packages/mypkg/publish/info
+  path: /api/v1/catalog/catalogs/test_user_with_existing_catalogs/packages/mypkg7/publish/info
   method: POST
   body: '{}'
 then:
   status: 200
   header:
   - name: date
-    value: Tue, 29 Jul 2025 01:26:18 GMT
+    value: Wed, 30 Jul 2025 02:17:47 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '716'
+    value: '90'
   - name: content-type
     value: application/json
-  body: '{"ingress_uri":"s3://ingress-cache/cache/test_user?endpoint=http://0.0.0.0:60281&scheme=http","ingress_auth":{"aws-s3":{"envs":{"AWS_ACCESS_KEY_ID":"ASIARZPUZDIKOT3X6XPE","AWS_SECRET_ACCESS_KEY":"5My+A0hml6inWr0aGq+nVJoWIqlZ8R9A6rEGhvFY","AWS_SESSION_TOKEN":"FQoGZXIvYXdzEBYaDeyrjAtNn/4CMo+UcYYIBv4elYOKE0Iu4c5ZWwOzKka8k9UFM2SihaKpHibDzntFeHMJoIuazMeCg9CFB11WFANtBMd8P8kKF0JwbwFZ5nn1EOnUSzYtwIX2lUrHuX00ON375t79cRIMZg2iyrm7Fn4jZ6K7S9lCGzFiyAotJT+PgIIAwbygbmVZOaKDwh3nLdm1vtv1GBrmzUO3PjfXjj0EUA7mGFD3YzrqptWhicCcySebbfcN2hAPC2zo4xNOf0NDjcDBr2bvcGlAN4ucew9qEJ3r0rqvWWyaAp/z3/gfxaX37CKh1W1lrdPHdE9VOOVwga2W3Ys9uxqYXHc=","AWS_REGION":"us-east-1"}}},"catalog_store_config":{"store_type":"publisher","publisher_url":null}}'
+  body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"meta-only"}}'
 ---
 when:
-  path: /api/v1/catalog/catalogs/test_user/packages/mypkg/builds
+  path: /api/v1/catalog/catalogs/test_user_with_existing_catalogs/packages/mypkg7/builds
   method: POST
-  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"dummy","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"outputs_to_install":[],"pname":"dummy","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
+  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg7","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"outputs_to_install":[],"pname":"mypkg7","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
 then:
   status: 404
   header:
   - name: date
-    value: Tue, 29 Jul 2025 01:26:18 GMT
+    value: Wed, 30 Jul 2025 02:17:47 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '75'
+    value: '99'
   - name: content-type
     value: application/json
-  body: '{"detail":"The package with name mypkg in catalog test_user was not found"}'
+  body: '{"detail":"The package with name mypkg7 in catalog test_user_with_existing_catalogs was not found"}'
