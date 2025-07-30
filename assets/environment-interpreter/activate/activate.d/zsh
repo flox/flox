@@ -43,6 +43,13 @@ done
 if [ ${#fpath_prepend[@]} -gt 0 ]; then
   fpath=( "${fpath_prepend[@]}" "${fpath[@]}" )
   autoload -U compinit
+  declare -a _flox_compinit_args=()
+
+  # Log the reason for any cache invalidations to STDERR at tracelevel >=1.
+  # This flag was introduced in 5.9 but older versions will just ignore it.
+  if [ "$_flox_activate_tracelevel" -ge 1 ]; then
+    _flox_compinit_args+=( "-w" )
+  fi
 
   # compinit tracing is very verbose so only enable at tracelevel >=3
   #
@@ -54,7 +61,8 @@ if [ ${#fpath_prepend[@]} -gt 0 ]; then
     set +x
   fi
 
-  compinit
+  compinit "${_flox_compinit_args[@]}"
+  unset _flox_compinit_args
 
   if [ "$_flox_activate_tracelevel" -eq 2 ]; then
     set -x
