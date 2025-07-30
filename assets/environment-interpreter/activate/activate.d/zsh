@@ -51,6 +51,19 @@ if [ ${#fpath_prepend[@]} -gt 0 ]; then
     _flox_compinit_args+=( "-w" )
   fi
 
+  # Cache completions in `FLOX_ENV_CACHE` when available. This cache is
+  # invalidated when the contents of `fpath` changes, due to installing new
+  # packages or layering environments in a different order, or when the version
+  # of zsh is changed.
+  #
+  # `activate` doesn't require `--env-cache` so we have to be careful that
+  # `FLOX_ENV_CACHE` is set. `compinit -d` persists the value in the shell as
+  # `$_comp_dumpfile` so it may write to the wrong file if environments are
+  # layered and the previous one didn't have `--env-cache`.
+  if [[ -n "${FLOX_ENV_CACHE:-}" && -d "${FLOX_ENV_CACHE}" ]]; then
+    _flox_compinit_args+=( "-d" "${FLOX_ENV_CACHE}/.zcompdump" )
+  fi
+
   # compinit tracing is very verbose so only enable at tracelevel >=3
   #
   # We only need to explicitly handle tracelevel =2 because:
