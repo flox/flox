@@ -61,6 +61,15 @@ if [ ${#fpath_prepend[@]} -gt 0 ]; then
     set +x
   fi
 
+  # Cache completions where possible.
+  #
+  # `activate` doesn't require `--env-cache` so we have to be careful that it's
+  # set. `compinit -d` persists the value as `$_comp_dumpfile` in the shell so
+  # it may write to the wrong file if the environment doesn't have `--env-cache`
+  if [[ -n "${FLOX_ENV_CACHE:-}" && -d "${FLOX_ENV_CACHE}" ]]; then
+    _flox_compinit_args+=( "-d" "${FLOX_ENV_CACHE}/.zcompdump" )
+  fi
+
   compinit "${_flox_compinit_args[@]}"
   unset _flox_compinit_args
 
