@@ -883,7 +883,7 @@ pub mod test_helpers {
 // Use file-based locking to be compatible with `nextest`.
 #[serial_test::file_serial(build)]
 mod tests {
-    use std::fs::{self};
+    use std::fs::{self, File};
     use std::os::unix::fs::PermissionsExt;
 
     use anyhow::Context;
@@ -3168,6 +3168,40 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn build_can_use_cmake_sandbox_pure() {
         build_can_use_cmake(true).await;
+    }
+
+    #[test]
+    fn pure_manifest_builds_succeed_with_deleted_tracked_files() {
+        let package_name = "foo";
+        let file_name = "bar";
+        let deleted_file_name = "to-be-deleted";
+
+        let manifest = formatdoc! {r#"
+            version = 1
+            [install]
+
+            [build.{package_name}]
+            sandbox = "pure"
+            command = """
+                mkdir $out
+                touch $out/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let deleted_file_path = env_path.join(deleted_file_name);
+        File::create(&deleted_file_path).unwrap();
+
+        let git = GitCommandProvider::init(&env_path, false).unwrap();
+
+        // simulate deleting a tracked file (explicically, without 'git rm')
+        git.add(&[&deleted_file_path]).unwrap();
+        fs::remove_file(&deleted_file_path).unwrap();
+
+        assert_build_status(&flox, &mut env, package_name, None, true);
     }
 }
 

@@ -51,6 +51,7 @@ __package_bin = $(if $(filter @%@,$(1)),$(2),$(1)/bin/$(2))
 _bash := $(call __package_bin,$(__bashInteractive),bash)
 _cat := $(call __package_bin,$(__coreutils),cat)
 _chmod := $(call __package_bin,$(__coreutils),chmod)
+_comm := $(call __package_bin,$(__coreutils),comm)
 _cp := $(call __package_bin,$(__coreutils),cp)
 _cpio := $(call __package_bin,$(__cpio),cpio)
 _cut := $(call __package_bin,$(__coreutils),cut)
@@ -490,15 +491,24 @@ define BUILD_nix_sandbox_template =
   # build cache.  This is used for (at least) publish.
   $(eval _do_buildCache = $(if $(DISABLE_BUILDCACHE),,true))
 
+  # 'git ls-files' will list all _tracked_ files **including deleted files**.
+  # Consequently, when we try to create a tarball with all files listed by
+  # 'git ls-files' we may attempt packing files that are actually deleted.
+  # To avoid this, we filter out deleted files.
+  # Because 'git ls-files' does not have a flag to filter deleted files,
+  # but allows to _only_ show deleted files, use 'comm' to do the filtering for
+  # us.
+  # Assumes the output of 'git ls-files' to be sorted.
+  $(eval $(_pvarname)_src_list = $($(_pvarname)_tmpBasename)/src-list)
+  $($(_pvarname)_src_list): $(PROJECT_TMPDIR)/check-build-prerequisites
+	$(_comm) -23 <($(_git) ls-files -c) <($(_git) ls-files -d) > $$@
+
   # The sourceTarball value needs to be stable when nothing changes across
   # builds, so we create a tarball at a stable temporary path and pass that
   # to the derivation instead.
   $(eval $(_pvarname)_src_tar = $($(_pvarname)_tmpBasename)/src.tar)
-  $($(_pvarname)_src_tar): $(PROJECT_TMPDIR)/check-build-prerequisites
-	@# TIL that you have to explicitly call `wait` to harvest the exit status
-	@# of a process substitution, and that `set -o pipefail` does nothing here.
-	@# See: https://mywiki.wooledge.org/ProcessSubstitution
-	$(_V_) $(_tar) -cf $$@ --no-recursion -T <($(_git) ls-files) && wait "$$$$!"
+  $($(_pvarname)_src_tar): $($(_pvarname)_src_list)
+	$(_V_) $(_tar) -cf $$@ --no-recursion --files-from $$<
 
   # The buildCache value needs to be similarly stable when nothing changes across
   $(eval $(_pvarname)_buildCache = $($(_pvarname)_tmpBasename)/buildCache.tar)
