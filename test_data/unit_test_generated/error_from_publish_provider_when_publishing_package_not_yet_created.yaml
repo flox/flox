@@ -1,0 +1,33 @@
+when:
+  path: /api/v1/catalog/catalogs/test_user_with_existing_catalogs/packages/mypkg7/publish/info
+  method: POST
+  body: '{}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Wed, 30 Jul 2025 02:17:47 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '90'
+  - name: content-type
+    value: application/json
+  body: '{"ingress_uri":null,"ingress_auth":null,"catalog_store_config":{"store_type":"meta-only"}}'
+---
+when:
+  path: /api/v1/catalog/catalogs/test_user_with_existing_catalogs/packages/mypkg7/builds
+  method: POST
+  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg7","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"outputs_to_install":[],"pname":"mypkg7","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
+then:
+  status: 404
+  header:
+  - name: date
+    value: Wed, 30 Jul 2025 02:17:47 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '99'
+  - name: content-type
+    value: application/json
+  body: '{"detail":"The package with name mypkg7 in catalog test_user_with_existing_catalogs was not found"}'

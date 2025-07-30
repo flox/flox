@@ -13,6 +13,7 @@
 nix_options := "--extra-experimental-features nix-command \
                 --extra-experimental-features flakes"
 INPUT_DATA := "${PWD}/test_data/input_data"
+TEST_DATA := "${PWD}/test_data"
 cargo_test_invocation := "cargo nextest --profile ci run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
 
 # Set the FLOX_VERSION variable so that it can be used in the build/runtime
@@ -129,7 +130,18 @@ version:
     pushd cli; cargo build -p mk_data; popd
 
 # Generate test data
-@gen-data floxhub_path +mk_data_args="": (mk-data mk_data_args) (gen-unit-data floxhub_path)
+@gen-data floxhub_path +mk_data_args="": (mk-data mk_data_args)
+    #!/usr/bin/env bash
+
+    # We do this because `mk_data` has a `-f` flag whereas the
+    # gen-unit-data recipe has a positional argument that can take the value
+    # `force`. As far as I can tell, there's not a way to conditionally run
+    # recipes within `just`, so we just run the correct recipe via a script.
+    if [ "{{mk_data_args}}" = "-f" ]; then
+        just gen-unit-data "{{floxhub_path}}" force
+    else
+        just gen-unit-data "{{floxhub_path}}"
+    fi
 
 @mk-data +mk_data_args="": build-data-gen build-cli md
 
@@ -149,9 +161,9 @@ gen-unit-data-no-publish force="":
     fi
 
     # Use remote services for non-publish tests
-    {{cargo_test_invocation}} --filterset 'not (test(providers::build::tests) | test(providers::publish) | test(commands::publish))'
+    {{cargo_test_invocation}} --filterset 'not (test(providers::build::tests) | test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog))'
 
-gen-unit-data-for-publish floxhub_repo_path reauth="" force="":
+gen-unit-data-for-publish floxhub_repo_path force="":
     #!/usr/bin/env bash
 
     # Use local services for publish tests, must already be running.
@@ -166,13 +178,14 @@ gen-unit-data-for-publish floxhub_repo_path reauth="" force="":
         echo "failed to communicate with floxhub services"
         exit 1
     fi
-    export DUMMY_NIXPKGS_URL="github:flox/nixpkgs?rev=$nixpkgs_rev"
+    echo "$nixpkgs_rev" > "{{TEST_DATA}}/unit_test_generated/latest_dev_catalog_rev.txt"
 
     # Grab configuration variables from the FloxHub repo's environment
-    export _FLOX_OAUTH_AUTH_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_AUTH_URL')"
-    export _FLOX_OAUTH_TOKEN_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_TOKEN_URL')"
-    export _FLOX_OAUTH_DEVICE_AUTH_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_DEVICE_AUTH_URL')"
-    export _FLOX_OAUTH_CLIENT_ID="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_CLIENT_ID')"
+    # (Only needed if you want to use Auth0 instead of the test users)
+    # export _FLOX_OAUTH_AUTH_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_AUTH_URL')"
+    # export _FLOX_OAUTH_TOKEN_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_TOKEN_URL')"
+    # export _FLOX_OAUTH_DEVICE_AUTH_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_DEVICE_AUTH_URL')"
+    # export _FLOX_OAUTH_CLIENT_ID="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_CLIENT_ID')"
     export FLOX_CONFIG_DIR="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $FLOX_CONFIG_DIR')"
 
     # Set the recording variable based on Justfile arguments
@@ -183,14 +196,8 @@ gen-unit-data-for-publish floxhub_repo_path reauth="" force="":
         export _FLOX_UNIT_TEST_RECORD="missing"
     fi
 
-    # Log in against the local services if necessary
-    if [ -n "{{reauth}}" ]; then
-        flox auth login
-    fi
-    export _FLOX_UNIT_TEST_RECORD_TOKEN=$(awk '$1 == "floxhub_token" {gsub("\"", "", $3); print $3}' "$FLOX_CONFIG_DIR"/flox.toml)
-
     # Run the tests that will regenerate the mocks
-    {{cargo_test_invocation}} --filterset 'test(providers::publish) | test(commands::publish)'
+    {{cargo_test_invocation}} --no-fail-fast --filterset 'test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog)'
 
 @gen-unit-data floxhub_path: gen-unit-data-no-publish (gen-unit-data-for-publish floxhub_path)
 

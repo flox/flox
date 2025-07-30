@@ -256,6 +256,7 @@ pub mod test_helpers {
 
     use self::catalog::MockClient;
     use super::*;
+    use crate::providers::catalog::test_helpers::UNIT_TEST_GENERATED;
     use crate::providers::flake_installable_locker::{
         InstallableLockerImpl,
         InstallableLockerMock,
@@ -278,6 +279,50 @@ pub mod test_helpers {
         .unwrap();
 
         FloxhubToken::from_str(&token).unwrap()
+    }
+
+    /// Describes which test user to load:
+    /// - One that has an existing personal catalog and access to other test
+    ///   catalogs.
+    /// - No access to org catalogs, and a personal catalog that doesn't exist
+    ///   yet.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum PublishTestUser {
+        WithCatalogs,
+        NoCatalogs,
+    }
+
+    pub fn test_token_from_floxhub_test_users_file(user: PublishTestUser) -> FloxhubToken {
+        let idx = match user {
+            PublishTestUser::WithCatalogs => 0,
+            PublishTestUser::NoCatalogs => 1,
+        };
+        let test_user_file_path = UNIT_TEST_GENERATED
+            .parent()
+            .unwrap()
+            .join("floxhub_test_users.json");
+        let contents =
+            std::fs::read_to_string(test_user_file_path).expect("couldn't open test user file");
+        let json: serde_json::Value =
+            serde_json::from_str(&contents).expect("couldn't parse test user file");
+        let token = json
+            .get(idx)
+            .and_then(|obj| obj.get("token"))
+            .expect("couldn't extract token from test user file")
+            .as_str()
+            .unwrap()
+            .to_string();
+        let handle = json
+            .get(idx)
+            .and_then(|obj| obj.get("handle"))
+            .expect("couldn't get user handle from test user file")
+            .as_str()
+            .unwrap()
+            .to_string();
+        FloxhubToken {
+            token,
+            token_data: FloxTokenClaims { handle },
+        }
     }
 
     pub fn flox_instance() -> (Flox, TempDir) {

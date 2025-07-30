@@ -193,7 +193,7 @@ impl Publish {
 
         // Check that we can publish before building.
         let package_created = publish_provider
-            .create_package(&flox.catalog_client, &catalog_name)
+            .create_package_and_possibly_user_catalog(&flox.catalog_client, &catalog_name)
             .await?;
 
         let build_metadata = check_build_metadata(

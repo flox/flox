@@ -1,0 +1,32 @@
+when:
+  path: /api/v1/catalog/catalogs/
+  method: POST
+then:
+  status: 201
+  header:
+  - name: date
+    value: Wed, 30 Jul 2025 02:17:46 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '125'
+  - name: content-type
+    value: application/json
+  body: '{"id":2,"name":"dummy_unused_catalog","created_at":"2025-07-29T20:17:47.829689-06:00","owner_handle":"test_user_no_catalogs"}'
+---
+when:
+  path: /api/v1/catalog/catalogs/dummy_unused_catalog/store/config
+  method: PUT
+  body: '{"store_type":"meta-only"}'
+then:
+  status: 200
+  header:
+  - name: date
+    value: Wed, 30 Jul 2025 02:17:47 GMT
+  - name: server
+    value: uvicorn
+  - name: content-length
+    value: '26'
+  - name: content-type
+    value: application/json
+  body: '{"store_type":"meta-only"}'
