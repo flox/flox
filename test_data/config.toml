@@ -334,6 +334,7 @@ hello_other_pkg_group.manifest = "hello_other_pkg_group.toml"
 hello_as_greeting.manifest = "hello_as_greeting.toml"
 hello_and_htop_for_no_system.manifest = "hello_and_htop_for_no_system.toml"
 influxdb2.manifest = "influxdb2.toml"
+old_hello.manifest = "old_hello.toml"
 pip.manifest = "pip.toml"
 build-noop.manifest = "build_noop.toml"
 publish-simple.manifest = "publish_simple.toml"
@@ -350,6 +351,7 @@ build-runtime-all-toplevel.manifest = "build_runtime_all_toplevel.toml"
 build-runtime-packages-only-hello.manifest = "build_runtime_packages_only_hello.toml"
 build-runtime-packages-not-toplevel.manifest = "build_runtime_packages_not_toplevel.toml"
 build-runtime-packages-not-found.manifest = "build_runtime_packages_not_found.toml"
+tabula-lock.manifest = "tabula-lock.toml"
 
 ################################################################################
 # Custom
@@ -418,45 +420,32 @@ record_cmd = '''
     flox install hello
 '''
 
-[envs.old_hello]
-skip_if_output_exists = "envs/old_hello"
-files = ["envs/old_hello/manifest.toml"]
-pre_cmd = "flox init"
-cmd = "flox edit -f manifest.toml"
-post_cmd = '''
-    envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/old_hello"
-    mkdir -p "$env_dir"
-    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
-    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-'''
-
-[build.hello-cmake]
-skip_if_output_exists = "build/hello-cmake"
-files = [
-    "build/hello-cmake/CMakeLists.txt",
-    "build/hello-cmake/hello.in",
-    "build/hello-cmake/HelloTarget",
-    "build/hello-cmake/.flox"
-]
-pre_cmd = '''
-    rm .flox/env/manifest.lock
-'''
-cmd = '''
-    # re-resolve and build
-    flox lock-manifest .flox/env/manifest.toml > .flox/env/manifest.lock
-'''
-post_cmd = '''
-    build_output_dir="$(dirname "$RESPONSE_FILE")"
-    build_name="$(basename -s .yaml "$RESPONSE_FILE")"
-    resp_file="$(basename "$RESPONSE_FILE")"
-    build_dir="$build_output_dir/$build_name"
-    mkdir -p "$build_dir"
-    mv "$RESPONSE_FILE" "$build_dir/$resp_file"
-    cp -R .flox "$build_dir/.flox"
-    # Copy over any source files
-    cp -r CMakeLists.txt hello.in HelloTarget "$build_dir"
-'''
+# [build.hello-cmake]
+# skip_if_output_exists = "build/hello-cmake"
+# files = [
+#     "build/hello-cmake/CMakeLists.txt",
+#     "build/hello-cmake/hello.in",
+#     "build/hello-cmake/HelloTarget",
+#     "build/hello-cmake/.flox"
+# ]
+# pre_cmd = '''
+#     rm .flox/env/manifest.lock
+# '''
+# cmd = '''
+#     # re-resolve and build
+#     flox lock-manifest .flox/env/manifest.toml > .flox/env/manifest.lock
+# '''
+# post_cmd = '''
+#     build_output_dir="$(dirname "$RESPONSE_FILE")"
+#     build_name="$(basename -s .yaml "$RESPONSE_FILE")"
+#     resp_file="$(basename "$RESPONSE_FILE")"
+#     build_dir="$build_output_dir/$build_name"
+#     mkdir -p "$build_dir"
+#     mv "$RESPONSE_FILE" "$build_dir/$resp_file"
+#     cp -R .flox "$build_dir/.flox"
+#     # Copy over any source files
+#     cp -r CMakeLists.txt hello.in HelloTarget "$build_dir"
+# '''
 
 [custom.heredocs]
 pre_cmd = '''

@@ -1106,8 +1106,9 @@ mod realise_nixpkgs_tests {
     }
 
     fn locked_published_package(store_path: Option<&str>) -> LockedPackageCatalog {
-        let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut locked_package = locked_package_catalog_from_mock(
+            GENERATED_DATA.join("custom/hello/.flox/env/manifest.lock"),
+        );
         // Set the attr_path to something that looks like a published package.
         locked_package.attr_path = "custom_catalog/hello".to_string();
         locked_package.locked_url =
@@ -1128,8 +1129,9 @@ mod realise_nixpkgs_tests {
     /// this test is only indicative that we _actually_ build the package.
     #[test]
     fn nixpkgs_build_reproduce_if_invalid() {
-        let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut locked_package = locked_package_catalog_from_mock(
+            GENERATED_DATA.join("custom/hello/.flox/env/manifest.lock"),
+        );
         let client = MockClient::new();
 
         // replace the store path with a known invalid one, to trigger a rebuild
@@ -1157,8 +1159,9 @@ mod realise_nixpkgs_tests {
     /// to ensure that the build will fail if buildenv attempts to evaluate the package.
     #[test]
     fn nixpkgs_skip_eval_if_valid() {
-        let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut locked_package = locked_package_catalog_from_mock(
+            GENERATED_DATA.join("custom/hello/.flox/env/manifest.lock"),
+        );
         let client = MockClient::new();
 
         // build the package to ensure it is in the store
@@ -1184,8 +1187,9 @@ mod realise_nixpkgs_tests {
     /// which is tested in the tests below.
     #[test]
     fn nixpkgs_eval_failure() {
-        let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
+        let mut locked_package = locked_package_catalog_from_mock(
+            GENERATED_DATA.join("custom/hello/.flox/env/manifest.lock"),
+        );
         let client = MockClient::new();
 
         // replace the store path with a known invalid one, to trigger a rebuild
@@ -1216,7 +1220,7 @@ mod realise_nixpkgs_tests {
     #[test]
     fn nixpkgs_build_unfree() {
         let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello-unfree-lock.yaml"));
+            locked_package_catalog_from_mock(GENERATED_DATA.join("lock/hello-unfree-lock.lock"));
         let client = MockClient::new();
 
         // replace the store path with a known invalid one, to trigger a rebuild
@@ -1244,7 +1248,7 @@ mod realise_nixpkgs_tests {
     #[test]
     fn nixpkgs_build_broken() {
         let mut locked_package =
-            locked_package_catalog_from_mock(GENERATED_DATA.join("envs/tabula-lock.yaml"));
+            locked_package_catalog_from_mock(GENERATED_DATA.join("lock/tabula-lock.lock"));
         let client = MockClient::new();
 
         // replace the store path with a known invalid one, to trigger a rebuild

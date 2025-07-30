@@ -1,0 +1,134 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "tabula": {
+        "pkg-path": "tabula"
+      }
+    },
+    "options": {}
+  },
+  "packages": [
+    {
+      "attr_path": "tabula",
+      "broken": false,
+      "derivation": "/nix/store/xvlpclbzmc1wlwkmz5sx67ahpzib6pnf-tabula-1.2.1.drv",
+      "description": "A tool for liberating data tables locked inside PDF files",
+      "install_id": "tabula",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2caf4ef5005ecc68141ecb4aac271079f7371c44",
+      "name": "tabula-1.2.1",
+      "pname": "tabula",
+      "rev": "2caf4ef5005ecc68141ecb4aac271079f7371c44",
+      "rev_count": 449318,
+      "rev_date": "2023-01-30T21:55:03Z",
+      "scrape_date": "2024-08-16T02:08:55Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.2.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/cfbs4942fdnpzwrnr5lapip3z1c0b7nx-tabula-1.2.1"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "tabula",
+      "broken": false,
+      "derivation": "/nix/store/v5f742bjv62gpa3dbdxsc9qqsnwvxcgq-tabula-1.2.1.drv",
+      "description": "A tool for liberating data tables locked inside PDF files",
+      "install_id": "tabula",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2caf4ef5005ecc68141ecb4aac271079f7371c44",
+      "name": "tabula-1.2.1",
+      "pname": "tabula",
+      "rev": "2caf4ef5005ecc68141ecb4aac271079f7371c44",
+      "rev_count": 449318,
+      "rev_date": "2023-01-30T21:55:03Z",
+      "scrape_date": "2024-08-16T02:08:55Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.2.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/gdkipd3nnhnih9s4vcsc266prffk04b8-tabula-1.2.1"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "tabula",
+      "broken": false,
+      "derivation": "/nix/store/swyy0ih7g49mpb39anm9nnwsfdf100jv-tabula-1.2.1.drv",
+      "description": "A tool for liberating data tables locked inside PDF files",
+      "install_id": "tabula",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2caf4ef5005ecc68141ecb4aac271079f7371c44",
+      "name": "tabula-1.2.1",
+      "pname": "tabula",
+      "rev": "2caf4ef5005ecc68141ecb4aac271079f7371c44",
+      "rev_count": 449318,
+      "rev_date": "2023-01-30T21:55:03Z",
+      "scrape_date": "2024-08-16T02:08:55Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.2.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/gh7xhpk4pd9fg6pgkk5dj95xq660vm30-tabula-1.2.1"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "tabula",
+      "broken": false,
+      "derivation": "/nix/store/1h8cnvdq5p3klfw8v6h7ry6icjv2h3gb-tabula-1.2.1.drv",
+      "description": "A tool for liberating data tables locked inside PDF files",
+      "install_id": "tabula",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2caf4ef5005ecc68141ecb4aac271079f7371c44",
+      "name": "tabula-1.2.1",
+      "pname": "tabula",
+      "rev": "2caf4ef5005ecc68141ecb4aac271079f7371c44",
+      "rev_count": 449318,
+      "rev_date": "2023-01-30T21:55:03Z",
+      "scrape_date": "2024-08-16T02:08:55Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.2.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/44wazcm221dxykz7954d3c48qfz605pd-tabula-1.2.1"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

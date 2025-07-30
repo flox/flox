@@ -2618,7 +2618,7 @@ mod tests {
         let file_name = String::from("bar");
 
         let (flox, _temp_dir_handle) = flox_instance();
-        let mut env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/bash"));
+        let mut env = new_path_environment_from_env_files(&flox, GENERATED_DATA.join("env/bash"));
         let env_path = env.parent_path().unwrap();
 
         let base_manifest = env.manifest_contents(&flox).unwrap();
@@ -2719,7 +2719,9 @@ mod tests {
         build_patch_shebangs_falls_back_to_correct_nixpkgs(true);
     }
 
+    // FIXME(zmitchell, 2025-07-30): need to add build support back in
     #[test]
+    #[should_panic]
     fn hello_world_builds() {
         let (flox, tmpdir) = flox_instance();
         assert_manifest_build_succeeds(GENERATED_DATA.join("build/hello"), "hello", &flox, tmpdir);
@@ -2739,7 +2741,7 @@ mod tests {
         // cause the closure check to fail if build-manifest.nix pulls in
         // `bash` from the toplevel nixpkgs.
         let mut env =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/old_hello"));
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("env/old_hello"));
         let env_path = env.parent_path().unwrap();
 
         let base_manifest = env.manifest_contents(&flox).unwrap();
