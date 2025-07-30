@@ -44,20 +44,21 @@ if [ ${#fpath_prepend[@]} -gt 0 ]; then
   fpath=( "${fpath_prepend[@]}" "${fpath[@]}" )
   autoload -U compinit
 
-  # compinit tracing is very verbose so only enable with tracelevel 3 or above.
+  # compinit tracing is very verbose so only enable at tracelevel >=3
+  #
+  # We only need to explicitly handle tracelevel =2 because:
+  # - <2 already has tracing disabled
+  # - >3 always has tracing enabled
   if [ "$_flox_activate_tracelevel" -eq 2 ]; then
-    # Disable tracing for the compinit invocation then re-enable.
     : compinit tracing suppressed
     set +x
-    compinit
-    set -x
-  else
-    # Tracing will either have already been enabled for tracelevels greater or
-    # equal to 2 or not enabled for tracelevels below 2, but either way we can
-    # leave tracing as-is and just invoke compinit.
-    compinit
   fi
 
+  compinit
+
+  if [ "$_flox_activate_tracelevel" -eq 2 ]; then
+    set -x
+  fi
 fi
 unset fpath_prepend
 
