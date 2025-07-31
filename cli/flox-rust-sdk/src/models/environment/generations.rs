@@ -597,6 +597,8 @@ pub struct AllGenerationsMetadata {
 }
 
 impl AllGenerationsMetadata {
+    /// Create a new object from its parts,
+    /// used in tests to create mocks.
     #[cfg(feature = "tests")]
     pub fn new(
         current_gen: GenerationId,
