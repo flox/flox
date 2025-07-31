@@ -584,6 +584,9 @@ impl TryFrom<ConcreteEnvironment> for GenerationsEnvironment {
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AllGenerationsMetadata {
+    #[serde(default, skip)]
+    pub history: History,
+
     /// None means the environment has been created but does not yet have any
     /// generations
     pub current_gen: Option<GenerationId>,
@@ -605,6 +608,7 @@ impl AllGenerationsMetadata {
         generations: impl IntoIterator<Item = (GenerationId, SingleGenerationMetadata)>,
     ) -> Self {
         AllGenerationsMetadata {
+            history: History::default(),
             current_gen: Some(current_gen),
             generations: BTreeMap::from_iter(generations),
             version: Default::default(),
