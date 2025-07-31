@@ -661,6 +661,79 @@ impl SingleGenerationMetadata {
 )]
 pub struct GenerationId(usize);
 
+/// The type of history event that is associated with a change.
+/// These are generation _creating_ changes (such as install, edit, etc.)
+/// and metadata only changes such as switching generations.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[non_exhaustive]
+pub enum HistoryKind {
+    Install,
+    Edit,
+    Uninstall,
+    Upgrade,
+
+    IncludeUpgrade,
+
+    SwitchGeneration,
+    Other(String),
+}
+
+/// The structure of a single change, tying together
+/// _who_ performed _what_ change, where and when.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistorySpec {
+    // change provided
+    /// Type of the change
+    kind: HistoryKind,
+    /// Producer generated summary of the change
+    summary: String,
+
+    // system provided
+    /// Local username of the user performing the change
+    author: String,
+    /// Hostname of the machine, on which the change was made
+    hostname: String,
+    /// Timestamp associated with the change
+    // for consistency with the existing SingleGenerationMetadata
+    #[serde(with = "chrono::serde::ts_seconds")]
+    timestamp: DateTime<Utc>,
+
+    // associated generation(s)
+    /// Currently active generation, e.g. created by the change
+    /// or switched to.
+    current_generation: GenerationId,
+    /// Previous generation before a new generation was created,
+    /// or the generation active before a generation switch.
+    previous_generation: Option<GenerationId>,
+
+    /// Additional unsupported fields.
+    #[serde(flatten)]
+    _compat: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, derive_more::AsRef)]
+pub struct History(Vec<HistorySpec>);
+
+impl<'h> IntoIterator for &'h History {
+    type IntoIter = std::slice::Iter<'h, HistorySpec>;
+    type Item = &'h HistorySpec;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+impl IntoIterator for History {
+    type IntoIter = std::vec::IntoIter<HistorySpec>;
+    type Item = HistorySpec;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl History {}
+
 #[cfg(test)]
 mod tests {
     use tempfile::TempDir;
