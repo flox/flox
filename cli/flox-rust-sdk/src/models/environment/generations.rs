@@ -661,6 +661,56 @@ impl SingleGenerationMetadata {
 )]
 pub struct GenerationId(usize);
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[non_exhaustive]
+pub enum HistoryKind {
+    Install,
+    Edit,
+    Uninstall,
+    Upgrade,
+
+    IncludeUpgrade,
+
+    SwitchGeneration,
+    Other(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistorySpec {
+    author: String,
+    hostname: String,
+    timestamp: DateTime<Utc>,
+    previous_generation: Option<GenerationId>,
+    current_generation: GenerationId,
+
+    // change provided
+    kind: HistoryKind,
+    summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct History(Vec<HistorySpec>);
+
+impl<'h> IntoIterator for &'h History {
+    type IntoIter = std::slice::Iter<'h, HistorySpec>;
+    type Item = &'h HistorySpec;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+impl IntoIterator for History {
+    type IntoIter = std::vec::IntoIter<HistorySpec>;
+    type Item = HistorySpec;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl History {}
+
 #[cfg(test)]
 mod tests {
     use tempfile::TempDir;
