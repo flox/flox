@@ -789,12 +789,9 @@ pub(crate) fn copy_dir_recursive(
     to: impl AsRef<Path>,
     keep_permissions: bool,
 ) -> Result<(), std::io::Error> {
-    eprintln!("copy from: {}", from.as_ref().display());
-    eprintln!("copy to: {}", to.as_ref().display());
     if !to.as_ref().exists() {
         std::fs::create_dir_all(&to).unwrap();
     }
-    eprintln!("made it");
     for entry in WalkDir::new(&from).into_iter().skip(1) {
         let entry = entry.unwrap();
         let new_path = to.as_ref().join(entry.path().strip_prefix(&from).unwrap());

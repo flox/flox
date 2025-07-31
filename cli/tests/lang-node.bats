@@ -155,7 +155,7 @@ teardown() {
         assert_failure
       fi
 
-      _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/krb5_after_prereqs_installed.yaml" \
+      _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/custom/krb5_after_prereqs_installed/resp.yaml" \
         run "$FLOX_BIN" install krb5
       assert_success
 

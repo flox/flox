@@ -140,17 +140,24 @@ pub(crate) fn copy_dir_recursive(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
 ) -> Result<(), Error> {
+    debug!(FROM = %from.as_ref().display(), "XXXXXX");
+    debug!(TO = %to.as_ref().display(), "XXXXXX");
     if !to.as_ref().exists() {
-        std::fs::create_dir(&to).unwrap();
+        std::fs::create_dir_all(&to).unwrap();
     }
     for entry in WalkDir::new(&from).into_iter().skip(1) {
         let entry = entry.unwrap();
+        debug!(path = %entry.path().display(), "handling dir entry");
+        let stripped = entry.path().strip_prefix(&from).unwrap();
+        debug!(fragment = %stripped.display(), "stripped path prefix");
         let new_path = to.as_ref().join(entry.path().strip_prefix(&from).unwrap());
         match entry.file_type() {
             file_type if file_type.is_dir() => {
+                debug!(path = %new_path.display(), "creating new directory");
                 std::fs::create_dir(new_path).context("failed to create new directory")?;
             },
             file_type if file_type.is_file() => {
+                debug!(path = %new_path.display(), "copying file");
                 std::fs::copy(entry.path(), &new_path).context("failed to copy file")?;
             },
             _ => {
@@ -167,48 +174,20 @@ pub fn unpack_inputs(
     input_data_dir: &Path,
     inputs: &[String],
     workdir: &Path,
-    ctx: &JobCtx,
+    _ctx: &JobCtx,
 ) -> Result<(), Error> {
     for input_path in inputs.iter() {
         let full_input_path = input_data_dir.join(input_path);
         if !full_input_path.exists() {
             bail!("path does not exist: {}", full_input_path.display());
         }
-        for item in full_input_path
-            .read_dir()
-            .with_context(|| format!("failed to read directory: {}", full_input_path.display()))?
-        {
-            let item = item.context("failed to dir entry")?;
-            let item_path = item.path();
-            let suffix = item_path.strip_prefix(&full_input_path).with_context(|| {
-                format!(
-                    "failed to strip prefix {} from {}",
-                    full_input_path.display(),
-                    item_path.display()
-                )
-            })?;
-            let dest = workdir.join(suffix);
-            let file_type = item.file_type().context("failed to get file type")?;
-            if file_type.is_file() {
-                debug!(category = "init", name = ctx.name, src = %item.path().display(), dest = %dest.display(), "copying input data");
-                std::fs::copy(&item_path, &dest).with_context(|| {
-                    format!(
-                        "failed to copy {} to {}",
-                        item_path.display(),
-                        dest.display()
-                    )
-                })?;
-            } else if file_type.is_dir() {
-                debug!(category = "init", name = ctx.name, src = %item_path.display(), dest = %dest.display(), "copying input data");
-                copy_dir_recursive(&full_input_path, &dest).with_context(|| {
-                    format!(
-                        "failed to copy {} to {}",
-                        full_input_path.display(),
-                        dest.display()
-                    )
-                })?;
-            }
-        }
+        copy_dir_recursive(&full_input_path, workdir).with_context(|| {
+            format!(
+                "failed to copy contents of {} to {}",
+                full_input_path.display(),
+                workdir.display()
+            )
+        })?;
     }
     Ok(())
 }

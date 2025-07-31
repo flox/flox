@@ -64,12 +64,15 @@ teardown() {
   "$FLOX_BIN" activate -- bash "$INPUT_DATA/init/python/requests-with-pip.sh"
 }
 
-# bats test_tags=python:activate:poetry,catalog
+# bats test_tags=python:activate:poetry,catalog,bats:focus
 @test "flox activate works with poetry" {
-  cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
-  cp -r "$INPUT_DATA"/init/python/poetry/* "$PROJECT_DIR/"
+  # cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
+  # cp -r "$INPUT_DATA"/init/python/poetry/* "$PROJECT_DIR/"
+  cp -R "$GENERATED_DATA"/init/python_poetry/* "$PROJECT_DIR/"
   # Files copied from the store are read-only
   chmod -R +w .
+  rm -rf "$PROJECT_DIR/.flox"
+  ls -al >&3
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_poetry/resp.yaml" \
     run "$FLOX_BIN" init --auto-setup

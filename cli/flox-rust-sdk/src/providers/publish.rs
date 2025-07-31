@@ -1119,7 +1119,6 @@ pub mod tests {
         remote: Option<&String>,
     ) -> (PathEnvironment, GitCommandProvider) {
         let repo_root = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
-        eprintln!("created tmpdir");
         let repo_subdir = repo_root.join("subdir_for_flox_stuff");
 
         let env = new_path_environment_from_env_files_in(
@@ -1128,7 +1127,6 @@ pub mod tests {
             repo_subdir,
             None,
         );
-        eprintln!("created new path env from files");
 
         let git = GitCommandProvider::init(repo_root, false).unwrap();
 
@@ -1514,16 +1512,13 @@ pub mod tests {
     async fn upload_to_local_cache() {
         let (mut flox, _temp_dir_handle) = flox_instance();
         let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
-        eprintln!("created example git repo");
         let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
-        eprintln!("created example path environment");
 
         let token = create_test_token("test");
         let catalog_name = token.handle().to_string();
         flox.floxhub_token = Some(token.clone());
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
-        eprintln!("checked env metadata");
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
             &mock_base_catalog_url(),

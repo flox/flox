@@ -1,0 +1,6 @@
+- python
+  - flox activate works with requirements.txt and pip
+  - flox activate works with pyproject and pip
+  - flox activate works with poetry
+- activate
+  - profile: JUPYTER_PATH is modified when Jupyter is installed

@@ -1,0 +1,96 @@
+~/src/flox/mkdata-refactor/cli ~/src/flox/mkdata-refactor
+   Compiling mk_data v0.1.0 (/Users/zmitchell/src/flox/mkdata-refactor/cli/mk_data)
+warning: unused variable: `ctx`
+   --> mk_data/src/generate/mod.rs:177:5
+    |
+177 |     ctx: &JobCtx,
+    |     ^^^ help: if this is intentional, prefix it with an underscore: `_ctx`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: `mk_data` (bin "mk_data") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.89s
+~/src/flox/mkdata-refactor
+ninja: Entering directory `/Users/zmitchell/src/flox/mkdata-refactor/nix-plugins/builddir'
+ninja: no work to do.
+INFO: autodetecting backend as ninja
+INFO: calculating backend command to run: /nix/store/ssj3qa52h5ajvzckyhnpv1rz7zc68a1x-ninja-1.12.1/bin/ninja -C /Users/zmitchell/src/flox/mkdata-refactor/nix-plugins/builddir
+ninja: Entering directory `/Users/zmitchell/src/flox/mkdata-refactor/nix-plugins/builddir'
+ninja: no work to do.
+Installing liblock-flake-installable.dylib to /Users/zmitchell/src/flox/mkdata-refactor/build/nix-plugins/lib/nix-plugins
+Installing libwrapped-nixpkgs-input.dylib to /Users/zmitchell/src/flox/mkdata-refactor/build/nix-plugins/lib/nix-plugins
+warning: Git tree '/Users/zmitchell/src/flox/mkdata-refactor' is dirty
+Using saved setting for 'extra-substituters = https://cache.flox.dev' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs=' from ~/.local/share/nix/trusted-settings.json.
+~/src/flox/mkdata-refactor/cli ~/src/flox/mkdata-refactor
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+warning: Git tree '/Users/zmitchell/src/flox/mkdata-refactor' is dirty
+Using saved setting for 'extra-substituters = https://cache.flox.dev' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs=' from ~/.local/share/nix/trusted-settings.json.
+~/src/flox/mkdata-refactor/cli ~/src/flox/mkdata-refactor
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s
+warning: Git tree '/Users/zmitchell/src/flox/mkdata-refactor' is dirty
+Using saved setting for 'extra-substituters = https://cache.flox.dev' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs=' from ~/.local/share/nix/trusted-settings.json.
+~/src/flox/mkdata-refactor/cli ~/src/flox/mkdata-refactor
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
+~/src/flox/mkdata-refactor/test_data ~/src/flox/mkdata-refactor
+2025-07-31T00:32:11.664830Z DEBUG mk_data::generate::init: starting job category="init" name="python_poetry"
+2025-07-31T00:32:11.664922Z DEBUG mk_data::generate: XXXXXX FROM=/Users/zmitchell/src/flox/mkdata-refactor/test_data/input_data/init/python/common
+2025-07-31T00:32:11.664929Z DEBUG mk_data::generate: XXXXXX TO=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP
+2025-07-31T00:32:11.664982Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/input_data/init/python/common/project
+2025-07-31T00:32:11.664990Z DEBUG mk_data::generate: stripped path prefix fragment=project
+2025-07-31T00:32:11.664996Z DEBUG mk_data::generate: creating new directory path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/project
+2025-07-31T00:32:11.665040Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/input_data/init/python/common/project/__main__.py
+2025-07-31T00:32:11.665046Z DEBUG mk_data::generate: stripped path prefix fragment=project/__main__.py
+2025-07-31T00:32:11.665051Z DEBUG mk_data::generate: copying file path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/project/__main__.py
+2025-07-31T00:32:11.665152Z DEBUG mk_data::generate: XXXXXX FROM=/Users/zmitchell/src/flox/mkdata-refactor/test_data/input_data/init/python/poetry
+2025-07-31T00:32:11.665164Z DEBUG mk_data::generate: XXXXXX TO=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP
+2025-07-31T00:32:11.665189Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/input_data/init/python/poetry/pyproject.toml
+2025-07-31T00:32:11.665194Z DEBUG mk_data::generate: stripped path prefix fragment=pyproject.toml
+2025-07-31T00:32:11.665198Z DEBUG mk_data::generate: copying file path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/pyproject.toml
+2025-07-31T00:32:11.665269Z DEBUG mk_data::generate::init: flox init category="init" name="python_poetry" dir=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP
+2025-07-31T00:32:13.667849Z DEBUG mk_data::generate::init: moving to output directory category="init" name="python_poetry"
+2025-07-31T00:32:13.667902Z DEBUG mk_data::generate: XXXXXX FROM=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP
+2025-07-31T00:32:13.667909Z DEBUG mk_data::generate: XXXXXX TO=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry
+2025-07-31T00:32:13.667999Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/pyproject.toml
+2025-07-31T00:32:13.668006Z DEBUG mk_data::generate: stripped path prefix fragment=pyproject.toml
+2025-07-31T00:32:13.668012Z DEBUG mk_data::generate: copying file path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry/pyproject.toml
+2025-07-31T00:32:13.668110Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/resp.yaml
+2025-07-31T00:32:13.668116Z DEBUG mk_data::generate: stripped path prefix fragment=resp.yaml
+2025-07-31T00:32:13.668120Z DEBUG mk_data::generate: copying file path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry/resp.yaml
+2025-07-31T00:32:13.668209Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/project
+2025-07-31T00:32:13.668215Z DEBUG mk_data::generate: stripped path prefix fragment=project
+2025-07-31T00:32:13.668220Z DEBUG mk_data::generate: creating new directory path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry/project
+2025-07-31T00:32:13.668258Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/project/__main__.py
+2025-07-31T00:32:13.668264Z DEBUG mk_data::generate: stripped path prefix fragment=project/__main__.py
+2025-07-31T00:32:13.668269Z DEBUG mk_data::generate: copying file path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry/project/__main__.py
+2025-07-31T00:32:13.668360Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/.flox
+2025-07-31T00:32:13.668366Z DEBUG mk_data::generate: stripped path prefix fragment=.flox
+2025-07-31T00:32:13.668370Z DEBUG mk_data::generate: creating new directory path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry/.flox
+2025-07-31T00:32:13.668405Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/.flox/env.json
+2025-07-31T00:32:13.668410Z DEBUG mk_data::generate: stripped path prefix fragment=.flox/env.json
+2025-07-31T00:32:13.668414Z DEBUG mk_data::generate: copying file path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry/.flox/env.json
+2025-07-31T00:32:13.668500Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/.flox/env
+2025-07-31T00:32:13.668504Z DEBUG mk_data::generate: stripped path prefix fragment=.flox/env
+2025-07-31T00:32:13.668509Z DEBUG mk_data::generate: creating new directory path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry/.flox/env
+2025-07-31T00:32:13.668549Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/.flox/env/manifest.toml
+2025-07-31T00:32:13.668554Z DEBUG mk_data::generate: stripped path prefix fragment=.flox/env/manifest.toml
+2025-07-31T00:32:13.668559Z DEBUG mk_data::generate: copying file path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry/.flox/env/manifest.toml
+2025-07-31T00:32:13.668635Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/.flox/env/manifest.lock
+2025-07-31T00:32:13.668640Z DEBUG mk_data::generate: stripped path prefix fragment=.flox/env/manifest.lock
+2025-07-31T00:32:13.668644Z DEBUG mk_data::generate: copying file path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry/.flox/env/manifest.lock
+2025-07-31T00:32:13.668710Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/.flox/.gitignore
+2025-07-31T00:32:13.668715Z DEBUG mk_data::generate: stripped path prefix fragment=.flox/.gitignore
+2025-07-31T00:32:13.668719Z DEBUG mk_data::generate: copying file path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry/.flox/.gitignore
+2025-07-31T00:32:13.668788Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/.flox/.gitattributes
+2025-07-31T00:32:13.668793Z DEBUG mk_data::generate: stripped path prefix fragment=.flox/.gitattributes
+2025-07-31T00:32:13.668797Z DEBUG mk_data::generate: copying file path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry/.flox/.gitattributes
+2025-07-31T00:32:13.668877Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/.flox/run
+2025-07-31T00:32:13.668882Z DEBUG mk_data::generate: stripped path prefix fragment=.flox/run
+2025-07-31T00:32:13.668886Z DEBUG mk_data::generate: creating new directory path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/python_poetry/.flox/run
+2025-07-31T00:32:13.668918Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/.flox/run/aarch64-darwin.tmpj9tpfp.dev
+2025-07-31T00:32:13.668922Z DEBUG mk_data::generate: stripped path prefix fragment=.flox/run/aarch64-darwin.tmpj9tpfp.dev
+2025-07-31T00:32:13.668927Z DEBUG mk_data::generate: handling dir entry path=/Users/zmitchell/src/flox/mkdata-refactor/test_data/generated/init/.tmpJ9tpfP/.flox/run/aarch64-darwin.tmpj9tpfp.run
+2025-07-31T00:32:13.668931Z DEBUG mk_data::generate: stripped path prefix fragment=.flox/run/aarch64-darwin.tmpj9tpfp.run
+~/src/flox/mkdata-refactor

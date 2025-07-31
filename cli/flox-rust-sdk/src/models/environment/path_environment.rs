@@ -674,7 +674,6 @@ pub mod test_helpers {
             true,
         )
         .unwrap();
-        eprintln!("did copy_dir");
 
         let ConcreteEnvironment::Path(mut path_env) =
             open_path(flox, dot_flox_parent_path).unwrap()
