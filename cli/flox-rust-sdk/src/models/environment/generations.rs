@@ -599,7 +599,80 @@ pub struct AllGenerationsMetadata {
     version: Version<1>,
 }
 
+#[derive(Debug, Clone)]
+pub struct AddGenerationOptions {
+    pub author: String,
+    pub hostname: String,
+    pub timestamp: DateTime<Utc>,
+    pub kind: HistoryKind,
+    pub summary: String,
+}
+
 impl AllGenerationsMetadata {
+    /// Add metadata for a new generation, as well as consistent history.
+    /// The return provides the [GenerationId] of the added generation metadata,
+    /// that should **subsequently** be used
+    /// to add the associated generation files.
+    pub fn add_generation(
+        &mut self,
+        AddGenerationOptions {
+            author,
+            hostname,
+            timestamp,
+            kind,
+            summary,
+        }: AddGenerationOptions,
+    ) -> (GenerationId, &SingleGenerationMetadata, &HistorySpec) {
+        // prepare new values
+
+        // Returns the highest numbered generation so we know which number to assign
+        // the new one. This protects against potentially overwriting another
+        // generation if you're currently on e.g. 2, but the latest is 5.
+        //
+        // Keys should all be numbers, but if they aren't we provide a default value.
+        let next_generation =
+            GenerationId(*self.generations.keys().cloned().max().unwrap_or_default() + 1);
+        let current_generation = self.current_gen;
+
+        let generation_metadata = SingleGenerationMetadata {
+            created: timestamp,
+            // TODO: I think we allowed this to be empty, i.e. create generations without activating them,
+            // but as far as I know we never wrote `None`.
+            last_active: Some(timestamp),
+            description: summary.clone(),
+        };
+
+        let history_spec = HistorySpec {
+            author,
+            hostname,
+            timestamp,
+            kind,
+            summary,
+            previous_generation: current_generation,
+            current_generation: next_generation,
+        };
+
+        // update self
+        self.generations
+            .insert(next_generation, generation_metadata);
+        self.current_gen = Some(next_generation);
+        self.history.0.push(history_spec);
+
+        let generation_metadata_ref = self
+            .generations
+            .get(&next_generation)
+            .expect("generation should have been inserted");
+
+        let history_ref = self
+            .history
+            .0
+            .iter()
+            .next_back()
+            .expect("history event should have been inserted");
+
+        (next_generation, generation_metadata_ref, history_ref)
+    }
+
     /// Create a new object from its parts,
     /// used in tests to create mocks.
     #[cfg(feature = "tests")]
