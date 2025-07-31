@@ -679,6 +679,7 @@ pub enum HistoryKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistorySpec {
     author: String,
     hostname: String,
@@ -691,7 +692,7 @@ pub struct HistorySpec {
     summary: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Debug, Clone, Serialize, Deserialize, Default)]
 pub struct History(Vec<HistorySpec>);
 
 impl<'h> IntoIterator for &'h History {
