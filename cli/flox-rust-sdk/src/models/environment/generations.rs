@@ -392,11 +392,18 @@ impl Generations<ReadWrite<'_>> {
             return Err(GenerationsError::RollbackToCurrentGeneration);
         }
 
-        let Some(new_generation_metadata) = metadata.generations.get(&generation).cloned() else {
-            return Err(GenerationsError::GenerationNotFound(*generation));
+        // update the generation metadata and return a copy for the caller
+        let new_generation_metadata = {
+            let Some(new_generation_metadata) = metadata.generations.get_mut(&generation) else {
+                return Err(GenerationsError::GenerationNotFound(*generation));
+            };
+            new_generation_metadata.last_active = Some(Utc::now());
+
+            new_generation_metadata.clone()
         };
 
         metadata.current_gen = Some(generation);
+
         write_metadata_file(metadata, self.repo.path())?;
 
         self.repo
