@@ -17,11 +17,11 @@ pub enum GenerationsCommands {
     #[bpaf(command, hide)]
     Help,
 
-    /// List generations of the selected environment
+    /// List generations of the environment
     #[bpaf(command)]
     List(#[bpaf(external(list::list))] list::List),
 
-    /// Switch to the last active generation
+    /// Switch to the previously active generation
     #[bpaf(command)]
     Rollback(#[bpaf(external(rollback::rollback))] rollback::Rollback),
 
