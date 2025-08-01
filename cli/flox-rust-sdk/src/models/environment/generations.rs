@@ -608,6 +608,15 @@ pub struct AddGenerationOptions {
     pub summary: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct SwitchGenerationOptions {
+    pub author: String,
+    pub hostname: String,
+    pub timestamp: DateTime<Utc>,
+    pub summary: String,
+    pub next_generation: GenerationId,
+}
+
 impl AllGenerationsMetadata {
     /// Add metadata for a new generation, as well as consistent history.
     /// The return provides the [GenerationId] of the added generation metadata,
@@ -671,6 +680,64 @@ impl AllGenerationsMetadata {
             .expect("history event should have been inserted");
 
         (next_generation, generation_metadata_ref, history_ref)
+    }
+
+    /// Switch the active marked generation to `next_generation`.
+    /// `next_generation` must exist, and must be different from the current generation.
+    /// To switch, this methods will (1) update [Self::current_gen] to `next_generation`,
+    /// (2) set the [SingleGenerationMetadata::last_active] timestamp of the `next_generation`,
+    /// and record a history item of type [HistoryKind::SwitchGeneration].
+    pub fn switch_generation(
+        &mut self,
+        SwitchGenerationOptions {
+            author,
+            hostname,
+            timestamp,
+            summary,
+            next_generation,
+        }: SwitchGenerationOptions,
+    ) -> Result<(), GenerationsError> {
+        let Some(previous_generation) = self.current_gen else {
+            unreachable!("current generation is only unavailable before any generation was added")
+        };
+
+        if next_generation == previous_generation {
+            return Err(GenerationsError::RollbackToCurrentGeneration);
+        }
+
+        // get the metadata to the switched to generation
+        let Some(next_generation_metadata) = self.generations.get_mut(&next_generation) else {
+            return Err(GenerationsError::GenerationNotFound(*next_generation));
+        };
+
+        let history_spec = HistorySpec {
+            author,
+            hostname,
+            timestamp,
+            previous_generation: Some(previous_generation),
+            current_generation: next_generation,
+            kind: HistoryKind::SwitchGeneration,
+            _compat: Default::default(),
+        };
+
+        // update current active gen
+        self.current_gen = Some(next_generation);
+
+        // update the generation metadata
+        next_generation_metadata.last_active = Some(timestamp);
+
+        // add action to history
+        self.history.0.push(HistorySpec {
+            author,
+            hostname,
+            timestamp,
+            previous_generation,
+            current_generation: next_generation,
+            kind: HistoryKind::SwitchGeneration,
+            summary,
+        });
+
+        Ok(())
     }
 
     /// Create a new object from its parts,
