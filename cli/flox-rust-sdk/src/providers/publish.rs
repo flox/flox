@@ -179,6 +179,7 @@ pub struct CheckedBuildMetadata {
     pub outputs_to_install: Vec<String>,
     pub drv_path: String,
     pub system: PackageSystem,
+    pub licenses: Option<Vec<String>>,
 
     pub version: Option<String>,
 
@@ -601,7 +602,11 @@ where
                 broken: Some(false),
                 description: self.package_metadata.description.clone(), // TODO: extract from expr build result
                 drv_path: build_metadata.drv_path.clone(),
-                license: None,
+                // The API treats licenses as a comma-separated string
+                license: build_metadata
+                    .licenses
+                    .as_ref()
+                    .map(|licenses| licenses.join(",")),
                 name: build_metadata.name.clone(),
                 outputs: build_metadata.outputs.clone(),
                 outputs_to_install: Some(build_metadata.outputs_to_install.clone()),
@@ -774,6 +779,7 @@ fn check_build_metadata_from_build_result(
         outputs_to_install,
         system,
         version: Some(build_result.version.clone()),
+        licenses: build_result.licenses.clone(),
         _private: (),
     })
 }
@@ -1353,6 +1359,7 @@ pub mod tests {
             drv_path: "dummy".to_string(),
             system: PackageSystem::X8664Linux,
             version: Some("1.0.0".to_string()),
+            licenses: Some(vec!["some license".to_string()]),
             _private: (),
         };
 
