@@ -9,7 +9,13 @@ use tracing::{debug, instrument};
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::fetcher::IncludeFetcher;
-use super::generations::{AllGenerationsMetadata, Generations, GenerationsError, GenerationsExt};
+use super::generations::{
+    AllGenerationsMetadata,
+    GenerationId,
+    Generations,
+    GenerationsError,
+    GenerationsExt,
+};
 use super::path_environment::PathEnvironment;
 use super::{
     CACHE_DIR_NAME,
@@ -562,6 +568,37 @@ impl Environment for ManagedEnvironment {
 impl GenerationsExt for ManagedEnvironment {
     fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError> {
         self.generations().metadata()
+    }
+
+    fn switch_generation(
+        &mut self,
+        flox: &Flox,
+        generation: GenerationId,
+    ) -> Result<(), EnvironmentError> {
+        let mut generations = self.generations();
+
+        let local_checkout = self.local_env_or_copy_current_generation(flox)?;
+        if !Self::validate_checkout(&local_checkout, &generations)? {
+            Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::CheckoutOutOfSync,
+            ))?
+        }
+
+        let mut generations = generations
+            .writable(&flox.temp_dir)
+            .map_err(ManagedEnvironmentError::Generations)?;
+
+        generations
+            .set_current_generation(generation)
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
+
+        // update the rendered environment
+        self.lock_pointer()?;
+        self.reset_local_env_to_current_generation(flox)?;
+        let buildenv_paths = self.build(flox)?;
+        self.link(&buildenv_paths)?;
+
+        Ok(())
     }
 }
 

@@ -32,8 +32,14 @@ use super::core_environment::CoreEnvironment;
 use super::fetcher::IncludeFetcher;
 use super::managed_environment::ManagedEnvironment;
 use super::remote_environment::RemoteEnvironment;
-use super::{ConcreteEnvironment, ENV_DIR_NAME, LOCKFILE_FILENAME, copy_dir_recursive};
-use crate::flox::EnvironmentName;
+use super::{
+    ConcreteEnvironment,
+    ENV_DIR_NAME,
+    EnvironmentError,
+    LOCKFILE_FILENAME,
+    copy_dir_recursive,
+};
+use crate::flox::{EnvironmentName, Flox};
 use crate::models::environment::{MANIFEST_FILENAME, UninitializedEnvironment};
 use crate::providers::git::{
     GitCommandError,
@@ -386,11 +392,18 @@ impl Generations<ReadWrite<'_>> {
             return Err(GenerationsError::RollbackToCurrentGeneration);
         }
 
-        let Some(new_generation_metadata) = metadata.generations.get(&generation).cloned() else {
-            return Err(GenerationsError::GenerationNotFound(*generation));
+        // update the generation metadata and return a copy for the caller
+        let new_generation_metadata = {
+            let Some(new_generation_metadata) = metadata.generations.get_mut(&generation) else {
+                return Err(GenerationsError::GenerationNotFound(*generation));
+            };
+            new_generation_metadata.last_active = Some(Utc::now());
+
+            new_generation_metadata.clone()
         };
 
-        metadata.current_gen = Some(generation.clone());
+        metadata.current_gen = Some(generation);
+
         write_metadata_file(metadata, self.repo.path())?;
 
         self.repo
@@ -519,6 +532,12 @@ fn write_metadata_file(
 pub trait GenerationsExt {
     /// Return all generations metadata for the environment.
     fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError>;
+
+    fn switch_generation(
+        &mut self,
+        flox: &Flox,
+        generation: GenerationId,
+    ) -> Result<(), EnvironmentError>;
 }
 
 /// Combined type for environments supporting generations,
@@ -626,6 +645,7 @@ impl SingleGenerationMetadata {
 #[derive(
     Debug,
     Clone,
+    Copy,
     PartialEq,
     Eq,
     PartialOrd,
