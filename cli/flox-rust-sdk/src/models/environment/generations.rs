@@ -880,8 +880,9 @@ mod tests {
 
         use pretty_assertions::assert_eq;
 
-        use crate::models::environment::generations::AllGenerationsMetadata;
+        use super::default_switch_generation_options;
         use crate::models::environment::generations::tests::default_add_generation_option;
+        use crate::models::environment::generations::{AllGenerationsMetadata, GenerationId};
         const AUTHOR: &str = "author";
         const HOSTNAME: &str = "host";
 
@@ -908,6 +909,28 @@ mod tests {
             assert_eq!(history.kind, options.kind);
             assert_eq!(history.summary, options.summary);
             assert_eq!(history.timestamp, options.timestamp);
+        }
+
+        #[test]
+        fn generation_counter_is_correctly_increased() {
+            let mut metadata = AllGenerationsMetadata::default();
+            let (first_generation, _, _) = metadata.add_generation(default_add_generation_option());
+
+            let (second_generation, _, _) =
+                metadata.add_generation(default_add_generation_option());
+
+            metadata
+                .switch_generation(default_switch_generation_options(first_generation))
+                .unwrap();
+            assert_eq!(metadata.current_gen, Some(first_generation));
+
+            let (third_generation, _, _) = metadata.add_generation(default_add_generation_option());
+
+            assert_eq!(first_generation, GenerationId(1));
+            assert_eq!(second_generation, GenerationId(2));
+
+            // generation counter continues at the current max (N=2) + 1
+            assert_eq!(third_generation, GenerationId(3));
         }
     }
 
