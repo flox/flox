@@ -893,6 +893,29 @@ mod tests {
     const GEN_ID_1: GenerationId = GenerationId(1);
     const GEN_ID_2: GenerationId = GenerationId(2);
 
+    const AUTHOR: &str = "author";
+    const HOSTNAME: &str = "host";
+
+    fn default_add_generation_options() -> AddGenerationOptions {
+        AddGenerationOptions {
+            author: AUTHOR.into(),
+            hostname: HOSTNAME.into(),
+            timestamp: Utc::now(),
+            kind: HistoryKind::Other("mock".into()),
+            summary: "mock generation".into(),
+        }
+    }
+
+    fn default_switch_generation_options(next_generation: GenerationId) -> SwitchGenerationOptions {
+        SwitchGenerationOptions {
+            author: AUTHOR.into(),
+            hostname: HOSTNAME.into(),
+            timestamp: Utc::now(),
+            summary: "switch mock".into(),
+            next_generation,
+        }
+    }
+
     fn setup_two_generations() -> (Generations, TempDir) {
         let (flox, tempdir) = flox_instance();
         let env = new_path_environment(&flox, "version = 1");
