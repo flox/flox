@@ -105,6 +105,7 @@ pub struct BuildResult {
     pub version: String,
     pub system: Option<String>,
     pub log: BuiltStorePath,
+    pub licenses: Option<Vec<String>>,
     // TODO: factor out and use buildenv::BuiltStorePath (?)
     #[serde(rename = "resultLinks")]
     pub result_links: BTreeMap<PathBuf, PathBuf>,
