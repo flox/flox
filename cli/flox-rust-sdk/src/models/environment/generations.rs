@@ -916,6 +916,44 @@ mod tests {
         }
     }
 
+    mod metadata {
+
+        use pretty_assertions::assert_eq;
+
+        use crate::models::environment::generations::AllGenerationsMetadata;
+        use crate::models::environment::generations::tests::default_add_generation_options;
+
+        /// Adding a generation adds consisten metadata, ie.
+        ///
+        /// * adds new [SingleGenerationMetadata]
+        /// * updates the current generation
+        /// * adds a history entry for adding the generation
+        #[test]
+        fn add_generation_adds_metadata_and_history() {
+            let mut metadata = AllGenerationsMetadata::default();
+
+            let options = default_add_generation_options();
+
+            let (generation, generation_metadata, history) =
+                metadata.add_generation(options.clone());
+
+            let (generation_metadata, history) = (generation_metadata.clone(), history.clone());
+
+            assert_eq!(metadata.current_gen, Some(generation));
+            assert_eq!(generation_metadata.created, options.timestamp);
+            assert_eq!(generation_metadata.last_active, Some(options.timestamp));
+            assert_eq!(generation_metadata.description, options.summary);
+
+            assert_eq!(history.author, options.author);
+            assert_eq!(history.hostname, options.hostname);
+            assert_eq!(history.current_generation, generation);
+            assert_eq!(history.previous_generation, None);
+            assert_eq!(history.kind, options.kind);
+            assert_eq!(history.summary, options.summary);
+            assert_eq!(history.timestamp, options.timestamp);
+        }
+    }
+
     fn setup_two_generations() -> (Generations, TempDir) {
         let (flox, tempdir) = flox_instance();
         let env = new_path_environment(&flox, "version = 1");
