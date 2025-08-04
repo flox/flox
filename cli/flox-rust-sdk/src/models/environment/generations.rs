@@ -76,6 +76,7 @@ pub struct ReadWrite<'a> {
     /// A reference to the [ReadOnly] instance that will be released
     /// when this instance is dropped.
     _read_only: &'a mut Generations<ReadOnly>,
+
     /// The author modifying the generations, usually the current $USER.
     author: String,
     /// The hostname of the machine on which generations are modified, usually $HOST
@@ -296,41 +297,35 @@ impl Generations<ReadWrite<'_>> {
         self.get_generation(*current_gen, include_fetcher)
     }
 
-    /// Import an existing environment into a generation
+    /// Create a new generation from an existing environment
     ///
-    /// Assumes the invariant that the [CoreEnvironment] instance is valid.
+    /// Assumes the invariant that the [PathEnvironment] instance is valid.
     ///
     /// This will copy the manifest and lockfile from the source environment
     /// into a generation folder.
     /// Any other assets such as hook scripts are ignored.
     ///
-    /// If the generation already exists, it will be overwritten.
-    ///
-    /// If `set_current` is true, the generation will also be set as the current generation.
-    fn register_generation(
+    /// This method assigns a new sequential generation number
+    /// and sets it as the current generation.
+    pub fn add_generation(
         &mut self,
         environment: &mut CoreEnvironment,
-        generation: usize,
         description: String,
-        set_current: bool,
     ) -> Result<(), GenerationsError> {
-        let mut generation_metadata = SingleGenerationMetadata::new(description.clone());
-
+        // add metadata
+        // this returns a free generation id to store the env files under
         let mut metadata = self.metadata()?;
-
-        if set_current {
-            metadata.current_gen = Some(generation.into());
-            generation_metadata.last_active = Some(Utc::now());
-        }
-
-        // Insert the new generation
-        let _existing = metadata
-            .generations
-            .insert(generation.into(), generation_metadata);
+        let (generation, ..) = metadata.add_generation(AddGenerationOptions {
+            author: self._state.author.clone(),
+            hostname: self._state.hostname.clone(),
+            timestamp: Utc::now(),
+            kind: todo!(),
+        });
 
         // Write the metadata file with the new generation added
         write_metadata_file(metadata, self.repo.path())?;
 
+        // copy generation environment files
         let generation_path = self.repo.path().join(generation.to_string());
         let env_path = generation_path.join(ENV_DIR_NAME);
         fs::create_dir_all(&env_path).unwrap();
@@ -339,6 +334,7 @@ impl Generations<ReadWrite<'_>> {
         // copy into `<generation>/env/` to make creating `PathEnvironment` easier
         copy_dir_recursive(environment.path(), &env_path, true).unwrap();
 
+        // commit environment and metadata
         self.repo
             .add(&[&generation_path])
             .map_err(GenerationsError::StageChanges)?;
@@ -359,61 +355,21 @@ impl Generations<ReadWrite<'_>> {
         Ok(())
     }
 
-    /// Create a new generation from an existing environment
-    ///
-    /// Assumes the invariant that the [PathEnvironment] instance is valid.
-    ///
-    /// This will copy the manifest and lockfile from the source environment
-    /// into a generation folder.
-    /// Any other assets such as hook scripts are ignored.
-    ///
-    /// This method assigns a new sequential generation number
-    /// and sets it as the current generation.
-    pub fn add_generation(
-        &mut self,
-        environment: &mut CoreEnvironment,
-        description: String,
-    ) -> Result<(), GenerationsError> {
-        // Returns the highest numbered generation so we know which number to assign
-        // the new one. This protects against potentially overwriting another
-        // generation if you're currently on e.g. 2, but the latest is 5.
-        //
-        // Keys should all be numbers, but if they aren't we provide a default value.
-        let max = self
-            .metadata()?
-            .generations
-            .keys()
-            .cloned()
-            .max()
-            .unwrap_or_default();
-
-        self.register_generation(environment, *max + 1, description, true)
-    }
-
     /// Switch to a provided generation to either roll backwards or forwards.
     ///
     /// Fails if the generation does not exist or is already the current generation.
     pub fn set_current_generation(
         &mut self,
-        generation: GenerationId,
-    ) -> Result<(GenerationId, SingleGenerationMetadata), GenerationsError> {
+        next_generation: GenerationId,
+    ) -> Result<(), GenerationsError> {
         let mut metadata = self.metadata()?;
 
-        if Some(&generation) == metadata.current_gen.as_ref() {
-            return Err(GenerationsError::RollbackToCurrentGeneration);
-        }
-
-        // update the generation metadata and return a copy for the caller
-        let new_generation_metadata = {
-            let Some(new_generation_metadata) = metadata.generations.get_mut(&generation) else {
-                return Err(GenerationsError::GenerationNotFound(*generation));
-            };
-            new_generation_metadata.last_active = Some(Utc::now());
-
-            new_generation_metadata.clone()
-        };
-
-        metadata.current_gen = Some(generation);
+        metadata.switch_generation(SwitchGenerationOptions {
+            author: self._state.author.clone(),
+            hostname: self._state.hostname.clone(),
+            timestamp: Utc::now(),
+            next_generation,
+        })?;
 
         write_metadata_file(metadata, self.repo.path())?;
 
@@ -427,7 +383,7 @@ impl Generations<ReadWrite<'_>> {
             .push("origin", false)
             .map_err(GenerationsError::CompleteTransaction)?;
 
-        Ok((generation, new_generation_metadata))
+        Ok(())
     }
 }
 
