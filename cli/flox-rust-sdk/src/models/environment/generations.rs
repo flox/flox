@@ -605,7 +605,6 @@ pub struct AddGenerationOptions {
     pub hostname: String,
     pub timestamp: DateTime<Utc>,
     pub kind: HistoryKind,
-    pub summary: String,
 }
 
 #[derive(Debug, Clone)]
@@ -613,7 +612,6 @@ pub struct SwitchGenerationOptions {
     pub author: String,
     pub hostname: String,
     pub timestamp: DateTime<Utc>,
-    pub summary: String,
     pub next_generation: GenerationId,
 }
 
@@ -629,7 +627,6 @@ impl AllGenerationsMetadata {
             hostname,
             timestamp,
             kind,
-            summary,
         }: AddGenerationOptions,
     ) -> (GenerationId, &SingleGenerationMetadata, &HistorySpec) {
         // prepare new values
@@ -656,7 +653,6 @@ impl AllGenerationsMetadata {
             hostname,
             timestamp,
             kind,
-            summary,
             previous_generation: current_generation,
             current_generation: next_generation,
         };
@@ -1063,6 +1059,21 @@ mod tests {
 
             assert!(
                 matches!(result, Err(GenerationsError::RollbackToCurrentGeneration)),
+                "unexpected result {:?}",
+                result
+            )
+        }
+
+        #[test]
+        fn switch_generation_requires_existing_generation() {
+            let mut metadata = AllGenerationsMetadata::default();
+            metadata.add_generation(default_add_generation_options());
+            let absent_gen_id = GenerationId(2);
+            let result =
+                metadata.switch_generation(default_switch_generation_options(absent_gen_id));
+
+            assert!(
+                matches!(result, Err(GenerationsError::GenerationNotFound(2))),
                 "unexpected result {:?}",
                 result
             )
