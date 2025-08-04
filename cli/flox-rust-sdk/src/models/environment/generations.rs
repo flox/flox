@@ -925,6 +925,7 @@ mod tests {
         use crate::models::environment::generations::{
             AllGenerationsMetadata,
             GenerationId,
+            GenerationsError,
             HistoryKind,
             SwitchGenerationOptions,
         };
@@ -1050,6 +1051,21 @@ mod tests {
                 first_gen_id,
                 second_gen_id,
             );
+        }
+
+        #[test]
+        fn switch_generation_does_not_allow_current_generation() {
+            let mut metadata = AllGenerationsMetadata::default();
+            let (generation_id, ..) = metadata.add_generation(default_add_generation_options());
+
+            let result =
+                metadata.switch_generation(default_switch_generation_options(generation_id));
+
+            assert!(
+                matches!(result, Err(GenerationsError::RollbackToCurrentGeneration)),
+                "unexpected result {:?}",
+                result
+            )
         }
     }
 
