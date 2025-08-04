@@ -922,7 +922,12 @@ mod tests {
 
         use super::default_switch_generation_options;
         use crate::models::environment::generations::tests::default_add_generation_options;
-        use crate::models::environment::generations::{AllGenerationsMetadata, GenerationId};
+        use crate::models::environment::generations::{
+            AllGenerationsMetadata,
+            GenerationId,
+            HistoryKind,
+            SwitchGenerationOptions,
+        };
 
         /// Adding a generation adds consisten metadata, ie.
         ///
@@ -976,6 +981,75 @@ mod tests {
 
             // generation counter continues at the current max (N=2) + 1
             assert_eq!(third_generation, GenerationId(3));
+        }
+
+        /// Switching generations
+        ///
+        /// * updates the current generation
+        /// * updares the "last_active" timestamp of the switched to generation
+        /// * adds a history entry for the switch
+        #[test]
+        fn switch_generation_updates_metadata() {
+            fn assert_switched_state(
+                metadata: &AllGenerationsMetadata,
+                switch_generation_options: &SwitchGenerationOptions,
+                generation_switched_from: GenerationId,
+                generation_switched_to: GenerationId,
+            ) {
+                assert_eq!(
+                    metadata.current_gen,
+                    Some(generation_switched_to),
+                    "current gen was not updated"
+                );
+                assert_eq!(
+                    metadata.generations[&generation_switched_to].last_active,
+                    Some(switch_generation_options.timestamp),
+                    "timestamp was not updated"
+                );
+
+                let history_entry = metadata.history.0.last().unwrap();
+                assert_eq!(history_entry.author, switch_generation_options.author);
+                assert_eq!(history_entry.hostname, switch_generation_options.hostname);
+                assert_eq!(history_entry.kind, HistoryKind::SwitchGeneration);
+                assert_eq!(
+                    history_entry.previous_generation,
+                    Some(generation_switched_from)
+                );
+                assert_eq!(history_entry.current_generation, generation_switched_to);
+                assert_eq!(history_entry.summary, switch_generation_options.summary);
+                assert_eq!(history_entry.timestamp, switch_generation_options.timestamp);
+            }
+
+            let mut metadata = AllGenerationsMetadata::default();
+
+            let first_generation_options = default_add_generation_options();
+            let second_generation_options = default_add_generation_options();
+
+            let (first_gen_id, ..) = metadata.add_generation(first_generation_options.clone());
+            let (second_gen_id, ..) = metadata.add_generation(second_generation_options.clone());
+
+            let switch_generation_options = default_switch_generation_options(first_gen_id);
+            metadata
+                .switch_generation(switch_generation_options.clone())
+                .unwrap();
+            assert_switched_state(
+                &metadata,
+                &switch_generation_options,
+                second_gen_id,
+                first_gen_id,
+            );
+
+            // switch back (roll forward)
+            let switch_generation_options = default_switch_generation_options(second_gen_id);
+            metadata
+                .switch_generation(switch_generation_options.clone())
+                .unwrap();
+            assert_switched_state(
+                &metadata,
+                &switch_generation_options,
+                first_gen_id,
+                second_gen_id,
+            );
         }
     }
 
