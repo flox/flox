@@ -24,6 +24,7 @@ use std::{env, fs};
 use chrono::{DateTime, Utc};
 use enum_dispatch::enum_dispatch;
 use flox_core::Version;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
@@ -640,14 +641,6 @@ impl AllGenerationsMetadata {
             GenerationId(*self.generations.keys().cloned().max().unwrap_or_default() + 1);
         let current_generation = self.current_gen;
 
-        let generation_metadata = SingleGenerationMetadata {
-            created: timestamp,
-            // TODO: I think we allowed this to be empty, i.e. create generations without activating them,
-            // but as far as I know we never wrote `None`.
-            last_active: Some(timestamp),
-            description: summary.clone(),
-        };
-
         let history_spec = HistorySpec {
             author,
             hostname,
@@ -655,6 +648,16 @@ impl AllGenerationsMetadata {
             kind,
             previous_generation: current_generation,
             current_generation: next_generation,
+            _compat: Default::default(),
+        };
+
+        let generation_metadata = SingleGenerationMetadata {
+            created: timestamp,
+            // TODO: I think we allowed this to be empty,
+            // i.e. to theoritically create generations without activating them,
+            // but as far as I know we never actually wrote `None`.
+            last_active: Some(timestamp),
+            description: history_spec.summary(),
         };
 
         // update self
@@ -689,7 +692,6 @@ impl AllGenerationsMetadata {
             author,
             hostname,
             timestamp,
-            summary,
             next_generation,
         }: SwitchGenerationOptions,
     ) -> Result<(), GenerationsError> {
@@ -723,15 +725,7 @@ impl AllGenerationsMetadata {
         next_generation_metadata.last_active = Some(timestamp);
 
         // add action to history
-        self.history.0.push(HistorySpec {
-            author,
-            hostname,
-            timestamp,
-            previous_generation,
-            current_generation: next_generation,
-            kind: HistoryKind::SwitchGeneration,
-            summary,
-        });
+        self.history.0.push(history_spec);
 
         Ok(())
     }
@@ -808,17 +802,35 @@ pub struct GenerationId(usize);
 /// and metadata only changes such as switching generations.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+#[serde(tag = "kind")]
 #[non_exhaustive]
 pub enum HistoryKind {
-    Install,
+    Install {
+        targets: Vec<String>,
+    },
     Edit,
-    Uninstall,
-    Upgrade,
+    Uninstall {
+        targets: Vec<String>,
+    },
+    Upgrade {
+        targets: Vec<String>,
+    },
 
-    IncludeUpgrade,
+    IncludeUpgrade {
+        targets: Vec<String>,
+    },
 
     SwitchGeneration,
-    Other(String),
+    Other {
+        summary: String,
+    },
+
+    #[serde(untagged)]
+    Compat {
+        kind: String,
+        #[serde(flatten)]
+        values: serde_json::Map<String, serde_json::Value>,
+    },
 }
 
 /// The structure of a single change, tying together
@@ -828,9 +840,8 @@ pub enum HistoryKind {
 pub struct HistorySpec {
     // change provided
     /// Type of the change
+    #[serde(flatten)]
     kind: HistoryKind,
-    /// Producer generated summary of the change
-    summary: String,
 
     // system provided
     /// Local username of the user performing the change
@@ -853,6 +864,59 @@ pub struct HistorySpec {
     /// Additional unsupported fields.
     #[serde(flatten)]
     _compat: serde_json::Map<String, serde_json::Value>,
+}
+
+impl HistorySpec {
+    /// A short summary of the change.
+    /// Summaries generally try to capture the _intent_ of the change
+    /// rather than giving an exhaustive account about the complete change.
+    /// The summary can be used alongside additional information such as author,
+    /// host, diffs and diff derived information to produce richer change logs.
+    fn summary(&self) -> String {
+        fn format_targets(verb: &str, object: &str, targets: &[String]) -> String {
+            let plural_s = if targets.is_empty() { "" } else { "s" };
+
+            let targets = targets
+                .iter()
+                .map(|target| format!("'{target}'"))
+                .join(", ");
+
+            format!("{verb} {object}{plural_s} {targets}")
+        }
+
+        fn format_targets_all_if_empty(verb: &str, object: &str, targets: &[String]) -> String {
+            if targets.is_empty() {
+                format!("{verb} all {object}s")
+            } else {
+                format_targets(verb, object, targets)
+            }
+        }
+
+        match &self.kind {
+            HistoryKind::Install { targets } => format_targets("installed", "package", targets),
+            HistoryKind::Edit => "manually edited the manifest".to_string(),
+            HistoryKind::Uninstall { targets } => format_targets("uninstalled", "package", targets),
+            HistoryKind::Upgrade { targets } => {
+                format_targets_all_if_empty("upgraded", "package", targets)
+            },
+            HistoryKind::IncludeUpgrade { targets } => {
+                format_targets_all_if_empty("upgraded", "included environment", targets)
+            },
+            HistoryKind::SwitchGeneration => match self.previous_generation {
+                Some(prev) => format!(
+                    "changed active generation {prev} -> {}",
+                    self.current_generation
+                ),
+                None => unreachable!(
+                    "switch implementation prevents switches without a current active generation"
+                ),
+            },
+            HistoryKind::Other { summary } => summary.to_string(),
+            HistoryKind::Compat { kind, values: _ } => {
+                format!("performed operation {kind}")
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, derive_more::AsRef)]
@@ -897,8 +961,9 @@ mod tests {
             author: AUTHOR.into(),
             hostname: HOSTNAME.into(),
             timestamp: Utc::now(),
-            kind: HistoryKind::Other("mock".into()),
-            summary: "mock generation".into(),
+            kind: HistoryKind::Other {
+                summary: "mock".into(),
+            },
         }
     }
 
@@ -907,22 +972,23 @@ mod tests {
             author: AUTHOR.into(),
             hostname: HOSTNAME.into(),
             timestamp: Utc::now(),
-            summary: "switch mock".into(),
             next_generation,
         }
     }
 
     mod metadata {
+        use chrono::Utc;
+        use pretty_assertions::{assert_eq, assert_str_eq};
+        use serde_json::{Value, json};
 
-        use pretty_assertions::assert_eq;
-
-        use super::default_switch_generation_options;
+        use super::{AUTHOR, HOSTNAME, default_switch_generation_options};
         use crate::models::environment::generations::tests::default_add_generation_options;
         use crate::models::environment::generations::{
             AllGenerationsMetadata,
             GenerationId,
             GenerationsError,
             HistoryKind,
+            HistorySpec,
             SwitchGenerationOptions,
         };
 
@@ -945,14 +1011,12 @@ mod tests {
             assert_eq!(metadata.current_gen, Some(generation));
             assert_eq!(generation_metadata.created, options.timestamp);
             assert_eq!(generation_metadata.last_active, Some(options.timestamp));
-            assert_eq!(generation_metadata.description, options.summary);
 
             assert_eq!(history.author, options.author);
             assert_eq!(history.hostname, options.hostname);
             assert_eq!(history.current_generation, generation);
             assert_eq!(history.previous_generation, None);
             assert_eq!(history.kind, options.kind);
-            assert_eq!(history.summary, options.summary);
             assert_eq!(history.timestamp, options.timestamp);
         }
 
@@ -1013,7 +1077,6 @@ mod tests {
                     Some(generation_switched_from)
                 );
                 assert_eq!(history_entry.current_generation, generation_switched_to);
-                assert_eq!(history_entry.summary, switch_generation_options.summary);
                 assert_eq!(history_entry.timestamp, switch_generation_options.timestamp);
             }
 
@@ -1077,6 +1140,83 @@ mod tests {
                 "unexpected result {:?}",
                 result
             )
+        }
+
+        #[test]
+        fn history_summaries() {
+            let all_targets = [];
+            let targets = ["a".to_string(), "b".to_string()];
+            let change_message_pairs = [
+                (HistoryKind::Edit, "manually edited the manifest"),
+                (
+                    HistoryKind::SwitchGeneration,
+                    "changed active generation 1 -> 2",
+                ),
+                (
+                    HistoryKind::IncludeUpgrade {
+                        targets: all_targets.to_vec(),
+                    },
+                    "upgraded all included environments",
+                ),
+                (
+                    HistoryKind::IncludeUpgrade {
+                        targets: targets.to_vec(),
+                    },
+                    "upgraded included environments 'a', 'b'",
+                ),
+                // does not use "all" format
+                (
+                    HistoryKind::Install {
+                        targets: all_targets.to_vec(),
+                    },
+                    "installed package ",
+                ),
+                (
+                    HistoryKind::Install {
+                        targets: targets.to_vec(),
+                    },
+                    "installed packages 'a', 'b'",
+                ),
+                // does not use "all" format
+                (
+                    HistoryKind::Uninstall {
+                        targets: all_targets.to_vec(),
+                    },
+                    "uninstalled package ",
+                ),
+                (
+                    HistoryKind::Uninstall {
+                        targets: targets.to_vec(),
+                    },
+                    "uninstalled packages 'a', 'b'",
+                ),
+                (
+                    HistoryKind::Upgrade {
+                        targets: all_targets.to_vec(),
+                    },
+                    "upgraded all packages",
+                ),
+                (
+                    HistoryKind::Upgrade {
+                        targets: targets.to_vec(),
+                    },
+                    "upgraded packages 'a', 'b'",
+                ),
+            ];
+
+            for (change_kind, message) in change_message_pairs {
+                let spec = HistorySpec {
+                    kind: change_kind,
+                    author: AUTHOR.to_string(),
+                    hostname: HOSTNAME.to_string(),
+                    timestamp: Utc::now(),
+                    current_generation: 2.into(),
+                    previous_generation: Some(1.into()),
+                    _compat: Default::default(),
+                };
+                let summary = spec.summary();
+                assert_str_eq!(summary, message)
+            }
         }
     }
 
