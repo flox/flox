@@ -192,7 +192,7 @@ impl Push {
         Ok(formatdoc! {"
             {heading}
 
-            View or edit the environment at: {url}
+            View the environment at: {url}
             Use this environment from another machine: 'flox activate -r {owner}/{name}'
             Make a copy of this environment: 'flox pull {owner}/{name}'
         "})
