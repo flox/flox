@@ -6,6 +6,7 @@ use tracing::instrument;
 use super::display_help;
 use crate::config::Config;
 
+mod history;
 mod list;
 mod rollback;
 mod switch;
@@ -20,6 +21,10 @@ pub enum GenerationsCommands {
     /// List generations of the environment
     #[bpaf(command)]
     List(#[bpaf(external(list::list))] list::List),
+
+    /// Show all managed changes to the selected environment
+    #[bpaf(command)]
+    History(#[bpaf(external(history::history))] history::History),
 
     /// Switch to the previously active generation
     #[bpaf(command)]
@@ -38,6 +43,7 @@ impl GenerationsCommands {
                 display_help(Some("generations".to_string()));
             },
             GenerationsCommands::List(args) => args.handle(flox)?,
+            GenerationsCommands::History(args) => args.handle(flox)?,
             GenerationsCommands::Rollback(args) => args.handle(flox)?,
             GenerationsCommands::Switch(args) => args.handle(flox)?,
         }
