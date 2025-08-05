@@ -248,7 +248,11 @@ impl Environment for ManagedEnvironment {
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
@@ -281,7 +285,11 @@ impl Environment for ManagedEnvironment {
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
@@ -310,7 +318,11 @@ impl Environment for ManagedEnvironment {
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
@@ -354,7 +366,11 @@ impl Environment for ManagedEnvironment {
     ) -> Result<UpgradeResult, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
@@ -390,7 +406,11 @@ impl Environment for ManagedEnvironment {
     ) -> Result<UpgradeResult, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
@@ -585,7 +605,11 @@ impl GenerationsExt for ManagedEnvironment {
         }
 
         let mut generations = generations
-            .writable(&flox.temp_dir)
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::Generations)?;
 
         generations
@@ -957,7 +981,11 @@ impl ManagedEnvironment {
     ) -> Result<Result<EditResult, EnvironmentError>, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         let mut temporary = self.local_env_or_copy_current_generation(flox)?;
@@ -1028,7 +1056,11 @@ impl ManagedEnvironment {
 
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                flox.temp_dir.clone(),
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         generations
@@ -1151,10 +1183,7 @@ impl ManagedEnvironment {
     /// Not having local changes means the environment has a lockfile, since we
     /// only create generations with lockfiles
     pub fn has_local_changes(&self, flox: &Flox) -> Result<bool, ManagedEnvironmentError> {
-        let mut generations = self.generations();
-        let generations = generations
-            .writable(flox.temp_dir.clone())
-            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let generations = self.generations();
 
         let local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
@@ -1196,10 +1225,12 @@ impl ManagedEnvironment {
         &self,
         flox: &Flox,
     ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
-        let tempdir = tempfile::tempdir_in(&flox.temp_dir).unwrap();
-
         self.generations()
-            .writable(tempdir)
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
             .get_current_generation(self.include_fetcher.clone())
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)
@@ -1413,7 +1444,11 @@ impl ManagedEnvironment {
         let temp_floxmeta_git = generations.git().clone();
 
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         // Add this environment as a new generation, which involves pushing to
@@ -1930,7 +1965,9 @@ mod test {
         )
         .unwrap();
 
-        let mut writable = generations.writable(base_tempdir.as_ref()).unwrap();
+        let mut writable = generations
+            .writable(&base_tempdir, "username", "hostname")
+            .unwrap();
         writable
             .add_generation(env, "initial generation".to_string())
             .unwrap();
