@@ -390,4 +390,9 @@ mod tests {
             )
         );
     }
+
+    #[test]
+    fn licenses_can_roundtrip() {
+        todo!()
+    }
 }

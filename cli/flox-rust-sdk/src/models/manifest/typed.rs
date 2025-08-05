@@ -883,7 +883,7 @@ pub struct BuildDescriptor {
     pub description: Option<String>,
     /// A license to assign to the package in SPDX format.
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
-    pub license: Option<Vec<String>>,
+    pub licenses: Option<Vec<String>>,
 }
 
 /// The definition of a package built from within the environment
@@ -1227,7 +1227,7 @@ pub mod test {
                     sandbox: None,
                     version: None,
                     description: None,
-                    license: None,
+                    licenses: None,
                 })]
                 .into()
             )

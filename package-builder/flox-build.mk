@@ -460,6 +460,7 @@ define BUILD_local_template =
 	$(_V_) $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr pname "$(_pname)" \
 	  --argstr version "$(_version)" \
+		--argstr licenses "$(_licenses)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
 	  --argstr nixpkgs-url $(BUILDTIME_NIXPKGS_URL) \
 	  --argstr build-wrapper-env "$$($(_pvarname)_build_wrapper_env)" \
@@ -477,10 +478,10 @@ define BUILD_local_template =
 
   # Assemble the final build metadata.
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log $(_pvarname)_CHECK_BUILD
-	$(_V_) $(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
+	$(_V_) $(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" --arg licenses "$(_licenses)" \
 	  --arg log "$(shell $(_readlink) $($(_pvarname)_result)-log)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks}' $$< > $$@
+	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks, licenses: $$$$licenses}' $$< > $$@
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -546,6 +547,7 @@ define BUILD_nix_sandbox_template =
 	$(_V_) $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	  --argstr pname "$(_pname)" \
 	  --argstr version "$(_version)" \
+	  --argstr licenses "$(_licenses)" \
 	  --argstr srcTarball "$($(_pvarname)_src_tar)" \
 	  --argstr flox-env "$(FLOX_ENV)" \
 	  --argstr nixpkgs-url $(BUILDTIME_NIXPKGS_URL) \
@@ -564,6 +566,7 @@ define BUILD_nix_sandbox_template =
 	  --arg name "$(_name)" \
 	  --arg pname "$(_pname)" \
 	  --arg version "$(_version)" \
+		--arg licenses "$(_licenses)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
 	  '.[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks }' $$< > $$@
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
@@ -725,6 +728,8 @@ $(foreach build,$(MANIFEST_BUILDS), \
   $(eval _pname = $(notdir $(build))) \
   $(eval _sandbox = $(shell \
     $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK))) \
+  $(eval _licenses = $(shell  \
+    $(_jq) -r '.manifest.build."$(_pname)".licenses' $(MANIFEST_LOCK))) \
   $(eval _version = $(shell $(shell \
     $(_jq) -r --arg pname "$(_pname)" '$(strip $(JSON_VERSION_TO_COMMAND_jq))' $(MANIFEST_LOCK)))) \
   $(if $(filter null off,$(_sandbox)), \
