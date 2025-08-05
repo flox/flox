@@ -315,12 +315,14 @@ impl Generations<ReadWrite<'_>> {
         // add metadata
         // this returns a free generation id to store the env files under
         let mut metadata = self.metadata()?;
-        let (generation, ..) = metadata.add_generation(AddGenerationOptions {
+        let (generation, _, history_item) = metadata.add_generation(AddGenerationOptions {
             author: self._state.author.clone(),
             hostname: self._state.hostname.clone(),
             timestamp: Utc::now(),
             kind: change_kind,
         });
+
+        let summary = history_item.summary();
 
         // Write the metadata file with the new generation added
         write_metadata_file(metadata, self.repo.path())?;
@@ -343,10 +345,7 @@ impl Generations<ReadWrite<'_>> {
             .map_err(GenerationsError::StageChanges)?;
 
         self.repo
-            .commit(&format!(
-                "Create generation {}\n\n{}",
-                generation, description
-            ))
+            .commit(&format!("Create generation {}\n\n{}", generation, summary))
             .map_err(GenerationsError::CommitChanges)?;
         self.repo
             .push("origin", false)
@@ -364,12 +363,13 @@ impl Generations<ReadWrite<'_>> {
     ) -> Result<(), GenerationsError> {
         let mut metadata = self.metadata()?;
 
-        metadata.switch_generation(SwitchGenerationOptions {
+        let (_, _, history_item) = metadata.switch_generation(SwitchGenerationOptions {
             author: self._state.author.clone(),
             hostname: self._state.hostname.clone(),
             timestamp: Utc::now(),
             next_generation,
         })?;
+        let summary = history_item.summary();
 
         write_metadata_file(metadata, self.repo.path())?;
 
@@ -377,7 +377,7 @@ impl Generations<ReadWrite<'_>> {
             .add(&[Path::new(GENERATIONS_METADATA_FILE)])
             .map_err(GenerationsError::StageChanges)?;
         self.repo
-            .commit(&format!("Set current generation to {}", generation))
+            .commit(&summary)
             .map_err(GenerationsError::CommitChanges)?;
         self.repo
             .push("origin", false)
@@ -659,7 +659,7 @@ impl AllGenerationsMetadata {
             timestamp,
             next_generation,
         }: SwitchGenerationOptions,
-    ) -> Result<(), GenerationsError> {
+    ) -> Result<(GenerationId, &SingleGenerationMetadata, &HistorySpec), GenerationsError> {
         let Some(previous_generation) = self.current_gen else {
             unreachable!("current generation is only unavailable before any generation was added")
         };
@@ -691,7 +691,19 @@ impl AllGenerationsMetadata {
         // add action to history
         self.history.0.push(history_spec);
 
-        Ok(())
+        let generation_metadata_ref = self
+            .generations
+            .get(&next_generation)
+            .expect("generation should have been inserted");
+
+        let history_ref = self
+            .history
+            .0
+            .iter()
+            .next_back()
+            .expect("history event should have been inserted");
+
+        Ok((next_generation, generation_metadata_ref, history_ref))
     }
 }
 
