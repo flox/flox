@@ -233,7 +233,7 @@ impl Build {
             // or produces at least one link.
             // Handle anyway for completeness and to avoid erros in case the above changes.
             [] => message::info(format!("{success_prefix} No outputs created")),
-            [link] => message::created(format!("{success_prefix}. Output created: {link}",)),
+            [link] => message::created(format!("{success_prefix} Output created: {link}",)),
             links => message::created(formatdoc! {"
                 {success_prefix}
                 Outputs created: {}",

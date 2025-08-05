@@ -43,21 +43,43 @@ done
 if [ ${#fpath_prepend[@]} -gt 0 ]; then
   fpath=( "${fpath_prepend[@]}" "${fpath[@]}" )
   autoload -U compinit
+  declare -a _flox_compinit_args=()
 
-  # compinit tracing is very verbose so only enable with tracelevel 3 or above.
-  if [ "$_flox_activate_tracelevel" -eq 2 ]; then
-    # Disable tracing for the compinit invocation then re-enable.
-    : compinit tracing suppressed
-    set +x
-    compinit
-    set -x
-  else
-    # Tracing will either have already been enabled for tracelevels greater or
-    # equal to 2 or not enabled for tracelevels below 2, but either way we can
-    # leave tracing as-is and just invoke compinit.
-    compinit
+  # Log the reason for any cache invalidations to STDERR at tracelevel >=1.
+  # This flag was introduced in 5.9 but older versions will just ignore it.
+  if [ "$_flox_activate_tracelevel" -ge 1 ]; then
+    _flox_compinit_args+=( "-w" )
   fi
 
+  # Cache completions in `FLOX_ENV_CACHE` when available. This cache is
+  # invalidated when the contents of `fpath` changes, due to installing new
+  # packages or layering environments in a different order, or when the version
+  # of zsh is changed.
+  #
+  # `activate` doesn't require `--env-cache` so we have to be careful that
+  # `FLOX_ENV_CACHE` is set. `compinit -d` persists the value in the shell as
+  # `$_comp_dumpfile` so it may write to the wrong file if environments are
+  # layered and the previous one didn't have `--env-cache`.
+  if [[ -n "${FLOX_ENV_CACHE:-}" && -d "${FLOX_ENV_CACHE}" ]]; then
+    _flox_compinit_args+=( "-d" "${FLOX_ENV_CACHE}/.zcompdump" )
+  fi
+
+  # compinit tracing is very verbose so only enable at tracelevel >=3
+  #
+  # We only need to explicitly handle tracelevel =2 because:
+  # - <2 already has tracing disabled
+  # - >3 always has tracing enabled
+  if [ "$_flox_activate_tracelevel" -eq 2 ]; then
+    : compinit tracing suppressed
+    set +x
+  fi
+
+  compinit "${_flox_compinit_args[@]}"
+  unset _flox_compinit_args
+
+  if [ "$_flox_activate_tracelevel" -eq 2 ]; then
+    set -x
+  fi
 fi
 unset fpath_prepend
 

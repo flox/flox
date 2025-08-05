@@ -101,6 +101,11 @@ cmd = "flox install emacs"
 pre_cmd = "flox init"
 cmd = "flox install emacs vim"
 
+# Use for zsh completions.
+[resolve.fd]
+pre_cmd = "flox init"
+cmd = "flox install fd"
+
 [resolve.gzip]
 pre_cmd = "flox init"
 cmd = "flox install gzip"
