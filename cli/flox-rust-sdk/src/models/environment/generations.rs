@@ -310,7 +310,7 @@ impl Generations<ReadWrite<'_>> {
     pub fn add_generation(
         &mut self,
         environment: &mut CoreEnvironment,
-        description: String,
+        change_kind: HistoryKind,
     ) -> Result<(), GenerationsError> {
         // add metadata
         // this returns a free generation id to store the env files under
@@ -319,7 +319,7 @@ impl Generations<ReadWrite<'_>> {
             author: self._state.author.clone(),
             hostname: self._state.hostname.clone(),
             timestamp: Utc::now(),
-            kind: todo!(),
+            kind: change_kind,
         });
 
         // Write the metadata file with the new generation added
@@ -755,6 +755,8 @@ pub struct GenerationId(usize);
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub enum HistoryKind {
+    Import,
+
     Install { targets: Vec<String> },
     Edit,
     Uninstall { targets: Vec<String> },
@@ -823,6 +825,7 @@ impl HistorySpec {
         }
 
         match &self.info {
+            HistoryKind::Import => "Imported unmanaged path environment".to_string(),
             HistoryKind::Install { targets } => format_targets("installed", "package", targets),
             HistoryKind::Edit => "manually edited the manifest".to_string(),
             HistoryKind::Uninstall { targets } => format_targets("uninstalled", "package", targets),
@@ -1269,10 +1272,14 @@ mod tests {
 
         let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
         generations_rw
-            .add_generation(&mut core_env, "First generation".to_string())
+            .add_generation(&mut core_env, HistoryKind::Other {
+                summary: "First generation".to_string(),
+            })
             .unwrap();
         generations_rw
-            .add_generation(&mut core_env, "Second generation".to_string())
+            .add_generation(&mut core_env, HistoryKind::Other {
+                summary: "Second generation".to_string(),
+            })
             .unwrap();
         assert_eq!(
             generations_rw.metadata().unwrap().current_gen,
