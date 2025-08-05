@@ -584,7 +584,7 @@ impl TryFrom<ConcreteEnvironment> for GenerationsEnvironment {
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AllGenerationsMetadata {
-    #[serde(default, skip)]
+    #[serde(default)]
     history: History,
 
     /// Schema version of the metadata file, not yet utilized
@@ -859,19 +859,19 @@ pub struct HistorySpec {
 
     // system provided
     /// Local username of the user performing the change
-    author: String,
+    pub author: String,
     /// Hostname of the machine, on which the change was made
-    hostname: String,
+    pub hostname: String,
     /// Timestamp associated with the change
 
     // for consistency with the existing SingleGenerationMetadata
     #[serde(with = "chrono::serde::ts_seconds")]
-    timestamp: DateTime<Utc>,
+    pub timestamp: DateTime<Utc>,
 
     // associated generation(s)
     /// Currently active generation, e.g. created by the change
     /// or switched to.
-    current_generation: GenerationId,
+    pub current_generation: GenerationId,
     /// Previous generation before a new generation was created,
     /// or the generation active before a generation switch.
     pub previous_generation: Option<GenerationId>,
@@ -883,7 +883,7 @@ impl HistorySpec {
     /// rather than giving an exhaustive account about the complete change.
     /// The summary can be used alongside additional information such as author,
     /// host, diffs and diff derived information to produce richer change logs.
-    fn summary(&self) -> String {
+    pub fn summary(&self) -> String {
         fn format_targets(verb: &str, object: &str, targets: &[String]) -> String {
             let plural_s = if targets.is_empty() { "" } else { "s" };
 
