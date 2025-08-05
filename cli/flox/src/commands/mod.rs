@@ -346,6 +346,11 @@ impl FloxArgs {
 
         let catalog_client = init_catalog_client(&config)?;
 
+        // we already make sure $USER corresponds to **euid** earlier on oin the process.
+        let system_user_name =
+            std::env::var("USER").context("could not determine username from $USER")?;
+        let system_hostname = sys_info::hostname().context("could not determine hostname")?;
+
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
@@ -354,6 +359,8 @@ impl FloxArgs {
             runtime_dir,
             temp_dir: temp_dir_path.clone(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
+            system_user_name,
+            system_hostname,
             floxhub_token,
             floxhub,
             catalog_client,
