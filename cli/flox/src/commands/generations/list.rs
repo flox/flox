@@ -84,30 +84,12 @@ impl Display for DisplayAllMetadata<'_> {
 #[cfg(test)]
 mod tests {
     use chrono::DateTime;
+    use flox_rust_sdk::models::environment::generations::SingleGenerationMetadata;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
     use super::*;
-
-    fn mock_generations() -> AllGenerationsMetadata {
-        AllGenerationsMetadata::new(2.into(), [
-            (1.into(), SingleGenerationMetadata {
-                created: DateTime::default() + chrono::Duration::hours(1),
-                last_active: None,
-                description: "Generation 1 description".to_string(),
-            }),
-            (2.into(), SingleGenerationMetadata {
-                created: DateTime::default() + chrono::Duration::hours(2),
-                last_active: Some(DateTime::default() + chrono::Duration::hours(4)),
-                description: "Generation 2 description".to_string(),
-            }),
-            (3.into(), SingleGenerationMetadata {
-                created: DateTime::default() + chrono::Duration::hours(3),
-                last_active: Some(DateTime::default() + chrono::Duration::hours(3)),
-                description: "Generation 3 description".to_string(),
-            }),
-        ])
-    }
+    use crate::commands::generations::test_helpers::mock_generations;
 
     #[test]
     fn test_fmt_single_generation() {
@@ -151,7 +133,7 @@ mod tests {
 
     #[test]
     fn test_fmt_generations() {
-        let actual = DisplayAllMetadata(&mock_generations()).to_string();
+        let actual = DisplayAllMetadata(&mock_generations(2.into())).to_string();
 
         let expected = indoc! {"
             * 1:

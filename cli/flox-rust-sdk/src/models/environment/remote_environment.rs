@@ -6,7 +6,7 @@ use tracing::{debug, instrument};
 
 use super::core_environment::UpgradeResult;
 use super::fetcher::IncludeFetcher;
-use super::generations::{AllGenerationsMetadata, GenerationsError, GenerationsExt};
+use super::generations::{AllGenerationsMetadata, GenerationId, GenerationsError, GenerationsExt};
 use super::managed_environment::{ManagedEnvironment, ManagedEnvironmentError};
 use super::{
     CanonicalPath,
@@ -415,6 +415,19 @@ impl Environment for RemoteEnvironment {
 impl GenerationsExt for RemoteEnvironment {
     fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError> {
         self.inner.generations_metadata()
+    }
+
+    fn switch_generation(
+        &mut self,
+        flox: &Flox,
+        generation: GenerationId,
+    ) -> Result<(), EnvironmentError> {
+        self.inner.switch_generation(flox, generation)?;
+        self.inner
+            .push(flox, false)
+            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
+            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Ok(())
     }
 }
 
