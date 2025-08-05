@@ -76,6 +76,10 @@ pub struct ReadWrite<'a> {
     /// A reference to the [ReadOnly] instance that will be released
     /// when this instance is dropped.
     _read_only: &'a mut Generations<ReadOnly>,
+    /// The author modifying the generations, usually the current $USER.
+    author: String,
+    /// The hostname of the machine on which generations are modified, usually $HOST
+    hostname: String,
 }
 
 /// A representation of the generations of an environment
@@ -222,6 +226,8 @@ impl Generations<ReadOnly> {
     pub fn writable(
         &mut self,
         tempdir: impl AsRef<Path>,
+        author: impl Into<String>,
+        hostname: impl Into<String>,
     ) -> Result<Generations<ReadWrite<'_>>, GenerationsError> {
         if env::var("_FLOX_TESTING_NO_WRITABLE").is_ok() {
             panic!("Can't create writable generations when _FLOX_TESTING_NO_WRITABLE is set");
@@ -236,7 +242,11 @@ impl Generations<ReadOnly> {
         Ok(Generations {
             repo,
             branch: self.branch.clone(),
-            _state: ReadWrite { _read_only: self },
+            _state: ReadWrite {
+                _read_only: self,
+                author: author.into(),
+                hostname: hostname.into(),
+            },
         })
     }
 }
@@ -1301,7 +1311,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut generations_rw = generations.writable(&tempdir).unwrap();
+        let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
         generations_rw
             .add_generation(&mut core_env, "First generation".to_string())
             .unwrap();
@@ -1320,7 +1330,7 @@ mod tests {
     #[test]
     fn set_current_generation_backwards_and_forwards() {
         let (mut generations, tempdir) = setup_two_generations();
-        let mut generations_rw = generations.writable(&tempdir).unwrap();
+        let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
 
         assert_eq!(
             generations_rw.metadata().unwrap().current_gen,
@@ -1346,7 +1356,7 @@ mod tests {
     #[test]
     fn set_current_generation_not_found() {
         let (mut generations, tempdir) = setup_two_generations();
-        let mut generations_rw = generations.writable(&tempdir).unwrap();
+        let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
 
         let res = generations_rw.set_current_generation(GenerationId(10));
         assert!(
@@ -1359,7 +1369,7 @@ mod tests {
     #[test]
     fn set_current_generation_already_current() {
         let (mut generations, tempdir) = setup_two_generations();
-        let mut generations_rw = generations.writable(&tempdir).unwrap();
+        let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
 
         let current_gen = generations_rw.metadata().unwrap().current_gen.unwrap();
         let res = generations_rw.set_current_generation(current_gen);
