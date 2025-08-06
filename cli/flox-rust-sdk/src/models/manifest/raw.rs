@@ -751,14 +751,6 @@ impl FromStr for CatalogPackage {
             None
         };
 
-        let disallowed_chars = ['=', ' '];
-        if disallowed_chars.iter().any(|c| attr_path.contains(*c)) {
-            return Err(RawManifestError::MalformedStringDescriptor {
-                msg: format! {"pkg-path cannot contain characters: {:?}", disallowed_chars},
-                desc: descriptor.to_string(),
-            });
-        }
-
         let install_id = install_id_from_attr_path(&attr_path, descriptor)?;
 
         Ok(Self {
@@ -1893,13 +1885,6 @@ pub(super) mod test {
             version: None,
             systems: None,
         });
-        let parsed: CatalogPackage = "foo.bar@>=2.10 <=2.12".parse().unwrap();
-        assert_eq!(parsed, CatalogPackage {
-            id: "bar".to_string(),
-            pkg_path: "foo.bar".to_string(),
-            version: Some(">=2.10 <=2.12".to_string()),
-            systems: None,
-        });
         let parsed: CatalogPackage = "foo.bar@=1.2.3".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
             id: "bar".to_string(),
@@ -1955,20 +1940,6 @@ pub(super) mod test {
         CatalogPackage::from_str("foo.\"bar.baz.qux@1.2.3")
             .expect_err("missing closing quote should cause failure");
         CatalogPackage::from_str("foo@").expect_err("missing version should cause failure");
-
-        let err =
-            CatalogPackage::from_str("foo=bar").expect_err("= in pkg-path should cause failure");
-        assert_eq!(
-            err.to_string(),
-            "couldn't parse descriptor 'foo=bar': pkg-path cannot contain characters: ['=', ' ']",
-        );
-
-        let err = CatalogPackage::from_str("foo bar")
-            .expect_err("whitespace in pkg-path should cause failure");
-        assert_eq!(
-            err.to_string(),
-            "couldn't parse descriptor 'foo bar': pkg-path cannot contain characters: ['=', ' ']",
-        );
     }
 
     /// Determines whether to have a branch and/or revision in the URL
