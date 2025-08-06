@@ -645,10 +645,9 @@ impl AllGenerationsMetadata {
             author,
             hostname,
             timestamp,
-            kind,
+            info: kind,
             previous_generation: current_generation,
             current_generation: next_generation,
-            _compat: Default::default(),
         };
 
         let generation_metadata = SingleGenerationMetadata {
@@ -714,8 +713,7 @@ impl AllGenerationsMetadata {
             timestamp,
             previous_generation: Some(previous_generation),
             current_generation: next_generation,
-            kind: HistoryKind::SwitchGeneration,
-            _compat: Default::default(),
+            info: HistoryKind::SwitchGeneration,
         };
 
         // update current active gen
@@ -803,45 +801,29 @@ pub struct GenerationId(usize);
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "kind")]
+#[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub enum HistoryKind {
-    Install {
-        targets: Vec<String>,
-    },
+    Install { targets: Vec<String> },
     Edit,
-    Uninstall {
-        targets: Vec<String>,
-    },
-    Upgrade {
-        targets: Vec<String>,
-    },
+    Uninstall { targets: Vec<String> },
+    Upgrade { targets: Vec<String> },
 
-    IncludeUpgrade {
-        targets: Vec<String>,
-    },
+    IncludeUpgrade { targets: Vec<String> },
 
     SwitchGeneration,
-    Other {
-        summary: String,
-    },
-
-    #[serde(untagged)]
-    Compat {
-        kind: String,
-        #[serde(flatten)]
-        values: serde_json::Map<String, serde_json::Value>,
-    },
+    Other { summary: String },
 }
 
 /// The structure of a single change, tying together
 /// _who_ performed _what_ change, where and when.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 pub struct HistorySpec {
     // change provided
     /// Type of the change
-    #[serde(flatten)]
-    kind: HistoryKind,
+    pub info: HistoryKind,
 
     // system provided
     /// Local username of the user performing the change
@@ -859,11 +841,7 @@ pub struct HistorySpec {
     current_generation: GenerationId,
     /// Previous generation before a new generation was created,
     /// or the generation active before a generation switch.
-    previous_generation: Option<GenerationId>,
-
-    /// Additional unsupported fields.
-    #[serde(flatten)]
-    _compat: serde_json::Map<String, serde_json::Value>,
+    pub previous_generation: Option<GenerationId>,
 }
 
 impl HistorySpec {
@@ -892,7 +870,7 @@ impl HistorySpec {
             }
         }
 
-        match &self.kind {
+        match &self.info {
             HistoryKind::Install { targets } => format_targets("installed", "package", targets),
             HistoryKind::Edit => "manually edited the manifest".to_string(),
             HistoryKind::Uninstall { targets } => format_targets("uninstalled", "package", targets),
@@ -912,9 +890,6 @@ impl HistorySpec {
                 ),
             },
             HistoryKind::Other { summary } => summary.to_string(),
-            HistoryKind::Compat { kind, values: _ } => {
-                format!("performed operation {kind}")
-            },
         }
     }
 }
@@ -1016,7 +991,7 @@ mod tests {
             assert_eq!(history.hostname, options.hostname);
             assert_eq!(history.current_generation, generation);
             assert_eq!(history.previous_generation, None);
-            assert_eq!(history.kind, options.kind);
+            assert_eq!(history.info, options.kind);
             assert_eq!(history.timestamp, options.timestamp);
         }
 
@@ -1071,7 +1046,7 @@ mod tests {
                 let history_entry = metadata.history.0.last().unwrap();
                 assert_eq!(history_entry.author, switch_generation_options.author);
                 assert_eq!(history_entry.hostname, switch_generation_options.hostname);
-                assert_eq!(history_entry.kind, HistoryKind::SwitchGeneration);
+                assert_eq!(history_entry.info, HistoryKind::SwitchGeneration);
                 assert_eq!(
                     history_entry.previous_generation,
                     Some(generation_switched_from)
@@ -1206,17 +1181,29 @@ mod tests {
 
             for (change_kind, message) in change_message_pairs {
                 let spec = HistorySpec {
-                    kind: change_kind,
+                    info: change_kind,
                     author: AUTHOR.to_string(),
                     hostname: HOSTNAME.to_string(),
                     timestamp: Utc::now(),
                     current_generation: 2.into(),
                     previous_generation: Some(1.into()),
-                    _compat: Default::default(),
                 };
                 let summary = spec.summary();
                 assert_str_eq!(summary, message)
             }
+        }
+
+        fn make_value(payload: &Value) -> Value {
+            let value = json! {{
+                "author": AUTHOR,
+                "hostname": HOSTNAME,
+                "timestamp": Utc::now().timestamp(),
+                "currentGeneration": "2",
+                "previousGeneration": "1",
+                "info": payload,
+            }};
+
+            value
         }
 
         /// Assure that different history kinds can be serialized
@@ -1225,23 +1212,8 @@ mod tests {
         /// should not be redacted.
         #[test]
         fn parse_history() {
-            fn make_value(payload: serde_json::Map<String, Value>) -> Value {
-                let mut value = json! {{
-                    "author": AUTHOR,
-                    "hostname": HOSTNAME,
-                    "timestamp": Utc::now().timestamp(),
-                    "currentGeneration": "2",
-                    "previousGeneration": Value::Null
-                }};
-                value.as_object_mut().unwrap().extend(payload.clone());
-
-                value
-            }
-
             let payloads = [
-                json! {{
-                    "kind": "edit"
-                }},
+                json! {{"kind": "edit"}},
                 json! {{"kind": "install", "targets": []}},
                 json! {{"kind": "uninstall", "targets": []}},
                 json! {{"kind": "upgrade", "targets": []}},
@@ -1250,12 +1222,10 @@ mod tests {
                 json! {{"kind": "switchGeneration"}},
                 json! {{"kind": "uninstall", "targets": []}},
                 json! {{"kind": "other", "summary": "foobar" }},
-                json! {{"kind": "fromthefuture", "not-targets": {}}},
-                json! {{"kind": "install", "targets": [], "and-not-targets":[]}},
             ];
 
             for payload in payloads {
-                let value = make_value(payload.as_object().unwrap().clone());
+                let value = make_value(&payload);
                 let deserialized_from_value: HistorySpec =
                     match serde_json::from_value(value.clone()) {
                         Ok(v) => v,
@@ -1278,7 +1248,8 @@ mod tests {
                         Ok(v) => v,
                         Err(err) => panic!("should serialize to string\n{err}"),
                     };
-                let deserialized_from_string: Value =
+
+                let deserialized_from_string: HistorySpec =
                     match serde_json::from_str(&serialized_to_string) {
                         Ok(v) => v,
                         Err(err) => panic!(
@@ -1287,9 +1258,27 @@ mod tests {
                     };
 
                 assert_eq!(
-                    deserialized_from_string, value,
+                    deserialized_from_string, deserialized_from_value,
                     "serialization to string lost information"
                 );
+            }
+        }
+
+        #[test]
+        fn unknown_kinds_and_data_are_denied() {
+            let payloads = [
+                // unknown kind
+                json! {{"kind": "fromthefuture", "not-targets": {}}},
+                // extra fields
+                json! {{"kind": "install", "targets": [], "and-not-targets":[]}},
+                // not an object
+                json! { "install" },
+            ];
+
+            for payload in payloads {
+                let value = make_value(&payload);
+                serde_json::from_value::<HistorySpec>(value.clone())
+                    .expect_err(&format!("{value} should fail to parse"));
             }
         }
     }
