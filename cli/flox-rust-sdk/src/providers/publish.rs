@@ -1850,7 +1850,7 @@ pub mod tests {
             .create_package_and_possibly_user_catalog(
                 &flox.catalog_client,
                 // This catalog name matches one that the test user has r/w
-                // access to as defined in `floxhub_test_users.json`.
+                // access to as defined in _FLOXHUB_TEST_USERS.json from the floxhub repo.
                 TEST_READ_WRITE_CATALOG_NAME,
             )
             .await
@@ -1868,10 +1868,16 @@ pub mod tests {
             .expect("failed to do publish");
     }
 
-    // This test ensures that a user gets an error when trying to publish to a
-    // catalog that they have read-only access to.
-    // FIXME(zmitchell, 2025-07-25): this test fails because somehow the user
-    // with read-only access is able to publish.
+    // This test was intended to ensure that a user gets an error if they try to
+    // publish to a catalog that exists but that they don't have write access to.
+    // However, ownership (the user targeting their personal catalog) takes precedence
+    // over roles, and so the user WILL be able to publish.
+    // To properly test this, we would need two user, one to create the catalog,
+    // and another to try and publish to it where they have only READER access.
+    // The mocks currently do not support this.
+    //
+    // Additionally, this is covered by the service and integration tests.
+    // For now we can leave this with a should_panic attribute.
     #[tokio::test(flavor = "multi_thread")]
     #[should_panic]
     async fn error_publishing_to_read_only_catalog() {
@@ -1886,8 +1892,8 @@ pub mod tests {
         let guard = publish_provider
             .create_package_and_possibly_user_catalog(
                 &flox.catalog_client,
-                // This catalog name matches one that the test user has r/w
-                // access to as defined in `floxhub_test_users.json`.
+                // This catalog name matches one that the test user has read-only
+                // access to as defined in _FLOXHUB_TEST_USERS.json from the floxhub repo.
                 TEST_READ_ONLY_CATALOG_NAME,
             )
             .await

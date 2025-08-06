@@ -187,6 +187,9 @@ gen-unit-data-for-publish floxhub_repo_path force="":
     # export _FLOX_OAUTH_DEVICE_AUTH_URL="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_DEVICE_AUTH_URL')"
     # export _FLOX_OAUTH_CLIENT_ID="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOX_OAUTH_CLIENT_ID')"
     export FLOX_CONFIG_DIR="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $FLOX_CONFIG_DIR')"
+    export _FLOXHUB_TEST_USER_ROLES="$(flox activate -d "{{floxhub_repo_path}}" -- bash -c 'echo $_FLOXHUB_TEST_USER_ROLES')"
+    # We need this test user info persistent when we run the tests.
+    cp $_FLOXHUB_TEST_USER_ROLES "{{TEST_DATA}}/floxhub_test_users.json"
 
     # Set the recording variable based on Justfile arguments
     export _FLOX_UNIT_TEST_RECORD=true
