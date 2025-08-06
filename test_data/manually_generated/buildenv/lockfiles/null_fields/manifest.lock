@@ -1,0 +1,18 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "hook": {
+      "on-activate": null
+    },
+    "profile": {
+      "common": null,
+      "bash": null,
+      "zsh": null,
+      "fish": null,
+      "tcsh": null
+    },
+    "options": {}
+  },
+  "packages": []
+}

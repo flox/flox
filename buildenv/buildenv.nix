@@ -90,16 +90,16 @@ let
       )
       # [hook] section
       (
-        if (builtins.hasAttr "on-activate" hookSection) then
+        if
+          (builtins.hasAttr "on-activate" hookSection && (builtins.getAttr "on-activate" hookSection) != null)
+        then
           let
             contents = outdentScript (builtins.getAttr "on-activate" hookSection);
+            scriptFile = builtins.toFile "hook-on-activate" contents;
           in
-          if (contents != null) then
-            ''
-              "${coreutils}/bin/cp" ${builtins.toFile "hook-on-activate" contents} $out/activate.d/hook-on-activate
-            ''
-          else
-            ""
+          ''
+            "${coreutils}/bin/cp" ${scriptFile} $out/activate.d/hook-on-activate
+          ''
         else
           ""
       )
@@ -124,19 +124,16 @@ let
       builtins.map
         (
           shellType:
-          if (builtins.hasAttr shellType profileSection) then
+          if
+            (builtins.hasAttr shellType profileSection && (builtins.getAttr shellType profileSection) != null)
+          then
             let
               contents = outdentScript (builtins.getAttr shellType profileSection);
+              scriptFile = builtins.toFile "profile-${shellType}" contents;
             in
-            if (contents != null) then
-              let
-                scriptFile = builtins.toFile "profile-${shellType}" contents;
-              in
-              ''
-                "${coreutils}/bin/cp" ${scriptFile} $out/activate.d/profile-${shellType}
-              ''
-            else
-              ""
+            ''
+              "${coreutils}/bin/cp" ${scriptFile} $out/activate.d/profile-${shellType}
+            ''
           else
             ""
         )
@@ -156,22 +153,15 @@ let
           build = builtins.getAttr buildId buildSection;
         in
         (
-          if (builtins.hasAttr "command" build) then
+          if (builtins.hasAttr "command" build && (builtins.getAttr "command" build) != null) then
             let
               contents = outdentScript (builtins.getAttr "command" build);
+              scriptFile = builtins.toFile "build-${buildId}" contents;
             in
-            if (contents != null) then
-              (
-                let
-                  scriptFile = builtins.toFile "build-${buildId}" contents;
-                in
-                ''
-                  "${coreutils}/bin/mkdir" -p $out/package-builds.d
-                  "${coreutils}/bin/cp" ${scriptFile} $out/package-builds.d/${buildId}
-                ''
-              )
-            else
-              ""
+            ''
+              "${coreutils}/bin/mkdir" -p $out/package-builds.d
+              "${coreutils}/bin/cp" ${scriptFile} $out/package-builds.d/${buildId}
+            ''
           else
             ""
         )
