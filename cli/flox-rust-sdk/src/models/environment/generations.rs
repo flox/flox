@@ -1218,6 +1218,80 @@ mod tests {
                 assert_str_eq!(summary, message)
             }
         }
+
+        /// Assure that different history kinds can be serialized
+        /// and deserialized losslessly.
+        /// Specifically, unsupported events (e.g. created by future versions of flox)
+        /// should not be redacted.
+        #[test]
+        fn parse_history() {
+            fn make_value(payload: serde_json::Map<String, Value>) -> Value {
+                let mut value = json! {{
+                    "author": AUTHOR,
+                    "hostname": HOSTNAME,
+                    "timestamp": Utc::now().timestamp(),
+                    "currentGeneration": "2",
+                    "previousGeneration": Value::Null
+                }};
+                value.as_object_mut().unwrap().extend(payload.clone());
+
+                value
+            }
+
+            let payloads = [
+                json! {{
+                    "kind": "edit"
+                }},
+                json! {{"kind": "install", "targets": []}},
+                json! {{"kind": "uninstall", "targets": []}},
+                json! {{"kind": "upgrade", "targets": []}},
+                json! {{"kind": "includeUpgrade", "targets": []}},
+                json! {{"kind": "uninstall", "targets": []}},
+                json! {{"kind": "switchGeneration"}},
+                json! {{"kind": "uninstall", "targets": []}},
+                json! {{"kind": "other", "summary": "foobar" }},
+                json! {{"kind": "fromthefuture", "not-targets": {}}},
+                json! {{"kind": "install", "targets": [], "and-not-targets":[]}},
+            ];
+
+            for payload in payloads {
+                let value = make_value(payload.as_object().unwrap().clone());
+                let deserialized_from_value: HistorySpec =
+                    match serde_json::from_value(value.clone()) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            panic!("should parse as history spec\nvalue:{value}\nerror:{err}")
+                        },
+                    };
+                let serialized_to_value = match serde_json::to_value(&deserialized_from_value) {
+                    Ok(v) => v,
+                    Err(err) => panic!("should serialize to value\n{err}"),
+                };
+
+                assert_eq!(
+                    serialized_to_value, value,
+                    "serialization to value lost information"
+                );
+
+                let serialized_to_string =
+                    match serde_json::to_string_pretty(&deserialized_from_value) {
+                        Ok(v) => v,
+                        Err(err) => panic!("should serialize to string\n{err}"),
+                    };
+                let deserialized_from_string: Value =
+                    match serde_json::from_str(&serialized_to_string) {
+                        Ok(v) => v,
+                        Err(err) => panic!(
+                            "should deserialize from string\n{serialized_to_string}\nerror:{err}"
+                        ),
+                    };
+
+                assert_eq!(
+                    deserialized_from_string, value,
+                    "serialization to string lost information"
+                );
+            }
+        }
     }
 
     fn setup_two_generations() -> (Generations, TempDir) {
