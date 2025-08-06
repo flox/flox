@@ -1829,6 +1829,21 @@ mod buildenv_tests {
         );
     }
 
+    /// Older versions of Flox rendered unspecified script fields as `null` in
+    /// the lockfile, which we should still support building and re-locking.
+    #[test]
+    fn null_script_fields() {
+        let buildenv = buildenv_instance();
+        let lockfile_path = MANUALLY_GENERATED.join("buildenv/lockfiles/null_fields/manifest.lock");
+        let client = MockClient::new();
+        let result = buildenv.build(&client, &lockfile_path, None);
+        assert!(
+            result.is_ok(),
+            "environment should render succesfully: {}",
+            result.unwrap_err()
+        );
+    }
+
     /// Single quotes in variables should be escaped.
     /// Similarly accidentally escaped single quotes like
     ///
