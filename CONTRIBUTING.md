@@ -471,9 +471,8 @@ Since those repositories are private, only a Flox employee can produce these rec
 
 Instructions for generating the mocks:
 - Check out the `floxhub` repo.
-- Get the path of the `floxhub_test_users.json` file in the `test_data` folder of the `flox` repo.
 - Activate the environment in the `floxhub` repo.
-- Run `just catalog-server::serve-for-mocks <path>` in the `floxhub` repo with the path identified above.
+- Run `just catalog-server::serve-for-mocks` in the `floxhub` repo.
 - In the `flox` repo run `just gen-data <floxhub repo path>` to generate any missing mocks.
     - To regenerate all unit test mocks, run `just gen-data <floxhub repo path> -f`.
 
@@ -482,7 +481,7 @@ See the `Justfile` for the list of commands, in particular `gen-unit-data-for-pu
 
 Publish tests interact with the local services in ways that are stateful, so it's very important that the mocks are generated from a clean database.
 The database is clean after starting up, which means you can clear it by simply restarting it.
-A Justfile command is provided to make this convenient: `just catalog-server::restart-and-watch <test users path>` (run from within the `floxhub` repo environment).
+A Justfile command is provided to make this convenient: `just catalog-server::restart-and-watch` (run from within the `floxhub` repo environment).
 
 If this process of keeping services from one repo running and clean while generating mocks in another looks brittle and manual, that's because it is.
 
@@ -493,9 +492,9 @@ This part you don't need to know, but is helpful to understand.
 There are enviroment variables/secrets stored in the `floxhub` repo that can't be made public, but that are required by the `flox` test suite.
 We extract these variables at mock generation time by essentially calling `flox activate -d <path> -- bash -c 'echo $VARIABLE'`.
 We also need the latest catalog page in the `catalog-server` database, so we use `curl` to query that and store it in the `test_data` folder for the unit tests to read at runtime.
-The `catalog-server` can populate itself with test users, which removes the need to talk to Auth0 at mock generation time.
-This is accomplished by starting the `floxhub` services with an environment variable set.
-The `Justfile` in the `floxhub` repo will take care of that if you follow the instructions in the previous section.
+The `catalog-server` can populate itself with test users and tokens, which removes the need to talk to Auth0 at mock generation time.
+This is accomplished by starting the `floxhub` services with an environment variable set to point to a file.
+This file lives in the floxhub repo and is read by the tests for publish.
 
 As you can see, there's a lot of cross-talk between the two repos while generating mocks.
 

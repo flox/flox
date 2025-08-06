@@ -1,15 +1,25 @@
 [
   {
-    "token": "publish_test_mock_generator",
-    "handle": "test_user_with_existing_catalogs",
-    "roles": {
-      "publish_tests_read_write": ["Reader", "Writer"],
-      "publish_tests_read_only": ["Reader"]
-    }
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdDEifQ.FFOGO7ZFov7139oNFr1QqqbJxBpkE1pZ0VYnzCDMo_Q",
+    "handle": "test1",
+    "roles": {"flox": ["Reader"],
+              "publish_tests_read_write": ["Reader", "Writer"] ,
+              "publish_tests_read_only": ["Reader"]
+            }
   },
   {
-    "token": "publish_test_mock_generator2",
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdDIifQ.XxaKMMLFE84Ls1lswdcyC4h-8v1liYcMIoj3rMlIQ6U",
     "handle": "test_user_no_catalogs",
-    "roles": {}
+    "roles": {  }
+  },
+  {
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdDMifQ.LCXNxlr6bMndQFD77lqqDTWQJ-ph7DbEtFJiaec9QC0",
+    "handle": "test3",
+    "roles": {  }
+  },
+  {
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTksImh0dHBzOi8vZmxveC5kZXYvaGFuZGxlIjoidGVzdDQifQ.hvQ7XSF_XDbpU2BteHCmmzPjQ8LPJ3wDXK9Li8mVOm0",
+    "handle": "test4",
+    "roles": {  }
   }
 ]

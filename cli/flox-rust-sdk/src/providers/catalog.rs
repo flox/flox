@@ -1890,8 +1890,6 @@ pub mod test_helpers {
         // FloxHub can load test users from a file, so we read the
         // corresponding token from that file. Just make sure you start
         // FloxHub with _FLOXHUB_TEST_USER_ROLES pointed at this file.
-        // The username will be `test<hash>` where `<hash>` is generated
-        // from the token at runtime on the FloxHub side.
         let token = test_token_from_floxhub_test_users_file(user);
 
         flox.floxhub_token = Some(token);
@@ -2025,7 +2023,7 @@ pub mod test_helpers {
     pub const TEST_READ_WRITE_CATALOG_NAME: &str = "publish_tests_read_write";
     pub const TEST_READ_ONLY_CATALOG_NAME: &str = "publish_tests_read_only";
     pub const TEST_USER_NO_CATALOG: &str = "test_user_no_catalogs";
-    pub const TEST_USER_WITH_EXISTING_CATALOG: &str = "test_user_with_existing_catalogs";
+    pub const TEST_USER_WITH_EXISTING_CATALOG: &str = "test1";
 
     /// Ensures that the test org catalog exists, ignoring errors that arise from
     /// trying to create it when it already exists.
