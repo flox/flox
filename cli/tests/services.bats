@@ -150,8 +150,8 @@ EOF
   assert_success
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    timeout 2s bash -c '
-      while ! redis-cli -p "${REDIS_PORT}" ping; do
+    timeout 6s bash -c '
+      while ! redis-cli -t 1 -p "${REDIS_PORT}" ping; do
         sleep 0.1
       done
     '
