@@ -62,15 +62,17 @@ impl Display for DisplayMetadata<'_> {
 struct DisplayAllMetadata<'m>(&'m AllGenerationsMetadata);
 impl Display for DisplayAllMetadata<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut iter = self.0.generations.iter().peekable();
+        let mut iter = self.0.generations().into_iter().peekable();
         while let (Some((id, metadata)), peek) = (iter.next(), iter.peek()) {
             write!(f, "* {id}")?;
-            if Some(id) == self.0.current_gen.as_ref() {
+            if Some(id) == self.0.current_gen() {
                 write!(f, " (current)")?;
             }
             writeln!(f, ":")?;
 
-            let next = DisplayMetadata { metadata };
+            let next = DisplayMetadata {
+                metadata: &metadata,
+            };
             write!(f, "{}", indent::indent_all_by(2, next.to_string()))?;
             if peek.is_some() {
                 writeln!(f)?;

@@ -42,7 +42,7 @@ impl Rollback {
         };
 
         debug!(%previously_active_generation_id, "target generation determined, attempting rollback");
-        env.switch_generation(&flox, *previously_active_generation_id)?;
+        env.switch_generation(&flox, previously_active_generation_id)?;
         message::updated(format!(
             "Switched to generation {previously_active_generation_id}"
         ));
@@ -59,10 +59,10 @@ impl Rollback {
 ///   3 -rollback-> 2 -rollback-> 3
 fn determine_previous_generation(
     metadata: &AllGenerationsMetadata,
-) -> Option<(&GenerationId, &SingleGenerationMetadata)> {
+) -> Option<(GenerationId, SingleGenerationMetadata)> {
     metadata
-        .generations
-        .iter()
+        .generations()
+        .into_iter()
         .sorted_by_key(|(_id, meta)| meta.last_active)
         .rev()
         .nth(1)
@@ -91,7 +91,7 @@ mod tests {
             panic!("expected to find previous generation")
         };
 
-        assert_eq!(previous_generation, &expected_prev_id)
+        assert_eq!(previous_generation, expected_prev_id)
     }
 
     /// Use mock generations that were rolled back once from generation 3 -> genration 2.
@@ -107,7 +107,7 @@ mod tests {
         let (third_generation, ..) = metadata.add_generation(default_add_generation_options());
         metadata
             .switch_generation(default_switch_generation_options(
-                *determine_previous_generation(&metadata).unwrap().0,
+                determine_previous_generation(&metadata).unwrap().0,
             ))
             .unwrap();
 
@@ -116,6 +116,6 @@ mod tests {
             panic!("expected to find previous generation")
         };
 
-        assert_eq!(previous_generation, &third_generation)
+        assert_eq!(previous_generation, third_generation)
     }
 }
