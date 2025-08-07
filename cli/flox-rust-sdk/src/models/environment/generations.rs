@@ -119,7 +119,7 @@ impl<S> Generations<S> {
     /// Read the manifest of a given generation and return its contents as a string
     pub fn manifest(&self, generation: usize) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
-        if !metadata.generations.contains_key(&generation.into()) {
+        if !metadata.generations().contains_key(&generation.into()) {
             return Err(GenerationsError::GenerationNotFound(generation));
         }
         let manifest_osstr = self
@@ -136,7 +136,7 @@ impl<S> Generations<S> {
     /// Read the lockfile of a given generation and return its contents as a string.
     pub fn lockfile(&self, generation: usize) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
-        if !metadata.generations.contains_key(&generation.into()) {
+        if !metadata.generations().contains_key(&generation.into()) {
             return Err(GenerationsError::GenerationNotFound(generation));
         }
         let lockfile_osstr = self
@@ -154,7 +154,7 @@ impl<S> Generations<S> {
     pub fn current_gen_manifest(&self) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
         let current_gen = metadata
-            .current_gen
+            .current_gen()
             .ok_or(GenerationsError::NoGenerations)?;
 
         self.manifest(*current_gen)
@@ -164,7 +164,7 @@ impl<S> Generations<S> {
     pub fn current_gen_lockfile(&self) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
         let current_gen = metadata
-            .current_gen
+            .current_gen()
             .ok_or(GenerationsError::NoGenerations)?;
 
         self.lockfile(*current_gen)
@@ -294,7 +294,7 @@ impl Generations<ReadWrite<'_>> {
     ) -> Result<CoreEnvironment, GenerationsError> {
         let metadata = self.metadata()?;
         let current_gen = metadata
-            .current_gen
+            .current_gen()
             .ok_or(GenerationsError::NoGenerations)?;
         self.get_generation(*current_gen, include_fetcher)
     }
@@ -317,7 +317,7 @@ impl Generations<ReadWrite<'_>> {
         // add metadata
         // this returns a free generation id to store the env files under
         let mut metadata = self.metadata()?;
-        let (generation, _, history_item) = metadata.add_generation(AddGenerationOptions {
+        let (generation, history_item) = metadata.add_generation(AddGenerationOptions {
             author: self._state.author.clone(),
             hostname: self._state.hostname.clone(),
             timestamp: Utc::now(),
@@ -365,7 +365,7 @@ impl Generations<ReadWrite<'_>> {
     ) -> Result<(), GenerationsError> {
         let mut metadata = self.metadata()?;
 
-        let (_, _, history_item) = metadata.switch_generation(SwitchGenerationOptions {
+        let (_, history_item) = metadata.switch_generation(SwitchGenerationOptions {
             author: self._state.author.clone(),
             hostname: self._state.hostname.clone(),
             timestamp: Utc::now(),
@@ -588,15 +588,7 @@ pub struct AllGenerationsMetadata {
     version: Version<2>,
 
     #[serde(default, skip)]
-    pub history: History,
-
-    /// None means the environment has been created but does not yet have any
-    /// generations
-    pub current_gen: Option<GenerationId>,
-    /// Metadata for all generations of the environment.
-    /// Entries in this map must match up 1-to-1 with the generation folders
-    /// in the environment branch.
-    pub generations: BTreeMap<GenerationId, SingleGenerationMetadata>,
+    history: History,
 }
 
 #[derive(Debug, Clone)]
@@ -628,7 +620,7 @@ impl AllGenerationsMetadata {
             timestamp,
             kind,
         }: AddGenerationOptions,
-    ) -> (GenerationId, &SingleGenerationMetadata, &HistorySpec) {
+    ) -> (GenerationId, &HistorySpec) {
         // prepare new values
 
         // Returns the highest numbered generation so we know which number to assign
@@ -636,9 +628,15 @@ impl AllGenerationsMetadata {
         // generation if you're currently on e.g. 2, but the latest is 5.
         //
         // Keys should all be numbers, but if they aren't we provide a default value.
-        let next_generation =
-            GenerationId(*self.generations.keys().cloned().max().unwrap_or_default() + 1);
-        let current_generation = self.current_gen;
+        let next_generation = GenerationId(
+            self.history
+                .iter()
+                .map(|spec| *spec.current_generation)
+                .max()
+                .unwrap_or_default()
+                + 1,
+        );
+        let current_generation = self.current_gen();
 
         let history_spec = HistorySpec {
             author,
@@ -649,25 +647,8 @@ impl AllGenerationsMetadata {
             current_generation: next_generation,
         };
 
-        let generation_metadata = SingleGenerationMetadata {
-            created: timestamp,
-            // TODO: I think we allowed this to be empty,
-            // i.e. to theoritically create generations without activating them,
-            // but as far as I know we never actually wrote `None`.
-            last_active: Some(timestamp),
-            description: history_spec.summary(),
-        };
-
         // update self
-        self.generations
-            .insert(next_generation, generation_metadata);
-        self.current_gen = Some(next_generation);
         self.history.0.push(history_spec);
-
-        let generation_metadata_ref = self
-            .generations
-            .get(&next_generation)
-            .expect("generation should have been inserted");
 
         let history_ref = self
             .history
@@ -676,7 +657,7 @@ impl AllGenerationsMetadata {
             .next_back()
             .expect("history event should have been inserted");
 
-        (next_generation, generation_metadata_ref, history_ref)
+        (next_generation, history_ref)
     }
 
     /// Switch the active marked generation to `next_generation`.
@@ -692,8 +673,8 @@ impl AllGenerationsMetadata {
             timestamp,
             next_generation,
         }: SwitchGenerationOptions,
-    ) -> Result<(GenerationId, &SingleGenerationMetadata, &HistorySpec), GenerationsError> {
-        let Some(previous_generation) = self.current_gen else {
+    ) -> Result<(GenerationId, &HistorySpec), GenerationsError> {
+        let Some(previous_generation) = self.current_gen() else {
             unreachable!("current generation is only unavailable before any generation was added")
         };
 
@@ -702,7 +683,7 @@ impl AllGenerationsMetadata {
         }
 
         // get the metadata to the switched to generation
-        let Some(next_generation_metadata) = self.generations.get_mut(&next_generation) else {
+        let Some(_) = self.generations().get_mut(&next_generation) else {
             return Err(GenerationsError::GenerationNotFound(*next_generation));
         };
 
@@ -715,19 +696,8 @@ impl AllGenerationsMetadata {
             info: HistoryKind::SwitchGeneration,
         };
 
-        // update current active gen
-        self.current_gen = Some(next_generation);
-
-        // update the generation metadata
-        next_generation_metadata.last_active = Some(timestamp);
-
         // add action to history
         self.history.0.push(history_spec);
-
-        let generation_metadata_ref = self
-            .generations
-            .get(&next_generation)
-            .expect("generation should have been inserted");
 
         let history_ref = self
             .history
@@ -736,7 +706,7 @@ impl AllGenerationsMetadata {
             .next_back()
             .expect("history event should have been inserted");
 
-        Ok((next_generation, generation_metadata_ref, history_ref))
+        Ok((next_generation, history_ref))
     }
 
     /// Access the history without granting access to the field
@@ -803,8 +773,7 @@ impl AllGenerationsMetadata {
 }
 
 /// Metadata for a single generation of an environment
-#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SingleGenerationMetadata {
     /// unix timestamp of the creation time of this generation
     pub created: DateTime<Utc>,
@@ -1097,7 +1066,7 @@ mod compat {
                 ))?
             };
 
-            if Some(&*original_current_gen) != dest.current_gen.as_deref() {
+            if Some(&*original_current_gen) != dest.current_gen().as_deref() {
                 let timestamp = value
                     .generations
                     .get(&original_current_gen)
@@ -1201,14 +1170,15 @@ mod tests {
 
             let options = default_add_generation_options();
 
-            let (generation, generation_metadata, history) =
-                metadata.add_generation(options.clone());
+            let (generation, history) = metadata.add_generation(options.clone());
+            let history = history.clone();
 
-            let (generation_metadata, history) = (generation_metadata.clone(), history.clone());
+            let generations = metadata.generations();
+            let generation_metadata = generations.get(&generation).expect("generation added");
 
-            assert_eq!(metadata.current_gen, Some(generation));
+            assert_eq!(metadata.current_gen(), Some(generation));
             assert_eq!(generation_metadata.created, options.timestamp);
-            assert_eq!(generation_metadata.last_active, Some(options.timestamp));
+            assert_eq!(generation_metadata.last_active, None);
 
             assert_eq!(history.author, options.author);
             assert_eq!(history.hostname, options.hostname);
@@ -1221,11 +1191,9 @@ mod tests {
         #[test]
         fn generation_counter_is_correctly_increased() {
             let mut metadata = AllGenerationsMetadata::default();
-            let (first_generation, _, _) =
-                metadata.add_generation(default_add_generation_options());
+            let (first_generation, _) = metadata.add_generation(default_add_generation_options());
 
-            let (second_generation, _, _) =
-                metadata.add_generation(default_add_generation_options());
+            let (second_generation, _) = metadata.add_generation(default_add_generation_options());
 
             assert_eq!(first_generation, GenerationId(1));
             assert_eq!(second_generation, GenerationId(2));
@@ -1233,10 +1201,9 @@ mod tests {
             metadata
                 .switch_generation(default_switch_generation_options(first_generation))
                 .unwrap();
-            assert_eq!(metadata.current_gen, Some(first_generation));
+            assert_eq!(metadata.current_gen(), Some(first_generation));
 
-            let (third_generation, _, _) =
-                metadata.add_generation(default_add_generation_options());
+            let (third_generation, _) = metadata.add_generation(default_add_generation_options());
 
             // generation counter continues at the current max (N=2) + 1
             assert_eq!(third_generation, GenerationId(3));
@@ -1256,12 +1223,17 @@ mod tests {
                 generation_switched_to: GenerationId,
             ) {
                 assert_eq!(
-                    metadata.current_gen,
+                    metadata.current_gen(),
                     Some(generation_switched_to),
                     "current gen was not updated"
                 );
                 assert_eq!(
-                    metadata.generations[&generation_switched_to].last_active,
+                    metadata.generations()[&generation_switched_to].last_active,
+                    None,
+                    "timestamp was not updated"
+                );
+                assert_eq!(
+                    metadata.generations()[&generation_switched_from].last_active,
                     Some(switch_generation_options.timestamp),
                     "timestamp was not updated"
                 );
@@ -1694,7 +1666,7 @@ mod tests {
 
                 assert_eq!(actual_v2, expected_v2);
                 assert_eq!(
-                    *actual_v2.current_gen.unwrap(),
+                    *actual_v2.current_gen().unwrap(),
                     *expected_current_gen.unwrap()
                 )
             }
@@ -1731,7 +1703,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(
-            generations_rw.metadata().unwrap().current_gen,
+            generations_rw.metadata().unwrap().current_gen(),
             Some(GEN_ID_2),
             "should be at second generation"
         );
@@ -1745,21 +1717,21 @@ mod tests {
         let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
 
         assert_eq!(
-            generations_rw.metadata().unwrap().current_gen,
+            generations_rw.metadata().unwrap().current_gen(),
             Some(GEN_ID_2),
             "should start at second generation"
         );
 
         generations_rw.set_current_generation(GEN_ID_1).unwrap();
         assert_eq!(
-            generations_rw.metadata().unwrap().current_gen,
+            generations_rw.metadata().unwrap().current_gen(),
             Some(GEN_ID_1),
             "should roll back to first generation"
         );
 
         generations_rw.set_current_generation(GEN_ID_2).unwrap();
         assert_eq!(
-            generations_rw.metadata().unwrap().current_gen,
+            generations_rw.metadata().unwrap().current_gen(),
             Some(GEN_ID_2),
             "should roll forwards to second generation"
         );
@@ -1783,7 +1755,7 @@ mod tests {
         let (mut generations, tempdir) = setup_two_generations();
         let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
 
-        let current_gen = generations_rw.metadata().unwrap().current_gen.unwrap();
+        let current_gen = generations_rw.metadata().unwrap().current_gen().unwrap();
         let res = generations_rw.set_current_generation(current_gen);
         assert!(
             matches!(res, Err(GenerationsError::RollbackToCurrentGeneration)),
