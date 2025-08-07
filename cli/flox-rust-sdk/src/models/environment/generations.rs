@@ -738,6 +738,68 @@ impl AllGenerationsMetadata {
 
         Ok((next_generation, generation_metadata_ref, history_ref))
     }
+
+    /// Access the history without granting access to the field
+    /// for possible modification outside of this module.
+    pub fn history(&self) -> &History {
+        &self.history
+    }
+
+    /// Get the current active generation id
+    pub fn current_gen(&self) -> Option<GenerationId> {
+        self.history
+            .iter()
+            .next_back()
+            .map(|spec| spec.current_generation)
+    }
+
+    /// Filter and reduce history to a table of generations,
+    /// represented as [SingleGenerationMetadata].
+    /// This function requires a semantically consistent history, i.e.
+    ///
+    /// * exactly one generation creating event for every generation [1..]
+    /// * previous_generation correctly refers to the previously active generation
+    ///
+    /// These invariants are maintained when using [Self::add_generation]
+    /// and [Self::switch_generation].
+    pub fn generations(&self) -> BTreeMap<GenerationId, SingleGenerationMetadata> {
+        let mut map: BTreeMap<GenerationId, SingleGenerationMetadata> = BTreeMap::new();
+        for spec in self.history.iter() {
+            match spec.info {
+                HistoryKind::SwitchGeneration => {
+                    let prev = spec
+                        .previous_generation
+                        .and_then(|generation| map.get_mut(&generation))
+                        .expect("there must be a previous generation by construction");
+                    prev.last_active = Some(spec.timestamp);
+
+                    let new = map
+                        .get_mut(&spec.current_generation)
+                        .expect("there must be a current generation by construction");
+                    new.last_active = None;
+                },
+                _ => {
+                    // Adding a generation performs an implicit switch.
+                    // Hence, record that the previous generation was only active
+                    // until the creation of the new generation.
+                    if let Some(prev) = spec
+                        .previous_generation
+                        .and_then(|generation| map.get_mut(&generation))
+                    {
+                        prev.last_active = Some(spec.timestamp);
+                    }
+
+                    map.insert(spec.current_generation, SingleGenerationMetadata {
+                        created: spec.timestamp,
+                        last_active: None,
+                        description: spec.summary(),
+                    });
+                },
+            }
+        }
+
+        map
+    }
 }
 
 /// Metadata for a single generation of an environment
@@ -911,7 +973,11 @@ impl IntoIterator for History {
     }
 }
 
-impl History {}
+impl History {
+    pub fn iter(&self) -> <&Self as IntoIterator>::IntoIter {
+        self.into_iter()
+    }
+}
 
 mod compat {
     use std::collections::BTreeMap;

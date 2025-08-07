@@ -167,16 +167,16 @@ mod tests {
             * 1:
               Description: mock
               Created: 1970-01-01 01:00:00 UTC
+              Last Active: 1970-01-01 02:00:00 UTC
 
             * 2 (current):
               Description: mock
               Created: 1970-01-01 02:00:00 UTC
-              Last Active: 1970-01-01 04:00:00 UTC
 
             * 3:
               Description: mock
               Created: 1970-01-01 03:00:00 UTC
-              Last Active: 1970-01-01 03:00:00 UTC"
+              Last Active: 1970-01-01 04:00:00 UTC"
         };
 
         assert_eq!(actual, expected);
