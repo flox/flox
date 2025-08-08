@@ -1,11 +1,17 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::raw::CatalogPackage;
-use flox_rust_sdk::providers::catalog::ClientTrait;
+use flox_rust_sdk::providers::catalog::{
+    ALL_SYSTEMS,
+    ClientTrait,
+    PackageDescriptor,
+    PackageGroup,
+};
 use flox_rust_sdk::utils::logging::traceable_path;
 use indoc::{formatdoc, indoc};
 use regex::Regex;
@@ -18,7 +24,6 @@ use super::{
     ProvidedPackage,
     find_compatible_package,
     format_customization,
-    try_find_compatible_package,
 };
 use crate::commands::init::try_find_compatible_major_version_package;
 use crate::utils::dialog::{Dialog, Select};
@@ -79,7 +84,9 @@ enum RequestedNVMRCVersion {
 /// Information about the result of finding a node version compatible with what the `.nvmrc` file
 /// requested
 #[derive(Debug, Clone, PartialEq)]
-enum NVMRCVersion {
+pub(crate) enum NVMRCVersion {
+    /// .nvmrc exists but doesn't specify a version
+    Unspecified,
     /// .nvmrc contains a version, but flox doesn't provide it.
     Unavailable,
     /// .nvmrc contains an alias or something we can't parse as a version.
@@ -89,7 +96,7 @@ enum NVMRCVersion {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum PackageJSONVersion {
+pub(crate) enum PackageJSONVersion {
     /// package.json exists but doesn't specify a version
     Unspecified,
     /// package.json specifies a version, but flox can't provide it
@@ -101,9 +108,15 @@ enum PackageJSONVersion {
 
 /// Which node and yarn versions to install together
 #[derive(Clone, Debug, PartialEq)]
-struct YarnInstall {
+struct YarnAndNodeInstall {
     yarn: ProvidedPackage,
     node: ProvidedPackage,
+}
+
+/// Which yarn package to install
+#[derive(Clone, Debug, PartialEq)]
+struct YarnInstall {
+    pkg: ProvidedPackage,
 }
 
 /// Which node version to install if desired
@@ -116,122 +129,70 @@ struct NodeInstall {
 /// Which node ecosystem packages to install
 #[derive(Debug, Clone, PartialEq)]
 enum NodeInstallAction {
-    Yarn(YarnInstall),
-    YarnOrNode(YarnInstall, NodeInstall),
+    YarnAndNode(YarnAndNodeInstall),
+    YarnOnly(YarnInstall),
     Node(NodeInstall),
 }
 
 /// Version strings extracted from `package.json` without any resolution against
 /// catalog packages.
+#[derive(Debug, Clone)]
 struct PackageJSONVersionsUnresolved {
     yarn: Option<String>,
     node: Option<String>,
 }
 
-impl Node {
-    /// Determine the [NodeAction] that should be taken by the node hook.
-    /// See tests for more information.
-    pub async fn new(flox: &Flox, path: &Path) -> Result<Option<Self>> {
-        // Check for a viable yarn
-        // TODO: we should check for npm version as well,
-        // but since npm comes bundled with nodejs, we'll probably cover the most
-        // cases by just giving the requested node and hoping for the bundled
-        // npm to work.
-        // We could check if our one version of npm with its hardcoded nodejs
-        // satisfies all constraints,
-        // but that seems unlikely to be as commonly needed.
-        let versions = Self::get_package_json_versions(path)?;
+/// The collected context about the Node files in the project and
+/// requested versions within them. This serves as the input to deciding
+/// which packages to install.
+#[derive(Debug)]
+struct NodeCtx {
+    /// The raw version requirements in a `package.json` file if it existed.
+    package_json_versions: Option<PackageJSONVersionsUnresolved>,
+    /// True when `yarn.lock` exists. It's an ambiguous state if both `yarn.lock`
+    /// and `package-lock.json` exist.
+    yarn_lock_exists: bool,
+    /// True when `package-lock.json` exists. It's an ambiguous state if both
+    /// `yarn.lock` and `package-lock.json` exist.
+    package_lock_exists: bool,
+    /// The raw contents of the `.nvmrc` file. We store this as a `Result`
+    /// so that if an error occurs while reading it we don't bail immediately
+    /// if it turns out we weren't going to need it.
+    nvmrc_contents: Result<Option<String>>,
+}
+
+impl NodeCtx {
+    /// Load all of the context about ecosystem files and versions.
+    fn new(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref();
+        let package_json_path = path.join("package.json");
+        let package_lock_path = path.join("package-lock.json");
         let yarn_lock_path = path.join("yarn.lock");
+        let nvmrc_path = path.join(".nvmrc");
+
+        let package_json_versions = Self::get_package_json_versions(&package_json_path)?;
+        debug!(path = %package_json_path.display(), "read package.json");
         let yarn_lock_exists = yarn_lock_path.exists();
-        let yarn_install = match versions {
-            None => None,
-            Some(ref versions) => {
-                if yarn_lock_exists {
-                    tracing::debug!(path = traceable_path(&yarn_lock_path), "found yarn.lock");
-                    Self::try_find_compatible_yarn(flox, versions).await?
-                } else {
-                    tracing::debug!(
-                        path = traceable_path(&yarn_lock_path),
-                        "did not find a yarn.lock at this location"
-                    );
-                    None
-                }
-            },
+        debug!(path = %yarn_lock_path.display(), exists = yarn_lock_exists, "searched for yarn.lock");
+        let package_lock_exists = package_lock_path.exists();
+        debug!(path = %package_lock_path.display(), exists = package_lock_exists, "searched for package-lock.json");
+        let nvmrc_contents = Self::get_nvmrc_version(&nvmrc_path);
+        debug!(path = %nvmrc_path.display(), success = nvmrc_contents.is_ok(), "attempted read of .nvmrc");
+
+        let ctx = Self {
+            package_json_versions,
+            yarn_lock_exists,
+            package_lock_exists,
+            nvmrc_contents,
         };
-
-        let valid_package_json = versions.is_some();
-        let package_json_and_package_lock =
-            valid_package_json && path.join("package-lock.json").exists();
-
-        // If there's yarn and not both a package.json and a package-lock.json,
-        // return early with just yarn.
-        if let Some(yarn_install) = &yarn_install {
-            if !package_json_and_package_lock {
-                return Ok(Some(Self {
-                    action: NodeInstallAction::Yarn(yarn_install.clone()),
-                    package_json_node_version: None,
-                    nvmrc_version: None,
-                }));
-            }
-        }
-
-        // Get value for self.package_json_node_version.
-        // We only do this if we didn't return early with action [NodeAction::YarnInstall]
-        let package_json_node_version = match versions {
-            None => None,
-            Some(ref versions) => Self::try_find_compatible_nodejs(flox, versions).await?,
-        };
-
-        // Get value for self.nvmrc_version
-        // We only do this if we didn't return early with action [NodeAction::YarnInstall]
-        let nvmrc_version = match package_json_node_version {
-            // package.json is higher priority than .nvmrc,
-            // so don't check .nvmrc if we know we'll use the version in
-            // package.json or we know we can't provide it
-            Some(PackageJSONVersion::Found(_)) | Some(PackageJSONVersion::Unavailable) => None,
-            _ => Self::get_nvmrc_version(flox, path).await?,
-        };
-
-        let node_install = Self::get_node_install(
-            &package_json_node_version,
-            &nvmrc_version,
-            valid_package_json,
-        );
-
-        let action = match yarn_install {
-            Some(yarn_install) => {
-                node_install.map_or(
-                    Some(NodeInstallAction::Yarn(yarn_install.clone())),
-                    |node_install| {
-                        // We know at this point that package-lock.json exists,
-                        // because otherwise we would have returned above
-                        Some(NodeInstallAction::YarnOrNode(yarn_install, node_install))
-                    },
-                )
-            },
-            None => {
-                node_install.map(|mut node_install| {
-                    // If yarn.lock exists but we couldn't find a compatible
-                    // yarn, don't offer an npm hook
-                    if yarn_lock_exists {
-                        node_install.npm_hook = false;
-                    }
-                    NodeInstallAction::Node(node_install)
-                })
-            },
-        };
-
-        Ok(action.map(|action| Self {
-            package_json_node_version,
-            nvmrc_version,
-            action,
-        }))
+        Ok(ctx)
     }
 
-    /// Look for nodejs, npm, and yarn versions in a (possibly non-existent)
+    /// Look for nodejs and yarn versions in a (possibly non-existent)
     /// `package.json` file
-    fn get_package_json_versions(path: &Path) -> Result<Option<PackageJSONVersionsUnresolved>> {
-        let package_json = path.join("package.json");
+    fn get_package_json_versions(
+        package_json: &Path,
+    ) -> Result<Option<PackageJSONVersionsUnresolved>> {
         if !package_json.exists() {
             tracing::debug!(
                 path = traceable_path(&package_json),
@@ -257,88 +218,466 @@ impl Node {
                 debug!(
                     node = node.as_ref().unwrap_or(&"null".to_string()),
                     yarn = yarn.as_ref().unwrap_or(&"null".to_string()),
-                    "detected package.json versions"
+                    "read package.json"
                 );
                 Ok(Some(PackageJSONVersionsUnresolved { node, yarn }))
             },
         }
     }
 
-    /// Try to find node, npm, and yarn versions that satisfy constraints in
-    /// package.json
-    async fn try_find_compatible_yarn(
+    /// Look for a Node version specified in a possibly-nonexistent .nvmrc file.
+    fn get_nvmrc_version(path: &Path) -> Result<Option<String>> {
+        if !path.exists() {
+            debug!(path = %path.display(), ".nvmrc didn't exist");
+            return Ok(None);
+        }
+
+        let contents = fs::read_to_string(path);
+        let debug_contents = contents
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or("read_error");
+        debug!(contents = debug_contents, "read .nvmrc");
+
+        contents.context("failed to read .nvmrc file").map(Some)
+    }
+
+    /// Returns whether this state is even valid before we start looking for
+    /// compatible versions or trying to decide which packages to install.
+    fn is_valid_state(&self) -> bool {
+        // We need _some_ kind of information, and at the very least one of
+        // these things will get you some kind of Node installation:
+        // - A valid `package.json` even if it doesn't contain versions.
+        // - The presence of a `yarn.lock` file.
+        // - The presence of a `.nvmrc` file.
+        //
+        // TODO(zmitchell, 2025-08-01): the previous iteration of this setup
+        // code didn't really use `package-lock.json` to inform whether we
+        // were in a good state, so this doesn't either, but we may decide
+        // to do that in the future.
+        self.package_json_versions.is_some()
+            || self.yarn_lock_exists
+            || self.nvmrc_contents.as_ref().is_ok_and(|c| c.is_some())
+    }
+
+    /// Returns whether we should install both `yarn` and a matching `node`.
+    fn should_install_yarn_and_node(&self) -> bool {
+        // There may be some cases missing from this logic, but I *think* this
+        // reproduces the existing behavior.
+        self.yarn_lock_exists
+            && self
+                .package_json_versions
+                .as_ref()
+                .is_some_and(|versions| versions.yarn.is_some())
+            && self
+                .package_json_versions
+                .as_ref()
+                .is_some_and(|versions| versions.node.is_some())
+            && !self.package_lock_exists
+    }
+
+    /// Returns whether we should install just `yarn` without `node`.
+    fn should_install_yarn_only(&self) -> bool {
+        // If both `yarn.lock` and `package-lock.json` exist, we're in an
+        // ambiguous state since these files serve the same purpose.
+        // It could mean that the user just left one of them around after
+        // switching between package managers. In this ambiguous state
+        // we defer to the `package-lock.json`
+        self.yarn_lock_exists && self.package_json_versions.is_some() && !self.package_lock_exists
+    }
+
+    /// Returns whether we should only install `node`.
+    fn should_install_node_only(&self) -> bool {
+        // The bar here is pretty low
+        self.package_json_versions.is_some()
+            || self
+                .nvmrc_contents
+                .as_ref()
+                .is_ok_and(|contents| contents.is_some())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum NodeVersionSource {
+    PackageJson(PackageJSONVersion),
+    Nvmrc(NVMRCVersion),
+}
+
+impl NodeVersionSource {
+    /// Returns the version string for the version we found and resolved
+    /// if we did so successfully.
+    fn version_found(&self) -> Option<String> {
+        if let NodeVersionSource::PackageJson(PackageJSONVersion::Found(pkg)) = self {
+            return pkg.version.clone();
+        }
+        if let NodeVersionSource::Nvmrc(NVMRCVersion::Found(pkg)) = self {
+            return pkg.version.clone();
+        }
+        None
+    }
+}
+
+impl Node {
+    /// Determine the [NodeAction] that should be taken by the node hook.
+    /// See tests for more information.
+    pub async fn new(flox: &Flox, path: &Path) -> Result<Option<Self>> {
+        // These are the files we care about:
+        // - package.json: config file for npm/node
+        // - package-lock.json: this person is using npm/node instead of yarn
+        // - yarn.lock: lockfile for packages in package.json via yarn
+        // - .nvmrc: this persion is using nvm to manage node versions
+        //
+        // The `yarn` package brings a `node` dependency along with it.
+        // The yarn version is specified in `package.json`.
+        // If the user specifies both a `yarn` and `node` version in `package.json`
+        // then we want the `node` dependency of `yarn` *and* the `node` package
+        // to match the version in `package.json`.
+        //
+        // If the user isn't using `yarn`, then we try to get a `node` version from
+        // `package.json`
+        let ctx = NodeCtx::new(path)?;
+        if !ctx.is_valid_state() {
+            debug!("node ctx detected an invalid state");
+            return Ok(None);
+        }
+        if ctx.should_install_yarn_and_node() {
+            // SAFETY: it's only possible to get to this point if we already found versions
+            // in the `package.json` file, so it's safe to unwrap here.
+            debug!("finding yarn and node versions");
+            let versions = ctx
+                .package_json_versions
+                .clone()
+                .expect("expected to find package.json versions");
+            let action = Self::try_find_compatible_yarn_and_node_versions(flox, &versions).await?;
+            let node = action.map(|action| {
+                let node_install_action = NodeInstallAction::YarnAndNode(action.clone());
+                Node {
+                    action: node_install_action,
+                    package_json_node_version: Some(PackageJSONVersion::Found(action.node.clone())),
+                    nvmrc_version: None,
+                }
+            });
+            Ok(node)
+        } else if ctx.should_install_yarn_only() {
+            // SAFETY: it's only possible to get to this point if we already found versions
+            // in the `package.json` file, so it's safe to unwrap here.
+            debug!("finding yarn version");
+            let versions = ctx
+                .package_json_versions
+                .clone()
+                .expect("expected to find package.json versions");
+            let action = Self::try_find_compatible_yarn_only(flox, &versions).await?;
+            let node = action.map(|action| {
+                let node_install_action = NodeInstallAction::YarnOnly(action);
+                Node {
+                    action: node_install_action,
+                    package_json_node_version: None,
+                    nvmrc_version: None,
+                }
+            });
+            Ok(node)
+        } else if ctx.should_install_node_only() {
+            debug!("finding node version");
+            let versions = ctx.package_json_versions.clone();
+            let res =
+                Self::try_find_compatible_node_only(flox, versions.as_ref(), ctx.nvmrc_contents)
+                    .await?;
+            let node = res.map(|(action, version_source)| {
+                let node_install_action = NodeInstallAction::Node(action.clone());
+                match version_source {
+                    NodeVersionSource::PackageJson(version) => Node {
+                        action: node_install_action,
+                        package_json_node_version: Some(version),
+                        nvmrc_version: None,
+                    },
+                    NodeVersionSource::Nvmrc(version) => Node {
+                        action: node_install_action,
+                        package_json_node_version: None,
+                        nvmrc_version: Some(version),
+                    },
+                }
+            });
+            return Ok(node);
+        } else {
+            return Ok(None);
+        }
+    }
+
+    /// Try to find a satisfactory `yarn` version and a compatible `node` version.
+    async fn try_find_compatible_yarn_and_node_versions(
         flox: &Flox,
         versions: &PackageJSONVersionsUnresolved,
-    ) -> Result<Option<YarnInstall>> {
-        let PackageJSONVersionsUnresolved { yarn, .. } = versions;
+    ) -> Result<Option<YarnAndNodeInstall>> {
+        let PackageJSONVersionsUnresolved {
+            yarn: requested_yarn_version,
+            node: requested_node_version,
+        } = versions;
 
-        let found_node = match Self::try_find_compatible_nodejs(flox, versions).await? {
-            // If the corresponding node isn't compatible, don't install yarn
-            None => return Ok(None),
-            Some(pkg_json_version) => {
-                if let PackageJSONVersion::Found(pkg) = pkg_json_version {
-                    pkg
-                } else if let PackageJSONVersion::Unspecified = pkg_json_version {
-                    try_find_compatible_package(flox, "nodejs", None)
-                        .await?
-                        .ok_or(anyhow!("Flox couldn't find nodejs in nixpkgs"))?
-                } else {
-                    return Ok(None);
-                }
-            },
-        };
-
-        // We assume that yarn is built with found_node, which is currently true
-        // in nixpkgs
+        // First try to determine whether we need the `yarn` or `yarn-berry`
+        // package so we can try to pair it with a node package later.
         let resolved_pkg_groups = try_find_compatible_major_version_package(
             flox,
             "yarn",
             &["yarn-berry", "yarn"],
-            yarn.as_deref(),
+            requested_yarn_version.as_deref(),
         )
         .await?;
-        let found_yarn = resolved_pkg_groups.first();
+        let yarn_pkg = resolved_pkg_groups
+            .first()
+            .map(|pkg| pkg.attr_path.to_string());
+        if yarn_pkg.is_none() {
+            // If we can't find a compatible version of *either*
+            // yarn package, there's nothing to do here.
+            return Ok(None);
+        }
+        let yarn_pkg = yarn_pkg.unwrap(); // just checked that it was Some
 
-        Ok(found_yarn.map(|found_yarn| YarnInstall {
-            yarn: found_yarn.clone(),
-            node: found_node,
-        }))
+        let yarn_and_node_pkg_group = PackageGroup {
+            descriptors: vec![
+                PackageDescriptor {
+                    attr_path: yarn_pkg.clone(),
+                    install_id: yarn_pkg.clone(),
+                    version: requested_yarn_version.clone(),
+                    allow_pre_releases: None,
+                    derivation: None,
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    allow_missing_builds: None,
+                    systems: ALL_SYSTEMS.to_vec(),
+                },
+                PackageDescriptor {
+                    allow_broken: None,
+                    allow_insecure: None,
+                    allow_missing_builds: None,
+                    allow_pre_releases: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    attr_path: "nodejs".to_string(),
+                    derivation: None,
+                    install_id: "nodejs".to_string(), // generic "nodejs" package
+                    systems: ALL_SYSTEMS.to_vec(),
+                    version: requested_node_version.clone(),
+                },
+            ],
+            name: "yarn".to_string(), // pkg-group name
+        };
+        let resolved = flox
+            .catalog_client
+            .resolve(vec![yarn_and_node_pkg_group])
+            .await?;
+        // A map of attr_path -> ProvidedPackage
+        let pkgs = resolved
+            .first()
+            .and_then(|group| group.page.clone())
+            .and_then(|page| page.packages)
+            .map(|pkgs| {
+                pkgs.into_iter()
+                    .map(|pkg| (pkg.attr_path.clone(), pkg.into()))
+                    .collect::<HashMap<String, ProvidedPackage>>()
+            });
+        if pkgs.is_none() {
+            debug!("failed to resolve yarn/node group");
+            return Ok(None);
+        }
+        let pkgs = pkgs.unwrap(); // We just checked that it was Some
+        let yarn_pkg = pkgs.get(&yarn_pkg);
+        let node_pkg = pkgs.get("nodejs");
+        if yarn_pkg.is_none() || node_pkg.is_none() {
+            return Ok(None);
+        }
+
+        let install = YarnAndNodeInstall {
+            yarn: yarn_pkg.unwrap().clone(),
+            node: node_pkg.unwrap().clone(),
+        };
+        Ok(Some(install))
     }
 
-    /// Try to find nodejs (alone) that satisfies constraints in package.json
-    async fn try_find_compatible_nodejs(
+    /// Try to find a satisfactory `yarn` version and a compatible `node` version.
+    async fn try_find_compatible_yarn_only(
         flox: &Flox,
         versions: &PackageJSONVersionsUnresolved,
-    ) -> Result<Option<PackageJSONVersion>> {
-        let PackageJSONVersionsUnresolved { node, .. } = versions;
+    ) -> Result<Option<YarnInstall>> {
+        let PackageJSONVersionsUnresolved {
+            yarn: requested_yarn_version,
+            ..
+        } = versions;
 
-        debug!(
-            version = node.as_ref().unwrap_or(&"unspecified".to_string()),
-            "trying to find compatible node version"
-        );
+        // First try to determine whether we need the `yarn` or `yarn-berry`
+        // package so we can try to pair it with a node package later.
+        let resolved_pkg_groups = try_find_compatible_major_version_package(
+            flox,
+            "yarn",
+            &["yarn-berry", "yarn"],
+            requested_yarn_version.as_deref(),
+        )
+        .await?;
+        if let Some(pkg) = resolved_pkg_groups.first() {
+            Ok(Some(YarnInstall { pkg: pkg.clone() }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn try_find_compatible_node_only(
+        flox: &Flox,
+        versions: Option<&PackageJSONVersionsUnresolved>,
+        nvmrc_contents: Result<Option<String>>,
+    ) -> Result<Option<(NodeInstall, NodeVersionSource)>> {
         let nodejs_packages = Self::get_available_node_packages(flox).await?;
-        let found_node = match node {
-            Some(node_version) => {
-                let resolved_groups = try_find_compatible_major_version_package(
-                    flox,
-                    "nodejs",
-                    &nodejs_packages,
-                    Some(node_version),
-                )
-                .await?;
-                if let Some(result) = resolved_groups.first() {
-                    Some(PackageJSONVersion::Found(result.clone()))
-                } else {
-                    Some(PackageJSONVersion::Unavailable)
-                }
-            },
-            _ => {
-                debug!("node version was unspecified");
-                Some(PackageJSONVersion::Unspecified)
-            },
-        };
+        debug!("resolving node version from package.json");
+        let node_from_package_json =
+            Self::node_install_from_package_json(flox, &nodejs_packages, versions).await?;
+        if let Some((node_install, version)) = node_from_package_json {
+            let source = NodeVersionSource::PackageJson(version);
+            debug!(
+                version = source.version_found().unwrap_or("null".to_string()),
+                "found node version from package.json"
+            );
+            return Ok(Some((node_install, source)));
+        }
+        debug!("resolving node version from .nvmrc");
+        let node_from_nvmrc =
+            Self::node_install_from_nvmrc(flox, &nodejs_packages, nvmrc_contents).await?;
+        if let Some((node_install, version)) = node_from_nvmrc {
+            let source = NodeVersionSource::Nvmrc(version);
+            debug!(
+                version = source.version_found().unwrap_or("null".to_string()),
+                "found node version from .nvmrc"
+            );
+            return Ok(Some((node_install, source)));
+        }
+        Ok(None)
+    }
 
-        Ok(found_node)
+    /// Tries to get a Node installation from package.json, which may itself be missing,
+    /// or may not contain a Node version even if package.json does exist.
+    async fn node_install_from_package_json(
+        flox: &Flox,
+        node_pkgs: &[String],
+        package_json_versions: Option<&PackageJSONVersionsUnresolved>,
+    ) -> Result<Option<(NodeInstall, PackageJSONVersion)>> {
+        debug!("checking compatible node version from package.json");
+        let node_from_package_json: Option<(NodeInstall, PackageJSONVersion)> =
+            match package_json_versions {
+                // We had a package.json and a node version inside of it.
+                Some(PackageJSONVersionsUnresolved {
+                    node: Some(node_version),
+                    ..
+                }) => {
+                    debug!(
+                        version = node_version,
+                        "trying to find compatible node version"
+                    );
+                    let resolved_groups = try_find_compatible_major_version_package(
+                        flox,
+                        "nodejs",
+                        node_pkgs,
+                        Some(node_version),
+                    )
+                    .await?;
+                    match resolved_groups.first() {
+                        Some(pkg) => {
+                            let node_install = NodeInstall {
+                                node: Some(pkg.clone()),
+                                npm_hook: true,
+                            };
+                            let version = PackageJSONVersion::Found(pkg.clone());
+                            Some((node_install, version))
+                        },
+                        None => {
+                            let node_install = NodeInstall {
+                                node: None,
+                                npm_hook: false,
+                            };
+                            Some((node_install, PackageJSONVersion::Unavailable))
+                        },
+                    }
+                },
+                // We had a package.json but no node version inside of it.
+                Some(PackageJSONVersionsUnresolved { node: None, .. }) => {
+                    let node_install = NodeInstall {
+                        node: None,
+                        npm_hook: true,
+                    };
+                    Some((node_install, PackageJSONVersion::Unspecified))
+                },
+                // We didn't have a package.json file.
+                None => None,
+            };
+        Ok(node_from_package_json)
+    }
+
+    /// Tries to get a Node installation from .nvmrc, which may itself be missing
+    /// or have invalid contents.
+    async fn node_install_from_nvmrc(
+        flox: &Flox,
+        node_pkgs: &[String],
+        nvmrc_contents: Result<Option<String>>,
+    ) -> Result<Option<(NodeInstall, NVMRCVersion)>> {
+        match nvmrc_contents {
+            // The .nvmrc file existed and we successfully read it.
+            Ok(Some(contents)) => {
+                let node_from_nvmrc = match Self::parse_nvmrc_version(&contents) {
+                    // The file was empty
+                    RequestedNVMRCVersion::None => {
+                        let node_install = NodeInstall {
+                            node: None,
+                            npm_hook: false,
+                        };
+                        Some((node_install, NVMRCVersion::Unspecified))
+                    },
+                    // The file contained an alias (e.g. "stable") or something else
+                    // that we don't know how to translate to a version.
+                    RequestedNVMRCVersion::Unsure => {
+                        let node_install = NodeInstall {
+                            node: None,
+                            npm_hook: false,
+                        };
+                        Some((node_install, NVMRCVersion::Unsure))
+                    },
+                    // The file contained a version we can search for.
+                    RequestedNVMRCVersion::Found(version) => {
+                        let resolved_groups = try_find_compatible_major_version_package(
+                            flox,
+                            "nodejs",
+                            node_pkgs,
+                            Some(version.as_str()),
+                        )
+                        .await?;
+                        match resolved_groups.first() {
+                            Some(pkg) => {
+                                let node_install = NodeInstall {
+                                    node: Some(pkg.clone()),
+                                    npm_hook: false,
+                                };
+                                let version = NVMRCVersion::Found(pkg.clone());
+                                Some((node_install, version))
+                            },
+                            None => {
+                                let node_install = NodeInstall {
+                                    node: None,
+                                    npm_hook: false,
+                                };
+                                Some((node_install, NVMRCVersion::Unavailable))
+                            },
+                        }
+                    },
+                };
+                Ok(node_from_nvmrc)
+            },
+            // The .nvmrc file didn't exist, so we didn't encounter an error
+            // while trying to read it (e.g. we successfully did...nothing).
+            Ok(None) => Ok(None),
+            // The .nvmrc file existed and we encountered an error trying to read it.
+            Err(err) => {
+                // This is necessary to make it compile since the Ok variant has
+                // a completely different type.
+                Err(err)
+            },
+        }
     }
 
     async fn get_available_node_packages(flox: &Flox) -> Result<Vec<String>> {
@@ -380,31 +719,6 @@ impl Node {
         Ok(matches)
     }
 
-    /// Determine appropriate [NVMRCVersion] variant for a (possibly
-    /// non-existent) `.nvmrc` file in `path`.
-    ///
-    /// This will perform a search to determine if a requested version is
-    /// available.
-    async fn get_nvmrc_version(flox: &Flox, path: &Path) -> Result<Option<NVMRCVersion>> {
-        let nvmrc = path.join(".nvmrc");
-        if !nvmrc.exists() {
-            return Ok(None);
-        }
-
-        let nvmrc_contents = fs::read_to_string(&nvmrc)?;
-        let nvmrc_version = match Self::parse_nvmrc_version(&nvmrc_contents) {
-            RequestedNVMRCVersion::None => None,
-            RequestedNVMRCVersion::Unsure => Some(NVMRCVersion::Unsure),
-            RequestedNVMRCVersion::Found(ref version) => {
-                match try_find_compatible_package(flox, "nodejs", Some(version)).await? {
-                    None => Some(NVMRCVersion::Unavailable),
-                    Some(result) => Some(NVMRCVersion::Found(result)),
-                }
-            },
-        };
-        Ok(nvmrc_version)
-    }
-
     /// Translate the contents of a `.nvmrc` file into a [RequestedNVMRCVersion]
     fn parse_nvmrc_version(nvmrc_contents: &str) -> RequestedNVMRCVersion {
         // When reading from a file, nvm runs:
@@ -439,45 +753,6 @@ impl Node {
                     _ => RequestedNVMRCVersion::Unsure,
                 }
             },
-        }
-    }
-
-    /// Return whether to skip the nodejs hook entirely, install a requested
-    /// version of nodejs, or offer to install the Flox default version of
-    /// nodejs.
-    ///
-    /// This is decided based on whether .nvmrc and package.json are present,
-    /// and whether Flox can provide versions they request.
-    fn get_node_install(
-        package_json_node_version: &Option<PackageJSONVersion>,
-        nvmrc_version: &Option<NVMRCVersion>,
-        npm_hook: bool,
-    ) -> Option<NodeInstall> {
-        match (package_json_node_version, nvmrc_version) {
-            // package.json takes precedence over .nvmrc
-            (Some(PackageJSONVersion::Found(package)), _) => Some(NodeInstall {
-                node: Some(package.clone()),
-                npm_hook,
-            }),
-            // Treat the version in package.json strictly; if we can't find it, don't suggest something else.
-            (Some(PackageJSONVersion::Unavailable), _) => None,
-            (_, Some(NVMRCVersion::Found(package))) => Some(NodeInstall {
-                node: Some(package.clone()),
-                npm_hook,
-            }),
-            (_, Some(NVMRCVersion::Unsure)) => Some(NodeInstall {
-                node: None,
-                npm_hook,
-            }),
-            (_, Some(NVMRCVersion::Unavailable)) => Some(NodeInstall {
-                node: None,
-                npm_hook,
-            }),
-            (Some(PackageJSONVersion::Unspecified), None) => Some(NodeInstall {
-                node: None,
-                npm_hook,
-            }),
-            (None, None) => None,
         }
     }
 
@@ -544,6 +819,18 @@ impl Node {
                 mentions_package_json = true;
                 ("Flox detected a package.json".to_string(), result.version)
             },
+            (None, Some(NVMRCVersion::Unspecified)) => {
+                let result = find_compatible_package(flox, "nodejs", None).await?;
+                ("Flox detected an .nvmrc".to_string(), result.version)
+            },
+            (Some(PackageJSONVersion::Unspecified), Some(NVMRCVersion::Unspecified)) => {
+                // This is unreachable because we only set the source to `Some` that we
+                // eventually used to find the package. In other words, if we had a
+                // `package.json` and failed to locate a suitable package, we still
+                // return `Some(_)` for the `package.json` one, and don't even look at
+                // .nvmrc.
+                unreachable!()
+            },
             // get_action() returns NodeAction::Nothing for this case so it's unreachable
             (None, None) => unreachable!(),
         };
@@ -607,7 +894,7 @@ impl Node {
     }
 
     /// Prompt whether to install yarn
-    fn prompt_with_yarn(&self, yarn_install: &YarnInstall) -> Result<bool> {
+    fn prompt_with_yarn_and_node(&self, yarn_install: &YarnAndNodeInstall) -> Result<bool> {
         let yarn_version = Self::format_version_or_empty(yarn_install.yarn.version.as_ref());
         let node_version = Self::format_version_or_empty(yarn_install.node.version.as_ref());
 
@@ -622,72 +909,19 @@ impl Node {
         self.single_option_prompt()
     }
 
-    /// Prompt whether to install npm or yarn when either is viable
-    async fn prompt_for_package_manager(
-        &mut self,
-        flox: &Flox,
-        yarn_install: YarnInstall,
-        node_install: NodeInstall,
-    ) -> Result<bool> {
-        let yarn_version = Self::format_version_or_empty(yarn_install.yarn.version.as_ref());
-        let yarn_node_version = Self::format_version_or_empty(yarn_install.node.version.as_ref());
-        let node_version = Self::format_version_or_empty(
-            match &node_install.node {
-                Some(found_node) => found_node.clone(),
-                None => find_compatible_package(flox, "nodejs", None).await?,
-            }
-            .version
-            .as_ref(),
-        );
+    /// Prompt whether to install yarn
+    fn prompt_with_yarn(&self, yarn_install: &YarnInstall) -> Result<bool> {
+        let yarn_version = Self::format_version_or_empty(yarn_install.pkg.version.as_ref());
 
         message::plain(formatdoc! {"
-            Flox detected both a package-lock.json and a yarn.lock
+            Flox detected a package.json and a yarn.lock
 
             Flox can add the following to your environment:
-            * Either nodejs{node_version} with npm bundled, OR yarn{yarn_version} with nodejs{yarn_node_version} bundled
-            * Either an npm installation hook, OR a yarn installation hook
+            * yarn{yarn_version}
+            * A yarn installation hook
             "});
-        let message = formatdoc! {
-        "Would you like Flox to apply one of these modifications?
-         You can always change the environment's manifest with 'flox edit'"};
-        let options = [
-            "Yes - with npm",
-            "Yes - with yarn",
-            "No",
-            "Show modifications with npm",
-            "Show modifications with yarn",
-        ]
-        .to_vec();
 
-        let dialog = Dialog {
-            message: &message,
-            help_message: Some(AUTO_SETUP_HINT),
-            typed: Select {
-                options: options.clone(),
-            },
-        };
-
-        let (mut choice, _) = dialog.clone().raw_prompt()?;
-
-        while choice == 3 || choice == 4 {
-            // Temporarily set choice so self.get_init_customization() returns
-            // the correct hook
-            if choice == 3 {
-                self.action = NodeInstallAction::Node(node_install.clone())
-            } else if choice == 4 {
-                self.action = NodeInstallAction::Yarn(yarn_install.clone())
-            }
-            message::plain(format_customization(&self.get_init_customization())?);
-
-            (choice, _) = dialog.clone().raw_prompt()?;
-        }
-
-        if choice == 0 {
-            self.action = NodeInstallAction::Node(node_install.clone())
-        } else if choice == 1 {
-            self.action = NodeInstallAction::Yarn(yarn_install.clone())
-        }
-        Ok(choice == 0 || choice == 1)
+        self.single_option_prompt()
     }
 
     fn format_version_or_empty(version: Option<&String>) -> String {
@@ -700,14 +934,13 @@ impl Node {
 impl InitHook for Node {
     async fn prompt_user(&mut self, flox: &Flox, _path: &Path) -> Result<bool> {
         match &self.action {
-            NodeInstallAction::Yarn(yarn_install) => self.prompt_with_yarn(yarn_install),
-            NodeInstallAction::YarnOrNode(yarn_install, node_install) => {
-                self.prompt_for_package_manager(flox, yarn_install.clone(), node_install.clone())
-                    .await
+            NodeInstallAction::YarnAndNode(yarn_and_node_install) => {
+                self.prompt_with_yarn_and_node(yarn_and_node_install)
             },
             NodeInstallAction::Node(node_install) => {
                 self.prompt_with_node(flox, node_install).await
             },
+            NodeInstallAction::YarnOnly(yarn_install) => self.prompt_with_yarn(yarn_install),
         }
     }
 
@@ -715,7 +948,7 @@ impl InitHook for Node {
         let mut packages = vec![];
 
         let hook_on_activate = match &self.action {
-            NodeInstallAction::Yarn(yarn_install) => {
+            NodeInstallAction::YarnAndNode(yarn_install) => {
                 packages.push(CatalogPackage {
                     id: "yarn".to_string(),
                     pkg_path: yarn_install.yarn.attr_path.clone().into(),
@@ -724,12 +957,17 @@ impl InitHook for Node {
                     version: yarn_install.yarn.version.clone(),
                     systems: None,
                 });
+                packages.push(CatalogPackage {
+                    id: "node".to_string(),
+                    pkg_path: yarn_install.node.attr_path.clone().into(),
+                    // TODO: we probably shouldn't pin this when we're just
+                    // providing the default
+                    version: yarn_install.node.version.clone(),
+                    systems: None,
+                });
                 Some(YARN_HOOK.to_string())
             },
-            // Default to node for InstallYarnOrNode
-            // This is only reachable if --auto-setup is used.
-            NodeInstallAction::YarnOrNode(_, node_install)
-            | NodeInstallAction::Node(node_install) => {
+            NodeInstallAction::Node(node_install) => {
                 let nodejs_to_install = match &node_install.node {
                     Some(result) => CatalogPackage {
                         id: "nodejs".to_string(),
@@ -750,6 +988,17 @@ impl InitHook for Node {
                 } else {
                     None
                 }
+            },
+            NodeInstallAction::YarnOnly(yarn_install) => {
+                packages.push(CatalogPackage {
+                    id: "yarn".to_string(),
+                    pkg_path: yarn_install.pkg.attr_path.clone().into(),
+                    // TODO: we probably shouldn't pin this when we're just
+                    // providing the default
+                    version: yarn_install.pkg.version.clone(),
+                    systems: None,
+                });
+                Some(YARN_HOOK.to_string())
             },
         };
 
@@ -824,7 +1073,7 @@ mod tests {
         };
         let node_20 = Package {
             name: "nodejs_20".to_string(),
-            version: "20.18.1".to_string(),
+            version: "20.19.4".to_string(),
         };
 
         let test_cases = vec![
@@ -840,7 +1089,7 @@ mod tests {
                         name: "package.json".to_string(),
                         content: serde_json::to_string(&PackageJSON {
                             engines: Some(Engines {
-                                node: Some(node_20.version.clone()),
+                                node: Some(node_package.version.clone()),
                                 yarn: Some(yarn_package.version.clone()),
                             }),
                         })
@@ -852,11 +1101,13 @@ mod tests {
                     },
                 ],
                 expected: Some(Node {
-                    action: NodeInstallAction::Yarn(YarnInstall {
+                    action: NodeInstallAction::YarnAndNode(YarnAndNodeInstall {
                         yarn: (&yarn_package).into(),
-                        node: (&node_20).into(),
+                        node: (&node_package).into(),
                     }),
-                    package_json_node_version: None,
+                    package_json_node_version: Some(PackageJSONVersion::Found(
+                        (&node_package).into(),
+                    )),
                     nvmrc_version: None,
                 }),
                 needs_client: true,
@@ -898,12 +1149,11 @@ mod tests {
                 }],
                 expected: Some(Node {
                     action: NodeInstallAction::Node(NodeInstall {
-                        node: Some((&node_package).into()),
+                        node: Some((&node_20).into()),
                         npm_hook: false,
                     }),
                     package_json_node_version: None,
-                    // TODO: nvmrc should use major node version (nodejs_20)
-                    nvmrc_version: Some(NVMRCVersion::Found((&node_package).into())),
+                    nvmrc_version: Some(NVMRCVersion::Found((&node_20).into())),
                 }),
                 needs_client: true,
             },
@@ -923,9 +1173,7 @@ mod tests {
                 }),
                 needs_client: true,
             },
-            // returns YarnOrNode
-            // - Returns [NodeAction::InstallYarnOrNode] if
-            //   - Constraints for yarn and constraints for nodejs are met
+            // package-lock.json takes precedence over yarn.lock
             TestCase {
                 description: "package.json, package-json.lock, and yarn.lock",
                 files: vec![
@@ -949,16 +1197,10 @@ mod tests {
                     },
                 ],
                 expected: Some(Node {
-                    action: NodeInstallAction::YarnOrNode(
-                        YarnInstall {
-                            yarn: (&yarn_package).into(),
-                            node: (&node_20).into(),
-                        },
-                        NodeInstall {
-                            node: Some((&node_20).into()),
-                            npm_hook: true,
-                        },
-                    ),
+                    action: NodeInstallAction::Node(NodeInstall {
+                        node: Some((&node_20).into()),
+                        npm_hook: true,
+                    }),
                     package_json_node_version: Some(PackageJSONVersion::Found((&node_20).into())),
                     nvmrc_version: None,
                 }),
@@ -973,6 +1215,8 @@ mod tests {
                 expected: None,
                 needs_client: false,
             },
+            // Returns a `NodeInstall` saying that we looked and didn't find a
+            // matching nodejs package.
             TestCase {
                 description: "constraints not met",
                 files: vec![File {
@@ -985,7 +1229,14 @@ mod tests {
                     })
                     .unwrap(),
                 }],
-                expected: None,
+                expected: Some(Node {
+                    action: NodeInstallAction::Node(NodeInstall {
+                        node: None,
+                        npm_hook: false,
+                    }),
+                    package_json_node_version: Some(PackageJSONVersion::Unavailable),
+                    nvmrc_version: None,
+                }),
                 needs_client: true,
             },
         ];
@@ -1070,7 +1321,7 @@ mod tests {
             Node {
                 package_json_node_version: None,
                 nvmrc_version: None,
-                action: NodeInstallAction::Yarn(YarnInstall {
+                action: NodeInstallAction::YarnAndNode(YarnAndNodeInstall {
                     yarn: ProvidedPackage {
                         attr_path: "yarn.path".into(),
                         version: Some("1".to_string()),
@@ -1087,65 +1338,26 @@ mod tests {
             }
             .get_init_customization(),
             InitCustomization {
-                packages: Some(vec![CatalogPackage {
-                    id: "yarn".to_string(),
-                    pkg_path: "yarn.path".to_string(),
-                    version: Some("1".to_string()),
-                    systems: None,
-                }]),
+                packages: Some(vec![
+                    CatalogPackage {
+                        id: "yarn".to_string(),
+                        pkg_path: "yarn.path".to_string(),
+                        version: Some("1".to_string()),
+                        systems: None,
+                    },
+                    CatalogPackage {
+                        id: "node".to_string(),
+                        pkg_path: "nodejs".to_string(),
+                        version: None,
+                        systems: None
+                    }
+                ]),
                 hook_on_activate: Some(YARN_HOOK.to_string()),
                 ..Default::default()
             }
         );
     }
 
-    /// Test get_init_customization() for action InstallYarnOrNode and npm_hook
-    /// true
-    #[test]
-    fn get_init_customization_yarn_or_node() {
-        assert_eq!(
-            Node {
-                package_json_node_version: None,
-                nvmrc_version: None,
-                action: NodeInstallAction::YarnOrNode(
-                    YarnInstall {
-                        yarn: ProvidedPackage {
-                            name: "yarn".to_string(),
-                            attr_path: "yarn".into(),
-                            display_version: "N/A".to_string(),
-                            version: None
-                        },
-                        node: ProvidedPackage {
-                            name: "nodejs".to_string(),
-                            attr_path: "nodejs".into(),
-                            display_version: "N/A".to_string(),
-                            version: None
-                        },
-                    },
-                    NodeInstall {
-                        node: Some(ProvidedPackage {
-                            attr_path: "nodejs.path".into(),
-                            version: Some("1".to_string()),
-                            name: "nodejs".to_string(),
-                            display_version: "1".to_string()
-                        }),
-                        npm_hook: true,
-                    }
-                ),
-            }
-            .get_init_customization(),
-            InitCustomization {
-                packages: Some(vec![CatalogPackage {
-                    id: "nodejs".to_string(),
-                    pkg_path: "nodejs.path".to_string(),
-                    version: Some("1".to_string()),
-                    systems: None,
-                }]),
-                hook_on_activate: Some(NPM_HOOK.to_string()),
-                ..Default::default()
-            }
-        );
-    }
     /// Test get_init_customization() for action InstallNode and npm_hook false
     #[test]
     fn get_init_customization_node() {
@@ -1187,10 +1399,13 @@ mod tests {
         flox.catalog_client =
             auto_recording_catalog_client("try_find_compatible_yarn_no_constraints_with_catalog");
 
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
-            yarn: None,
-            node: None,
-        })
+        let yarn_install = Node::try_find_compatible_yarn_and_node_versions(
+            &flox,
+            &PackageJSONVersionsUnresolved {
+                yarn: None,
+                node: None,
+            },
+        )
         .await
         .unwrap()
         .unwrap();
@@ -1206,18 +1421,21 @@ mod tests {
         flox.catalog_client =
             auto_recording_catalog_client("try_find_compatible_yarn_node_available_with_catalog");
 
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
-            yarn: None,
-            node: Some("18".to_string()),
-        })
+        // NOTE: there's a similar test below that tests for `yarn` and `nodejs`,
+        // whereas this one tests for `yarn-berry` and `nodejs`.
+        let yarn_install = Node::try_find_compatible_yarn_and_node_versions(
+            &flox,
+            &PackageJSONVersionsUnresolved {
+                yarn: Some("4".to_string()),
+                node: Some("22".to_string()),
+            },
+        )
         .await
         .unwrap()
         .unwrap();
 
-        // TODO: I believe this is wrong, as we should only use nodejs with
-        // yarn, since yarn bundles node
-        assert_eq!(yarn_install.node.attr_path, "nodejs_18".into());
-        assert!(yarn_install.node.version.unwrap().starts_with("18"));
+        assert_eq!(yarn_install.node.attr_path, "nodejs".into());
+        assert!(yarn_install.node.version.unwrap().starts_with("22"));
         assert_eq!(yarn_install.yarn.attr_path, "yarn-berry".into());
     }
 
@@ -1229,10 +1447,13 @@ mod tests {
         flox.catalog_client =
             auto_recording_catalog_client("try_find_compatible_yarn_node_unavailable_with_catalog");
 
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
-            yarn: None,
-            node: Some("25".to_string()),
-        })
+        let yarn_install = Node::try_find_compatible_yarn_and_node_versions(
+            &flox,
+            &PackageJSONVersionsUnresolved {
+                yarn: Some("4".to_string()),
+                node: Some("25".to_string()),
+            },
+        )
         .await
         .unwrap();
 
@@ -1246,17 +1467,17 @@ mod tests {
         flox.catalog_client =
             auto_recording_catalog_client("try_find_compatible_yarn_yarn_available_with_catalog");
 
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
-            yarn: Some("1".to_string()),
-            node: None,
-        })
-        .await
-        .unwrap()
-        .unwrap();
+        let yarn_install =
+            Node::try_find_compatible_yarn_only(&flox, &PackageJSONVersionsUnresolved {
+                yarn: Some("1".to_string()),
+                node: None,
+            })
+            .await
+            .unwrap()
+            .unwrap();
 
-        assert_eq!(yarn_install.node.attr_path, "nodejs".into());
-        assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
-        assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
+        assert_eq!(yarn_install.pkg.attr_path, "yarn".into());
+        assert!(yarn_install.pkg.version.unwrap().starts_with('1'));
     }
 
     /// Test finding yarn with a version of yarn other than that of
@@ -1267,12 +1488,13 @@ mod tests {
         flox.catalog_client =
             auto_recording_catalog_client("try_find_compatible_yarn_yarn_unavailable_with_catalog");
 
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
-            yarn: Some("2".to_string()),
-            node: None,
-        })
-        .await
-        .unwrap();
+        let yarn_install =
+            Node::try_find_compatible_yarn_only(&flox, &PackageJSONVersionsUnresolved {
+                yarn: Some("22".to_string()),
+                node: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(yarn_install, None);
     }
@@ -1285,15 +1507,18 @@ mod tests {
 
         flox.catalog_client =
             auto_recording_catalog_client("try_find_compatible_yarn_both_available_with_catalog");
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersionsUnresolved {
-            yarn: Some("1".to_string()),
-            node: Some("18".to_string()),
-        })
+        let yarn_install = Node::try_find_compatible_yarn_and_node_versions(
+            &flox,
+            &PackageJSONVersionsUnresolved {
+                yarn: Some("1".to_string()),
+                node: Some("18".to_string()),
+            },
+        )
         .await
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.attr_path, "nodejs_18".into());
+        assert_eq!(yarn_install.node.attr_path, "nodejs".into());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
         assert_eq!(yarn_install.yarn.attr_path, "yarn".into());
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
