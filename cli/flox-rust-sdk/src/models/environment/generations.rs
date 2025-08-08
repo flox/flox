@@ -24,6 +24,7 @@ use std::{env, fs};
 use chrono::{DateTime, Utc};
 use enum_dispatch::enum_dispatch;
 use flox_core::Version;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
@@ -584,6 +585,9 @@ impl TryFrom<ConcreteEnvironment> for GenerationsEnvironment {
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AllGenerationsMetadata {
+    #[serde(default, skip)]
+    pub history: History,
+
     /// None means the environment has been created but does not yet have any
     /// generations
     pub current_gen: Option<GenerationId>,
@@ -596,13 +600,143 @@ pub struct AllGenerationsMetadata {
     version: Version<1>,
 }
 
+#[derive(Debug, Clone)]
+pub struct AddGenerationOptions {
+    pub author: String,
+    pub hostname: String,
+    pub timestamp: DateTime<Utc>,
+    pub kind: HistoryKind,
+}
+
+#[derive(Debug, Clone)]
+pub struct SwitchGenerationOptions {
+    pub author: String,
+    pub hostname: String,
+    pub timestamp: DateTime<Utc>,
+    pub next_generation: GenerationId,
+}
+
 impl AllGenerationsMetadata {
+    /// Add metadata for a new generation, as well as consistent history.
+    /// The return provides the [GenerationId] of the added generation metadata,
+    /// that should **subsequently** be used
+    /// to add the associated generation files.
+    pub fn add_generation(
+        &mut self,
+        AddGenerationOptions {
+            author,
+            hostname,
+            timestamp,
+            kind,
+        }: AddGenerationOptions,
+    ) -> (GenerationId, &SingleGenerationMetadata, &HistorySpec) {
+        // prepare new values
+
+        // Returns the highest numbered generation so we know which number to assign
+        // the new one. This protects against potentially overwriting another
+        // generation if you're currently on e.g. 2, but the latest is 5.
+        //
+        // Keys should all be numbers, but if they aren't we provide a default value.
+        let next_generation =
+            GenerationId(*self.generations.keys().cloned().max().unwrap_or_default() + 1);
+        let current_generation = self.current_gen;
+
+        let history_spec = HistorySpec {
+            author,
+            hostname,
+            timestamp,
+            info: kind,
+            previous_generation: current_generation,
+            current_generation: next_generation,
+        };
+
+        let generation_metadata = SingleGenerationMetadata {
+            created: timestamp,
+            // TODO: I think we allowed this to be empty,
+            // i.e. to theoritically create generations without activating them,
+            // but as far as I know we never actually wrote `None`.
+            last_active: Some(timestamp),
+            description: history_spec.summary(),
+        };
+
+        // update self
+        self.generations
+            .insert(next_generation, generation_metadata);
+        self.current_gen = Some(next_generation);
+        self.history.0.push(history_spec);
+
+        let generation_metadata_ref = self
+            .generations
+            .get(&next_generation)
+            .expect("generation should have been inserted");
+
+        let history_ref = self
+            .history
+            .0
+            .iter()
+            .next_back()
+            .expect("history event should have been inserted");
+
+        (next_generation, generation_metadata_ref, history_ref)
+    }
+
+    /// Switch the active marked generation to `next_generation`.
+    /// `next_generation` must exist, and must be different from the current generation.
+    /// To switch, this methods will (1) update [Self::current_gen] to `next_generation`,
+    /// (2) set the [SingleGenerationMetadata::last_active] timestamp of the `next_generation`,
+    /// and record a history item of type [HistoryKind::SwitchGeneration].
+    pub fn switch_generation(
+        &mut self,
+        SwitchGenerationOptions {
+            author,
+            hostname,
+            timestamp,
+            next_generation,
+        }: SwitchGenerationOptions,
+    ) -> Result<(), GenerationsError> {
+        let Some(previous_generation) = self.current_gen else {
+            unreachable!("current generation is only unavailable before any generation was added")
+        };
+
+        if next_generation == previous_generation {
+            return Err(GenerationsError::RollbackToCurrentGeneration);
+        }
+
+        // get the metadata to the switched to generation
+        let Some(next_generation_metadata) = self.generations.get_mut(&next_generation) else {
+            return Err(GenerationsError::GenerationNotFound(*next_generation));
+        };
+
+        let history_spec = HistorySpec {
+            author,
+            hostname,
+            timestamp,
+            previous_generation: Some(previous_generation),
+            current_generation: next_generation,
+            info: HistoryKind::SwitchGeneration,
+        };
+
+        // update current active gen
+        self.current_gen = Some(next_generation);
+
+        // update the generation metadata
+        next_generation_metadata.last_active = Some(timestamp);
+
+        // add action to history
+        self.history.0.push(history_spec);
+
+        Ok(())
+    }
+
+    /// Create a new object from its parts,
+    /// used in tests to create mocks.
     #[cfg(feature = "tests")]
     pub fn new(
         current_gen: GenerationId,
         generations: impl IntoIterator<Item = (GenerationId, SingleGenerationMetadata)>,
     ) -> Self {
         AllGenerationsMetadata {
+            history: History::default(),
             current_gen: Some(current_gen),
             generations: BTreeMap::from_iter(generations),
             version: Default::default(),
@@ -661,6 +795,127 @@ impl SingleGenerationMetadata {
 )]
 pub struct GenerationId(usize);
 
+/// The type of history event that is associated with a change.
+/// These are generation _creating_ changes (such as install, edit, etc.)
+/// and metadata only changes such as switching generations.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[serde(tag = "kind")]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub enum HistoryKind {
+    Install { targets: Vec<String> },
+    Edit,
+    Uninstall { targets: Vec<String> },
+    Upgrade { targets: Vec<String> },
+
+    IncludeUpgrade { targets: Vec<String> },
+
+    SwitchGeneration,
+    Other { summary: String },
+}
+
+/// The structure of a single change, tying together
+/// _who_ performed _what_ change, where and when.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
+pub struct HistorySpec {
+    // change provided
+    /// Type of the change
+    pub info: HistoryKind,
+
+    // system provided
+    /// Local username of the user performing the change
+    author: String,
+    /// Hostname of the machine, on which the change was made
+    hostname: String,
+    /// Timestamp associated with the change
+    // for consistency with the existing SingleGenerationMetadata
+    #[serde(with = "chrono::serde::ts_seconds")]
+    timestamp: DateTime<Utc>,
+
+    // associated generation(s)
+    /// Currently active generation, e.g. created by the change
+    /// or switched to.
+    current_generation: GenerationId,
+    /// Previous generation before a new generation was created,
+    /// or the generation active before a generation switch.
+    pub previous_generation: Option<GenerationId>,
+}
+
+impl HistorySpec {
+    /// A short summary of the change.
+    /// Summaries generally try to capture the _intent_ of the change
+    /// rather than giving an exhaustive account about the complete change.
+    /// The summary can be used alongside additional information such as author,
+    /// host, diffs and diff derived information to produce richer change logs.
+    fn summary(&self) -> String {
+        fn format_targets(verb: &str, object: &str, targets: &[String]) -> String {
+            let plural_s = if targets.is_empty() { "" } else { "s" };
+
+            let targets = targets
+                .iter()
+                .map(|target| format!("'{target}'"))
+                .join(", ");
+
+            format!("{verb} {object}{plural_s} {targets}")
+        }
+
+        fn format_targets_all_if_empty(verb: &str, object: &str, targets: &[String]) -> String {
+            if targets.is_empty() {
+                format!("{verb} all {object}s")
+            } else {
+                format_targets(verb, object, targets)
+            }
+        }
+
+        match &self.info {
+            HistoryKind::Install { targets } => format_targets("installed", "package", targets),
+            HistoryKind::Edit => "manually edited the manifest".to_string(),
+            HistoryKind::Uninstall { targets } => format_targets("uninstalled", "package", targets),
+            HistoryKind::Upgrade { targets } => {
+                format_targets_all_if_empty("upgraded", "package", targets)
+            },
+            HistoryKind::IncludeUpgrade { targets } => {
+                format_targets_all_if_empty("upgraded", "included environment", targets)
+            },
+            HistoryKind::SwitchGeneration => match self.previous_generation {
+                Some(prev) => format!(
+                    "changed active generation {prev} -> {}",
+                    self.current_generation
+                ),
+                None => unreachable!(
+                    "switch implementation prevents switches without a current active generation"
+                ),
+            },
+            HistoryKind::Other { summary } => summary.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, derive_more::AsRef)]
+pub struct History(Vec<HistorySpec>);
+
+impl<'h> IntoIterator for &'h History {
+    type IntoIter = std::slice::Iter<'h, HistorySpec>;
+    type Item = &'h HistorySpec;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+impl IntoIterator for History {
+    type IntoIter = std::vec::IntoIter<HistorySpec>;
+    type Item = HistorySpec;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl History {}
+
 #[cfg(test)]
 mod tests {
     use tempfile::TempDir;
@@ -672,6 +927,361 @@ mod tests {
 
     const GEN_ID_1: GenerationId = GenerationId(1);
     const GEN_ID_2: GenerationId = GenerationId(2);
+
+    const AUTHOR: &str = "author";
+    const HOSTNAME: &str = "host";
+
+    fn default_add_generation_options() -> AddGenerationOptions {
+        AddGenerationOptions {
+            author: AUTHOR.into(),
+            hostname: HOSTNAME.into(),
+            timestamp: Utc::now(),
+            kind: HistoryKind::Other {
+                summary: "mock".into(),
+            },
+        }
+    }
+
+    fn default_switch_generation_options(next_generation: GenerationId) -> SwitchGenerationOptions {
+        SwitchGenerationOptions {
+            author: AUTHOR.into(),
+            hostname: HOSTNAME.into(),
+            timestamp: Utc::now(),
+            next_generation,
+        }
+    }
+
+    mod metadata {
+        use chrono::Utc;
+        use pretty_assertions::{assert_eq, assert_str_eq};
+        use serde_json::{Value, json};
+
+        use super::{AUTHOR, HOSTNAME, default_switch_generation_options};
+        use crate::models::environment::generations::tests::default_add_generation_options;
+        use crate::models::environment::generations::{
+            AllGenerationsMetadata,
+            GenerationId,
+            GenerationsError,
+            HistoryKind,
+            HistorySpec,
+            SwitchGenerationOptions,
+        };
+
+        /// Adding a generation adds consisten metadata, ie.
+        ///
+        /// * adds new [SingleGenerationMetadata]
+        /// * updates the current generation
+        /// * adds a history entry for adding the generation
+        #[test]
+        fn add_generation_adds_metadata_and_history() {
+            let mut metadata = AllGenerationsMetadata::default();
+
+            let options = default_add_generation_options();
+
+            let (generation, generation_metadata, history) =
+                metadata.add_generation(options.clone());
+
+            let (generation_metadata, history) = (generation_metadata.clone(), history.clone());
+
+            assert_eq!(metadata.current_gen, Some(generation));
+            assert_eq!(generation_metadata.created, options.timestamp);
+            assert_eq!(generation_metadata.last_active, Some(options.timestamp));
+
+            assert_eq!(history.author, options.author);
+            assert_eq!(history.hostname, options.hostname);
+            assert_eq!(history.current_generation, generation);
+            assert_eq!(history.previous_generation, None);
+            assert_eq!(history.info, options.kind);
+            assert_eq!(history.timestamp, options.timestamp);
+        }
+
+        #[test]
+        fn generation_counter_is_correctly_increased() {
+            let mut metadata = AllGenerationsMetadata::default();
+            let (first_generation, _, _) =
+                metadata.add_generation(default_add_generation_options());
+
+            let (second_generation, _, _) =
+                metadata.add_generation(default_add_generation_options());
+
+            assert_eq!(first_generation, GenerationId(1));
+            assert_eq!(second_generation, GenerationId(2));
+
+            metadata
+                .switch_generation(default_switch_generation_options(first_generation))
+                .unwrap();
+            assert_eq!(metadata.current_gen, Some(first_generation));
+
+            let (third_generation, _, _) =
+                metadata.add_generation(default_add_generation_options());
+
+            // generation counter continues at the current max (N=2) + 1
+            assert_eq!(third_generation, GenerationId(3));
+        }
+
+        /// Switching generations
+        ///
+        /// * updates the current generation
+        /// * updares the "last_active" timestamp of the switched to generation
+        /// * adds a history entry for the switch
+        #[test]
+        fn switch_generation_updates_metadata() {
+            fn assert_switched_state(
+                metadata: &AllGenerationsMetadata,
+                switch_generation_options: &SwitchGenerationOptions,
+                generation_switched_from: GenerationId,
+                generation_switched_to: GenerationId,
+            ) {
+                assert_eq!(
+                    metadata.current_gen,
+                    Some(generation_switched_to),
+                    "current gen was not updated"
+                );
+                assert_eq!(
+                    metadata.generations[&generation_switched_to].last_active,
+                    Some(switch_generation_options.timestamp),
+                    "timestamp was not updated"
+                );
+
+                let history_entry = metadata.history.0.last().unwrap();
+                assert_eq!(history_entry.author, switch_generation_options.author);
+                assert_eq!(history_entry.hostname, switch_generation_options.hostname);
+                assert_eq!(history_entry.info, HistoryKind::SwitchGeneration);
+                assert_eq!(
+                    history_entry.previous_generation,
+                    Some(generation_switched_from)
+                );
+                assert_eq!(history_entry.current_generation, generation_switched_to);
+                assert_eq!(history_entry.timestamp, switch_generation_options.timestamp);
+            }
+
+            let mut metadata = AllGenerationsMetadata::default();
+
+            let first_generation_options = default_add_generation_options();
+            let second_generation_options = default_add_generation_options();
+
+            let (first_gen_id, ..) = metadata.add_generation(first_generation_options.clone());
+            let (second_gen_id, ..) = metadata.add_generation(second_generation_options.clone());
+
+            let switch_generation_options = default_switch_generation_options(first_gen_id);
+            metadata
+                .switch_generation(switch_generation_options.clone())
+                .unwrap();
+            assert_switched_state(
+                &metadata,
+                &switch_generation_options,
+                second_gen_id,
+                first_gen_id,
+            );
+
+            // switch back (roll forward)
+            let switch_generation_options = default_switch_generation_options(second_gen_id);
+            metadata
+                .switch_generation(switch_generation_options.clone())
+                .unwrap();
+            assert_switched_state(
+                &metadata,
+                &switch_generation_options,
+                first_gen_id,
+                second_gen_id,
+            );
+        }
+
+        #[test]
+        fn switch_generation_does_not_allow_current_generation() {
+            let mut metadata = AllGenerationsMetadata::default();
+            let (generation_id, ..) = metadata.add_generation(default_add_generation_options());
+
+            let result =
+                metadata.switch_generation(default_switch_generation_options(generation_id));
+
+            assert!(
+                matches!(result, Err(GenerationsError::RollbackToCurrentGeneration)),
+                "unexpected result {:?}",
+                result
+            )
+        }
+
+        #[test]
+        fn switch_generation_requires_existing_generation() {
+            let mut metadata = AllGenerationsMetadata::default();
+            metadata.add_generation(default_add_generation_options());
+            let absent_gen_id = GenerationId(2);
+            let result =
+                metadata.switch_generation(default_switch_generation_options(absent_gen_id));
+
+            assert!(
+                matches!(result, Err(GenerationsError::GenerationNotFound(2))),
+                "unexpected result {:?}",
+                result
+            )
+        }
+
+        #[test]
+        fn history_summaries() {
+            let all_targets = [];
+            let targets = ["a".to_string(), "b".to_string()];
+            let change_message_pairs = [
+                (HistoryKind::Edit, "manually edited the manifest"),
+                (
+                    HistoryKind::SwitchGeneration,
+                    "changed active generation 1 -> 2",
+                ),
+                (
+                    HistoryKind::IncludeUpgrade {
+                        targets: all_targets.to_vec(),
+                    },
+                    "upgraded all included environments",
+                ),
+                (
+                    HistoryKind::IncludeUpgrade {
+                        targets: targets.to_vec(),
+                    },
+                    "upgraded included environments 'a', 'b'",
+                ),
+                // does not use "all" format
+                (
+                    HistoryKind::Install {
+                        targets: all_targets.to_vec(),
+                    },
+                    "installed package ",
+                ),
+                (
+                    HistoryKind::Install {
+                        targets: targets.to_vec(),
+                    },
+                    "installed packages 'a', 'b'",
+                ),
+                // does not use "all" format
+                (
+                    HistoryKind::Uninstall {
+                        targets: all_targets.to_vec(),
+                    },
+                    "uninstalled package ",
+                ),
+                (
+                    HistoryKind::Uninstall {
+                        targets: targets.to_vec(),
+                    },
+                    "uninstalled packages 'a', 'b'",
+                ),
+                (
+                    HistoryKind::Upgrade {
+                        targets: all_targets.to_vec(),
+                    },
+                    "upgraded all packages",
+                ),
+                (
+                    HistoryKind::Upgrade {
+                        targets: targets.to_vec(),
+                    },
+                    "upgraded packages 'a', 'b'",
+                ),
+            ];
+
+            for (change_kind, message) in change_message_pairs {
+                let spec = HistorySpec {
+                    info: change_kind,
+                    author: AUTHOR.to_string(),
+                    hostname: HOSTNAME.to_string(),
+                    timestamp: Utc::now(),
+                    current_generation: 2.into(),
+                    previous_generation: Some(1.into()),
+                };
+                let summary = spec.summary();
+                assert_str_eq!(summary, message)
+            }
+        }
+
+        fn make_value(payload: &Value) -> Value {
+            let value = json! {{
+                "author": AUTHOR,
+                "hostname": HOSTNAME,
+                "timestamp": Utc::now().timestamp(),
+                "currentGeneration": "2",
+                "previousGeneration": "1",
+                "info": payload,
+            }};
+
+            value
+        }
+
+        /// Assure that different history kinds can be serialized
+        /// and deserialized losslessly.
+        /// Specifically, unsupported events (e.g. created by future versions of flox)
+        /// should not be redacted.
+        #[test]
+        fn parse_history() {
+            let payloads = [
+                json! {{"kind": "edit"}},
+                json! {{"kind": "install", "targets": []}},
+                json! {{"kind": "uninstall", "targets": []}},
+                json! {{"kind": "upgrade", "targets": []}},
+                json! {{"kind": "includeUpgrade", "targets": []}},
+                json! {{"kind": "uninstall", "targets": []}},
+                json! {{"kind": "switchGeneration"}},
+                json! {{"kind": "uninstall", "targets": []}},
+                json! {{"kind": "other", "summary": "foobar" }},
+            ];
+
+            for payload in payloads {
+                let value = make_value(&payload);
+                let deserialized_from_value: HistorySpec =
+                    match serde_json::from_value(value.clone()) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            panic!("should parse as history spec\nvalue:{value}\nerror:{err}")
+                        },
+                    };
+                let serialized_to_value = match serde_json::to_value(&deserialized_from_value) {
+                    Ok(v) => v,
+                    Err(err) => panic!("should serialize to value\n{err}"),
+                };
+
+                assert_eq!(
+                    serialized_to_value, value,
+                    "serialization to value lost information"
+                );
+
+                let serialized_to_string =
+                    match serde_json::to_string_pretty(&deserialized_from_value) {
+                        Ok(v) => v,
+                        Err(err) => panic!("should serialize to string\n{err}"),
+                    };
+
+                let deserialized_from_string: HistorySpec =
+                    match serde_json::from_str(&serialized_to_string) {
+                        Ok(v) => v,
+                        Err(err) => panic!(
+                            "should deserialize from string\n{serialized_to_string}\nerror:{err}"
+                        ),
+                    };
+
+                assert_eq!(
+                    deserialized_from_string, deserialized_from_value,
+                    "serialization to string lost information"
+                );
+            }
+        }
+
+        #[test]
+        fn unknown_kinds_and_data_are_denied() {
+            let payloads = [
+                // unknown kind
+                json! {{"kind": "fromthefuture", "not-targets": {}}},
+                // extra fields
+                json! {{"kind": "install", "targets": [], "and-not-targets":[]}},
+                // not an object
+                json! { "install" },
+            ];
+
+            for payload in payloads {
+                let value = make_value(&payload);
+                serde_json::from_value::<HistorySpec>(value.clone())
+                    .expect_err(&format!("{value} should fail to parse"));
+            }
+        }
+    }
 
     fn setup_two_generations() -> (Generations, TempDir) {
         let (flox, tempdir) = flox_instance();
