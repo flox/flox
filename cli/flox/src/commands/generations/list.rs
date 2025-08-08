@@ -83,13 +83,21 @@ impl Display for DisplayAllMetadata<'_> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::DateTime;
-    use flox_rust_sdk::models::environment::generations::SingleGenerationMetadata;
+
+    use chrono::{DateTime, Duration};
+    use flox_rust_sdk::models::environment::generations::test_helpers::{
+        default_add_generation_options,
+        default_switch_generation_options,
+    };
+    use flox_rust_sdk::models::environment::generations::{
+        AddGenerationOptions,
+        SingleGenerationMetadata,
+        SwitchGenerationOptions,
+    };
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::commands::generations::test_helpers::mock_generations;
 
     #[test]
     fn test_fmt_single_generation() {
@@ -133,20 +141,40 @@ mod tests {
 
     #[test]
     fn test_fmt_generations() {
-        let actual = DisplayAllMetadata(&mock_generations(2.into())).to_string();
+        let mut metadata = AllGenerationsMetadata::default();
+        metadata.add_generation(AddGenerationOptions {
+            timestamp: DateTime::default() + Duration::hours(1),
+            ..default_add_generation_options()
+        });
+        let (id, ..) = metadata.add_generation(AddGenerationOptions {
+            timestamp: DateTime::default() + Duration::hours(2),
+            ..default_add_generation_options()
+        });
+        metadata.add_generation(AddGenerationOptions {
+            timestamp: DateTime::default() + Duration::hours(3),
+            ..default_add_generation_options()
+        });
+        metadata
+            .switch_generation(SwitchGenerationOptions {
+                timestamp: DateTime::default() + Duration::hours(4),
+                ..default_switch_generation_options(id)
+            })
+            .unwrap();
+
+        let actual = DisplayAllMetadata(&metadata).to_string();
 
         let expected = indoc! {"
             * 1:
-              Description: Generation 1 description
+              Description: mock
               Created: 1970-01-01 01:00:00 UTC
 
             * 2 (current):
-              Description: Generation 2 description
+              Description: mock
               Created: 1970-01-01 02:00:00 UTC
               Last Active: 1970-01-01 04:00:00 UTC
 
             * 3:
-              Description: Generation 3 description
+              Description: mock
               Created: 1970-01-01 03:00:00 UTC
               Last Active: 1970-01-01 03:00:00 UTC"
         };

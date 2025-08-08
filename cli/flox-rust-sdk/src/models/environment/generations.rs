@@ -727,21 +727,6 @@ impl AllGenerationsMetadata {
 
         Ok(())
     }
-
-    /// Create a new object from its parts,
-    /// used in tests to create mocks.
-    #[cfg(feature = "tests")]
-    pub fn new(
-        current_gen: GenerationId,
-        generations: impl IntoIterator<Item = (GenerationId, SingleGenerationMetadata)>,
-    ) -> Self {
-        AllGenerationsMetadata {
-            history: History::default(),
-            current_gen: Some(current_gen),
-            generations: BTreeMap::from_iter(generations),
-            version: Default::default(),
-        }
-    }
 }
 
 /// Metadata for a single generation of an environment
@@ -831,6 +816,7 @@ pub struct HistorySpec {
     /// Hostname of the machine, on which the change was made
     hostname: String,
     /// Timestamp associated with the change
+
     // for consistency with the existing SingleGenerationMetadata
     #[serde(with = "chrono::serde::ts_seconds")]
     timestamp: DateTime<Utc>,
@@ -916,22 +902,16 @@ impl IntoIterator for History {
 
 impl History {}
 
-#[cfg(test)]
-mod tests {
-    use tempfile::TempDir;
+#[cfg(any(test, feature = "tests"))]
+pub mod test_helpers {
+    use chrono::Utc;
 
-    use super::*;
-    use crate::flox::test_helpers::flox_instance;
-    use crate::models::environment::Environment;
-    use crate::models::environment::path_environment::test_helpers::new_path_environment;
+    use super::{AddGenerationOptions, GenerationId, HistoryKind, SwitchGenerationOptions};
 
-    const GEN_ID_1: GenerationId = GenerationId(1);
-    const GEN_ID_2: GenerationId = GenerationId(2);
+    pub const AUTHOR: &str = "author";
+    pub const HOSTNAME: &str = "host";
 
-    const AUTHOR: &str = "author";
-    const HOSTNAME: &str = "host";
-
-    fn default_add_generation_options() -> AddGenerationOptions {
+    pub fn default_add_generation_options() -> AddGenerationOptions {
         AddGenerationOptions {
             author: AUTHOR.into(),
             hostname: HOSTNAME.into(),
@@ -942,7 +922,9 @@ mod tests {
         }
     }
 
-    fn default_switch_generation_options(next_generation: GenerationId) -> SwitchGenerationOptions {
+    pub fn default_switch_generation_options(
+        next_generation: GenerationId,
+    ) -> SwitchGenerationOptions {
         SwitchGenerationOptions {
             author: AUTHOR.into(),
             hostname: HOSTNAME.into(),
@@ -950,14 +932,32 @@ mod tests {
             next_generation,
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::Environment;
+    use crate::models::environment::generations::test_helpers::{AUTHOR, HOSTNAME};
+    use crate::models::environment::path_environment::test_helpers::new_path_environment;
+
+    const GEN_ID_1: GenerationId = GenerationId(1);
+    const GEN_ID_2: GenerationId = GenerationId(2);
 
     mod metadata {
         use chrono::Utc;
         use pretty_assertions::{assert_eq, assert_str_eq};
         use serde_json::{Value, json};
 
-        use super::{AUTHOR, HOSTNAME, default_switch_generation_options};
-        use crate::models::environment::generations::tests::default_add_generation_options;
+        use crate::models::environment::generations::test_helpers::{
+            AUTHOR,
+            HOSTNAME,
+            default_add_generation_options,
+            default_switch_generation_options,
+        };
         use crate::models::environment::generations::{
             AllGenerationsMetadata,
             GenerationId,
