@@ -43,6 +43,7 @@ walkdir.workspace = true
 xdg.workspace = true
 serial_test = { workspace = true, features = ["file_locks"] }
 tracing-subscriber = { workspace = true, optional = true }
+pretty_assertions = { workspace = true, optional = true }
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
 http.workspace = true
@@ -62,6 +63,11 @@ sentry = { workspace = true, features = ["test"] }
 
 [features]
 # allow exporting test helpers in dev mode only
-tests = ["tracing-subscriber", "proptest", "proptest-derive"]
+tests = [
+    "tracing-subscriber",
+    "proptest",
+    "proptest-derive",
+    "pretty_assertions",
+]
 extra-tests = ["impure-unit-tests"]
 impure-unit-tests = []

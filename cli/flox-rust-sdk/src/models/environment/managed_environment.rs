@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use flox_core::Version;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, instrument};
@@ -15,6 +14,7 @@ use super::generations::{
     Generations,
     GenerationsError,
     GenerationsExt,
+    HistoryKind,
 };
 use super::path_environment::PathEnvironment;
 use super::{
@@ -49,7 +49,7 @@ use crate::models::floxmeta::{
     floxmeta_git_options,
 };
 use crate::models::lockfile::{LockResult, Lockfile};
-use crate::models::manifest::raw::PackageToInstall;
+use crate::models::manifest::raw::{CatalogPackage, FlakePackage, PackageToInstall, StorePath};
 use crate::models::manifest::typed::IncludeDescriptor;
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::providers::git::{
@@ -248,7 +248,11 @@ impl Environment for ManagedEnvironment {
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
@@ -259,11 +263,31 @@ impl Environment for ManagedEnvironment {
             ))?
         }
 
-        let metadata = format!("installed packages: {:?}", &packages);
+        let targets = packages
+            .iter()
+            .map(|p| match p {
+                PackageToInstall::Catalog(CatalogPackage {
+                    id,
+                    pkg_path,
+                    version: Some(version),
+                    ..
+                }) => format!("{id} ({pkg_path}@{version})"),
+                PackageToInstall::Catalog(CatalogPackage { id, pkg_path, .. }) => {
+                    format!("{id} ({pkg_path})")
+                },
+                PackageToInstall::Flake(FlakePackage { id, url }) => format!("{id} ({url})"),
+                PackageToInstall::StorePath(StorePath { id, store_path, .. }) => {
+                    format!("{id} ({})", store_path.display())
+                },
+            })
+            .collect();
+
+        let change = HistoryKind::Install { targets };
+
         let result = local_checkout.install(packages, flox)?;
 
         generations
-            .add_generation(&mut local_checkout, metadata)
+            .add_generation(&mut local_checkout, change)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
         if let Some(store_paths) = &result.built_environments {
@@ -281,7 +305,11 @@ impl Environment for ManagedEnvironment {
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
@@ -292,11 +320,11 @@ impl Environment for ManagedEnvironment {
             ))?
         }
 
-        let metadata = format!("uninstalled packages: {:?}", &packages);
-        let result = local_checkout.uninstall(packages, flox)?;
+        let result = local_checkout.uninstall(packages.clone(), flox)?;
+        let change = HistoryKind::Uninstall { targets: packages };
 
         generations
-            .add_generation(&mut local_checkout, metadata)
+            .add_generation(&mut local_checkout, change)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
         if let Some(store_paths) = &result.built_environment_store_paths {
@@ -310,7 +338,11 @@ impl Environment for ManagedEnvironment {
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
@@ -323,7 +355,7 @@ impl Environment for ManagedEnvironment {
                 ..
             } => {
                 generations
-                    .add_generation(&mut local_checkout, "manually edited".to_string())
+                    .add_generation(&mut local_checkout, HistoryKind::Edit)
                     .map_err(ManagedEnvironmentError::CommitGeneration)?;
                 self.lock_pointer()?;
                 self.link(built_environment_store_paths)?;
@@ -354,7 +386,11 @@ impl Environment for ManagedEnvironment {
     ) -> Result<UpgradeResult, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
@@ -367,10 +403,12 @@ impl Environment for ManagedEnvironment {
 
         let result = local_checkout.upgrade(flox, groups_or_iids, true)?;
 
-        let metadata = format!("upgraded packages: {}", result.packages().join(", "));
+        let change = HistoryKind::Upgrade {
+            targets: result.packages().collect(),
+        };
 
         generations
-            .add_generation(&mut local_checkout, metadata)
+            .add_generation(&mut local_checkout, change)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         write_pointer_lockfile(
@@ -390,7 +428,11 @@ impl Environment for ManagedEnvironment {
     ) -> Result<UpgradeResult, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
@@ -401,19 +443,13 @@ impl Environment for ManagedEnvironment {
             ))?
         }
 
-        let metadata = if to_upgrade.is_empty() {
-            "upgraded environment with latest changes to all included environments".to_string()
-        } else {
-            format!(
-                "upgraded environment with latest change to included environments: {}",
-                to_upgrade.iter().join(", ")
-            )
+        let result = local_checkout.include_upgrade(flox, to_upgrade.clone())?;
+
+        let change = HistoryKind::IncludeUpgrade {
+            targets: to_upgrade,
         };
-
-        let result = local_checkout.include_upgrade(flox, to_upgrade)?;
-
         generations
-            .add_generation(&mut local_checkout, metadata)
+            .add_generation(&mut local_checkout, change)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         write_pointer_lockfile(
@@ -585,7 +621,11 @@ impl GenerationsExt for ManagedEnvironment {
         }
 
         let mut generations = generations
-            .writable(&flox.temp_dir)
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::Generations)?;
 
         generations
@@ -957,7 +997,11 @@ impl ManagedEnvironment {
     ) -> Result<Result<EditResult, EnvironmentError>, EnvironmentError> {
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         let mut temporary = self.local_env_or_copy_current_generation(flox)?;
@@ -977,7 +1021,7 @@ impl ManagedEnvironment {
         debug!("Environment changed, create and lock generation");
 
         generations
-            .add_generation(&mut temporary, "manually edited".to_string())
+            .add_generation(&mut temporary, HistoryKind::Edit)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
 
@@ -1028,14 +1072,15 @@ impl ManagedEnvironment {
 
         let mut generations = self.generations();
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                flox.temp_dir.clone(),
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         generations
-            .add_generation(
-                &mut local_checkout,
-                "Synchronized manual changes to generation".to_string(),
-            )
+            .add_generation(&mut local_checkout, HistoryKind::Edit)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         self.lock_pointer()?;
@@ -1151,10 +1196,7 @@ impl ManagedEnvironment {
     /// Not having local changes means the environment has a lockfile, since we
     /// only create generations with lockfiles
     pub fn has_local_changes(&self, flox: &Flox) -> Result<bool, ManagedEnvironmentError> {
-        let mut generations = self.generations();
-        let generations = generations
-            .writable(flox.temp_dir.clone())
-            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let generations = self.generations();
 
         let local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
@@ -1196,10 +1238,12 @@ impl ManagedEnvironment {
         &self,
         flox: &Flox,
     ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
-        let tempdir = tempfile::tempdir_in(&flox.temp_dir).unwrap();
-
         self.generations()
-            .writable(tempdir)
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
             .get_current_generation(self.include_fetcher.clone())
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)
@@ -1413,13 +1457,17 @@ impl ManagedEnvironment {
         let temp_floxmeta_git = generations.git().clone();
 
         let mut generations = generations
-            .writable(flox.temp_dir.clone())
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+            )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         // Add this environment as a new generation, which involves pushing to
         // the fake remote.
         generations
-            .add_generation(&mut core_environment, "Add first generation".to_string())
+            .add_generation(&mut core_environment, HistoryKind::Import)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         temp_floxmeta_git
@@ -1930,10 +1978,10 @@ mod test {
         )
         .unwrap();
 
-        let mut writable = generations.writable(base_tempdir.as_ref()).unwrap();
-        writable
-            .add_generation(env, "initial generation".to_string())
+        let mut writable = generations
+            .writable(&base_tempdir, "username", "hostname")
             .unwrap();
+        writable.add_generation(env, HistoryKind::Import).unwrap();
 
         generations
     }
