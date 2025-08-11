@@ -15,6 +15,7 @@ use super::generations::{
     GenerationsError,
     GenerationsExt,
     HistoryKind,
+    WithOtherFields,
 };
 use super::path_environment::PathEnvironment;
 use super::{
@@ -602,7 +603,9 @@ impl Environment for ManagedEnvironment {
 }
 
 impl GenerationsExt for ManagedEnvironment {
-    fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError> {
+    fn generations_metadata(
+        &self,
+    ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
         self.generations().metadata()
     }
 

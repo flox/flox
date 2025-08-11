@@ -6,7 +6,13 @@ use tracing::{debug, instrument};
 
 use super::core_environment::UpgradeResult;
 use super::fetcher::IncludeFetcher;
-use super::generations::{AllGenerationsMetadata, GenerationId, GenerationsError, GenerationsExt};
+use super::generations::{
+    AllGenerationsMetadata,
+    GenerationId,
+    GenerationsError,
+    GenerationsExt,
+    WithOtherFields,
+};
 use super::managed_environment::{ManagedEnvironment, ManagedEnvironmentError};
 use super::{
     CanonicalPath,
@@ -413,7 +419,9 @@ impl Environment for RemoteEnvironment {
 }
 
 impl GenerationsExt for RemoteEnvironment {
-    fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError> {
+    fn generations_metadata(
+        &self,
+    ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
         self.inner.generations_metadata()
     }
 
