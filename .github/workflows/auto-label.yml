@@ -3,18 +3,21 @@ name: Apply label to new issues and PRs
 on:
   issues:
     types: [opened]
-  pull_request:
+  pull_request_target:
     types: [opened]
   workflow_dispatch: # Allows manual triggering of the workflow
 
 jobs:
   add-label:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
     steps:
     - name: Add team label automatically to new issues and PRs
       uses: actions-ecosystem/action-add-labels@v1
       with:
-        github_token: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
+        github_token: "${{ secrets.GITHUB_TOKEN }}"
         labels: "team-cli"
 
 
