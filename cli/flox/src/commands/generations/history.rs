@@ -68,7 +68,7 @@ impl Display for DisplayChange<'_> {
 struct DisplayHistory<'m>(&'m generations::History);
 impl Display for DisplayHistory<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut iter = self.0.into_iter().peekable();
+        let mut iter = self.0.into_iter().rev().peekable();
         while let (Some(change), peek) = (iter.next(), iter.peek()) {
             let next = DisplayChange { change };
             write!(f, "* {}", indent::indent_by(2, next.to_string()))?;

@@ -62,7 +62,7 @@ impl Display for DisplayMetadata<'_> {
 struct DisplayAllMetadata<'m>(&'m AllGenerationsMetadata);
 impl Display for DisplayAllMetadata<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut iter = self.0.generations().into_iter().peekable();
+        let mut iter = self.0.generations().into_iter().rev().peekable();
         while let (Some((id, metadata)), peek) = (iter.next(), iter.peek()) {
             write!(f, "* {id}")?;
             if Some(id) == self.0.current_gen() {
@@ -166,19 +166,19 @@ mod tests {
         let actual = DisplayAllMetadata(&metadata).to_string();
 
         let expected = indoc! {"
-            * 1:
+            * 3:
               Description: mock
-              Created: 1970-01-01 01:00:00 UTC
-              Last Active: 1970-01-01 02:00:00 UTC
+              Created: 1970-01-01 03:00:00 UTC
+              Last Active: 1970-01-01 04:00:00 UTC
 
             * 2 (current):
               Description: mock
               Created: 1970-01-01 02:00:00 UTC
 
-            * 3:
+            * 1:
               Description: mock
-              Created: 1970-01-01 03:00:00 UTC
-              Last Active: 1970-01-01 04:00:00 UTC"
+              Created: 1970-01-01 01:00:00 UTC
+              Last Active: 1970-01-01 02:00:00 UTC"
         };
 
         assert_eq!(actual, expected);
