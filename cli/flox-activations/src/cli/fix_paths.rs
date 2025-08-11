@@ -73,7 +73,7 @@ impl FixPathsArgs {
 /// If suffixes is empty, adds each dir in FLOX_ENV_DIRS directly.
 pub fn prepend_dirs_to_pathlike_var(
     flox_env_dirs: &[PathBuf],
-    suffixes: &[&str],
+    suffixes: &[impl AsRef<str>],
     existing_dirs: &[PathBuf],
 ) -> Vec<PathBuf> {
     let mut dir_set = HashSet::new();
@@ -91,7 +91,7 @@ pub fn prepend_dirs_to_pathlike_var(
             }
         } else {
             for suffix in suffixes.iter().rev() {
-                let new_dir = dir.join(suffix);
+                let new_dir = dir.join(suffix.as_ref());
                 // Insert returns `true` if the value was _newly_ inserted
                 if dir_set.insert(new_dir.clone()) {
                     dirs.push_front(new_dir)
