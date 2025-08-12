@@ -873,7 +873,7 @@ impl HistorySpec {
     /// host, diffs and diff derived information to produce richer change logs.
     pub fn summary(&self) -> String {
         fn format_targets(verb: &str, object: &str, targets: &[String]) -> String {
-            let plural_s = if targets.is_empty() { "" } else { "s" };
+            let plural_s = if targets.len() < 2 { "" } else { "s" };
 
             let targets = targets
                 .iter()
@@ -1312,7 +1312,8 @@ mod tests {
         #[test]
         fn history_summaries() {
             let all_targets = [];
-            let targets = ["a".to_string(), "b".to_string()];
+            let single_target = ["a".to_string()];
+            let multiple_targets = ["a".to_string(), "b".to_string()];
             let change_message_pairs = [
                 (HistoryKind::Edit, "manually edited the manifest"),
                 (
@@ -1327,7 +1328,13 @@ mod tests {
                 ),
                 (
                     HistoryKind::IncludeUpgrade {
-                        targets: targets.to_vec(),
+                        targets: single_target.to_vec(),
+                    },
+                    "upgraded included environment 'a'",
+                ),
+                (
+                    HistoryKind::IncludeUpgrade {
+                        targets: multiple_targets.to_vec(),
                     },
                     "upgraded included environments 'a', 'b'",
                 ),
@@ -1340,7 +1347,13 @@ mod tests {
                 ),
                 (
                     HistoryKind::Install {
-                        targets: targets.to_vec(),
+                        targets: single_target.to_vec(),
+                    },
+                    "installed package 'a'",
+                ),
+                (
+                    HistoryKind::Install {
+                        targets: multiple_targets.to_vec(),
                     },
                     "installed packages 'a', 'b'",
                 ),
@@ -1353,7 +1366,13 @@ mod tests {
                 ),
                 (
                     HistoryKind::Uninstall {
-                        targets: targets.to_vec(),
+                        targets: single_target.to_vec(),
+                    },
+                    "uninstalled package 'a'",
+                ),
+                (
+                    HistoryKind::Uninstall {
+                        targets: multiple_targets.to_vec(),
                     },
                     "uninstalled packages 'a', 'b'",
                 ),
@@ -1365,7 +1384,13 @@ mod tests {
                 ),
                 (
                     HistoryKind::Upgrade {
-                        targets: targets.to_vec(),
+                        targets: single_target.to_vec(),
+                    },
+                    "upgraded package 'a'",
+                ),
+                (
+                    HistoryKind::Upgrade {
+                        targets: multiple_targets.to_vec(),
                     },
                     "upgraded packages 'a', 'b'",
                 ),
