@@ -907,7 +907,7 @@ impl HistorySpec {
             },
             HistoryKind::SwitchGeneration => match self.previous_generation {
                 Some(prev) => format!(
-                    "changed active generation {prev} -> {}",
+                    "changed current generation {prev} -> {}",
                     self.current_generation
                 ),
                 None => unreachable!(
@@ -1318,7 +1318,7 @@ mod tests {
                 (HistoryKind::Edit, "manually edited the manifest"),
                 (
                     HistoryKind::SwitchGeneration,
-                    "changed active generation 1 -> 2",
+                    "changed current generation 1 -> 2",
                 ),
                 (
                     HistoryKind::IncludeUpgrade {
