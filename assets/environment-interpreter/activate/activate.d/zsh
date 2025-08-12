@@ -24,24 +24,31 @@ else
   unset ZDOTDIR
 fi
 
-# Modify dynamic zsh fpath in preference to FPATH in environment.
-# See https://github.com/flox/flox/pull/1299 for more details.
-declare -a fpath_prepend=()
-for i in "${(@s/:/)FLOX_ENV_DIRS}"; do
-  # Check if fpath already contains this env's site-functions directory.
-  # The trick here is that the "i" means inverse subscript, meaning that
-  # it returns the index of the value which follows, and "e" specifies an
-  # exact match. If the value is found it returns the index of the matching
-  # element, but if not it returns the length of the array + 1, hence we
-  # check for any value greater than the length of the array.
-  # TODO: apple puts their stuff first so re-sort fpath by putting flox envs
-  #       first by paring the latter appearances from fpath.
-  if [[ -n "$i" && $fpath[(ie)$i/share/zsh/site-functions] -gt ${#fpath} ]]; then
-    fpath_prepend+=( "$i"/share/zsh/site-functions "$i"/share/zsh/vendor-completions )
-  fi
-done
-if [ ${#fpath_prepend[@]} -gt 0 ]; then
-  fpath=( "${fpath_prepend[@]}" "${fpath[@]}" )
+# Save FPATH before and after rearranging it so we know whether we need to
+# reload completions below.
+old_fpath="$FPATH"
+
+# We use `FPATH` as input here so we can re-use machinery for rearranging
+# PATH-like variables, but we actually output code to set `fpath` instead.
+# 
+# Setting `FPATH` directly has different (e.g. surprising) behavior compared to
+# setting `fpath`. I haven't found first-party documentation stating that this
+# is the case, but FPATH/fpath aren't normal shell variables, and if zsh sees
+# that `FPATH` is set at startup time, it won't proceed with its normal shell
+# function loading procedures (it assumes that `FPATH` is set because you've
+# intentionally done so), which will remove completions already installed to
+# the system.
+#
+# For more details on `fpath` and `FPATH`, see:
+# - `man zshbuiltins`
+# - `man zshparam`
+# - https://zsh.sourceforge.io/Doc/Release/Functions.html
+
+# shellcheck disable=SC1090
+source <($_flox_activations fix-fpath --colon-separated-fpath "$FPATH" --env-dirs "${FLOX_ENV_DIRS:-}")
+new_fpath="$FPATH"
+
+if [ "$old_fpath" != "$new_fpath" ]; then
   autoload -U compinit
   declare -a _flox_compinit_args=()
 
@@ -81,7 +88,6 @@ if [ ${#fpath_prepend[@]} -gt 0 ]; then
     set -x
   fi
 fi
-unset fpath_prepend
 
 if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" != true ]; then
   # Restore environment variables set in the previous bash initialization.

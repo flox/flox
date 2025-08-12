@@ -71,6 +71,7 @@ impl FixPathsArgs {
 /// Adds subdirectories of FLOX_ENV_DIRS to the front of the provided list
 /// of directories.
 /// If suffixes is empty, adds each dir in FLOX_ENV_DIRS directly.
+/// Suffixes are expected *not* to contain a leading slash.
 pub fn prepend_dirs_to_pathlike_var(
     flox_env_dirs: &[PathBuf],
     suffixes: &[impl AsRef<str>],
