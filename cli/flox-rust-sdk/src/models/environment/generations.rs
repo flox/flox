@@ -586,6 +586,7 @@ pub struct AllGenerationsMetadata {
     /// Schema version of the metadata file
     version: Version<2>,
     history: History,
+    total_generations: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -625,14 +626,7 @@ impl AllGenerationsMetadata {
         // generation if you're currently on e.g. 2, but the latest is 5.
         //
         // Keys should all be numbers, but if they aren't we provide a default value.
-        let next_generation = GenerationId(
-            self.history
-                .iter()
-                .map(|spec| *spec.current_generation)
-                .max()
-                .unwrap_or_default()
-                + 1,
-        );
+        let next_generation = GenerationId(self.total_generations + 1);
         let current_generation = self.current_gen();
 
         let history_spec = HistorySpec {
@@ -646,6 +640,7 @@ impl AllGenerationsMetadata {
 
         // update self
         self.history.0.push(history_spec);
+        self.total_generations = self.total_generations.saturating_add(1);
 
         let history_ref = self
             .history
@@ -679,8 +674,8 @@ impl AllGenerationsMetadata {
             return Err(GenerationsError::RollbackToCurrentGeneration);
         }
 
-        // get the metadata to the switched to generation
-        let Some(_) = self.generations().get_mut(&next_generation) else {
+        // we assume to track generations consecutively, 1 ..= total_generations
+        if *next_generation > self.total_generations {
             return Err(GenerationsError::GenerationNotFound(*next_generation));
         };
 
