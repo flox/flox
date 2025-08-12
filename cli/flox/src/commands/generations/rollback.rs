@@ -42,7 +42,7 @@ impl Rollback {
         };
 
         debug!(%previously_active_generation_id, "target generation determined, attempting rollback");
-        env.switch_generation(&flox, *previously_active_generation_id)?;
+        env.switch_generation(&flox, previously_active_generation_id)?;
         message::updated(format!(
             "Switched to generation {previously_active_generation_id}"
         ));
@@ -59,31 +59,38 @@ impl Rollback {
 ///   3 -rollback-> 2 -rollback-> 3
 fn determine_previous_generation(
     metadata: &AllGenerationsMetadata,
-) -> Option<(&GenerationId, &SingleGenerationMetadata)> {
+) -> Option<(GenerationId, SingleGenerationMetadata)> {
     metadata
-        .generations
-        .iter()
+        .generations()
+        .into_iter()
         .sorted_by_key(|(_id, meta)| meta.last_active)
-        .rev()
-        .nth(1)
+        .next_back()
 }
 
 #[cfg(test)]
 mod tests {
 
+    use flox_rust_sdk::models::environment::generations::test_helpers::{
+        default_add_generation_options,
+        default_switch_generation_options,
+    };
+
     use super::*;
-    use crate::commands::generations::test_helpers::mock_generations;
 
     #[test]
     fn rollback_uses_previously_active() {
         // last created active
-        let metadata = mock_generations(3.into());
+        let mut metadata = AllGenerationsMetadata::default();
+        metadata.add_generation(default_add_generation_options());
+        let (expected_prev_id, ..) = metadata.add_generation(default_add_generation_options());
+        metadata.add_generation(default_add_generation_options());
+
         let Some((previous_generation, _metadata)) = determine_previous_generation(&metadata)
         else {
             panic!("expected to find previous generation")
         };
 
-        assert_eq!(previous_generation, &2.into())
+        assert_eq!(previous_generation, expected_prev_id)
     }
 
     /// Use mock generations that were rolled back once from generation 3 -> genration 2.
@@ -92,12 +99,22 @@ mod tests {
     #[test]
     fn rollback_rolls_back_to_newer_generation_if_previously_active() {
         // e.g. rolled back once 3->2
-        let metadata = mock_generations(2.into());
+        // last created active
+        let mut metadata = AllGenerationsMetadata::default();
+        metadata.add_generation(default_add_generation_options());
+        metadata.add_generation(default_add_generation_options());
+        let (third_generation, ..) = metadata.add_generation(default_add_generation_options());
+        metadata
+            .switch_generation(default_switch_generation_options(
+                determine_previous_generation(&metadata).unwrap().0,
+            ))
+            .unwrap();
+
         let Some((previous_generation, _metadata)) = determine_previous_generation(&metadata)
         else {
             panic!("expected to find previous generation")
         };
 
-        assert_eq!(previous_generation, &3.into())
+        assert_eq!(previous_generation, third_generation)
     }
 }

@@ -78,6 +78,8 @@ pub struct Flox {
     pub runtime_dir: PathBuf,
 
     pub system: String,
+    pub system_user_name: String,
+    pub system_hostname: String,
 
     pub floxhub: Floxhub,
 
@@ -363,6 +365,8 @@ pub mod test_helpers {
 
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
+            system_user_name: "its-a-me-mario".to_string(),
+            system_hostname: "mushroom-kingdom".to_string(),
             cache_dir,
             data_dir,
             state_dir,

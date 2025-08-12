@@ -18,6 +18,7 @@
 //! ```
 
 use std::collections::BTreeMap;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
@@ -25,7 +26,8 @@ use chrono::{DateTime, Utc};
 use enum_dispatch::enum_dispatch;
 use flox_core::Version;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
@@ -76,6 +78,11 @@ pub struct ReadWrite<'a> {
     /// A reference to the [ReadOnly] instance that will be released
     /// when this instance is dropped.
     _read_only: &'a mut Generations<ReadOnly>,
+
+    /// The author modifying the generations, usually the current $USER.
+    author: String,
+    /// The hostname of the machine on which generations are modified, usually $HOST
+    hostname: String,
 }
 
 /// A representation of the generations of an environment
@@ -112,7 +119,7 @@ impl<S> Generations<S> {
     /// Read the manifest of a given generation and return its contents as a string
     pub fn manifest(&self, generation: usize) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
-        if !metadata.generations.contains_key(&generation.into()) {
+        if !metadata.generations().contains_key(&generation.into()) {
             return Err(GenerationsError::GenerationNotFound(generation));
         }
         let manifest_osstr = self
@@ -129,7 +136,7 @@ impl<S> Generations<S> {
     /// Read the lockfile of a given generation and return its contents as a string.
     pub fn lockfile(&self, generation: usize) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
-        if !metadata.generations.contains_key(&generation.into()) {
+        if !metadata.generations().contains_key(&generation.into()) {
             return Err(GenerationsError::GenerationNotFound(generation));
         }
         let lockfile_osstr = self
@@ -147,7 +154,7 @@ impl<S> Generations<S> {
     pub fn current_gen_manifest(&self) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
         let current_gen = metadata
-            .current_gen
+            .current_gen()
             .ok_or(GenerationsError::NoGenerations)?;
 
         self.manifest(*current_gen)
@@ -157,7 +164,7 @@ impl<S> Generations<S> {
     pub fn current_gen_lockfile(&self) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
         let current_gen = metadata
-            .current_gen
+            .current_gen()
             .ok_or(GenerationsError::NoGenerations)?;
 
         self.lockfile(*current_gen)
@@ -222,6 +229,8 @@ impl Generations<ReadOnly> {
     pub fn writable(
         &mut self,
         tempdir: impl AsRef<Path>,
+        author: impl Into<String>,
+        hostname: impl Into<String>,
     ) -> Result<Generations<ReadWrite<'_>>, GenerationsError> {
         if env::var("_FLOX_TESTING_NO_WRITABLE").is_ok() {
             panic!("Can't create writable generations when _FLOX_TESTING_NO_WRITABLE is set");
@@ -236,7 +245,11 @@ impl Generations<ReadOnly> {
         Ok(Generations {
             repo,
             branch: self.branch.clone(),
-            _state: ReadWrite { _read_only: self },
+            _state: ReadWrite {
+                _read_only: self,
+                author: author.into(),
+                hostname: hostname.into(),
+            },
         })
     }
 }
@@ -281,72 +294,9 @@ impl Generations<ReadWrite<'_>> {
     ) -> Result<CoreEnvironment, GenerationsError> {
         let metadata = self.metadata()?;
         let current_gen = metadata
-            .current_gen
+            .current_gen()
             .ok_or(GenerationsError::NoGenerations)?;
         self.get_generation(*current_gen, include_fetcher)
-    }
-
-    /// Import an existing environment into a generation
-    ///
-    /// Assumes the invariant that the [CoreEnvironment] instance is valid.
-    ///
-    /// This will copy the manifest and lockfile from the source environment
-    /// into a generation folder.
-    /// Any other assets such as hook scripts are ignored.
-    ///
-    /// If the generation already exists, it will be overwritten.
-    ///
-    /// If `set_current` is true, the generation will also be set as the current generation.
-    fn register_generation(
-        &mut self,
-        environment: &mut CoreEnvironment,
-        generation: usize,
-        description: String,
-        set_current: bool,
-    ) -> Result<(), GenerationsError> {
-        let mut generation_metadata = SingleGenerationMetadata::new(description.clone());
-
-        let mut metadata = self.metadata()?;
-
-        if set_current {
-            metadata.current_gen = Some(generation.into());
-            generation_metadata.last_active = Some(Utc::now());
-        }
-
-        // Insert the new generation
-        let _existing = metadata
-            .generations
-            .insert(generation.into(), generation_metadata);
-
-        // Write the metadata file with the new generation added
-        write_metadata_file(metadata, self.repo.path())?;
-
-        let generation_path = self.repo.path().join(generation.to_string());
-        let env_path = generation_path.join(ENV_DIR_NAME);
-        fs::create_dir_all(&env_path).unwrap();
-
-        // copy `env/`, i.e. manifest and lockfile (if it exists) and possibly other assets
-        // copy into `<generation>/env/` to make creating `PathEnvironment` easier
-        copy_dir_recursive(environment.path(), &env_path, true).unwrap();
-
-        self.repo
-            .add(&[&generation_path])
-            .map_err(GenerationsError::StageChanges)?;
-        self.repo
-            .add(&[Path::new(GENERATIONS_METADATA_FILE)])
-            .map_err(GenerationsError::StageChanges)?;
-
-        self.repo
-            .commit(&format!(
-                "Create generation {}\n\n{}",
-                generation, description
-            ))
-            .map_err(GenerationsError::CommitChanges)?;
-        self.repo
-            .push("origin", false)
-            .map_err(GenerationsError::CompleteTransaction)?;
-
-        Ok(())
     }
 
     /// Create a new generation from an existing environment
@@ -362,22 +312,48 @@ impl Generations<ReadWrite<'_>> {
     pub fn add_generation(
         &mut self,
         environment: &mut CoreEnvironment,
-        description: String,
+        change_kind: HistoryKind,
     ) -> Result<(), GenerationsError> {
-        // Returns the highest numbered generation so we know which number to assign
-        // the new one. This protects against potentially overwriting another
-        // generation if you're currently on e.g. 2, but the latest is 5.
-        //
-        // Keys should all be numbers, but if they aren't we provide a default value.
-        let max = self
-            .metadata()?
-            .generations
-            .keys()
-            .cloned()
-            .max()
-            .unwrap_or_default();
+        // add metadata
+        // this returns a free generation id to store the env files under
+        let mut metadata = self.metadata()?;
+        let (generation, history_item) = metadata.add_generation(AddGenerationOptions {
+            author: self._state.author.clone(),
+            hostname: self._state.hostname.clone(),
+            timestamp: Utc::now(),
+            kind: change_kind,
+        });
 
-        self.register_generation(environment, *max + 1, description, true)
+        let summary = history_item.summary();
+
+        // Write the metadata file with the new generation added
+        write_metadata_file(metadata, self.repo.path())?;
+
+        // copy generation environment files
+        let generation_path = self.repo.path().join(generation.to_string());
+        let env_path = generation_path.join(ENV_DIR_NAME);
+        fs::create_dir_all(&env_path).unwrap();
+
+        // copy `env/`, i.e. manifest and lockfile (if it exists) and possibly other assets
+        // copy into `<generation>/env/` to make creating `PathEnvironment` easier
+        copy_dir_recursive(environment.path(), &env_path, true).unwrap();
+
+        // commit environment and metadata
+        self.repo
+            .add(&[&generation_path])
+            .map_err(GenerationsError::StageChanges)?;
+        self.repo
+            .add(&[Path::new(GENERATIONS_METADATA_FILE)])
+            .map_err(GenerationsError::StageChanges)?;
+
+        self.repo
+            .commit(&format!("Create generation {}\n\n{}", generation, summary))
+            .map_err(GenerationsError::CommitChanges)?;
+        self.repo
+            .push("origin", false)
+            .map_err(GenerationsError::CompleteTransaction)?;
+
+        Ok(())
     }
 
     /// Switch to a provided generation to either roll backwards or forwards.
@@ -385,25 +361,17 @@ impl Generations<ReadWrite<'_>> {
     /// Fails if the generation does not exist or is already the current generation.
     pub fn set_current_generation(
         &mut self,
-        generation: GenerationId,
-    ) -> Result<(GenerationId, SingleGenerationMetadata), GenerationsError> {
+        next_generation: GenerationId,
+    ) -> Result<(), GenerationsError> {
         let mut metadata = self.metadata()?;
 
-        if Some(&generation) == metadata.current_gen.as_ref() {
-            return Err(GenerationsError::RollbackToCurrentGeneration);
-        }
-
-        // update the generation metadata and return a copy for the caller
-        let new_generation_metadata = {
-            let Some(new_generation_metadata) = metadata.generations.get_mut(&generation) else {
-                return Err(GenerationsError::GenerationNotFound(*generation));
-            };
-            new_generation_metadata.last_active = Some(Utc::now());
-
-            new_generation_metadata.clone()
-        };
-
-        metadata.current_gen = Some(generation);
+        let (_, history_item) = metadata.switch_generation(SwitchGenerationOptions {
+            author: self._state.author.clone(),
+            hostname: self._state.hostname.clone(),
+            timestamp: Utc::now(),
+            next_generation,
+        })?;
+        let summary = history_item.summary();
 
         write_metadata_file(metadata, self.repo.path())?;
 
@@ -411,13 +379,13 @@ impl Generations<ReadWrite<'_>> {
             .add(&[Path::new(GENERATIONS_METADATA_FILE)])
             .map_err(GenerationsError::StageChanges)?;
         self.repo
-            .commit(&format!("Set current generation to {}", generation))
+            .commit(&summary)
             .map_err(GenerationsError::CommitChanges)?;
         self.repo
             .push("origin", false)
             .map_err(GenerationsError::CompleteTransaction)?;
 
-        Ok((generation, new_generation_metadata))
+        Ok(())
     }
 }
 
@@ -444,6 +412,9 @@ pub enum GenerationsError {
     SerializeMetadata(#[source] serde_json::Error),
     #[error("could not write generations metadata file")]
     WriteMetadata(#[source] std::io::Error),
+
+    #[error("failed to migrate v1 metatada: {0}")]
+    MigrateV1ToV2(String),
 
     #[error("could not show generations metadata file")]
     ShowMetadata(#[source] GitCommandError),
@@ -500,13 +471,41 @@ fn read_metadata(
     repo: &GitCommandProvider,
     ref_name: &str,
 ) -> Result<AllGenerationsMetadata, GenerationsError> {
-    let metadata = {
-        let metadata_content = repo
-            .show(&format!("{}:{}", ref_name, GENERATIONS_METADATA_FILE))
-            .map_err(GenerationsError::ShowMetadata)?;
-        serde_json::from_str(&metadata_content.to_string_lossy())
-            .map_err(GenerationsError::DeserializeMetadata)?
+    let metadata_content = repo
+        .show(&format!("{}:{}", ref_name, GENERATIONS_METADATA_FILE))
+        .map_err(GenerationsError::ShowMetadata)?;
+
+    parse_metadata(&mut serde_json::Deserializer::from_slice(
+        metadata_content.as_bytes(),
+    ))
+}
+
+fn parse_metadata<'de>(
+    deserializer: impl Deserializer<'de, Error = serde_json::Error>,
+) -> Result<AllGenerationsMetadata, GenerationsError> {
+    #[derive(Debug, Deserialize)]
+    #[serde(untagged)]
+    enum MetadataVersionCompat {
+        V1(compat::AllGenerationsMetadataV1),
+        V2(AllGenerationsMetadata),
+        VX { version: serde_json::Value },
+    }
+
+    let metadata: MetadataVersionCompat = MetadataVersionCompat::deserialize(deserializer)
+        .map_err(GenerationsError::DeserializeMetadata)?;
+
+    let metadata = match metadata {
+        MetadataVersionCompat::V1(all_generations_metadata_v1) => {
+            all_generations_metadata_v1.try_into()?
+        },
+        MetadataVersionCompat::V2(all_generations_metadata) => all_generations_metadata,
+        MetadataVersionCompat::VX { version } => Err(GenerationsError::DeserializeMetadata(
+            serde_json::Error::custom(format!(
+                "Environment metadata of version '{version}' is not supported",
+            )),
+        ))?,
     };
+
     Ok(metadata)
 }
 
@@ -582,22 +581,11 @@ impl TryFrom<ConcreteEnvironment> for GenerationsEnvironment {
 /// Generations are defined as immutable copy-on-write folders.
 /// Rollbacks and associated [SingleGenerationMetadata] are tracked per environment
 /// in a metadata file at the root of the environment branch.
-#[derive(Serialize, Deserialize, Debug, Default)]
-#[serde(rename_all = "camelCase")]
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
 pub struct AllGenerationsMetadata {
-    #[serde(default, skip)]
-    pub history: History,
-
-    /// None means the environment has been created but does not yet have any
-    /// generations
-    pub current_gen: Option<GenerationId>,
-    /// Metadata for all generations of the environment.
-    /// Entries in this map must match up 1-to-1 with the generation folders
-    /// in the environment branch.
-    pub generations: BTreeMap<GenerationId, SingleGenerationMetadata>,
-    /// Schema version of the metadata file, not yet utilized
-    #[serde(default)]
-    version: Version<1>,
+    /// Schema version of the metadata file
+    version: Version<2>,
+    history: History,
 }
 
 #[derive(Debug, Clone)]
@@ -629,7 +617,7 @@ impl AllGenerationsMetadata {
             timestamp,
             kind,
         }: AddGenerationOptions,
-    ) -> (GenerationId, &SingleGenerationMetadata, &HistorySpec) {
+    ) -> (GenerationId, &HistorySpec) {
         // prepare new values
 
         // Returns the highest numbered generation so we know which number to assign
@@ -637,9 +625,15 @@ impl AllGenerationsMetadata {
         // generation if you're currently on e.g. 2, but the latest is 5.
         //
         // Keys should all be numbers, but if they aren't we provide a default value.
-        let next_generation =
-            GenerationId(*self.generations.keys().cloned().max().unwrap_or_default() + 1);
-        let current_generation = self.current_gen;
+        let next_generation = GenerationId(
+            self.history
+                .iter()
+                .map(|spec| *spec.current_generation)
+                .max()
+                .unwrap_or_default()
+                + 1,
+        );
+        let current_generation = self.current_gen();
 
         let history_spec = HistorySpec {
             author,
@@ -650,25 +644,8 @@ impl AllGenerationsMetadata {
             current_generation: next_generation,
         };
 
-        let generation_metadata = SingleGenerationMetadata {
-            created: timestamp,
-            // TODO: I think we allowed this to be empty,
-            // i.e. to theoritically create generations without activating them,
-            // but as far as I know we never actually wrote `None`.
-            last_active: Some(timestamp),
-            description: history_spec.summary(),
-        };
-
         // update self
-        self.generations
-            .insert(next_generation, generation_metadata);
-        self.current_gen = Some(next_generation);
         self.history.0.push(history_spec);
-
-        let generation_metadata_ref = self
-            .generations
-            .get(&next_generation)
-            .expect("generation should have been inserted");
 
         let history_ref = self
             .history
@@ -677,7 +654,7 @@ impl AllGenerationsMetadata {
             .next_back()
             .expect("history event should have been inserted");
 
-        (next_generation, generation_metadata_ref, history_ref)
+        (next_generation, history_ref)
     }
 
     /// Switch the active marked generation to `next_generation`.
@@ -693,8 +670,8 @@ impl AllGenerationsMetadata {
             timestamp,
             next_generation,
         }: SwitchGenerationOptions,
-    ) -> Result<(), GenerationsError> {
-        let Some(previous_generation) = self.current_gen else {
+    ) -> Result<(GenerationId, &HistorySpec), GenerationsError> {
+        let Some(previous_generation) = self.current_gen() else {
             unreachable!("current generation is only unavailable before any generation was added")
         };
 
@@ -703,7 +680,7 @@ impl AllGenerationsMetadata {
         }
 
         // get the metadata to the switched to generation
-        let Some(next_generation_metadata) = self.generations.get_mut(&next_generation) else {
+        let Some(_) = self.generations().get_mut(&next_generation) else {
             return Err(GenerationsError::GenerationNotFound(*next_generation));
         };
 
@@ -716,53 +693,94 @@ impl AllGenerationsMetadata {
             info: HistoryKind::SwitchGeneration,
         };
 
-        // update current active gen
-        self.current_gen = Some(next_generation);
-
-        // update the generation metadata
-        next_generation_metadata.last_active = Some(timestamp);
-
         // add action to history
         self.history.0.push(history_spec);
 
-        Ok(())
+        let history_ref = self
+            .history
+            .0
+            .iter()
+            .next_back()
+            .expect("history event should have been inserted");
+
+        Ok((next_generation, history_ref))
     }
 
-    /// Create a new object from its parts,
-    /// used in tests to create mocks.
-    #[cfg(feature = "tests")]
-    pub fn new(
-        current_gen: GenerationId,
-        generations: impl IntoIterator<Item = (GenerationId, SingleGenerationMetadata)>,
-    ) -> Self {
-        AllGenerationsMetadata {
-            history: History::default(),
-            current_gen: Some(current_gen),
-            generations: BTreeMap::from_iter(generations),
-            version: Default::default(),
+    /// Access the history without granting access to the field
+    /// for possible modification outside of this module.
+    pub fn history(&self) -> &History {
+        &self.history
+    }
+
+    /// Get the current active generation id
+    pub fn current_gen(&self) -> Option<GenerationId> {
+        self.history
+            .iter()
+            .next_back()
+            .map(|spec| spec.current_generation)
+    }
+
+    /// Filter and reduce history to a table of generations,
+    /// represented as [SingleGenerationMetadata].
+    /// This function requires a semantically consistent history, i.e.
+    ///
+    /// * exactly one generation creating event for every generation [1..]
+    /// * previous_generation correctly refers to the previously active generation
+    ///
+    /// These invariants are maintained when using [Self::add_generation]
+    /// and [Self::switch_generation].
+    pub fn generations(&self) -> BTreeMap<GenerationId, SingleGenerationMetadata> {
+        let mut map: BTreeMap<GenerationId, SingleGenerationMetadata> = BTreeMap::new();
+        for spec in self.history.iter() {
+            match spec.info {
+                HistoryKind::SwitchGeneration => {
+                    let prev = spec
+                        .previous_generation
+                        .and_then(|generation| map.get_mut(&generation))
+                        .expect("there must be a previous generation by construction");
+                    prev.last_active = Some(spec.timestamp);
+
+                    let new = map
+                        .get_mut(&spec.current_generation)
+                        .expect("there must be a current generation by construction");
+                    new.last_active = None;
+                },
+                _ => {
+                    // Adding a generation performs an implicit switch.
+                    // Hence, record that the previous generation was only active
+                    // until the creation of the new generation.
+                    if let Some(prev) = spec
+                        .previous_generation
+                        .and_then(|generation| map.get_mut(&generation))
+                    {
+                        prev.last_active = Some(spec.timestamp);
+                    }
+
+                    map.insert(spec.current_generation, SingleGenerationMetadata {
+                        created: spec.timestamp,
+                        last_active: None,
+                        description: spec.summary(),
+                    });
+                },
+            }
         }
+
+        map
     }
 }
 
 /// Metadata for a single generation of an environment
-#[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SingleGenerationMetadata {
     /// unix timestamp of the creation time of this generation
-    #[serde(with = "chrono::serde::ts_seconds")]
     pub created: DateTime<Utc>,
 
     /// unix timestamp of the time when this generation was last set as active
     /// `None` if this generation has never been set as active
-    #[serde(with = "chrono::serde::ts_seconds_option")]
     pub last_active: Option<DateTime<Utc>>,
 
     /// log message(s) describing the change from the previous generation
     pub description: String,
-    // todo: do we still need to track this?
-    //       do we now?
-    // /// store path of the built generation
-    // path: PathBuf,
 }
 
 impl SingleGenerationMetadata {
@@ -799,11 +817,14 @@ pub struct GenerationId(usize);
 /// These are generation _creating_ changes (such as install, edit, etc.)
 /// and metadata only changes such as switching generations.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
 #[serde(tag = "kind")]
+#[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub enum HistoryKind {
+    Import,
+    MigrateV1 { description: String },
+
     Install { targets: Vec<String> },
     Edit,
     Uninstall { targets: Vec<String> },
@@ -818,7 +839,6 @@ pub enum HistoryKind {
 /// The structure of a single change, tying together
 /// _who_ performed _what_ change, where and when.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
 #[serde(deny_unknown_fields)]
 pub struct HistorySpec {
     // change provided
@@ -827,18 +847,19 @@ pub struct HistorySpec {
 
     // system provided
     /// Local username of the user performing the change
-    author: String,
+    pub author: String,
     /// Hostname of the machine, on which the change was made
-    hostname: String,
+    pub hostname: String,
     /// Timestamp associated with the change
+
     // for consistency with the existing SingleGenerationMetadata
     #[serde(with = "chrono::serde::ts_seconds")]
-    timestamp: DateTime<Utc>,
+    pub timestamp: DateTime<Utc>,
 
     // associated generation(s)
     /// Currently active generation, e.g. created by the change
     /// or switched to.
-    current_generation: GenerationId,
+    pub current_generation: GenerationId,
     /// Previous generation before a new generation was created,
     /// or the generation active before a generation switch.
     pub previous_generation: Option<GenerationId>,
@@ -850,7 +871,7 @@ impl HistorySpec {
     /// rather than giving an exhaustive account about the complete change.
     /// The summary can be used alongside additional information such as author,
     /// host, diffs and diff derived information to produce richer change logs.
-    fn summary(&self) -> String {
+    pub fn summary(&self) -> String {
         fn format_targets(verb: &str, object: &str, targets: &[String]) -> String {
             let plural_s = if targets.is_empty() { "" } else { "s" };
 
@@ -871,6 +892,10 @@ impl HistorySpec {
         }
 
         match &self.info {
+            HistoryKind::Import => "Imported unmanaged path environment".to_string(),
+            HistoryKind::MigrateV1 { description } => {
+                format!("Migrated generation from v1 metadata: {description}")
+            },
             HistoryKind::Install { targets } => format_targets("installed", "package", targets),
             HistoryKind::Edit => "manually edited the manifest".to_string(),
             HistoryKind::Uninstall { targets } => format_targets("uninstalled", "package", targets),
@@ -894,7 +919,7 @@ impl HistorySpec {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, derive_more::AsRef)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, derive_more::AsRef)]
 pub struct History(Vec<HistorySpec>);
 
 impl<'h> IntoIterator for &'h History {
@@ -914,24 +939,168 @@ impl IntoIterator for History {
     }
 }
 
-impl History {}
+impl History {
+    pub fn iter(&self) -> <&Self as IntoIterator>::IntoIter {
+        self.into_iter()
+    }
+}
 
-#[cfg(test)]
-mod tests {
-    use tempfile::TempDir;
+mod compat {
+    use std::collections::BTreeMap;
 
-    use super::*;
-    use crate::flox::test_helpers::flox_instance;
-    use crate::models::environment::Environment;
-    use crate::models::environment::path_environment::test_helpers::new_path_environment;
+    use chrono::{DateTime, Utc};
+    use flox_core::Version;
+    use serde::{Deserialize, Serialize};
+    use serde_with::{DeserializeFromStr, SerializeDisplay};
 
-    const GEN_ID_1: GenerationId = GenerationId(1);
-    const GEN_ID_2: GenerationId = GenerationId(2);
+    use super::{AddGenerationOptions, GenerationsError, SwitchGenerationOptions};
 
-    const AUTHOR: &str = "author";
-    const HOSTNAME: &str = "host";
+    #[derive(
+        Debug,
+        Copy,
+        Clone,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        derive_more::Deref,
+        derive_more::Display,
+        derive_more::FromStr,
+        derive_more::From,
+        DeserializeFromStr,
+        SerializeDisplay,
+    )]
+    pub struct GenerationId(usize);
 
-    fn default_add_generation_options() -> AddGenerationOptions {
+    /// Metadata for a single generation of an environment
+    #[derive(Deserialize, Serialize, Debug)]
+    #[serde(rename_all = "camelCase")]
+    pub struct SingleGenerationMetadata {
+        /// unix timestamp of the creation time of this generation
+        #[serde(with = "chrono::serde::ts_seconds")]
+        pub created: DateTime<Utc>,
+
+        /// unix timestamp of the time when this generation was last set as active
+        /// `None` if this generation has never been set as active
+        #[serde(with = "chrono::serde::ts_seconds_option")]
+        pub last_active: Option<DateTime<Utc>>,
+
+        /// log message(s) describing the change from the previous generation
+        pub description: String,
+        // todo: do we still need to track this?
+        //       do we now?
+        // /// store path of the built generation
+        // path: PathBuf,
+    }
+
+    /// flox environment metadata for managed environments
+    ///
+    /// Managed environments support rolling back to previous generations.
+    /// Generations are defined as immutable copy-on-write folders.
+    /// Rollbacks and associated [SingleGenerationMetadata] are tracked per environment
+    /// in a metadata file at the root of the environment branch.
+    #[derive(Deserialize, Serialize, Debug, Default)]
+    #[serde(rename_all = "camelCase")]
+    pub struct AllGenerationsMetadataV1 {
+        /// None means the environment has been created but does not yet have any
+        /// generations
+        pub current_gen: Option<GenerationId>,
+        /// Metadata for all generations of the environment.
+        /// Entries in this map must match up 1-to-1 with the generation folders
+        /// in the environment branch.
+        pub generations: BTreeMap<GenerationId, SingleGenerationMetadata>,
+        /// Schema version of the metadata file, not yet utilized
+        #[serde(default)]
+        #[serde(rename = "version")]
+        _version: Version<1>,
+    }
+
+    #[cfg(test)]
+    impl AllGenerationsMetadataV1 {
+        pub(super) fn new(
+            current_gen: GenerationId,
+            generations: BTreeMap<GenerationId, SingleGenerationMetadata>,
+        ) -> Self {
+            Self {
+                current_gen: Some(current_gen),
+                generations,
+                _version: Version,
+            }
+        }
+    }
+
+    impl TryFrom<AllGenerationsMetadataV1> for super::AllGenerationsMetadata {
+        type Error = GenerationsError;
+
+        fn try_from(value: AllGenerationsMetadataV1) -> Result<Self, Self::Error> {
+            let mut dest = super::AllGenerationsMetadata::default();
+
+            for (index, (generation_id, generation_metadata)) in
+                value.generations.iter().enumerate()
+            {
+                if (index + 1) != generation_id.0 {
+                    Err(GenerationsError::MigrateV1ToV2(format!(
+                        "metadata invalid gap in tracked generations detected, missing generation {}",
+                        index + 1
+                    )))?;
+                }
+
+                let add_generation_options = AddGenerationOptions {
+                    author: "unknown".to_string(),
+                    hostname: "unknown".to_string(),
+                    timestamp: generation_metadata.created,
+                    kind: super::HistoryKind::MigrateV1 {
+                        description: generation_metadata.description.clone(),
+                    },
+                };
+
+                dest.add_generation(add_generation_options);
+            }
+
+            let Some(original_current_gen) = value.current_gen else {
+                Err(GenerationsError::MigrateV1ToV2(
+                    "metadata has no current generation".into(),
+                ))?
+            };
+
+            if Some(&*original_current_gen) != dest.current_gen().as_deref() {
+                let timestamp = value
+                    .generations
+                    .get(&original_current_gen)
+                    .ok_or(GenerationsError::MigrateV1ToV2(
+                        "current generation missing".into(),
+                    ))?
+                    .last_active
+                    .ok_or(GenerationsError::MigrateV1ToV2(
+                        "current generation missing timestamp".into(),
+                    ))?;
+
+                let add_generation_options = SwitchGenerationOptions {
+                    author: "unknown".to_string(),
+                    hostname: "unknown".to_string(),
+                    timestamp,
+                    next_generation: super::GenerationId(*original_current_gen),
+                };
+
+                dest.switch_generation(add_generation_options)
+                    .expect("switch to known generation should not fail");
+            }
+
+            Ok(dest)
+        }
+    }
+}
+
+#[cfg(any(test, feature = "tests"))]
+pub mod test_helpers {
+    use chrono::Utc;
+
+    use super::{AddGenerationOptions, GenerationId, HistoryKind, SwitchGenerationOptions};
+
+    pub const AUTHOR: &str = "author";
+    pub const HOSTNAME: &str = "host";
+
+    pub fn default_add_generation_options() -> AddGenerationOptions {
         AddGenerationOptions {
             author: AUTHOR.into(),
             hostname: HOSTNAME.into(),
@@ -942,7 +1111,9 @@ mod tests {
         }
     }
 
-    fn default_switch_generation_options(next_generation: GenerationId) -> SwitchGenerationOptions {
+    pub fn default_switch_generation_options(
+        next_generation: GenerationId,
+    ) -> SwitchGenerationOptions {
         SwitchGenerationOptions {
             author: AUTHOR.into(),
             hostname: HOSTNAME.into(),
@@ -950,14 +1121,32 @@ mod tests {
             next_generation,
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::Environment;
+    use crate::models::environment::generations::test_helpers::{AUTHOR, HOSTNAME};
+    use crate::models::environment::path_environment::test_helpers::new_path_environment;
+
+    const GEN_ID_1: GenerationId = GenerationId(1);
+    const GEN_ID_2: GenerationId = GenerationId(2);
 
     mod metadata {
         use chrono::Utc;
         use pretty_assertions::{assert_eq, assert_str_eq};
         use serde_json::{Value, json};
 
-        use super::{AUTHOR, HOSTNAME, default_switch_generation_options};
-        use crate::models::environment::generations::tests::default_add_generation_options;
+        use crate::models::environment::generations::test_helpers::{
+            AUTHOR,
+            HOSTNAME,
+            default_add_generation_options,
+            default_switch_generation_options,
+        };
         use crate::models::environment::generations::{
             AllGenerationsMetadata,
             GenerationId,
@@ -978,14 +1167,15 @@ mod tests {
 
             let options = default_add_generation_options();
 
-            let (generation, generation_metadata, history) =
-                metadata.add_generation(options.clone());
+            let (generation, history) = metadata.add_generation(options.clone());
+            let history = history.clone();
 
-            let (generation_metadata, history) = (generation_metadata.clone(), history.clone());
+            let generations = metadata.generations();
+            let generation_metadata = generations.get(&generation).expect("generation added");
 
-            assert_eq!(metadata.current_gen, Some(generation));
+            assert_eq!(metadata.current_gen(), Some(generation));
             assert_eq!(generation_metadata.created, options.timestamp);
-            assert_eq!(generation_metadata.last_active, Some(options.timestamp));
+            assert_eq!(generation_metadata.last_active, None);
 
             assert_eq!(history.author, options.author);
             assert_eq!(history.hostname, options.hostname);
@@ -998,11 +1188,9 @@ mod tests {
         #[test]
         fn generation_counter_is_correctly_increased() {
             let mut metadata = AllGenerationsMetadata::default();
-            let (first_generation, _, _) =
-                metadata.add_generation(default_add_generation_options());
+            let (first_generation, _) = metadata.add_generation(default_add_generation_options());
 
-            let (second_generation, _, _) =
-                metadata.add_generation(default_add_generation_options());
+            let (second_generation, _) = metadata.add_generation(default_add_generation_options());
 
             assert_eq!(first_generation, GenerationId(1));
             assert_eq!(second_generation, GenerationId(2));
@@ -1010,10 +1198,9 @@ mod tests {
             metadata
                 .switch_generation(default_switch_generation_options(first_generation))
                 .unwrap();
-            assert_eq!(metadata.current_gen, Some(first_generation));
+            assert_eq!(metadata.current_gen(), Some(first_generation));
 
-            let (third_generation, _, _) =
-                metadata.add_generation(default_add_generation_options());
+            let (third_generation, _) = metadata.add_generation(default_add_generation_options());
 
             // generation counter continues at the current max (N=2) + 1
             assert_eq!(third_generation, GenerationId(3));
@@ -1033,12 +1220,17 @@ mod tests {
                 generation_switched_to: GenerationId,
             ) {
                 assert_eq!(
-                    metadata.current_gen,
+                    metadata.current_gen(),
                     Some(generation_switched_to),
                     "current gen was not updated"
                 );
                 assert_eq!(
-                    metadata.generations[&generation_switched_to].last_active,
+                    metadata.generations()[&generation_switched_to].last_active,
+                    None,
+                    "timestamp was not updated"
+                );
+                assert_eq!(
+                    metadata.generations()[&generation_switched_from].last_active,
                     Some(switch_generation_options.timestamp),
                     "timestamp was not updated"
                 );
@@ -1198,8 +1390,8 @@ mod tests {
                 "author": AUTHOR,
                 "hostname": HOSTNAME,
                 "timestamp": Utc::now().timestamp(),
-                "currentGeneration": "2",
-                "previousGeneration": "1",
+                "current_generation": "2",
+                "previous_generation": "1",
                 "info": payload,
             }};
 
@@ -1213,13 +1405,15 @@ mod tests {
         #[test]
         fn parse_history() {
             let payloads = [
+                json! {{"kind": "migrate_v1", "description": "v1 description"}},
+                json! {{"kind": "import"}},
                 json! {{"kind": "edit"}},
                 json! {{"kind": "install", "targets": []}},
                 json! {{"kind": "uninstall", "targets": []}},
                 json! {{"kind": "upgrade", "targets": []}},
-                json! {{"kind": "includeUpgrade", "targets": []}},
+                json! {{"kind": "include_upgrade", "targets": []}},
                 json! {{"kind": "uninstall", "targets": []}},
-                json! {{"kind": "switchGeneration"}},
+                json! {{"kind": "switch_generation"}},
                 json! {{"kind": "uninstall", "targets": []}},
                 json! {{"kind": "other", "summary": "foobar" }},
             ];
@@ -1283,6 +1477,199 @@ mod tests {
         }
     }
 
+    mod compat {
+        use std::collections::BTreeMap;
+
+        use chrono::{DateTime, Duration, Utc};
+        use pretty_assertions::assert_eq;
+
+        use crate::models::environment::generations::compat::{self, SingleGenerationMetadata};
+        use crate::models::environment::generations::{
+            AddGenerationOptions,
+            AllGenerationsMetadata,
+            HistoryKind,
+            SwitchGenerationOptions,
+            parse_metadata,
+        };
+
+        fn migration_options(timestamp: DateTime<Utc>) -> AddGenerationOptions {
+            AddGenerationOptions {
+                author: "unknown".to_string(),
+                hostname: "unknown".to_string(),
+                timestamp,
+                kind: HistoryKind::MigrateV1 {
+                    description: "description".to_string(),
+                },
+            }
+        }
+
+        #[test]
+        fn parse_v1() {
+            let date = DateTime::default();
+
+            let metadata = compat::AllGenerationsMetadataV1::new(
+                1.into(),
+                BTreeMap::from_iter([(1.into(), SingleGenerationMetadata {
+                    created: date,
+                    last_active: Some(date),
+                    description: "description".to_string(),
+                })]),
+            );
+            let serialized = serde_json::to_string_pretty(&metadata).unwrap();
+            let actual =
+                parse_metadata(&mut serde_json::Deserializer::from_str(&serialized)).unwrap();
+
+            let mut expected = AllGenerationsMetadata::default();
+            expected.add_generation(migration_options(date));
+
+            assert_eq!(actual, expected)
+        }
+
+        #[test]
+        fn metadata_migrations() {
+            let date = DateTime::default();
+            let pairs = [
+                // a single generation
+                (
+                    compat::AllGenerationsMetadataV1::new(
+                        1.into(),
+                        BTreeMap::from_iter([(1.into(), SingleGenerationMetadata {
+                            created: date,
+                            last_active: Some(date),
+                            description: "description".to_string(),
+                        })]),
+                    ),
+                    {
+                        let mut migrated = AllGenerationsMetadata::default();
+                        migrated.add_generation(migration_options(date));
+                        migrated
+                    },
+                ),
+                // multiple generations linear
+                (
+                    compat::AllGenerationsMetadataV1::new(
+                        3.into(),
+                        BTreeMap::from_iter([
+                            (1.into(), SingleGenerationMetadata {
+                                created: date,
+                                last_active: Some(date),
+                                description: "description".to_string(),
+                            }),
+                            (2.into(), SingleGenerationMetadata {
+                                created: date + Duration::hours(1),
+                                last_active: Some(date + Duration::hours(1)), // [sic]
+                                description: "description".to_string(),
+                            }),
+                            (3.into(), SingleGenerationMetadata {
+                                created: date + Duration::hours(2),
+                                last_active: Some(date + Duration::hours(2)), // [sic]
+                                description: "description".to_string(),
+                            }),
+                        ]),
+                    ),
+                    {
+                        let mut migrated = AllGenerationsMetadata::default();
+                        migrated.add_generation(migration_options(date));
+                        migrated.add_generation(migration_options(date + Duration::hours(1)));
+                        migrated.add_generation(migration_options(date + Duration::hours(2)));
+                        migrated
+                    },
+                ),
+                // multiple generations with rollback
+                // 1->2->1->3
+                //
+                // However we don't know when that rollback happened (and from where)
+                //
+                (
+                    compat::AllGenerationsMetadataV1::new(
+                        3.into(),
+                        BTreeMap::from_iter([
+                            (1.into(), SingleGenerationMetadata {
+                                created: date,
+                                last_active: Some(date + Duration::hours(2)),
+                                description: "description".to_string(),
+                            }),
+                            (2.into(), SingleGenerationMetadata {
+                                created: date + Duration::hours(1),
+                                last_active: Some(date + Duration::hours(1)), // [sic]
+                                description: "description".to_string(),
+                            }),
+                            (3.into(), SingleGenerationMetadata {
+                                created: date + Duration::hours(3),
+                                last_active: Some(date + Duration::hours(3)), // [sic]
+                                description: "description".to_string(),
+                            }),
+                        ]),
+                    ),
+                    {
+                        let mut migrated = AllGenerationsMetadata::default();
+
+                        migrated.add_generation(migration_options(date));
+                        migrated.add_generation(migration_options(date + Duration::hours(1)));
+                        migrated.add_generation(migration_options(date + Duration::hours(3)));
+
+                        migrated
+                    },
+                ),
+                // multiple generations with rollback
+                // 1->2->3->2
+                //
+                // we only know, 2 is the current generation,
+                // so only final rollback is created to switch to the final generation
+                (
+                    compat::AllGenerationsMetadataV1::new(
+                        2.into(),
+                        BTreeMap::from_iter([
+                            (1.into(), SingleGenerationMetadata {
+                                created: date,
+                                last_active: Some(date + Duration::hours(2)),
+                                description: "description".to_string(),
+                            }),
+                            (2.into(), SingleGenerationMetadata {
+                                created: date + Duration::hours(1),
+                                last_active: Some(date + Duration::hours(3)), // [sic]
+                                description: "description".to_string(),
+                            }),
+                            (3.into(), SingleGenerationMetadata {
+                                created: date + Duration::hours(2),
+                                last_active: Some(date + Duration::hours(2)), // [sic]
+                                description: "description".to_string(),
+                            }),
+                        ]),
+                    ),
+                    {
+                        let mut migrated = AllGenerationsMetadata::default();
+
+                        migrated.add_generation(migration_options(date));
+                        let (second_generation, ..) =
+                            migrated.add_generation(migration_options(date + Duration::hours(1)));
+                        migrated.add_generation(migration_options(date + Duration::hours(2)));
+                        migrated
+                            .switch_generation(SwitchGenerationOptions {
+                                author: "unknown".into(),
+                                hostname: "unknown".into(),
+                                timestamp: date + Duration::hours(3),
+                                next_generation: second_generation,
+                            })
+                            .unwrap();
+                        migrated
+                    },
+                ),
+            ];
+
+            for (v1, expected_v2) in pairs {
+                let expected_current_gen = v1.current_gen;
+                let actual_v2 = AllGenerationsMetadata::try_from(v1).unwrap();
+
+                assert_eq!(actual_v2, expected_v2);
+                assert_eq!(
+                    *actual_v2.current_gen().unwrap(),
+                    *expected_current_gen.unwrap()
+                )
+            }
+        }
+    }
+
     fn setup_two_generations() -> (Generations, TempDir) {
         let (flox, tempdir) = flox_instance();
         let env = new_path_environment(&flox, "version = 1");
@@ -1301,15 +1688,19 @@ mod tests {
         )
         .unwrap();
 
-        let mut generations_rw = generations.writable(&tempdir).unwrap();
+        let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
         generations_rw
-            .add_generation(&mut core_env, "First generation".to_string())
+            .add_generation(&mut core_env, HistoryKind::Other {
+                summary: "First generation".to_string(),
+            })
             .unwrap();
         generations_rw
-            .add_generation(&mut core_env, "Second generation".to_string())
+            .add_generation(&mut core_env, HistoryKind::Other {
+                summary: "Second generation".to_string(),
+            })
             .unwrap();
         assert_eq!(
-            generations_rw.metadata().unwrap().current_gen,
+            generations_rw.metadata().unwrap().current_gen(),
             Some(GEN_ID_2),
             "should be at second generation"
         );
@@ -1320,24 +1711,24 @@ mod tests {
     #[test]
     fn set_current_generation_backwards_and_forwards() {
         let (mut generations, tempdir) = setup_two_generations();
-        let mut generations_rw = generations.writable(&tempdir).unwrap();
+        let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
 
         assert_eq!(
-            generations_rw.metadata().unwrap().current_gen,
+            generations_rw.metadata().unwrap().current_gen(),
             Some(GEN_ID_2),
             "should start at second generation"
         );
 
         generations_rw.set_current_generation(GEN_ID_1).unwrap();
         assert_eq!(
-            generations_rw.metadata().unwrap().current_gen,
+            generations_rw.metadata().unwrap().current_gen(),
             Some(GEN_ID_1),
             "should roll back to first generation"
         );
 
         generations_rw.set_current_generation(GEN_ID_2).unwrap();
         assert_eq!(
-            generations_rw.metadata().unwrap().current_gen,
+            generations_rw.metadata().unwrap().current_gen(),
             Some(GEN_ID_2),
             "should roll forwards to second generation"
         );
@@ -1346,7 +1737,7 @@ mod tests {
     #[test]
     fn set_current_generation_not_found() {
         let (mut generations, tempdir) = setup_two_generations();
-        let mut generations_rw = generations.writable(&tempdir).unwrap();
+        let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
 
         let res = generations_rw.set_current_generation(GenerationId(10));
         assert!(
@@ -1359,9 +1750,9 @@ mod tests {
     #[test]
     fn set_current_generation_already_current() {
         let (mut generations, tempdir) = setup_two_generations();
-        let mut generations_rw = generations.writable(&tempdir).unwrap();
+        let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
 
-        let current_gen = generations_rw.metadata().unwrap().current_gen.unwrap();
+        let current_gen = generations_rw.metadata().unwrap().current_gen().unwrap();
         let res = generations_rw.set_current_generation(current_gen);
         assert!(
             matches!(res, Err(GenerationsError::RollbackToCurrentGeneration)),
