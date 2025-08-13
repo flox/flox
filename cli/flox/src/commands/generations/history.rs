@@ -25,7 +25,9 @@ pub struct History {
 impl History {
     #[instrument(name = "history", skip_all)]
     pub fn handle(self, flox: Flox) -> Result<()> {
-        let env = self.environment.to_concrete_environment(&flox)?;
+        let env = self
+            .environment
+            .detect_concrete_environment(&flox, "Show history for")?;
         environment_subcommand_metric!("generations::history", env);
 
         let env: GenerationsEnvironment = env.try_into()?;

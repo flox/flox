@@ -1204,8 +1204,15 @@ impl EnvironmentSelect {
         flox: &Flox,
     ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         match self {
-            EnvironmentSelect::Dir(path) => Ok(open_path(flox, path)?),
+            EnvironmentSelect::Dir(path) => {
+                debug!(
+                    path = %path.display(),
+                    "getting concrete environment from supplied path"
+                );
+                Ok(open_path(flox, path)?)
+            },
             EnvironmentSelect::Unspecified => {
+                debug!("getting concrete environment without explicit args");
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_found_environment = find_dot_flox(&current_dir)?;
                 match maybe_found_environment {
@@ -1217,6 +1224,10 @@ impl EnvironmentSelect {
                 }
             },
             EnvironmentSelect::Remote(env_ref) => {
+                debug!(
+                    remote = env_ref.to_string(),
+                    "getting concrete environment from remote"
+                );
                 let pointer = ManagedPointer::new(
                     env_ref.owner().clone(),
                     env_ref.name().clone(),
@@ -1449,13 +1460,22 @@ impl IntoIterator for ActiveEnvironments {
 
 /// Determine the most recently activated environment [ActiveEnvironment].
 fn last_activated_environment() -> Option<UninitializedEnvironment> {
-    activated_environments().last_active()
+    let env = activated_environments().last_active();
+    debug!(
+        env = env
+            .as_ref()
+            .map(|e| e.name().to_string())
+            .unwrap_or("null".into()),
+        "most recent activation"
+    );
+    env
 }
 
 /// Read [ActiveEnvironments] from the process environment [FLOX_ACTIVE_ENVIRONMENTS_VAR]
 fn activated_environments() -> ActiveEnvironments {
     let flox_active_environments_var: String =
         env::var(FLOX_ACTIVE_ENVIRONMENTS_VAR).unwrap_or_default();
+    debug!("read active environments variable");
 
     match ActiveEnvironments::from_str(&flox_active_environments_var) {
         Ok(active_environments) => active_environments,
