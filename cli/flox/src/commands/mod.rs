@@ -960,7 +960,7 @@ enum ModifyCommands {
     Uninstall(#[bpaf(external(uninstall::uninstall))] uninstall::Uninstall),
 
     /// Interact with environment generations
-    #[bpaf(command, hide)]
+    #[bpaf(command)]
     Generations(
         #[bpaf(
             external(generations::generations_commands),
