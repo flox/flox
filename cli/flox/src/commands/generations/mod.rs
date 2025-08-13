@@ -22,7 +22,7 @@ pub enum GenerationsCommands {
     #[bpaf(command)]
     List(#[bpaf(external(list::list))] list::List),
 
-    /// Show all managed changes to the selected environment
+    /// Print the history of the environment
     #[bpaf(command)]
     History(#[bpaf(external(history::history))] history::History),
 
