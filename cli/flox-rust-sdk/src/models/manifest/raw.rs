@@ -125,7 +125,7 @@ impl RawManifest {
             ##
             ##   _Everything_ you need to know about the _manifest_ is here:
             ##
-            ##               https://flox.dev/docs/concepts/manifest
+            ##       https://flox.dev/docs/reference/command-reference/manifest.toml
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
@@ -1160,7 +1160,7 @@ pub(super) mod test {
             ##
             ##   _Everything_ you need to know about the _manifest_ is here:
             ##
-            ##               https://flox.dev/docs/concepts/manifest
+            ##       https://flox.dev/docs/reference/command-reference/manifest.toml
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
@@ -1284,7 +1284,7 @@ pub(super) mod test {
             ##
             ##   _Everything_ you need to know about the _manifest_ is here:
             ##
-            ##               https://flox.dev/docs/concepts/manifest
+            ##       https://flox.dev/docs/reference/command-reference/manifest.toml
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
@@ -1412,7 +1412,7 @@ pub(super) mod test {
             ##
             ##   _Everything_ you need to know about the _manifest_ is here:
             ##
-            ##               https://flox.dev/docs/concepts/manifest
+            ##       https://flox.dev/docs/reference/command-reference/manifest.toml
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
@@ -1533,7 +1533,7 @@ pub(super) mod test {
             ##
             ##   _Everything_ you need to know about the _manifest_ is here:
             ##
-            ##               https://flox.dev/docs/concepts/manifest
+            ##       https://flox.dev/docs/reference/command-reference/manifest.toml
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
@@ -1643,7 +1643,7 @@ pub(super) mod test {
             ##
             ##   _Everything_ you need to know about the _manifest_ is here:
             ##
-            ##               https://flox.dev/docs/concepts/manifest
+            ##       https://flox.dev/docs/reference/command-reference/manifest.toml
             ##
             ## -------------------------------------------------------------------
             # Flox manifest version managed by Flox CLI
