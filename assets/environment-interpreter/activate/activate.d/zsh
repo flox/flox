@@ -28,6 +28,15 @@ fi
 # reload completions below.
 old_fpath="$FPATH"
 
+# We already customized the PATH and MANPATH, but the user and system
+# dotfiles may have changed them, so finish by doing this again.
+# We need to restore FLOX_ENV_DIRS before fixing fpath since fpath uses
+# FLOX_ENV_DIRS.
+# shellcheck disable=SC1090
+source <("$_flox_activations" set-env-dirs --shell zsh --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
+# shellcheck disable=SC1090
+source <("$_flox_activations" fix-paths --shell zsh --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
+
 # We use `FPATH` as input here so we can re-use machinery for rearranging
 # PATH-like variables, but we actually output code to set `fpath` instead.
 # 
@@ -98,11 +107,6 @@ if [[ -o interactive ]]; then
   source "$_activate_d/set-prompt.zsh"
 fi
 
-# We already customized the PATH and MANPATH, but the user and system
-# dotfiles may have changed them, so finish by doing this again.
-source <("$_flox_activations" set-env-dirs --shell zsh --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
-source <("$_flox_activations" fix-paths --shell zsh --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
-
 # Our ZDOTDIR startup files source user RC files that may modify FLOX_ENV_DIRS,
 # and then _flox_env_helper may fix it up.
 # If this happens, we want to respect those modifications,
@@ -115,6 +119,7 @@ if [ -n "${_flox_sourcing_rc:-}" ]; then
 else
   profile_script_dirs="$FLOX_ENV_DIRS"
 fi
+# shellcheck disable=SC1090
 source <("$_flox_activations" profile-scripts --shell zsh --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "$profile_script_dirs")
 
 # Disable command hashing to allow for newly installed flox packages
