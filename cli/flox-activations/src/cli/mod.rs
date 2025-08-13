@@ -4,6 +4,7 @@ use attach::AttachArgs;
 use clap::{Parser, Subcommand};
 
 pub mod attach;
+mod fix_fpath;
 mod fix_paths;
 mod prepend_and_dedup;
 mod profile_scripts;
@@ -11,6 +12,7 @@ mod set_env_dirs;
 mod set_ready;
 mod start_or_attach;
 
+use fix_fpath::FixFpathArgs;
 use fix_paths::FixPathsArgs;
 use prepend_and_dedup::PrependAndDedupArgs;
 use profile_scripts::ProfileScriptsArgs;
@@ -47,6 +49,8 @@ pub enum Command {
         about = "Prepends and dedups environment dirs, optionally pruning directories that aren't from environments"
     )]
     PrependAndDedup(PrependAndDedupArgs),
+    #[command(about = "Print sourceable output fixing fpath/FPATH for zsh.")]
+    FixFpath(FixFpathArgs),
 }
 
 /// Splits PATH-like variables into individual paths, removing any empty strings.
