@@ -63,7 +63,16 @@ impl Display for DisplayChange<'_> {
             Author:     {author}
             Host:       {host}
             Generation: {generation}
-            Summary:    {summary}"})
+            "})?;
+
+        if let Some(command) = &self.change.command {
+            let command = command.join(" ");
+            write!(f, "{}", formatdoc! {"
+            Command:    {command}
+            "})?;
+        }
+        write!(f, "{}", formatdoc! {"
+        Summary:    {summary}"})
     }
 }
 

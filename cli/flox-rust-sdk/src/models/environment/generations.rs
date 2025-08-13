@@ -85,6 +85,8 @@ pub struct ReadWrite<'a> {
     author: String,
     /// The hostname of the machine on which generations are modified, usually $HOST
     hostname: String,
+
+    argv: Vec<String>,
 }
 
 /// A representation of the generations of an environment
@@ -233,6 +235,7 @@ impl Generations<ReadOnly> {
         tempdir: impl AsRef<Path>,
         author: impl Into<String>,
         hostname: impl Into<String>,
+        argv: &[String],
     ) -> Result<Generations<ReadWrite<'_>>, GenerationsError> {
         if env::var("_FLOX_TESTING_NO_WRITABLE").is_ok() {
             panic!("Can't create writable generations when _FLOX_TESTING_NO_WRITABLE is set");
@@ -251,6 +254,7 @@ impl Generations<ReadOnly> {
                 _read_only: self,
                 author: author.into(),
                 hostname: hostname.into(),
+                argv: argv.to_owned(),
             },
         })
     }
@@ -322,6 +326,7 @@ impl Generations<ReadWrite<'_>> {
         let (generation, history_item) = metadata.add_generation(AddGenerationOptions {
             author: self._state.author.clone(),
             hostname: self._state.hostname.clone(),
+            argv: Some(self._state.argv.clone()),
             timestamp: Utc::now(),
             kind: change_kind,
         });
@@ -370,6 +375,7 @@ impl Generations<ReadWrite<'_>> {
         let (_, history_item) = metadata.switch_generation(SwitchGenerationOptions {
             author: self._state.author.clone(),
             hostname: self._state.hostname.clone(),
+            argv: Some(self._state.argv.clone()),
             timestamp: Utc::now(),
             next_generation,
         })?;
@@ -609,6 +615,7 @@ pub struct AllGenerationsMetadata {
 pub struct AddGenerationOptions {
     pub author: String,
     pub hostname: String,
+    pub argv: Option<Vec<String>>,
     pub timestamp: DateTime<Utc>,
     pub kind: HistoryKind,
 }
@@ -617,6 +624,7 @@ pub struct AddGenerationOptions {
 pub struct SwitchGenerationOptions {
     pub author: String,
     pub hostname: String,
+    pub argv: Option<Vec<String>>,
     pub timestamp: DateTime<Utc>,
     pub next_generation: GenerationId,
 }
@@ -631,6 +639,7 @@ impl AllGenerationsMetadata {
         AddGenerationOptions {
             author,
             hostname,
+            argv,
             timestamp,
             kind,
         }: AddGenerationOptions,
@@ -645,9 +654,18 @@ impl AllGenerationsMetadata {
         let next_generation = GenerationId(self.total_generations + 1);
         let current_generation = self.current_gen();
 
+        // Use "flox" instead of argv[0].
+        // We don't for example need to print a full path if flox is invoked
+        // with /usr/bin/flox
+        let command = argv.map(|mut argv| {
+            argv[0] = "flox".to_string();
+            argv
+        });
+
         let history_spec = HistorySpec {
             author,
             hostname,
+            command,
             timestamp,
             kind,
             previous_generation: current_generation,
@@ -678,6 +696,7 @@ impl AllGenerationsMetadata {
         SwitchGenerationOptions {
             author,
             hostname,
+            argv,
             timestamp,
             next_generation,
         }: SwitchGenerationOptions,
@@ -695,9 +714,18 @@ impl AllGenerationsMetadata {
             return Err(GenerationsError::GenerationNotFound(*next_generation));
         };
 
+        // Use "flox" instead of argv[0].
+        // We don't for example need to print a full path if flox is invoked
+        // with /usr/bin/flox
+        let command = argv.map(|mut argv| {
+            argv[0] = "flox".to_string();
+            argv
+        });
+
         let history_spec = HistorySpec {
             author,
             hostname,
+            command,
             timestamp,
             previous_generation: Some(previous_generation),
             current_generation: next_generation,
@@ -940,8 +968,9 @@ pub struct HistorySpec {
     pub author: String,
     /// Hostname of the machine, on which the change was made
     pub hostname: String,
+    /// Command line args to the command that performed the change
+    pub command: Option<Vec<String>>,
     /// Timestamp associated with the change
-
     // for consistency with the existing SingleGenerationMetadata
     #[serde(with = "chrono::serde::ts_seconds")]
     pub timestamp: DateTime<Utc>,
@@ -1139,6 +1168,7 @@ mod compat {
                 let add_generation_options = AddGenerationOptions {
                     author: "unknown".to_string(),
                     hostname: "unknown".to_string(),
+                    argv: None,
                     timestamp: generation_metadata.created,
                     kind: super::HistoryKind::MigrateV1 {
                         description: generation_metadata.description.clone(),
@@ -1169,6 +1199,7 @@ mod compat {
                 let add_generation_options = SwitchGenerationOptions {
                     author: "unknown".to_string(),
                     hostname: "unknown".to_string(),
+                    argv: None,
                     timestamp,
                     next_generation: super::GenerationId(*original_current_gen),
                 };
@@ -1184,17 +1215,22 @@ mod compat {
 
 #[cfg(any(test, feature = "tests"))]
 pub mod test_helpers {
+    use std::sync::LazyLock;
+
     use chrono::Utc;
 
     use super::{AddGenerationOptions, GenerationId, HistoryKind, SwitchGenerationOptions};
 
     pub const AUTHOR: &str = "author";
     pub const HOSTNAME: &str = "host";
+    pub static ARGV: LazyLock<Vec<String>> =
+        LazyLock::new(|| vec!["flox".to_string(), "subcommand".to_string()]);
 
     pub fn default_add_generation_options() -> AddGenerationOptions {
         AddGenerationOptions {
             author: AUTHOR.into(),
             hostname: HOSTNAME.into(),
+            argv: Some((*ARGV).clone()),
             timestamp: Utc::now(),
             kind: HistoryKind::Other {
                 summary: "mock".into(),
@@ -1208,6 +1244,7 @@ pub mod test_helpers {
         SwitchGenerationOptions {
             author: AUTHOR.into(),
             hostname: HOSTNAME.into(),
+            argv: Some(ARGV.clone()),
             timestamp: Utc::now(),
             next_generation,
         }
@@ -1221,7 +1258,7 @@ mod tests {
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::environment::Environment;
-    use crate::models::environment::generations::test_helpers::{AUTHOR, HOSTNAME};
+    use crate::models::environment::generations::test_helpers::{ARGV, AUTHOR, HOSTNAME};
     use crate::models::environment::path_environment::test_helpers::new_path_environment;
 
     const GEN_ID_1: GenerationId = GenerationId(1);
@@ -1233,6 +1270,7 @@ mod tests {
         use serde_json::{Value, json};
 
         use crate::models::environment::generations::test_helpers::{
+            ARGV,
             AUTHOR,
             HOSTNAME,
             default_add_generation_options,
@@ -1493,6 +1531,7 @@ mod tests {
                     kind: change_kind,
                     author: AUTHOR.to_string(),
                     hostname: HOSTNAME.to_string(),
+                    command: Some((*ARGV).clone()),
                     timestamp: Utc::now(),
                     current_generation: 2.into(),
                     previous_generation: Some(1.into()),
@@ -1506,6 +1545,7 @@ mod tests {
             let mut value = json! {{
                 "author": AUTHOR,
                 "hostname": HOSTNAME,
+                "command": *ARGV.clone(),
                 "timestamp": Utc::now().timestamp(),
                 "current_generation": "2",
                 "previous_generation": "1",
@@ -1667,6 +1707,7 @@ mod tests {
             AddGenerationOptions {
                 author: "unknown".to_string(),
                 hostname: "unknown".to_string(),
+                argv: None,
                 timestamp,
                 kind: HistoryKind::MigrateV1 {
                     description: "description".to_string(),
@@ -1819,6 +1860,7 @@ mod tests {
                             .switch_generation(SwitchGenerationOptions {
                                 author: "unknown".into(),
                                 hostname: "unknown".into(),
+                                argv: None,
                                 timestamp: date + Duration::hours(3),
                                 next_generation: second_generation,
                             })
@@ -1859,7 +1901,9 @@ mod tests {
         )
         .unwrap();
 
-        let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
+        let mut generations_rw = generations
+            .writable(&tempdir, AUTHOR, HOSTNAME, &ARGV)
+            .unwrap();
         generations_rw
             .add_generation(&mut core_env, HistoryKind::Other {
                 summary: "First generation".to_string(),
@@ -1882,7 +1926,9 @@ mod tests {
     #[test]
     fn set_current_generation_backwards_and_forwards() {
         let (mut generations, tempdir) = setup_two_generations();
-        let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
+        let mut generations_rw = generations
+            .writable(&tempdir, AUTHOR, HOSTNAME, &ARGV)
+            .unwrap();
 
         assert_eq!(
             generations_rw.metadata().unwrap().current_gen(),
@@ -1908,7 +1954,9 @@ mod tests {
     #[test]
     fn set_current_generation_not_found() {
         let (mut generations, tempdir) = setup_two_generations();
-        let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
+        let mut generations_rw = generations
+            .writable(&tempdir, AUTHOR, HOSTNAME, &ARGV)
+            .unwrap();
 
         let res = generations_rw.set_current_generation(GenerationId(10));
         assert!(
@@ -1921,7 +1969,9 @@ mod tests {
     #[test]
     fn set_current_generation_already_current() {
         let (mut generations, tempdir) = setup_two_generations();
-        let mut generations_rw = generations.writable(&tempdir, AUTHOR, HOSTNAME).unwrap();
+        let mut generations_rw = generations
+            .writable(&tempdir, AUTHOR, HOSTNAME, &ARGV)
+            .unwrap();
 
         let current_gen = generations_rw.metadata().unwrap().current_gen().unwrap();
         let res = generations_rw.set_current_generation(current_gen);
