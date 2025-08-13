@@ -97,7 +97,7 @@ Modify environments
     include        Compose environments together
     upgrade        Upgrade packages in an environment
     uninstall      Uninstall installed packages from an environment
-    generations    Interact with environment generations
+    generations    Version control for environments pushed to FloxHub
 
 Share with others
     build          Build packages for Flox
