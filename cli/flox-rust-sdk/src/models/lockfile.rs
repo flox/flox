@@ -234,6 +234,7 @@ pub struct LockedPackageCatalog {
     // endregion
 
     // region: converted fields
+    /// A map of output name to store path
     pub outputs: BTreeMap<String, String>,
     // endregion
 
