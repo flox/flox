@@ -24,7 +24,9 @@ pub struct List {
 impl List {
     #[instrument(name = "list", skip_all)]
     pub fn handle(self, flox: Flox) -> Result<()> {
-        let env = self.environment.to_concrete_environment(&flox)?;
+        let env = self
+            .environment
+            .detect_concrete_environment(&flox, "List using")?;
         environment_subcommand_metric!("generations::list", env);
 
         let env: GenerationsEnvironment = env.try_into()?;

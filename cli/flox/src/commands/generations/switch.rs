@@ -25,7 +25,9 @@ pub struct Switch {
 impl Switch {
     #[instrument(name = "switch", skip_all)]
     pub fn handle(self, flox: Flox) -> Result<()> {
-        let env = self.environment.to_concrete_environment(&flox)?;
+        let env = self
+            .environment
+            .detect_concrete_environment(&flox, "Switch using")?;
 
         environment_subcommand_metric!("generations::switch", env);
         let mut env: GenerationsEnvironment = env.try_into()?;
