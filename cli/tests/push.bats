@@ -40,24 +40,6 @@ teardown() {
   common_test_teardown
 }
 
-# simulate a dummy env update pushed to floxhub
-function update_dummy_env() {
-  OWNER="$1"
-  shift
-  ENV_NAME="$1"
-  shift
-
-  FLOXHUB_FLOXMETA_DIR="$BATS_TEST_TMPDIR/floxhub/$OWNER/floxmeta"
-
-  pushd "$FLOXHUB_FLOXMETA_DIR" >/dev/null || return
-
-  touch new_file
-  git add .
-  git commit -m "update"
-
-  popd >/dev/null || return
-}
-
 # ---------------------------------------------------------------------------- #
 # These don't need the catalog
 
