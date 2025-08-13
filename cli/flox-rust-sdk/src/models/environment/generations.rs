@@ -889,7 +889,7 @@ impl HistorySpec {
         match &self.info {
             HistoryKind::Import => "imported unmanaged path environment".to_string(),
             HistoryKind::MigrateV1 { description } => {
-                format!("migrated generation from v1 metadata: {description}")
+                format!("{description} [metadata migrated]")
             },
             HistoryKind::Install { targets } => format_targets("installed", "package", targets),
             HistoryKind::Edit => "manually edited the manifest".to_string(),
