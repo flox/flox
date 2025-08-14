@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use anyhow::Result;
 use bpaf::Bpaf;
+use crossterm::style::Stylize;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
     self,
@@ -14,6 +15,7 @@ use tracing::instrument;
 
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::dialog::Dialog;
 
 /// Arguments for the `flox generations history` command
 #[derive(Bpaf, Debug, Clone)]
@@ -51,8 +53,13 @@ impl Display for DisplayChange<'_> {
         let summary = self.change.summary();
         let generation = self.change.current_generation;
 
+        let line = format!("Date:       {date}");
+        if Dialog::can_prompt() {
+            writeln!(f, "{}", line.bold())?;
+        } else {
+            writeln!(f, "{}", line)?;
+        }
         write!(f, "{}", formatdoc! {"
-            Date:       {date}
             Author:     {author}
             Host:       {host}
             Generation: {generation}
@@ -64,8 +71,9 @@ impl Display for DisplayChange<'_> {
 /// List formatting of generation data, following the template
 ///
 /// ```text
-/// * <generation id>[ (current)]:
-///   <generation metadata>          # implemented by [DisplayMetadata] above
+/// <generation metadata>          # implemented by [DisplayMetadata] above
+///
+/// ...
 /// ```
 struct DisplayHistory<'m>(&'m generations::History);
 impl Display for DisplayHistory<'_> {
@@ -73,7 +81,7 @@ impl Display for DisplayHistory<'_> {
         let mut iter = self.0.into_iter().peekable();
         while let (Some(change), peek) = (iter.next(), iter.peek()) {
             let next = DisplayChange { change };
-            write!(f, "* {}", indent::indent_by(2, next.to_string()))?;
+            write!(f, "{}", next)?;
             if peek.is_some() {
                 writeln!(f)?;
                 writeln!(f)?;

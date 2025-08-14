@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use anyhow::Result;
 use bpaf::Bpaf;
+use crossterm::style::Stylize;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
     AllGenerationsMetadata,
@@ -9,10 +10,12 @@ use flox_rust_sdk::models::environment::generations::{
     GenerationsExt,
     SingleGenerationMetadata,
 };
+use indoc::formatdoc;
 use tracing::instrument;
 
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
+use crate::utils::dialog::Dialog;
 
 /// Arguments for the `flox generations list` command
 #[derive(Bpaf, Debug, Clone)]
@@ -44,38 +47,57 @@ struct DisplayMetadata<'m> {
 }
 impl Display for DisplayMetadata<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Description: {}", self.metadata.description)?;
-        write!(f, "Created: {}", self.metadata.created)?;
-        if let Some(last_active) = self.metadata.last_active {
-            writeln!(f)?;
-            write!(f, "Last Active: {last_active}")?;
+        let description = &self.metadata.description;
+        let created = self.metadata.created;
+        let last_active = if let Some(last_active) = self.metadata.last_active {
+            last_active.to_string()
+        } else {
+            "Now".to_string()
         };
-        Ok(())
+
+        write!(f, "{}", formatdoc! {"
+            Description: {description}
+            Created:     {created}
+            Last Active: {last_active}"})
     }
 }
 
 /// Formatter container for [AllGenerationsMetadata].
 /// List formatting of generation data, following the template
 ///
+/// Current version:
 /// ```text
-/// * <generation id>[ (current)]:
-///   <generation metadata>          # implemented by [DisplayMetadata] above
+/// Generation: <generation id> (current)
+/// <generation metadata>          # implemented by [DisplayMetadata] above
+/// ```
+///
+/// Other versions:
+/// ```text
+/// Generation: <generation id>
+/// <generation metadata>
 /// ```
 struct DisplayAllMetadata<'m>(&'m AllGenerationsMetadata);
 impl Display for DisplayAllMetadata<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut iter = self.0.generations().into_iter().peekable();
         while let (Some((id, metadata)), peek) = (iter.next(), iter.peek()) {
-            write!(f, "* {id}")?;
-            if Some(id) == self.0.current_gen() {
-                write!(f, " (current)")?;
+            let generation = format!("Generation:  {id}");
+            let current = if Some(id) == self.0.current_gen() {
+                " (current)"
+            } else {
+                ""
+            };
+            if Dialog::can_prompt() {
+                write!(f, "{}{}", generation.bold(), current.bold().yellow())?;
+            } else {
+                write!(f, "{}{}", generation, current)?;
             }
-            writeln!(f, ":")?;
+            writeln!(f)?;
 
             let next = DisplayMetadata {
                 metadata: &metadata,
             };
-            write!(f, "{}", indent::indent_all_by(2, next.to_string()))?;
+            write!(f, "{}", next)?;
             if peek.is_some() {
                 writeln!(f)?;
                 writeln!(f)?;
@@ -116,7 +138,7 @@ mod tests {
 
         let expected = indoc! {"
             Description: Generation description
-            Created: 1970-01-01 00:00:00 UTC
+            Created:     1970-01-01 00:00:00 UTC
             Last Active: 1970-01-01 00:00:00 UTC"
         };
 
@@ -137,7 +159,8 @@ mod tests {
 
         let expected = indoc! {"
             Description: Generation description
-            Created: 1970-01-01 00:00:00 UTC"
+            Created:     1970-01-01 00:00:00 UTC
+            Last Active: Now"
         };
 
         assert_eq!(actual, expected);
@@ -168,19 +191,20 @@ mod tests {
         let actual = DisplayAllMetadata(&metadata).to_string();
 
         let expected = indoc! {"
-            * 1:
-              Description: mock
-              Created: 1970-01-01 01:00:00 UTC
-              Last Active: 1970-01-01 02:00:00 UTC
+            Generation:  1
+            Description: mock
+            Created:     1970-01-01 01:00:00 UTC
+            Last Active: 1970-01-01 02:00:00 UTC
 
-            * 2 (current):
-              Description: mock
-              Created: 1970-01-01 02:00:00 UTC
+            Generation:  2 (current)
+            Description: mock
+            Created:     1970-01-01 02:00:00 UTC
+            Last Active: Now
 
-            * 3:
-              Description: mock
-              Created: 1970-01-01 03:00:00 UTC
-              Last Active: 1970-01-01 04:00:00 UTC"
+            Generation:  3
+            Description: mock
+            Created:     1970-01-01 03:00:00 UTC
+            Last Active: 1970-01-01 04:00:00 UTC"
         };
 
         assert_eq!(actual, expected);
