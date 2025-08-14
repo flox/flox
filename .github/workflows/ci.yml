@@ -466,10 +466,11 @@ jobs:
 
       - name: "Upload Bats Tests results"
         uses: "codecov/test-results-action@v1"
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && (github.ref_name == 'main' || github.event_name != 'merge_group') }}
         with:
           disable_search: true
           files: "./report.xml"
           flags: "nix-integration-tests, ${{ matrix.test-tags }}, ${{ matrix.system }}"
           verbose: true
           use_oidc: true
+          override_branch: "main-or-merge-queue"
