@@ -282,14 +282,14 @@ impl Environment for ManagedEnvironment {
             })
             .collect();
 
-        let change = HistoryKind::Install { targets };
-
         let result = local_checkout.install(packages, flox)?;
-
-        generations
-            .add_generation(&mut local_checkout, change)
-            .map_err(ManagedEnvironmentError::CommitGeneration)?;
-        self.lock_pointer()?;
+        if result.new_manifest.is_some() {
+            let change = HistoryKind::Install { targets };
+            generations
+                .add_generation(&mut local_checkout, change)
+                .map_err(ManagedEnvironmentError::CommitGeneration)?;
+            self.lock_pointer()?;
+        }
         if let Some(store_paths) = &result.built_environments {
             self.link(store_paths)?;
         }
@@ -323,6 +323,8 @@ impl Environment for ManagedEnvironment {
         let result = local_checkout.uninstall(packages.clone(), flox)?;
         let change = HistoryKind::Uninstall { targets: packages };
 
+        // It's an error to uninstall a package that isn't installed so if we
+        // got this far then we need a new generation.
         generations
             .add_generation(&mut local_checkout, change)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
@@ -402,21 +404,21 @@ impl Environment for ManagedEnvironment {
         }
 
         let result = local_checkout.upgrade(flox, groups_or_iids, true)?;
+        if !result.diff().is_empty() {
+            let change = HistoryKind::Upgrade {
+                targets: result.packages().collect(),
+            };
+            generations
+                .add_generation(&mut local_checkout, change)
+                .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
-        let change = HistoryKind::Upgrade {
-            targets: result.packages().collect(),
-        };
-
-        generations
-            .add_generation(&mut local_checkout, change)
-            .map_err(ManagedEnvironmentError::CommitGeneration)?;
-
-        write_pointer_lockfile(
-            self.path.join(GENERATION_LOCK_FILENAME),
-            &self.floxmeta,
-            remote_branch_name(&self.pointer),
-            branch_name(&self.pointer, &self.path).into(),
-        )?;
+            write_pointer_lockfile(
+                self.path.join(GENERATION_LOCK_FILENAME),
+                &self.floxmeta,
+                remote_branch_name(&self.pointer),
+                branch_name(&self.pointer, &self.path).into(),
+            )?;
+        }
         Ok(result)
     }
 
@@ -444,20 +446,22 @@ impl Environment for ManagedEnvironment {
         }
 
         let result = local_checkout.include_upgrade(flox, to_upgrade.clone())?;
+        if !result.include_diff().is_empty() {
+            let change = HistoryKind::IncludeUpgrade {
+                targets: to_upgrade,
+            };
+            generations
+                .add_generation(&mut local_checkout, change)
+                .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
-        let change = HistoryKind::IncludeUpgrade {
-            targets: to_upgrade,
-        };
-        generations
-            .add_generation(&mut local_checkout, change)
-            .map_err(ManagedEnvironmentError::CommitGeneration)?;
+            write_pointer_lockfile(
+                self.path.join(GENERATION_LOCK_FILENAME),
+                &self.floxmeta,
+                remote_branch_name(&self.pointer),
+                branch_name(&self.pointer, &self.path).into(),
+            )?;
+        }
 
-        write_pointer_lockfile(
-            self.path.join(GENERATION_LOCK_FILENAME),
-            &self.floxmeta,
-            remote_branch_name(&self.pointer),
-            branch_name(&self.pointer, &self.path).into(),
-        )?;
         Ok(result)
     }
 
@@ -1851,7 +1855,7 @@ mod test {
     use std::collections::BTreeMap;
     use std::str::FromStr;
 
-    use indoc::indoc;
+    use indoc::{formatdoc, indoc};
     use test_helpers::{
         mock_managed_environment_from_env_files,
         mock_managed_environment_unlocked,
@@ -3088,6 +3092,151 @@ mod test {
         assert_eq!(
             lockfile.compose.unwrap().include[0].manifest,
             toml_edit::de::from_str(dep_manifest_contents).unwrap()
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn install_generations() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+
+        let mut env = mock_managed_environment_in(&flox, "version = 1", owner, &temp_dir, None);
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&1),
+            "initialised environment should have generation 1"
+        );
+
+        let packages = [PackageToInstall::Catalog(
+            CatalogPackage::from_str("hello").unwrap(),
+        )];
+
+        env.install(&packages, &flox).unwrap();
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&2),
+            "installing a package should create a new generation"
+        );
+
+        env.install(&packages, &flox).unwrap();
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&2),
+            "installing the same package should not change the generation"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn uninstall_generations() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+
+        let package = "hello".to_string();
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            {package}.pkg-path = "{package}"
+        "#};
+
+        let mut env = mock_managed_environment_in(&flox, &manifest, owner, &temp_dir, None);
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&1),
+            "initialised environment should have generation 1"
+        );
+
+        env.uninstall(vec![package.clone()], &flox).unwrap();
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&2),
+            "uninstalling a package should create a new generation"
+        );
+
+        env.uninstall(vec![package.clone()], &flox)
+            .expect_err("uninstalling a package should fail if it is not installed");
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&2),
+            "uninstalling the same package should not change the generation"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn edit_generations() {
+        let owner = "owner".parse().unwrap();
+        let (flox, temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let mut env = mock_managed_environment_in(&flox, "version = 1", owner, &temp_dir, None);
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&1),
+            "initialised environment should have generation 1"
+        );
+
+        let manifest_updated = indoc! {r#"
+            # updated
+            version = 1
+        "#};
+
+        env.edit(&flox, manifest_updated.to_string()).unwrap();
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&2),
+            "edit with manifest changes should create a new generation"
+        );
+
+        env.edit(&flox, manifest_updated.to_string()).unwrap();
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&2),
+            "edit with the same manifest should not change the generation"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn upgrade_generations() {
+        let owner = "owner".parse().unwrap();
+        let (mut flox, temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let manifest = indoc! {r#"
+            version = 1
+
+            [install]
+            hello.pkg-path = "hello"
+        "#};
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/old_hello.yaml")).await;
+
+        let mut env = mock_managed_environment_in(&flox, manifest, owner, &temp_dir, None);
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&1),
+            "initialised environment should have generation 1"
+        );
+
+        flox.catalog_client =
+            catalog_replay_client(GENERATED_DATA.join("resolve/hello.yaml")).await;
+
+        env.upgrade(&flox, &[]).unwrap();
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&2),
+            "upgrade with changes should create a new generation"
+        );
+
+        env.upgrade(&flox, &[]).unwrap();
+        assert_eq!(
+            env.generations_metadata().unwrap().current_gen().as_deref(),
+            Some(&2),
+            "upgrade with no changes should not change the generation"
         );
     }
 }
