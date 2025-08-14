@@ -26,7 +26,7 @@ Generation numbers can be found with
 
 Switching generation restores the environment's manifest and lockfile to the
 state of the specified generation, sets it as the current generation, and adds
-an entry the generation history.
+an entry to generation history.
 
 Generations don't always have a linear history. If you create generation 2 by
 installing a package, rollback to generation 1 and create generation 3 by

@@ -49,8 +49,8 @@ impl Display for DisplayMetadata<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let description = &self.metadata.description;
         let created = self.metadata.created;
-        let last_active = if let Some(last_active) = self.metadata.last_active {
-            last_active.to_string()
+        let last_live = if let Some(last_live) = self.metadata.last_live {
+            last_live.to_string()
         } else {
             "Now".to_string()
         };
@@ -58,7 +58,7 @@ impl Display for DisplayMetadata<'_> {
         write!(f, "{}", formatdoc! {"
             Description: {description}
             Created:     {created}
-            Last Active: {last_active}"})
+            Last Live:   {last_live}"})
     }
 }
 
@@ -130,7 +130,7 @@ mod tests {
         let actual = DisplayMetadata {
             metadata: &SingleGenerationMetadata {
                 created: DateTime::default(),
-                last_active: Some(DateTime::default()),
+                last_live: Some(DateTime::default()),
                 description: "Generation description".to_string(),
             },
         }
@@ -139,7 +139,7 @@ mod tests {
         let expected = indoc! {"
             Description: Generation description
             Created:     1970-01-01 00:00:00 UTC
-            Last Active: 1970-01-01 00:00:00 UTC"
+            Last Live:   1970-01-01 00:00:00 UTC"
         };
 
         assert_eq!(actual, expected);
@@ -151,7 +151,7 @@ mod tests {
         let actual = DisplayMetadata {
             metadata: &SingleGenerationMetadata {
                 created: DateTime::default(),
-                last_active: None,
+                last_live: None,
                 description: "Generation description".to_string(),
             },
         }
@@ -160,7 +160,7 @@ mod tests {
         let expected = indoc! {"
             Description: Generation description
             Created:     1970-01-01 00:00:00 UTC
-            Last Active: Now"
+            Last Live:   Now"
         };
 
         assert_eq!(actual, expected);
@@ -194,17 +194,17 @@ mod tests {
             Generation:  1
             Description: mock
             Created:     1970-01-01 01:00:00 UTC
-            Last Active: 1970-01-01 02:00:00 UTC
+            Last Live:   1970-01-01 02:00:00 UTC
 
             Generation:  2 (current)
             Description: mock
             Created:     1970-01-01 02:00:00 UTC
-            Last Active: Now
+            Last Live:   Now
 
             Generation:  3
             Description: mock
             Created:     1970-01-01 03:00:00 UTC
-            Last Active: 1970-01-01 04:00:00 UTC"
+            Last Live:   1970-01-01 04:00:00 UTC"
         };
 
         assert_eq!(actual, expected);

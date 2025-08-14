@@ -23,7 +23,7 @@ For environments pushed to FloxHub, every modification to the environment
 creates a new generation of the environment.
 
 `flox generations list` prints all generations of the environment, including
-which generation is currently active.
+which generation is currently live.
 
 ```{.include}
 ./include/environment-options.md

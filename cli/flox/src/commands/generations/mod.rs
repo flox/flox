@@ -26,7 +26,7 @@ pub enum GenerationsCommands {
     #[bpaf(command)]
     History(#[bpaf(external(history::history))] history::History),
 
-    /// Switch to the previously active generation
+    /// Switch to the previous live generation
     #[bpaf(command)]
     Rollback(#[bpaf(external(rollback::rollback))] rollback::Rollback),
 
