@@ -172,7 +172,7 @@ EOF
 
     RUST_LOG=debug run "$FLOX_BIN" services
     assert_success
-    assert_output --partial "Interact with services"
+    assert_output --partial "Manage services in an environment"
 }
 
 @test "all imperative commands error when no services are defined" {

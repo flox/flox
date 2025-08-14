@@ -84,7 +84,7 @@ Manage environments
 
 Use environments
     activate       Enter the environment, type 'exit' to leave
-    services       Interact with services
+    services       Manage services in an environment
 
 Discover packages
     search         Search for system or library packages to install
@@ -97,6 +97,7 @@ Modify environments
     include        Compose environments together
     upgrade        Upgrade packages in an environment
     uninstall      Uninstall installed packages from an environment
+    generations    Version control for environments pushed to FloxHub
 
 Share with others
     build          Build packages for Flox

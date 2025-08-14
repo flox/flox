@@ -855,7 +855,7 @@ enum UseCommands {
     )]
     Activate(#[bpaf(external(activate::activate))] activate::Activate),
 
-    /// Interact with services
+    /// Manage services in an environment
     #[bpaf(command)]
     Services(
         #[bpaf(
@@ -959,8 +959,8 @@ enum ModifyCommands {
     )]
     Uninstall(#[bpaf(external(uninstall::uninstall))] uninstall::Uninstall),
 
-    /// Interact with environment generations
-    #[bpaf(command, hide)]
+    /// Version control for environments pushed to FloxHub
+    #[bpaf(command)]
     Generations(
         #[bpaf(
             external(generations::generations_commands),
