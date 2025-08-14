@@ -84,7 +84,7 @@ Manage environments
 
 Use environments
     activate       Enter the environment, type 'exit' to leave
-    services       Interact with services
+    services       Manage services in an environment
 
 Discover packages
     search         Search for system or library packages to install

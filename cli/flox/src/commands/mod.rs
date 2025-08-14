@@ -855,7 +855,7 @@ enum UseCommands {
     )]
     Activate(#[bpaf(external(activate::activate))] activate::Activate),
 
-    /// Interact with services
+    /// Manage services in an environment
     #[bpaf(command)]
     Services(
         #[bpaf(
