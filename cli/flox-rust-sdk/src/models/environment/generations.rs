@@ -20,6 +20,7 @@
 use std::collections::BTreeMap;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::{env, fs};
 
 use chrono::{DateTime, Utc};
@@ -802,11 +803,20 @@ impl SingleGenerationMetadata {
     derive_more::DerefMut,
     derive_more::From,
     derive_more::Display,
-    derive_more::FromStr,
     DeserializeFromStr,
     SerializeDisplay,
 )]
 pub struct GenerationId(usize);
+
+impl FromStr for GenerationId {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(GenerationId(s.parse::<usize>().map_err(|_| {
+            "generations must be referenced by number".to_string()
+        })?))
+    }
+}
 
 /// The type of history event that is associated with a change.
 /// These are generation _creating_ changes (such as install, edit, etc.)
