@@ -20,7 +20,7 @@ flox [<general-options>] generations rollback
 Switch to the previous live generation of the environment.
 
 Rolling back to the previous generation restores the environment's manifest and
-lockfile to the state of the previous generation, sets it as the current
+lockfile to the state of the previous generation, sets it as the live
 generation, and adds an entry to generation history.
 
 The previously live generation isn't always N-1. If you've previously rolled

@@ -67,7 +67,7 @@ impl Display for DisplayMetadata<'_> {
 ///
 /// Current version:
 /// ```text
-/// Generation: <generation id> (current)
+/// Generation: <generation id> (live)
 /// <generation metadata>          # implemented by [DisplayMetadata] above
 /// ```
 ///
@@ -83,7 +83,7 @@ impl Display for DisplayAllMetadata<'_> {
         while let (Some((id, metadata)), peek) = (iter.next(), iter.peek()) {
             let generation = format!("Generation:  {id}");
             let current = if Some(id) == self.0.current_gen() {
-                " (current)"
+                " (live)"
             } else {
                 ""
             };
@@ -196,7 +196,7 @@ mod tests {
             Created:     1970-01-01 01:00:00 UTC
             Last Live:   1970-01-01 02:00:00 UTC
 
-            Generation:  2 (current)
+            Generation:  2 (live)
             Description: mock
             Created:     1970-01-01 02:00:00 UTC
             Last Live:   Now
