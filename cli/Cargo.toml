@@ -62,6 +62,7 @@ proptest-derive = "0.5.1"
 regex = "1.10"
 regress = "0.10.4"
 reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
+schemars = "1"
 semver = "1.0.26"
 sentry = { version = "0.32.3", features = [
     "test",
