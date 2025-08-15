@@ -8,6 +8,19 @@ use thiserror::Error;
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, proptest_derive::Arbitrary)]
 pub struct Version<const V: u8>;
 
+impl<const V: u8> schemars::JsonSchema for Version<V> {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "version".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "integer",
+            "const": V,
+        })
+    }
+}
+
 impl<const V: u8> Default for Version<V> {
     fn default() -> Self {
         Self
