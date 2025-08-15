@@ -326,7 +326,7 @@ impl Generations<ReadWrite<'_>> {
         let (generation, history_item) = metadata.add_generation(AddGenerationOptions {
             author: self._state.author.clone(),
             hostname: self._state.hostname.clone(),
-            argv: Some(self._state.argv.clone()),
+            argv: self._state.argv.clone(),
             timestamp: Utc::now(),
             kind: change_kind,
         });
@@ -375,7 +375,7 @@ impl Generations<ReadWrite<'_>> {
         let (_, history_item) = metadata.switch_generation(SwitchGenerationOptions {
             author: self._state.author.clone(),
             hostname: self._state.hostname.clone(),
-            argv: Some(self._state.argv.clone()),
+            argv: self._state.argv.clone(),
             timestamp: Utc::now(),
             next_generation,
         })?;
@@ -615,7 +615,7 @@ pub struct AllGenerationsMetadata {
 pub struct AddGenerationOptions {
     pub author: String,
     pub hostname: String,
-    pub argv: Option<Vec<String>>,
+    pub argv: Vec<String>,
     pub timestamp: DateTime<Utc>,
     pub kind: HistoryKind,
 }
@@ -624,7 +624,7 @@ pub struct AddGenerationOptions {
 pub struct SwitchGenerationOptions {
     pub author: String,
     pub hostname: String,
-    pub argv: Option<Vec<String>>,
+    pub argv: Vec<String>,
     pub timestamp: DateTime<Utc>,
     pub next_generation: GenerationId,
 }
@@ -654,18 +654,10 @@ impl AllGenerationsMetadata {
         let next_generation = GenerationId(self.total_generations + 1);
         let current_generation = self.current_gen();
 
-        // Use "flox" instead of argv[0].
-        // We don't for example need to print a full path if flox is invoked
-        // with /usr/bin/flox
-        let command = argv.map(|mut argv| {
-            argv[0] = "flox".to_string();
-            argv
-        });
-
         let history_spec = HistorySpec {
             author,
             hostname,
-            command,
+            command: Self::parse_argv(argv),
             timestamp,
             kind,
             previous_generation: current_generation,
@@ -714,18 +706,10 @@ impl AllGenerationsMetadata {
             return Err(GenerationsError::GenerationNotFound(*next_generation));
         };
 
-        // Use "flox" instead of argv[0].
-        // We don't for example need to print a full path if flox is invoked
-        // with /usr/bin/flox
-        let command = argv.map(|mut argv| {
-            argv[0] = "flox".to_string();
-            argv
-        });
-
         let history_spec = HistorySpec {
             author,
             hostname,
-            command,
+            command: Self::parse_argv(argv),
             timestamp,
             previous_generation: Some(previous_generation),
             current_generation: next_generation,
@@ -743,6 +727,21 @@ impl AllGenerationsMetadata {
             .expect("history event should have been inserted");
 
         Ok((next_generation, history_ref))
+    }
+
+    /// Parse ARGV to store in a `HistorySpec`.
+    ///
+    /// If empty, as invokved from a unit test, return `None`.
+    ///
+    /// If non-empty, replace the first index with `flox` because we don't need
+    /// to print the full path if `flox` was invoked with `/usr/local/bin/flox`.
+    fn parse_argv(mut argv: Vec<String>) -> Option<Vec<String>> {
+        if argv.is_empty() {
+            return None;
+        }
+
+        argv[0] = "flox".to_string();
+        Some(argv)
     }
 
     /// Access the history without granting access to the field
@@ -969,6 +968,7 @@ pub struct HistorySpec {
     /// Hostname of the machine, on which the change was made
     pub hostname: String,
     /// Command line args to the command that performed the change
+    /// This can be `None` if the change was invoked by a unit test or FloxHub.
     pub command: Option<Vec<String>>,
     /// Timestamp associated with the change
     // for consistency with the existing SingleGenerationMetadata
@@ -1168,7 +1168,7 @@ mod compat {
                 let add_generation_options = AddGenerationOptions {
                     author: "unknown".to_string(),
                     hostname: "unknown".to_string(),
-                    argv: None,
+                    argv: vec![],
                     timestamp: generation_metadata.created,
                     kind: super::HistoryKind::MigrateV1 {
                         description: generation_metadata.description.clone(),
@@ -1199,7 +1199,7 @@ mod compat {
                 let add_generation_options = SwitchGenerationOptions {
                     author: "unknown".to_string(),
                     hostname: "unknown".to_string(),
-                    argv: None,
+                    argv: vec![],
                     timestamp,
                     next_generation: super::GenerationId(*original_current_gen),
                 };
@@ -1230,7 +1230,7 @@ pub mod test_helpers {
         AddGenerationOptions {
             author: AUTHOR.into(),
             hostname: HOSTNAME.into(),
-            argv: Some((*ARGV).clone()),
+            argv: (*ARGV).clone(),
             timestamp: Utc::now(),
             kind: HistoryKind::Other {
                 summary: "mock".into(),
@@ -1244,7 +1244,7 @@ pub mod test_helpers {
         SwitchGenerationOptions {
             author: AUTHOR.into(),
             hostname: HOSTNAME.into(),
-            argv: Some(ARGV.clone()),
+            argv: ARGV.clone(),
             timestamp: Utc::now(),
             next_generation,
         }
@@ -1707,7 +1707,7 @@ mod tests {
             AddGenerationOptions {
                 author: "unknown".to_string(),
                 hostname: "unknown".to_string(),
-                argv: None,
+                argv: vec![],
                 timestamp,
                 kind: HistoryKind::MigrateV1 {
                     description: "description".to_string(),
@@ -1860,7 +1860,7 @@ mod tests {
                             .switch_generation(SwitchGenerationOptions {
                                 author: "unknown".into(),
                                 hostname: "unknown".into(),
-                                argv: None,
+                                argv: vec![],
                                 timestamp: date + Duration::hours(3),
                                 next_generation: second_generation,
                             })
