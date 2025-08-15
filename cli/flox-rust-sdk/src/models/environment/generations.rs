@@ -27,6 +27,7 @@ use chrono::{DateTime, Utc};
 use enum_dispatch::enum_dispatch;
 use flox_core::Version;
 use itertools::Itertools;
+use schemars::JsonSchema;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -602,7 +603,7 @@ impl TryFrom<ConcreteEnvironment> for GenerationsEnvironment {
 /// Generations are defined as immutable copy-on-write folders.
 /// Rollbacks and associated [SingleGenerationMetadata] are tracked per environment
 /// in a metadata file at the root of the environment branch.
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, JsonSchema)]
 #[skip_serializing_none]
 pub struct AllGenerationsMetadata {
     /// Schema version of the metadata file
@@ -847,7 +848,9 @@ impl SingleGenerationMetadata {
     derive_more::Display,
     DeserializeFromStr,
     SerializeDisplay,
+    JsonSchema,
 )]
+#[schemars(try_from = "String")]
 pub struct GenerationId(usize);
 
 impl FromStr for GenerationId {
@@ -863,44 +866,44 @@ impl FromStr for GenerationId {
 /// The type of history event that is associated with a change.
 /// These are generation _creating_ changes (such as install, edit, etc.)
 /// and metadata only changes such as switching generations.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[serde(tag = "kind")]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 #[skip_serializing_none]
 pub enum HistoryKind {
+    #[schemars(title = "Import")]
     Import,
-    MigrateV1 {
-        description: String,
-    },
+    #[schemars(title = "MigrateV1")]
+    MigrateV1 { description: String },
 
-    Install {
-        targets: Vec<String>,
-    },
+    #[schemars(title = "Install")]
+    Install { targets: Vec<String> },
+    #[schemars(title = "Edit")]
     Edit,
-    Uninstall {
-        targets: Vec<String>,
-    },
-    Upgrade {
-        targets: Vec<String>,
-    },
+    #[schemars(title = "Uninstall")]
+    Uninstall { targets: Vec<String> },
+    #[schemars(title = "Upgrade")]
+    Upgrade { targets: Vec<String> },
 
-    IncludeUpgrade {
-        targets: Vec<String>,
-    },
+    #[schemars(title = "IncludeUpgrade")]
+    IncludeUpgrade { targets: Vec<String> },
 
+    #[schemars(title = "SwitchGeneration")]
     SwitchGeneration,
-    Other {
-        summary: String,
-    },
+
+    #[schemars(title = "Other")]
+    Other { summary: String },
 
     #[serde(untagged)]
-    Unknown {
-        kind: String,
-    },
+    #[schemars(title = "Unknown")]
+    Unknown { kind: String },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, derive_more::Deref, derive_more::DerefMut)]
+#[derive(
+    Debug, Clone, PartialEq, Serialize, derive_more::Deref, derive_more::DerefMut, JsonSchema,
+)]
+#[schemars(with = "T")]
 pub struct WithOtherFields<T> {
     #[deref]
     #[deref_mut]
@@ -956,7 +959,7 @@ where
 
 /// The structure of a single change, tying together
 /// _who_ performed _what_ change, where and when.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[skip_serializing_none]
 pub struct HistorySpec {
     // change provided
@@ -975,6 +978,7 @@ pub struct HistorySpec {
     /// Timestamp associated with the change
     // for consistency with the existing SingleGenerationMetadata
     #[serde(with = "chrono::serde::ts_seconds")]
+    #[schemars(with = "usize")]
     pub timestamp: DateTime<Utc>,
 
     // associated generation(s)
@@ -1041,7 +1045,9 @@ impl HistorySpec {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, derive_more::AsRef)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Default, PartialEq, derive_more::AsRef, JsonSchema,
+)]
 pub struct History(Vec<WithOtherFields<HistorySpec>>);
 
 impl<'h> IntoIterator for &'h History {
@@ -1984,4 +1990,26 @@ mod tests {
             res
         );
     }
+}
+
+#[test]
+#[ignore = "only exporting schema"]
+fn export_schema() {
+    use std::fs::File;
+    use std::io::Write;
+    let schema = schemars::schema_for!(AllGenerationsMetadata);
+
+    // Slightly hacky since we cant read the target dir
+    // or even at least the workspace dir directly:
+    // <https://github.com/rust-lang/cargo/issues/3946>
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let schemars_basedir = manifest_dir.join("../target/schemars");
+    fs::create_dir_all(&schemars_basedir).unwrap();
+
+    let schema_path = schemars_basedir.join("generations-metadata-v2.schema.json");
+    let mut schema_file = File::create(&schema_path).unwrap();
+
+    writeln!(&mut schema_file, "{:#}", schema.as_value()).unwrap();
+
+    println!("schema written to {schema_path:?}")
 }
