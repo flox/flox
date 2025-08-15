@@ -796,6 +796,7 @@ impl AllGenerationsMetadata {
                     }
 
                     map.insert(spec.current_generation, SingleGenerationMetadata {
+                        parent: spec.previous_generation,
                         created: spec.timestamp,
                         last_live: None,
                         description: spec.summary(),
@@ -811,6 +812,8 @@ impl AllGenerationsMetadata {
 /// Metadata for a single generation of an environment
 #[derive(Clone, Debug, PartialEq)]
 pub struct SingleGenerationMetadata {
+    pub parent: Option<GenerationId>,
+
     /// unix timestamp of the creation time of this generation
     pub created: DateTime<Utc>,
 
@@ -826,6 +829,7 @@ impl SingleGenerationMetadata {
     /// Create a new generation metadata instance
     pub fn new(description: String) -> Self {
         Self {
+            parent: None,
             created: Utc::now(),
             last_live: None,
             description,
@@ -841,6 +845,7 @@ impl SingleGenerationMetadata {
     Eq,
     PartialOrd,
     Ord,
+    Hash,
     Default,
     derive_more::Deref,
     derive_more::DerefMut,
