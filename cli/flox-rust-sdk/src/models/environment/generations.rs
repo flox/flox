@@ -29,6 +29,7 @@ use flox_core::Version;
 use itertools::Itertools;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Value;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
@@ -113,7 +114,7 @@ pub struct Generations<State = ReadOnly> {
 
 impl<S> Generations<S> {
     /// Read the generations metadata for an environment
-    pub fn metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError> {
+    pub fn metadata(&self) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
         read_metadata(&self.repo, &self.branch)
     }
 
@@ -203,7 +204,7 @@ impl Generations<ReadOnly> {
             .map_err(GenerationsError::CreateBranch)?;
 
         let metadata = AllGenerationsMetadata::default();
-        write_metadata_file(metadata, repo.path())?;
+        write_metadata_file(metadata.into(), repo.path())?;
 
         repo.add(&[Path::new(GENERATIONS_METADATA_FILE)])
             .map_err(GenerationsError::StageChanges)?;
@@ -471,7 +472,7 @@ fn checkout_to_tempdir(
 fn read_metadata(
     repo: &GitCommandProvider,
     ref_name: &str,
-) -> Result<AllGenerationsMetadata, GenerationsError> {
+) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
     let metadata_content = repo
         .show(&format!("{}:{}", ref_name, GENERATIONS_METADATA_FILE))
         .map_err(GenerationsError::ShowMetadata)?;
@@ -483,12 +484,12 @@ fn read_metadata(
 
 fn parse_metadata<'de>(
     deserializer: impl Deserializer<'de, Error = serde_json::Error>,
-) -> Result<AllGenerationsMetadata, GenerationsError> {
+) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError> {
     #[derive(Debug, Deserialize)]
     #[serde(untagged)]
     enum MetadataVersionCompat {
         V1(compat::AllGenerationsMetadataV1),
-        V2(AllGenerationsMetadata),
+        V2(WithOtherFields<AllGenerationsMetadata>),
         VX { version: serde_json::Value },
     }
 
@@ -497,9 +498,20 @@ fn parse_metadata<'de>(
 
     let metadata = match metadata {
         MetadataVersionCompat::V1(all_generations_metadata_v1) => {
-            all_generations_metadata_v1.try_into()?
+            let migrated: AllGenerationsMetadata = all_generations_metadata_v1.try_into()?;
+            migrated.into()
         },
         MetadataVersionCompat::V2(all_generations_metadata) => all_generations_metadata,
+        MetadataVersionCompat::VX { version }
+            if version == Value::Number(1.into()) || version == Value::Number(2.into()) =>
+        {
+            Err(GenerationsError::DeserializeMetadata(
+                serde_json::Error::custom(format!(
+                    "Environment metadata of version '{version}' could not be parsed into its expected schema.",
+                )),
+            ))?
+        },
+
         MetadataVersionCompat::VX { version } => Err(GenerationsError::DeserializeMetadata(
             serde_json::Error::custom(format!(
                 "Environment metadata of version '{version}' is not supported",
@@ -514,7 +526,7 @@ fn parse_metadata<'de>(
 ///
 /// The path is expected to be a realized generations repository.
 fn write_metadata_file(
-    metadata: AllGenerationsMetadata,
+    metadata: WithOtherFields<AllGenerationsMetadata>,
     realized_path: &Path,
 ) -> Result<(), GenerationsError> {
     let metadata_content =
@@ -532,7 +544,9 @@ fn write_metadata_file(
 #[enum_dispatch]
 pub trait GenerationsExt {
     /// Return all generations metadata for the environment.
-    fn generations_metadata(&self) -> Result<AllGenerationsMetadata, GenerationsError>;
+    fn generations_metadata(
+        &self,
+    ) -> Result<WithOtherFields<AllGenerationsMetadata>, GenerationsError>;
 
     fn switch_generation(
         &mut self,
@@ -583,6 +597,7 @@ impl TryFrom<ConcreteEnvironment> for GenerationsEnvironment {
 /// Rollbacks and associated [SingleGenerationMetadata] are tracked per environment
 /// in a metadata file at the root of the environment branch.
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct AllGenerationsMetadata {
     /// Schema version of the metadata file
     version: Version<2>,
@@ -634,13 +649,13 @@ impl AllGenerationsMetadata {
             author,
             hostname,
             timestamp,
-            info: kind,
+            kind,
             previous_generation: current_generation,
             current_generation: next_generation,
         };
 
         // update self
-        self.history.0.push(history_spec);
+        self.history.0.push(history_spec.into());
         self.total_generations = self.total_generations.saturating_add(1);
 
         let history_ref = self
@@ -686,11 +701,11 @@ impl AllGenerationsMetadata {
             timestamp,
             previous_generation: Some(previous_generation),
             current_generation: next_generation,
-            info: HistoryKind::SwitchGeneration,
+            kind: HistoryKind::SwitchGeneration,
         };
 
         // add action to history
-        self.history.0.push(history_spec);
+        self.history.0.push(history_spec.into());
 
         let history_ref = self
             .history
@@ -728,7 +743,7 @@ impl AllGenerationsMetadata {
     pub fn generations(&self) -> BTreeMap<GenerationId, SingleGenerationMetadata> {
         let mut map: BTreeMap<GenerationId, SingleGenerationMetadata> = BTreeMap::new();
         for spec in self.history.iter() {
-            match spec.info {
+            match spec.kind {
                 HistoryKind::SwitchGeneration => {
                     let prev = spec
                         .previous_generation
@@ -824,31 +839,101 @@ impl FromStr for GenerationId {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind")]
 #[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
 #[non_exhaustive]
 pub enum HistoryKind {
     Import,
-    MigrateV1 { description: String },
+    MigrateV1 {
+        description: String,
+    },
 
-    Install { targets: Vec<String> },
+    Install {
+        targets: Vec<String>,
+    },
     Edit,
-    Uninstall { targets: Vec<String> },
-    Upgrade { targets: Vec<String> },
+    Uninstall {
+        targets: Vec<String>,
+    },
+    Upgrade {
+        targets: Vec<String>,
+    },
 
-    IncludeUpgrade { targets: Vec<String> },
+    IncludeUpgrade {
+        targets: Vec<String>,
+    },
 
     SwitchGeneration,
-    Other { summary: String },
+    Other {
+        summary: String,
+    },
+
+    #[serde(untagged)]
+    Unknown {
+        kind: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, derive_more::Deref, derive_more::DerefMut)]
+pub struct WithOtherFields<T> {
+    #[deref]
+    #[deref_mut]
+    #[serde(flatten)]
+    inner: T,
+    #[serde(flatten)]
+    other: BTreeMap<String, Value>,
+}
+
+impl<T> From<T> for WithOtherFields<T> {
+    fn from(value: T) -> Self {
+        WithOtherFields {
+            inner: value,
+            other: Default::default(),
+        }
+    }
+}
+
+impl<'de, T> Deserialize<'de> for WithOtherFields<T>
+where
+    T: Deserialize<'de> + Serialize,
+{
+    fn deserialize<D>(deserializer: D) -> Result<WithOtherFields<T>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        #[derive(Deserialize)]
+        struct WithOtherFieldsHelper<T> {
+            #[serde(flatten)]
+            inner: T,
+            #[serde(flatten)]
+            other: BTreeMap<String, Value>,
+        }
+
+        let mut helper = WithOtherFieldsHelper::deserialize(deserializer)?;
+        // remove all fields present in the inner struct from the other fields, this is to avoid
+        // duplicate fields in the catch all other fields because serde flatten does not exclude
+        // already deserialized fields when deserializing the other fields.
+        if let Value::Object(map) = serde_json::to_value(&helper.inner).map_err(D::Error::custom)? {
+            for key in map.keys() {
+                helper.other.remove(key);
+            }
+        }
+
+        Ok(WithOtherFields {
+            inner: helper.inner,
+            other: helper.other,
+        })
+    }
 }
 
 /// The structure of a single change, tying together
 /// _who_ performed _what_ change, where and when.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct HistorySpec {
     // change provided
     /// Type of the change
-    pub info: HistoryKind,
+    #[serde(flatten)]
+    pub kind: HistoryKind,
 
     // system provided
     /// Local username of the user performing the change
@@ -896,7 +981,7 @@ impl HistorySpec {
             }
         }
 
-        match &self.info {
+        match &self.kind {
             HistoryKind::Import => "imported unmanaged path environment".to_string(),
             HistoryKind::MigrateV1 { description } => {
                 format!("{description} [metadata migrated]")
@@ -920,24 +1005,25 @@ impl HistorySpec {
                 ),
             },
             HistoryKind::Other { summary } => summary.to_string(),
+            HistoryKind::Unknown { kind } => format!("performed unknown {kind} operation"),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, derive_more::AsRef)]
-pub struct History(Vec<HistorySpec>);
+pub struct History(Vec<WithOtherFields<HistorySpec>>);
 
 impl<'h> IntoIterator for &'h History {
-    type IntoIter = std::slice::Iter<'h, HistorySpec>;
-    type Item = &'h HistorySpec;
+    type IntoIter = std::slice::Iter<'h, WithOtherFields<HistorySpec>>;
+    type Item = &'h WithOtherFields<HistorySpec>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
     }
 }
 impl IntoIterator for History {
-    type IntoIter = std::vec::IntoIter<HistorySpec>;
-    type Item = HistorySpec;
+    type IntoIter = std::vec::IntoIter<WithOtherFields<HistorySpec>>;
+    type Item = WithOtherFields<HistorySpec>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -1159,6 +1245,7 @@ mod tests {
             HistoryKind,
             HistorySpec,
             SwitchGenerationOptions,
+            WithOtherFields,
         };
 
         /// Adding a generation adds consisten metadata, ie.
@@ -1186,7 +1273,7 @@ mod tests {
             assert_eq!(history.hostname, options.hostname);
             assert_eq!(history.current_generation, generation);
             assert_eq!(history.previous_generation, None);
-            assert_eq!(history.info, options.kind);
+            assert_eq!(history.kind, options.kind);
             assert_eq!(history.timestamp, options.timestamp);
         }
 
@@ -1243,7 +1330,7 @@ mod tests {
                 let history_entry = metadata.history.0.last().unwrap();
                 assert_eq!(history_entry.author, switch_generation_options.author);
                 assert_eq!(history_entry.hostname, switch_generation_options.hostname);
-                assert_eq!(history_entry.info, HistoryKind::SwitchGeneration);
+                assert_eq!(history_entry.kind, HistoryKind::SwitchGeneration);
                 assert_eq!(
                     history_entry.previous_generation,
                     Some(generation_switched_from)
@@ -1403,7 +1490,7 @@ mod tests {
 
             for (change_kind, message) in change_message_pairs {
                 let spec = HistorySpec {
-                    info: change_kind,
+                    kind: change_kind,
                     author: AUTHOR.to_string(),
                     hostname: HOSTNAME.to_string(),
                     timestamp: Utc::now(),
@@ -1416,14 +1503,18 @@ mod tests {
         }
 
         fn make_value(payload: &Value) -> Value {
-            let value = json! {{
+            let mut value = json! {{
                 "author": AUTHOR,
                 "hostname": HOSTNAME,
                 "timestamp": Utc::now().timestamp(),
                 "current_generation": "2",
                 "previous_generation": "1",
-                "info": payload,
             }};
+
+            value
+                .as_object_mut()
+                .unwrap()
+                .extend(payload.as_object().unwrap().clone());
 
             value
         }
@@ -1446,11 +1537,15 @@ mod tests {
                 json! {{"kind": "switch_generation"}},
                 json! {{"kind": "uninstall", "targets": []}},
                 json! {{"kind": "other", "summary": "foobar" }},
+                // additional unknown fields
+                json! {{"kind": "other", "summary": "foobar", "and": "more" }},
+                // an unknown kind
+                json! {{"kind": "unknown kind" }},
             ];
 
             for payload in payloads {
                 let value = make_value(&payload);
-                let deserialized_from_value: HistorySpec =
+                let deserialized_from_value: WithOtherFields<HistorySpec> =
                     match serde_json::from_value(value.clone()) {
                         Ok(v) => v,
                         Err(err) => {
@@ -1473,7 +1568,7 @@ mod tests {
                         Err(err) => panic!("should serialize to string\n{err}"),
                     };
 
-                let deserialized_from_string: HistorySpec =
+                let deserialized_from_string: WithOtherFields<HistorySpec> =
                     match serde_json::from_str(&serialized_to_string) {
                         Ok(v) => v,
                         Err(err) => panic!(
@@ -1489,19 +1584,65 @@ mod tests {
         }
 
         #[test]
-        fn unknown_kinds_and_data_are_denied() {
+        fn unknown_kinds_and_data_are_allowed() {
             let payloads = [
                 // unknown kind
-                json! {{"kind": "fromthefuture", "not-targets": {}}},
+                (
+                    json! {{"kind": "fromthefuture", "not-targets": {}}},
+                    HistoryKind::Unknown {
+                        kind: "fromthefuture".to_string(),
+                    },
+                    &["not-targets"],
+                ),
                 // extra fields
-                json! {{"kind": "install", "targets": [], "and-not-targets":[]}},
-                // not an object
-                json! { "install" },
+                (
+                    json! {{"kind": "install", "targets": [], "and-not-targets":[]}},
+                    HistoryKind::Install {
+                        targets: Default::default(),
+                    },
+                    &["and-not-targets"],
+                ),
+                //
+                // wrong fields, doesn't parse as install becauise the fields don't match,
+                // but won't fail parsing
+                (
+                    json! {{ "kind": "install", "targets": "not a list" }},
+                    HistoryKind::Unknown {
+                        kind: "install".to_string(),
+                    },
+                    &["targets"],
+                ),
+            ];
+
+            for (payload, history_kind, other_fields) in payloads {
+                let value = make_value(&payload);
+                let with_other_fields =
+                    serde_json::from_value::<WithOtherFields<HistorySpec>>(value.clone())
+                        .unwrap_or_else(|_| panic!("{value} should parse"));
+
+                assert_eq!(with_other_fields.kind, history_kind);
+
+                let actual_extra_fields: Vec<&String> = with_other_fields.other.keys().collect();
+                for expected_field in other_fields {
+                    assert!(
+                        actual_extra_fields
+                            .iter()
+                            .any(|field| field == expected_field),
+                        "extra field {expected_field} not found"
+                    );
+                }
+            }
+        }
+        #[test]
+        fn invalid_data_is_not_allowed() {
+            let payloads = [
+                // wrong kind type
+                json! {{ "kind": { "an object": "not a string" } }},
             ];
 
             for payload in payloads {
                 let value = make_value(&payload);
-                serde_json::from_value::<HistorySpec>(value.clone())
+                let _ = serde_json::from_value::<WithOtherFields<HistorySpec>>(value.clone())
                     .expect_err(&format!("{value} should fail to parse"));
             }
         }
@@ -1552,7 +1693,7 @@ mod tests {
             let mut expected = AllGenerationsMetadata::default();
             expected.add_generation(migration_options(date));
 
-            assert_eq!(actual, expected)
+            assert_eq!(*actual, expected)
         }
 
         #[test]
