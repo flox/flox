@@ -350,6 +350,7 @@ impl FloxArgs {
         let system_user_name =
             std::env::var("USER").context("could not determine username from $USER")?;
         let system_hostname = sys_info::hostname().context("could not determine hostname")?;
+        let argv = std::env::args().collect();
 
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
@@ -361,6 +362,7 @@ impl FloxArgs {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             system_user_name,
             system_hostname,
+            argv,
             floxhub_token,
             floxhub,
             catalog_client,

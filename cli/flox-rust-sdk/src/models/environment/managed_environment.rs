@@ -253,6 +253,7 @@ impl Environment for ManagedEnvironment {
                 &flox.temp_dir,
                 &flox.system_user_name,
                 &flox.system_hostname,
+                &flox.argv,
             )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
@@ -310,6 +311,7 @@ impl Environment for ManagedEnvironment {
                 &flox.temp_dir,
                 &flox.system_user_name,
                 &flox.system_hostname,
+                &flox.argv,
             )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
@@ -345,6 +347,7 @@ impl Environment for ManagedEnvironment {
                 &flox.temp_dir,
                 &flox.system_user_name,
                 &flox.system_hostname,
+                &flox.argv,
             )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
@@ -393,6 +396,7 @@ impl Environment for ManagedEnvironment {
                 &flox.temp_dir,
                 &flox.system_user_name,
                 &flox.system_hostname,
+                &flox.argv,
             )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
@@ -435,6 +439,7 @@ impl Environment for ManagedEnvironment {
                 &flox.temp_dir,
                 &flox.system_user_name,
                 &flox.system_hostname,
+                &flox.argv,
             )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
@@ -632,6 +637,7 @@ impl GenerationsExt for ManagedEnvironment {
                 &flox.temp_dir,
                 &flox.system_user_name,
                 &flox.system_hostname,
+                &flox.argv,
             )
             .map_err(ManagedEnvironmentError::Generations)?;
 
@@ -1008,6 +1014,7 @@ impl ManagedEnvironment {
                 &flox.temp_dir,
                 &flox.system_user_name,
                 &flox.system_hostname,
+                &flox.argv,
             )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
@@ -1083,6 +1090,7 @@ impl ManagedEnvironment {
                 flox.temp_dir.clone(),
                 &flox.system_user_name,
                 &flox.system_hostname,
+                &flox.argv,
             )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
@@ -1250,6 +1258,7 @@ impl ManagedEnvironment {
                 &flox.temp_dir,
                 &flox.system_user_name,
                 &flox.system_hostname,
+                &flox.argv,
             )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
             .get_current_generation(self.include_fetcher.clone())
@@ -1468,6 +1477,7 @@ impl ManagedEnvironment {
                 &flox.temp_dir,
                 &flox.system_user_name,
                 &flox.system_hostname,
+                &flox.argv,
             )
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
@@ -1986,7 +1996,10 @@ mod test {
         .unwrap();
 
         let mut writable = generations
-            .writable(&base_tempdir, "username", "hostname")
+            .writable(&base_tempdir, "username", "hostname", &[
+                "flox".to_string(),
+                "subcommand".to_string(),
+            ])
             .unwrap();
         writable.add_generation(env, HistoryKind::Import).unwrap();
 

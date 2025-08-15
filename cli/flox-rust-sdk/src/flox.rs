@@ -80,6 +80,8 @@ pub struct Flox {
     pub system: String,
     pub system_user_name: String,
     pub system_hostname: String,
+    // The command used to run flox
+    pub argv: Vec<String>,
 
     pub floxhub: Floxhub,
 
@@ -367,6 +369,7 @@ pub mod test_helpers {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             system_user_name: "its-a-me-mario".to_string(),
             system_hostname: "mushroom-kingdom".to_string(),
+            argv: vec![],
             cache_dir,
             data_dir,
             state_dir,
