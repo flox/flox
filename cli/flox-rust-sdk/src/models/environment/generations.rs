@@ -30,7 +30,7 @@ use itertools::Itertools;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{DeserializeFromStr, SerializeDisplay, skip_serializing_none};
 use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;
@@ -597,7 +597,7 @@ impl TryFrom<ConcreteEnvironment> for GenerationsEnvironment {
 /// Rollbacks and associated [SingleGenerationMetadata] are tracked per environment
 /// in a metadata file at the root of the environment branch.
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq)]
-#[serde(deny_unknown_fields)]
+#[skip_serializing_none]
 pub struct AllGenerationsMetadata {
     /// Schema version of the metadata file
     version: Version<2>,
@@ -840,6 +840,7 @@ impl FromStr for GenerationId {
 #[serde(tag = "kind")]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
+#[skip_serializing_none]
 pub enum HistoryKind {
     Import,
     MigrateV1 {
@@ -929,6 +930,7 @@ where
 /// The structure of a single change, tying together
 /// _who_ performed _what_ change, where and when.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[skip_serializing_none]
 pub struct HistorySpec {
     // change provided
     /// Type of the change
