@@ -501,6 +501,16 @@ fn parse_metadata<'de>(
             migrated.into()
         },
         MetadataVersionCompat::V2(all_generations_metadata) => all_generations_metadata,
+        MetadataVersionCompat::VX { version }
+            if version == Value::Number(1.into()) || version == Value::Number(2.into()) =>
+        {
+            Err(GenerationsError::DeserializeMetadata(
+                serde_json::Error::custom(format!(
+                    "Environment metadata of version '{version}' could not be parsed into its expected schema.",
+                )),
+            ))?
+        },
+
         MetadataVersionCompat::VX { version } => Err(GenerationsError::DeserializeMetadata(
             serde_json::Error::custom(format!(
                 "Environment metadata of version '{version}' is not supported",
