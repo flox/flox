@@ -25,8 +25,8 @@ Generation numbers can be found with
 [`flox-generations-list(1)`](./flox-generations-list.md).
 
 Switching generation restores the environment's manifest and lockfile to the
-state of the specified generation, sets it as the current generation, and adds
-an entry the generation history.
+state of the specified generation, sets it as the live generation, and adds
+an entry to generation history.
 
 Generations don't always have a linear history. If you create generation 2 by
 installing a package, rollback to generation 1 and create generation 3 by

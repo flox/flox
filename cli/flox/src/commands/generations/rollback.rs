@@ -57,7 +57,7 @@ impl Rollback {
     }
 }
 
-/// "previous generation" currently means "previously active"
+/// "previous generation" currently means "previously live"
 /// (as opposed to e.g. originating generation or generation N-1).
 /// That implies that switching to the "previous generation",
 /// i.e. rollback, returns at the original generation.
@@ -69,7 +69,7 @@ fn determine_previous_generation(
     metadata
         .generations()
         .into_iter()
-        .sorted_by_key(|(_id, meta)| meta.last_active)
+        .sorted_by_key(|(_id, meta)| meta.last_live)
         .next_back()
 }
 
@@ -101,11 +101,11 @@ mod tests {
 
     /// Use mock generations that were rolled back once from generation 3 -> genration 2.
     /// By our current definition of "previous generation" we expect another rollback
-    /// to "roll forward" to generation 3, as thats the one previously active.
+    /// to "roll forward" to generation 3, as thats the one previously live.
     #[test]
-    fn rollback_rolls_back_to_newer_generation_if_previously_active() {
+    fn rollback_rolls_back_to_newer_generation_if_previously_live() {
         // e.g. rolled back once 3->2
-        // last created active
+        // last created live
         let mut metadata = AllGenerationsMetadata::default();
         metadata.add_generation(default_add_generation_options());
         metadata.add_generation(default_add_generation_options());

@@ -653,10 +653,10 @@ impl AllGenerationsMetadata {
         (next_generation, history_ref)
     }
 
-    /// Switch the active marked generation to `next_generation`.
+    /// Switch the live generation to `next_generation`.
     /// `next_generation` must exist, and must be different from the current generation.
     /// To switch, this methods will (1) update [Self::current_gen] to `next_generation`,
-    /// (2) set the [SingleGenerationMetadata::last_active] timestamp of the `next_generation`,
+    /// (2) set the [SingleGenerationMetadata::last_live] timestamp of the `next_generation`,
     /// and record a history item of type [HistoryKind::SwitchGeneration].
     pub fn switch_generation(
         &mut self,
@@ -708,7 +708,7 @@ impl AllGenerationsMetadata {
         &self.history
     }
 
-    /// Get the current active generation id
+    /// Get the current live generation id
     pub fn current_gen(&self) -> Option<GenerationId> {
         self.history
             .iter()
@@ -721,7 +721,7 @@ impl AllGenerationsMetadata {
     /// This function requires a semantically consistent history, i.e.
     ///
     /// * exactly one generation creating event for every generation [1..]
-    /// * previous_generation correctly refers to the previously active generation
+    /// * previous_generation correctly refers to the previously live generation
     ///
     /// These invariants are maintained when using [Self::add_generation]
     /// and [Self::switch_generation].
@@ -734,27 +734,27 @@ impl AllGenerationsMetadata {
                         .previous_generation
                         .and_then(|generation| map.get_mut(&generation))
                         .expect("there must be a previous generation by construction");
-                    prev.last_active = Some(spec.timestamp);
+                    prev.last_live = Some(spec.timestamp);
 
                     let new = map
                         .get_mut(&spec.current_generation)
                         .expect("there must be a current generation by construction");
-                    new.last_active = None;
+                    new.last_live = None;
                 },
                 _ => {
                     // Adding a generation performs an implicit switch.
-                    // Hence, record that the previous generation was only active
+                    // Hence, record that the previous generation was only live
                     // until the creation of the new generation.
                     if let Some(prev) = spec
                         .previous_generation
                         .and_then(|generation| map.get_mut(&generation))
                     {
-                        prev.last_active = Some(spec.timestamp);
+                        prev.last_live = Some(spec.timestamp);
                     }
 
                     map.insert(spec.current_generation, SingleGenerationMetadata {
                         created: spec.timestamp,
-                        last_active: None,
+                        last_live: None,
                         description: spec.summary(),
                     });
                 },
@@ -771,9 +771,9 @@ pub struct SingleGenerationMetadata {
     /// unix timestamp of the creation time of this generation
     pub created: DateTime<Utc>,
 
-    /// unix timestamp of the time when this generation was last set as active
-    /// `None` if this generation has never been set as active
-    pub last_active: Option<DateTime<Utc>>,
+    /// unix timestamp of the time when this generation was last set as live
+    /// `None` if this generation has never been set as live
+    pub last_live: Option<DateTime<Utc>>,
 
     /// log message(s) describing the change from the previous generation
     pub description: String,
@@ -784,7 +784,7 @@ impl SingleGenerationMetadata {
     pub fn new(description: String) -> Self {
         Self {
             created: Utc::now(),
-            last_active: None,
+            last_live: None,
             description,
         }
     }
@@ -862,11 +862,11 @@ pub struct HistorySpec {
     pub timestamp: DateTime<Utc>,
 
     // associated generation(s)
-    /// Currently active generation, e.g. created by the change
+    /// Currently live generation, e.g. created by the change
     /// or switched to.
     pub current_generation: GenerationId,
     /// Previous generation before a new generation was created,
-    /// or the generation active before a generation switch.
+    /// or the generation live before a generation switch.
     pub previous_generation: Option<GenerationId>,
 }
 
@@ -916,7 +916,7 @@ impl HistorySpec {
                     self.current_generation
                 ),
                 None => unreachable!(
-                    "switch implementation prevents switches without a current active generation"
+                    "switch implementation prevents switches without a current live generation"
                 ),
             },
             HistoryKind::Other { summary } => summary.to_string(),
@@ -985,10 +985,10 @@ mod compat {
         #[serde(with = "chrono::serde::ts_seconds")]
         pub created: DateTime<Utc>,
 
-        /// unix timestamp of the time when this generation was last set as active
-        /// `None` if this generation has never been set as active
+        /// unix timestamp of the time when this generation was last set as live
+        /// `None` if this generation has never been set as live
         #[serde(with = "chrono::serde::ts_seconds_option")]
-        pub last_active: Option<DateTime<Utc>>,
+        pub last_live: Option<DateTime<Utc>>,
 
         /// log message(s) describing the change from the previous generation
         pub description: String,
@@ -1075,7 +1075,7 @@ mod compat {
                     .ok_or(GenerationsError::MigrateV1ToV2(
                         "current generation missing".into(),
                     ))?
-                    .last_active
+                    .last_live
                     .ok_or(GenerationsError::MigrateV1ToV2(
                         "current generation missing timestamp".into(),
                     ))?;
@@ -1180,7 +1180,7 @@ mod tests {
 
             assert_eq!(metadata.current_gen(), Some(generation));
             assert_eq!(generation_metadata.created, options.timestamp);
-            assert_eq!(generation_metadata.last_active, None);
+            assert_eq!(generation_metadata.last_live, None);
 
             assert_eq!(history.author, options.author);
             assert_eq!(history.hostname, options.hostname);
@@ -1214,7 +1214,7 @@ mod tests {
         /// Switching generations
         ///
         /// * updates the current generation
-        /// * updares the "last_active" timestamp of the switched to generation
+        /// * updares the "last_live" timestamp of the switched to generation
         /// * adds a history entry for the switch
         #[test]
         fn switch_generation_updates_metadata() {
@@ -1230,12 +1230,12 @@ mod tests {
                     "current gen was not updated"
                 );
                 assert_eq!(
-                    metadata.generations()[&generation_switched_to].last_active,
+                    metadata.generations()[&generation_switched_to].last_live,
                     None,
                     "timestamp was not updated"
                 );
                 assert_eq!(
-                    metadata.generations()[&generation_switched_from].last_active,
+                    metadata.generations()[&generation_switched_from].last_live,
                     Some(switch_generation_options.timestamp),
                     "timestamp was not updated"
                 );
@@ -1541,7 +1541,7 @@ mod tests {
                 1.into(),
                 BTreeMap::from_iter([(1.into(), SingleGenerationMetadata {
                     created: date,
-                    last_active: Some(date),
+                    last_live: Some(date),
                     description: "description".to_string(),
                 })]),
             );
@@ -1565,7 +1565,7 @@ mod tests {
                         1.into(),
                         BTreeMap::from_iter([(1.into(), SingleGenerationMetadata {
                             created: date,
-                            last_active: Some(date),
+                            last_live: Some(date),
                             description: "description".to_string(),
                         })]),
                     ),
@@ -1582,17 +1582,17 @@ mod tests {
                         BTreeMap::from_iter([
                             (1.into(), SingleGenerationMetadata {
                                 created: date,
-                                last_active: Some(date),
+                                last_live: Some(date),
                                 description: "description".to_string(),
                             }),
                             (2.into(), SingleGenerationMetadata {
                                 created: date + Duration::hours(1),
-                                last_active: Some(date + Duration::hours(1)), // [sic]
+                                last_live: Some(date + Duration::hours(1)), // [sic]
                                 description: "description".to_string(),
                             }),
                             (3.into(), SingleGenerationMetadata {
                                 created: date + Duration::hours(2),
-                                last_active: Some(date + Duration::hours(2)), // [sic]
+                                last_live: Some(date + Duration::hours(2)), // [sic]
                                 description: "description".to_string(),
                             }),
                         ]),
@@ -1616,17 +1616,17 @@ mod tests {
                         BTreeMap::from_iter([
                             (1.into(), SingleGenerationMetadata {
                                 created: date,
-                                last_active: Some(date + Duration::hours(2)),
+                                last_live: Some(date + Duration::hours(2)),
                                 description: "description".to_string(),
                             }),
                             (2.into(), SingleGenerationMetadata {
                                 created: date + Duration::hours(1),
-                                last_active: Some(date + Duration::hours(1)), // [sic]
+                                last_live: Some(date + Duration::hours(1)), // [sic]
                                 description: "description".to_string(),
                             }),
                             (3.into(), SingleGenerationMetadata {
                                 created: date + Duration::hours(3),
-                                last_active: Some(date + Duration::hours(3)), // [sic]
+                                last_live: Some(date + Duration::hours(3)), // [sic]
                                 description: "description".to_string(),
                             }),
                         ]),
@@ -1652,17 +1652,17 @@ mod tests {
                         BTreeMap::from_iter([
                             (1.into(), SingleGenerationMetadata {
                                 created: date,
-                                last_active: Some(date + Duration::hours(2)),
+                                last_live: Some(date + Duration::hours(2)),
                                 description: "description".to_string(),
                             }),
                             (2.into(), SingleGenerationMetadata {
                                 created: date + Duration::hours(1),
-                                last_active: Some(date + Duration::hours(3)), // [sic]
+                                last_live: Some(date + Duration::hours(3)), // [sic]
                                 description: "description".to_string(),
                             }),
                             (3.into(), SingleGenerationMetadata {
                                 created: date + Duration::hours(2),
-                                last_active: Some(date + Duration::hours(2)), // [sic]
+                                last_live: Some(date + Duration::hours(2)), // [sic]
                                 description: "description".to_string(),
                             }),
                         ]),

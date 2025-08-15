@@ -6,7 +6,7 @@ header: "Flox User Manuals"
 
 # NAME
 
-flox-generations-rollback - switch to the previous generation
+flox-generations-rollback - switch to the previous live generation
 
 # SYNOPSIS
 
@@ -17,13 +17,13 @@ flox [<general-options>] generations rollback
 
 # DESCRIPTION
 
-Switch to the previously active generation of the environment.
+Switch to the previous live generation of the environment.
 
 Rolling back to the previous generation restores the environment's manifest and
-lockfile to the state of the previous generation, sets it as the current
-generation, and adds an entry the generation history.
+lockfile to the state of the previous generation, sets it as the live
+generation, and adds an entry to generation history.
 
-The previously active generation isn't always N-1. If you've previously rolled
+The previously live generation isn't always N-1. If you've previously rolled
 back from generation 3 -> 2 then rolling back again will take you from
 generation 2 -> 3. Similarly if you've switched from generation 3 -> 1 then
 rolling back will take you from generation 1 -> 3.
