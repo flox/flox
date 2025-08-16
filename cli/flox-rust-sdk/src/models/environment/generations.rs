@@ -1104,8 +1104,9 @@ mod compat {
 
         /// unix timestamp of the time when this generation was last set as live
         /// `None` if this generation has never been set as live
+        /// last_live is used in the new metadata format
         #[serde(with = "chrono::serde::ts_seconds_option")]
-        pub last_live: Option<DateTime<Utc>>,
+        pub last_active: Option<DateTime<Utc>>,
 
         /// log message(s) describing the change from the previous generation
         pub description: String,
@@ -1193,7 +1194,7 @@ mod compat {
                     .ok_or(GenerationsError::MigrateV1ToV2(
                         "current generation missing".into(),
                     ))?
-                    .last_live
+                    .last_active
                     .ok_or(GenerationsError::MigrateV1ToV2(
                         "current generation missing timestamp".into(),
                     ))?;
@@ -1725,7 +1726,7 @@ mod tests {
                 1.into(),
                 BTreeMap::from_iter([(1.into(), SingleGenerationMetadata {
                     created: date,
-                    last_live: Some(date),
+                    last_active: Some(date),
                     description: "description".to_string(),
                 })]),
             );
@@ -1749,7 +1750,7 @@ mod tests {
                         1.into(),
                         BTreeMap::from_iter([(1.into(), SingleGenerationMetadata {
                             created: date,
-                            last_live: Some(date),
+                            last_active: Some(date),
                             description: "description".to_string(),
                         })]),
                     ),
@@ -1766,17 +1767,17 @@ mod tests {
                         BTreeMap::from_iter([
                             (1.into(), SingleGenerationMetadata {
                                 created: date,
-                                last_live: Some(date),
+                                last_active: Some(date),
                                 description: "description".to_string(),
                             }),
                             (2.into(), SingleGenerationMetadata {
                                 created: date + Duration::hours(1),
-                                last_live: Some(date + Duration::hours(1)), // [sic]
+                                last_active: Some(date + Duration::hours(1)), // [sic]
                                 description: "description".to_string(),
                             }),
                             (3.into(), SingleGenerationMetadata {
                                 created: date + Duration::hours(2),
-                                last_live: Some(date + Duration::hours(2)), // [sic]
+                                last_active: Some(date + Duration::hours(2)), // [sic]
                                 description: "description".to_string(),
                             }),
                         ]),
@@ -1800,17 +1801,17 @@ mod tests {
                         BTreeMap::from_iter([
                             (1.into(), SingleGenerationMetadata {
                                 created: date,
-                                last_live: Some(date + Duration::hours(2)),
+                                last_active: Some(date + Duration::hours(2)),
                                 description: "description".to_string(),
                             }),
                             (2.into(), SingleGenerationMetadata {
                                 created: date + Duration::hours(1),
-                                last_live: Some(date + Duration::hours(1)), // [sic]
+                                last_active: Some(date + Duration::hours(1)), // [sic]
                                 description: "description".to_string(),
                             }),
                             (3.into(), SingleGenerationMetadata {
                                 created: date + Duration::hours(3),
-                                last_live: Some(date + Duration::hours(3)), // [sic]
+                                last_active: Some(date + Duration::hours(3)), // [sic]
                                 description: "description".to_string(),
                             }),
                         ]),
@@ -1836,17 +1837,17 @@ mod tests {
                         BTreeMap::from_iter([
                             (1.into(), SingleGenerationMetadata {
                                 created: date,
-                                last_live: Some(date + Duration::hours(2)),
+                                last_active: Some(date + Duration::hours(2)),
                                 description: "description".to_string(),
                             }),
                             (2.into(), SingleGenerationMetadata {
                                 created: date + Duration::hours(1),
-                                last_live: Some(date + Duration::hours(3)), // [sic]
+                                last_active: Some(date + Duration::hours(3)), // [sic]
                                 description: "description".to_string(),
                             }),
                             (3.into(), SingleGenerationMetadata {
                                 created: date + Duration::hours(2),
-                                last_live: Some(date + Duration::hours(2)), // [sic]
+                                last_active: Some(date + Duration::hours(2)), // [sic]
                                 description: "description".to_string(),
                             }),
                         ]),
