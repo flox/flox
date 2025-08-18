@@ -221,7 +221,10 @@ let
               # from the following conditional.
               filteredOutputs =
                 if (true || outputsToInstall == null) then
-                  (builtins.attrValues package.outputs)
+                  # Filter out outputs named `stubs` because they're needed at build time,
+                  # but break things at run time. This may be unnecessary once we do
+                  # "outputs to install".
+                  (builtins.attrValues (builtins.removeAttrs package.outputs [ "stubs" ]))
                 else
                   (builtins.map (x: builtins.getAttr x package.outputs) outputsToInstall);
             in
