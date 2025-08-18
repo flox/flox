@@ -278,6 +278,16 @@ sub addPkg {
                 close PROP;
                 my @propagated = split ' ', $propagated;
                 foreach my $p (@propagated) {
+                    # This is a hack to prevent packages with `stub` outputs
+                    # from being recursively linked into the `/lib` directory
+                    # of the environment. There's only one known package
+                    # that does this (cudaPackages.cuda_cudart).
+                    #
+                    # The line below matches on store paths ending in `-stubs`
+                    # (e.g. a store path for a pkg with a `stubs` output)
+                    # and skips them, since at this point we only have store
+                    # paths rather than attribute paths, output names, etc.
+                    next if $p =~ /-stubs$/;
                     $postponed{$p} = 1 unless defined $done{$p};
                 }
             }
@@ -443,6 +453,7 @@ if ($manifest) {
                     # If we encounter this output and it's a file then we skip it.
                     # XXX Remove once we properly support outputs_to_install.
                     next if $output eq "log" and -f $package->{"outputs"}{$output};
+                    next if $output eq "stubs";
 
                     # And for now we divide the outputs into two categories: those
                     # that should be installed by default and those that should not.
