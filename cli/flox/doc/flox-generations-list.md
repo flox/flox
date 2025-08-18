@@ -6,7 +6,7 @@ header: "Flox User Manuals"
 
 # NAME
 
-flox-generations-list - list generations of the environment
+flox-generations-list - show all environment generations that you can switch to
 
 # SYNOPSIS
 
@@ -17,7 +17,7 @@ flox [<general-options>] generations list
 
 # DESCRIPTION
 
-List generations of the environment.
+Show all environment generations that you can switch to.
 
 For environments pushed to FloxHub, every modification to the environment
 creates a new generation of the environment.
@@ -34,4 +34,3 @@ which generation is currently live.
 [`flox-generations-history(1)`](./flox-generations-history.md)
 [`flox-generations-rollback(1)`](./flox-generations-rollback.md)
 [`flox-generations-switch(1)`](./flox-generations-switch.md)
-
