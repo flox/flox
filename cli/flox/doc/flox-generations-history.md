@@ -6,7 +6,7 @@ header: "Flox User Manuals"
 
 # NAME
 
-flox-generations-history - print the history of the environment
+flox-generations-history - Show the change log for the current environment
 
 # SYNOPSIS
 
@@ -17,7 +17,7 @@ flox [<general-options>] generations history
 
 # DESCRIPTION
 
-Print the history of the environment.
+Show the change log for the current environment.
 
 For environments pushed to FloxHub, every modification to the environment
 creates a new generation of the environment.
