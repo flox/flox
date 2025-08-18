@@ -962,7 +962,7 @@ enum ModifyCommands {
     Uninstall(#[bpaf(external(uninstall::uninstall))] uninstall::Uninstall),
 
     /// Version control for environments pushed to FloxHub
-    #[bpaf(command)]
+    #[bpaf(command, long("generations"), long("generation"))]
     Generations(
         #[bpaf(
             external(generations::generations_commands),
