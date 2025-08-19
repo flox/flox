@@ -234,6 +234,17 @@ impl List {
 
             let message = match package {
                 PackageToList::Catalog(_, locked) => {
+                    let mut sorted_outputs = locked
+                        .outputs
+                        .keys()
+                        .map(|s| format!("\"{s}\""))
+                        .collect::<Vec<_>>();
+                    sorted_outputs.sort();
+                    let outputs = if sorted_outputs.is_empty() {
+                        "[ ]".to_string()
+                    } else {
+                        format!("[ {} ]", sorted_outputs.join(", "))
+                    };
                     formatdoc! {"
                         {name}:{upgrade_available}
                           Description:  {description}
@@ -244,6 +255,7 @@ impl List {
                           License:      {license}
                           Unfree:       {unfree}
                           Broken:       {broken}
+                          Outputs:      {outputs}
                         ",
                         name = &locked.install_id,
                         pname = &locked.pname,
@@ -257,6 +269,19 @@ impl List {
                     }
                 },
                 PackageToList::Flake(_, package) => {
+                    let mut sorted_outputs = package
+                        .locked_installable
+                        .output_names
+                        .as_slice()
+                        .iter()
+                        .map(|s| format!("\"{s}\""))
+                        .collect::<Vec<_>>();
+                    sorted_outputs.sort();
+                    let outputs = if sorted_outputs.is_empty() {
+                        "[ ]".to_string()
+                    } else {
+                        format!("[ {} ]", sorted_outputs.join(", "))
+                    };
                     let LockedPackageFlake {
                         install_id,
                         locked_installable:
@@ -293,6 +318,7 @@ impl List {
                       {formatted_licenses}
                       Unfree:          {unfree}
                       Broken:          {broken}
+                      Outputs:         {outputs}
                     ",
                         formatted_pname = pname.as_deref().unwrap_or("N/A"),
                         description = description.as_deref().unwrap_or("N/A"),
@@ -514,6 +540,7 @@ mod tests {
               License:      MIT
               Unfree:       true
               Broken:       false
+              Outputs:      [ ]
 
             python_install_id:
               Description:  Python interpreter
@@ -524,6 +551,7 @@ mod tests {
               License:      PSF
               Unfree:       false
               Broken:       false
+              Outputs:      [ ]
         "})
     }
 
@@ -544,6 +572,7 @@ mod tests {
               License:         GPL-3.0
               Unfree:          false
               Broken:          false
+              Outputs:         [ \"out\" ]
         "});
     }
 
@@ -569,6 +598,7 @@ mod tests {
               License:         GPL-3.0
               Unfree:          false
               Broken:          false
+              Outputs:         [ \"out\" ]
         "});
     }
 
@@ -595,6 +625,7 @@ mod tests {
               Licenses:        GPL-3.0, license 2
               Unfree:          false
               Broken:          false
+              Outputs:         [ \"out\" ]
         "});
     }
 
@@ -619,6 +650,7 @@ mod tests {
               License:      PSF
               Unfree:       false
               Broken:       false
+              Outputs:      [ ]
 
             pip_install_id:
               Description:  Python package installer
@@ -629,6 +661,7 @@ mod tests {
               License:      MIT
               Unfree:       true
               Broken:       false
+              Outputs:      [ ]
         "})
     }
 
@@ -653,6 +686,7 @@ mod tests {
               License:      PSF
               Unfree:       false
               Broken:       false
+              Outputs:      [ ]
 
             pip_install_id:
               Description:  Python package installer
@@ -663,6 +697,7 @@ mod tests {
               License:      MIT
               Unfree:       true
               Broken:       false
+              Outputs:      [ ]
         "})
     }
 
@@ -682,6 +717,7 @@ mod tests {
               License:      N/A
               Unfree:       N/A
               Broken:       N/A
+              Outputs:      [ ]
         "})
     }
 
@@ -717,6 +753,7 @@ mod tests {
               License:      MIT
               Unfree:       true
               Broken:       false
+              Outputs:      [ ]
 
             python_install_id:
               Description:  Python interpreter
@@ -727,6 +764,7 @@ mod tests {
               License:      PSF
               Unfree:       false
               Broken:       false
+              Outputs:      [ ]
         "});
     }
 
