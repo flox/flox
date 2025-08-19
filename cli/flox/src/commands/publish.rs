@@ -133,7 +133,6 @@ impl Publish {
         metadata_only: bool,
         cache_args: CacheArgs,
         base_catalog_url_select: Option<BaseCatalogUrlSelect>,
-        // stability: Option<String>,
     ) -> Result<()> {
         // Fail as early as possible if the user isn't authenticated or doesn't
         // belong to an org with a catalog.
