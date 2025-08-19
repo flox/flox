@@ -18,11 +18,11 @@ pub enum GenerationsCommands {
     #[bpaf(command, hide)]
     Help,
 
-    /// List generations of the environment
+    /// Show all environment generations that you can switch to
     #[bpaf(command)]
     List(#[bpaf(external(list::list))] list::List),
 
-    /// Print the history of the environment
+    /// Show the change log for the current environment
     #[bpaf(command)]
     History(#[bpaf(external(history::history))] history::History),
 
