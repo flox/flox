@@ -9,6 +9,7 @@ use flox_rust_sdk::models::environment::generations::{
     GenerationsEnvironment,
     GenerationsExt,
     HistorySpec,
+    Platform,
 };
 use indoc::formatdoc;
 use tracing::instrument;
@@ -48,8 +49,18 @@ struct DisplayChange<'m> {
 impl Display for DisplayChange<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let date = self.change.timestamp;
-        let author = &self.change.author;
-        let host = &self.change.hostname;
+        let (author, host, command) = 'p: {
+            let Platform::Local {
+                author,
+                hostname,
+                command,
+            } = &self.change.platform
+            else {
+                break 'p ("unknown", "unknown", &None);
+            };
+            (author, hostname, command)
+        };
+
         let summary = self.change.summary();
         let generation = self.change.current_generation;
 
@@ -65,7 +76,7 @@ impl Display for DisplayChange<'_> {
             Generation: {generation}
             "})?;
 
-        if let Some(command) = &self.change.command {
+        if let Some(command) = command {
             let command = command.join(" ");
             write!(f, "{}", formatdoc! {"
             Command:    {command}

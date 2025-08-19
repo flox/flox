@@ -653,11 +653,13 @@ impl AllGenerationsMetadata {
         // Keys should all be numbers, but if they aren't we provide a default value.
         let next_generation = GenerationId(self.total_generations + 1);
         let current_generation = self.current_gen();
-
-        let history_spec = HistorySpec {
+        let platform = Platform::Local {
             author,
             hostname,
             command: Self::parse_argv(argv),
+        };
+        let history_spec = HistorySpec {
+            platform,
             timestamp,
             kind,
             previous_generation: current_generation,
@@ -706,10 +708,14 @@ impl AllGenerationsMetadata {
             return Err(GenerationsError::GenerationNotFound(*next_generation));
         };
 
-        let history_spec = HistorySpec {
+        let platform = Platform::Local {
             author,
             hostname,
             command: Self::parse_argv(argv),
+        };
+
+        let history_spec = HistorySpec {
+            platform,
             timestamp,
             previous_generation: Some(previous_generation),
             current_generation: next_generation,
@@ -900,6 +906,28 @@ pub enum HistoryKind {
     },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "platform")]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+#[skip_serializing_none]
+pub enum Platform {
+    Local {
+        /// Local username of the user performing the change
+        author: String,
+        /// Hostname of the machine, on which the change was made
+        hostname: String,
+        /// Command line args to the command that performed the change
+        /// This can be `None` if the change was invoked by a unit test or FloxHub.
+        command: Option<Vec<String>>,
+    },
+
+    //Floxhub {}
+    //
+    #[serde(untagged)]
+    Unknown { platform: String },
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, derive_more::Deref, derive_more::DerefMut)]
 pub struct WithOtherFields<T> {
     #[deref]
@@ -965,13 +993,8 @@ pub struct HistorySpec {
     pub kind: HistoryKind,
 
     // system provided
-    /// Local username of the user performing the change
-    pub author: String,
-    /// Hostname of the machine, on which the change was made
-    pub hostname: String,
-    /// Command line args to the command that performed the change
-    /// This can be `None` if the change was invoked by a unit test or FloxHub.
-    pub command: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub platform: Platform,
     /// Timestamp associated with the change
     // for consistency with the existing SingleGenerationMetadata
     #[serde(with = "chrono::serde::ts_seconds")]
@@ -1284,6 +1307,7 @@ mod tests {
             GenerationsError,
             HistoryKind,
             HistorySpec,
+            Platform,
             SwitchGenerationOptions,
             WithOtherFields,
         };
@@ -1309,12 +1333,17 @@ mod tests {
             assert_eq!(generation_metadata.created, options.timestamp);
             assert_eq!(generation_metadata.last_live, None);
 
-            assert_eq!(history.author, options.author);
-            assert_eq!(history.hostname, options.hostname);
-            assert_eq!(history.current_generation, generation);
-            assert_eq!(history.previous_generation, None);
-            assert_eq!(history.kind, options.kind);
-            assert_eq!(history.timestamp, options.timestamp);
+            assert_eq!(history, HistorySpec {
+                kind: options.kind,
+                platform: Platform::Local {
+                    author: options.author,
+                    hostname: options.hostname,
+                    command: AllGenerationsMetadata::parse_argv(options.argv)
+                },
+                current_generation: generation,
+                previous_generation: None,
+                timestamp: options.timestamp
+            });
         }
 
         #[test]
@@ -1368,15 +1397,20 @@ mod tests {
                 );
 
                 let history_entry = metadata.history.0.last().unwrap();
-                assert_eq!(history_entry.author, switch_generation_options.author);
-                assert_eq!(history_entry.hostname, switch_generation_options.hostname);
-                assert_eq!(history_entry.kind, HistoryKind::SwitchGeneration);
-                assert_eq!(
-                    history_entry.previous_generation,
-                    Some(generation_switched_from)
-                );
-                assert_eq!(history_entry.current_generation, generation_switched_to);
-                assert_eq!(history_entry.timestamp, switch_generation_options.timestamp);
+
+                assert_eq!(history_entry.inner, HistorySpec {
+                    kind: HistoryKind::SwitchGeneration,
+                    platform: Platform::Local {
+                        author: switch_generation_options.author.clone(),
+                        hostname: switch_generation_options.hostname.clone(),
+                        command: AllGenerationsMetadata::parse_argv(
+                            switch_generation_options.argv.clone()
+                        )
+                    },
+                    current_generation: generation_switched_to,
+                    previous_generation: Some(generation_switched_from),
+                    timestamp: switch_generation_options.timestamp
+                });
             }
 
             let mut metadata = AllGenerationsMetadata::default();
@@ -1529,11 +1563,14 @@ mod tests {
             ];
 
             for (change_kind, message) in change_message_pairs {
-                let spec = HistorySpec {
-                    kind: change_kind,
+                let platform = Platform::Local {
                     author: AUTHOR.to_string(),
                     hostname: HOSTNAME.to_string(),
                     command: Some((*ARGV).clone()),
+                };
+                let spec = HistorySpec {
+                    kind: change_kind,
+                    platform,
                     timestamp: Utc::now(),
                     current_generation: 2.into(),
                     previous_generation: Some(1.into()),
