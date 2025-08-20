@@ -7,7 +7,6 @@ use flox_rust_sdk::models::environment::{ConcreteEnvironment, Environment};
 use flox_rust_sdk::models::manifest::typed::Manifest;
 use flox_rust_sdk::providers::auth::Auth;
 use flox_rust_sdk::providers::build::{COMMON_NIXPKGS_URL, PackageTarget, nix_expression_dir};
-use flox_rust_sdk::providers::catalog::get_base_nixpkgs_url;
 use flox_rust_sdk::providers::publish::{
     PublishProvider,
     Publisher,
@@ -21,8 +20,11 @@ use tracing::{debug, info_span, instrument};
 
 use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::build::{
+    BaseCatalogUrlSelect,
+    base_catalog_url_select,
+    base_nixpkgs_url_from_url_select,
     check_git_tracking_for_expression_builds,
-    disallow_stability_flag_for_manifest_builds,
+    disallow_base_url_select_for_manifest_builds,
     packages_to_build,
     prefetch_expression_build_flake_ref,
     prefetch_flake_ref,
@@ -51,15 +53,8 @@ pub struct Publish {
     #[bpaf(long, hide)]
     metadata_only: bool,
 
-    #[bpaf(
-        long,
-        help(
-            "Perform a nix expression build using a base package set of the given stability\n\
-            as tracked by the catalog server.\n\
-            Can not be used with manifest base builds."
-        )
-    )]
-    stability: Option<String>,
+    #[bpaf(external(base_catalog_url_select), optional)]
+    base_catalog_url_select: Option<BaseCatalogUrlSelect>,
 
     #[bpaf(external(publish_target), optional)]
     publish_target: Option<PublishTarget>,
@@ -106,7 +101,7 @@ impl Publish {
             self.publish_target,
             self.metadata_only,
             self.cache,
-            self.stability,
+            self.base_catalog_url_select,
         )
         .await
     }
@@ -137,7 +132,7 @@ impl Publish {
         package_arg: Option<PublishTarget>,
         metadata_only: bool,
         cache_args: CacheArgs,
-        stability: Option<String>,
+        base_catalog_url_select: Option<BaseCatalogUrlSelect>,
     ) -> Result<()> {
         // Fail as early as possible if the user isn't authenticated or doesn't
         // belong to an org with a catalog.
@@ -167,7 +162,10 @@ impl Publish {
 
         let package = Self::get_publish_target(&lockfile.manifest, &expression_dir, package_arg)?;
 
-        disallow_stability_flag_for_manifest_builds([&package], stability.is_some())?;
+        disallow_base_url_select_for_manifest_builds(
+            [&package],
+            base_catalog_url_select.is_some(),
+        )?;
         // Note: when publishsing an expression build,
         // this causes us to discover the containing git repo twice.
         // While slightly redundant it outweighs the complexity of reusing git instances.
@@ -176,14 +174,21 @@ impl Publish {
         // Check the environment for appropriate state to build and publish
         let env_metadata = check_environment_metadata(&flox, &path_env)?;
 
-        let base_nixpkgs_url =
-            get_base_nixpkgs_url(&flox, stability.as_deref(), &env_metadata).await?;
+        let selected_base_nixpkgs_url = base_nixpkgs_url_from_url_select(
+            &flox,
+            base_catalog_url_select,
+            Some(&env_metadata.lockfile),
+        )
+        .await?;
 
-        prefetch_expression_build_flake_ref([&package], &base_nixpkgs_url.as_flake_ref()?)?;
+        prefetch_expression_build_flake_ref(
+            [&package],
+            &selected_base_nixpkgs_url.as_flake_ref()?,
+        )?;
 
         let package_metadata = check_package_metadata(
             &env_metadata.lockfile,
-            &base_nixpkgs_url,
+            &selected_base_nixpkgs_url,
             env_metadata.toplevel_catalog_ref.as_ref(),
             package,
         )?;
@@ -198,6 +203,7 @@ impl Publish {
 
         let build_metadata = check_build_metadata(
             &flox,
+            &selected_base_nixpkgs_url,
             &publish_provider.env_metadata,
             &publish_provider.package_metadata.package,
         )?;

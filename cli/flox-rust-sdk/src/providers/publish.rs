@@ -38,7 +38,6 @@ use super::catalog::{
     ClientTrait,
     UserBuildPublish,
     UserDerivationInfo,
-    mock_base_catalog_url,
 };
 use super::git::{GitCommandError, GitCommandProvider, StatusInfo};
 use crate::data::CanonicalPath;
@@ -626,7 +625,7 @@ where
             narinfos_source_version: None,
         };
 
-        tracing::debug!("Publishing build in catalog...");
+        tracing::debug!(?build_info, "Publishing build in catalog...");
         client
             .publish_build(
                 &catalog_name,
@@ -781,6 +780,7 @@ fn check_build_metadata_from_build_result(
 /// Collect metadata needed for publishing that is obtained from the build output
 pub fn check_build_metadata(
     flox: &Flox,
+    base_nixpkgs_url: &BaseCatalogUrl,
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
 ) -> Result<CheckedBuildMetadata, PublishError> {
@@ -821,7 +821,7 @@ pub fn check_build_metadata(
     // Build the package and collect the outputs
     let build_results = builder.build(
         // todo: use a non-hardcoded nixpkgs url
-        &mock_base_catalog_url().as_flake_ref()?,
+        &base_nixpkgs_url.as_flake_ref()?,
         &built_environments.develop,
         &[pkg.name()],
         Some(false),
@@ -1255,8 +1255,13 @@ pub mod tests {
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
 
         // This will actually run the build
-        let meta =
-            check_build_metadata(&flox, &env_metadata, &EXAMPLE_MANIFEST_PACKAGE_TARGET).unwrap();
+        let meta = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            &env_metadata,
+            &EXAMPLE_MANIFEST_PACKAGE_TARGET,
+        )
+        .unwrap();
 
         let version_in_manifest = "1.0.2a";
 
@@ -1288,8 +1293,13 @@ pub mod tests {
         )
         .unwrap();
 
-        let build_metadata =
-            check_build_metadata(&flox, &env_metadata, &package_metadata.package).unwrap();
+        let build_metadata = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            &env_metadata,
+            &package_metadata.package,
+        )
+        .unwrap();
 
         let auth = Auth::from_flox(&flox).unwrap();
         let publish_provider = PublishProvider::new(env_metadata, package_metadata, auth);
@@ -1527,8 +1537,13 @@ pub mod tests {
         )
         .unwrap();
 
-        let build_metadata =
-            check_build_metadata(&flox, &env_metadata, &package_metadata.package).unwrap();
+        let build_metadata = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            &env_metadata,
+            &package_metadata.package,
+        )
+        .unwrap();
 
         let (_key_file, cache) = local_nix_cache(&token);
         let auth = Auth::from_flox(&flox).unwrap();
