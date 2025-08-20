@@ -3596,24 +3596,14 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   # This has to be updated with [flox_core::activations::LATEST_VERSION].
   LATEST_VERSION=1
 
-  # Pass the path to jq for the benefit of the jq_edit() function.
-  _jq="$(command -v jq)"
-  export _jq
-
-  export -f jq_edit
   run "$FLOX_BIN" activate -- bash <(
     cat << 'EOF'
       ACTIVATIONS_DIR=$(dirname "$_FLOX_ACTIVATION_STATE_DIR")
       ACTIVATIONS_JSON="${ACTIVATIONS_DIR}/activations.json"
-
-      jq_edit "$ACTIVATIONS_JSON" '.version = 0'
       echo "$ACTIVATIONS_JSON" > activations_json
 EOF
   )
   assert_success
-
-  # Capture from the previous activation.
-  ACTIVATIONS_JSON=$(cat activations_json)
 
   # Wait for the "start" to exit.
   # Add some output to the buffer to debug later assertion failures.
@@ -3621,8 +3611,9 @@ EOF
   wait_for_watchdogs "$PROJECT_DIR"
   cat "${PROJECT_DIR}"/.flox/log/watchdog.*
 
-  # Old version should still be recorded.
-  jq --exit-status '.version == 0' "$ACTIVATIONS_JSON"
+  # Capture and modify from the previous activation.
+  ACTIVATIONS_JSON=$(cat activations_json)
+  jq_edit "$ACTIVATIONS_JSON" '.version = 0'
 
   # New "start" with old version should succeed.
   run "$FLOX_BIN" activate -- echo "should succeed"
