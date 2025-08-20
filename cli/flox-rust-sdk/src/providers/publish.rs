@@ -625,8 +625,7 @@ where
             narinfos_source_version: None,
         };
 
-        tracing::debug!("Publishing build in catalog...");
-        tracing::debug!("Build info to be published: {build_info:?}");
+        tracing::debug!(?build_info, "Publishing build in catalog...");
         client
             .publish_build(
                 &catalog_name,

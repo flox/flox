@@ -282,6 +282,23 @@ pub(crate) fn disallow_base_url_select_for_manifest_builds<'p>(
     Ok(())
 }
 
+/// Determine the [BaseCatalogUrl] used for expression builds
+/// using the following rules:
+///
+/// * If the command line arguments address a specific nixpkgs url
+///   (i.e. `BaseCatalogUrlSelect::NixpkgsUrl` / `--nixpkgs-url <url>`)
+///   this url is used as is.  The catalog service may require the url to already be
+///   present in the catalog.  This is an advanced option and is hidden for that
+///   reason.
+/// * If the command line arguments address a stability
+///   (i.e. `BaseCatalogUrlSelect::Stability` / `--stability <stability>`)
+///   queries the nixpkgs url for the given stability from the catalog server
+///   and uses the latest revision for that stability.
+/// * If neither argument is provided, uses the nixpkgs url
+///   associated with the (implicit) `toplevel` group of the environment.
+/// * If the environment has no `toplevel` group, finally falls back
+///   to querying the latest nixpkgs url for the stability "stable"
+///   from the catalog-server.
 pub(crate) async fn base_nixpkgs_url_from_url_select(
     flox: &Flox,
     nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
