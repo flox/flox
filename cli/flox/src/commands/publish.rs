@@ -21,6 +21,7 @@ use tracing::{debug, info_span, instrument};
 use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::build::{
     BaseCatalogUrlSelect,
+    SystemOverride,
     base_catalog_url_select,
     base_nixpkgs_url_from_url_select,
     check_git_tracking_for_expression_builds,
@@ -28,6 +29,7 @@ use crate::commands::build::{
     packages_to_build,
     prefetch_expression_build_flake_ref,
     prefetch_flake_ref,
+    system_override,
 };
 use crate::commands::ensure_floxhub_token;
 use crate::config::Config;
@@ -55,6 +57,9 @@ pub struct Publish {
 
     #[bpaf(external(base_catalog_url_select), optional)]
     base_catalog_url_select: Option<BaseCatalogUrlSelect>,
+
+    #[bpaf(external(system_override))]
+    system_override: SystemOverride,
 
     #[bpaf(external(publish_target), optional)]
     publish_target: Option<PublishTarget>,
@@ -102,6 +107,7 @@ impl Publish {
             self.metadata_only,
             self.cache,
             self.base_catalog_url_select,
+            self.system_override,
         )
         .await
     }
@@ -133,6 +139,7 @@ impl Publish {
         metadata_only: bool,
         cache_args: CacheArgs,
         base_catalog_url_select: Option<BaseCatalogUrlSelect>,
+        system_override: SystemOverride,
     ) -> Result<()> {
         // Fail as early as possible if the user isn't authenticated or doesn't
         // belong to an org with a catalog.
@@ -204,6 +211,7 @@ impl Publish {
         let build_metadata = check_build_metadata(
             &flox,
             &selected_base_nixpkgs_url,
+            system_override.system,
             &publish_provider.env_metadata,
             &publish_provider.package_metadata.package,
         )?;

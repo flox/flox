@@ -104,7 +104,10 @@ OS := $(shell $(_uname) -s)
 
 # Nix system
 # TODO(nef): we might be passing that around differently (or call nef stuff with --impure)
-NIX_SYSTEM := $(shell $(_nix) config show system)
+NIX_SYSTEM_CURRENT := $(shell $(_nix) config show system)
+ifeq (,$(NIX_SYSTEM))
+  NIX_SYSTEM = $(NIX_SYSTEM_CURRENT)
+endif
 
 # Set the default goal to be all builds if one is not specified.
 .DEFAULT_GOAL := usage

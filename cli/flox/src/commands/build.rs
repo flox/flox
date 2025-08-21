@@ -54,6 +54,21 @@ pub enum BaseCatalogUrlSelect {
     ),
 }
 
+/// Reusable system override option for commands that need to specify a target system
+#[derive(Debug, Default, Bpaf, Clone)]
+pub struct SystemOverride {
+    #[bpaf(
+        argument("system"),
+        hide,
+        help(
+            "Override the Nix system.\n\
+            This is used to build packages for a different system than the current system.\n\
+            If not specified, the current system as reported by nix is used.\n"
+        )
+    )]
+    pub system: Option<String>,
+}
+
 #[derive(Bpaf, Clone)]
 pub struct Build {
     #[bpaf(external(dir_environment_select), fallback(Default::default()))]
@@ -80,6 +95,9 @@ enum SubcommandOrBuildTargets {
         #[bpaf(external(base_catalog_url_select), optional)]
         base_catalog_url_select: Option<BaseCatalogUrlSelect>,
 
+        #[bpaf(external(system_override))]
+        system_override: SystemOverride,
+
         /// The package to build.
         /// Corresponds to entries in the 'build' table in the environment's manifest.toml.
         /// If not specified, all packages are built.
@@ -102,13 +120,21 @@ impl Build {
             SubcommandOrBuildTargets::BuildTargets {
                 targets,
                 base_catalog_url_select,
+                system_override,
             } => {
                 let env = self
                     .environment
                     .detect_concrete_environment(&flox, "Build packages of")?;
                 environment_subcommand_metric!("build", env);
 
-                Self::build(flox, env, targets, base_catalog_url_select).await
+                Self::build(
+                    flox,
+                    env,
+                    targets,
+                    base_catalog_url_select,
+                    system_override.system,
+                )
+                .await
             },
         }
     }
@@ -150,6 +176,7 @@ impl Build {
         mut env: ConcreteEnvironment,
         packages: Vec<String>,
         nixpkgs_url_select: Option<BaseCatalogUrlSelect>,
+        system_override: Option<String>,
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
@@ -191,7 +218,13 @@ impl Build {
             .collect::<Vec<_>>();
 
         let builder = FloxBuildMk::new(&flox, &base_dir, &expression_dir, &built_environments);
-        let results = builder.build(&base_nixpkgs_url, &FLOX_INTERPRETER, &target_names, None)?;
+        let results = builder.build(
+            &base_nixpkgs_url,
+            &FLOX_INTERPRETER,
+            &target_names,
+            None,
+            system_override,
+        )?;
 
         let current_dir = env::current_dir()
             .context("could not get current directory")?
