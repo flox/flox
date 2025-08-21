@@ -92,6 +92,15 @@ struct PublishTarget {
     target: String,
 }
 
+/// Configuration options for the publish command
+#[derive(Debug, Clone)]
+struct PublishConfig {
+    metadata_only: bool,
+    cache_args: CacheArgs,
+    base_catalog_url_select: Option<BaseCatalogUrlSelect>,
+    system_override: SystemOverride,
+}
+
 impl Publish {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         let env = self
@@ -99,17 +108,14 @@ impl Publish {
             .detect_concrete_environment(&flox, "Publish")?;
         environment_subcommand_metric!("publish", env);
 
-        Self::publish(
-            config,
-            flox,
-            env,
-            self.publish_target,
-            self.metadata_only,
-            self.cache,
-            self.base_catalog_url_select,
-            self.system_override,
-        )
-        .await
+        let publish_config = PublishConfig {
+            metadata_only: self.metadata_only,
+            cache_args: self.cache,
+            base_catalog_url_select: self.base_catalog_url_select,
+            system_override: self.system_override,
+        };
+
+        Self::publish(config, flox, env, self.publish_target, publish_config).await
     }
 
     fn get_publish_target(
@@ -136,15 +142,16 @@ impl Publish {
         mut flox: Flox,
         env: ConcreteEnvironment,
         package_arg: Option<PublishTarget>,
-        metadata_only: bool,
-        cache_args: CacheArgs,
-        base_catalog_url_select: Option<BaseCatalogUrlSelect>,
-        system_override: SystemOverride,
+        publish_config: PublishConfig,
     ) -> Result<()> {
         // Fail as early as possible if the user isn't authenticated or doesn't
         // belong to an org with a catalog.
         let token = ensure_floxhub_token(&mut flox).await?.clone();
-        let catalog_name = cache_args.org.clone().unwrap_or(token.handle().to_string());
+        let catalog_name = publish_config
+            .cache_args
+            .org
+            .clone()
+            .unwrap_or(token.handle().to_string());
 
         let path_env = match env {
             ConcreteEnvironment::Path(path_env) => path_env,
@@ -171,7 +178,7 @@ impl Publish {
 
         disallow_base_url_select_for_manifest_builds(
             [&package],
-            base_catalog_url_select.is_some(),
+            publish_config.base_catalog_url_select.is_some(),
         )?;
         // Note: when publishsing an expression build,
         // this causes us to discover the containing git repo twice.
@@ -183,7 +190,7 @@ impl Publish {
 
         let selected_base_nixpkgs_url = base_nixpkgs_url_from_url_select(
             &flox,
-            base_catalog_url_select,
+            publish_config.base_catalog_url_select,
             Some(&env_metadata.lockfile),
         )
         .await?;
@@ -211,13 +218,13 @@ impl Publish {
         let build_metadata = check_build_metadata(
             &flox,
             &selected_base_nixpkgs_url,
-            system_override.system,
+            publish_config.system_override.system,
             &publish_provider.env_metadata,
             &publish_provider.package_metadata.package,
         )?;
 
         // CLI args take precedence over config
-        let key_file = cache_args.signing_private_key.or(config
+        let key_file = publish_config.cache_args.signing_private_key.or(config
             .flox
             .publish
             .as_ref()
@@ -234,7 +241,7 @@ impl Publish {
                 package_created,
                 &build_metadata,
                 key_file,
-                metadata_only,
+                publish_config.metadata_only,
             )
             .await
         {
