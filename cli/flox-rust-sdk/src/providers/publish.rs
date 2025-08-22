@@ -781,6 +781,7 @@ fn check_build_metadata_from_build_result(
 pub fn check_build_metadata(
     flox: &Flox,
     base_nixpkgs_url: &BaseCatalogUrl,
+    system_override: Option<String>,
     env_metadata: &CheckedEnvironmentMetadata,
     pkg: &PackageTarget,
 ) -> Result<CheckedBuildMetadata, PublishError> {
@@ -825,6 +826,7 @@ pub fn check_build_metadata(
         &built_environments.develop,
         &[pkg.name()],
         Some(false),
+        system_override,
     )?;
 
     if build_results.len() != 1 {
@@ -1258,6 +1260,7 @@ pub mod tests {
         let meta = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            None,
             &env_metadata,
             &EXAMPLE_MANIFEST_PACKAGE_TARGET,
         )
@@ -1296,6 +1299,7 @@ pub mod tests {
         let build_metadata = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            None,
             &env_metadata,
             &package_metadata.package,
         )
@@ -1540,6 +1544,7 @@ pub mod tests {
         let build_metadata = check_build_metadata(
             &flox,
             env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            None,
             &env_metadata,
             &package_metadata.package,
         )
