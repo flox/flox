@@ -484,7 +484,7 @@ define BUILD_local_template =
 	  --arg name "$(_name)" \
 	  --arg pname "$(_pname)" \
 	  --arg version "$(_version)" \
-	  --arg license "$(_license)" \
+	  --argjson license '$(_license)' \
 	  --arg description "$(_description)" \
 	  --arg log "$(shell $(_readlink) $($(_pvarname)_result)-log)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
@@ -572,7 +572,7 @@ define BUILD_nix_sandbox_template =
 	  --arg name "$(_name)" \
 	  --arg pname "$(_pname)" \
 	  --arg version "$(_version)" \
-	  --arg license "$(_license)" \
+	  --argjson license '$(_license)' \
 	  --arg description "$(_description)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
 	  '.[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks, meta: {license:$$$$license, description:$$$$description} }' $$< > $$@
@@ -740,7 +740,7 @@ $(foreach build,$(MANIFEST_BUILDS), \
   $(eval _description = $(shell \
     $(_jq) -r '.manifest.build."$(_pname)".description // empty' $(MANIFEST_LOCK))) \
   $(eval _license = $(shell \
-    $(_jq) -r '.manifest.build."$(_pname)".license // empty' $(MANIFEST_LOCK))) \
+    $(_jq) -c '.manifest.build."$(_pname)".license // null' $(MANIFEST_LOCK))) \
   $(if $(filter null off,$(_sandbox)), \
     $(eval $(call MANIFEST_BUILD_template,local)), \
     $(eval $(call MANIFEST_BUILD_template,nix_sandbox))))
