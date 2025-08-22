@@ -480,10 +480,15 @@ define BUILD_local_template =
 
   # Assemble the final build metadata.
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log $(_pvarname)_CHECK_BUILD
-	$(_V_) $(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
+	$(_V_) $(_jq) \
+	  --arg name "$(_name)" \
+	  --arg pname "$(_pname)" \
+	  --arg version "$(_version)" \
+	  --arg license "$(_license)" \
+	  --arg description "$(_description)" \
 	  --arg log "$(shell $(_readlink) $($(_pvarname)_result)-log)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks}' $$< > $$@
+	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks, meta: {license:$$$$license, description:$$$$description} }' $$< > $$@
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -567,8 +572,10 @@ define BUILD_nix_sandbox_template =
 	  --arg name "$(_name)" \
 	  --arg pname "$(_pname)" \
 	  --arg version "$(_version)" \
+	  --arg license "$(_license)" \
+	  --arg description "$(_description)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '.[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks }' $$< > $$@
+	  '.[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks, meta: {license:$$$$license, description:$$$$description} }' $$< > $$@
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
@@ -730,6 +737,10 @@ $(foreach build,$(MANIFEST_BUILDS), \
     $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK))) \
   $(eval _version = $(shell $(shell \
     $(_jq) -r --arg pname "$(_pname)" '$(strip $(JSON_VERSION_TO_COMMAND_jq))' $(MANIFEST_LOCK)))) \
+  $(eval _description = $(shell \
+    $(_jq) -r '.manifest.build."$(_pname)".description // empty' $(MANIFEST_LOCK))) \
+  $(eval _license = $(shell \
+    $(_jq) -r '.manifest.build."$(_pname)".license // empty' $(MANIFEST_LOCK))) \
   $(if $(filter null off,$(_sandbox)), \
     $(eval $(call MANIFEST_BUILD_template,local)), \
     $(eval $(call MANIFEST_BUILD_template,nix_sandbox))))
