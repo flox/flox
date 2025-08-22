@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
-use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
+use std::{env, fmt};
 
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -128,19 +128,21 @@ pub enum NixyLicense {
 // The catalog doesn't really have support that yet, so we'll format as a string
 // that maintains the data in case we want to convert later.  We just don't want
 // to be lossy.
-impl NixyLicense {
+impl fmt::Display for NixyLicense {
     /// Convert the license to a string representation
     /// - String: Returns the string as-is
     /// - List: Returns a JSON-serialized array string
     /// - Map: Returns a JSON-serialized object string
-    pub fn to_string(&self) -> String {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NixyLicense::String(s) => s.clone(),
+            NixyLicense::String(s) => write!(f, "{}", s),
             NixyLicense::List(list) => {
-                serde_json::to_string(list).unwrap_or_else(|_| "[]".to_string())
+                let json = serde_json::to_string(list).unwrap_or_else(|_| "[]".to_string());
+                write!(f, "{}", json)
             },
             NixyLicense::Map(map) => {
-                serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string())
+                let json = serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string());
+                write!(f, "{}", json)
             },
         }
     }
