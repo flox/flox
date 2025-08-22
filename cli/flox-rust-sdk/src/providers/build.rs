@@ -103,12 +103,59 @@ pub struct BuildResult {
     pub name: String,
     pub pname: String,
     pub outputs: HashMap<String, BuiltStorePath>,
+    pub meta: BuildResultMeta,
     pub version: String,
     pub system: Option<String>,
     pub log: BuiltStorePath,
     // TODO: factor out and use buildenv::BuiltStorePath (?)
     #[serde(rename = "resultLinks")]
     pub result_links: BTreeMap<PathBuf, PathBuf>,
+}
+
+/// Represents different license formats that can be found in package metadata
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum NixyLicense {
+    /// A single license as a string
+    String(String),
+    /// Multiple licenses as a list of strings
+    List(Vec<String>),
+    /// License information as a map (e.g., license names to booleans or strings)
+    Map(HashMap<String, serde_json::Value>),
+}
+
+// The license field in nix can be a string, a list of strings, or a map.
+// The catalog doesn't really have support that yet, so we'll format as a string
+// that maintains the data in case we want to convert later.  We just don't want
+// to be lossy.
+impl NixyLicense {
+    /// Convert the license to a string representation
+    /// - String: Returns the string as-is
+    /// - List: Returns a JSON-serialized array string
+    /// - Map: Returns a JSON-serialized object string
+    pub fn to_string(&self) -> String {
+        match self {
+            NixyLicense::String(s) => s.clone(),
+            NixyLicense::List(list) => {
+                serde_json::to_string(list).unwrap_or_else(|_| "[]".to_string())
+            },
+            NixyLicense::Map(map) => {
+                serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string())
+            },
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Deserialize)]
+pub struct BuildResultMeta {
+    pub description: Option<String>,
+    pub homepage: Option<String>,
+    pub license: Option<NixyLicense>,
+    pub broken: Option<bool>,
+    pub insecure: Option<bool>,
+
+    #[serde(rename = "outputsToInstall")]
+    pub outputs_to_install: Option<Vec<String>>,
 }
 
 /// A manifest builder that uses the [FLOX_BUILD_MK] makefile to build packages.
@@ -878,6 +925,79 @@ pub mod test_helpers {
         };
         assert_build_status(flox, &mut env, name, None, true);
     }
+}
+
+#[cfg(test)]
+mod license_tests {
+    use super::*;
+
+    #[test]
+    fn test_license_string_deserialization() {
+        let json = r#""MIT""#;
+        let license: NixyLicense = serde_json::from_str(json).unwrap();
+        assert_eq!(license, NixyLicense::String("MIT".to_string()));
+        assert_eq!(license.to_string(), "MIT");
+    }
+
+    #[test]
+    fn test_license_list_deserialization() {
+        let json = r#"["MIT", "Apache-2.0"]"#;
+        let license: NixyLicense = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            license,
+            NixyLicense::List(vec!["MIT".to_string(), "Apache-2.0".to_string()])
+        );
+        assert_eq!(license.to_string(), r#"["MIT","Apache-2.0"]"#);
+    }
+
+    #[test]
+    fn test_license_map_deserialization() {
+        let json = r#"{"MIT": true, "GPL": false, "Apache-2.0": "version 2.0"}"#;
+        let license: NixyLicense = serde_json::from_str(json).unwrap();
+        
+        match &license {
+            NixyLicense::Map(map) => {
+                assert_eq!(map.get("MIT"), Some(&serde_json::Value::Bool(true)));
+                assert_eq!(map.get("GPL"), Some(&serde_json::Value::Bool(false)));
+                assert_eq!(map.get("Apache-2.0"), Some(&serde_json::Value::String("version 2.0".to_string())));
+            }
+            _ => panic!("Expected License::Map"),
+        }
+        
+        let license_string = license.to_string();
+        // The JSON string should be deserializable back to the original map
+        let parsed_map: std::collections::HashMap<String, serde_json::Value> = 
+            serde_json::from_str(&license_string).unwrap();
+        assert_eq!(parsed_map.get("MIT"), Some(&serde_json::Value::Bool(true)));
+        assert_eq!(parsed_map.get("GPL"), Some(&serde_json::Value::Bool(false)));
+        assert_eq!(
+            parsed_map.get("Apache-2.0"), 
+            Some(&serde_json::Value::String("version 2.0".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_build_result_meta_with_license() {
+        let json = r#"
+        {
+            "description": "A test package",
+            "homepage": "https://example.com",
+            "license": "MIT",
+            "broken": false,
+            "insecure": null,
+            "outputsToInstall": ["out"]
+        }
+        "#;
+        
+        let meta: BuildResultMeta = serde_json::from_str(json).unwrap();
+        assert_eq!(meta.description, Some("A test package".to_string()));
+        assert_eq!(meta.homepage, Some("https://example.com".to_string()));
+        assert_eq!(meta.license, Some(NixyLicense::String("MIT".to_string())));
+        assert_eq!(meta.broken, Some(false));
+        assert_eq!(meta.insecure, None);
+        assert_eq!(meta.outputs_to_install, Some(vec!["out".to_string()]));
+    }
+
 }
 
 /// Unit tests for the `flox-build.mk` "black box" builder, via

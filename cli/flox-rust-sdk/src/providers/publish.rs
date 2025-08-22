@@ -820,7 +820,7 @@ pub fn check_build_metadata(
     let builder = FloxBuildMk::new(flox, &base_dir, &expression_dir, &built_environments);
 
     // Build the package and collect the outputs
-    let build_results = builder.build(
+    let build_results: crate::providers::build::BuildResults = builder.build(
         // todo: use a non-hardcoded nixpkgs url
         &base_nixpkgs_url.as_flake_ref()?,
         &built_environments.develop,
