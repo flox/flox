@@ -44,7 +44,6 @@ use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError, open_path};
 use crate::models::lockfile::Lockfile;
-use crate::models::manifest::typed::Inner;
 use crate::providers::auth::catalog_auth_to_envs;
 use crate::providers::catalog::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
 use crate::providers::git::GitProvider;
@@ -199,7 +198,6 @@ pub struct PackageMetadata {
 
     // These are collected from the environment manifest
     pub package: PackageTarget,
-    pub description: String,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
@@ -603,10 +601,7 @@ where
 
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
-                description: build_metadata
-                    .description
-                    .clone()
-                    .unwrap_or_default(),
+                description: build_metadata.description.clone().unwrap_or_default(),
                 drv_path: build_metadata.drv_path.clone(),
                 license: build_metadata.license.clone(),
                 name: build_metadata.name.clone(),
@@ -1008,7 +1003,6 @@ pub fn check_environment_metadata(
 }
 
 pub fn check_package_metadata(
-    lockfile: &Lockfile,
     expression_build_ref: &BaseCatalogUrl,
     toplevel_catalog_ref: Option<&BaseCatalogUrl>,
     pkg: PackageTarget,
@@ -1027,17 +1021,8 @@ pub fn check_package_metadata(
         expression_build_ref.clone()
     };
 
-    let description = lockfile
-        .manifest
-        .build
-        .inner()
-        .get(*pkg.name().as_ref())
-        .and_then(|desc| desc.description.clone())
-        .unwrap_or_default();
-
     Ok(PackageMetadata {
         package: pkg,
-        description,
         base_catalog_ref,
         _private: (),
     })
@@ -1048,9 +1033,17 @@ pub mod tests {
 
     // Defined in the manifest.toml in
     const EXAMPLE_PACKAGE_NAME: &str = "mypkg";
+    const EXAMPLE_PACKAGE_NAME_MISSING_FIELDS: &str = "mypkg_missing_fields";
     static EXAMPLE_MANIFEST_PACKAGE_TARGET: LazyLock<PackageTarget> = LazyLock::new(|| {
         PackageTarget::new_unchecked(EXAMPLE_PACKAGE_NAME, PackageTargetKind::ManifestBuild)
     });
+    static EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS: LazyLock<PackageTarget> =
+        LazyLock::new(|| {
+            PackageTarget::new_unchecked(
+                EXAMPLE_PACKAGE_NAME_MISSING_FIELDS,
+                PackageTargetKind::ManifestBuild,
+            )
+        });
 
     const EXAMPLE_MANIFEST: &str = "envs/publish-simple";
 
@@ -1251,13 +1244,11 @@ pub mod tests {
         let toplevel_catalog_url = find_toplevel_group_nixpkgs(&lockfile);
 
         let meta = check_package_metadata(
-            &lockfile,
             &mock_base_catalog_url(),
             toplevel_catalog_url.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
         )
         .unwrap();
-        let description_in_manifest = "Some sample package description from our tests";
 
         // Only the toplevel group in this example, so we can grab the first package
         let locked_base_pkg = lockfile.packages[0].as_catalog_package_ref().unwrap();
@@ -1266,7 +1257,6 @@ pub mod tests {
             locked_base_pkg.locked_url
         );
         assert_eq!(&meta.package, &*EXAMPLE_MANIFEST_PACKAGE_TARGET);
-        assert_eq!(meta.description, description_in_manifest.to_string());
     }
 
     #[test]
@@ -1289,6 +1279,8 @@ pub mod tests {
         .unwrap();
 
         let version_in_manifest = "1.0.2a";
+        let description_in_manifest = "Some sample package description from our tests";
+        let license_in_manifest = "[\"my very private license\"]";
 
         assert_eq!(meta.outputs.len(), 1);
         assert_eq!(meta.outputs_to_install.len(), 1);
@@ -1297,6 +1289,41 @@ pub mod tests {
         assert_eq!(meta.version, Some(version_in_manifest.to_string()));
         assert_eq!(meta.pname, EXAMPLE_PACKAGE_NAME.to_string());
         assert_eq!(meta.system.to_string(), flox.system);
+
+        assert_eq!(meta.description, Some(description_in_manifest.to_string()));
+        assert_eq!(meta.license, Some(license_in_manifest.to_string()));
+    }
+
+    #[test]
+    fn test_check_build_meta_null_fields() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
+
+        let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
+
+        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
+
+        // This will actually run the build
+        let meta = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            None,
+            &env_metadata,
+            &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
+        )
+        .unwrap();
+
+        assert_eq!(meta.outputs.len(), 1);
+        assert_eq!(meta.outputs_to_install.len(), 1);
+        assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
+        assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
+        assert_eq!(meta.pname, EXAMPLE_PACKAGE_NAME_MISSING_FIELDS.to_string());
+        assert_eq!(meta.system.to_string(), flox.system);
+
+        // We apply a default version if none is specified, set in flox-build.mk
+        assert_eq!(meta.version, Some("0.0.0".to_string()));
+        assert_eq!(meta.description, Some("".to_string()));
+        assert_eq!(meta.license, None);
     }
 
     #[tokio::test]
@@ -1311,7 +1338,6 @@ pub mod tests {
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let package_metadata = check_package_metadata(
-            &env_metadata.lockfile,
             &mock_base_catalog_url(),
             env_metadata.toplevel_catalog_ref.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
@@ -1416,7 +1442,6 @@ pub mod tests {
         let package_metadata = PackageMetadata {
             base_catalog_ref: catalog_page_nixpkgs_https_url,
             package: PackageTarget::new_unchecked(pkg_name, PackageTargetKind::ManifestBuild),
-            description: "dummy".to_string(),
             _private: (),
         };
 
@@ -1561,7 +1586,6 @@ pub mod tests {
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let package_metadata = check_package_metadata(
-            &env_metadata.lockfile,
             &mock_base_catalog_url(),
             env_metadata.toplevel_catalog_ref.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),

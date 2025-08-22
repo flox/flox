@@ -201,7 +201,6 @@ impl Publish {
         )?;
 
         let package_metadata = check_package_metadata(
-            &env_metadata.lockfile,
             &selected_base_nixpkgs_url,
             env_metadata.toplevel_catalog_ref.as_ref(),
             package,

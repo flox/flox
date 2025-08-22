@@ -970,12 +970,12 @@ mod license_tests {
 
         let license_string = license.to_string();
         // The JSON string should be deserializable back to the original map
-        let parsed_map: std::collections::HashMap<String, serde_json::Value> = 
+        let parsed_map: std::collections::HashMap<String, serde_json::Value> =
             serde_json::from_str(&license_string).unwrap();
         assert_eq!(parsed_map.get("MIT"), Some(&serde_json::Value::Bool(true)));
         assert_eq!(parsed_map.get("GPL"), Some(&serde_json::Value::Bool(false)));
         assert_eq!(
-            parsed_map.get("Apache-2.0"), 
+            parsed_map.get("Apache-2.0"),
             Some(&serde_json::Value::String("version 2.0".to_string()))
         );
     }
@@ -1001,7 +1001,6 @@ mod license_tests {
         assert_eq!(meta.insecure, None);
         assert_eq!(meta.outputs_to_install, Some(vec!["out".to_string()]));
     }
-
 }
 
 /// Unit tests for the `flox-build.mk` "black box" builder, via

@@ -766,11 +766,19 @@ hello.pkg-path = "hello"
 [build]
 mypkg.description = "Some sample package description from our tests"
 mypkg.version = "1.0.2a"
+mypkg.license = ["my very private license"]
 mypkg.command = """
     mkdir -p $out/bin
     echo -n "!#/bin/sh" > $out/bin/mypkg
     echo -n "echo Happy Floxing!" > $out/bin/mypkg
     chmod +x $out/bin/mypkg
+"""
+
+mypkg_missing_fields.command = """
+    mkdir -p $out/bin
+    echo -n "!#/bin/sh" > $out/bin/mypkg2
+    echo -n "echo Happy Floxing!" > $out/bin/mypkg2
+    chmod +x $out/bin/mypkg2
 """
 ' | flox edit -f -
 '''
@@ -781,6 +789,7 @@ post_cmd = '''
     cp .flox/env/manifest.toml "$env_dir/manifest.toml"
     cp .flox/env/manifest.lock "$env_dir/manifest.lock"
 '''
+
 
 # lock (and only lock) hello-unfree
 # used to test buildenv's ability to build unfree packages
