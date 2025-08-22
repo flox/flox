@@ -81,6 +81,11 @@ pub struct Init {
     /// are being used in the containing directory
     #[bpaf(long)]
     auto_setup: bool,
+
+    /// Don't auto-detect language support for a project or
+    /// make suggestions.
+    #[bpaf(long)]
+    no_auto_setup: bool,
 }
 
 impl Init {
@@ -113,7 +118,12 @@ impl Init {
         };
 
         // Don't run language hooks for "default" environment
-        let customization = if !default_environment || self.auto_setup {
+        let should_customize = !default_environment || self.auto_setup;
+        let customization = if self.no_auto_setup {
+            debug!("user asked to skip auto-setup");
+            InitCustomization::default()
+        } else if should_customize {
+            debug!("attempting auto-setup");
             self.run_language_hooks(&flox, &dir)
                 .await
                 .unwrap_or_else(|e| {
@@ -121,7 +131,7 @@ impl Init {
                     InitCustomization::default()
                 })
         } else {
-            debug!("Skipping language hooks in home directory");
+            debug!("skipping auto-setup in home directory");
             InitCustomization {
                 activate_mode: Some(ActivateMode::Run),
                 ..Default::default()
