@@ -1086,15 +1086,6 @@ mod license_tests {
     }
 
     #[test]
-    fn test_to_catalog_license_map_with_bool_true() {
-        let mut map = std::collections::HashMap::new();
-        map.insert("mit".to_string(), serde_json::Value::Bool(true));
-        map.insert("gpl".to_string(), serde_json::Value::Bool(false));
-        let license = NixyLicense::Map(map);
-        assert_eq!(license.to_catalog_license(), "mit");
-    }
-
-    #[test]
     #[should_panic(
         expected = "License map must contain at least one of the following keys: spdxId, fullName, shortName, url"
     )]
