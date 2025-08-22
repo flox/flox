@@ -179,6 +179,12 @@ pub struct CheckedBuildMetadata {
     pub drv_path: String,
     pub system: PackageSystem,
 
+    pub description: Option<String>,
+    pub license: Option<String>,
+    pub broken: Option<bool>,
+    pub insecure: Option<bool>,
+    pub unfree: Option<bool>,
+
     pub version: Option<String>,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
@@ -597,16 +603,19 @@ where
 
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
-                broken: Some(false),
-                description: self.package_metadata.description.clone(), // TODO: extract from expr build result
+                description: build_metadata
+                    .description
+                    .clone()
+                    .unwrap_or_default(),
                 drv_path: build_metadata.drv_path.clone(),
-                license: None,
+                license: build_metadata.license.clone(),
                 name: build_metadata.name.clone(),
                 outputs: build_metadata.outputs.clone(),
                 outputs_to_install: Some(build_metadata.outputs_to_install.clone()),
                 pname: Some(build_metadata.pname.clone()),
                 system: build_metadata.system,
-                unfree: None,
+                broken: build_metadata.broken,
+                unfree: build_metadata.unfree,
                 version: build_metadata.version.clone(),
             },
             locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
@@ -763,16 +772,29 @@ fn check_build_metadata_from_build_result(
             .collect(),
     );
 
-    let outputs_to_install: Vec<String> = build_result.outputs.clone().into_keys().collect();
+    // Get outputs to install from the build result, or default to all outputs.
+    let outputs_to_install = build_result
+        .meta
+        .outputs_to_install
+        .clone()
+        .unwrap_or_else(|| outputs.0.iter().map(|o| o.name.clone()).collect());
 
     Ok(CheckedBuildMetadata {
         drv_path: build_result.drv_path.clone(),
         name: build_result.name.clone(),
         pname: build_result.pname.clone(),
+
+        description: build_result.meta.description.clone(),
+        license: build_result.meta.license.clone().map(|l| l.to_string()),
+        broken: build_result.meta.broken,
+        insecure: build_result.meta.insecure,
+        unfree: build_result.meta.unfree,
+
         outputs,
         outputs_to_install,
         system,
         version: Some(build_result.version.clone()),
+
         _private: (),
     })
 }
@@ -1367,6 +1389,11 @@ pub mod tests {
             drv_path: "dummy".to_string(),
             system: PackageSystem::X8664Linux,
             version: Some("1.0.0".to_string()),
+            description: Some("dummy".to_string()),
+            license: None,
+            broken: Some(false),
+            insecure: None,
+            unfree: None,
             _private: (),
         };
 

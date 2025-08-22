@@ -153,6 +153,7 @@ pub struct BuildResultMeta {
     pub license: Option<NixyLicense>,
     pub broken: Option<bool>,
     pub insecure: Option<bool>,
+    pub unfree: Option<bool>,
 
     #[serde(rename = "outputsToInstall")]
     pub outputs_to_install: Option<Vec<String>>,
@@ -954,16 +955,19 @@ mod license_tests {
     fn test_license_map_deserialization() {
         let json = r#"{"MIT": true, "GPL": false, "Apache-2.0": "version 2.0"}"#;
         let license: NixyLicense = serde_json::from_str(json).unwrap();
-        
+
         match &license {
             NixyLicense::Map(map) => {
                 assert_eq!(map.get("MIT"), Some(&serde_json::Value::Bool(true)));
                 assert_eq!(map.get("GPL"), Some(&serde_json::Value::Bool(false)));
-                assert_eq!(map.get("Apache-2.0"), Some(&serde_json::Value::String("version 2.0".to_string())));
-            }
+                assert_eq!(
+                    map.get("Apache-2.0"),
+                    Some(&serde_json::Value::String("version 2.0".to_string()))
+                );
+            },
             _ => panic!("Expected License::Map"),
         }
-        
+
         let license_string = license.to_string();
         // The JSON string should be deserializable back to the original map
         let parsed_map: std::collections::HashMap<String, serde_json::Value> = 
@@ -988,7 +992,7 @@ mod license_tests {
             "outputsToInstall": ["out"]
         }
         "#;
-        
+
         let meta: BuildResultMeta = serde_json::from_str(json).unwrap();
         assert_eq!(meta.description, Some("A test package".to_string()));
         assert_eq!(meta.homepage, Some("https://example.com".to_string()));
