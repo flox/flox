@@ -780,7 +780,11 @@ fn check_build_metadata_from_build_result(
         pname: build_result.pname.clone(),
 
         description: build_result.meta.description.clone(),
-        license: build_result.meta.license.clone().map(|l| l.to_string()),
+        license: build_result
+            .meta
+            .license
+            .clone()
+            .map(|l| l.to_catalog_license()),
         broken: build_result.meta.broken,
         insecure: build_result.meta.insecure,
         unfree: build_result.meta.unfree,
@@ -1280,7 +1284,7 @@ pub mod tests {
 
         let version_in_manifest = "1.0.2a";
         let description_in_manifest = "Some sample package description from our tests";
-        let license_in_manifest = "[\"my very private license\"]";
+        let _license_in_manifest = "[\"my very private license\"]";
 
         assert_eq!(meta.outputs.len(), 1);
         assert_eq!(meta.outputs_to_install.len(), 1);
@@ -1291,7 +1295,16 @@ pub mod tests {
         assert_eq!(meta.system.to_string(), flox.system);
 
         assert_eq!(meta.description, Some(description_in_manifest.to_string()));
-        assert_eq!(meta.license, Some(license_in_manifest.to_string()));
+        // Note that this is different than what's in the manifest.  This is a
+        // result of the processing through the build process into build
+        // results, and processing from there as a NixyLicense.  The formatting
+        // of the license between nix and the catalog is very inconsistent and
+        // lossy unfortanately.  We'll need to address that, but for now, we
+        // choose to be consistent in the processing between them.
+        assert_eq!(
+            meta.license,
+            Some("[ my very private license ]".to_string())
+        );
     }
 
     #[test]
