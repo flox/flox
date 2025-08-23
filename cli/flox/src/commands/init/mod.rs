@@ -81,6 +81,15 @@ pub struct Init {
     /// are being used in the containing directory
     #[bpaf(long)]
     auto_setup: bool,
+
+    /// Don't auto-detect language support for a project or
+    /// make suggestions.
+    #[bpaf(long)]
+    no_auto_setup: bool,
+
+    /// Set up the environment with the emptiest possible manifest.
+    #[bpaf(short, long)]
+    bare: bool,
 }
 
 impl Init {
@@ -113,7 +122,13 @@ impl Init {
         };
 
         // Don't run language hooks for "default" environment
-        let customization = if !default_environment || self.auto_setup {
+        let should_customize = !default_environment || self.auto_setup;
+        let skip_customize = self.bare || self.no_auto_setup;
+        let customization = if skip_customize {
+            debug!("user asked to skip auto-setup");
+            InitCustomization::default()
+        } else if should_customize {
+            debug!("attempting auto-setup");
             self.run_language_hooks(&flox, &dir)
                 .await
                 .unwrap_or_else(|e| {
@@ -121,23 +136,26 @@ impl Init {
                     InitCustomization::default()
                 })
         } else {
-            debug!("Skipping language hooks in home directory");
+            debug!("skipping auto-setup in home directory");
             InitCustomization {
                 activate_mode: Some(ActivateMode::Run),
                 ..Default::default()
             }
         };
 
+        let path_pointer = PathPointer::new(env_name);
         let env = if customization.packages.is_some() {
             info_span!(
                 "init_with_suggested_packages",
                 progress = "Installing Flox suggested packages"
             )
-            .in_scope(|| {
-                PathEnvironment::init(PathPointer::new(env_name), &dir, &customization, &flox)
-            })?
+            .in_scope(|| PathEnvironment::init(path_pointer, &dir, &customization, &flox))?
+        } else if self.bare {
+            debug!("creating environment with bare manifest");
+            PathEnvironment::init_bare(path_pointer, &dir, &flox)?
         } else {
-            PathEnvironment::init(PathPointer::new(env_name), &dir, &customization, &flox)?
+            debug!("creating environment");
+            PathEnvironment::init(path_pointer, &dir, &customization, &flox)?
         };
 
         let env_in_git_repo = GitCommandProvider::discover(&dir).is_ok();

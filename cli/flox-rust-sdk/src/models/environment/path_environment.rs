@@ -431,6 +431,35 @@ impl PathEnvironment {
         PathEnvironment::new(pointer, dot_flox_path, &flox.system)
     }
 
+    /// Create a new env in a `.flox` directory within a specific path
+    /// or open it if it exists. Will create a very minimal manifest.
+    ///
+    /// The method creates or opens a `.flox` directory _contained_ within `path`!
+    pub fn init_bare(
+        pointer: PathPointer,
+        dot_flox_parent_path: impl AsRef<Path>,
+        flox: &Flox,
+    ) -> Result<Self, EnvironmentError> {
+        // Ensure that the .flox directory does not already exist
+        match DotFlox::open_in(dot_flox_parent_path.as_ref()) {
+            // continue if the .flox directory does not exist, as it's being created by this method
+            Err(EnvironmentError::DotFloxNotFound(_)) => {},
+            // propagate any other error signaling a faulty .flox directory
+            Err(e) => Err(e)?,
+            // .flox directory exists, so we can't create a new environment here
+            Ok(_) => Err(EnvironmentError::EnvironmentExists(
+                dot_flox_parent_path.as_ref().to_path_buf(),
+            ))?,
+        }
+
+        // The most minimal manifest we can generate.
+        let manifest = "version = 1\n";
+
+        let environment = Self::write_new_unchecked(flox, pointer, dot_flox_parent_path, manifest)?;
+
+        Ok(environment)
+    }
+
     /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
     ///
     /// The method creates or opens a `.flox` directory _contained_ within `path`!
