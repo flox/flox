@@ -20,6 +20,7 @@ pub struct Logs {
     environment: EnvironmentSelect,
 
     /// Follow log output
+    #[bpaf(short('f'), long)]
     follow: bool,
 
     /// Number of lines to show from the end of the logs
