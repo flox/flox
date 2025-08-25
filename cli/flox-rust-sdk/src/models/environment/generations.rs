@@ -1013,7 +1013,7 @@ impl HistorySpec {
         }
 
         match &self.kind {
-            HistoryKind::Import => "imported unmanaged path environment".to_string(),
+            HistoryKind::Import => "imported environment".to_string(),
             HistoryKind::MigrateV1 { description } => {
                 format!("{description} [metadata migrated]")
             },
