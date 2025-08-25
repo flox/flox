@@ -174,7 +174,7 @@ pub struct CheckedBuildMetadata {
     pub name: String,
     pub pname: String,
     pub outputs: catalog_api_v1::types::PackageOutputs,
-    pub outputs_to_install: Vec<String>,
+    pub outputs_to_install: Option<Vec<String>>,
     pub drv_path: String,
     pub system: PackageSystem,
 
@@ -606,7 +606,7 @@ where
                 license: build_metadata.license.clone(),
                 name: build_metadata.name.clone(),
                 outputs: build_metadata.outputs.clone(),
-                outputs_to_install: Some(build_metadata.outputs_to_install.clone()),
+                outputs_to_install: build_metadata.outputs_to_install.clone(),
                 pname: Some(build_metadata.pname.clone()),
                 system: build_metadata.system,
                 broken: build_metadata.broken,
@@ -768,11 +768,12 @@ fn check_build_metadata_from_build_result(
     );
 
     // Get outputs to install from the build result, or default to all outputs.
-    let outputs_to_install = build_result
-        .meta
-        .outputs_to_install
-        .clone()
-        .unwrap_or_else(|| outputs.0.iter().map(|o| o.name.clone()).collect());
+    let outputs_to_install = build_result.meta.outputs_to_install.clone();
+
+    let license = match &build_result.meta.license {
+        Some(lic) => Some(lic.to_catalog_license()?),
+        None => None,
+    };
 
     Ok(CheckedBuildMetadata {
         drv_path: build_result.drv_path.clone(),
@@ -780,11 +781,7 @@ fn check_build_metadata_from_build_result(
         pname: build_result.pname.clone(),
 
         description: build_result.meta.description.clone(),
-        license: build_result
-            .meta
-            .license
-            .clone()
-            .map(|l| l.to_catalog_license()),
+        license,
         broken: build_result.meta.broken,
         insecure: build_result.meta.insecure,
         unfree: build_result.meta.unfree,
@@ -841,7 +838,7 @@ pub fn check_build_metadata(
     let builder = FloxBuildMk::new(flox, &base_dir, &expression_dir, &built_environments);
 
     // Build the package and collect the outputs
-    let build_results: crate::providers::build::BuildResults = builder.build(
+    let build_results = builder.build(
         // todo: use a non-hardcoded nixpkgs url
         &base_nixpkgs_url.as_flake_ref()?,
         &built_environments.develop,
@@ -1287,7 +1284,7 @@ pub mod tests {
         let _license_in_manifest = "[\"my very private license\"]";
 
         assert_eq!(meta.outputs.len(), 1);
-        assert_eq!(meta.outputs_to_install.len(), 1);
+        assert_eq!(meta.outputs_to_install.unwrap().len(), 1);
         assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.version, Some(version_in_manifest.to_string()));
@@ -1300,7 +1297,9 @@ pub mod tests {
         // results, and processing from there as a NixyLicense.  The formatting
         // of the license between nix and the catalog is very inconsistent and
         // lossy unfortanately.  We'll need to address that, but for now, we
-        // choose to be consistent in the processing between them.
+        // choose to be consistent in the processing between them.  The
+        // processing is to join the licenses, without quotes and spaces around
+        // the brackets.   i.e. - "[ {<licenses joined with commas>} ]"
         assert_eq!(
             meta.license,
             Some("[ my very private license ]".to_string())
@@ -1327,7 +1326,7 @@ pub mod tests {
         .unwrap();
 
         assert_eq!(meta.outputs.len(), 1);
-        assert_eq!(meta.outputs_to_install.len(), 1);
+        assert_eq!(meta.outputs_to_install.unwrap().len(), 1);
         assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.pname, EXAMPLE_PACKAGE_NAME_MISSING_FIELDS.to_string());
@@ -1424,7 +1423,7 @@ pub mod tests {
                 name: "out".to_string(),
                 store_path: "/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo".to_string(),
             }]),
-            outputs_to_install: vec![],
+            outputs_to_install: None,
             drv_path: "dummy".to_string(),
             system: PackageSystem::X8664Linux,
             version: Some("1.0.0".to_string()),

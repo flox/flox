@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
+use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::LazyLock;
-use std::{env, fmt};
 
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -86,6 +86,9 @@ pub enum ManifestBuilderError {
     #[error("failed to list available nix expressions to build: {0}")]
     ListNixExpressions(String),
 
+    #[error("failed to parse the license metadata from the build results: {0}")]
+    ParseLicenseMetaData(String),
+
     #[error("failed to clean up build artifacts: {status}")]
     RunClean { status: ExitStatus },
 
@@ -121,31 +124,12 @@ pub enum NixyLicense {
     /// Multiple licenses as a list of strings
     List(Vec<String>),
     /// License information as a map (e.g., license names to booleans or strings)
-    Map(HashMap<String, serde_json::Value>),
-}
-
-// The license field in nix can be a string, a list of strings, or a map.
-// The catalog doesn't really have support that yet, so we'll format as a string
-// that maintains the data in case we want to convert later.  We just don't want
-// to be lossy.
-impl fmt::Display for NixyLicense {
-    /// Convert the license to a string representation
-    /// - String: Returns the string as-is
-    /// - List: Returns a JSON-serialized array string
-    /// - Map: Returns a JSON-serialized object string
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            NixyLicense::String(s) => write!(f, "{}", s),
-            NixyLicense::List(list) => {
-                let json = serde_json::to_string(list).unwrap_or_else(|_| "[]".to_string());
-                write!(f, "{}", json)
-            },
-            NixyLicense::Map(map) => {
-                let json = serde_json::to_string(map).unwrap_or_else(|_| "{}".to_string());
-                write!(f, "{}", json)
-            },
-        }
-    }
+    Map {
+        spdx_id: Option<String>,
+        full_name: Option<String>,
+        short_name: Option<String>,
+        url: Option<String>,
+    },
 }
 
 // Implement a to_string method that returns the string expected by the catalog.
@@ -159,29 +143,24 @@ impl NixyLicense {
     /// - String: Returns the string as-is
     /// - List: Returns a comma-separated string of the license names
     /// - Map: Returns the first available key in order of preference: "spdxId", "fullName", "shortName", "url"
-    pub fn to_catalog_license(&self) -> String {
+    pub fn to_catalog_license(&self) -> Result<String, ManifestBuilderError> {
         match self {
-            NixyLicense::String(s) => s.clone(),
-            NixyLicense::List(list) => format!("[ {} ]", list.join(", ")),
-            NixyLicense::Map(map) => {
+            NixyLicense::String(s) => Ok(s.clone()),
+            NixyLicense::List(list) => Ok(format!("[ {} ]", list.join(", "))),
+            NixyLicense::Map {
+                spdx_id,
+                full_name,
+                short_name,
+                url,
+            } => {
                 // Check keys in order of preference
-                let preferred_keys = ["spdxId", "fullName", "shortName", "url"];
-
-                for key in preferred_keys {
-                    if let Some(value) = map.get(key) {
-                        return match value {
-                            serde_json::Value::String(s) => s.clone(),
-                            serde_json::Value::Bool(true) => key.to_string(),
-                            serde_json::Value::Bool(false) => continue,
-                            _ => value.to_string(),
-                        };
-                    }
-                }
-
-                // If none of the preferred keys are found, raise a parsing error
-                panic!(
-                    "License map must contain at least one of the following keys: spdxId, fullName, shortName, url"
-                )
+                spdx_id.clone()
+                    .or_else(|| full_name.clone())
+                    .or_else(|| short_name.clone())
+                    .or_else(|| url.clone())
+                    .ok_or_else(|| ManifestBuilderError::ParseLicenseMetaData(
+                        "License map must contain at least one of the following keys: spdxId, fullName, shortName, url".to_string()
+                    ))
             },
         }
     }
@@ -974,54 +953,6 @@ mod license_tests {
     use super::*;
 
     #[test]
-    fn test_license_string_deserialization() {
-        let json = r#""MIT""#;
-        let license: NixyLicense = serde_json::from_str(json).unwrap();
-        assert_eq!(license, NixyLicense::String("MIT".to_string()));
-        assert_eq!(license.to_string(), "MIT");
-    }
-
-    #[test]
-    fn test_license_list_deserialization() {
-        let json = r#"["MIT", "Apache-2.0"]"#;
-        let license: NixyLicense = serde_json::from_str(json).unwrap();
-        assert_eq!(
-            license,
-            NixyLicense::List(vec!["MIT".to_string(), "Apache-2.0".to_string()])
-        );
-        assert_eq!(license.to_string(), r#"["MIT","Apache-2.0"]"#);
-    }
-
-    #[test]
-    fn test_license_map_deserialization() {
-        let json = r#"{"MIT": true, "GPL": false, "Apache-2.0": "version 2.0"}"#;
-        let license: NixyLicense = serde_json::from_str(json).unwrap();
-
-        match &license {
-            NixyLicense::Map(map) => {
-                assert_eq!(map.get("MIT"), Some(&serde_json::Value::Bool(true)));
-                assert_eq!(map.get("GPL"), Some(&serde_json::Value::Bool(false)));
-                assert_eq!(
-                    map.get("Apache-2.0"),
-                    Some(&serde_json::Value::String("version 2.0".to_string()))
-                );
-            },
-            _ => panic!("Expected License::Map"),
-        }
-
-        let license_string = license.to_string();
-        // The JSON string should be deserializable back to the original map
-        let parsed_map: std::collections::HashMap<String, serde_json::Value> =
-            serde_json::from_str(&license_string).unwrap();
-        assert_eq!(parsed_map.get("MIT"), Some(&serde_json::Value::Bool(true)));
-        assert_eq!(parsed_map.get("GPL"), Some(&serde_json::Value::Bool(false)));
-        assert_eq!(
-            parsed_map.get("Apache-2.0"),
-            Some(&serde_json::Value::String("version 2.0".to_string()))
-        );
-    }
-
-    #[test]
     fn test_build_result_meta_with_license() {
         let json = r#"
         {
@@ -1046,53 +977,35 @@ mod license_tests {
     #[test]
     fn test_to_catalog_license_string() {
         let license = NixyLicense::String("MIT".to_string());
-        assert_eq!(license.to_catalog_license(), "MIT");
+        assert_eq!(license.to_catalog_license().unwrap(), "MIT");
     }
 
     #[test]
     fn test_to_catalog_license_list() {
         let license = NixyLicense::List(vec!["MIT".to_string(), "Apache-2.0".to_string()]);
-        assert_eq!(license.to_catalog_license(), "[ MIT, Apache-2.0 ]");
+        assert_eq!(license.to_catalog_license().unwrap(), "[ MIT, Apache-2.0 ]");
     }
 
     #[test]
     fn test_to_catalog_license_map_with_spdx_id() {
-        let mut map = std::collections::HashMap::new();
-        map.insert(
-            "spdxId".to_string(),
-            serde_json::Value::String("MIT".to_string()),
-        );
-        map.insert(
-            "fullName".to_string(),
-            serde_json::Value::String("MIT License".to_string()),
-        );
-        let license = NixyLicense::Map(map);
-        assert_eq!(license.to_catalog_license(), "MIT");
+        let license = NixyLicense::Map {
+            spdx_id: Some("MIT".to_string()),
+            full_name: Some("MIT License".to_string()),
+            short_name: None,
+            url: None,
+        };
+        assert_eq!(license.to_catalog_license().unwrap(), "MIT");
     }
 
     #[test]
     fn test_to_catalog_license_map_with_full_name() {
-        let mut map = std::collections::HashMap::new();
-        map.insert(
-            "fullName".to_string(),
-            serde_json::Value::String("MIT License".to_string()),
-        );
-        map.insert(
-            "shortName".to_string(),
-            serde_json::Value::String("MIT".to_string()),
-        );
-        let license = NixyLicense::Map(map);
-        assert_eq!(license.to_catalog_license(), "MIT License");
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "License map must contain at least one of the following keys: spdxId, fullName, shortName, url"
-    )]
-    fn test_to_catalog_license_map_empty() {
-        let map = std::collections::HashMap::new();
-        let license = NixyLicense::Map(map);
-        license.to_catalog_license();
+        let license = NixyLicense::Map {
+            spdx_id: None,
+            full_name: Some("MIT License".to_string()),
+            short_name: Some("MIT".to_string()),
+            url: None,
+        };
+        assert_eq!(license.to_catalog_license().unwrap(), "MIT License");
     }
 
     #[test]
@@ -1100,14 +1013,13 @@ mod license_tests {
         expected = "License map must contain at least one of the following keys: spdxId, fullName, shortName, url"
     )]
     fn test_to_catalog_license_map_no_preferred_keys() {
-        let mut map = std::collections::HashMap::new();
-        map.insert(
-            "unknown".to_string(),
-            serde_json::Value::String("some license".to_string()),
-        );
-        map.insert("other".to_string(), serde_json::Value::Bool(true));
-        let license = NixyLicense::Map(map);
-        license.to_catalog_license();
+        let license = NixyLicense::Map {
+            spdx_id: None,
+            full_name: None,
+            short_name: None,
+            url: None,
+        };
+        license.to_catalog_license().unwrap();
     }
 }
 
