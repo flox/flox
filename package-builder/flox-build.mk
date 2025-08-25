@@ -484,11 +484,10 @@ define BUILD_local_template =
 	  --arg name "$(_name)" \
 	  --arg pname "$(_pname)" \
 	  --arg version "$(_version)" \
-	  --argjson license '$(_license)' \
-	  --arg description "$(_description)" \
+	  --slurpfile manifest "$(MANIFEST_LOCK)" \
 	  --arg log "$(shell $(_readlink) $($(_pvarname)_result)-log)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks, meta: {license:$$$$license, description:$$$$description} }' $$< > $$@
+	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks, meta: $$$$meta }' $$< > $$@
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -572,10 +571,9 @@ define BUILD_nix_sandbox_template =
 	  --arg name "$(_name)" \
 	  --arg pname "$(_pname)" \
 	  --arg version "$(_version)" \
-	  --argjson license '$(_license)' \
-	  --arg description "$(_description)" \
+	  --slurpfile manifest "$(MANIFEST_LOCK)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '.[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks, meta: {license:$$$$license, description:$$$$description} }' $$< > $$@
+	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks, meta: $$$$meta }' $$< > $$@
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
@@ -737,10 +735,6 @@ $(foreach build,$(MANIFEST_BUILDS), \
     $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK))) \
   $(eval _version = $(shell $(shell \
     $(_jq) -r --arg pname "$(_pname)" '$(strip $(JSON_VERSION_TO_COMMAND_jq))' $(MANIFEST_LOCK)))) \
-  $(eval _description = $(shell \
-    $(_jq) -r '.manifest.build."$(_pname)".description // empty' $(MANIFEST_LOCK))) \
-  $(eval _license = $(shell \
-    $(_jq) -c '.manifest.build."$(_pname)".license // null' $(MANIFEST_LOCK))) \
   $(if $(filter null off,$(_sandbox)), \
     $(eval $(call MANIFEST_BUILD_template,local)), \
     $(eval $(call MANIFEST_BUILD_template,nix_sandbox))))
