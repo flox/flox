@@ -1284,7 +1284,7 @@ pub mod tests {
         let _license_in_manifest = "[\"my very private license\"]";
 
         assert_eq!(meta.outputs.len(), 1);
-        assert_eq!(meta.outputs_to_install.unwrap().len(), 1);
+        assert!(meta.outputs_to_install.is_none());
         assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.version, Some(version_in_manifest.to_string()));
@@ -1326,7 +1326,7 @@ pub mod tests {
         .unwrap();
 
         assert_eq!(meta.outputs.len(), 1);
-        assert_eq!(meta.outputs_to_install.unwrap().len(), 1);
+        assert!(meta.outputs_to_install.is_none());
         assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.pname, EXAMPLE_PACKAGE_NAME_MISSING_FIELDS.to_string());
@@ -1334,7 +1334,7 @@ pub mod tests {
 
         // We apply a default version if none is specified, set in flox-build.mk
         assert_eq!(meta.version, Some("0.0.0".to_string()));
-        assert_eq!(meta.description, Some("".to_string()));
+        assert_eq!(meta.description, None);
         assert_eq!(meta.license, None);
     }
 

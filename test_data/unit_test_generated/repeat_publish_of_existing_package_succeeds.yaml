@@ -6,7 +6,7 @@ then:
   status: 201
   header:
   - name: date
-    value: Wed, 30 Jul 2025 02:17:48 GMT
+    value: Mon, 25 Aug 2025 16:16:03 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -23,7 +23,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Wed, 30 Jul 2025 02:17:48 GMT
+    value: Mon, 25 Aug 2025 16:16:03 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -35,19 +35,19 @@ then:
 when:
   path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/mypkg6/builds
   method: POST
-  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg6","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"outputs_to_install":[],"pname":"mypkg6","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
+  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg6","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"pname":"mypkg6","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
 then:
   status: 201
   header:
   - name: date
-    value: Wed, 30 Jul 2025 02:17:48 GMT
+    value: Mon, 25 Aug 2025 16:16:03 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '14'
+    value: '2'
   - name: content-type
     value: application/json
-  body: '{"store":null}'
+  body: '{}'
 ---
 when:
   path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/mypkg6/publish/info
@@ -57,7 +57,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Wed, 30 Jul 2025 02:17:48 GMT
+    value: Mon, 25 Aug 2025 16:16:04 GMT
   - name: server
     value: uvicorn
   - name: content-length
@@ -69,16 +69,16 @@ then:
 when:
   path: /api/v1/catalog/catalogs/publish_tests_read_write/packages/mypkg6/builds
   method: POST
-  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg6","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"outputs_to_install":[],"pname":"mypkg6","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
+  body: '{"derivation":{"broken":false,"description":"dummy","drv_path":"dummy","name":"mypkg6","outputs":[{"name":"out","store_path":"/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo"}],"pname":"mypkg6","system":"x86_64-linux","version":"1.0.0"},"locked_base_catalog_url":"https://github.com/flox/nixpkgs?rev=5e0ca22929f3342b19569b21b2f3462f053e497b","rev":"dummy","rev_count":0,"rev_date":"2025-01-01T12:00:00Z","url":"dummy"}'
 then:
   status: 200
   header:
   - name: date
-    value: Wed, 30 Jul 2025 02:17:48 GMT
+    value: Mon, 25 Aug 2025 16:16:04 GMT
   - name: server
     value: uvicorn
   - name: content-length
-    value: '14'
+    value: '2'
   - name: content-type
     value: application/json
-  body: '{"store":null}'
+  body: '{}'
