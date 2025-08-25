@@ -73,6 +73,7 @@ _realpath := $(call __package_bin,$(__coreutils),realpath)
 _rm := $(call __package_bin,$(__coreutils),rm)
 _sed := $(call __package_bin,$(__gnused),sed)
 _sha256sum := $(call __package_bin,$(__coreutils),sha256sum)
+_sort := $(call __package_bin,$(__coreutils),sort)
 _tar := $(call __package_bin,$(__gnutar),tar)
 _t3 := $(call __package_bin,$(__t3),t3) --relative $(if $(NO_COLOR),,--forcecolor)
 _tr := $(call __package_bin,$(__coreutils),tr)
@@ -505,10 +506,9 @@ define BUILD_nix_sandbox_template =
   # Because 'git ls-files' does not have a flag to filter deleted files,
   # but allows to _only_ show deleted files, use 'comm' to do the filtering for
   # us.
-  # Assumes the output of 'git ls-files' to be sorted.
   $(eval $(_pvarname)_src_list = $($(_pvarname)_tmpBasename)/src-list)
   $($(_pvarname)_src_list): $(PROJECT_TMPDIR)/check-build-prerequisites
-	$(_comm) -23 <($(_git) ls-files -c) <($(_git) ls-files -d) > $$@
+	$(_comm) -23 <($(_git) ls-files -c | $(_sort)) <($(_git) ls-files -d | $(_sort)) > $$@
 
   # The sourceTarball value needs to be stable when nothing changes across
   # builds, so we create a tarball at a stable temporary path and pass that
