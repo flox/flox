@@ -391,6 +391,35 @@ impl ManifestPackageDescriptor {
     /// * Descriptors are resolved per system,
     ///   changing the supported systems does not invalidate _existing_ resolutions.
     /// * Priority is not used in resolution, so it is ignored.
+    pub(crate) fn is_from_custom_catalog(&self) -> bool {
+        use ManifestPackageDescriptor::*;
+        match self {
+            // This should parse the pkg-path and if there is a catalog prefix, return true.
+            // This parsing matches the logic in the catalog service.
+            Catalog(this) => {
+                let parts: Vec<&str> = this.pkg_path.split('/').collect();
+                if parts.len() == 1 || parts.first().is_some_and(|p| p.contains('.')) {
+                    // No catalog prefix, or the first part contains a dot (nixpkgs style)
+                    false
+                } else {
+                    // There is a catalog prefix
+                    true
+                }
+            },
+            // different types of descriptors are always different
+            _ => false,
+        }
+    }
+}
+
+impl ManifestPackageDescriptor {
+    /// Check if two package descriptors should have the same resolution.
+    /// This is used to determine if a package needs to be re-resolved
+    /// in the presence of an existing lock.
+    ///
+    /// * Descriptors are resolved per system,
+    ///   changing the supported systems does not invalidate _existing_ resolutions.
+    /// * Priority is not used in resolution, so it is ignored.
     pub(crate) fn invalidates_existing_resolution(&self, other: &Self) -> bool {
         use ManifestPackageDescriptor::*;
         match (self, other) {
@@ -1423,5 +1452,79 @@ pub mod test {
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], "testInstallID");
+    }
+
+    /// Helper function to create a catalog descriptor for testing
+    fn create_catalog_descriptor(pkg_path: &str) -> ManifestPackageDescriptor {
+        ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+            pkg_path: pkg_path.to_string(),
+            pkg_group: None,
+            priority: None,
+            version: None,
+            systems: None,
+        })
+    }
+
+    /// Helper function to create a flake descriptor for testing
+    fn create_flake_descriptor(flake: &str) -> ManifestPackageDescriptor {
+        ManifestPackageDescriptor::FlakeRef(PackageDescriptorFlake {
+            flake: flake.to_string(),
+            priority: None,
+            systems: None,
+        })
+    }
+
+    /// Helper function to create a store path descriptor for testing
+    fn create_store_path_descriptor(store_path: &str) -> ManifestPackageDescriptor {
+        ManifestPackageDescriptor::StorePath(PackageDescriptorStorePath {
+            store_path: store_path.to_string(),
+            systems: None,
+            priority: None,
+        })
+    }
+
+    #[test]
+    fn test_is_from_custom_catalog() {
+        // Test cases: (pkg_path, expected_result, description)
+        let test_cases = vec![
+            ("hello", false, "nixpkgs-style packages (no custom catalog)"),
+            (
+                "python3.11",
+                false,
+                "packages with dots in the name (nixpkgs-style)",
+            ),
+            (
+                "mycatalog/hello",
+                true,
+                "package with custom catalog prefix",
+            ),
+            (
+                "custom/category/package",
+                true,
+                "package with nested path and custom catalog",
+            ),
+            (
+                "my.catalog/hello",
+                false,
+                "first part contains a dot (should be treated as nixpkgs-style)",
+            ),
+            ("", false, "edge case with empty pkg_path"),
+            ("/", true, "edge case with just a slash"),
+        ];
+
+        for (pkg_path, expected, description) in test_cases {
+            let descriptor = create_catalog_descriptor(pkg_path);
+            assert_eq!(
+                descriptor.is_from_custom_catalog(),
+                expected,
+                "Failed for {}: {}",
+                pkg_path,
+                description
+            );
+        }
+
+        // Test non-catalog descriptors always return false
+        assert!(!create_flake_descriptor("github:owner/repo").is_from_custom_catalog());
+        assert!(!create_store_path_descriptor("/nix/store/abc123-hello").is_from_custom_catalog());
     }
 }
