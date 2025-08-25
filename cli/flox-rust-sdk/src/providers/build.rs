@@ -125,8 +125,11 @@ pub enum NixyLicense {
     List(Vec<String>),
     /// License information as a map (e.g., license names to booleans or strings)
     Map {
+        #[serde(rename = "spdxId")]
         spdx_id: Option<String>,
+        #[serde(rename = "fullName")]
         full_name: Option<String>,
+        #[serde(rename = "shortName")]
         short_name: Option<String>,
         url: Option<String>,
     },
