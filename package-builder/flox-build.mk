@@ -480,10 +480,14 @@ define BUILD_local_template =
 
   # Assemble the final build metadata.
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log $(_pvarname)_CHECK_BUILD
-	$(_V_) $(_jq) --arg pname "$(_pname)" --arg version "$(_version)" --arg name "$(_name)" \
+	$(_V_) $(_jq) \
+	  --arg name "$(_name)" \
+	  --arg pname "$(_pname)" \
+	  --arg version "$(_version)" \
+	  --slurpfile manifest "$(MANIFEST_LOCK)" \
 	  --arg log "$(shell $(_readlink) $($(_pvarname)_result)-log)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '.[0] * {name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks}' $$< > $$@
+	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks, meta: $$$$meta }' $$< > $$@
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -567,8 +571,9 @@ define BUILD_nix_sandbox_template =
 	  --arg name "$(_name)" \
 	  --arg pname "$(_pname)" \
 	  --arg version "$(_version)" \
+	  --slurpfile manifest "$(MANIFEST_LOCK)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '.[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks }' $$< > $$@
+	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks, meta: $$$$meta }' $$< > $$@
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in

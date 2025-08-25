@@ -6,7 +6,7 @@ then:
   status: 200
   header:
   - name: date
-    value: Wed, 06 Aug 2025 23:06:32 GMT
+    value: Mon, 25 Aug 2025 16:15:34 GMT
   - name: content-type
     value: application/json
   - name: content-length
@@ -14,5 +14,5 @@ then:
   - name: server
     value: uvicorn
   - name: apigw-requestid
-    value: O5_uoixmIAMESZA=
+    value: P3rVogYrIAMESuw=
   body: '{"items":[{"name":"yarn-berry","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"constraints_too_tight","message":"Resolution constraints are too tight.","context":{}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''yarn-berry'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''yarn-berry'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''yarn-berry'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''yarn-berry'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''yarn-berry'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''yarn-berry'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]},{"name":"yarn","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"constraints_too_tight","message":"Resolution constraints are too tight.","context":{}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''yarn'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations.","context":{"install_id":"GROUP","message":"Group ''yarn'' could not be resolved with strategy: Stage 1: Only allow missing builds for packages without current locked derivations."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''yarn'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds.","context":{"install_id":"GROUP","message":"Group ''yarn'' could not be resolved with strategy: Stage 2: Unlock existing derivations but require known builds."}},{"level":"trace","type":"resolution_logic","message":"TRACE (GROUP): Group ''yarn'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds.","context":{"install_id":"GROUP","message":"Group ''yarn'' could not be resolved with strategy: Stage 3: Unlock existing derivations and allow missing builds."}}]}]}'

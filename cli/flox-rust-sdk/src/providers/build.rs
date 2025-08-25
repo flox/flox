@@ -86,6 +86,9 @@ pub enum ManifestBuilderError {
     #[error("failed to list available nix expressions to build: {0}")]
     ListNixExpressions(String),
 
+    #[error("failed to parse the license metadata from the build results: {0}")]
+    ParseLicenseMetaData(String),
+
     #[error("failed to clean up build artifacts: {status}")]
     RunClean { status: ExitStatus },
 
@@ -103,12 +106,77 @@ pub struct BuildResult {
     pub name: String,
     pub pname: String,
     pub outputs: HashMap<String, BuiltStorePath>,
+    pub meta: BuildResultMeta,
     pub version: String,
     pub system: Option<String>,
     pub log: BuiltStorePath,
     // TODO: factor out and use buildenv::BuiltStorePath (?)
     #[serde(rename = "resultLinks")]
     pub result_links: BTreeMap<PathBuf, PathBuf>,
+}
+
+/// Represents different license formats that can be found in package metadata
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum NixyLicense {
+    /// A single license as a string
+    String(String),
+    /// Multiple licenses as a list of strings
+    List(Vec<String>),
+    /// License information as a map (e.g., license names to booleans or strings)
+    Map {
+        spdx_id: Option<String>,
+        full_name: Option<String>,
+        short_name: Option<String>,
+        url: Option<String>,
+    },
+}
+
+// Implement a to_string method that returns the string expected by the catalog.
+// These rules are a port from the existing scraping logic for consistency.
+// If the license metadata is a string, it returns it directly.
+// If it's a list, it returns list.
+// If it's a map, it takes the keys in the order of "spdxId", "fullName", "shortName", and "url",
+impl NixyLicense {
+    /// Convert the license to a string representation expected by the catalog.
+    /// These rules are a port from the existing scraping logic for consistency.
+    /// - String: Returns the string as-is
+    /// - List: Returns a comma-separated string of the license names
+    /// - Map: Returns the first available key in order of preference: "spdxId", "fullName", "shortName", "url"
+    pub fn to_catalog_license(&self) -> Result<String, ManifestBuilderError> {
+        match self {
+            NixyLicense::String(s) => Ok(s.clone()),
+            NixyLicense::List(list) => Ok(format!("[ {} ]", list.join(", "))),
+            NixyLicense::Map {
+                spdx_id,
+                full_name,
+                short_name,
+                url,
+            } => {
+                // Check keys in order of preference
+                spdx_id.clone()
+                    .or_else(|| full_name.clone())
+                    .or_else(|| short_name.clone())
+                    .or_else(|| url.clone())
+                    .ok_or_else(|| ManifestBuilderError::ParseLicenseMetaData(
+                        "License map must contain at least one of the following keys: spdxId, fullName, shortName, url".to_string()
+                    ))
+            },
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Deserialize)]
+pub struct BuildResultMeta {
+    pub description: Option<String>,
+    pub homepage: Option<String>,
+    pub license: Option<NixyLicense>,
+    pub broken: Option<bool>,
+    pub insecure: Option<bool>,
+    pub unfree: Option<bool>,
+
+    #[serde(rename = "outputsToInstall")]
+    pub outputs_to_install: Option<Vec<String>>,
 }
 
 /// A manifest builder that uses the [FLOX_BUILD_MK] makefile to build packages.
@@ -877,6 +945,81 @@ pub mod test_helpers {
             panic!("expected path environment")
         };
         assert_build_status(flox, &mut env, name, None, true);
+    }
+}
+
+#[cfg(test)]
+mod license_tests {
+    use super::*;
+
+    #[test]
+    fn test_build_result_meta_with_license() {
+        let json = r#"
+        {
+            "description": "A test package",
+            "homepage": "https://example.com",
+            "license": "MIT",
+            "broken": false,
+            "insecure": null,
+            "outputsToInstall": ["out"]
+        }
+        "#;
+
+        let meta: BuildResultMeta = serde_json::from_str(json).unwrap();
+        assert_eq!(meta.description, Some("A test package".to_string()));
+        assert_eq!(meta.homepage, Some("https://example.com".to_string()));
+        assert_eq!(meta.license, Some(NixyLicense::String("MIT".to_string())));
+        assert_eq!(meta.broken, Some(false));
+        assert_eq!(meta.insecure, None);
+        assert_eq!(meta.outputs_to_install, Some(vec!["out".to_string()]));
+    }
+
+    #[test]
+    fn test_to_catalog_license_string() {
+        let license = NixyLicense::String("MIT".to_string());
+        assert_eq!(license.to_catalog_license().unwrap(), "MIT");
+    }
+
+    #[test]
+    fn test_to_catalog_license_list() {
+        let license = NixyLicense::List(vec!["MIT".to_string(), "Apache-2.0".to_string()]);
+        assert_eq!(license.to_catalog_license().unwrap(), "[ MIT, Apache-2.0 ]");
+    }
+
+    #[test]
+    fn test_to_catalog_license_map_with_spdx_id() {
+        let license = NixyLicense::Map {
+            spdx_id: Some("MIT".to_string()),
+            full_name: Some("MIT License".to_string()),
+            short_name: None,
+            url: None,
+        };
+        assert_eq!(license.to_catalog_license().unwrap(), "MIT");
+    }
+
+    #[test]
+    fn test_to_catalog_license_map_with_full_name() {
+        let license = NixyLicense::Map {
+            spdx_id: None,
+            full_name: Some("MIT License".to_string()),
+            short_name: Some("MIT".to_string()),
+            url: None,
+        };
+        assert_eq!(license.to_catalog_license().unwrap(), "MIT License");
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "License map must contain at least one of the following keys: spdxId, fullName, shortName, url"
+    )]
+    fn test_to_catalog_license_map_no_preferred_keys() {
+        let license = NixyLicense::Map {
+            spdx_id: None,
+            full_name: None,
+            short_name: None,
+            url: None,
+        };
+        license.to_catalog_license().unwrap();
     }
 }
 

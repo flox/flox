@@ -44,7 +44,6 @@ use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::environment::{Environment, EnvironmentError, open_path};
 use crate::models::lockfile::Lockfile;
-use crate::models::manifest::typed::Inner;
 use crate::providers::auth::catalog_auth_to_envs;
 use crate::providers::catalog::{CatalogStoreConfig, CatalogStoreConfigNixCopy};
 use crate::providers::git::GitProvider;
@@ -175,9 +174,15 @@ pub struct CheckedBuildMetadata {
     pub name: String,
     pub pname: String,
     pub outputs: catalog_api_v1::types::PackageOutputs,
-    pub outputs_to_install: Vec<String>,
+    pub outputs_to_install: Option<Vec<String>>,
     pub drv_path: String,
     pub system: PackageSystem,
+
+    pub description: Option<String>,
+    pub license: Option<String>,
+    pub broken: Option<bool>,
+    pub insecure: Option<bool>,
+    pub unfree: Option<bool>,
 
     pub version: Option<String>,
 
@@ -193,7 +198,6 @@ pub struct PackageMetadata {
 
     // These are collected from the environment manifest
     pub package: PackageTarget,
-    pub description: String,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
@@ -597,16 +601,16 @@ where
 
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
-                broken: Some(false),
-                description: self.package_metadata.description.clone(), // TODO: extract from expr build result
+                description: build_metadata.description.clone().unwrap_or_default(),
                 drv_path: build_metadata.drv_path.clone(),
-                license: None,
+                license: build_metadata.license.clone(),
                 name: build_metadata.name.clone(),
                 outputs: build_metadata.outputs.clone(),
-                outputs_to_install: Some(build_metadata.outputs_to_install.clone()),
+                outputs_to_install: build_metadata.outputs_to_install.clone(),
                 pname: Some(build_metadata.pname.clone()),
                 system: build_metadata.system,
-                unfree: None,
+                broken: build_metadata.broken,
+                unfree: build_metadata.unfree,
                 version: build_metadata.version.clone(),
             },
             locked_base_catalog_url: Some(self.package_metadata.base_catalog_ref.to_string()),
@@ -763,16 +767,30 @@ fn check_build_metadata_from_build_result(
             .collect(),
     );
 
-    let outputs_to_install: Vec<String> = build_result.outputs.clone().into_keys().collect();
+    // Get outputs to install from the build result, or default to all outputs.
+    let outputs_to_install = build_result.meta.outputs_to_install.clone();
+
+    let license = match &build_result.meta.license {
+        Some(lic) => Some(lic.to_catalog_license()?),
+        None => None,
+    };
 
     Ok(CheckedBuildMetadata {
         drv_path: build_result.drv_path.clone(),
         name: build_result.name.clone(),
         pname: build_result.pname.clone(),
+
+        description: build_result.meta.description.clone(),
+        license,
+        broken: build_result.meta.broken,
+        insecure: build_result.meta.insecure,
+        unfree: build_result.meta.unfree,
+
         outputs,
         outputs_to_install,
         system,
         version: Some(build_result.version.clone()),
+
         _private: (),
     })
 }
@@ -986,7 +1004,6 @@ pub fn check_environment_metadata(
 }
 
 pub fn check_package_metadata(
-    lockfile: &Lockfile,
     expression_build_ref: &BaseCatalogUrl,
     toplevel_catalog_ref: Option<&BaseCatalogUrl>,
     pkg: PackageTarget,
@@ -1005,17 +1022,8 @@ pub fn check_package_metadata(
         expression_build_ref.clone()
     };
 
-    let description = lockfile
-        .manifest
-        .build
-        .inner()
-        .get(*pkg.name().as_ref())
-        .and_then(|desc| desc.description.clone())
-        .unwrap_or_default();
-
     Ok(PackageMetadata {
         package: pkg,
-        description,
         base_catalog_ref,
         _private: (),
     })
@@ -1026,9 +1034,17 @@ pub mod tests {
 
     // Defined in the manifest.toml in
     const EXAMPLE_PACKAGE_NAME: &str = "mypkg";
+    const EXAMPLE_PACKAGE_NAME_MISSING_FIELDS: &str = "mypkg_missing_fields";
     static EXAMPLE_MANIFEST_PACKAGE_TARGET: LazyLock<PackageTarget> = LazyLock::new(|| {
         PackageTarget::new_unchecked(EXAMPLE_PACKAGE_NAME, PackageTargetKind::ManifestBuild)
     });
+    static EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS: LazyLock<PackageTarget> =
+        LazyLock::new(|| {
+            PackageTarget::new_unchecked(
+                EXAMPLE_PACKAGE_NAME_MISSING_FIELDS,
+                PackageTargetKind::ManifestBuild,
+            )
+        });
 
     const EXAMPLE_MANIFEST: &str = "envs/publish-simple";
 
@@ -1229,13 +1245,11 @@ pub mod tests {
         let toplevel_catalog_url = find_toplevel_group_nixpkgs(&lockfile);
 
         let meta = check_package_metadata(
-            &lockfile,
             &mock_base_catalog_url(),
             toplevel_catalog_url.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
         )
         .unwrap();
-        let description_in_manifest = "Some sample package description from our tests";
 
         // Only the toplevel group in this example, so we can grab the first package
         let locked_base_pkg = lockfile.packages[0].as_catalog_package_ref().unwrap();
@@ -1244,7 +1258,6 @@ pub mod tests {
             locked_base_pkg.locked_url
         );
         assert_eq!(&meta.package, &*EXAMPLE_MANIFEST_PACKAGE_TARGET);
-        assert_eq!(meta.description, description_in_manifest.to_string());
     }
 
     #[test]
@@ -1267,14 +1280,62 @@ pub mod tests {
         .unwrap();
 
         let version_in_manifest = "1.0.2a";
+        let description_in_manifest = "Some sample package description from our tests";
+        let _license_in_manifest = "[\"my very private license\"]";
 
         assert_eq!(meta.outputs.len(), 1);
-        assert_eq!(meta.outputs_to_install.len(), 1);
+        assert!(meta.outputs_to_install.is_none());
         assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.version, Some(version_in_manifest.to_string()));
         assert_eq!(meta.pname, EXAMPLE_PACKAGE_NAME.to_string());
         assert_eq!(meta.system.to_string(), flox.system);
+
+        assert_eq!(meta.description, Some(description_in_manifest.to_string()));
+        // Note that this is different than what's in the manifest.  This is a
+        // result of the processing through the build process into build
+        // results, and processing from there as a NixyLicense.  The formatting
+        // of the license between nix and the catalog is very inconsistent and
+        // lossy unfortanately.  We'll need to address that, but for now, we
+        // choose to be consistent in the processing between them.  The
+        // processing is to join the licenses, without quotes and spaces around
+        // the brackets.   i.e. - "[ {<licenses joined with commas>} ]"
+        assert_eq!(
+            meta.license,
+            Some("[ my very private license ]".to_string())
+        );
+    }
+
+    #[test]
+    fn test_check_build_meta_null_fields() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let (_tempdir_handle, _remote_repo, remote_uri) = example_git_remote_repo();
+
+        let (env, _build_repo) = example_path_environment(&flox, Some(&remote_uri));
+
+        let env_metadata = check_environment_metadata(&flox, &env).unwrap();
+
+        // This will actually run the build
+        let meta = check_build_metadata(
+            &flox,
+            env_metadata.toplevel_catalog_ref.as_ref().unwrap(),
+            None,
+            &env_metadata,
+            &EXAMPLE_MANIFEST_PACKAGE_TARGET_MISSING_FIELDS,
+        )
+        .unwrap();
+
+        assert_eq!(meta.outputs.len(), 1);
+        assert!(meta.outputs_to_install.is_none());
+        assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
+        assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
+        assert_eq!(meta.pname, EXAMPLE_PACKAGE_NAME_MISSING_FIELDS.to_string());
+        assert_eq!(meta.system.to_string(), flox.system);
+
+        // We apply a default version if none is specified, set in flox-build.mk
+        assert_eq!(meta.version, Some("0.0.0".to_string()));
+        assert_eq!(meta.description, None);
+        assert_eq!(meta.license, None);
     }
 
     #[tokio::test]
@@ -1289,7 +1350,6 @@ pub mod tests {
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let package_metadata = check_package_metadata(
-            &env_metadata.lockfile,
             &mock_base_catalog_url(),
             env_metadata.toplevel_catalog_ref.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
@@ -1363,10 +1423,15 @@ pub mod tests {
                 name: "out".to_string(),
                 store_path: "/nix/store/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-foo".to_string(),
             }]),
-            outputs_to_install: vec![],
+            outputs_to_install: None,
             drv_path: "dummy".to_string(),
             system: PackageSystem::X8664Linux,
             version: Some("1.0.0".to_string()),
+            description: Some("dummy".to_string()),
+            license: None,
+            broken: Some(false),
+            insecure: None,
+            unfree: None,
             _private: (),
         };
 
@@ -1389,7 +1454,6 @@ pub mod tests {
         let package_metadata = PackageMetadata {
             base_catalog_ref: catalog_page_nixpkgs_https_url,
             package: PackageTarget::new_unchecked(pkg_name, PackageTargetKind::ManifestBuild),
-            description: "dummy".to_string(),
             _private: (),
         };
 
@@ -1534,7 +1598,6 @@ pub mod tests {
 
         let env_metadata = check_environment_metadata(&flox, &env).unwrap();
         let package_metadata = check_package_metadata(
-            &env_metadata.lockfile,
             &mock_base_catalog_url(),
             env_metadata.toplevel_catalog_ref.as_ref(),
             EXAMPLE_MANIFEST_PACKAGE_TARGET.clone(),
