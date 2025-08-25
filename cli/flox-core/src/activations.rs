@@ -266,6 +266,24 @@ impl Activation {
         self.attached_pids
             .retain(|attached_pid| attached_pid.pid != pid);
     }
+
+    /// Remove any PIDs that are not running, except if they have an expiration in the future.
+    ///
+    /// Returns a boolean indicating whether any PIDs were removed.
+    pub fn remove_terminated_pids(&mut self) -> bool {
+        let now = OffsetDateTime::now_utc();
+        let old_len = self.attached_pids.len();
+        self.attached_pids.retain(|attached_pid| {
+            if let Some(expiration) = attached_pid.expiration {
+                // If the PID has an unreached expiration, retain it even if it
+                // isn't running
+                now < expiration || pid_is_running(attached_pid.pid)
+            } else {
+                pid_is_running(attached_pid.pid)
+            }
+        });
+        old_len != self.attached_pids.len()
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
@@ -367,7 +385,28 @@ pub fn write_activations_json<V: Serialize>(
 
 #[cfg(test)]
 mod test {
+    use std::process::{Child, Command};
+
     use super::*;
+
+    // NOTE: these two functions are copied from flox-rust-sdk since you can't
+    //       share anything behind #[cfg(test)] across crates
+
+    /// Start a shortlived process that we can check the PID is running.
+    pub fn start_process() -> Child {
+        Command::new("sleep")
+            .arg("2")
+            .spawn()
+            .expect("failed to start")
+    }
+
+    /// Stop a shortlived process that we can check the PID is not running. It's
+    /// unlikely, but not impossible, that the kernel will have not re-used the
+    /// PID by the time we check it.
+    pub fn stop_process(mut child: Child) {
+        child.kill().expect("failed to kill");
+        child.wait().expect("failed to wait");
+    }
 
     #[test]
     fn check_version_upgrade() {
@@ -512,5 +551,57 @@ mod test {
 
         activation.remove_pid(123);
         assert_eq!(activation.attached_pids.len(), 0);
+    }
+
+    #[test]
+    fn activation_remove_terminated_pids() {
+        let proc_running = start_process();
+        let pid_running = AttachedPid {
+            pid: proc_running.id() as i32,
+            expiration: None,
+        };
+        let proc_past = start_process();
+        let pid_past = AttachedPid {
+            pid: proc_past.id() as i32,
+            expiration: Some(OffsetDateTime::now_utc() - time::Duration::days(1)),
+        };
+        let proc_future = start_process();
+        let pid_future = AttachedPid {
+            pid: proc_future.id() as i32,
+            expiration: Some(OffsetDateTime::now_utc() + time::Duration::days(1)),
+        };
+
+        let mut activation = Activation {
+            id: "1".to_string(),
+            store_path: "/store/path".to_string(),
+            ready: false,
+            attached_pids: vec![pid_running.clone(), pid_past.clone(), pid_future.clone()],
+        };
+
+        let modified = activation.remove_terminated_pids();
+        assert_eq!(activation.attached_pids().to_vec(), vec![
+            pid_running.clone(),
+            pid_past.clone(),
+            pid_future.clone(),
+        ]);
+        assert!(!modified, "should return false when no PIDs are removed");
+
+        stop_process(proc_running);
+        stop_process(proc_past);
+        stop_process(proc_future);
+
+        let modified = activation.remove_terminated_pids();
+        assert_eq!(
+            activation.attached_pids().to_owned(),
+            vec![pid_future.clone()],
+            "should remove PIDs that are not running AND expired"
+        );
+        assert!(modified, "should return true when PIDs are removed");
+
+        let removed = activation.remove_terminated_pids();
+        assert!(
+            !removed,
+            "should return false when there are still no changes"
+        );
     }
 }

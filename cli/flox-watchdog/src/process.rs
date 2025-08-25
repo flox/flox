@@ -8,7 +8,6 @@
 //! On macOS we slum it and call `/bin/ps` rather than using the private `libproc.h`
 //! API, but mostly for build-complexity reasons.
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -17,15 +16,11 @@ use std::time::Duration;
 use anyhow::{Result, bail};
 use flox_core::activations::{
     Activations,
-    AttachedPid,
     CheckedVersion,
-    UncheckedVersion,
     read_activations_json,
     write_activations_json,
 };
-use flox_core::proc_status::pid_is_running;
 use fslock::LockFile;
-use time::OffsetDateTime;
 use tracing::trace;
 /// How long to wait between watcher updates.
 pub const WATCHER_SLEEP_INTERVAL: Duration = Duration::from_millis(100);
@@ -35,7 +30,7 @@ type Error = anyhow::Error;
 /// A deserialized activations.json together with a lock preventing it from
 /// being modified
 /// TODO: there's probably a cleaner way to do this
-pub type LockedActivations = (Activations<UncheckedVersion>, LockFile);
+pub type LockedActivations = (Activations<CheckedVersion>, LockFile);
 
 #[derive(Debug)]
 pub enum WaitResult {
@@ -48,7 +43,7 @@ pub trait Watcher {
     fn wait_for_termination(&mut self) -> Result<WaitResult, Error>;
     /// Instructs the watcher to update the list of PIDs that it's watching
     /// by reading the environment registry (for now).
-    fn update_watchlist(&mut self, hold_lock: bool) -> Result<Option<LockedActivations>, Error>;
+    fn check_pids(&mut self) -> Result<Option<WaitResult>, Error>;
     /// Writes the current activation PIDs back out to `activations.json`
     /// while holding a lock on it.
     fn update_activations_file(
@@ -56,14 +51,10 @@ pub trait Watcher {
         activations: Activations<CheckedVersion>,
         lock: LockFile,
     ) -> Result<(), Error>;
-    /// Returns true if the watcher determines that it's time to perform
-    /// cleanup.
-    fn should_clean_up(&self) -> Result<bool, Error>;
 }
 
 #[derive(Debug)]
 pub struct PidWatcher {
-    pids_watching: HashSet<AttachedPid>,
     activation_id: String,
     activations_json_path: PathBuf,
     should_terminate_flag: Arc<AtomicBool>,
@@ -80,56 +71,19 @@ impl PidWatcher {
         should_clean_up_flag: Arc<AtomicBool>,
     ) -> Self {
         Self {
-            pids_watching: HashSet::new(),
             activations_json_path,
             activation_id,
             should_terminate_flag,
             should_clean_up_flag,
         }
     }
-
-    /// Removes any PIDs that are no longer running from the watchlist.
-    fn prune_terminations(&mut self) {
-        let now = OffsetDateTime::now_utc();
-        self.pids_watching.retain(|attached_pid| {
-            if let Some(expiration) = attached_pid.expiration {
-                // If the PID has an unreached expiration, retain it even if it
-                // isn't running
-                now < expiration || pid_is_running(attached_pid.pid)
-            } else {
-                pid_is_running(attached_pid.pid)
-            }
-        })
-    }
 }
 
 impl Watcher for PidWatcher {
     fn wait_for_termination(&mut self) -> Result<WaitResult, Error> {
         loop {
-            let old_pids = self.pids_watching.clone();
-            self.update_watchlist(false)?;
-            if self.pids_watching != old_pids {
-                // If the running activations have changed, write the new PIDs
-                // back to `activations.json` so that we don't monitor PIDs
-                // that have terminated on the next loop iteration.
-                let (activations, lockfile) = self.update_watchlist(true)?.ok_or(
-                    anyhow::anyhow!("update_watchlist always returns Some when hold_lock is true"),
-                )?;
-                // NOTE(zmitchell, 2025-07-28): at some point we'll have to handle migrations here
-                // if there are updates to the `activations.json` schema.
-                let activations = activations.check_version()?;
-                self.update_activations_file(activations, lockfile)?;
-            }
-            if self.should_clean_up()? {
-                // Don't hold the lock during normal polling to avoid contention
-                // But when we're actually ready to cleanup, we need to hold the lock
-                // TODO: could probably refactor and get rid of the unwrap
-                let locked_activations = self.update_watchlist(true)?.ok_or(anyhow::anyhow!(
-                    "update_watchlist always returns Some when hold_lock is true"
-                ))?;
-                if self.should_clean_up()? {
-                    return Ok(WaitResult::CleanUp(locked_activations));
-                };
+            if let Some(exit) = self.check_pids()? {
+                return Ok(exit);
             }
             if self
                 .should_terminate_flag
@@ -145,38 +99,43 @@ impl Watcher for PidWatcher {
                 let Some(activations_json) = activations_json else {
                     bail!("watchdog shouldn't be running when activations.json doesn't exist");
                 };
-                return Ok(WaitResult::CleanUp((activations_json, lock)));
+                let activations = activations_json.check_version()?;
+                return Ok(WaitResult::CleanUp((activations, lock)));
             }
             std::thread::sleep(WATCHER_SLEEP_INTERVAL);
         }
     }
 
-    /// Update the list of PIDs that are currently being watched.
-    fn update_watchlist(&mut self, hold_lock: bool) -> Result<Option<LockedActivations>, Error> {
+    /// Reload and check the list of PIDs for an activation.
+    fn check_pids(&mut self) -> Result<Option<WaitResult>, Error> {
         let (activations_json, lock) = read_activations_json(&self.activations_json_path)?;
         let Some(activations_json) = activations_json else {
             bail!("watchdog shouldn't be running when activations.json doesn't exist");
         };
-        let maybe_locked_activations = if hold_lock {
-            Some((activations_json.clone(), lock))
-        } else {
-            drop(lock);
-            None
-        };
 
-        let Some(activation) = activations_json.activation_for_id_ref(&self.activation_id) else {
+        // NOTE(zmitchell, 2025-07-28): at some point we'll have to handle migrations here
+        // if there are updates to the `activations.json` schema.
+        let mut activations = activations_json.check_version()?;
+
+        let Some(activation) = activations.activation_for_id_mut(&self.activation_id) else {
             bail!("watchdog shouldn't be running with ID that isn't in activations.json");
         };
 
-        let all_attached_pids: HashSet<AttachedPid> = activation
-            .attached_pids()
-            .iter()
-            .map(AttachedPid::to_owned)
-            .collect();
-        // Add all PIDs, even if they're dead, but then immediately remove them
-        self.pids_watching.extend(all_attached_pids);
-        self.prune_terminations();
-        Ok(maybe_locked_activations)
+        let pids_modified = activation.remove_terminated_pids();
+        let pids = activation.attached_pids();
+        if pids.is_empty() {
+            let res = WaitResult::CleanUp((activations, lock));
+            return Ok(Some(res));
+        }
+
+        trace!("still watching PIDs {:?}", pids);
+        // Only write changes after checking if we need to exit.
+        if pids_modified {
+            trace!(?activation, "writing PID changes to activation");
+            self.update_activations_file(activations, lock)?;
+        }
+
+        Ok(None)
     }
 
     /// Update the `activations.json` file with the current list of running PIDs.
@@ -187,15 +146,6 @@ impl Watcher for PidWatcher {
     ) -> Result<(), Error> {
         write_activations_json(&activations, &self.activations_json_path, lock)
     }
-
-    /// Returns true if the watcher is not currently watching any PIDs.
-    fn should_clean_up(&self) -> Result<bool, super::Error> {
-        let should_clean_up = self.pids_watching.is_empty();
-        if !should_clean_up {
-            trace!("still watching PIDs {:?}", self.pids_watching);
-        }
-        Ok(should_clean_up)
-    }
 }
 
 #[cfg(test)]
@@ -205,10 +155,9 @@ pub mod test {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use flox_activations::cli::attach::{AttachArgs, AttachExclusiveArgs};
     use flox_activations::cli::{SetReadyArgs, StartOrAttachArgs};
     use flox_core::activations::activations_json_path;
-    use flox_core::proc_status::{ProcStatus, read_pid_status};
+    use flox_core::proc_status::{ProcStatus, pid_is_running, read_pid_status};
 
     use super::*;
 
@@ -383,8 +332,11 @@ pub mod test {
             .iter()
             .map(|pid| pid.pid)
             .collect::<Vec<_>>();
-        assert!(initial_pids.contains(&pid1));
-        assert!(initial_pids.contains(&pid2));
+        assert_eq!(
+            initial_pids,
+            vec![pid1, pid2],
+            "both pids should be running and present"
+        );
         drop(lockfile); // Prevents a deadlock
         stop_process(proc1);
 
@@ -422,187 +374,11 @@ pub mod test {
             .iter()
             .map(|pid| pid.pid)
             .collect::<Vec<_>>();
-        // Check that the other process was observed to still be running.
-        assert!(final_pids.contains(&pid2));
-    }
-
-    #[test]
-    fn pid_not_pruned_before_expiration() {
-        let runtime_dir = tempfile::tempdir().unwrap();
-        let flox_env = PathBuf::from("flox_env");
-        let store_path = "store_path".to_string();
-
-        let proc1 = start_process();
-        let pid1 = proc1.id() as i32;
-        let start_or_attach_pid1 = StartOrAttachArgs {
-            pid: pid1,
-            flox_env: flox_env.clone(),
-            store_path: store_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        let activation_id = start_or_attach_pid1.handle().unwrap();
-        let set_ready_pid1 = SetReadyArgs {
-            id: activation_id.clone(),
-            flox_env: flox_env.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        set_ready_pid1.handle().unwrap();
-
-        let proc2 = start_process();
-        let pid2 = proc2.id() as i32;
-        let start_or_attach_pid2 = StartOrAttachArgs {
-            pid: pid2,
-            flox_env: flox_env.clone(),
-            store_path: store_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        let activation_id_2 = start_or_attach_pid2.handle().unwrap();
-        assert_eq!(activation_id, activation_id_2);
-
-        let proc3 = start_process();
-        let pid3 = proc3.id() as i32;
-        let timeout_ms = 9999;
-        let attach_pid3 = AttachArgs {
-            flox_env: flox_env.clone(),
-            id: activation_id.clone(),
-            pid: pid3,
-            exclusive: AttachExclusiveArgs {
-                timeout_ms: Some(timeout_ms),
-                remove_pid: None,
-            },
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        let now = OffsetDateTime::now_utc();
-        let expiration = Some(now + Duration::from_millis(timeout_ms as u64));
-        attach_pid3.handle_inner(now).unwrap();
-
-        let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
-        let (terminate_flag, cleanup_flag) = shutdown_flags();
-        let mut watcher = PidWatcher::new(
-            activations_json_path,
-            activation_id,
-            terminate_flag,
-            cleanup_flag,
-        );
-        watcher.update_watchlist(false).unwrap();
-
         assert_eq!(
-            watcher.pids_watching,
-            HashSet::from([
-                AttachedPid {
-                    pid: pid1,
-                    expiration: None,
-                },
-                AttachedPid {
-                    pid: pid2,
-                    expiration: None,
-                },
-                AttachedPid {
-                    pid: pid3,
-                    expiration,
-                }
-            ])
+            final_pids,
+            vec![pid2],
+            "only pid2 should be running and present"
         );
-
-        stop_process(proc1);
-        stop_process(proc2);
-        stop_process(proc3);
-
-        watcher.update_watchlist(false).unwrap();
-
-        assert!(!watcher.should_clean_up().unwrap());
-        assert_eq!(
-            watcher.pids_watching,
-            HashSet::from([AttachedPid {
-                pid: pid3,
-                expiration,
-            }])
-        );
-    }
-
-    #[test]
-    fn pid_pruned_after_expiration() {
-        let runtime_dir = tempfile::tempdir().unwrap();
-        let flox_env = PathBuf::from("flox_env");
-        let store_path = "store_path".to_string();
-
-        let proc1 = start_process();
-        let pid1 = proc1.id() as i32;
-        let start_or_attach_pid1 = StartOrAttachArgs {
-            pid: pid1,
-            flox_env: flox_env.clone(),
-            store_path: store_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        let activation_id = start_or_attach_pid1.handle().unwrap();
-        let set_ready_pid1 = SetReadyArgs {
-            id: activation_id.clone(),
-            flox_env: flox_env.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        set_ready_pid1.handle().unwrap();
-
-        let proc2 = start_process();
-        let pid2 = proc2.id() as i32;
-        let start_or_attach_pid2 = StartOrAttachArgs {
-            pid: pid2,
-            flox_env: flox_env.clone(),
-            store_path: store_path.clone(),
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        let activation_id_2 = start_or_attach_pid2.handle().unwrap();
-        assert_eq!(activation_id, activation_id_2);
-
-        let proc3 = start_process();
-        let pid3 = proc3.id() as i32;
-        let attach_pid3 = AttachArgs {
-            flox_env: flox_env.clone(),
-            id: activation_id.clone(),
-            pid: pid3,
-            exclusive: AttachExclusiveArgs {
-                timeout_ms: Some(0),
-                remove_pid: None,
-            },
-            runtime_dir: runtime_dir.path().to_path_buf(),
-        };
-        let the_past = OffsetDateTime::now_utc() - Duration::from_secs(9999);
-        attach_pid3.handle_inner(the_past).unwrap();
-
-        let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
-        let (terminate_flag, cleanup_flag) = shutdown_flags();
-        let mut watcher = PidWatcher::new(
-            activations_json_path,
-            activation_id,
-            terminate_flag,
-            cleanup_flag,
-        );
-        watcher.update_watchlist(false).unwrap();
-
-        assert_eq!(
-            watcher.pids_watching,
-            HashSet::from([
-                AttachedPid {
-                    pid: pid1,
-                    expiration: None,
-                },
-                AttachedPid {
-                    pid: pid2,
-                    expiration: None,
-                },
-                AttachedPid {
-                    pid: pid3,
-                    expiration: Some(the_past),
-                }
-            ])
-        );
-
-        stop_process(proc1);
-        stop_process(proc2);
-        stop_process(proc3);
-
-        watcher.update_watchlist(false).unwrap();
-
-        assert!(watcher.should_clean_up().unwrap());
     }
 
     #[test]

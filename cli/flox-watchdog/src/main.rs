@@ -182,8 +182,9 @@ fn run_inner(
             let Some(activations_json) = activations_json else {
                 bail!("watchdog shouldn't be running when activations.json doesn't exist");
             };
+            let activations = activations_json.check_version()?;
             let _ = cleanup(
-                (activations_json, lock),
+                (activations, lock),
                 &args.socket_path,
                 &activations_json_path,
                 &activation_state_dir,
