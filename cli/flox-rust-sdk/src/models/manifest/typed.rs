@@ -384,6 +384,21 @@ pub enum ManifestPackageDescriptor {
 }
 
 impl ManifestPackageDescriptor {
+    /// Check if the package descriptor is from a custom catalog by parsing the
+    /// pkg-path and looking for a catalog prefix.  Only Catalog type descriptors
+    /// are considered to be from a custom catalog.
+    pub(crate) fn is_from_custom_catalog(&self) -> bool {
+        if let ManifestPackageDescriptor::Catalog(pkg) = self {
+            let parts: Vec<&str> = pkg.pkg_path.split('/').collect();
+            let is_base_catalog_pkg =
+                parts.len() == 1 || parts.first().is_some_and(|p| p.contains('.'));
+            return !is_base_catalog_pkg;
+        }
+        false
+    }
+}
+
+impl ManifestPackageDescriptor {
     /// Check if two package descriptors should have the same resolution.
     /// This is used to determine if a package needs to be re-resolved
     /// in the presence of an existing lock.
@@ -1423,5 +1438,80 @@ pub mod test {
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], "testInstallID");
+    }
+
+    /// Helper function to create a catalog descriptor for testing
+    fn create_catalog_descriptor(pkg_path: &str) -> ManifestPackageDescriptor {
+        ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+            pkg_path: pkg_path.to_string(),
+            pkg_group: None,
+            priority: None,
+            version: None,
+            systems: None,
+        })
+    }
+
+    /// Helper function to create a flake descriptor for testing
+    fn create_flake_descriptor(flake: &str) -> ManifestPackageDescriptor {
+        ManifestPackageDescriptor::FlakeRef(PackageDescriptorFlake {
+            flake: flake.to_string(),
+            priority: None,
+            systems: None,
+        })
+    }
+
+    /// Helper function to create a store path descriptor for testing
+    fn create_store_path_descriptor(store_path: &str) -> ManifestPackageDescriptor {
+        ManifestPackageDescriptor::StorePath(PackageDescriptorStorePath {
+            store_path: store_path.to_string(),
+            systems: None,
+            priority: None,
+        })
+    }
+
+    #[test]
+    fn test_is_from_custom_catalog() {
+        // Test cases: (pkg_path, expected_result, description)
+        let test_cases = vec![
+            ("hello", false, "basic pkg-path"),
+            ("python3.11", false, "packages with dots in the name"),
+            (
+                "mycatalog/hello",
+                true,
+                "package with custom catalog prefix",
+            ),
+            (
+                "custom/category/package",
+                true,
+                "package with nested path and custom catalog",
+            ),
+            (
+                "nodePackages.@angular/cli",
+                false,
+                "first part contains a dot (should be treated as attr-path)",
+            ),
+            (
+                "nodePackages.tedicross-git+https://github.com/TediCross/TediCross.git#v0.8.7",
+                false,
+                "complex package name with dots and special characters, ugly but valid",
+            ),
+            ("", false, "edge case with empty pkg_path"),
+            ("/", true, "edge case with just a slash"),
+        ];
+
+        for (pkg_path, expected, description) in test_cases {
+            let descriptor = create_catalog_descriptor(pkg_path);
+            assert_eq!(
+                descriptor.is_from_custom_catalog(),
+                expected,
+                "Failed for {}: {}",
+                pkg_path,
+                description
+            );
+        }
+
+        // Test non-catalog descriptors always return false
+        assert!(!create_flake_descriptor("github:owner/repo").is_from_custom_catalog());
+        assert!(!create_store_path_descriptor("/nix/store/abc123-hello").is_from_custom_catalog());
     }
 }
