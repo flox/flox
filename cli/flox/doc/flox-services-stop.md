@@ -58,14 +58,14 @@ $ flox services stop
 Attempt to stop a service that doesn't exist:
 ```
 $ flox services stop myservice doesnt_exist
-❌ ERROR: Service 'doesnt_exist' not found.  
+❌ ERROR: Service 'doesnt_exist' not found.
 ```
 
 Attempt to stop a service that isn't running:
 ```
 $ flox services stop running not_running
 ⚠️  Service 'not_running' is not running
-✅ Service 'running' stopped  
+✅ Service 'running' stopped
 ```
 
 # SEE ALSO
