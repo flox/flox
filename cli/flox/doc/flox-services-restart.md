@@ -39,9 +39,6 @@ An error is displayed if the specified service does not exist.
 
 # OPTIONS
 
-`-d`, `--dir`
-:   Path containing a .flox/ directory.
-
 `<name>`
 :   The name(s) of the services to restart.
 

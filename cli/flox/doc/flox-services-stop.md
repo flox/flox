@@ -33,9 +33,6 @@ non-zero exit code will be returned.
 
 # OPTIONS
 
-`-d`, `--dir`
-:   Path containing a .flox/ directory.
-
 `<name>`
 :   The name(s) of the services to stop.
 

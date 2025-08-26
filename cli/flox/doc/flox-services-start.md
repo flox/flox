@@ -37,9 +37,6 @@ of how many times the environment is activated concurrently.
 
 # OPTIONS
 
-`-d`, `--dir`
-:   Path containing a .flox/ directory.
-
 `<name>`
 :   The name(s) of the services to start.
 
