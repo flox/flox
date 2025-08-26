@@ -1114,6 +1114,7 @@ mod realise_nixpkgs_tests {
 
     use super::*;
     use crate::models::lockfile;
+    use crate::models::manifest::typed::PackageDescriptorCatalog;
     use crate::providers::catalog::{GENERATED_DATA, MockClient, StoreInfo, StoreInfoResponse};
     use crate::providers::nix::test_helpers::known_store_path;
 
@@ -1149,10 +1150,19 @@ mod realise_nixpkgs_tests {
     fn locked_published_package(
         store_path: Option<&str>,
     ) -> (LockedPackageCatalog, ManifestPackageDescriptor) {
-        let (mut locked_package, manifest_package) =
+        let (mut locked_package, _) =
             locked_package_catalog_from_mock(GENERATED_DATA.join("envs/hello/manifest.lock"));
-        // Set the attr_path to something that looks like a published package.
-        locked_package.attr_path = "custom_catalog/hello".to_string();
+
+        // make a new custom manifest descriptor such that we determine this is a published package
+        let manifest_package = ManifestPackageDescriptor::Catalog(PackageDescriptorCatalog {
+            pkg_path: "custom/hello".to_string(),
+            pkg_group: Some("my_group".to_string()),
+            priority: None,
+            version: None,
+            systems: None,
+        });
+
+        locked_package.attr_path = "hello".to_string();
         locked_package.locked_url =
             "github:super/custom/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string();
 
