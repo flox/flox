@@ -33,9 +33,9 @@ use crate::commands::build::{
 };
 use crate::commands::ensure_floxhub_token;
 use crate::config::Config;
-use crate::environment_subcommand_metric;
 use crate::utils::errors::display_chain;
 use crate::utils::message;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 const PUBLISH_COMPLETION_POLL_INTERVAL_MILLIS: u64 = 2_000; // 1s
 const PUBLISH_COMPLETION_TIMEOUT_MILLIS: u64 = 30 * 60 * 1_000; // 30 min
@@ -214,6 +214,19 @@ impl Publish {
             .create_package_and_possibly_user_catalog(&flox.catalog_client, &catalog_name)
             .await?;
 
+        subcommand_metric!(
+            "publish",
+            "has_expression_build" = publish_provider
+                .package_metadata
+                .package
+                .kind()
+                .is_expression_build(),
+            "has_manifest_build" = publish_provider
+                .package_metadata
+                .package
+                .kind()
+                .is_manifest_build()
+        );
         let build_metadata = check_build_metadata(
             &flox,
             &selected_base_nixpkgs_url,

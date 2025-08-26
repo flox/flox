@@ -34,8 +34,8 @@ use url::Url;
 
 use super::{DirEnvironmentSelect, dir_environment_select};
 use crate::commands::activate::FLOX_INTERPRETER;
-use crate::environment_subcommand_metric;
 use crate::utils::message;
+use crate::{environment_subcommand_metric, subcommand_metric};
 
 #[derive(Debug, Clone, Bpaf)]
 pub enum BaseCatalogUrlSelect {
@@ -216,6 +216,18 @@ impl Build {
             .iter()
             .map(|target| target.name())
             .collect::<Vec<_>>();
+
+        let has_expression_build = packages_to_build
+            .iter()
+            .any(|target| target.kind().is_expression_build());
+        let has_manifest_build = packages_to_build
+            .iter()
+            .any(|target| target.kind().is_manifest_build());
+        subcommand_metric!(
+            "build",
+            "has_expression_build" = has_expression_build,
+            "has_manifest_build" = has_manifest_build
+        );
 
         let builder = FloxBuildMk::new(&flox, &base_dir, &expression_dir, &built_environments);
         let results = builder.build(
