@@ -8,7 +8,7 @@ use flox_rust_sdk::flox::{FLOX_VERSION, Flox};
 use flox_rust_sdk::providers::container_builder::{ContainerBuilder, ContainerSource};
 use flox_rust_sdk::providers::nix::NIX_VERSION;
 use flox_rust_sdk::utils::ReaderExt;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use thiserror::Error;
 use tracing::{debug, info, instrument};
 
@@ -53,6 +53,12 @@ impl ContainerizeProxy {
     fn runtime_base_command(&self) -> Command {
         let mut command = self.container_runtime.to_command();
         command.arg("run");
+        command.args(["--platform", "linux/amd64"]);
+        command.args(["--env", indoc! {r#"
+            NIX_CONFIG=
+            filter-syscalls = false
+            sandbox = false
+        "#}]);
         command.arg("--rm");
         command
     }
