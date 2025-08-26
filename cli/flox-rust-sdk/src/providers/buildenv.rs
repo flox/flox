@@ -123,8 +123,8 @@ pub enum BuildEnvError {
     /// An unhandled condition was encountered in the lockfile.  One example is
     /// a package that is expected to be a base catalog package but the
     /// lockfile appears to be a custom package or vice versa.
-    #[error("Unhandled condition in lockfile: {0}")]
-    UnhandledLockfileCondition(String),
+    #[error("encountered an error interpreting the lockfile: {0}")]
+    Other(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -287,7 +287,7 @@ where
                 .manifest
                 .pkg_descriptor_with_id(install_id)
                 .ok_or_else(|| {
-                    BuildEnvError::Link(format!(
+                    BuildEnvError::Other(format!(
                         "Could not find package with install_id '{install_id}' in manifest"
                     ))
                 })?;
@@ -527,7 +527,7 @@ where
                 if let Some(revision_suffix) = locked_url.strip_prefix(NIXPKGS_CATALOG_URL_PREFIX) {
                     locked_url = format!("{FLOX_NIXPKGS_PROXY_FLAKE_REF_BASE}/{revision_suffix}");
                 } else {
-                    return Err(BuildEnvError::UnhandledLockfileCondition(format!(
+                    return Err(BuildEnvError::Other(format!(
                         "Locked package '{}' is a base catalog package, but the locked url '{}' does not start with the expected prefix '{}'",
                         locked.install_id, locked.locked_url, NIXPKGS_CATALOG_URL_PREFIX
                     )));

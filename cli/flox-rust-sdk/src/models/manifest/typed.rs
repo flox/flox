@@ -384,31 +384,17 @@ pub enum ManifestPackageDescriptor {
 }
 
 impl ManifestPackageDescriptor {
-    /// Check if two package descriptors should have the same resolution.
-    /// This is used to determine if a package needs to be re-resolved
-    /// in the presence of an existing lock.
-    ///
-    /// * Descriptors are resolved per system,
-    ///   changing the supported systems does not invalidate _existing_ resolutions.
-    /// * Priority is not used in resolution, so it is ignored.
+    /// Check if the package descriptor is from a custom catalog by parsing the
+    /// pkg-path and looking for a catalog prefix.  Only Catalog type descriptors
+    /// are considered to be from a custom catalog.
     pub(crate) fn is_from_custom_catalog(&self) -> bool {
-        use ManifestPackageDescriptor::*;
-        match self {
-            // This should parse the pkg-path and if there is a catalog prefix, return true.
-            // This parsing matches the logic in the catalog service.
-            Catalog(this) => {
-                let parts: Vec<&str> = this.pkg_path.split('/').collect();
-                if parts.len() == 1 || parts.first().is_some_and(|p| p.contains('.')) {
-                    // No catalog prefix, or the first part contains a dot (nixpkgs style)
-                    false
-                } else {
-                    // There is a catalog prefix
-                    true
-                }
-            },
-            // different types of descriptors are always different
-            _ => false,
+        if let ManifestPackageDescriptor::Catalog(pkg) = self {
+            let parts: Vec<&str> = pkg.pkg_path.split('/').collect();
+            let is_base_catalog_pkg =
+                parts.len() == 1 || parts.first().is_some_and(|p| p.contains('.'));
+            return !is_base_catalog_pkg;
         }
+        false
     }
 }
 
@@ -1487,12 +1473,8 @@ pub mod test {
     fn test_is_from_custom_catalog() {
         // Test cases: (pkg_path, expected_result, description)
         let test_cases = vec![
-            ("hello", false, "nixpkgs-style packages (no custom catalog)"),
-            (
-                "python3.11",
-                false,
-                "packages with dots in the name (nixpkgs-style)",
-            ),
+            ("hello", false, "basic pkg-path"),
+            ("python3.11", false, "packages with dots in the name"),
             (
                 "mycatalog/hello",
                 true,
@@ -1504,9 +1486,14 @@ pub mod test {
                 "package with nested path and custom catalog",
             ),
             (
-                "my.catalog/hello",
+                "nodePackages.@angular/cli",
                 false,
-                "first part contains a dot (should be treated as nixpkgs-style)",
+                "first part contains a dot (should be treated as attr-path)",
+            ),
+            (
+                "nodePackages.tedicross-git+https://github.com/TediCross/TediCross.git#v0.8.7",
+                false,
+                "complex package name with dots and special characters, ugly but valid",
             ),
             ("", false, "edge case with empty pkg_path"),
             ("/", true, "edge case with just a slash"),
