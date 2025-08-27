@@ -36,9 +36,6 @@ An error will be returned if a specified service does not exist.
 
 # OPTIONS
 
-`-d`, `--dir`
-:   Path containing a .flox/ directory.
-
 `--follow`
 :   Follow log output for the specified services. Required when no service
     names are supplied.

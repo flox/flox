@@ -28,9 +28,6 @@ does not exist.
 
 # OPTIONS
 
-`-d`, `--dir`
-:   Path containing a .flox/ directory.
-
 `--json`
 :   Print statuses formatted as JSON. Each service is printed as a single JSON
     object on its own line.
