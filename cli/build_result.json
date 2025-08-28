@@ -1,0 +1,63 @@
+{
+  "inputs": {
+    "officialRelease": {
+      "name": "officialRelease",
+      "uri": null,
+      "value": "false",
+      "path": "",
+      "revision": null,
+      "type": "boolean"
+    },
+    "supportedSystems": {
+      "name": "supportedSystems",
+      "uri": null,
+      "path": "",
+      "value": "[ \"x86_64-linux\" \"aarch64-linux\" ]",
+      "type": "nix",
+      "revision": null
+    },
+    "nixpkgs": {
+      "path": "/nix/store/r6g8ksyz42q28va8qjd021fwlxs010xw-source",
+      "value": null,
+      "type": "git",
+      "revision": "8a6d5427d99ec71c64f0b93d45778c889005d9c2",
+      "name": "nixpkgs",
+      "uri": "https://github.com/flox/nixpkgs.git"
+    }
+  },
+  "metrics": [],
+  "buildStatus": 0,
+  "startTime": 1756341133,
+  "timestamp": 1756340700,
+  "system": "aarch64-linux",
+  "stopTime": 1756344915,
+  "homepage": "https://www.blender.org",
+  "jobset": "unstable",
+  "outputs": [
+    {
+      "name": "out",
+      "path": "/nix/store/bc5hjh7spa84ph26xh85v8l4j69awzcd-blender-4.5.2"
+    }
+  ],
+  "build": 33771,
+  "job": "blender.aarch64-linux",
+  "nixName": "blender-4.5.2",
+  "license": "gpl2Plus, NVidia OptiX EULA",
+  "drvPath": "/nix/store/a3agij7y41s0w07p1g3qcnlr1p528hgf-blender-4.5.2.drv",
+  "finished": true,
+  "products": [
+    {
+      "type": "nix-build",
+      "path": "/nix/store/bc5hjh7spa84ph26xh85v8l4j69awzcd-blender-4.5.2",
+      "sha256hash": null,
+      "defaultPath": "",
+      "fileSize": null,
+      "productNr": 1,
+      "name": "blender-4.5.2",
+      "subtype": ""
+    }
+  ],
+  "description": "3D Creation/Animation/Publishing System",
+  "event": "buildFinished",
+  "project": "cuda"
+}

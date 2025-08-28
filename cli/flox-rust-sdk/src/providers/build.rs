@@ -984,6 +984,20 @@ mod license_tests {
     }
 
     #[test]
+    fn test_to_catalog_license_comma_separated_string_to_string() {
+        let license = NixyLicense::String("foo, bar".to_string());
+        assert_eq!(license.to_catalog_license().unwrap(), "foo, bar");
+    }
+
+    #[test]
+    fn test_to_catalog_license_comma_separated_string() {
+        let from_json: NixyLicense =
+            serde_json::from_str(r#""gpl2Plus, NVidia OptiX EULA""#).unwrap();
+        let expected = NixyLicense::String("gpl2Plus, NVidia OptiX EULA".to_string());
+        assert_eq!(from_json, expected);
+    }
+
+    #[test]
     fn test_to_catalog_license_list() {
         let license = NixyLicense::List(vec!["MIT".to_string(), "Apache-2.0".to_string()]);
         assert_eq!(license.to_catalog_license().unwrap(), "[ MIT, Apache-2.0 ]");
@@ -3583,5 +3597,17 @@ mod nef_tests {
         let result_path = env_path.join(format!("result-{pname_manifest_build}"));
         let content = fs::read_to_string(result_path).unwrap();
         assert_eq!(content, "321\n");
+    }
+
+    #[test]
+    fn parses_build_result_bill() {
+        let raw_json = include_str! {"../../../build_result.json"};
+        let parsed: BuildResultMeta = serde_json::from_str(raw_json).unwrap();
+        assert_eq!(
+            parsed.license,
+            Some(NixyLicense::String(
+                "gpl2Plus, NVidia OptiX EULA".to_string()
+            ))
+        );
     }
 }
