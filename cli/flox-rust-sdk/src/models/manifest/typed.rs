@@ -18,6 +18,7 @@ use indoc::formatdoc;
 use itertools::Itertools;
 #[cfg(test)]
 use proptest::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
@@ -79,7 +80,7 @@ pub(crate) trait SkipSerializing {
 // the user provided manifest but allow unknown fields when deserializing the
 // lockfile, but that doesn't seem worth the effort at the moment.
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
@@ -351,7 +352,7 @@ fn pkg_belongs_to_non_empty_toplevel_group(
     Ok(self_in_toplevel_group && other_toplevel_packages_exist)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Install(
     #[cfg_attr(
@@ -369,7 +370,7 @@ impl SkipSerializing for Install {
 
 impl_into_inner!(Install, BTreeMap<String, ManifestPackageDescriptor>);
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 // todo: this can make the error messages less clear and might call for a custom (de)serialize impl
 #[serde(
@@ -502,7 +503,7 @@ impl From<PackageDescriptorStorePath> for ManifestPackageDescriptor {
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
@@ -542,7 +543,7 @@ impl PackageDescriptorCatalog {
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
@@ -556,7 +557,7 @@ pub struct PackageDescriptorFlake {
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
@@ -569,7 +570,7 @@ pub struct PackageDescriptorStorePath {
     pub(crate) priority: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Vars(
     #[cfg_attr(test, proptest(strategy = "btree_map_strategy::<String>(5, 3)"))]
@@ -585,7 +586,7 @@ impl SkipSerializing for Vars {
 impl_into_inner!(Vars, BTreeMap<String, String>);
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
@@ -600,7 +601,7 @@ pub struct Hook {
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
 pub struct Profile {
@@ -637,7 +638,7 @@ pub struct Profile {
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
@@ -663,7 +664,7 @@ pub struct Options {
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
 pub struct Allows {
@@ -691,7 +692,7 @@ impl SkipSerializing for Allows {
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
@@ -711,7 +712,7 @@ impl SkipSerializing for SemverOptions {
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
@@ -727,7 +728,9 @@ impl SkipSerializing for ActivateOptions {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Ord, PartialOrd, Default)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Ord, PartialOrd, Default, JsonSchema,
+)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 pub enum ActivateMode {
@@ -758,7 +761,7 @@ impl FromStr for ActivateMode {
 }
 
 /// A map of service names to service definitions
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Services(
     #[cfg_attr(
@@ -778,7 +781,7 @@ impl_into_inner!(Services, BTreeMap<String, ServiceDescriptor>);
 
 /// The definition of a service in a manifest
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
@@ -846,7 +849,7 @@ impl Services {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
@@ -857,7 +860,7 @@ pub struct ServiceShutdown {
 }
 
 /// A map of package ids to package build descriptors
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Build(
     #[cfg_attr(
@@ -877,7 +880,7 @@ impl SkipSerializing for Build {
 
 /// The definition of a package built from within the environment
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
@@ -902,7 +905,9 @@ pub struct BuildDescriptor {
 }
 
 /// The definition of a package built from within the environment
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, derive_more::Display)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, derive_more::Display, JsonSchema,
+)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 pub enum BuildSandbox {
@@ -911,7 +916,7 @@ pub enum BuildSandbox {
 }
 
 /// The definition of a package built from within the environment
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case", untagged)]
 pub enum BuildVersion {
@@ -926,7 +931,7 @@ pub enum BuildVersion {
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Containerize {
@@ -939,7 +944,7 @@ pub struct Containerize {
 /// Env and Entrypoint are left out since they interfere with our activation implementation
 /// Deprecated and reserved keys are also left out
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -996,7 +1001,7 @@ pub enum ManifestError {
 }
 
 /// The section where users can declare dependencies on other environments.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
 pub struct Include {
@@ -1011,7 +1016,7 @@ impl SkipSerializing for Include {
 }
 
 /// The structure for how a user is able to declare a dependency on an environment.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
 #[serde(
@@ -1514,4 +1519,27 @@ pub mod test {
         assert!(!create_flake_descriptor("github:owner/repo").is_from_custom_catalog());
         assert!(!create_store_path_descriptor("/nix/store/abc123-hello").is_from_custom_catalog());
     }
+}
+
+#[test]
+#[ignore = "only exporting schema"]
+fn export_schema() {
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::Path;
+    let schema = schemars::schema_for!(Manifest);
+
+    // Slightly hacky since we cant read the target dir
+    // or even at least the workspace dir directly:
+    // <https://github.com/rust-lang/cargo/issues/3946>
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let schemars_basedir = manifest_dir.join("../target/schemars");
+    std::fs::create_dir_all(&schemars_basedir).unwrap();
+
+    let schema_path = schemars_basedir.join("manifest-v1.schema.json");
+    let mut schema_file = File::create(&schema_path).unwrap();
+
+    writeln!(&mut schema_file, "{:#}", schema.as_value()).unwrap();
+
+    println!("schema written to {schema_path:?}")
 }
