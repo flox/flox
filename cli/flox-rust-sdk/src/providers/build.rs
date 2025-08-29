@@ -121,8 +121,8 @@ pub struct BuildResult {
 pub enum NixyLicense {
     /// A single license as a string
     String(String),
-    /// Multiple licenses as a list of strings
-    List(Vec<String>),
+    /// Multiple licenses as a list of maps or strings
+    ComplexList(Vec<NixyLicense>),
     /// License information as a map (e.g., license names to booleans or strings)
     Map {
         #[serde(rename = "spdxId")]
@@ -141,30 +141,42 @@ pub enum NixyLicense {
 // If it's a list, it returns list.
 // If it's a map, it takes the keys in the order of "spdxId", "fullName", "shortName", and "url",
 impl NixyLicense {
+    fn license_map_to_string(
+        spdx_id: &Option<String>,
+        full_name: &Option<String>,
+        short_name: &Option<String>,
+        url: &Option<String>,
+    ) -> Result<String, ManifestBuilderError> {
+        spdx_id.clone()
+            .or_else(|| full_name.clone())
+            .or_else(|| short_name.clone())
+            .or_else(|| url.clone())
+            .ok_or_else(|| ManifestBuilderError::ParseLicenseMetaData(
+                "License map must contain at least one of the following keys: spdxId, fullName, shortName, url".to_string()
+            ))
+    }
+
     /// Convert the license to a string representation expected by the catalog.
     /// These rules are a port from the existing scraping logic for consistency.
     /// - String: Returns the string as-is
-    /// - List: Returns a comma-separated string of the license names
+    /// - ComplexList: Recursively converts each element and returns a comma-separated string
     /// - Map: Returns the first available key in order of preference: "spdxId", "fullName", "shortName", "url"
     pub fn to_catalog_license(&self) -> Result<String, ManifestBuilderError> {
         match self {
             NixyLicense::String(s) => Ok(s.clone()),
-            NixyLicense::List(list) => Ok(format!("[ {} ]", list.join(", "))),
+            NixyLicense::ComplexList(list) => {
+                let license_strings: Result<Vec<String>, ManifestBuilderError> = list
+                    .iter()
+                    .map(|license| license.to_catalog_license())
+                    .collect();
+                Ok(format!("[ {} ]", license_strings?.join(", ")))
+            },
             NixyLicense::Map {
                 spdx_id,
                 full_name,
                 short_name,
                 url,
-            } => {
-                // Check keys in order of preference
-                spdx_id.clone()
-                    .or_else(|| full_name.clone())
-                    .or_else(|| short_name.clone())
-                    .or_else(|| url.clone())
-                    .ok_or_else(|| ManifestBuilderError::ParseLicenseMetaData(
-                        "License map must contain at least one of the following keys: spdxId, fullName, shortName, url".to_string()
-                    ))
-            },
+            } => NixyLicense::license_map_to_string(spdx_id, full_name, short_name, url),
         }
     }
 }
@@ -984,8 +996,11 @@ mod license_tests {
     }
 
     #[test]
-    fn test_to_catalog_license_list() {
-        let license = NixyLicense::List(vec!["MIT".to_string(), "Apache-2.0".to_string()]);
+    fn test_to_catalog_license_complex_list_strings() {
+        let license = NixyLicense::ComplexList(vec![
+            NixyLicense::String("MIT".to_string()),
+            NixyLicense::String("Apache-2.0".to_string()),
+        ]);
         assert_eq!(license.to_catalog_license().unwrap(), "[ MIT, Apache-2.0 ]");
     }
 
@@ -1023,6 +1038,119 @@ mod license_tests {
             url: None,
         };
         license.to_catalog_license().unwrap();
+    }
+
+    #[test]
+    fn test_to_catalog_license_complex_list_maps() {
+        let license = NixyLicense::ComplexList(vec![
+            NixyLicense::Map {
+                spdx_id: Some("MIT".to_string()),
+                full_name: None,
+                short_name: None,
+                url: None,
+            },
+            NixyLicense::Map {
+                spdx_id: Some("Apache-2.0".to_string()),
+                full_name: None,
+                short_name: None,
+                url: None,
+            },
+        ]);
+        assert_eq!(license.to_catalog_license().unwrap(), "[ MIT, Apache-2.0 ]");
+    }
+
+    #[test]
+    fn test_to_catalog_license_complex_list_mixed() {
+        let license = NixyLicense::ComplexList(vec![
+            NixyLicense::String("BSD-3-Clause".to_string()),
+            NixyLicense::Map {
+                spdx_id: Some("MIT".to_string()),
+                full_name: Some("MIT License".to_string()),
+                short_name: None,
+                url: None,
+            },
+        ]);
+        assert_eq!(
+            license.to_catalog_license().unwrap(),
+            "[ BSD-3-Clause, MIT ]"
+        );
+    }
+
+    #[test]
+    fn test_deserialize_string_array_as_complex_list() {
+        // Test that a JSON array of strings is correctly deserialized as ComplexList
+        let json = r#"["MIT", "Apache-2.0"]"#;
+        let license: NixyLicense = serde_json::from_str(json).unwrap();
+
+        // Should be deserialized as ComplexList containing String variants
+        match &license {
+            NixyLicense::ComplexList(list) => {
+                assert_eq!(list.len(), 2);
+                assert_eq!(list[0], NixyLicense::String("MIT".to_string()));
+                assert_eq!(list[1], NixyLicense::String("Apache-2.0".to_string()));
+            },
+            _ => panic!("Expected ComplexList variant"),
+        }
+
+        assert_eq!(license.to_catalog_license().unwrap(), "[ MIT, Apache-2.0 ]");
+    }
+
+    #[test]
+    fn test_deserialize_map_array_as_complex_list() {
+        // Test that a JSON array of license maps is correctly deserialized as ComplexList
+        let json = r#"[
+            {
+                "deprecated": false,
+                "free": true,
+                "fullName": "GNU General Public License v2.0 or later",
+                "redistributable": true,
+                "shortName": "gpl2Plus",
+                "spdxId": "GPL-2.0-or-later",
+                "url": "https://spdx.org/licenses/GPL-2.0-or-later.html"
+            },
+            {
+                "deprecated": false,
+                "free": false,
+                "fullName": "Unfree",
+                "redistributable": false,
+                "shortName": "NVidia OptiX EULA"
+            }
+        ]"#;
+        let license: NixyLicense = serde_json::from_str(json).unwrap();
+
+        // Should be deserialized as ComplexList containing Map variants
+        match &license {
+            NixyLicense::ComplexList(list) => {
+                assert_eq!(list.len(), 2);
+                match &list[0] {
+                    NixyLicense::Map {
+                        spdx_id, full_name, ..
+                    } => {
+                        assert_eq!(spdx_id, &Some("GPL-2.0-or-later".to_string()));
+                        assert_eq!(
+                            full_name,
+                            &Some("GNU General Public License v2.0 or later".to_string())
+                        );
+                    },
+                    _ => panic!("Expected first element to be a Map variant"),
+                }
+                match &list[1] {
+                    NixyLicense::Map {
+                        spdx_id, full_name, ..
+                    } => {
+                        assert!(spdx_id.is_none());
+                        assert_eq!(full_name, &Some("Unfree".to_string()));
+                    },
+                    _ => panic!("Expected second element to be a Map variant"),
+                }
+            },
+            _ => panic!("Expected ComplexList variant"),
+        }
+
+        assert_eq!(
+            license.to_catalog_license().unwrap(),
+            "[ GPL-2.0-or-later, Unfree ]"
+        );
     }
 }
 
