@@ -117,6 +117,7 @@
           flox-activations = callPackage ./pkgs/flox-activations { };
           flox-cli = callPackage ./pkgs/flox-cli { };
           flox-manpages = callPackage ./pkgs/flox-manpages { }; # Flox Command Line Interface Manpages
+          flox-manpages-md = callPackage ./pkgs/flox-manpages { outputFormat = "markdown"; }; # Flox Command Line Interface Manpages (as markdown)
           flox = callPackage ./pkgs/flox { }; # Flox Command Line Interface ( production build ).
 
           # Wrapper scripts for running test suites.
@@ -192,6 +193,7 @@
           flox-cli
           flox-cli-tests
           flox-manpages
+          flox-manpages-md
           flox
           ld-floxlib
           pre-commit-check
