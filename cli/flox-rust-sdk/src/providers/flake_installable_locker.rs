@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 
 use enum_dispatch::enum_dispatch;
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::skip_serializing_none;
 use thiserror::Error;
@@ -28,7 +29,7 @@ pub enum FlakeInstallableError {
 /// This is a direct translation of the definition in
 /// `<flox>/nix-plugins/include/flox/lock-flake-installable.hh`
 #[skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 // [sic] this is inconsistent with the naming of all other structs in the lockfile
 // and a relict of different naming conventions in the pkgdb/C++ code.
 #[serde(rename_all = "kebab-case")]

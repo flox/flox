@@ -7,6 +7,7 @@ use flox_test_utils::proptest::{alphanum_string, chrono_strat};
 use indent::{indent_all_by, indent_by};
 use indoc::formatdoc;
 use itertools::{Either, Itertools};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::skip_serializing_none;
@@ -95,7 +96,7 @@ impl From<LockResult> for Lockfile {
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Lockfile {
     #[serde(rename = "lockfile-version")]
@@ -138,7 +139,7 @@ impl Display for Lockfile {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, derive_more::From)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, derive_more::From, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(untagged)]
 pub enum LockedPackage {
@@ -207,7 +208,7 @@ impl LockedPackage {
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedPackageCatalog {
     // region: original fields from the service
@@ -328,7 +329,7 @@ impl LockedPackageCatalog {
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedPackageFlake {
     pub install_id: String,
@@ -360,7 +361,7 @@ struct FlakeInstallableToLock {
     system: System,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[skip_serializing_none]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedPackageStorePath {
@@ -387,7 +388,7 @@ struct LockedGroup {
     page: CatalogPage,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Compose {
     /// The composing environment's manifest that was on disk at lock-time.
@@ -435,7 +436,7 @@ impl Compose {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedInclude {
     pub manifest: Manifest,
@@ -4437,4 +4438,27 @@ pub(crate) mod tests {
             "composer should include fields from both indirect child includes"
         )
     }
+}
+
+#[test]
+#[ignore = "only exporting schema"]
+fn export_schema() {
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::Path;
+    let schema = schemars::schema_for!(Manifest);
+
+    // Slightly hacky since we cant read the target dir
+    // or even at least the workspace dir directly:
+    // <https://github.com/rust-lang/cargo/issues/3946>
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let schemars_basedir = manifest_dir.join("../target/schemars");
+    std::fs::create_dir_all(&schemars_basedir).unwrap();
+
+    let schema_path = schemars_basedir.join("lockfile-v1.schema.json");
+    let mut schema_file = File::create(&schema_path).unwrap();
+
+    writeln!(&mut schema_file, "{:#}", schema.as_value()).unwrap();
+
+    println!("schema written to {schema_path:?}")
 }

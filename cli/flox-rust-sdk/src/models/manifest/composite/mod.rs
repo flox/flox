@@ -6,6 +6,7 @@ mod shallow;
 use enum_dispatch::enum_dispatch;
 #[cfg(test)]
 use proptest::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 pub(crate) use shallow::ShallowMerger;
 use thiserror::Error;
@@ -26,7 +27,9 @@ pub enum MergeError {}
 /// where [`KeyPath::push`] and [`KeyPath::extend`] return a new `KeyPath`
 /// with the new key(s) added to the top of the stack,
 /// leaving the original `KeyPath` unchanged.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, JsonSchema,
+)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct KeyPath(Vec<String>);
 impl KeyPath {
@@ -68,7 +71,7 @@ impl_into_inner!(KeyPath, Vec<String>);
 ///
 /// Warnings are not errors, but they may indicate
 /// that the user should review the merged manifest or its dependencies.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[must_use]
 // Currently, the only warning is that a value is being overridden,
@@ -80,7 +83,7 @@ pub enum Warning {
 
 /// A warning that occurred during the merge of two manifests,
 /// along with the names of the overriding manifest.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct WarningWithContext {
     pub warning: Warning,

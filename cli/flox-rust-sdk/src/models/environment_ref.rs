@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use derive_more::{AsRef, Deref, Display};
+use schemars::JsonSchema;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
@@ -23,6 +24,7 @@ pub static DEFAULT_OWNER: &str = "local";
     Display,
     DeserializeFromStr,
     SerializeDisplay,
+    JsonSchema,
 )]
 pub struct EnvironmentOwner(String);
 
@@ -50,6 +52,7 @@ impl FromStr for EnvironmentOwner {
     Display,
     DeserializeFromStr,
     SerializeDisplay,
+    JsonSchema,
 )]
 pub struct EnvironmentName(String);
 
@@ -65,7 +68,7 @@ impl FromStr for EnvironmentName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct EnvironmentRef {
     owner: EnvironmentOwner,
