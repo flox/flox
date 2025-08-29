@@ -26,10 +26,10 @@ use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::Config;
-use crate::subcommand_metric;
 use crate::utils::dialog::{Checkpoint, Dialog};
 use crate::utils::message;
 use crate::utils::openers::Browser;
+use crate::{Exit, subcommand_metric};
 
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct Credential {
@@ -221,7 +221,7 @@ impl Auth {
                 let _guard = span.enter();
                 let Some(token) = flox.floxhub_token else {
                     message::warning("You are not currently logged in to FloxHub.");
-                    return Ok(());
+                    return Err(Exit(1.into()).into());
                 };
 
                 let handle = token.handle();
