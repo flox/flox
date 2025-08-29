@@ -5,8 +5,13 @@
   pandoc,
   findutils,
   installShellFiles,
+  outputFormat ? "man"
 }:
 let
+  outputFileString = if outputFormat == "man" then
+      "$destdir/$(basename $source .md).$section"
+    else
+      "$destdir/$(basename $source)";
   compileManPageBin = writeShellScript "compile" ''
     source="$1"
     shift
@@ -30,9 +35,9 @@ let
       --standalone                             \
       --strip-comments                         \
       --from markdown                          \
-      --to man                                 \
+      --to ${outputFormat}                     \
        $source                                 \
-    > "$destdir/$(basename $source .md).$section"
+    > "${outputFileString}"
   '';
 in
 runCommand "flox-manpages"
@@ -54,7 +59,16 @@ runCommand "flox-manpages"
     pushd "$src"
 
     find . -name "*.md" -exec ${compileManPageBin} {} $buildDir 1 \;
-    mv $buildDir/manifest.toml.1 $buildDir/manifest.toml.5
+    ${if outputFileString == "man" then
+        "mv $buildDir/manifest.toml.1 $buildDir/manifest.toml.5"
+      else ''
+        # Remove the partials that were in the 'include' directory
+        find . -wholename "*include/*.md" | while read -r included_file; do
+          bname="$(basename "$included_file")"
+          rm "$buildDir/$bname"
+        done
+      ''
+    }
 
     ls $buildDir
 
