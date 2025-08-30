@@ -434,7 +434,7 @@ if ($manifest) {
                     $package->{"outputs_to_install"} = $package->{"outputs-to-install"};
                 }
                 unless ( defined $package->{"outputs_to_install"} ) {
-                    $package->{"outputs_to_install"} = keys %{$package->{"outputs"}};
+                    @{$package->{"outputs_to_install"}} = grep { $_ ne "log" } keys %{$package->{"outputs"}};
                 }
                 foreach my $output (keys %{$package->{"outputs"}}) {
                     # Unfortunately, due to pkgdb limitations in the 1.0 release we
