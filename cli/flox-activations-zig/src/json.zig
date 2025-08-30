@@ -8,144 +8,111 @@ const Error = @import("main.zig").Error;
 // In production, you'd want to use a more robust JSON library
 
 pub fn serializeActivations(allocator: Allocator, data: *const activations.Activations) ![]u8 {
-    var result = std.ArrayList(u8).init(allocator);
-    defer result.deinit();
-    const writer = result.writer();
+    // Create serializable structures
+    const SerializableAttachedPid = struct {
+        pid: i32,
+        expiration: ?i64,
+    };
     
-    try writer.writeAll("{\"version\":");
-    try writer.print("{}", .{data.version});
-    try writer.writeAll(",\"activations\":[");
+    const SerializableActivation = struct {
+        id: []const u8,
+        store_path: []const u8,
+        ready: bool,
+        attached_pids: []SerializableAttachedPid,
+    };
+    
+    const SerializableActivations = struct {
+        version: u8,
+        activations: []SerializableActivation,
+    };
+    
+    // Convert activations to serializable format
+    var serializable_activations = try allocator.alloc(SerializableActivation, data.activations.len);
+    defer allocator.free(serializable_activations);
     
     for (data.activations, 0..) |activation, i| {
-        if (i > 0) try writer.writeAll(",");
-        try writer.writeAll("{");
+        var serializable_pids = try allocator.alloc(SerializableAttachedPid, activation.attached_pids.len);
+        defer allocator.free(serializable_pids);
         
-        try writer.writeAll("\"id\":\"");
-        try writer.writeAll(activation.id);
-        try writer.writeAll("\",");
-        
-        try writer.writeAll("\"store_path\":\"");
-        try writer.writeAll(activation.store_path);
-        try writer.writeAll("\",");
-        
-        try writer.print("\"ready\":{},", .{activation.ready});
-        
-        try writer.writeAll("\"attached_pids\":[");
         for (activation.attached_pids, 0..) |pid, j| {
-            if (j > 0) try writer.writeAll(",");
-            try writer.writeAll("{");
-            try writer.print("\"pid\":{}", .{pid.pid});
-            if (pid.expiration) |exp| {
-                try writer.print(",\"expiration\":{}", .{exp});
-            } else {
-                try writer.writeAll(",\"expiration\":null");
-            }
-            try writer.writeAll("}");
+            serializable_pids[j] = SerializableAttachedPid{
+                .pid = pid.pid,
+                .expiration = pid.expiration,
+            };
         }
-        try writer.writeAll("]");
         
-        try writer.writeAll("}");
+        serializable_activations[i] = SerializableActivation{
+            .id = activation.id,
+            .store_path = activation.store_path,
+            .ready = activation.ready,
+            .attached_pids = try allocator.dupe(SerializableAttachedPid, serializable_pids),
+        };
+    }
+    defer {
+        for (serializable_activations) |sa| {
+            allocator.free(sa.attached_pids);
+        }
     }
     
-    try writer.writeAll("]}");
-    return try allocator.dupe(u8, result.items);
+    const serializable_data = SerializableActivations{
+        .version = data.version,
+        .activations = serializable_activations,
+    };
+    
+    return try std.json.stringifyAlloc(allocator, serializable_data, .{});
 }
 
 pub fn deserializeActivations(allocator: Allocator, json_str: []const u8) !activations.Activations {
-    // Use std.json for proper parsing
-    const parsed = std.json.parseFromSlice(std.json.Value, allocator, json_str, .{}) catch |err| switch (err) {
+    // Define structures that match the JSON format for direct parsing
+    const JsonAttachedPid = struct {
+        pid: i32,
+        expiration: ?i64,
+    };
+    
+    const JsonActivation = struct {
+        id: []const u8,
+        store_path: []const u8,
+        ready: bool,
+        attached_pids: []JsonAttachedPid,
+    };
+    
+    const JsonActivations = struct {
+        version: u8,
+        activations: []JsonActivation,
+    };
+    
+    // Parse JSON directly into structures
+    const parsed = std.json.parseFromSlice(JsonActivations, allocator, json_str, .{
+        .allocate = .alloc_always,
+    }) catch |err| switch (err) {
         error.SyntaxError => return activations.Activations.init(allocator),
         else => return err,
     };
     defer parsed.deinit();
     
     var result = activations.Activations.init(allocator);
+    result.version = parsed.value.version;
     
-    const root = parsed.value.object;
-    
-    // Parse version
-    if (root.get("version")) |version_val| {
-        if (version_val == .integer) {
-            result.version = @intCast(version_val.integer);
-        }
-    }
-    
-    // Parse activations array
-    if (root.get("activations")) |activations_val| {
-        if (activations_val == .array) {
-            const activations_array = activations_val.array;
-            
-            if (activations_array.items.len > 0) {
-                result.activations = try allocator.alloc(activations.Activation, activations_array.items.len);
-                
-                for (activations_array.items, 0..) |activation_val, i| {
-                    if (activation_val != .object) continue;
-                    const activation_obj = activation_val.object;
-                    
-                    // Parse activation fields
-                    const id = if (activation_obj.get("id")) |id_val| blk: {
-                        if (id_val == .string) {
-                            break :blk try allocator.dupe(u8, id_val.string);
-                        }
-                        break :blk try allocator.dupe(u8, "");
-                    } else try allocator.dupe(u8, "");
-                    
-                    const store_path = if (activation_obj.get("store_path")) |sp_val| blk: {
-                        if (sp_val == .string) {
-                            break :blk try allocator.dupe(u8, sp_val.string);
-                        }
-                        break :blk try allocator.dupe(u8, "");
-                    } else try allocator.dupe(u8, "");
-                    
-                    const ready = if (activation_obj.get("ready")) |ready_val| blk: {
-                        if (ready_val == .bool) {
-                            break :blk ready_val.bool;
-                        }
-                        break :blk false;
-                    } else false;
-                    
-                    // Parse attached_pids array
-                    var attached_pids = std.ArrayList(activations.AttachedPid).init(allocator);
-                    defer attached_pids.deinit();
-                    
-                    if (activation_obj.get("attached_pids")) |pids_val| {
-                        if (pids_val == .array) {
-                            for (pids_val.array.items) |pid_val| {
-                                if (pid_val != .object) continue;
-                                const pid_obj = pid_val.object;
-                                
-                                const pid = if (pid_obj.get("pid")) |p_val| blk: {
-                                    if (p_val == .integer) {
-                                        break :blk @as(i32, @intCast(p_val.integer));
-                                    }
-                                    break :blk @as(i32, 0);
-                                } else @as(i32, 0);
-                                
-                                const expiration = if (pid_obj.get("expiration")) |exp_val| blk: {
-                                    if (exp_val == .integer) {
-                                        break :blk @as(?i64, @as(i64, @intCast(exp_val.integer)));
-                                    } else if (exp_val == .null) {
-                                        break :blk @as(?i64, null);
-                                    }
-                                    break :blk @as(?i64, null);
-                                } else @as(?i64, null);
-                                
-                                try attached_pids.append(activations.AttachedPid{
-                                    .pid = pid,
-                                    .expiration = expiration,
-                                });
-                            }
-                        }
-                    }
-                    
-                    result.activations[i] = activations.Activation{
-                        .id = id,
-                        .store_path = store_path,
-                        .ready = ready,
-                        .attached_pids = try attached_pids.toOwnedSlice(),
-                    };
-                }
+    // Convert to internal format
+    if (parsed.value.activations.len > 0) {
+        result.activations = try allocator.alloc(activations.Activation, parsed.value.activations.len);
+        
+        for (parsed.value.activations, 0..) |json_activation, i| {
+            // Convert attached_pids
+            var attached_pids = try allocator.alloc(activations.AttachedPid, json_activation.attached_pids.len);
+            for (json_activation.attached_pids, 0..) |json_pid, j| {
+                attached_pids[j] = activations.AttachedPid{
+                    .pid = json_pid.pid,
+                    .expiration = json_pid.expiration,
+                };
             }
+            
+            result.activations[i] = activations.Activation{
+                .id = try allocator.dupe(u8, json_activation.id),
+                .store_path = try allocator.dupe(u8, json_activation.store_path),
+                .ready = json_activation.ready,
+                .attached_pids = attached_pids,
+            };
         }
     }
     
