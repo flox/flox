@@ -23,6 +23,7 @@
   treefmt,
   writeShellScript,
   yq,
+  zig,
   ci ? false,
 }:
 let
@@ -47,6 +48,7 @@ let
       shfmt
       treefmt
       yq
+      zig
     ]
     ++ lib.optionals stdenv.isLinux [
       # The python3Packages.mitmproxy-macos package is broken on mac:

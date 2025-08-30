@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(zig build)",
+      "Bash(zig build:*)",
+      "Bash(zig:*)",
+      "Bash(FLOX_ACTIVATIONS_ZIG_DIR=/home/zmitchell/src/flox/zig-port/cli/flox-activations-zig)"
+    ],
+    "deny": []
+  }
+}

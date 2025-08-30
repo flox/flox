@@ -1,0 +1,11 @@
+.{
+    .name = .flox_activations,
+    .version = "0.0.0",
+    .minimum_zig_version = "0.14.0",
+    .fingerprint = 0x4b05e062c4d29afe,
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
