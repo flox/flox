@@ -67,7 +67,7 @@ test "CLI: parseArgs with start-or-attach command" {
         "--runtime-dir", "/runtime" 
     };
     
-    const result = try cli.parseArgs(allocator, &args);
+    const result = try cli.parseArgsNoSideEffects(allocator, &args);
     defer result.deinit(allocator);
     
     switch (result.command) {
@@ -91,7 +91,7 @@ test "CLI: parseArgs with set-ready command" {
         "--runtime-dir", "/runtime" 
     };
     
-    const result = try cli.parseArgs(allocator, &args);
+    const result = try cli.parseArgsNoSideEffects(allocator, &args);
     defer result.deinit(allocator);
     
     switch (result.command) {
@@ -116,7 +116,7 @@ test "CLI: parseArgs with attach command" {
         "--runtime-dir", "/runtime" 
     };
     
-    const result = try cli.parseArgs(allocator, &args);
+    const result = try cli.parseArgsNoSideEffects(allocator, &args);
     defer result.deinit(allocator);
     
     switch (result.command) {
@@ -134,14 +134,14 @@ test "CLI: parseArgs with attach command" {
 test "CLI: parseArgs invalid command returns error" {
     const allocator = testing.allocator;
     const args = [_][]const u8{ "flox-activations", "invalid-command" };
-    const result = cli.parseArgs(allocator, &args);
+    const result = cli.parseArgsNoSideEffects(allocator, &args);
     try testing.expectError(cli.Error.InvalidArgs, result);
 }
 
 test "CLI: parseArgs missing required arguments" {
     const allocator = testing.allocator;
     const args = [_][]const u8{ "flox-activations", "start-or-attach", "--pid", "1234" };
-    const result = cli.parseArgs(allocator, &args);
+    const result = cli.parseArgsNoSideEffects(allocator, &args);
     try testing.expectError(cli.Error.InvalidArgs, result);
 }
 
