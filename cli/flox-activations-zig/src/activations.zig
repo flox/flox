@@ -195,6 +195,7 @@ pub fn startOrAttachImpl(allocator: Allocator, args: cli.StartOrAttachArgs) !Sta
         
         // Create state directory
         const state_dir = try getActivationStateDirPath(allocator, args.runtime_dir, args.flox_env, new_activation.id);
+        defer allocator.free(state_dir);
         try std.fs.cwd().makePath(state_dir);
         
         try writeActivationsJson(allocator, &activations_data, activations_path);
