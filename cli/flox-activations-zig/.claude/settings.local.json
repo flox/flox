@@ -4,7 +4,8 @@
     "allow": [
       "Bash(find:*)",
       "Bash(ls:*)",
-      "Bash(zig build:*)"
+      "Bash(zig build:*)",
+      "Bash(zig test:*)"
     ],
     "deny": []
   }

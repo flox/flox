@@ -44,10 +44,9 @@ pub const Activations = struct {
     activations: []Activation,
     
     pub fn init(allocator: Allocator) Activations {
-        _ = allocator;
         return Activations{
             .version = LATEST_VERSION,
-            .activations = &[_]Activation{},
+            .activations = allocator.alloc(Activation, 0) catch unreachable,
         };
     }
     
@@ -121,14 +120,16 @@ pub const Activations = struct {
         var found_idx: ?usize = null;
         for (self.activations, 0..) |*activation, i| {
             if (std.mem.eql(u8, activation.id, id)) {
-                activation.deinit(allocator);
                 found_idx = i;
                 break;
             }
         }
         
         if (found_idx) |idx| {
-            // Shift remaining elements
+            // First clean up the activation we're removing
+            self.activations[idx].deinit(allocator);
+            
+            // Then shift remaining elements
             for (idx..self.activations.len - 1) |i| {
                 self.activations[i] = self.activations[i + 1];
             }
