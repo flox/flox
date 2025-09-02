@@ -20,7 +20,7 @@ blake3 = "1.8.2"
 bpaf = { version = "0.9.20", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.41", features = ["serde"] }
-clap = { version = "4.5.45", features = ["derive"] }
+clap = { version = "4.5.46", features = ["derive"] }
 clap_derive = "4.5.4"
 close_fds = "0.3"
 config = { version = "0.15", default-features = false, features = ["toml"] }
