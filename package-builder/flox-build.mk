@@ -488,7 +488,7 @@ define BUILD_local_template =
 	  --slurpfile manifest "$(MANIFEST_LOCK)" \
 	  --arg log "$(shell $(_readlink) $($(_pvarname)_result)-log)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks, meta: $$$$meta }' $$< > $$@
+	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) * { "outputsToInstall":["out"] } as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks, meta: $$$$meta }' $$< > $$@
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -573,7 +573,7 @@ define BUILD_nix_sandbox_template =
 	  --arg version "$(_version)" \
 	  --slurpfile manifest "$(MANIFEST_LOCK)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks, meta: $$$$meta }' $$< > $$@
+	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) * { "outputsToInstall":["out"] } as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks, meta: $$$$meta }' $$< > $$@
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in

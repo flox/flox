@@ -770,6 +770,11 @@ fn check_build_metadata_from_build_result(
     // Get outputs to install from the build result, or default to all outputs.
     let outputs_to_install = build_result.meta.outputs_to_install.clone();
 
+    // Wrapping `outputs_to_install` in an option to satisfy the API.
+    // In practice outputs_to_install are required / must be always `Some`
+    // so a future change will update the API to reflect that.
+    let outputs_to_install = Some(outputs_to_install);
+
     let license = match &build_result.meta.license {
         Some(lic) => Some(lic.to_catalog_license()?),
         None => None,
@@ -1284,7 +1289,7 @@ pub mod tests {
         let _license_in_manifest = "[\"my very private license\"]";
 
         assert_eq!(meta.outputs.len(), 1);
-        assert!(meta.outputs_to_install.is_none());
+        assert_eq!(meta.outputs_to_install, Some(vec!["out".to_string()]));
         assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.version, Some(version_in_manifest.to_string()));
@@ -1326,7 +1331,7 @@ pub mod tests {
         .unwrap();
 
         assert_eq!(meta.outputs.len(), 1);
-        assert!(meta.outputs_to_install.is_none());
+        assert_eq!(meta.outputs_to_install, Some(vec!["out".to_string()]));
         assert_eq!(meta.outputs[0].store_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.drv_path.starts_with("/nix/store/"), true);
         assert_eq!(meta.pname, EXAMPLE_PACKAGE_NAME_MISSING_FIELDS.to_string());
