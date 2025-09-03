@@ -430,7 +430,12 @@ pub enum GenerationsError {
     DeserializeMetadata(#[source] serde_json::Error),
     #[error("Environment metadata of version '{0}' could not be parsed into its expected schema.")]
     InvalidSchema(serde_json::Value),
-    #[error("Environment metadata of version '{0}' is not supported")]
+    #[error(
+        "Environment metadata of version '{0}' is not supported\n\
+         \n\
+         This environment appears to have been modified by a newer version of Flox.\n\
+         Please upgrade to the latest version of Flox and try again."
+    )]
     InvalidVersion(serde_json::Value),
     // endregion
 
@@ -1696,6 +1701,7 @@ mod tests {
         use std::collections::BTreeMap;
 
         use chrono::{DateTime, Duration, Utc};
+        use indoc::indoc;
         use pretty_assertions::assert_eq;
         use serde_json::json;
 
@@ -1765,10 +1771,11 @@ mod tests {
             let serialized = serde_json::to_string_pretty(&metadata).unwrap();
             let err = parse_metadata(&mut serde_json::Deserializer::from_str(&serialized))
                 .expect_err("unknown v3 schema should fail to parse");
-            assert_eq!(
-                err.to_string(),
-                "Environment metadata of version '3' is not supported"
-            );
+            assert_eq!(err.to_string(), indoc! {"
+                Environment metadata of version '3' is not supported
+
+                This environment appears to have been modified by a newer version of Flox.
+                Please upgrade to the latest version of Flox and try again."});
         }
 
         #[test]
