@@ -191,7 +191,7 @@ pub struct BuildResultMeta {
     pub unfree: Option<bool>,
 
     #[serde(rename = "outputsToInstall")]
-    pub outputs_to_install: Option<Vec<String>>,
+    pub outputs_to_install: Vec<String>,
 }
 
 /// A manifest builder that uses the [FLOX_BUILD_MK] makefile to build packages.
@@ -986,7 +986,7 @@ mod license_tests {
         assert_eq!(meta.license, Some(NixyLicense::String("MIT".to_string())));
         assert_eq!(meta.broken, Some(false));
         assert_eq!(meta.insecure, None);
-        assert_eq!(meta.outputs_to_install, Some(vec!["out".to_string()]));
+        assert_eq!(meta.outputs_to_install, vec!["out".to_string()]);
     }
 
     #[test]
