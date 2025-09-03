@@ -21,7 +21,7 @@ use flox_rust_sdk::models::environment::{
 use indoc::formatdoc;
 use tracing::{debug, instrument};
 
-use crate::commands::ensure_floxhub_token;
+use crate::commands::{SHELL_COMPLETION_DIR, ensure_floxhub_token};
 use crate::subcommand_metric;
 use crate::utils::errors::format_core_error;
 use crate::utils::message;
@@ -30,7 +30,7 @@ use crate::utils::message;
 #[derive(Bpaf, Clone)]
 pub struct Push {
     /// Directory to push the environment from (default: current directory)
-    #[bpaf(long, short, argument("path"))]
+    #[bpaf(long, short, argument("path"), complete_shell(SHELL_COMPLETION_DIR))]
     dir: Option<PathBuf>,
 
     /// FloxHub account to push environment to (default: current FloxHub user).

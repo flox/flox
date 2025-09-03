@@ -31,7 +31,7 @@ use crate::commands::build::{
     prefetch_flake_ref,
     system_override,
 };
-use crate::commands::ensure_floxhub_token;
+use crate::commands::{SHELL_COMPLETION_FILE, ensure_floxhub_token};
 use crate::config::Config;
 use crate::utils::errors::display_chain;
 use crate::utils::message;
@@ -79,7 +79,7 @@ struct CacheArgs {
     /// Flox.
     /// Takes precedence over the value of `publish.signing_private_key` from
     /// 'flox config'.
-    #[bpaf(long, argument("FILE"))]
+    #[bpaf(long, argument("FILE"), complete_shell(SHELL_COMPLETION_FILE))]
     signing_private_key: Option<PathBuf>,
 }
 
