@@ -30,7 +30,7 @@ use super::{
     activated_environments,
     environment_select,
 };
-use crate::commands::{EnvironmentSelectError, ensure_floxhub_token};
+use crate::commands::{EnvironmentSelectError, SHELL_COMPLETION_FILE, ensure_floxhub_token};
 use crate::utils::dialog::{Confirm, Dialog};
 use crate::utils::errors::format_error;
 use crate::utils::message;
@@ -49,7 +49,7 @@ pub struct Edit {
 pub enum EditAction {
     EditManifest {
         /// Replace environment manifest with that in <file>
-        #[bpaf(long, short, argument("file"))]
+        #[bpaf(long, short, argument("file"), complete_shell(SHELL_COMPLETION_FILE))]
         file: Option<PathBuf>,
     },
 

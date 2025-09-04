@@ -34,7 +34,7 @@ use std::str::FromStr;
 use std::{env, fmt, fs, io, mem};
 
 use anyhow::{Context, Result, anyhow, bail};
-use bpaf::{Args, Bpaf, ParseFailure, Parser};
+use bpaf::{Args, Bpaf, ParseFailure, Parser, ShellComp};
 use flox_rust_sdk::data::FloxVersion;
 use flox_rust_sdk::flox::{
     DEFAULT_FLOXHUB_URL,
@@ -94,6 +94,9 @@ use crate::utils::init::{
 };
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FILE_NAME};
 use crate::utils::{TRAILING_NETWORK_CALL_TIMEOUT, message};
+
+const SHELL_COMPLETION_DIR: ShellComp = ShellComp::Dir { mask: None };
+const SHELL_COMPLETION_FILE: ShellComp = ShellComp::File { mask: None };
 
 // Relative to flox executable
 const DEFAULT_UPDATE_INSTRUCTIONS: &str =
@@ -1165,7 +1168,12 @@ impl Version {
 pub enum EnvironmentSelect {
     Dir(
         /// Path containing a .flox/ directory
-        #[bpaf(long("dir"), short('d'), argument("path"))]
+        #[bpaf(
+            long("dir"),
+            short('d'),
+            argument("path"),
+            complete_shell(SHELL_COMPLETION_DIR)
+        )]
         PathBuf,
     ),
     Remote(
@@ -1182,7 +1190,12 @@ pub enum EnvironmentSelect {
 pub enum DirEnvironmentSelect {
     Dir(
         /// Path containing a .flox/ directory
-        #[bpaf(long("dir"), short('d'), argument("path"))]
+        #[bpaf(
+            long("dir"),
+            short('d'),
+            argument("path"),
+            complete_shell(SHELL_COMPLETION_DIR)
+        )]
         PathBuf,
     ),
     #[default]

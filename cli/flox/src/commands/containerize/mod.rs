@@ -18,6 +18,7 @@ use macos_containerize_proxy::ContainerizeProxy;
 use tracing::{debug, info, instrument};
 
 use super::{EnvironmentSelect, environment_select};
+use crate::commands::SHELL_COMPLETION_FILE;
 use crate::environment_subcommand_metric;
 use crate::utils::message;
 use crate::utils::openers::first_in_path;
@@ -40,7 +41,7 @@ pub struct Containerize {
     /// File to write the container image to.
     /// '-` to write to stdout.
     /// Defaults to '{name}-container.tar' if '--runtime' isn't specified or detected.
-    #[bpaf(short, long, argument("file"))]
+    #[bpaf(short, long, argument("file"), complete_shell(SHELL_COMPLETION_FILE))]
     file: Option<FileOrStdout>,
 
     /// Tag to apply to the container, defaults to 'latest'

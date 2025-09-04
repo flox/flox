@@ -22,7 +22,7 @@ use indoc::{formatdoc, indoc};
 use path_dedot::ParseDot;
 use tracing::{debug, info_span, instrument};
 
-use crate::commands::environment_description;
+use crate::commands::{SHELL_COMPLETION_DIR, environment_description};
 use crate::subcommand_metric;
 use crate::utils::dialog::Dialog;
 use crate::utils::message;
@@ -68,7 +68,7 @@ impl InitHook for InitHookType {
 #[derive(Bpaf, Clone)]
 pub struct Init {
     /// Directory to create the environment in (default: current directory)
-    #[bpaf(long, short, argument("path"))]
+    #[bpaf(long, short, argument("path"), complete_shell(SHELL_COMPLETION_DIR))]
     dir: Option<PathBuf>,
 
     /// Name of the environment
