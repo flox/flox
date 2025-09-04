@@ -28,7 +28,6 @@ use enum_dispatch::enum_dispatch;
 use flox_core::Version;
 use itertools::Itertools;
 use schemars::JsonSchema;
-use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use serde_with::{DeserializeFromStr, SerializeDisplay, skip_serializing_none};
@@ -429,6 +428,15 @@ pub enum GenerationsError {
     ShowMetadata(#[source] GitCommandError),
     #[error("could not parse generations metadata")]
     DeserializeMetadata(#[source] serde_json::Error),
+    #[error("Environment metadata of version '{0}' could not be parsed into its expected schema.")]
+    InvalidSchema(serde_json::Value),
+    #[error(
+        "Environment metadata of version '{0}' is not supported\n\
+         \n\
+         This environment appears to have been modified by a newer version of Flox.\n\
+         Please upgrade to the latest version of Flox and try again."
+    )]
+    InvalidVersion(serde_json::Value),
     // endregion
 
     // region: generation errors
@@ -512,18 +520,10 @@ fn parse_metadata<'de>(
         MetadataVersionCompat::VX { version }
             if version == Value::Number(1.into()) || version == Value::Number(2.into()) =>
         {
-            Err(GenerationsError::DeserializeMetadata(
-                serde_json::Error::custom(format!(
-                    "Environment metadata of version '{version}' could not be parsed into its expected schema.",
-                )),
-            ))?
+            Err(GenerationsError::InvalidSchema(version))?
         },
 
-        MetadataVersionCompat::VX { version } => Err(GenerationsError::DeserializeMetadata(
-            serde_json::Error::custom(format!(
-                "Environment metadata of version '{version}' is not supported",
-            )),
-        ))?,
+        MetadataVersionCompat::VX { version } => Err(GenerationsError::InvalidVersion(version))?,
     };
 
     Ok(metadata)
@@ -1701,7 +1701,9 @@ mod tests {
         use std::collections::BTreeMap;
 
         use chrono::{DateTime, Duration, Utc};
+        use indoc::indoc;
         use pretty_assertions::assert_eq;
+        use serde_json::json;
 
         use crate::models::environment::generations::compat::{self, SingleGenerationMetadata};
         use crate::models::environment::generations::{
@@ -1744,6 +1746,36 @@ mod tests {
             expected.add_generation(migration_options(date));
 
             assert_eq!(*actual, expected)
+        }
+
+        #[test]
+        fn parse_v2_invalid() {
+            let metadata = json!({
+                "version": 2,
+                // Missing required fields.
+            });
+            let serialized = serde_json::to_string_pretty(&metadata).unwrap();
+            let err = parse_metadata(&mut serde_json::Deserializer::from_str(&serialized))
+                .expect_err("invalid v2 schema should fail to parse");
+            assert_eq!(
+                err.to_string(),
+                "Environment metadata of version '2' could not be parsed into its expected schema."
+            );
+        }
+
+        #[test]
+        fn parse_v3_unknown() {
+            let metadata = json!({
+                "version": 3,
+            });
+            let serialized = serde_json::to_string_pretty(&metadata).unwrap();
+            let err = parse_metadata(&mut serde_json::Deserializer::from_str(&serialized))
+                .expect_err("unknown v3 schema should fail to parse");
+            assert_eq!(err.to_string(), indoc! {"
+                Environment metadata of version '3' is not supported
+
+                This environment appears to have been modified by a newer version of Flox.
+                Please upgrade to the latest version of Flox and try again."});
         }
 
         #[test]
