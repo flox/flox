@@ -943,7 +943,7 @@
           "catalogs"
         ],
         "summary": "Submit a build of a particular package",
-        "description": "Create or update a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **UserBuildPublish**: The build info to submit\n\nReturns:\n- **PackageBuildResponse**",
+        "description": "Create or update a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **PackageBuild**: The build info to submit\n\nReturns:\n- **PackageBuildResponse**",
         "operationId": "create_package_build_api_v1_catalog_catalogs__catalog_name__packages__package_name__builds_post",
         "security": [
           {
@@ -984,7 +984,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UserBuildPublish"
+                "$ref": "#/components/schemas/PackageBuildWithNarInfo"
               }
             }
           }
@@ -1047,7 +1047,7 @@
           "catalogs"
         ],
         "summary": "Update a build of a particular package",
-        "description": "Create or update a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **UserBuildPublish**: The build info to submit\n\nReturns:\n- **PackageBuildResponse**",
+        "description": "Create or update a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **PackageBuild**: The build info to submit\n\nReturns:\n- **PackageBuildResponse**",
         "operationId": "create_package_build_api_v1_catalog_catalogs__catalog_name__packages__package_name__builds_put",
         "security": [
           {
@@ -1088,7 +1088,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UserBuildPublish"
+                "$ref": "#/components/schemas/PackageBuildWithNarInfo"
               }
             }
           }
@@ -1151,7 +1151,7 @@
           "catalogs"
         ],
         "summary": "Get a list of builds for a given package",
-        "description": "Get the list of builds for a given package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nReturns:\n- **UserBuildList**",
+        "description": "Get the list of builds for a given package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nReturns:\n- **PackageBuildList**",
         "operationId": "get_package_builds_api_v1_catalog_catalogs__catalog_name__packages__package_name__builds_get",
         "security": [
           {
@@ -1193,7 +1193,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserBuildList"
+                  "$ref": "#/components/schemas/PackageBuildList"
                 }
               }
             }
@@ -2254,6 +2254,16 @@
             "nullable": true,
             "type": "boolean"
           },
+          "compression": {
+            "title": "Compression",
+            "nullable": true,
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "nullable": true,
+            "type": "string"
+          },
           "closureDownloadSize": {
             "title": "Closuredownloadsize",
             "nullable": true,
@@ -2266,11 +2276,7 @@
           },
           "compresssize": {
             "title": "Compresssize",
-            "nullable": true,
-            "type": "string"
-          },
-          "compression": {
-            "title": "Compression",
+            "deprecated": true,
             "nullable": true,
             "type": "string"
           }
@@ -2286,10 +2292,336 @@
         "type": "object",
         "title": "NarInfos"
       },
+      "PackageBuild": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          },
+          "rev_count": {
+            "type": "integer",
+            "title": "Rev Count"
+          },
+          "rev_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Rev Date"
+          },
+          "locked_base_catalog_url": {
+            "title": "Locked Base Catalog Url",
+            "nullable": true,
+            "type": "string"
+          },
+          "derivation": {
+            "$ref": "#/components/schemas/PackageDerivation-Output"
+          },
+          "cache_uri": {
+            "title": "Cache Uri",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "rev",
+          "rev_count",
+          "rev_date",
+          "derivation"
+        ],
+        "title": "PackageBuild",
+        "example": {
+          "derivation": {
+            "description": "A very nice derivation",
+            "drv_path": "foo.bar.curl",
+            "license": "GnuFoo",
+            "name": "mydrv",
+            "outputs": {
+              "bin": "/nix/store/foo",
+              "man": "/nix/store/bar"
+            },
+            "outputs_to_install": [
+              "bin",
+              "man"
+            ],
+            "pname": "mydrv",
+            "system": "x86_64-linux",
+            "version": "1.0"
+          },
+          "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+          "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+          "rev_count": 12345,
+          "rev_date": "2021-09-01T00:00:00Z",
+          "url": "https://github.com/org/example"
+        }
+      },
+      "PackageBuildList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PackageBuild"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PackageBuildList"
+      },
       "PackageBuildResponse": {
         "properties": {},
         "type": "object",
         "title": "PackageBuildResponse"
+      },
+      "PackageBuildWithNarInfo": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          },
+          "rev_count": {
+            "type": "integer",
+            "title": "Rev Count"
+          },
+          "rev_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Rev Date"
+          },
+          "locked_base_catalog_url": {
+            "title": "Locked Base Catalog Url",
+            "nullable": true,
+            "type": "string"
+          },
+          "derivation": {
+            "$ref": "#/components/schemas/PackageDerivation-Input"
+          },
+          "cache_uri": {
+            "title": "Cache Uri",
+            "nullable": true,
+            "type": "string"
+          },
+          "narinfos": {
+            "nullable": true,
+            "$ref": "#/components/schemas/NarInfos"
+          },
+          "narinfos_source_url": {
+            "title": "Narinfos Source Url",
+            "nullable": true,
+            "type": "string"
+          },
+          "narinfos_source_version": {
+            "title": "Narinfos Source Version",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "rev",
+          "rev_count",
+          "rev_date",
+          "derivation"
+        ],
+        "title": "PackageBuildWithNarInfo",
+        "example": {
+          "derivation": {
+            "description": "A very nice derivation",
+            "drv_path": "foo.bar.curl",
+            "license": "GnuFoo",
+            "name": "mydrv",
+            "outputs": {
+              "bin": "/nix/store/foo",
+              "man": "/nix/store/bar"
+            },
+            "outputs_to_install": [
+              "bin",
+              "man"
+            ],
+            "pname": "mydrv",
+            "system": "x86_64-linux",
+            "version": "1.0"
+          },
+          "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+          "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+          "rev_count": 12345,
+          "rev_date": "2021-09-01T00:00:00Z",
+          "url": "https://github.com/org/example"
+        }
+      },
+      "PackageDerivation-Input": {
+        "properties": {
+          "drv_path": {
+            "type": "string",
+            "title": "Drv Path"
+          },
+          "system": {
+            "$ref": "#/components/schemas/PackageSystem"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "outputs": {
+            "$ref": "#/components/schemas/PackageOutputs"
+          },
+          "outputs_to_install": {
+            "title": "Outputs To Install",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pname": {
+            "title": "Pname",
+            "nullable": true,
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "nullable": true,
+            "type": "string"
+          },
+          "license": {
+            "title": "License",
+            "nullable": true,
+            "type": "string"
+          },
+          "broken": {
+            "title": "Broken",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "unfree": {
+            "title": "Unfree",
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drv_path",
+          "system",
+          "name",
+          "description",
+          "outputs"
+        ],
+        "title": "PackageDerivation",
+        "example": {
+          "description": "A very nice derivation",
+          "drv_path": "foo.bar.curl",
+          "license": "GnuFoo",
+          "name": "mydrv",
+          "outputs": {
+            "bin": "/nix/store/foo",
+            "man": "/nix/store/bar"
+          },
+          "outputs_to_install": [
+            "bin",
+            "man"
+          ],
+          "pname": "mydrv",
+          "system": "x86_64-linux",
+          "version": "1.0"
+        }
+      },
+      "PackageDerivation-Output": {
+        "properties": {
+          "drv_path": {
+            "type": "string",
+            "title": "Drv Path"
+          },
+          "system": {
+            "$ref": "#/components/schemas/PackageSystem"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "outputs": {
+            "$ref": "#/components/schemas/PackageOutputs"
+          },
+          "outputs_to_install": {
+            "title": "Outputs To Install",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pname": {
+            "title": "Pname",
+            "nullable": true,
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "nullable": true,
+            "type": "string"
+          },
+          "license": {
+            "title": "License",
+            "nullable": true,
+            "type": "string"
+          },
+          "broken": {
+            "title": "Broken",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "unfree": {
+            "title": "Unfree",
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drv_path",
+          "system",
+          "name",
+          "description",
+          "outputs"
+        ],
+        "title": "PackageDerivation",
+        "example": {
+          "description": "A very nice derivation",
+          "drv_path": "foo.bar.curl",
+          "license": "GnuFoo",
+          "name": "mydrv",
+          "outputs": {
+            "bin": "/nix/store/foo",
+            "man": "/nix/store/bar"
+          },
+          "outputs_to_install": [
+            "bin",
+            "man"
+          ],
+          "pname": "mydrv",
+          "system": "x86_64-linux",
+          "version": "1.0"
+        }
       },
       "PackageDescriptor": {
         "properties": {
@@ -3309,166 +3641,6 @@
         ],
         "title": "StorepathStatusResponse"
       },
-      "UserBuild": {
-        "properties": {
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "rev": {
-            "type": "string",
-            "title": "Rev"
-          },
-          "rev_count": {
-            "type": "integer",
-            "title": "Rev Count"
-          },
-          "rev_date": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Rev Date"
-          },
-          "locked_base_catalog_url": {
-            "title": "Locked Base Catalog Url",
-            "nullable": true,
-            "type": "string"
-          },
-          "derivation": {
-            "$ref": "#/components/schemas/UserDerivation-Output"
-          },
-          "cache_uri": {
-            "title": "Cache Uri",
-            "nullable": true,
-            "type": "string"
-          }
-        },
-        "type": "object",
-        "required": [
-          "url",
-          "rev",
-          "rev_count",
-          "rev_date",
-          "derivation"
-        ],
-        "title": "UserBuild",
-        "example": {
-          "derivation": {
-            "description": "A very nice derivation",
-            "drv_path": "foo.bar.curl",
-            "license": "GnuFoo",
-            "name": "mydrv",
-            "outputs": {
-              "bin": "/nix/store/foo"
-            },
-            "outputs_to_install": [
-              "bin"
-            ],
-            "pname": "mydrv",
-            "system": "x86_64-linux",
-            "version": "1.0"
-          },
-          "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-          "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-          "rev_count": 12345,
-          "rev_date": "2021-09-01T00:00:00Z",
-          "url": "https://github.com/org/example"
-        }
-      },
-      "UserBuildList": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/UserBuild"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "title": "UserBuildList"
-      },
-      "UserBuildPublish": {
-        "properties": {
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "rev": {
-            "type": "string",
-            "title": "Rev"
-          },
-          "rev_count": {
-            "type": "integer",
-            "title": "Rev Count"
-          },
-          "rev_date": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Rev Date"
-          },
-          "locked_base_catalog_url": {
-            "title": "Locked Base Catalog Url",
-            "nullable": true,
-            "type": "string"
-          },
-          "derivation": {
-            "$ref": "#/components/schemas/UserDerivation-Input"
-          },
-          "cache_uri": {
-            "title": "Cache Uri",
-            "nullable": true,
-            "type": "string"
-          },
-          "narinfos": {
-            "nullable": true,
-            "$ref": "#/components/schemas/NarInfos"
-          },
-          "narinfos_source_url": {
-            "title": "Narinfos Source Url",
-            "nullable": true,
-            "type": "string"
-          },
-          "narinfos_source_version": {
-            "title": "Narinfos Source Version",
-            "nullable": true,
-            "type": "integer"
-          }
-        },
-        "type": "object",
-        "required": [
-          "url",
-          "rev",
-          "rev_count",
-          "rev_date",
-          "derivation"
-        ],
-        "title": "UserBuildPublish",
-        "example": {
-          "derivation": {
-            "description": "A very nice derivation",
-            "drv_path": "foo.bar.curl",
-            "license": "GnuFoo",
-            "name": "mydrv",
-            "outputs": {
-              "bin": "/nix/store/foo"
-            },
-            "outputs_to_install": [
-              "bin"
-            ],
-            "pname": "mydrv",
-            "system": "x86_64-linux",
-            "version": "1.0"
-          },
-          "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-          "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-          "rev_count": 12345,
-          "rev_date": "2021-09-01T00:00:00Z",
-          "url": "https://github.com/org/example"
-        }
-      },
       "UserCatalog": {
         "properties": {
           "id": {
@@ -3497,164 +3669,6 @@
           "created_at"
         ],
         "title": "UserCatalog"
-      },
-      "UserDerivation-Input": {
-        "properties": {
-          "drv_path": {
-            "type": "string",
-            "title": "Drv Path"
-          },
-          "system": {
-            "$ref": "#/components/schemas/PackageSystem"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
-          "outputs": {
-            "$ref": "#/components/schemas/PackageOutputs"
-          },
-          "outputs_to_install": {
-            "title": "Outputs To Install",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "pname": {
-            "title": "Pname",
-            "nullable": true,
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "nullable": true,
-            "type": "string"
-          },
-          "license": {
-            "title": "License",
-            "nullable": true,
-            "type": "string"
-          },
-          "broken": {
-            "title": "Broken",
-            "nullable": true,
-            "type": "boolean"
-          },
-          "unfree": {
-            "title": "Unfree",
-            "nullable": true,
-            "type": "boolean"
-          }
-        },
-        "type": "object",
-        "required": [
-          "drv_path",
-          "system",
-          "name",
-          "description",
-          "outputs"
-        ],
-        "title": "UserDerivation",
-        "example": {
-          "description": "A very nice derivation",
-          "drv_path": "foo.bar.curl",
-          "license": "GnuFoo",
-          "name": "mydrv",
-          "outputs": {
-            "bin": "/nix/store/foo"
-          },
-          "outputs_to_install": [
-            "bin"
-          ],
-          "pname": "mydrv",
-          "system": "x86_64-linux",
-          "version": "1.0"
-        }
-      },
-      "UserDerivation-Output": {
-        "properties": {
-          "drv_path": {
-            "type": "string",
-            "title": "Drv Path"
-          },
-          "system": {
-            "$ref": "#/components/schemas/PackageSystem"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
-          "outputs": {
-            "$ref": "#/components/schemas/PackageOutputs"
-          },
-          "outputs_to_install": {
-            "title": "Outputs To Install",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "pname": {
-            "title": "Pname",
-            "nullable": true,
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "nullable": true,
-            "type": "string"
-          },
-          "license": {
-            "title": "License",
-            "nullable": true,
-            "type": "string"
-          },
-          "broken": {
-            "title": "Broken",
-            "nullable": true,
-            "type": "boolean"
-          },
-          "unfree": {
-            "title": "Unfree",
-            "nullable": true,
-            "type": "boolean"
-          }
-        },
-        "type": "object",
-        "required": [
-          "drv_path",
-          "system",
-          "name",
-          "description",
-          "outputs"
-        ],
-        "title": "UserDerivation",
-        "example": {
-          "description": "A very nice derivation",
-          "drv_path": "foo.bar.curl",
-          "license": "GnuFoo",
-          "name": "mydrv",
-          "outputs": {
-            "bin": "/nix/store/foo"
-          },
-          "outputs_to_install": [
-            "bin"
-          ],
-          "pname": "mydrv",
-          "system": "x86_64-linux",
-          "version": "1.0"
-        }
       },
       "UserPackage": {
         "properties": {

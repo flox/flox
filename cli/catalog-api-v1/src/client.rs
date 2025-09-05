@@ -803,6 +803,7 @@ pub mod types {
     ///    },
     ///    "compresssize": {
     ///      "title": "Compresssize",
+    ///      "deprecated": true,
     ///      "type": [
     ///        "string",
     ///        "null"
@@ -840,6 +841,13 @@ pub mod types {
     ///      "title": "Narsize",
     ///      "type": [
     ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "path": {
+    ///      "title": "Path",
+    ///      "type": [
+    ///        "string",
     ///        "null"
     ///      ]
     ///    },
@@ -935,6 +943,8 @@ pub mod types {
         )]
         pub nar_size: ::std::option::Option<i64>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub path: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub references: ::std::option::Option<::std::vec::Vec<::std::string::String>>,
         #[serde(
             rename = "registrationTime",
@@ -967,6 +977,7 @@ pub mod types {
                 download_size: Default::default(),
                 nar_hash: Default::default(),
                 nar_size: Default::default(),
+                path: Default::default(),
                 references: Default::default(),
                 registration_time: Default::default(),
                 signatures: Default::default(),
@@ -1018,6 +1029,135 @@ pub mod types {
             Self(value)
         }
     }
+    ///`PackageBuild`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageBuild",
+    ///  "examples": [
+    ///    {
+    ///      "derivation": {
+    ///        "description": "A very nice derivation",
+    ///        "drv_path": "foo.bar.curl",
+    ///        "license": "GnuFoo",
+    ///        "name": "mydrv",
+    ///        "outputs": {
+    ///          "bin": "/nix/store/foo",
+    ///          "man": "/nix/store/bar"
+    ///        },
+    ///        "outputs_to_install": [
+    ///          "bin",
+    ///          "man"
+    ///        ],
+    ///        "pname": "mydrv",
+    ///        "system": "x86_64-linux",
+    ///        "version": "1.0"
+    ///      },
+    ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+    ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+    ///      "rev_count": 12345,
+    ///      "rev_date": "2021-09-01T00:00:00Z",
+    ///      "url": "https://github.com/org/example"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "derivation",
+    ///    "rev",
+    ///    "rev_count",
+    ///    "rev_date",
+    ///    "url"
+    ///  ],
+    ///  "properties": {
+    ///    "cache_uri": {
+    ///      "title": "Cache Uri",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "derivation": {
+    ///      "$ref": "#/components/schemas/PackageDerivation-Output"
+    ///    },
+    ///    "locked_base_catalog_url": {
+    ///      "title": "Locked Base Catalog Url",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "rev_count": {
+    ///      "title": "Rev Count",
+    ///      "type": "integer"
+    ///    },
+    ///    "rev_date": {
+    ///      "title": "Rev Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "url": {
+    ///      "title": "Url",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageBuild {
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub cache_uri: ::std::option::Option<::std::string::String>,
+        pub derivation: PackageDerivationOutput,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
+        pub rev: ::std::string::String,
+        pub rev_count: i64,
+        pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
+        pub url: ::std::string::String,
+    }
+    impl ::std::convert::From<&PackageBuild> for PackageBuild {
+        fn from(value: &PackageBuild) -> Self {
+            value.clone()
+        }
+    }
+    ///`PackageBuildList`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageBuildList",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PackageBuild"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageBuildList {
+        pub items: ::std::vec::Vec<PackageBuild>,
+    }
+    impl ::std::convert::From<&PackageBuildList> for PackageBuildList {
+        fn from(value: &PackageBuildList) -> Self {
+            value.clone()
+        }
+    }
     ///`PackageBuildResponse`
     ///
     /// <details><summary>JSON schema</summary>
@@ -1060,6 +1200,384 @@ pub mod types {
             value: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
         ) -> Self {
             Self(value)
+        }
+    }
+    ///`PackageBuildWithNarInfo`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageBuildWithNarInfo",
+    ///  "examples": [
+    ///    {
+    ///      "derivation": {
+    ///        "description": "A very nice derivation",
+    ///        "drv_path": "foo.bar.curl",
+    ///        "license": "GnuFoo",
+    ///        "name": "mydrv",
+    ///        "outputs": {
+    ///          "bin": "/nix/store/foo",
+    ///          "man": "/nix/store/bar"
+    ///        },
+    ///        "outputs_to_install": [
+    ///          "bin",
+    ///          "man"
+    ///        ],
+    ///        "pname": "mydrv",
+    ///        "system": "x86_64-linux",
+    ///        "version": "1.0"
+    ///      },
+    ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+    ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+    ///      "rev_count": 12345,
+    ///      "rev_date": "2021-09-01T00:00:00Z",
+    ///      "url": "https://github.com/org/example"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "derivation",
+    ///    "rev",
+    ///    "rev_count",
+    ///    "rev_date",
+    ///    "url"
+    ///  ],
+    ///  "properties": {
+    ///    "cache_uri": {
+    ///      "title": "Cache Uri",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "derivation": {
+    ///      "$ref": "#/components/schemas/PackageDerivation-Input"
+    ///    },
+    ///    "locked_base_catalog_url": {
+    ///      "title": "Locked Base Catalog Url",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "narinfos": {
+    ///      "$ref": "#/components/schemas/NarInfos"
+    ///    },
+    ///    "narinfos_source_url": {
+    ///      "title": "Narinfos Source Url",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "narinfos_source_version": {
+    ///      "title": "Narinfos Source Version",
+    ///      "type": [
+    ///        "integer",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "rev_count": {
+    ///      "title": "Rev Count",
+    ///      "type": "integer"
+    ///    },
+    ///    "rev_date": {
+    ///      "title": "Rev Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "url": {
+    ///      "title": "Url",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageBuildWithNarInfo {
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub cache_uri: ::std::option::Option<::std::string::String>,
+        pub derivation: PackageDerivationInput,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub narinfos: ::std::option::Option<NarInfos>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub narinfos_source_url: ::std::option::Option<::std::string::String>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub narinfos_source_version: ::std::option::Option<i64>,
+        pub rev: ::std::string::String,
+        pub rev_count: i64,
+        pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
+        pub url: ::std::string::String,
+    }
+    impl ::std::convert::From<&PackageBuildWithNarInfo> for PackageBuildWithNarInfo {
+        fn from(value: &PackageBuildWithNarInfo) -> Self {
+            value.clone()
+        }
+    }
+    ///`PackageDerivationInput`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageDerivation",
+    ///  "examples": [
+    ///    {
+    ///      "description": "A very nice derivation",
+    ///      "drv_path": "foo.bar.curl",
+    ///      "license": "GnuFoo",
+    ///      "name": "mydrv",
+    ///      "outputs": {
+    ///        "bin": "/nix/store/foo",
+    ///        "man": "/nix/store/bar"
+    ///      },
+    ///      "outputs_to_install": [
+    ///        "bin",
+    ///        "man"
+    ///      ],
+    ///      "pname": "mydrv",
+    ///      "system": "x86_64-linux",
+    ///      "version": "1.0"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "description",
+    ///    "drv_path",
+    ///    "name",
+    ///    "outputs",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "broken": {
+    ///      "title": "Broken",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "type": "string"
+    ///    },
+    ///    "drv_path": {
+    ///      "title": "Drv Path",
+    ///      "type": "string"
+    ///    },
+    ///    "license": {
+    ///      "title": "License",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "outputs": {
+    ///      "$ref": "#/components/schemas/PackageOutputs"
+    ///    },
+    ///    "outputs_to_install": {
+    ///      "title": "Outputs To Install",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "pname": {
+    ///      "title": "Pname",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/PackageSystem"
+    ///    },
+    ///    "unfree": {
+    ///      "title": "Unfree",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageDerivationInput {
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub broken: ::std::option::Option<bool>,
+        pub description: ::std::string::String,
+        pub drv_path: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub license: ::std::option::Option<::std::string::String>,
+        pub name: ::std::string::String,
+        pub outputs: PackageOutputs,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub outputs_to_install: ::std::option::Option<
+            ::std::vec::Vec<::std::string::String>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub pname: ::std::option::Option<::std::string::String>,
+        pub system: PackageSystem,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub unfree: ::std::option::Option<bool>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub version: ::std::option::Option<::std::string::String>,
+    }
+    impl ::std::convert::From<&PackageDerivationInput> for PackageDerivationInput {
+        fn from(value: &PackageDerivationInput) -> Self {
+            value.clone()
+        }
+    }
+    ///`PackageDerivationOutput`
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageDerivation",
+    ///  "examples": [
+    ///    {
+    ///      "description": "A very nice derivation",
+    ///      "drv_path": "foo.bar.curl",
+    ///      "license": "GnuFoo",
+    ///      "name": "mydrv",
+    ///      "outputs": {
+    ///        "bin": "/nix/store/foo",
+    ///        "man": "/nix/store/bar"
+    ///      },
+    ///      "outputs_to_install": [
+    ///        "bin",
+    ///        "man"
+    ///      ],
+    ///      "pname": "mydrv",
+    ///      "system": "x86_64-linux",
+    ///      "version": "1.0"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "description",
+    ///    "drv_path",
+    ///    "name",
+    ///    "outputs",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "broken": {
+    ///      "title": "Broken",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "type": "string"
+    ///    },
+    ///    "drv_path": {
+    ///      "title": "Drv Path",
+    ///      "type": "string"
+    ///    },
+    ///    "license": {
+    ///      "title": "License",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "outputs": {
+    ///      "$ref": "#/components/schemas/PackageOutputs"
+    ///    },
+    ///    "outputs_to_install": {
+    ///      "title": "Outputs To Install",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "pname": {
+    ///      "title": "Pname",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/PackageSystem"
+    ///    },
+    ///    "unfree": {
+    ///      "title": "Unfree",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
+    pub struct PackageDerivationOutput {
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub broken: ::std::option::Option<bool>,
+        pub description: ::std::string::String,
+        pub drv_path: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub license: ::std::option::Option<::std::string::String>,
+        pub name: ::std::string::String,
+        pub outputs: PackageOutputs,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub outputs_to_install: ::std::option::Option<
+            ::std::vec::Vec<::std::string::String>,
+        >,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub pname: ::std::option::Option<::std::string::String>,
+        pub system: PackageSystem,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub unfree: ::std::option::Option<bool>,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub version: ::std::option::Option<::std::string::String>,
+    }
+    impl ::std::convert::From<&PackageDerivationOutput> for PackageDerivationOutput {
+        fn from(value: &PackageDerivationOutput) -> Self {
+            value.clone()
         }
     }
     ///`PackageDescriptor`
@@ -3108,251 +3626,6 @@ pub mod types {
             value.clone()
         }
     }
-    ///`UserBuild`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "UserBuild",
-    ///  "examples": [
-    ///    {
-    ///      "derivation": {
-    ///        "description": "A very nice derivation",
-    ///        "drv_path": "foo.bar.curl",
-    ///        "license": "GnuFoo",
-    ///        "name": "mydrv",
-    ///        "outputs": {
-    ///          "bin": "/nix/store/foo"
-    ///        },
-    ///        "outputs_to_install": [
-    ///          "bin"
-    ///        ],
-    ///        "pname": "mydrv",
-    ///        "system": "x86_64-linux",
-    ///        "version": "1.0"
-    ///      },
-    ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-    ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-    ///      "rev_count": 12345,
-    ///      "rev_date": "2021-09-01T00:00:00Z",
-    ///      "url": "https://github.com/org/example"
-    ///    }
-    ///  ],
-    ///  "type": "object",
-    ///  "required": [
-    ///    "derivation",
-    ///    "rev",
-    ///    "rev_count",
-    ///    "rev_date",
-    ///    "url"
-    ///  ],
-    ///  "properties": {
-    ///    "cache_uri": {
-    ///      "title": "Cache Uri",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "derivation": {
-    ///      "$ref": "#/components/schemas/UserDerivation-Output"
-    ///    },
-    ///    "locked_base_catalog_url": {
-    ///      "title": "Locked Base Catalog Url",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "rev": {
-    ///      "title": "Rev",
-    ///      "type": "string"
-    ///    },
-    ///    "rev_count": {
-    ///      "title": "Rev Count",
-    ///      "type": "integer"
-    ///    },
-    ///    "rev_date": {
-    ///      "title": "Rev Date",
-    ///      "type": "string",
-    ///      "format": "date-time"
-    ///    },
-    ///    "url": {
-    ///      "title": "Url",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct UserBuild {
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub cache_uri: ::std::option::Option<::std::string::String>,
-        pub derivation: UserDerivationOutput,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
-        pub rev: ::std::string::String,
-        pub rev_count: i64,
-        pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
-        pub url: ::std::string::String,
-    }
-    impl ::std::convert::From<&UserBuild> for UserBuild {
-        fn from(value: &UserBuild) -> Self {
-            value.clone()
-        }
-    }
-    ///`UserBuildList`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "UserBuildList",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/UserBuild"
-    ///      }
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct UserBuildList {
-        pub items: ::std::vec::Vec<UserBuild>,
-    }
-    impl ::std::convert::From<&UserBuildList> for UserBuildList {
-        fn from(value: &UserBuildList) -> Self {
-            value.clone()
-        }
-    }
-    ///`UserBuildPublish`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "UserBuildPublish",
-    ///  "examples": [
-    ///    {
-    ///      "derivation": {
-    ///        "description": "A very nice derivation",
-    ///        "drv_path": "foo.bar.curl",
-    ///        "license": "GnuFoo",
-    ///        "name": "mydrv",
-    ///        "outputs": {
-    ///          "bin": "/nix/store/foo"
-    ///        },
-    ///        "outputs_to_install": [
-    ///          "bin"
-    ///        ],
-    ///        "pname": "mydrv",
-    ///        "system": "x86_64-linux",
-    ///        "version": "1.0"
-    ///      },
-    ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-    ///      "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-    ///      "rev_count": 12345,
-    ///      "rev_date": "2021-09-01T00:00:00Z",
-    ///      "url": "https://github.com/org/example"
-    ///    }
-    ///  ],
-    ///  "type": "object",
-    ///  "required": [
-    ///    "derivation",
-    ///    "rev",
-    ///    "rev_count",
-    ///    "rev_date",
-    ///    "url"
-    ///  ],
-    ///  "properties": {
-    ///    "cache_uri": {
-    ///      "title": "Cache Uri",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "derivation": {
-    ///      "$ref": "#/components/schemas/UserDerivation-Input"
-    ///    },
-    ///    "locked_base_catalog_url": {
-    ///      "title": "Locked Base Catalog Url",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "narinfos": {
-    ///      "$ref": "#/components/schemas/NarInfos"
-    ///    },
-    ///    "narinfos_source_url": {
-    ///      "title": "Narinfos Source Url",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "narinfos_source_version": {
-    ///      "title": "Narinfos Source Version",
-    ///      "type": [
-    ///        "integer",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "rev": {
-    ///      "title": "Rev",
-    ///      "type": "string"
-    ///    },
-    ///    "rev_count": {
-    ///      "title": "Rev Count",
-    ///      "type": "integer"
-    ///    },
-    ///    "rev_date": {
-    ///      "title": "Rev Date",
-    ///      "type": "string",
-    ///      "format": "date-time"
-    ///    },
-    ///    "url": {
-    ///      "title": "Url",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct UserBuildPublish {
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub cache_uri: ::std::option::Option<::std::string::String>,
-        pub derivation: UserDerivationInput,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub locked_base_catalog_url: ::std::option::Option<::std::string::String>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub narinfos: ::std::option::Option<NarInfos>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub narinfos_source_url: ::std::option::Option<::std::string::String>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub narinfos_source_version: ::std::option::Option<i64>,
-        pub rev: ::std::string::String,
-        pub rev_count: i64,
-        pub rev_date: ::chrono::DateTime<::chrono::offset::Utc>,
-        pub url: ::std::string::String,
-    }
-    impl ::std::convert::From<&UserBuildPublish> for UserBuildPublish {
-        fn from(value: &UserBuildPublish) -> Self {
-            value.clone()
-        }
-    }
     ///`UserCatalog`
     ///
     /// <details><summary>JSON schema</summary>
@@ -3401,260 +3674,6 @@ pub mod types {
     }
     impl ::std::convert::From<&UserCatalog> for UserCatalog {
         fn from(value: &UserCatalog) -> Self {
-            value.clone()
-        }
-    }
-    ///`UserDerivationInput`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "UserDerivation",
-    ///  "examples": [
-    ///    {
-    ///      "description": "A very nice derivation",
-    ///      "drv_path": "foo.bar.curl",
-    ///      "license": "GnuFoo",
-    ///      "name": "mydrv",
-    ///      "outputs": {
-    ///        "bin": "/nix/store/foo"
-    ///      },
-    ///      "outputs_to_install": [
-    ///        "bin"
-    ///      ],
-    ///      "pname": "mydrv",
-    ///      "system": "x86_64-linux",
-    ///      "version": "1.0"
-    ///    }
-    ///  ],
-    ///  "type": "object",
-    ///  "required": [
-    ///    "description",
-    ///    "drv_path",
-    ///    "name",
-    ///    "outputs",
-    ///    "system"
-    ///  ],
-    ///  "properties": {
-    ///    "broken": {
-    ///      "title": "Broken",
-    ///      "type": [
-    ///        "boolean",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "description": {
-    ///      "title": "Description",
-    ///      "type": "string"
-    ///    },
-    ///    "drv_path": {
-    ///      "title": "Drv Path",
-    ///      "type": "string"
-    ///    },
-    ///    "license": {
-    ///      "title": "License",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "name": {
-    ///      "title": "Name",
-    ///      "type": "string"
-    ///    },
-    ///    "outputs": {
-    ///      "$ref": "#/components/schemas/PackageOutputs"
-    ///    },
-    ///    "outputs_to_install": {
-    ///      "title": "Outputs To Install",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "pname": {
-    ///      "title": "Pname",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "system": {
-    ///      "$ref": "#/components/schemas/PackageSystem"
-    ///    },
-    ///    "unfree": {
-    ///      "title": "Unfree",
-    ///      "type": [
-    ///        "boolean",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "version": {
-    ///      "title": "Version",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct UserDerivationInput {
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub broken: ::std::option::Option<bool>,
-        pub description: ::std::string::String,
-        pub drv_path: ::std::string::String,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub license: ::std::option::Option<::std::string::String>,
-        pub name: ::std::string::String,
-        pub outputs: PackageOutputs,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub outputs_to_install: ::std::option::Option<
-            ::std::vec::Vec<::std::string::String>,
-        >,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub pname: ::std::option::Option<::std::string::String>,
-        pub system: PackageSystem,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub unfree: ::std::option::Option<bool>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub version: ::std::option::Option<::std::string::String>,
-    }
-    impl ::std::convert::From<&UserDerivationInput> for UserDerivationInput {
-        fn from(value: &UserDerivationInput) -> Self {
-            value.clone()
-        }
-    }
-    ///`UserDerivationOutput`
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "UserDerivation",
-    ///  "examples": [
-    ///    {
-    ///      "description": "A very nice derivation",
-    ///      "drv_path": "foo.bar.curl",
-    ///      "license": "GnuFoo",
-    ///      "name": "mydrv",
-    ///      "outputs": {
-    ///        "bin": "/nix/store/foo"
-    ///      },
-    ///      "outputs_to_install": [
-    ///        "bin"
-    ///      ],
-    ///      "pname": "mydrv",
-    ///      "system": "x86_64-linux",
-    ///      "version": "1.0"
-    ///    }
-    ///  ],
-    ///  "type": "object",
-    ///  "required": [
-    ///    "description",
-    ///    "drv_path",
-    ///    "name",
-    ///    "outputs",
-    ///    "system"
-    ///  ],
-    ///  "properties": {
-    ///    "broken": {
-    ///      "title": "Broken",
-    ///      "type": [
-    ///        "boolean",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "description": {
-    ///      "title": "Description",
-    ///      "type": "string"
-    ///    },
-    ///    "drv_path": {
-    ///      "title": "Drv Path",
-    ///      "type": "string"
-    ///    },
-    ///    "license": {
-    ///      "title": "License",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "name": {
-    ///      "title": "Name",
-    ///      "type": "string"
-    ///    },
-    ///    "outputs": {
-    ///      "$ref": "#/components/schemas/PackageOutputs"
-    ///    },
-    ///    "outputs_to_install": {
-    ///      "title": "Outputs To Install",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "pname": {
-    ///      "title": "Pname",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "system": {
-    ///      "$ref": "#/components/schemas/PackageSystem"
-    ///    },
-    ///    "unfree": {
-    ///      "title": "Unfree",
-    ///      "type": [
-    ///        "boolean",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "version": {
-    ///      "title": "Version",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
-    pub struct UserDerivationOutput {
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub broken: ::std::option::Option<bool>,
-        pub description: ::std::string::String,
-        pub drv_path: ::std::string::String,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub license: ::std::option::Option<::std::string::String>,
-        pub name: ::std::string::String,
-        pub outputs: PackageOutputs,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub outputs_to_install: ::std::option::Option<
-            ::std::vec::Vec<::std::string::String>,
-        >,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub pname: ::std::option::Option<::std::string::String>,
-        pub system: PackageSystem,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub unfree: ::std::option::Option<bool>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
-        pub version: ::std::option::Option<::std::string::String>,
-    }
-    impl ::std::convert::From<&UserDerivationOutput> for UserDerivationOutput {
-        fn from(value: &UserDerivationOutput) -> Self {
             value.clone()
         }
     }
@@ -4302,7 +4321,7 @@ Path Parameters:
 - **package_name**: The name of the package
 
 Returns:
-- **UserBuildList**
+- **PackageBuildList**
 
 Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/builds`
 
@@ -4313,7 +4332,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         &'a self,
         catalog_name: &'a types::CatalogName,
         package_name: &'a types::PackageName,
-    ) -> Result<ResponseValue<types::UserBuildList>, Error<types::ErrorResponse>> {
+    ) -> Result<ResponseValue<types::PackageBuildList>, Error<types::ErrorResponse>> {
         let url = format!(
             "{}/api/v1/catalog/catalogs/{}/packages/{}/builds", self.baseurl,
             encode_path(& catalog_name.to_string()), encode_path(& package_name
@@ -4371,7 +4390,7 @@ Path Parameters:
 - **catalog_name**: The name of the catalog
 - **package_name**: The name of the package
 Body Content:
-- **UserBuildPublish**: The build info to submit
+- **PackageBuild**: The build info to submit
 
 Returns:
 - **PackageBuildResponse**
@@ -4385,7 +4404,7 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         &'a self,
         catalog_name: &'a types::CatalogName,
         package_name: &'a types::PackageName,
-        body: &'a types::UserBuildPublish,
+        body: &'a types::PackageBuildWithNarInfo,
     ) -> Result<
         ResponseValue<types::PackageBuildResponse>,
         Error<types::ErrorResponse>,
@@ -4452,7 +4471,7 @@ Path Parameters:
 - **catalog_name**: The name of the catalog
 - **package_name**: The name of the package
 Body Content:
-- **UserBuildPublish**: The build info to submit
+- **PackageBuild**: The build info to submit
 
 Returns:
 - **PackageBuildResponse**
@@ -4466,7 +4485,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         &'a self,
         catalog_name: &'a types::CatalogName,
         package_name: &'a types::PackageName,
-        body: &'a types::UserBuildPublish,
+        body: &'a types::PackageBuildWithNarInfo,
     ) -> Result<
         ResponseValue<types::PackageBuildResponse>,
         Error<types::ErrorResponse>,
