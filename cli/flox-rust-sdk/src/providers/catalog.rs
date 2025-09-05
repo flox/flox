@@ -438,9 +438,9 @@ impl MockClient {
 }
 
 pub type PublishResponse = api_types::PublishInfoResponseCatalog;
-pub type UserBuildInfo = api_types::UserBuild;
-pub type UserBuildPublish = api_types::UserBuildPublish;
-pub type UserDerivationInfo = api_types::UserDerivationInput;
+pub type UserBuildInfo = api_types::PackageBuildInput;
+pub type UserBuildPublish = api_types::PackageBuildInput;
+pub type UserDerivationInfo = api_types::PackageDerivationInput;
 pub type StoreInfoRequest = api_types::StoreInfoRequest;
 pub type StoreInfoResponse = api_types::StoreInfoResponse;
 pub type StorepathStatusResponse = api_types::StorepathStatusResponse;
