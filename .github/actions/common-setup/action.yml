@@ -31,6 +31,8 @@ runs:
   steps:
     - name: "Install newer Nix"
       uses: "cachix/install-nix-action@v31"
+      with:
+        install_url: "https://releases.nixos.org/nix/nix-2.30.3/install"
 
     - name: "Configure Nix"
       uses: "flox/configure-nix-action@main"
