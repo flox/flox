@@ -278,7 +278,7 @@ jobs:
           SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
           TAILSCALE_URL:          "${{    vars.MANAGED_TAILSCALE_URL }}"
           TAILSCALE_AUTH_KEY:     "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
-          REMOTE_BUILDERS:        "${{    vars.MANAGED_REMOTE_BUILDERS }}"
+          REMOTE_BUILDERS:        "${{    vars.TESTING_REMOTE_BUILDERS }}"
           SYSTEM:                 "${{ matrix.system }}"
 
       - name: "Build"
@@ -454,7 +454,7 @@ jobs:
           SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
           TAILSCALE_URL:          "${{    vars.MANAGED_TAILSCALE_URL }}"
           TAILSCALE_AUTH_KEY:     "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
-          REMOTE_BUILDERS:        "${{    vars.MANAGED_REMOTE_BUILDERS }}"
+          REMOTE_BUILDERS:        "${{    vars.TESTING_REMOTE_BUILDERS }}"
           SYSTEM:                 "${{ matrix.system }}"
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
