@@ -486,7 +486,7 @@ dependencies = [
  "progenitor-client",
  "regex",
  "regress",
- "reqwest 0.12.9",
+ "reqwest 0.12.12",
  "sentry",
  "serde",
  "serde_json",
@@ -1036,7 +1036,7 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "regex",
- "reqwest 0.12.9",
+ "reqwest 0.12.12",
  "semver",
  "sentry",
  "serde",
@@ -1137,7 +1137,7 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "regex",
- "reqwest 0.12.9",
+ "reqwest 0.12.12",
  "schemars 1.0.4",
  "sentry",
  "serde",
@@ -2452,9 +2452,9 @@ dependencies = [
 
 [[package]]
 name = "percent-encoding"
-version = "2.3.1"
+version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
+checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pin-project-lite"
@@ -2549,18 +2549,17 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.95"
+version = "1.0.101"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
+checksum = "89ae43fd86e4158d6db51ad8e2b80f313af9cc74f5c0e03ccb87de09998732de"
 dependencies = [
  "unicode-ident",
 ]
 
 [[package]]
 name = "progenitor"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ced2eadb9776a201d0585b4b072fd44d7d2104e0f3452d967b5a78966f4855cf"
+version = "0.11.0"
+source = "git+https://github.com/oxidecomputer/progenitor#772bd3d48f73413a7e6e829b60c2481e32313a77"
 dependencies = [
  "progenitor-client",
  "progenitor-impl",
@@ -2569,14 +2568,13 @@ dependencies = [
 
 [[package]]
 name = "progenitor-client"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "296003fd74e64c77aeb2c10eae850eb543211a8557dd3b3de6f4230b5071e44b"
+version = "0.11.0"
+source = "git+https://github.com/oxidecomputer/progenitor#772bd3d48f73413a7e6e829b60c2481e32313a77"
 dependencies = [
  "bytes",
  "futures-core",
  "percent-encoding",
- "reqwest 0.12.9",
+ "reqwest 0.12.12",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -2584,9 +2582,8 @@ dependencies = [
 
 [[package]]
 name = "progenitor-impl"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b17e5363daa50bf1cccfade6b0fb970d2278758fd5cfa9ab69f25028e4b1afa3"
+version = "0.11.0"
+source = "git+https://github.com/oxidecomputer/progenitor#772bd3d48f73413a7e6e829b60c2481e32313a77"
 dependencies = [
  "heck",
  "http 1.3.1",
@@ -2606,9 +2603,8 @@ dependencies = [
 
 [[package]]
 name = "progenitor-macro"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4972aec926d1e06d6abc11ab3f063d2f7063be3dd46fd2839442c14d8e48f3ed"
+version = "0.11.0"
+source = "git+https://github.com/oxidecomputer/progenitor#772bd3d48f73413a7e6e829b60c2481e32313a77"
 dependencies = [
  "openapiv3",
  "proc-macro2",
@@ -2878,9 +2874,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.9"
+version = "0.12.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a77c62af46e79de0a562e1a9849205ffcb7fc1238876e9bd743357570e04046f"
+checksum = "43e734407157c3c2034e0258f5e4473ddb361b1e85f95a66690d67264d7cd1da"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2913,6 +2909,7 @@ dependencies = [
  "tokio",
  "tokio-native-tls",
  "tokio-util",
+ "tower",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -3246,7 +3243,7 @@ dependencies = [
  "httpdate",
  "log",
  "native-tls",
- "reqwest 0.12.9",
+ "reqwest 0.12.12",
  "sentry-anyhow",
  "sentry-backtrace",
  "sentry-contexts",
@@ -4089,6 +4086,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcc842091f2def52017664b53082ecbbeb5c7731092bad69d2c63050401dfd64"
 
 [[package]]
+name = "tower"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d039ad9159c98b70ecfd540b2573b97f7f52c3e8d9f8ad57a24b916a536975f9"
+dependencies = [
+ "futures-core",
+ "futures-util",
+ "pin-project-lite",
+ "sync_wrapper 1.0.1",
+ "tokio",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
+name = "tower-layer"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "121c2a6cda46980bb0fcd1647ffaf6cd3fc79a013de288782836f6df9c48780e"
+
+[[package]]
 name = "tower-service"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4193,9 +4211,8 @@ checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
 
 [[package]]
 name = "typify"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcc5bec3cdff70fd542e579aa2e52967833e543a25fae0d14579043d2e868a50"
+version = "0.4.3"
+source = "git+https://github.com/oxidecomputer/typify#32de7b26f0ce9aef5bea8046bfdcd15400e73b09"
 dependencies = [
  "typify-impl",
  "typify-macro",
@@ -4203,9 +4220,8 @@ dependencies = [
 
 [[package]]
 name = "typify-impl"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b52a67305054e1da6f3d99ad94875dcd0c7c49adbd17b4b64f0eefb7ae5bf8ab"
+version = "0.4.3"
+source = "git+https://github.com/oxidecomputer/typify#32de7b26f0ce9aef5bea8046bfdcd15400e73b09"
 dependencies = [
  "heck",
  "log",
@@ -4223,9 +4239,8 @@ dependencies = [
 
 [[package]]
 name = "typify-macro"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ff5799be156e4f635c348c6051d165e1c59997827155133351a8c4d333d9841"
+version = "0.4.3"
+source = "git+https://github.com/oxidecomputer/typify#32de7b26f0ce9aef5bea8046bfdcd15400e73b09"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4591,7 +4606,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
