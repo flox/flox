@@ -119,17 +119,17 @@ impl Activate {
             mode = self.mode.clone().unwrap_or(ActivateMode::Dev).to_string()
         );
 
-        if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
-            if !self.trust {
-                ensure_environment_trust(
-                    &mut config,
-                    &flox,
-                    &env.env_ref(),
-                    false,
-                    &env.manifest_contents(&flox)?,
-                )
-                .await?;
-            }
+        if let ConcreteEnvironment::Remote(ref env) = concrete_environment
+            && !self.trust
+        {
+            ensure_environment_trust(
+                &mut config,
+                &flox,
+                &env.env_ref(),
+                false,
+                &env.manifest_contents(&flox)?,
+            )
+            .await?;
         }
 
         if config.flox.upgrade_notifications.unwrap_or(true) {

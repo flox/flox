@@ -356,13 +356,13 @@ impl GoModuleSystemMode for GoWorkSystem {
 
     fn get_detection_description(&self) -> String {
         // Check if this instance was created from the GOWORK environment variable
-        if let Ok(gowork_path) = std::env::var(GO_WORK_ENV) {
-            if gowork_path != "off" {
-                return format!(
-                    "Flox detected the GOWORK environment variable pointing to a {} file.",
-                    self.get_filename()
-                );
-            }
+        if let Ok(gowork_path) = std::env::var(GO_WORK_ENV)
+            && gowork_path != "off"
+        {
+            return format!(
+                "Flox detected the GOWORK environment variable pointing to a {} file.",
+                self.get_filename()
+            );
         }
 
         format!(

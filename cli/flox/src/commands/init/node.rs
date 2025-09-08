@@ -397,9 +397,9 @@ impl Node {
                     },
                 }
             });
-            return Ok(node);
+            Ok(node)
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 

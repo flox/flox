@@ -832,13 +832,13 @@ impl Lockfile {
 
         Self::check_locked_names_unique(&locked_includes)?;
 
-        if let Some(to_upgrade) = &to_upgrade {
-            if let Some(unused_include_to_upgrade) = to_upgrade.first() {
-                return Err(RecoverableMergeError::Catchall(format!(
-                    "unknown included environment to check for changes '{}'",
-                    unused_include_to_upgrade
-                )));
-            }
+        if let Some(to_upgrade) = &to_upgrade
+            && let Some(unused_include_to_upgrade) = to_upgrade.first()
+        {
+            return Err(RecoverableMergeError::Catchall(format!(
+                "unknown included environment to check for changes '{}'",
+                unused_include_to_upgrade
+            )));
         }
 
         // Call the merger with all the manifests
@@ -1300,11 +1300,11 @@ impl Lockfile {
             let failures = Self::collect_failures(&failed_groups, manifest)?;
             Some(failures)
         };
-        if let Some(failures) = failures {
-            if !failures.is_empty() {
-                tracing::debug!(n = failures.len(), "returning resolution failures");
-                return Err(ResolveError::ResolutionFailed(ResolutionFailures(failures)));
-            }
+        if let Some(failures) = failures
+            && !failures.is_empty()
+        {
+            tracing::debug!(n = failures.len(), "returning resolution failures");
+            return Err(ResolveError::ResolutionFailed(ResolutionFailures(failures)));
         }
         let locked_pkg_iter = groups
             .into_iter()

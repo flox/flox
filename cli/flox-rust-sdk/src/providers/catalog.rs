@@ -1953,11 +1953,11 @@ pub mod test_helpers {
         if matches!(mock_mode, CatalogMockMode::Record(_)) && user == PublishTestUser::WithCatalogs
         {
             ensure_test_catalogs_exist(&client).block_on();
-            if let Client::Catalog(ref mut client_inner) = client {
-                if let Some(guard) = client_inner._mock_guard.as_mut() {
-                    // Delete all of the setup operations from the recording.
-                    guard.reset_recording();
-                }
+            if let Client::Catalog(ref mut client_inner) = client
+                && let Some(guard) = client_inner._mock_guard.as_mut()
+            {
+                // Delete all of the setup operations from the recording.
+                guard.reset_recording();
             }
         }
         client
