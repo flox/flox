@@ -6,8 +6,8 @@ index 4858d9d..9534006 100644
  	}
  	xdgPcHome, err := xdg.SearchConfigFile(configHome)
  	if err != nil {
--		log.Warn().Err(err).Msg("Path not found for process compose config home")
-+		// log.Warn().Err(err).Msg("Path not found for process compose config home")
+-		log.Debug().Err(err).Msg("Path not found for process compose config home")
++		// log.Debug().Err(err).Msg("Path not found for process compose config home")
  	}
  	return xdgPcHome
  }
