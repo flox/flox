@@ -8,6 +8,7 @@ use flox_rust_sdk::models::environment::fetcher::IncludeFetcher;
 use flox_rust_sdk::models::lockfile::Lockfile;
 use tracing::instrument;
 
+use crate::commands::SHELL_COMPLETION_FILE;
 use crate::subcommand_metric;
 
 /// Lock a manifest file read from the path specified or stdin if `-`.
@@ -18,11 +19,11 @@ use crate::subcommand_metric;
 #[derive(Bpaf, Clone)]
 pub struct LockManifest {
     /// The previous lockfile to use as a base.
-    #[bpaf(long, short, argument("path"))]
+    #[bpaf(long, short, argument("path"), complete_shell(SHELL_COMPLETION_FILE))]
     lockfile: Option<PathBuf>,
 
     /// The manifest file to lock. (default: stdin)
-    #[bpaf(positional("path to manifest"))]
+    #[bpaf(positional("path to manifest"), complete_shell(SHELL_COMPLETION_FILE))]
     manifest: PathBuf,
 }
 

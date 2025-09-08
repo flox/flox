@@ -8,7 +8,7 @@ use flox_rust_sdk::providers::publish::ClientSideCatalogStoreConfig;
 use tracing::instrument;
 use url::Url;
 
-use crate::commands::ensure_floxhub_token;
+use crate::commands::{SHELL_COMPLETION_FILE, ensure_floxhub_token};
 use crate::subcommand_metric;
 use crate::utils::message;
 
@@ -28,7 +28,7 @@ struct CacheArgs {
     store_url: Url,
 
     /// Path of the key file used to sign packages before copying.
-    #[bpaf(long, argument("FILE"))]
+    #[bpaf(long, argument("FILE"), complete_shell(SHELL_COMPLETION_FILE))]
     signing_key: PathBuf,
 }
 

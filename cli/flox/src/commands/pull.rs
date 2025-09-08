@@ -28,6 +28,7 @@ use tracing::{debug, info_span, instrument};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{ConcreteEnvironment, open_path};
+use crate::commands::SHELL_COMPLETION_DIR;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::{display_chain, format_core_error};
@@ -60,7 +61,7 @@ pub struct Pull {
     /// Directory in which to create a managed environment,
     /// or directory that already contains a managed environment
     /// (default: current directory)
-    #[bpaf(long, short, argument("path"))]
+    #[bpaf(long, short, argument("path"), complete_shell(SHELL_COMPLETION_DIR))]
     dir: Option<PathBuf>,
 
     /// Forcibly pull the environment
