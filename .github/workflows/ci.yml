@@ -474,4 +474,3 @@ jobs:
           verbose: true
           use_oidc: true
           override_build_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          override_branch: "main-or-merge-queue"
