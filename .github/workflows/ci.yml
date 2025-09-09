@@ -473,4 +473,3 @@ jobs:
           flags: "nix-integration-tests, ${{ matrix.test-tags }}, ${{ matrix.system }}"
           verbose: true
           use_oidc: true
-          override_build_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
