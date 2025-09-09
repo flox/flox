@@ -466,7 +466,7 @@ jobs:
 
       - name: "Upload Bats Tests results"
         uses: "codecov/test-results-action@v1"
-        if: ${{ !cancelled() && (github.ref_name == 'main' || github.event_name != 'merge_group') }}
+        if: ${{ !cancelled() && github.ref_name == 'main' }}
         with:
           disable_search: true
           files: "./report.xml"
