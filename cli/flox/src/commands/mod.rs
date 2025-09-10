@@ -1538,11 +1538,11 @@ pub(super) async fn ensure_environment_trust(
         return Ok(());
     }
 
-    if let Some(ref token) = flox.floxhub_token {
-        if token.handle() == env_ref.owner().as_str() {
-            debug!("{env_prefixed_name} is trusted by token");
-            return Ok(());
-        }
+    if let Some(ref token) = flox.floxhub_token
+        && token.handle() == env_ref.owner().as_str()
+    {
+        debug!("{env_prefixed_name} is trusted by token");
+        return Ok(());
     }
 
     if matches!(trust, Some(EnvironmentTrust::Trust)) {

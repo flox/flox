@@ -607,10 +607,10 @@ mod tests {
     fn test_print_detail_flake_output_multiple_licenses() {
         let mut out = Vec::new();
         let mut package = test_flake_package();
-        if let PackageToList::Flake(_, ref mut locked_package) = package {
-            if let Some(licenses) = locked_package.locked_installable.licenses.as_mut() {
-                licenses.push("license 2".to_string());
-            }
+        if let PackageToList::Flake(_, ref mut locked_package) = package
+            && let Some(licenses) = locked_package.locked_installable.licenses.as_mut()
+        {
+            licenses.push("license 2".to_string());
         }
         List::print_detail(&mut out, &[package], None).unwrap();
         let out = String::from_utf8(out).unwrap();

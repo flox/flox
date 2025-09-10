@@ -93,11 +93,11 @@ pub fn mtime_of(path: impl AsRef<Path>) -> SystemTime {
 pub trait CommandExt {
     /// Provide a [DisplayCommand] that can be used to display
     /// POSIX like formatting of the command.
-    fn display(&self) -> DisplayCommand;
+    fn display(&self) -> DisplayCommand<'_>;
 }
 
 impl CommandExt for std::process::Command {
-    fn display(&self) -> DisplayCommand {
+    fn display(&self) -> DisplayCommand<'_> {
         DisplayCommand(self)
     }
 }

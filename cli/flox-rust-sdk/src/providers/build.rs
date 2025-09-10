@@ -678,7 +678,7 @@ pub struct PackageTarget {
 }
 
 impl PackageTarget {
-    pub fn name(&self) -> PackageTargetName {
+    pub fn name(&self) -> PackageTargetName<'_> {
         PackageTargetName(&self.name)
     }
 
@@ -722,8 +722,8 @@ impl PackageTargets {
         targets.extend(
             environment_packages
                 .inner()
-                .iter()
-                .map(|(name, _)| (name.to_string(), PackageTargetKind::ManifestBuild)),
+                .keys()
+                .map(|name| (name.to_string(), PackageTargetKind::ManifestBuild)),
         );
 
         for (expression_build_target, expression_build_metadata) in nix_expression_packages {

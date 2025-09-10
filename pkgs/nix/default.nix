@@ -28,8 +28,6 @@ nixVersions."${nixVersion}".overrideAttrs (prev: {
 
   # Apply patch files.
   patches = prev.patches ++ [
-    (builtins.path { path = ./patches/seekable_http.patch; })
-
     # Flox, or more specifically nix expression builds,
     # currently use nix fetchers to fetch shallow git clones of nixpkgs.
     # The git fetcher in Nix < 2.29,

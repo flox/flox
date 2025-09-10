@@ -356,17 +356,15 @@ impl CoreEnvironment<ReadOnly> {
         let install_ids = match manifest.get_install_ids(packages) {
             Ok(ids) => ids,
             Err(err) => {
-                if let ManifestError::PackageNotFound(ref package) = err {
-                    if let Some(include) = packages_in_includes.get(package) {
-                        return Err(EnvironmentError::Core(
-                            CoreEnvironmentError::UninstallError(
-                                UninstallError::PackageOnlyIncluded(
-                                    package.to_string(),
-                                    include.name.clone(),
-                                ),
-                            ),
-                        ));
-                    }
+                if let ManifestError::PackageNotFound(ref package) = err
+                    && let Some(include) = packages_in_includes.get(package)
+                {
+                    return Err(EnvironmentError::Core(
+                        CoreEnvironmentError::UninstallError(UninstallError::PackageOnlyIncluded(
+                            package.to_string(),
+                            include.name.clone(),
+                        )),
+                    ));
                 };
                 return Err(EnvironmentError::ManifestError(err));
             },

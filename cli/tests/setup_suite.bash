@@ -453,7 +453,7 @@ common_suite_teardown() {
   # Our agent was useful, but it's time for them to retire.
   # We force true in case we are tearing down when an agent never launched.
   eval "$(ssh-agent -k 2> /dev/null || echo ':')"
-  cd "$BAT_RUN_TMPDIR" || return
+  cd "$BATS_RUN_TMPDIR" || return
   # This directory is always deleted because it contains generated secrets.
   # I can't imagine what anyone would ever do with them, but I'm not interested
   # in learning about some esoteric new exploit in an

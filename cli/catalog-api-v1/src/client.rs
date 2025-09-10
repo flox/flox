@@ -1,7 +1,7 @@
 #[allow(unused_imports)]
-pub use progenitor_client::{ByteStream, Error, ResponseValue};
+pub use progenitor_client::{ByteStream, ClientInfo, Error, ResponseValue};
 #[allow(unused_imports)]
-use progenitor_client::{encode_path, RequestBuilderExt};
+use progenitor_client::{encode_path, ClientHooks, OperationInfo, RequestBuilderExt};
 /// Types used as operation parameters and responses.
 #[allow(clippy::all)]
 pub mod types {
@@ -123,11 +123,9 @@ pub mod types {
         fn from_str(
             value: &str,
         ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            if regress::Regex::new("[a-zA-Z0-9\\-_]{3,64}")
-                .unwrap()
-                .find(value)
-                .is_none()
-            {
+            static PATTERN: ::std::sync::LazyLock<::regress::Regex> = ::std::sync::LazyLock::new(||
+            { ::regress::Regex::new("[a-zA-Z0-9\\-_]{3,64}").unwrap() });
+            if PATTERN.find(value).is_none() {
                 return Err("doesn't match pattern \"[a-zA-Z0-9\\-_]{3,64}\"".into());
             }
             Ok(Self(value.to_string()))
@@ -719,10 +717,10 @@ pub mod types {
     impl ::std::fmt::Display for MessageLevel {
         fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
             match *self {
-                Self::Trace => write!(f, "trace"),
-                Self::Info => write!(f, "info"),
-                Self::Warning => write!(f, "warning"),
-                Self::Error => write!(f, "error"),
+                Self::Trace => f.write_str("trace"),
+                Self::Info => f.write_str("info"),
+                Self::Warning => f.write_str("warning"),
+                Self::Error => f.write_str("error"),
             }
         }
     }
@@ -1480,11 +1478,9 @@ pub mod types {
         fn from_str(
             value: &str,
         ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            if regress::Regex::new("[a-zA-Z0-9.\\-_]{3,128}")
-                .unwrap()
-                .find(value)
-                .is_none()
-            {
+            static PATTERN: ::std::sync::LazyLock<::regress::Regex> = ::std::sync::LazyLock::new(||
+            { ::regress::Regex::new("[a-zA-Z0-9.\\-_]{3,128}").unwrap() });
+            if PATTERN.find(value).is_none() {
                 return Err("doesn't match pattern \"[a-zA-Z0-9.\\-_]{3,128}\"".into());
             }
             Ok(Self(value.to_string()))
@@ -1909,11 +1905,11 @@ pub mod types {
     impl ::std::fmt::Display for PackageSystem {
         fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
             match *self {
-                Self::Aarch64Darwin => write!(f, "aarch64-darwin"),
-                Self::Aarch64Linux => write!(f, "aarch64-linux"),
-                Self::X8664Darwin => write!(f, "x86_64-darwin"),
-                Self::X8664Linux => write!(f, "x86_64-linux"),
-                Self::Invalid => write!(f, "invalid"),
+                Self::Aarch64Darwin => f.write_str("aarch64-darwin"),
+                Self::Aarch64Linux => f.write_str("aarch64-linux"),
+                Self::X8664Darwin => f.write_str("x86_64-darwin"),
+                Self::X8664Linux => f.write_str("x86_64-linux"),
+                Self::Invalid => f.write_str("invalid"),
             }
         }
     }
@@ -2742,11 +2738,9 @@ pub mod types {
         fn from_str(
             value: &str,
         ) -> ::std::result::Result<Self, self::error::ConversionError> {
-            if regress::Regex::new("[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}")
-                .unwrap()
-                .find(value)
-                .is_none()
-            {
+            static PATTERN: ::std::sync::LazyLock<::regress::Regex> = ::std::sync::LazyLock::new(||
+            { ::regress::Regex::new("[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}").unwrap() });
+            if PATTERN.find(value).is_none() {
                 return Err(
                     "doesn't match pattern \"[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}\"".into(),
                 );
@@ -3864,24 +3858,23 @@ impl Client {
             client,
         }
     }
-    /// Get the base URL to which requests are made.
-    pub fn baseurl(&self) -> &String {
-        &self.baseurl
-    }
-    /// Get the internal `reqwest::Client` used to make requests.
-    pub fn client(&self) -> &reqwest::Client {
-        &self.client
-    }
-    /// Get the version of this API.
-    ///
-    /// This string is pulled directly from the source OpenAPI
-    /// document and may be in any format the API selects.
-    pub fn api_version(&self) -> &'static str {
+}
+impl ClientInfo<()> for Client {
+    fn api_version() -> &'static str {
         "unknown"
     }
+    fn baseurl(&self) -> &str {
+        self.baseurl.as_str()
+    }
+    fn client(&self) -> &reqwest::Client {
+        &self.client
+    }
+    fn inner(&self) -> &() {
+        &()
+    }
 }
+impl ClientHooks<()> for &Client {}
 #[allow(clippy::all)]
-#[allow(elided_named_lifetimes)]
 impl Client {
     /**Create a new user catalog
 
@@ -3906,7 +3899,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -3919,6 +3912,9 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/`
             .query(&progenitor_client::QueryParam::new("name", &name))
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "create_catalog_api_v1_catalog_catalogs_post",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -3932,9 +3928,11 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             201u16 => ResponseValue::from_response(response).await,
@@ -3973,7 +3971,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -3985,6 +3983,9 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}`
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_catalog_api_v1_catalog_catalogs_catalog_name_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -3998,9 +3999,11 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4039,7 +4042,7 @@ Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4051,6 +4054,9 @@ Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "delete_catalog_api_v1_catalog_catalogs_catalog_name_delete",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4064,9 +4070,11 @@ Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4106,7 +4114,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4118,6 +4126,9 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_catalog_packages_api_v1_catalog_catalogs_catalog_name_packages_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4131,9 +4142,11 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4178,7 +4191,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4192,6 +4205,9 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
             .query(&progenitor_client::QueryParam::new("name", &name))
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "create_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4205,9 +4221,11 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4253,7 +4271,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4265,6 +4283,9 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_package_name_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4278,9 +4299,11 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4323,7 +4346,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4335,6 +4358,9 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_package_builds_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4348,9 +4374,11 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4399,7 +4427,7 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4412,6 +4440,9 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             .json(&body)
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_put",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4425,9 +4456,11 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pack
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4480,7 +4513,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4493,6 +4526,9 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             .json(&body)
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_post",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4506,9 +4542,11 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4559,7 +4597,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4572,6 +4610,9 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             .json(&body)
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "publish_request_api_v1_catalog_catalogs_catalog_name_packages_package_name_publish_info_post",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4585,9 +4626,11 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{pac
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4630,7 +4673,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4642,6 +4685,9 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing`
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4655,9 +4701,11 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4701,7 +4749,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/add-r
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4714,6 +4762,9 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/add-r
             .json(&body)
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "add_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_add_read_users_post",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4727,9 +4778,11 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/add-r
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4773,7 +4826,7 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/remov
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4786,6 +4839,9 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/remov
             .json(&body)
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "remove_catalog_sharing_api_v1_catalog_catalogs_catalog_name_sharing_remove_read_users_post",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4799,9 +4855,11 @@ Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/sharing/remov
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4838,7 +4896,7 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4850,6 +4908,9 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_catalog_store_config_api_v1_catalog_catalogs_catalog_name_store_config_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4863,9 +4924,11 @@ Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4903,7 +4966,7 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4916,6 +4979,9 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
             .json(&body)
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "set_catalog_store_config_api_v1_catalog_catalogs_catalog_name_store_config_put",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4929,9 +4995,11 @@ Sends a `PUT` request to `/api/v1/catalog/catalogs/{catalog_name}/store/config`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -4957,7 +5025,7 @@ Sends a `GET` request to `/api/v1/catalog/info/base-catalog`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -4969,6 +5037,9 @@ Sends a `GET` request to `/api/v1/catalog/info/base-catalog`
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_base_catalog_api_v1_catalog_info_base_catalog_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -4982,9 +5053,11 @@ Sends a `GET` request to `/api/v1/catalog/info/base-catalog`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -5011,7 +5084,7 @@ Sends a `GET` request to `/api/v1/catalog/info/pkg-paths`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -5025,6 +5098,9 @@ Sends a `GET` request to `/api/v1/catalog/info/pkg-paths`
             .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_pkg_paths_api_v1_catalog_info_pkg_paths_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -5038,9 +5114,11 @@ Sends a `GET` request to `/api/v1/catalog/info/pkg-paths`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -5066,7 +5144,7 @@ Sends a `GET` request to `/api/v1/catalog/info/published-catalogs`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -5078,6 +5156,9 @@ Sends a `GET` request to `/api/v1/catalog/info/published-catalogs`
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_published_catalogs_api_v1_catalog_info_published_catalogs_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -5091,9 +5172,11 @@ Sends a `GET` request to `/api/v1/catalog/info/published-catalogs`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -5134,7 +5217,7 @@ Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -5148,6 +5231,9 @@ Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
             .query(&progenitor_client::QueryParam::new("pageSize", &page_size))
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "packages_api_v1_catalog_packages_attr_path_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -5161,9 +5247,11 @@ Sends a `GET` request to `/api/v1/catalog/packages/{attr_path}`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -5239,7 +5327,7 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -5255,6 +5343,9 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "resolve_api_v1_catalog_resolve_post",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -5268,9 +5359,11 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -5312,7 +5405,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -5329,6 +5422,9 @@ Sends a `GET` request to `/api/v1/catalog/search`
             .query(&progenitor_client::QueryParam::new("system", &system))
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "search_api_v1_catalog_search_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -5342,9 +5438,11 @@ Sends a `GET` request to `/api/v1/catalog/search`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -5380,7 +5478,7 @@ Sends a `POST` request to `/api/v1/catalog/settings/{key}`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -5393,6 +5491,9 @@ Sends a `POST` request to `/api/v1/catalog/settings/{key}`
             .query(&progenitor_client::QueryParam::new("value", &value))
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "settings_api_v1_catalog_settings_key_post",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -5406,9 +5507,11 @@ Sends a `POST` request to `/api/v1/catalog/settings/{key}`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -5436,7 +5539,7 @@ Sends a `GET` request to `/api/v1/catalog/status/catalog`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -5448,6 +5551,9 @@ Sends a `GET` request to `/api/v1/catalog/status/catalog`
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_catalog_status_api_v1_catalog_status_catalog_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -5461,9 +5567,11 @@ Sends a `GET` request to `/api/v1/catalog/status/catalog`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -5491,7 +5599,7 @@ Sends a `GET` request to `/api/v1/catalog/status/healthcheck`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -5503,6 +5611,9 @@ Sends a `GET` request to `/api/v1/catalog/status/healthcheck`
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_catalog_health_check_api_v1_catalog_status_healthcheck_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -5516,9 +5627,11 @@ Sends a `GET` request to `/api/v1/catalog/status/healthcheck`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -5541,7 +5654,7 @@ Sends a `GET` request to `/api/v1/catalog/status/sentry-debug`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -5553,6 +5666,9 @@ Sends a `GET` request to `/api/v1/catalog/status/sentry-debug`
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "trigger_error_api_v1_catalog_status_sentry_debug_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -5566,9 +5682,11 @@ Sends a `GET` request to `/api/v1/catalog/status/sentry-debug`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -5593,7 +5711,7 @@ Sends a `GET` request to `/api/v1/catalog/status/service`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -5605,6 +5723,9 @@ Sends a `GET` request to `/api/v1/catalog/status/service`
             )
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_service_status_api_v1_catalog_status_service_get",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -5618,9 +5739,11 @@ Sends a `GET` request to `/api/v1/catalog/status/service`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -5652,7 +5775,7 @@ Sends a `POST` request to `/api/v1/catalog/store`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -5665,6 +5788,9 @@ Sends a `POST` request to `/api/v1/catalog/store`
             .json(&body)
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_store_info_api_v1_catalog_store_post",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -5678,9 +5804,11 @@ Sends a `POST` request to `/api/v1/catalog/store`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
@@ -5713,7 +5841,7 @@ Sends a `POST` request to `/api/v1/catalog/store/status`
         header_map
             .append(
                 ::reqwest::header::HeaderName::from_static("api-version"),
-                ::reqwest::header::HeaderValue::from_static(self.api_version()),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
             );
         #[allow(unused_mut)]
         let mut request = self
@@ -5726,6 +5854,9 @@ Sends a `POST` request to `/api/v1/catalog/store/status`
             .json(&body)
             .headers(header_map)
             .build()?;
+        let info = OperationInfo {
+            operation_id: "get_storepath_status_api_v1_catalog_store_status_post",
+        };
         match (async |request: &mut ::reqwest::Request| {
             if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
                 for (k, v) in span.iter_headers() {
@@ -5739,9 +5870,11 @@ Sends a `POST` request to `/api/v1/catalog/store/status`
             .await
         {
             Ok(_) => {}
-            Err(e) => return Err(Error::PreHookError(e.to_string())),
+            Err(e) => return Err(Error::Custom(e.to_string())),
         }
-        let result = self.client.execute(request).await;
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,

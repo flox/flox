@@ -166,10 +166,11 @@ impl Edit {
         environment: &mut ConcreteEnvironment,
         contents: Option<String>,
     ) -> Result<()> {
-        if let ConcreteEnvironment::Managed(environment) = environment {
-            if environment.has_local_changes(flox)? && contents.is_none() {
-                bail!(ManagedEnvironmentError::CheckoutOutOfSync)
-            }
+        if let ConcreteEnvironment::Managed(environment) = environment
+            && environment.has_local_changes(flox)?
+            && contents.is_none()
+        {
+            bail!(ManagedEnvironmentError::CheckoutOutOfSync)
         };
 
         let active_environment = UninitializedEnvironment::from_concrete_environment(environment);

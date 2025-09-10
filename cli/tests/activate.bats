@@ -2147,7 +2147,7 @@ EOF
   export bad_dir="$PWD/contains space/project"
   mkdir -p "$bad_dir"
   activation_cmd="$(cat <<'EOF'
-    setenv PATH "$bad_dir:$PATH"
+    setenv PATH "${bad_dir}:${PATH}"
     eval "`"$FLOX_BIN" activate`"
 EOF
 )"
@@ -4994,12 +4994,12 @@ check_nested_activation_repairs_path_and_manpath() {
 
 # bats test_tags=activate:bash,activate:nested
 @test "bash: command: nested activation repairs (MAN)PATH" {
-  check_nested_activation_repairs_path_and_manpath bash -lc 
+  check_nested_activation_repairs_path_and_manpath bash -lc
 }
 
 # bats test_tags=activate:bash,activate:nested
 @test "bash: interactive: nested activation repairs (MAN)PATH" {
-  check_nested_activation_repairs_path_and_manpath bash -ic 
+  check_nested_activation_repairs_path_and_manpath bash -ic
 }
 
 # bats test_tags=activate:bash,activate:nested

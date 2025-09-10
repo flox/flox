@@ -274,21 +274,17 @@ pub fn execute_jobs(
             name = job.spec.name,
             "executing job"
         );
-        if !quiet {
-            if let Some(ref s) = spinner {
-                s.set_message(format!(
-                    "Running job: category={}, name={}",
-                    &job.category, &job.spec.name
-                ));
-            }
+        if !quiet && let Some(ref s) = spinner {
+            s.set_message(format!(
+                "Running job: category={}, name={}",
+                &job.category, &job.spec.name
+            ));
         }
         execute_job(&job, vars, input_dir)
             .with_context(|| format!("failed to execute job: {}", job.spec.name))?;
     }
-    if !quiet {
-        if let Some(s) = spinner {
-            s.finish_and_clear();
-        }
+    if !quiet && let Some(s) = spinner {
+        s.finish_and_clear();
     }
     Ok(())
 }
