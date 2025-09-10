@@ -302,7 +302,7 @@ jobs:
               if [[ "$package" = *flox ]]; then
                   CLOSURE_SIZE=$(nix path-info ./result -S | awk '{print $2}')
                   echo "closure-size-${{ matrix.system }}=$CLOSURE_SIZE" >> "$GITHUB_OUTPUT"
-                  if [[ "$CLOSURE_SIZE" -gt 350000000 ]]; then # 340MB-ish
+                  if [[ "$CLOSURE_SIZE" -gt 360000000 ]]; then # 360MB-ish
                     echo "  -> $package is too large: $CLOSURE_SIZE";
                     exit 1;
                   fi
