@@ -2147,7 +2147,7 @@ EOF
   export bad_dir="$PWD/contains space/project"
   mkdir -p "$bad_dir"
   activation_cmd="$(cat <<'EOF'
-    setenv PATH "$bad_dir:$PATH"
+    setenv PATH "${bad_dir}:${PATH}"
     eval "`"$FLOX_BIN" activate`"
 EOF
 )"
