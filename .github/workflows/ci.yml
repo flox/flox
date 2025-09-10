@@ -194,7 +194,7 @@ jobs:
 
       - name: "Upload CLI Unit Test Results"
         uses: "codecov/test-results-action@v1"
-        if: ${{ !cancelled() && matrix.test-tags == '!activate,!containerize,!catalog' }}
+        if: ${{ !cancelled() && github.ref_name == 'main' && matrix.test-tags == '!activate,!containerize,!catalog' }}
         with:
           disable_search: true
           files: "./cli/target/nextest/ci/junit.xml"
@@ -223,7 +223,7 @@ jobs:
 
       - name: "Upload CLI Integration Test Results"
         uses: "codecov/test-results-action@v1"
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.ref_name == 'main' }}
         with:
           disable_search: true
           files: "./test-results/report.xml"
@@ -466,12 +466,10 @@ jobs:
 
       - name: "Upload Bats Tests results"
         uses: "codecov/test-results-action@v1"
-        if: ${{ !cancelled() && (github.ref_name == 'main' || github.event_name != 'merge_group') }}
+        if: ${{ !cancelled() && github.ref_name == 'main' }}
         with:
           disable_search: true
           files: "./report.xml"
           flags: "nix-integration-tests, ${{ matrix.test-tags }}, ${{ matrix.system }}"
           verbose: true
           use_oidc: true
-          override_build_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          override_branch: "main-or-merge-queue"
