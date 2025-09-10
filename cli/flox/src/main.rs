@@ -83,6 +83,7 @@ fn main() -> ExitCode {
     };
 
     init_logger(Some(verbosity));
+    debug!("FLOX_VERSION={}", *FLOX_VERSION);
 
     if let Err(err) = set_user() {
         message::error(err.to_string());
