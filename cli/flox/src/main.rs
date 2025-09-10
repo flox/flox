@@ -29,7 +29,6 @@ mod config;
 mod utils;
 
 async fn run(args: FloxArgs) -> Result<()> {
-    init_logger(Some(args.verbosity));
     set_parent_process_id();
     populate_default_nix_env_vars();
     let config = config::Config::parse()?;
