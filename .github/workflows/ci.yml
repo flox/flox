@@ -188,13 +188,14 @@ jobs:
       - name: "CLI Unit Tests"
         # Only run unit tests if when not running specialized integration tests
         if: ${{ matrix.test-tags == '!activate,!containerize,!catalog' }}
+        id: unit-tests
         env:
           RUST_BACKTRACE: 1
         run: nix develop -L --no-update-lock-file --command just impure-tests
 
       - name: "Upload CLI Unit Test Results"
         uses: "codecov/test-results-action@v1"
-        if: ${{ !cancelled() && matrix.test-tags == '!activate,!containerize,!catalog' }}
+        if: ${{ !cancelled() && steps.unit-tests.outcome != 'skipped' }}
         with:
           disable_search: true
           files: "./cli/target/nextest/ci/junit.xml"
