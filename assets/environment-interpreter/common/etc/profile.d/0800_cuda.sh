@@ -15,7 +15,7 @@ activate_cuda() {
   # Path to ldconfig that can be substituted for testing.
   local ldconfig_bin="$2"
   # Pattern of libraries that we support.
-  local lib_pattern="lib(cuda|nvidia|dxcore).*\.so.*"
+  local lib_pattern="lib(cuda|nvidia|nvcuvid|dxcore).*\.so.*"
 
   # Only run if _FLOX_ENV_CUDA_DETECTION is set
   if [[ "${_FLOX_ENV_CUDA_DETECTION:-}" != 1 ]]; then
