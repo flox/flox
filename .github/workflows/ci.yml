@@ -194,7 +194,7 @@ jobs:
 
       - name: "Upload CLI Unit Test Results"
         uses: "codecov/test-results-action@v1"
-        if: ${{ !cancelled() && github.ref_name == 'main' && matrix.test-tags == '!activate,!containerize,!catalog' }}
+        if: ${{ !cancelled() && matrix.test-tags == '!activate,!containerize,!catalog' }}
         with:
           disable_search: true
           files: "./cli/target/nextest/ci/junit.xml"
@@ -223,7 +223,7 @@ jobs:
 
       - name: "Upload CLI Integration Test Results"
         uses: "codecov/test-results-action@v1"
-        if: ${{ !cancelled() && github.ref_name == 'main' }}
+        if: ${{ !cancelled() }}
         with:
           disable_search: true
           files: "./test-results/report.xml"
@@ -466,7 +466,7 @@ jobs:
 
       - name: "Upload Bats Tests results"
         uses: "codecov/test-results-action@v1"
-        if: ${{ !cancelled() && github.ref_name == 'main' }}
+        if: ${{ !cancelled() }}
         with:
           disable_search: true
           files: "./report.xml"
