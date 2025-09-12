@@ -380,46 +380,62 @@ impl FloxArgs {
             "feature flags"
         );
 
-        // in debug mode keep the tempdir to reproduce nix commands
-        if self.debug || matches!(self.verbosity, Verbosity::Verbose(1..)) {
-            let _ = temp_dir.keep();
-        }
+        let signal_handler = async { tokio::signal::ctrl_c().await.unwrap() };
+        let keep_tempfiles = config.flox.keep_tempdir.unwrap_or_default();
 
-        tokio::spawn(async move {
-            tokio::signal::ctrl_c().await.unwrap();
-            // in case of SIG* the drop handler of temp_dir will not be called
-            // if we are not in debugging mode, drop the tempdir manually
-            if !self.debug || !matches!(self.verbosity, Verbosity::Verbose(1..)) {
-                let _ = fs::remove_dir_all(&temp_dir_path);
+        let cli_worker = async move {
+            // command handled above
+            let result = match self.command.unwrap() {
+                Commands::Help(group) => {
+                    group.handle();
+                    Ok(())
+                },
+                Commands::Manage(args) => args.handle(flox).await,
+                Commands::Use(args) => args.handle(config, flox).await,
+                Commands::Discover(args) => args.handle(config, flox).await,
+                Commands::Modify(args) => args.handle(config, flox).await,
+                Commands::Share(args) => args.handle(config, flox).await,
+                Commands::Admin(args) => args.handle(config, flox).await,
+                Commands::Internal(args) => args.handle(flox).await,
+            };
+
+            // This will print the update notification after output from a successful
+            // command but before an error is printed for an unsuccessful command.
+            // That's a bit weird,
+            // but I'm not sure it's worth a refactor.
+            match check_for_update_handle.await {
+                Ok(update_notification) => {
+                    UpdateNotification::handle_update_result(update_notification, &update_channel);
+                },
+                Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
             }
 
-            std::process::exit(130);
-        });
-
-        // command handled above
-        let result = match self.command.unwrap() {
-            Commands::Help(group) => {
-                group.handle();
-                Ok(())
-            },
-            Commands::Manage(args) => args.handle(flox).await,
-            Commands::Use(args) => args.handle(config, flox).await,
-            Commands::Discover(args) => args.handle(config, flox).await,
-            Commands::Modify(args) => args.handle(config, flox).await,
-            Commands::Share(args) => args.handle(config, flox).await,
-            Commands::Admin(args) => args.handle(config, flox).await,
-            Commands::Internal(args) => args.handle(flox).await,
+            result
         };
 
-        // This will print the update notification after output from a successful
-        // command but before an error is printed for an unsuccessful command.
-        // That's a bit weird,
-        // but I'm not sure it's worth a refactor.
-        match check_for_update_handle.await {
-            Ok(update_notification) => {
-                UpdateNotification::handle_update_result(update_notification, &update_channel);
-            },
-            Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
+        // Wait for either an interrupting signal or completion of the cli work
+        let result = tokio::task::LocalSet::new()
+            .run_until(async {
+                tokio::select! {
+                    _ = tokio::task::spawn_local(signal_handler) => {
+                        // TODO:
+                        // For now we rely on subprocesses to inherit `flox` process group
+                        // and thus being sent ctrl_c signals in sync with flox itself.
+                        // If we do need more control here,
+                        // we can find process children and propagate signals manually.
+                        Err(anyhow!("user interrupted process"))
+                    }
+                    result = tokio::task::spawn_local(cli_worker) => result?
+                }
+            })
+            .await;
+
+        // Remove tempdirs
+        if (self.debug || matches!(self.verbosity, Verbosity::Verbose(1..))) && keep_tempfiles {
+            debug!(?temp_dir_path, "leaving process tempdir in place")
+        } else {
+            debug!(?temp_dir_path, "removing process tempdir");
+            let _ = fs::remove_dir_all(&temp_dir_path);
         }
 
         result
