@@ -106,6 +106,10 @@ enum SubcommandOrBuildTargets {
         /// The package name to import from nixpkgs
         #[bpaf(positional("expression"))]
         expression: String,
+
+        /// Flake reference to use for nixpkgs (defaults to nixpkgs)
+        #[bpaf(long("nixpkgs"), argument("flake-ref"), optional)]
+        nixpkgs_flake: Option<String>,
     },
     BuildTargets {
         #[bpaf(external(base_catalog_url_select), optional)]
@@ -133,13 +137,17 @@ impl Build {
 
                 Self::clean(flox, env, targets).await
             },
-            SubcommandOrBuildTargets::ImportNixpkgs { expression, force } => {
+            SubcommandOrBuildTargets::ImportNixpkgs {
+                expression,
+                force,
+                nixpkgs_flake,
+            } => {
                 let env = self
                     .environment
                     .detect_concrete_environment(&flox, "Import package definition in")?;
                 environment_subcommand_metric!("build::import-nixpkgs", env);
 
-                Self::import_nixpkgs(flox, env, expression, force).await
+                Self::import_nixpkgs(flox, env, expression, force, nixpkgs_flake).await
             },
             SubcommandOrBuildTargets::BuildTargets {
                 targets,
@@ -298,6 +306,7 @@ impl Build {
         env: ConcreteEnvironment,
         expression: String,
         force: bool,
+        nixpkgs_flake: Option<String>,
     ) -> Result<()> {
         match &env {
             ConcreteEnvironment::Path(_) => (),
@@ -309,13 +318,19 @@ impl Build {
             },
         };
 
-        let base_dir = env.parent_path()?;
-        let dot_flox_dir = base_dir.join(".flox");
-        let pkgs_dir = dot_flox_dir.join("pkgs");
-        let package_file = pkgs_dir.join(format!("{}.nix", expression));
+        let pkgs_dir = nix_expression_dir(&env);
 
-        // Create .flox/pkgs directory if it doesn't exist
-        std::fs::create_dir_all(&pkgs_dir).context("Failed to create .flox/pkgs directory")?;
+        // Split package name by dots to create proper directory nesting
+        let package_parts: Vec<&str> = expression.split('.').collect();
+        let package_dir = if package_parts.len() > 1 {
+            pkgs_dir.join(package_parts[..package_parts.len() - 1].join("/"))
+        } else {
+            pkgs_dir.clone()
+        };
+        let package_file = package_dir.join(format!("{}.nix", package_parts.last().unwrap()));
+
+        // Create .flox/pkgs directory and any nested package directories if they don't exist
+        std::fs::create_dir_all(&package_dir).context("Failed to create package directory")?;
 
         // Check if file already exists
         if package_file.exists() && !force {
@@ -327,22 +342,34 @@ impl Build {
             });
         }
 
-        // Run nix edit command to get the package definition
+        // Get package position using nix eval
+        let flake_ref = nixpkgs_flake.as_deref().unwrap_or("nixpkgs");
         let mut cmd = nix::nix_base_command();
-        cmd.args(["edit", &format!("nixpkgs#{}", expression)]);
-        cmd.env("EDITOR", "cat");
+        cmd.args([
+            "eval",
+            "--raw",
+            &format!("{}#{}.meta.position", flake_ref, expression),
+        ]);
 
-        debug!(cmd = %cmd.display(), "running nix edit command");
-        let output = cmd.output().context("Failed to run nix edit command")?;
+        debug!(cmd = %cmd.display(), "running nix eval command to get package position");
+        let output = cmd.output().context("Failed to run nix eval command")?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("nix edit command failed: {stderr}");
+            bail!("nix eval command failed: {stderr}");
         }
 
-        // Write the package definition to the file
-        let package_content =
-            String::from_utf8(output.stdout).context("nix edit command returned invalid UTF-8")?;
+        let position_output =
+            String::from_utf8(output.stdout).context("nix eval command returned invalid UTF-8")?;
+
+        // Split position by ':' to get file and line
+        let (file, _line) = position_output
+            .split_once(':')
+            .ok_or_else(|| anyhow::anyhow!("Invalid position format: {}", position_output))?;
+
+        // Read the package definition from the source file
+        let package_content = std::fs::read(file)
+            .with_context(|| format!("Failed to read package source file: {}", file))?;
 
         std::fs::write(&package_file, package_content).context("Failed to write package file")?;
 
@@ -858,6 +885,7 @@ mod test {
             ConcreteEnvironment::Path(env),
             package_name.to_string(),
             false,
+            None,
         )
         .await;
         assert!(result.is_ok());
@@ -893,6 +921,7 @@ mod test {
             ConcreteEnvironment::Path(env),
             "hello".to_string(),
             false,
+            None,
         )
         .await;
         assert!(result.is_ok());
@@ -929,6 +958,7 @@ mod test {
             ConcreteEnvironment::Path(env),
             package_name.to_string(),
             false,
+            None,
         )
         .await;
         assert!(result.is_err());
@@ -969,6 +999,7 @@ mod test {
             ConcreteEnvironment::Path(env),
             package_name.to_string(),
             true,
+            None,
         )
         .await;
         assert!(result.is_ok());
@@ -1013,6 +1044,7 @@ mod test {
                 ConcreteEnvironment::Path(env),
                 package_name.to_string(),
                 false,
+                None,
             )
             .await;
             assert!(result.is_ok(), "Failed to import package: {}", package_name);
