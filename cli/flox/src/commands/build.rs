@@ -103,13 +103,13 @@ enum SubcommandOrBuildTargets {
         #[bpaf(long, short)]
         force: bool,
 
-        /// The package name to import from nixpkgs
-        #[bpaf(positional("expression"))]
-        expression: String,
-
         /// Flake reference to use for nixpkgs (defaults to nixpkgs)
         #[bpaf(long("nixpkgs"), argument("flake-ref"), optional)]
         nixpkgs_flake: Option<String>,
+
+        /// The package name to import from nixpkgs
+        #[bpaf(positional("expression"))]
+        expression: String,
     },
     BuildTargets {
         #[bpaf(external(base_catalog_url_select), optional)]
