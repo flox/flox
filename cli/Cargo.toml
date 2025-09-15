@@ -44,7 +44,7 @@ httpmock = { git = "https://github.com/flox/httpmock.git", default-features = fa
     "record",
 ] }
 indent = "0.1.1"
-indexmap = { version = "2.11.0", features = ["serde"] }
+indexmap = { version = "2.11.1", features = ["serde"] }
 indoc = "2.0.6"
 inquire = "0.6.0"
 indicatif = "0.18"
@@ -63,7 +63,7 @@ regex = "1.11"
 regress = "0.10.4"
 reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
 schemars = "1"
-semver = "1.0.26"
+semver = "1.0.27"
 sentry = { version = "0.32.3", features = [
     "test",
     "anyhow",
@@ -82,12 +82,12 @@ sysinfo = "0.32.1"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
-tempfile = "3.21.0"
+tempfile = "3.22.0"
 textwrap = { version = "0.16.2", features = ["terminal_size"] }
 thiserror = "2"
 time = { version = "0.3", features = ["serde", "formatting"] }
 tokio = { version = "1", features = ["full"] }
-toml = "0.9.5"
+toml = "0.9.6"
 toml_edit = { version = "0.22", features = ["serde"] }
 tracing = "0.1"
 tracing-appender = "0.2"
