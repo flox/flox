@@ -228,4 +228,17 @@ mod test {
         let expected = vec!["_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older';".to_string()];
         assert_eq!(expected, cmds);
     }
+
+    #[test]
+    fn prepend_already_sourced_when_no_overlap() {
+        let dirs = "standalone";
+        let already_sourced = "already:existing";
+        let cmds = source_profile_scripts_cmds(dirs, already_sourced, &Shell::Bash, |_| true);
+        let expected = vec![
+            "source 'standalone/activate.d/profile-common';".to_string(),
+            "source 'standalone/activate.d/profile-bash';".to_string(),
+            "_FLOX_SOURCED_PROFILE_SCRIPTS='standalone:already:existing';".to_string(),
+        ];
+        assert_eq!(expected, cmds);
+    }
 }

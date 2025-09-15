@@ -23,6 +23,7 @@ _save_FLOX_ZSH_INIT_SCRIPT="$FLOX_ZSH_INIT_SCRIPT"
 _save_FLOX_ACTIVATION_PROFILE_ONLY="$_FLOX_ACTIVATION_PROFILE_ONLY"
 
 restore_saved_vars() {
+    unset _flox_sourcing_rc
     export _flox_activate_tracelevel="$_save_flox_activate_tracelevel"
     export FLOX_ENV="$_save_FLOX_ENV"
     export FLOX_ENV_CACHE="$_save_FLOX_ENV_CACHE"
@@ -43,6 +44,7 @@ restore_saved_vars() {
 
 if [ -f /etc/zlogin ]
 then
+    export _flox_sourcing_rc=1
     if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
     then
         ZDOTDIR="$FLOX_ORIG_ZDOTDIR" FLOX_ORIG_ZDOTDIR= source /etc/zlogin
@@ -55,6 +57,7 @@ fi
 zlogin="${FLOX_ORIG_ZDOTDIR:-$HOME}/.zlogin"
 if [ -f "$zlogin" ]
 then
+    export _flox_sourcing_rc=1
     if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
     then
         ZDOTDIR="$FLOX_ORIG_ZDOTDIR" FLOX_ORIG_ZDOTDIR= source "$zlogin"

@@ -5296,7 +5296,6 @@ EOF
 }
 
 @test "zsh: profile scripts can modify PATH with default environment" {
-  skip "broken on zsh"
   project_setup_common
   profile_scripts_can_modify_path_with_default_environment zsh
 }
