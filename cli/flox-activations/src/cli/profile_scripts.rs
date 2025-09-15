@@ -87,6 +87,8 @@ fn source_profile_scripts_cmds(
 
 #[cfg(test)]
 mod test {
+    use pretty_assertions::assert_eq;
+
     use super::*;
 
     #[test]

@@ -1080,6 +1080,7 @@ dependencies = [
  "indoc",
  "log",
  "nix",
+ "pretty_assertions",
  "serde",
  "serde_json",
  "temp-env",
