@@ -22,7 +22,7 @@ impl IncludeFetcher {
     ) -> Result<LockedInclude, EnvironmentError> {
         let (manifest, name) = match include_environment {
             IncludeDescriptor::Local { dir, name } => self.fetch_local(flox, dir, name),
-            IncludeDescriptor::Remote { remote, name } => self.fetch_remote(flox, remote, name),
+            IncludeDescriptor::Remote { remote, name, .. } => self.fetch_remote(flox, remote, name),
         }?;
 
         Ok(LockedInclude {
@@ -376,6 +376,7 @@ mod test {
         let include_descriptor = IncludeDescriptor::Remote {
             remote: "owner/name".parse().unwrap(),
             name: None,
+            generation: None,
         };
         let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
         assert_eq!(
