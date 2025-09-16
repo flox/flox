@@ -989,14 +989,64 @@ pub fn insert_packages(
         }
     }
 
+    // Sort the install table if it was modified.
+    let new_toml = if !already_installed.values().all(|p| *p) {
+        sort_install_table(&mut toml)?;
+        Some(toml)
+    } else {
+        None
+    };
+
     Ok(PackageInsertion {
-        new_toml: if !already_installed.values().all(|p| *p) {
-            Some(toml)
-        } else {
-            None
-        },
+        new_toml,
         already_installed,
     })
+}
+
+/// Sort the [install] table entries in lexicographical order by package name.
+/// Only sorts if the table doesn't contain comments or additional formatting.
+fn sort_install_table(toml: &mut DocumentMut) -> Result<(), TomlEditError> {
+    debug!("checking if [install] table should be sorted in lexicographical order");
+
+    if let Some(install_item) = toml.get_mut("install") {
+        if let Item::Table(install_table) = install_item {
+            // Check if the table has comments or additional formatting.
+            if has_comments_or_formatting(install_table) {
+                debug!("skipping sort: [install] table has comments or custom formatting");
+                return Ok(());
+            }
+
+            debug!("sorting [install] table entries in lexicographical order");
+
+            // Collect all key-value pairs.
+            let mut entries: Vec<(String, Item)> = install_table
+                .iter()
+                .map(|(key, value)| (key.to_string(), value.clone()))
+                .collect();
+
+            // Sort by key, which is the package name.
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+            // Clear the table and re-insert in sorted order.
+            install_table.clear();
+            for (key, value) in entries {
+                install_table.insert(&key, value);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Check if a table contains comments or additional formatting that indicates
+/// intentional user organization that should be preserved.
+fn has_comments_or_formatting(table: &Table) -> bool {
+    // Use a simpler approach: check the raw string representation
+    // of the table to see if it contains comments.
+    let table_str = table.to_string();
+    table_str
+        .lines()
+        .any(|line| line.trim_start().starts_with('#'))
 }
 
 // Custom packages are of the form "<prefix>/<suffix>" where the prefix is not
@@ -1047,6 +1097,9 @@ pub fn remove_packages(
             debug!("package with install id '{id}' was removed");
         }
     }
+
+    // Sort the install table after removal
+    sort_install_table(&mut toml)?;
 
     Ok(toml)
 }
@@ -2150,5 +2203,157 @@ pub(super) mod test {
         assert!(is_custom_package("zmitchell/hello"));
         assert!(!is_custom_package("hello"));
         assert!(!is_custom_package("foo.bar/hello"));
+    }
+
+    #[test]
+    fn sorts_install_table_in_lexicographical_order() {
+        // Start with a clean manifest.
+        let clean_manifest = indoc! {r#"
+            version = 1
+        "#};
+
+        // Install packages in non-lexicographical order.
+        let test_packages = vec![
+            PackageToInstall::Catalog(CatalogPackage::from_str("zebra").unwrap()),
+            PackageToInstall::Catalog(CatalogPackage::from_str("2ni").unwrap()),
+            PackageToInstall::Catalog(CatalogPackage::from_str("apple").unwrap()),
+            PackageToInstall::Catalog(CatalogPackage::from_str("1ichi").unwrap()),
+            PackageToInstall::Catalog(CatalogPackage::from_str("monkey").unwrap()),
+            PackageToInstall::Catalog(CatalogPackage::from_str("banana").unwrap()),
+            PackageToInstall::Catalog(CatalogPackage::from_str("3san").unwrap()),
+        ];
+
+        let insertion =
+            insert_packages(clean_manifest, &test_packages).expect("couldn't add packages");
+        assert!(
+            insertion.new_toml.is_some(),
+            "manifest was changed by install"
+        );
+
+        let new_toml = insertion.new_toml.unwrap();
+        let install_table = new_toml.get("install").unwrap().as_table().unwrap();
+
+        // Check that keys are in lexicographical order.
+        let keys: Vec<&str> = install_table.iter().map(|(k, _)| k).collect();
+        let expected_order = vec!["1ichi", "2ni", "3san", "apple", "banana", "monkey", "zebra"];
+        assert_eq!(
+            keys, expected_order,
+            "install table should be sorted in lexicographical order"
+        );
+    }
+
+    #[test]
+    fn maintains_sorted_order_after_removal() {
+        // Start with a manifest that has packages in unsorted order.
+        let manifest_with_packages = indoc! {r#"
+            version = 1
+
+            [install]
+            apple.pkg-path = "apple"
+            3san.pkg-path = "3san"
+            banana.pkg-path = "banana"
+            cherry.pkg-path = "cherry"
+            2ni.pkg-path = "2ni"
+            zebra.pkg-path = "zebra"
+            1ichi.pkg-path = "1ichi"
+        "#};
+
+        // Remove the middle package.
+        let packages_to_remove = vec!["cherry".to_string()];
+        let new_toml = remove_packages(manifest_with_packages, &packages_to_remove)
+            .expect("couldn't remove package");
+
+        let install_table = new_toml.get("install").unwrap().as_table().unwrap();
+
+        // Check that remaining keys are still in lexicographical order.
+        let keys: Vec<&str> = install_table.iter().map(|(k, _)| k).collect();
+        let expected_order = vec!["1ichi", "2ni", "3san", "apple", "banana", "zebra"];
+        assert_eq!(
+            keys, expected_order,
+            "install table should remain sorted after removal"
+        );
+    }
+
+    #[test]
+    fn skips_sorting_when_install_table_has_comments() {
+        // Start with a manifest that has comments in the install section.
+        let manifest_with_comments = indoc! {r#"
+            version = 1
+
+            [install]
+            # Rust toolchain
+            zebra.pkg-path = "zebra"
+            apple.pkg-path = "apple"
+            # Database tools
+            banana.pkg-path = "banana"
+            monkey.pkg-path = "monkey"
+        "#};
+
+        // Add a new .
+        let test_packages = vec![PackageToInstall::Catalog(
+            CatalogPackage::from_str("cherry").unwrap(),
+        )];
+
+        let insertion =
+            insert_packages(manifest_with_comments, &test_packages).expect("couldn't add package");
+        assert!(
+            insertion.new_toml.is_some(),
+            "manifest was changed by install"
+        );
+
+        let new_toml = insertion.new_toml.unwrap();
+        let install_table = new_toml.get("install").unwrap().as_table().unwrap();
+
+        // Check that keys are NOT sorted (preserved original order with new package added).
+        let keys: Vec<&str> = install_table.iter().map(|(k, _)| k).collect();
+
+        // The exact order depends on where the new package gets inserted,
+        // but it should NOT be in lexicographical order due to the comments.
+        assert!(
+            keys != vec!["apple", "banana", "cherry", "monkey", "zebra"],
+            "install table should NOT be sorted when comments are present"
+        );
+
+        // Verify the new package was actually added
+        assert!(keys.contains(&"cherry"), "new package should be present");
+    }
+
+    #[test]
+    fn skips_sorting_when_removing_from_commented_table() {
+        // Start with a manifest that has comments.
+        let manifest_with_comments = indoc! {r#"
+            version = 1
+
+            [install]
+            # Rust toolchain
+            zebra.pkg-path = "zebra"
+            apple.pkg-path = "apple"
+            # Database tools
+            banana.pkg-path = "banana"
+            cherry.pkg-path = "cherry"
+            monkey.pkg-path = "monkey"
+        "#};
+
+        // Remove a package.
+        let packages_to_remove = vec!["cherry".to_string()];
+        let new_toml = remove_packages(manifest_with_comments, &packages_to_remove)
+            .expect("couldn't remove package");
+
+        let install_table = new_toml.get("install").unwrap().as_table().unwrap();
+
+        // Check that the remaining keys are NOT sorted (original order preserved).
+        let keys: Vec<&str> = install_table.iter().map(|(k, _)| k).collect();
+
+        // Should preserve the original order, not be lexicographically sorted.
+        assert!(
+            keys != vec!["apple", "banana", "monkey", "zebra"],
+            "install table should NOT be sorted when comments are present"
+        );
+
+        // Verify the package was actually removed.
+        assert!(
+            !keys.contains(&"cherry"),
+            "removed package should not be present"
+        );
     }
 }
