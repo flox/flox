@@ -560,6 +560,11 @@ pub trait GenerationsExt {
         flox: &Flox,
         generation: GenerationId,
     ) -> Result<(), EnvironmentError>;
+
+    fn lockfile_contents_for_generation(
+        &self,
+        generation: usize,
+    ) -> Result<String, GenerationsError>;
 }
 
 /// Combined type for environments supporting generations,
