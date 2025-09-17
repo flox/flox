@@ -1,11 +1,14 @@
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use super::{ConcreteEnvironment, EnvironmentError, open_path};
 use crate::flox::Flox;
+use crate::models::environment::generations::GenerationsExt;
+use crate::models::environment::managed_environment::ManagedEnvironmentError;
 use crate::models::environment::remote_environment::RemoteEnvironment;
 use crate::models::environment::{Environment, ManagedPointer};
 use crate::models::environment_ref::EnvironmentRef;
-use crate::models::lockfile::{LockedInclude, RecoverableMergeError};
+use crate::models::lockfile::{LockedInclude, Lockfile, RecoverableMergeError};
 use crate::models::manifest::typed::{IncludeDescriptor, Manifest};
 
 /// Context required to fetch an environment include
@@ -22,7 +25,11 @@ impl IncludeFetcher {
     ) -> Result<LockedInclude, EnvironmentError> {
         let (manifest, name) = match include_environment {
             IncludeDescriptor::Local { dir, name } => self.fetch_local(flox, dir, name),
-            IncludeDescriptor::Remote { remote, name, .. } => self.fetch_remote(flox, remote, name),
+            IncludeDescriptor::Remote {
+                remote,
+                name,
+                generation,
+            } => self.fetch_remote(flox, remote, name, *generation),
         }?;
 
         Ok(LockedInclude {
@@ -89,11 +96,14 @@ impl IncludeFetcher {
     }
 
     /// Fetch a remote environment.
+    /// If `generation` is not [None], retrieve the lockfile for the named generation,
+    /// instead of the "live" generation.
     fn fetch_remote(
         &self,
         flox: &Flox,
         remote: &EnvironmentRef,
         name: &Option<String>,
+        generation: Option<usize>,
     ) -> Result<(Manifest, String), EnvironmentError> {
         let pointer =
             ManagedPointer::new(remote.owner().clone(), remote.name().clone(), &flox.floxhub);
@@ -103,9 +113,17 @@ impl IncludeFetcher {
             tempfile::tempdir_in(&flox.temp_dir).map_err(EnvironmentError::CreateTempDir)?;
         let environment = RemoteEnvironment::new_in(flox, tempdir.path(), pointer)?;
 
-        let lockfile = environment
-            .existing_lockfile(flox)?
-            .expect("remote environments should always be locked");
+        let lockfile = match generation {
+            Some(generation) => {
+                let lockfile_content = environment
+                    .lockfile_contents_for_generation(generation)
+                    .map_err(ManagedEnvironmentError::Generations)?;
+                Lockfile::from_str(&lockfile_content)?
+            },
+            None => environment
+                .existing_lockfile(flox)?
+                .expect("remote environments should always be locked"),
+        };
         let manifest = lockfile.manifest;
         let name = name
             .clone()
