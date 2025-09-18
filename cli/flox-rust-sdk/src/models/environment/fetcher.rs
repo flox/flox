@@ -418,4 +418,65 @@ mod test {
             "fetch should not affect the generation of an already open environment"
         );
     }
+
+    #[test]
+    fn fetch_remote_with_generation() {
+        let env_ref = EnvironmentRef::new("owner", "name").unwrap();
+        let (flox, tempdir) = flox_instance_with_optional_floxhub(Some(env_ref.owner()));
+
+        let mut remote_env = mock_remote_environment(
+            &flox,
+            "version = 1",
+            env_ref.owner().clone(),
+            Some(&env_ref.name().to_string()),
+        );
+
+        let initial_generation = remote_env
+            .generations_metadata()
+            .unwrap()
+            .current_gen()
+            .unwrap();
+        let initial_generation_manifest: Manifest = remote_env
+            .manifest_contents(&flox)
+            .unwrap()
+            .parse()
+            .unwrap();
+
+        // Fetch and lock the remote environment at a given generation.
+        let include_fetcher = IncludeFetcher {
+            base_directory: Some(tempdir.path().to_path_buf()),
+        };
+        let include_descriptor = IncludeDescriptor::Remote {
+            remote: "owner/name".parse().unwrap(),
+            name: None,
+            generation: Some(*initial_generation),
+        };
+
+        let fetched = include_fetcher.fetch(&flox, &include_descriptor).unwrap();
+        assert_eq!(fetched, LockedInclude {
+            manifest: initial_generation_manifest.clone(),
+            name: "name".to_string(),
+            descriptor: include_descriptor.clone(),
+        });
+
+        // Modify the remote environment to create a new generation.
+        let manifest_contents = indoc! {r#"
+            version = 1
+
+            [vars]
+            foo = "bar"
+        "#};
+        remote_env
+            .edit(&flox, manifest_contents.to_string())
+            .unwrap();
+
+        let fetched_after_upstream_changes =
+            include_fetcher.fetch(&flox, &include_descriptor).unwrap();
+
+        // include should remain at the pinned generation
+        assert_eq!(
+            fetched_after_upstream_changes, fetched,
+            "fetch should get the locked generation"
+        );
+    }
 }
