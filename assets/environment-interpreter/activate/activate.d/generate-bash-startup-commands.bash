@@ -37,10 +37,10 @@ generate_bash_startup_commands() {
     # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
     # so source that here, but not if we're already in the process of sourcing
     # bashrc in a parent process.
-    if [ -f ~/.bashrc ] && [ -z "${_flox_already_sourcing_bashrc:=}" ]; then
-      echo "export _flox_already_sourcing_bashrc=1;"
+    if [ -f ~/.bashrc ] && [ -z "${_flox_sourcing_rc:=}" ]; then
+      echo "export _flox_sourcing_rc=1;"
       echo "source ~/.bashrc;"
-      echo "unset _flox_already_sourcing_bashrc;"
+      echo "unset _flox_sourcing_rc;"
     fi
 
     # Restore environment variables set in the previous bash initialization.

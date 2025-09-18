@@ -5207,3 +5207,95 @@ EOF
   project_setup_common
   shell_vars_preserved_in_subshells zsh
 }
+
+profile_scripts_can_modify_path_with_default_environment() {
+  local shell="${1?}"
+
+  "$FLOX_BIN" init -d "$PROJECT_DIR/default"
+  case "$shell" in
+    bash)
+      # We use a non-interactive Bash invocation below, so use .bash_profile
+      rm "${HOME}/.bashrc"
+      cat > "${HOME}/.bash_profile" <<EOF
+eval "\$("$FLOX_BIN" activate -d "$PROJECT_DIR/default")"
+EOF
+      set_shell_path='export PATH="/me-first:${PATH}"'
+      ;;
+    fish)
+      cat > "${HOME}/.config/fish/config.fish" <<EOF
+"$FLOX_BIN" activate -d "$PROJECT_DIR/default" | source
+EOF
+      set_shell_path='set -gx PATH "/me-first:$PATH"'
+      ;;
+    tcsh)
+      cat > "${HOME}/.tcshrc" <<EOF
+eval "\`$FLOX_BIN activate -d $PROJECT_DIR/default\`"
+EOF
+      set_shell_path='setenv PATH "/me-first:${PATH}"'
+      ;;
+    zsh)
+      cat > "${HOME}/.zshenv" <<EOF
+eval "\$("$FLOX_BIN" activate -d "$PROJECT_DIR/default")"
+EOF
+      set_shell_path='export PATH="/me-first:${PATH}"'
+      # We don't want extra output
+      rm "${HOME}/.zshrc"
+      ;;
+    *)
+      echo "Unsupported shell: ${shell}"
+      exit 1
+      ;;
+  esac
+
+  "$FLOX_BIN" init -d project
+  MANIFEST_CONTENTS="$(cat << EOF
+    version = 1
+    [profile]
+    $shell = """
+      $set_shell_path
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d project -f -
+
+  if [[ "$shell" == "bash" ]]; then
+    # Use a login shell instead of an interactive one because of the /dev/tty
+    # issue
+    _FLOX_SHELL_FORCE="$shell" \
+      run "$FLOX_BIN" activate -d project -- "$shell" -lc 'echo "$PATH"'
+  elif [[ "$shell" == "tcsh" ]]; then
+    # tcsh does not parse the following:
+    #   % tcsh -m -c 'tcsh -ic "echo \"$shell_var\""'
+    #   Unmatched '"'.
+    # ... so we skip the quoting of $shell_var below.
+    _FLOX_SHELL_FORCE="$shell" \
+      run "$FLOX_BIN" activate -d project -- "$shell" -ic "echo \$PATH"
+  else
+    _FLOX_SHELL_FORCE="$shell" \
+      run "$FLOX_BIN" activate -d project -- "$shell" -ic 'echo "$PATH"'
+  fi
+  assert_success
+  assert_output --regexp '^/me-first:'
+}
+
+@test "bash: profile scripts can modify PATH with default environment" {
+  project_setup_common
+  profile_scripts_can_modify_path_with_default_environment bash
+}
+
+@test "fish: profile scripts can modify PATH with default environment" {
+  skip "broken on fish"
+  project_setup_common
+  profile_scripts_can_modify_path_with_default_environment fish
+}
+
+@test "tcsh: profile scripts can modify PATH with default environment" {
+  skip "broken on tcsh"
+  project_setup_common
+  profile_scripts_can_modify_path_with_default_environment tcsh
+}
+
+@test "zsh: profile scripts can modify PATH with default environment" {
+  project_setup_common
+  profile_scripts_can_modify_path_with_default_environment zsh
+}
