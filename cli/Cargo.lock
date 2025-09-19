@@ -396,6 +396,9 @@ name = "bitflags"
 version = "2.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b8e56985ec62d17e9c1001dc89c88ecd7dc08e47eba5ec7c29c7b5eeecde967"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "blake3"
@@ -1037,6 +1040,7 @@ dependencies = [
  "proptest-derive",
  "regex",
  "reqwest 0.12.12",
+ "sapling-renderdag",
  "semver",
  "sentry",
  "serde",
@@ -3088,6 +3092,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "sapling-renderdag"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edffb89cab87bd0901c5749d576f5d37a1f34e05160e936f463f4e94cc447b61"
+dependencies = [
+ "bitflags 2.9.1",
 ]
 
 [[package]]

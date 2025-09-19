@@ -13,6 +13,7 @@ flox-generations-list - show all environment generations that you can switch to
 ```
 flox [<general-options>] generations list
      [-d=<path> | -r=<owner/name>]
+     [-t]
 ```
 
 # DESCRIPTION
@@ -24,6 +25,12 @@ creates a new generation of the environment.
 
 `flox generations list` prints all generations of the environment, including
 which generation is currently live.
+
+# OPTIONS
+
+`--tree`, `-t`
+:   Render generations as a tree
+
 
 ```{.include}
 ./include/environment-options.md
