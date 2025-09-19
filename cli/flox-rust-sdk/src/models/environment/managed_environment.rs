@@ -653,6 +653,13 @@ impl GenerationsExt for ManagedEnvironment {
 
         Ok(())
     }
+
+    fn lockfile_contents_for_generation(
+        &self,
+        generation: usize,
+    ) -> Result<String, GenerationsError> {
+        self.generations().lockfile_contents(generation)
+    }
 }
 
 /// Constructors and related functions
