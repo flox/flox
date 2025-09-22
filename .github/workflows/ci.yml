@@ -14,7 +14,7 @@ on:
         type: choice
         options:
           - "nix-plugins-dev"
-          - "cli-dev"
+          - "cli-unit"
           - "nix-build"
           - "trigger-flox-installers-workflow"
           - "report-failure"
@@ -124,10 +124,10 @@ jobs:
       - name: "Test buildenvLib"
         run: nix develop -L --no-update-lock-file --command just test-buildenvLib
 
-  cli-dev:
-    name: "dev"
+  cli-unit:
+    name: "unit"
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    timeout-minutes: 60
 
     permissions:
       id-token: write  # Needed for CodeCov
@@ -138,15 +138,6 @@ jobs:
         os:
           - "ubuntu-22.04-8core"
           - "macos-14-xlarge"
-        test-tags:
-          - "activate"
-          - "containerize"
-          - "catalog"
-          - "!activate,!containerize,!catalog"
-        exclude:
-          # Skip containerize tests on the macOS runner because we can't double nest virtualization
-          - os: "macos-14-xlarge"
-            test-tags: "containerize"
 
     steps:
       - name: "Checkout"
@@ -187,7 +178,6 @@ jobs:
 
       - name: "CLI Unit Tests"
         # Only run unit tests if when not running specialized integration tests
-        if: ${{ matrix.test-tags == '!activate,!containerize,!catalog' }}
         id: unit-tests
         env:
           RUST_BACKTRACE: 1
@@ -200,33 +190,6 @@ jobs:
           disable_search: true
           files: "./cli/target/nextest/ci/junit.xml"
           flags: "dev-unittests, ${{ matrix.test-tags }}, ${{ matrix.os }}"
-          verbose: true
-          use_oidc: true
-
-      # This differs from `nix-build-bats-tests` in that:
-      #   - a cargo-built debug binary is used, like you would in local development
-      - name: "CLI Integration Tests"
-        timeout-minutes: 30
-        env:
-          FLOX_CI_RUNNER: "github-${{ matrix.os }}"
-        run: |
-          mkdir -p ./test-results
-          nix develop -L --no-update-lock-file --command just integ-tests --\
-            --filter-tags '"${{ matrix.test-tags }}"' \
-            --report-formatter junit \
-            --output $PWD/test-results
-
-      - name: "Capture process tree for failing tests"
-        if: ${{ failure() }}
-        run: nix develop -L --no-update-lock-file --command pstree
-
-      - name: "Upload CLI Integration Test Results"
-        uses: "codecov/test-results-action@v1"
-        if: ${{ !cancelled() }}
-        with:
-          disable_search: true
-          files: "./test-results/report.xml"
-          flags: "dev-integration-tests, ${{ matrix.test-tags }}, ${{ matrix.os }}"
           verbose: true
           use_oidc: true
 
@@ -380,8 +343,8 @@ jobs:
     needs:
       - "nix-build"
       - "nix-plugins-dev"
-      - "cli-dev"
-      # TODO: enable these when deemed reliable - "nix-build-bats-tests"
+      - "cli-unit"
+      - "nix-build-bats-tests"
 
     steps:
       - name: "Setup upterm session"
