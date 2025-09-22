@@ -27,6 +27,8 @@ generate_bash_startup_commands() {
   shift
   _FLOX_ENV_DESCRIPTION="${1?}"
   shift
+  _is_in_place="${1?}"
+  shift
 
   if [ "$_flox_activate_tracelevel" -ge 2 ]; then
     echo "set -x;"
@@ -37,10 +39,11 @@ generate_bash_startup_commands() {
     # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
     # so source that here, but not if we're already in the process of sourcing
     # bashrc in a parent process.
-    if [ -f ~/.bashrc ] && [ -z "${_flox_sourcing_rc:=}" ]; then
-      echo "export _flox_sourcing_rc=1;"
+    if [ "${_flox_already_sourced_rc:-}" != "1" ] && [ -f ~/.bashrc ] && [ -z "${_flox_already_sourcing_rc:=}" ]; then
+      echo "export _flox_already_sourcing_rc=1;"
       echo "source ~/.bashrc;"
       echo "unset _flox_sourcing_rc;"
+      echo "export _flox_already_sourced_rc=1;"
     fi
 
     # Restore environment variables set in the previous bash initialization.
