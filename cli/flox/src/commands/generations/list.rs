@@ -6,11 +6,13 @@ use crossterm::style::Stylize;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
     AllGenerationsMetadata,
+    GenerationId,
     GenerationsEnvironment,
     GenerationsExt,
     SingleGenerationMetadata,
 };
 use indoc::formatdoc;
+use renderdag::{Ancestor, GraphRowRenderer, Renderer as _};
 use tracing::instrument;
 
 use crate::commands::{EnvironmentSelect, environment_select};
@@ -22,6 +24,10 @@ use crate::utils::dialog::Dialog;
 pub struct List {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
+
+    /// Render generations as a tree
+    #[bpaf(long, short)]
+    tree: bool,
 }
 
 impl List {
@@ -30,10 +36,15 @@ impl List {
         let env = self
             .environment
             .detect_concrete_environment(&flox, "List using")?;
-        environment_subcommand_metric!("generations::list", env);
+        environment_subcommand_metric!("generations::list", env, request_tree = self.tree);
 
         let env: GenerationsEnvironment = env.try_into()?;
         let metadata = env.generations_metadata()?;
+
+        if self.tree {
+            println!("{}", render_tree(&metadata));
+            return Ok(());
+        }
 
         println!("{}", DisplayAllMetadata(&metadata));
         Ok(())
@@ -107,6 +118,82 @@ impl Display for DisplayAllMetadata<'_> {
     }
 }
 
+/// Render generations as a tree, clearly showing the parent generation,
+/// and construction of the current state.
+///
+/// ## Example
+///
+/// ```text
+/// 7  (live) installed package 'gum (gum)'
+/// │  created:   2025-09-19 15:27:44 UTC
+/// │  last live: Now
+/// │ 6  installed package 'jq (jq)'
+/// │ │  created:   2025-09-19 15:22:33 UTC
+/// │ │  last live: 2025-09-19 15:27:18 UTC
+/// │ │ 5  installed packages 'jq (jq)', 'htop (htop)'
+/// │ │ │  created:   2025-09-19 15:21:57 UTC
+/// │ │ │  last live: 2025-09-19 15:22:22 UTC
+/// 4 │ │  installed package 'lolcat (lolcat)'
+/// │ │ │  created:   2025-09-19 15:19:10 UTC
+/// │ │ │  last live: 2025-09-19 15:27:44 UTC
+/// │ 3 │  installed package 'htop (htop)'
+/// ├─╯ │  created:   2025-09-18 15:53:59 UTC
+/// │   │  last live: 2025-09-19 15:22:33 UTC
+/// 2   │  installed package 'hello (hello)'
+/// ├───╯  created:   2025-09-18 15:53:49 UTC
+/// │      last live: 2025-09-19 15:19:10 UTC
+/// 1  manually edited the manifest [metadata migrated]
+/// │  created:   2025-08-07 16:02:02 UTC
+/// ~  last live: 2025-09-19 15:21:57 UTC
+/// ```
+fn render_tree(metadata: &AllGenerationsMetadata) -> String {
+    let mut graph_nodes: Vec<(GenerationId, SingleGenerationMetadata)> = Vec::new();
+
+    for (id, generation) in metadata.generations() {
+        graph_nodes.push((id, generation))
+    }
+
+    let current_gen = metadata.current_gen();
+
+    let mut renderer = GraphRowRenderer::new()
+        .output()
+        .with_min_row_height(2)
+        .build_box_drawing();
+
+    graph_nodes
+        .into_iter()
+        .rev()
+        .map(|(id, generation)| {
+            let glyph = id.to_string();
+
+            let live_prefix = if Some(id) == current_gen {
+                "(live) "
+            } else {
+                ""
+            };
+
+            let description = format!("{live_prefix}{}", generation.description.bold());
+            let created = generation.created;
+            let last_live = if let Some(last_live) = generation.last_live {
+                last_live.to_string()
+            } else {
+                "Now".to_string()
+            };
+
+            let message = formatdoc! {"
+                {description}
+                created:   {created}
+                last live: {last_live}"};
+            let parents = match generation.parent {
+                None => vec![Ancestor::Anonymous],
+                Some(parent) => vec![Ancestor::Parent(parent)],
+            };
+
+            renderer.next_row(id, parents, glyph, message)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -129,6 +216,7 @@ mod tests {
     fn test_fmt_single_generation() {
         let actual = DisplayMetadata {
             metadata: &SingleGenerationMetadata {
+                parent: None,
                 created: DateTime::default(),
                 last_live: Some(DateTime::default()),
                 description: "Generation description".to_string(),
@@ -150,6 +238,7 @@ mod tests {
     fn test_fmt_single_generation_never_active() {
         let actual = DisplayMetadata {
             metadata: &SingleGenerationMetadata {
+                parent: None,
                 created: DateTime::default(),
                 last_live: None,
                 description: "Generation description".to_string(),
