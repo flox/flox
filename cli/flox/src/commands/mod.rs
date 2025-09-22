@@ -761,7 +761,6 @@ impl UpdateNotification {
                     .await
                     .unwrap_or_else(|e| format!("couldn't decode body: {e}"))
                     .trim()
-                    .to_string()
             )))
         }
     }
