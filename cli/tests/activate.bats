@@ -2575,14 +2575,12 @@ EOF
   echo "Testing bash"
   run bash -l -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
-  assert_equal "${#lines[@]}" 7
+  assert_equal "${#lines[@]}" 5
   assert_equal "${lines[0]}" "Sourcing .profile"
   assert_equal "${lines[1]}" "Setting PATH from .profile"
   assert_equal "${lines[2]}" "sourcing hook.on-activate"
-  assert_equal "${lines[3]}" "Sourcing .bashrc"
-  assert_equal "${lines[4]}" "Setting PATH from .bashrc"
-  assert_equal "${lines[5]}" "sourcing profile.common"
-  assert_equal "${lines[6]}" "sourcing profile.bash"
+  assert_equal "${lines[3]}" "sourcing profile.common"
+  assert_equal "${lines[4]}" "sourcing profile.bash"
 }
 
 # bats test_tags=activate,activate:validate_hook_and_dotfile_sourcing
@@ -2910,8 +2908,6 @@ EOF
   assert_success
   assert_output - <<EOF
 hook.on-activate
-Sourcing .bashrc
-Setting PATH from .bashrc
 profile.common
 profile.bash
 $hello_path
@@ -3837,6 +3833,7 @@ EOF
 
     [profile]
     bash = """
+      echo "sourcing default profile"
       alias default_alias="echo Hello default!"
     """
 EOF
@@ -3849,6 +3846,7 @@ EOF
 
     [profile]
     bash = """
+      echo "sourcing project profile"
       alias project_alias="echo Hello project!"
     """
 EOF
@@ -3859,8 +3857,7 @@ EOF
   # It would be better use bash -i to source .bashrc,
   # but that causes the tests to background because bash -i tries to open
   # /dev/tty.
-  # Instead `eval "$(flox activate -d default)"` manually to simulate sourcing
-  # .bashrc
+  # Instead `eval "$(flox activate -d default)"` manually to simulate sourcing .bashrc
   run bash <(cat <<'EOF'
     set -euo pipefail
     _expect="$(command -v expect)"
@@ -4345,13 +4342,13 @@ EOF
 }
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "interactive: bash attachs to an activation from the previous release" {
+@test "interactive: bash attaches to an activation from the previous release" {
   project_setup
   attach_previous_release bash interactive
 }
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "interactive: tcsh attachs to an activation from the previous release" {
+@test "interactive: tcsh attaches to an activation from the previous release" {
   project_setup
   attach_previous_release tcsh interactive
 }
@@ -4363,49 +4360,50 @@ EOF
 # attach_previous_release zsh interactive
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "command-mode: bash attachs to an activation from the previous release" {
+@test "command-mode: bash attaches to an activation from the previous release" {
   project_setup
   attach_previous_release bash command
 }
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "command-mode: fish attachs to an activation from the previous release" {
+@test "command-mode: fish attaches to an activation from the previous release" {
   project_setup
   attach_previous_release fish command
 }
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "command-mode: tcsh attachs to an activation from the previous release" {
+@test "command-mode: tcsh attaches to an activation from the previous release" {
   project_setup
   attach_previous_release tcsh command
 }
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "command-mode: zsh attachs to an activation from the previous release" {
+@test "command-mode: zsh attaches to an activation from the previous release" {
   project_setup
   attach_previous_release zsh command
 }
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "in-place: bash attachs to an activation from the previous release" {
+@test "in-place: bash attaches to an activation from the previous release" {
+  skip "FIXME: enable this test after a release containing #3631"
   project_setup
   attach_previous_release bash in-place
 }
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "in-place: fish attachs to an activation from the previous release" {
+@test "in-place: fish attaches to an activation from the previous release" {
   project_setup
   attach_previous_release fish in-place
 }
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "in-place: tcsh attachs to an activation from the previous release" {
+@test "in-place: tcsh attaches to an activation from the previous release" {
   project_setup
   attach_previous_release tcsh in-place
 }
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
-@test "in-place: zsh attachs to an activation from the previous release" {
+@test "in-place: zsh attaches to an activation from the previous release" {
   project_setup
   attach_previous_release zsh in-place
 }
@@ -4949,12 +4947,27 @@ run_activation_check_command() {
 # activation process. We'll check this output in a separate command.
 inplace_activation_check_script() {
   shell="${1:?}"
-  echo "$(cat << EOF
-    $(inplace_activation_cmd "$shell" "$PWD/outer")
-    echo "PATH is \$PATH";
-    echo "MANPATH is \$MANPATH";
+  # We have to manually source ~/.bashrc because we now skip it for
+  # in-place activations, and without it we lose out on the PATH
+  # customization that we're trying to observe.
+  if [ "$shell" = "bash" ]; then
+    echo "$(cat << EOF
+      if [ "$shell" = "bash" ]; then
+        source ~/.bashrc
+      fi
+      $(inplace_activation_cmd "$shell" "$PWD/outer")
+      echo "PATH is \$PATH";
+      echo "MANPATH is \$MANPATH";
 EOF
 )"
+  else
+    echo "$(cat << EOF
+      $(inplace_activation_cmd "$shell" "$PWD/outer")
+      echo "PATH is \$PATH";
+      echo "MANPATH is \$MANPATH";
+EOF
+)"
+  fi
 }
 
 # Get output from the nested activation process so that we can make assertions
