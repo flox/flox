@@ -29,7 +29,8 @@ case "$_flox_shell" in
       "$FLOX_ENV" \
       "${_FLOX_ENV_CACHE:-}" \
       "${_FLOX_ENV_PROJECT:-}" \
-      "${_FLOX_ENV_DESCRIPTION:-}"
+      "${_FLOX_ENV_DESCRIPTION:-}" \
+      "true" # is_in_place
     ;;
   *fish)
     echo "$_flox_activations attach --runtime-dir \"$FLOX_RUNTIME_DIR\" --pid \$fish_pid --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"

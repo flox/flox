@@ -18,6 +18,7 @@ case "$_flox_shell" in
         "${_FLOX_ENV_CACHE:-}" \
         "${_FLOX_ENV_PROJECT:-}" \
         "${_FLOX_ENV_DESCRIPTION:-}" \
+        "false" \
         > "$RCFILE"
       # self destruct
       echo "@coreutils@/bin/rm '$RCFILE'" >> "$RCFILE"
