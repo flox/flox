@@ -36,7 +36,7 @@ impl List {
         let env = self
             .environment
             .detect_concrete_environment(&flox, "List using")?;
-        environment_subcommand_metric!("generations::list", env);
+        environment_subcommand_metric!("generations::list", env, request_tree = self.tree);
 
         let env: GenerationsEnvironment = env.try_into()?;
         let metadata = env.generations_metadata()?;
