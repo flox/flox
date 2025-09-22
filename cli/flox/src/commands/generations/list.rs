@@ -124,21 +124,27 @@ impl Display for DisplayAllMetadata<'_> {
 /// ## Example
 ///
 /// ```text
-/// 7  (live) installed package 'gum (gum)' (created: 2025-09-19 15:27:44 UTC, last live: Now)
-/// │
-/// │ 6  installed package 'jq (jq)' (created: 2025-09-19 15:22:33 UTC, last live: 2025-09-19 15:27:18 UTC)
-/// │ │
-/// │ │ 5  installed packages 'jq (jq)', 'htop (htop)' (created: 2025-09-19 15:21:57 UTC, last live: 2025-09-19 15:22:22 UTC)
-/// │ │ │
-/// 4 │ │  installed package 'lolcat (lolcat)' (created: 2025-09-19 15:19:10 UTC, last live: 2025-09-19 15:27:44 UTC)
-/// │ │ │
-/// │ 3 │  installed package 'htop (htop)' (created: 2025-09-18 15:53:59 UTC, last live: 2025-09-19 15:22:33 UTC)
-/// ├─╯ │
-/// 2   │  installed package 'hello (hello)' (created: 2025-09-18 15:53:49 UTC, last live: 2025-09-19 15:19:10 UTC)
-/// ├───╯
-/// 1  manually edited the manifest [metadata migrated] (created: 2025-08-07 16:02:02 UTC, last live: 2025-09-19 15:21:57 UTC)
-/// │
-/// ~
+/// 7  (live) installed package 'gum (gum)'
+/// │  created:   2025-09-19 15:27:44 UTC
+/// │  last live: Now
+/// │ 6  installed package 'jq (jq)'
+/// │ │  created:   2025-09-19 15:22:33 UTC
+/// │ │  last live: 2025-09-19 15:27:18 UTC
+/// │ │ 5  installed packages 'jq (jq)', 'htop (htop)'
+/// │ │ │  created:   2025-09-19 15:21:57 UTC
+/// │ │ │  last live: 2025-09-19 15:22:22 UTC
+/// 4 │ │  installed package 'lolcat (lolcat)'
+/// │ │ │  created:   2025-09-19 15:19:10 UTC
+/// │ │ │  last live: 2025-09-19 15:27:44 UTC
+/// │ 3 │  installed package 'htop (htop)'
+/// ├─╯ │  created:   2025-09-18 15:53:59 UTC
+/// │   │  last live: 2025-09-19 15:22:33 UTC
+/// 2   │  installed package 'hello (hello)'
+/// ├───╯  created:   2025-09-18 15:53:49 UTC
+/// │      last live: 2025-09-19 15:19:10 UTC
+/// 1  manually edited the manifest [metadata migrated]
+/// │  created:   2025-08-07 16:02:02 UTC
+/// ~  last live: 2025-09-19 15:21:57 UTC
 /// ```
 fn render_tree(metadata: &AllGenerationsMetadata) -> String {
     let mut graph_nodes: Vec<(GenerationId, SingleGenerationMetadata)> = Vec::new();
@@ -174,7 +180,10 @@ fn render_tree(metadata: &AllGenerationsMetadata) -> String {
                 "Now".to_string()
             };
 
-            let message = format!("{description} (created: {created}, last live: {last_live})");
+            let message = formatdoc! {"
+                {description}
+                created:   {created}
+                last live: {last_live}"};
             let parents = match generation.parent {
                 None => vec![Ancestor::Anonymous],
                 Some(parent) => vec![Ancestor::Parent(parent)],
