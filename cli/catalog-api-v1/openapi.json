@@ -1693,6 +1693,57 @@
         ]
       }
     },
+    "/api/v1/catalog/info/nar/{nar_file}": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "Get a derivation for a NAR file",
+        "description": "Get the attr_path for a package based on its NAR file name.",
+        "operationId": "derivation_for_nar_file_api_v1_catalog_info_nar__nar_file__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "nar_file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Nar File"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One of (possibly many) derivations corresponding to the NAR file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageDerivation-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/store": {
       "post": {
         "tags": [
