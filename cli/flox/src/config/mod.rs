@@ -108,6 +108,12 @@ pub struct FloxConfig {
 
     /// Release channel to use when checking for updates to Flox.
     pub installer_channel: Option<InstallerChannel>,
+
+    /// Flox creates a single tempdir for each process in
+    /// `$FLOX_CACHE_HOME/process`.
+    /// Flox will delete this empdir upon conclusion of the process
+    /// unless `keep_tempdir == true` AND verbose logs are enabled.
+    pub keep_tempdir: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
