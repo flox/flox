@@ -437,6 +437,13 @@ impl GenerationsExt for RemoteEnvironment {
             .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
         Ok(())
     }
+
+    fn lockfile_contents_for_generation(
+        &self,
+        generation: usize,
+    ) -> Result<String, GenerationsError> {
+        self.inner.generations().lockfile_contents(generation)
+    }
 }
 
 #[cfg(any(test, feature = "tests"))]

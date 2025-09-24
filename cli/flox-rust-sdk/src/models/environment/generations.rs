@@ -138,7 +138,7 @@ impl<S> Generations<S> {
     }
 
     /// Read the lockfile of a given generation and return its contents as a string.
-    pub fn lockfile(&self, generation: usize) -> Result<String, GenerationsError> {
+    pub fn lockfile_contents(&self, generation: usize) -> Result<String, GenerationsError> {
         let metadata = self.metadata()?;
         if !metadata.generations().contains_key(&generation.into()) {
             return Err(GenerationsError::GenerationNotFound(generation));
@@ -171,7 +171,7 @@ impl<S> Generations<S> {
             .current_gen()
             .ok_or(GenerationsError::NoGenerations)?;
 
-        self.lockfile(*current_gen)
+        self.lockfile_contents(*current_gen)
     }
 
     pub(super) fn git(&self) -> &GitCommandProvider {
@@ -560,6 +560,11 @@ pub trait GenerationsExt {
         flox: &Flox,
         generation: GenerationId,
     ) -> Result<(), EnvironmentError>;
+
+    fn lockfile_contents_for_generation(
+        &self,
+        generation: usize,
+    ) -> Result<String, GenerationsError>;
 }
 
 /// Combined type for environments supporting generations,

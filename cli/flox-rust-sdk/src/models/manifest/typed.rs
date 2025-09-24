@@ -1043,16 +1043,20 @@ pub enum IncludeDescriptor {
         #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
         #[serde(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
+
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10usize)"))]
+        generation: Option<usize>,
     },
 }
 
 impl Display for IncludeDescriptor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            IncludeDescriptor::Local { dir, name } => {
+            IncludeDescriptor::Local { dir, name, .. } => {
                 write!(f, "{}", name.as_deref().unwrap_or(&dir.to_string_lossy()))
             },
-            IncludeDescriptor::Remote { remote, name } => {
+            IncludeDescriptor::Remote { remote, name, .. } => {
                 write!(f, "{}", name.as_deref().unwrap_or(&remote.to_string()))
             },
         }
@@ -1331,6 +1335,7 @@ pub mod test {
             IncludeDescriptor::Remote {
                 remote: EnvironmentRef::new("owner", "repo").unwrap(),
                 name: Some("baz".to_string()),
+                generation: None,
             },
         ]);
     }
