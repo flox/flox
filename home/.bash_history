@@ -10,3 +10,7 @@ echo $HOME
 FLOX_SHELL=bash /Users/zmitchell/src/flox/double-bashrc-exec/cli/target/debug/flox -d project
 FLOX_SHELL=bash /Users/zmitchell/src/flox/double-bashrc-exec/cli/target/debug/flox activate -d project
 FLOX_SHELL=bash /Users/zmitchell/src/flox/double-bashrc-exec/cli/target/debug/flox activate -d project
+FLOX_SHELL=bash /Users/zmitchell/src/flox/double-bashrc-exec/cli/target/debug/flox activate -d project
+echo $_flox_sourced_rc
+FLOX_SHELL=bash /Users/zmitchell/src/flox/double-bashrc-exec/cli/target/debug/flox activate -d project
+eval "$(FLOX_SHELL=bash /Users/zmitchell/src/flox/double-bashrc-exec/cli/target/debug/flox activate -d project)"

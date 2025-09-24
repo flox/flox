@@ -39,10 +39,26 @@ generate_bash_startup_commands() {
     # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
     # so source that here, but not if we're already in the process of sourcing
     # bashrc in a parent process.
-    if [ -f ~/.bashrc ] && [ -z "${_flox_already_sourcing_rc:=}" ] && [ "${_is_in_place:-}" != "true" ]; then
-      echo "export _flox_already_sourcing_rc=1;"
+
+    # We need to source the .bashrc file exactly once. We skip it for in-place
+    # activations under the assumption that it has already been sourced by one
+    # of the shells in the chain of ancestors UNLESS none of them were bash
+    # and therefore .bashrc hasn't been sourced yet.
+    # declare needs_sourcing
+    # if bashrc exists:
+    should_source="false"
+    # echo "DEBUG: in place: '$_is_in_place'" >&2
+    # echo "DEBUG: sourced: '${_flox_sourced_rc:-}'" >&2
+    # echo "DEBUG: sourcing: '${_flox_sourcing_rc:-}'" >&2
+    if [ -f ~/.bashrc ] && [ "${_is_in_place:-}" != "true" ] && [ "${_flox_sourced_rc:-}" != "true" ] && [ "${_flox_sourcing_rc:-}" != "true" ]; then
+      should_source="true"
+    fi
+    echo "DEBUG: should source: '$should_source'" >&2
+    if [ "$should_source" = "true" ]; then
+      echo "export _flox_sourcing_rc=true;"
       echo "source ~/.bashrc;"
-      echo "unset _flox_already_sourcing_rc;"
+      echo "unset _flox_sourcing_rc;"
+      echo "export _flox_sourced_bash=true;"
     fi
 
     # Restore environment variables set in the previous bash initialization.

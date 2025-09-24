@@ -2579,10 +2579,8 @@ EOF
   assert_equal "${lines[0]}" "Sourcing .profile"
   assert_equal "${lines[1]}" "Setting PATH from .profile"
   assert_equal "${lines[2]}" "sourcing hook.on-activate"
-  assert_equal "${lines[3]}" "Sourcing .bashrc"
-  assert_equal "${lines[4]}" "Setting PATH from .bashrc"
-  assert_equal "${lines[5]}" "sourcing profile.common"
-  assert_equal "${lines[6]}" "sourcing profile.bash"
+  assert_equal "${lines[3]}" "sourcing profile.common"
+  assert_equal "${lines[4]}" "sourcing profile.bash"
 }
 
 # bats test_tags=activate,activate:validate_hook_and_dotfile_sourcing

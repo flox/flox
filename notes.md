@@ -90,3 +90,14 @@ flox-activations set-prompt
 --set-prompt "${_FLOX_SET_PROMPT:-empty}"
 ```
 
+# new failures
+
+not ok 126 bash: confirm hooks and dotfiles sourced correctly in 578ms
+not ok 140 in-place activate works with bash 3 in 632ms
+not ok 206 interactive: bash attachs to an activation from the previous release in 1033ms
+not ok 212 in-place: bash attachs to an activation from the previous release in 892ms
+not ok 237 bash: in-place: nested activation repairs (MAN)PATH in 607ms
+
+## Confirm hooks and dotfiles sourced correctly
+
+
