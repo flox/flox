@@ -17,8 +17,6 @@ generate_bash_startup_commands() {
   shift
   _activate_d="${1?}"
   shift
-  _FLOX_ACTIVATION_PROFILE_ONLY="${1?}"
-  shift
   _FLOX_ENV="${1?}"
   shift
   _FLOX_ENV_CACHE="${1?}"
@@ -32,34 +30,32 @@ generate_bash_startup_commands() {
     echo "set -x;"
   fi
 
-  if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" != true ]; then
-    # TODO: should we skip this for in-place activations?
-    # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
-    # so source that here, but not if we're already in the process of sourcing
-    # bashrc in a parent process.
-    if [ -f ~/.bashrc ] && [ -z "${_flox_sourcing_rc:=}" ]; then
-      echo "export _flox_sourcing_rc=1;"
-      echo "source ~/.bashrc;"
-      echo "unset _flox_sourcing_rc;"
-    fi
-
-    # Restore environment variables set in the previous bash initialization.
-    $_sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
-    $_sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
-
-    # Propagate required variables that are documented as exposed.
-    echo "export FLOX_ENV='$_FLOX_ENV';"
-
-    # Propagate optional variables that are documented as exposed.
-    for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
-      eval "var_val=\${_$var_key-}"
-      if [ -n "$var_val" ]; then
-        echo "export $var_key='$var_val';"
-      else
-        echo "unset $var_key;"
-      fi
-    done
+  # TODO: should we skip this for in-place activations?
+  # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
+  # so source that here, but not if we're already in the process of sourcing
+  # bashrc in a parent process.
+  if [ -f ~/.bashrc ] && [ -z "${_flox_sourcing_rc:=}" ]; then
+    echo "export _flox_sourcing_rc=1;"
+    echo "source ~/.bashrc;"
+    echo "unset _flox_sourcing_rc;"
   fi
+
+  # Restore environment variables set in the previous bash initialization.
+  $_sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
+  $_sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
+
+  # Propagate required variables that are documented as exposed.
+  echo "export FLOX_ENV='$_FLOX_ENV';"
+
+  # Propagate optional variables that are documented as exposed.
+  for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
+    eval "var_val=\${_$var_key-}"
+    if [ -n "$var_val" ]; then
+      echo "export $var_key='$var_val';"
+    else
+      echo "unset $var_key;"
+    fi
+  done
 
   # Propagate $_activate_d to the environment.
   echo "export _activate_d='$_activate_d';"

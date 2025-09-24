@@ -1761,7 +1761,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:bash
-@test "'hook.on-activate' modifies environment variables for first nested activation (bash)" {
+@test "'hook.on-activate' resets environment variables for first nested activation (bash)" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
@@ -1773,15 +1773,15 @@ EOF
     fi
     unset foo
     eval "$("$FLOX_BIN" activate)"
-    if [[ ! -z "${foo:-}" ]]; then
-      echo "foo=$foo when it should be unset"
+    if [[ "$foo" != "baz" ]]; then
+      echo "foo=$foo when it should be foo=baz"
       exit 1
     fi
 EOF
 }
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:fish
-@test "'hook.on-activate' modifies environment variables for first nested activation (fish)" {
+@test "'hook.on-activate' resets environment variables for first nested activation (fish)" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
@@ -1790,15 +1790,12 @@ EOF
     echo "$foo" | string match "baz"
     set -e foo
     eval "$("$FLOX_BIN" activate)"
-    if set -q foo
-      echo "foo=$foo when it should be unset"
-      exit 1
-    end
+    echo "$foo" | string match "baz"
 EOF
 }
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:tcsh
-@test "'hook.on-activate' modifies environment variables for first nested activation (tcsh)" {
+@test "'hook.on-activate' resets environment variables for first nested activation (tcsh)" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
@@ -1810,15 +1807,15 @@ EOF
     endif
     unsetenv foo
     eval "`$FLOX_BIN activate`"
-    if ( $?foo ) then
-      echo "foo=$foo when it should be unset"
+    if ( "$foo" != "baz" ) then
+      echo "foo=$foo when it should be foo=baz"
       exit 1
     endif
 EOF
 }
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:zsh
-@test "'hook.on-activate' modifies environment variables for first nested activation (zsh)" {
+@test "'hook.on-activate' resets environment variables for first nested activation (zsh)" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
@@ -1830,8 +1827,8 @@ EOF
     fi
     unset foo
     eval "$("$FLOX_BIN" activate)"
-    if [[ ! -z "${foo:-}" ]]; then
-      echo "foo=$foo when it should be unset"
+    if [[ "$foo" != "baz" ]]; then
+      echo "foo=$foo when it should be foo=baz"
       exit 1
     fi
 EOF
@@ -1863,8 +1860,8 @@ EOF
     fi
     export foo=baz
     eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
-    if [[ "$foo" != "baz" ]]; then
-      echo "foo=$foo when it should be foo=baz"
+    if [[ ! -z "${foo:-}" ]]; then
+      echo "foo=$foo when it should be unset"
       exit 1
     fi
 EOF
@@ -1894,7 +1891,10 @@ EOF
     end
     set -gx foo baz
     eval "$("$FLOX_BIN" activate)"
-    echo "$foo" | string match "baz"
+    if set -q foo
+      echo "foo=$foo when it should be unset"
+      exit 1
+    end
 EOF
 }
 
@@ -1922,8 +1922,8 @@ EOF
     endif
     setenv foo baz
     eval "`$FLOX_BIN activate`"
-    if ( "$foo" != "baz" ) then
-      echo "foo=$foo when it should be foo=baz"
+    if ( $?foo ) then
+      echo "foo=$foo when it should be unset"
       exit 1
     endif
 EOF
@@ -1953,8 +1953,8 @@ EOF
     fi
     export foo=baz
     eval "$("$FLOX_BIN" activate)"
-    if [[ "$foo" != "baz" ]]; then
-      echo "foo=$foo when it should be foo=baz"
+    if [[ ! -z "${foo:-}" ]]; then
+      echo "foo=$foo when it should be unset"
       exit 1
     fi
 EOF

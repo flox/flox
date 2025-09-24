@@ -17,8 +17,6 @@ generate_tcsh_startup_commands() {
   shift
   _activate_d="${1?}"
   shift
-  _FLOX_ACTIVATION_PROFILE_ONLY="${1?}"
-  shift
   _FLOX_ENV="${1?}"
   shift
   _FLOX_ENV_CACHE="${1?}"
@@ -32,30 +30,28 @@ generate_tcsh_startup_commands() {
     echo "set verbose;"
   fi
 
-  if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" != true ]; then
-    # The tcsh implementation will source our custom .tcshrc
-    # which will then source the result of this script as $FLOX_TCSH_INIT_SCRIPT
-    # after the normal configuration has been processed,
-    # so there is no requirement to go back and source the user's own config
-    # as we do in bash.
+  # The tcsh implementation will source our custom .tcshrc
+  # which will then source the result of this script as $FLOX_TCSH_INIT_SCRIPT
+  # after the normal configuration has been processed,
+  # so there is no requirement to go back and source the user's own config
+  # as we do in bash.
 
-    # Restore environment variables set in the previous bash initialization.
-    $_sed -e 's/^/unsetenv /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
-    $_sed -e 's/^/setenv /' -e 's/=/ /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
+  # Restore environment variables set in the previous bash initialization.
+  $_sed -e 's/^/unsetenv /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env"
+  $_sed -e 's/^/setenv /' -e 's/=/ /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env"
 
-    # Propagate required variables that are documented as exposed.
-    echo "setenv FLOX_ENV '$_FLOX_ENV';"
+  # Propagate required variables that are documented as exposed.
+  echo "setenv FLOX_ENV '$_FLOX_ENV';"
 
-    # Propagate optional variables that are documented as exposed.
-    for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
-      eval "var_val=\${_$var_key-}"
-      if [ -n "$var_val" ]; then
-        echo "setenv $var_key '$var_val';"
-      else
-        echo "unsetenv $var_key;"
-      fi
-    done
-  fi
+  # Propagate optional variables that are documented as exposed.
+  for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
+    eval "var_val=\${_$var_key-}"
+    if [ -n "$var_val" ]; then
+      echo "setenv $var_key '$var_val';"
+    else
+      echo "unsetenv $var_key;"
+    fi
+  done
 
   # Propagate $_activate_d to the environment.
   echo "setenv _activate_d '$_activate_d';"
