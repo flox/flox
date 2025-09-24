@@ -485,10 +485,11 @@ define BUILD_local_template =
 	  --arg name "$(_name)" \
 	  --arg pname "$(_pname)" \
 	  --arg version "$(_version)" \
+	  --arg system "$(NIX_SYSTEM)" \
 	  --slurpfile manifest "$(MANIFEST_LOCK)" \
 	  --arg log "$(shell $(_readlink) $($(_pvarname)_result)-log)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) * { "outputsToInstall":["out"] } as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks, meta: $$$$meta }' $$< > $$@
+	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) * { "outputsToInstall":["out"] } as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, system: $$$$system, version:$$$$version, log:$$$$log, resultLinks: $$$$resultLinks, meta: $$$$meta }' $$< > $$@
 	@echo "Completed build of $(_name) in local mode" && echo ""
 
 endef
@@ -571,9 +572,10 @@ define BUILD_nix_sandbox_template =
 	  --arg name "$(_name)" \
 	  --arg pname "$(_pname)" \
 	  --arg version "$(_version)" \
+	  --arg system "$(NIX_SYSTEM)" \
 	  --slurpfile manifest "$(MANIFEST_LOCK)" \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
-	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) * { "outputsToInstall":["out"] } as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks, meta: $$$$meta }' $$< > $$@
+	  '($$$$manifest[0].manifest.build."$(_pname)" | with_entries(select(.key == "description" or .key == "license"))) * { "outputsToInstall":["out"] } as $$$$meta | .[0] * { name:$$$$name, pname:$$$$pname, system: $$$$system, version:$$$$version, log:.[0].outputs.log, resultLinks:$$$$resultLinks, meta: $$$$meta }' $$< > $$@
 	@echo "Completed build of $(_name) in Nix sandbox mode" && echo ""
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
@@ -802,10 +804,11 @@ define NIX_EXPRESSION_BUILD_template =
   $($(_pvarname)_buildMetaJSON): $($(_pvarname)_evalJSON) $($(_pvarname)_buildJSON) $($(_pvarname)_result)-log
 	$(_V_) $(_jq) -n \
 	  --arg logfile $$(shell $(_readlink) $($(_pvarname)_result)-log) \
+	  --arg system $(NIX_SYSTEM) \
 	  --argjson resultLinks '$$($(_pvarname)_resultLinks_json)' \
 	  --slurpfile eval $($(_pvarname)_evalJSON) \
 	  --slurpfile build $($(_pvarname)_buildJSON) \
-	  '$$$$build[0][0] * $$$$eval[0] * { log: $$$$logfile, resultLinks: $$$$resultLinks }' > $$@
+	  '$$$$build[0][0] * $$$$eval[0] * { system: $$$$system, log: $$$$logfile, resultLinks: $$$$resultLinks }' > $$@
 	@echo -e "Completed build of $$(_name) in Nix expression mode\n"
 
   # Create targets for cleaning up the result and log symlinks.

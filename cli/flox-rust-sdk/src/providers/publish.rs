@@ -753,7 +753,6 @@ fn get_client_side_catalog_store_config(
 
 fn check_build_metadata_from_build_result(
     build_result: &BuildResult,
-    system: PackageSystem,
 ) -> Result<CheckedBuildMetadata, PublishError> {
     let outputs = PackageOutputs(
         build_result
@@ -793,7 +792,9 @@ fn check_build_metadata_from_build_result(
 
         outputs,
         outputs_to_install,
-        system,
+        system: PackageSystem::from_str(build_result.system.as_str()).map_err(|_e| {
+            PublishError::UnsupportedEnvironmentState("Invalid system".to_string())
+        })?,
         version: Some(build_result.version.clone()),
 
         _private: (),
@@ -859,12 +860,7 @@ pub fn check_build_metadata(
     }
     let build_result = &build_results[0];
 
-    let metadata = check_build_metadata_from_build_result(
-        build_result,
-        PackageSystem::from_str(flox.system.as_str()).map_err(|_e| {
-            PublishError::UnsupportedEnvironmentState("Invalid system".to_string())
-        })?,
-    )?;
+    let metadata = check_build_metadata_from_build_result(build_result)?;
     Ok(metadata)
 }
 

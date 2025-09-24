@@ -108,7 +108,7 @@ pub struct BuildResult {
     pub outputs: HashMap<String, BuiltStorePath>,
     pub meta: BuildResultMeta,
     pub version: String,
-    pub system: Option<String>,
+    pub system: String,
     pub log: BuiltStorePath,
     // TODO: factor out and use buildenv::BuiltStorePath (?)
     #[serde(rename = "resultLinks")]
