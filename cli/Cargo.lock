@@ -1078,6 +1078,7 @@ dependencies = [
  "blake3",
  "clap",
  "clap_derive",
+ "dirs",
  "env_logger",
  "flox-core",
  "fslock",

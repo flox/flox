@@ -45,6 +45,16 @@ impl Shell {
             Self::Zsh => format!("typeset -g {var}='{value}';"),
         }
     }
+
+    /// Set a shell variable that is exported
+    pub fn set_var_exported_no_expansion(&self, var: &str, value: &str) -> String {
+        match self {
+            Self::Bash => format!("export {var}='{value}';"),
+            Self::Fish => format!("set -gx {var} '{value}';"),
+            Self::Tcsh => format!("setenv {var} = '{value}';"),
+            Self::Zsh => format!("export {var}='{value}';"),
+        }
+    }
 }
 
 pub fn source_file(path: &Path) -> String {

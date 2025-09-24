@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 pub mod attach;
 mod fix_fpath;
 mod fix_paths;
+mod generate_startup_cmds;
 mod prepend_and_dedup;
 mod profile_scripts;
 mod set_env_dirs;

@@ -24,7 +24,7 @@ time.workspace = true
 uuid.workspace = true
 xdg.workspace = true
 indoc.workspace = true
-
+dirs.workspace = true
 
 [dev-dependencies]
 nix.workspace = true
