@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "hash": "bf11400a",
+      "path": "/Users/zmitchell/src/flox/double-bashrc-exec/home/project/.flox",
+      "envs": [
+        {
+          "created_at": 1758746455,
+          "pointer": {
+            "name": "project",
+            "version": 1
+          }
+        }
+      ]
+    },
+    {
+      "hash": "cd1f55cc",
+      "path": "/Users/zmitchell/src/flox/double-bashrc-exec/home/.flox",
+      "envs": [
+        {
+          "created_at": 1758746455,
+          "pointer": {
+            "name": "home",
+            "version": 1
+          }
+        }
+      ]
+    }
+  ]
+}

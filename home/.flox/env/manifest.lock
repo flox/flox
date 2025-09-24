@@ -1,0 +1,11 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "profile": {
+      "bash": "  echo \"hello from default\"\n  alias default_alias=\"echo hello\"\n"
+    },
+    "options": {}
+  },
+  "packages": []
+}

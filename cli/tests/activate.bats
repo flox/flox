@@ -3837,6 +3837,7 @@ EOF
 
     [profile]
     bash = """
+      echo "sourcing default profile"
       alias default_alias="echo Hello default!"
     """
 EOF
@@ -3849,6 +3850,7 @@ EOF
 
     [profile]
     bash = """
+      echo "sourcing project profile"
       alias project_alias="echo Hello project!"
     """
 EOF
@@ -3859,8 +3861,7 @@ EOF
   # It would be better use bash -i to source .bashrc,
   # but that causes the tests to background because bash -i tries to open
   # /dev/tty.
-  # Instead `eval "$(flox activate -d default)"` manually to simulate sourcing
-  # .bashrc
+  # Instead `eval "$(flox activate -d default)"` manually to simulate sourcing .bashrc
   run bash <(cat <<'EOF'
     set -euo pipefail
     _expect="$(command -v expect)"

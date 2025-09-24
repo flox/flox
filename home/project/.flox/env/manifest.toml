@@ -1,0 +1,7 @@
+version = 1
+
+[profile]
+bash = '''
+  echo "hello from project"
+  alias project_alias="echo foo"
+'''

@@ -1,0 +1,7 @@
+version = 1
+
+[profile]
+bash = '''
+  echo "hello from default"
+  alias default_alias="echo hello"
+'''
