@@ -273,7 +273,7 @@ fn raw_config_from_parts(
     let config_dir = user_config_dir;
 
     let mut builder = HierarchicalConfig::builder()
-        .set_default("default_substituter", "https://cache.floxdev.com/")?
+        .set_default("default_substituter", "https://cache.flox.dev/")?
         .set_default("cache_dir", cache_dir.to_str().unwrap())?
         .set_default("data_dir", data_dir.to_str().unwrap())?
         .set_default("state_dir", state_dir.to_str().unwrap())?
