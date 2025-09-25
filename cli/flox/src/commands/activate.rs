@@ -205,9 +205,7 @@ impl Activate {
         let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         let interactive = !in_place && self.run_args.is_empty();
 
-        // Don't spin in bashrcs and similar contexts
         let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
-
         let rendered_env_path = match rendered_env_path_result {
             Err(EnvironmentError::Core(err)) if err.is_incompatible_system_error() => {
                 let mut message = format!(
