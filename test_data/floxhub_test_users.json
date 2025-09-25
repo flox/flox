@@ -5,6 +5,7 @@
     "roles": {"flox": ["Reader"],
               "publish_tests_read_write": ["Reader", "Writer"] ,
               "publish_tests_read_only": ["Reader"],
+              "flox-public": ["Owner"],
               "nixpkgs": ["Writer"]
             }
   },
