@@ -13,7 +13,6 @@ case "$_flox_shell" in
         "$_flox_activate_tracelevel" \
         "$_FLOX_ACTIVATION_STATE_DIR" \
         "$_activate_d" \
-        "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" \
         "$FLOX_ENV" \
         "${_FLOX_ENV_CACHE:-}" \
         "${_FLOX_ENV_PROJECT:-}" \
@@ -43,7 +42,6 @@ case "$_flox_shell" in
         "$_flox_activate_tracelevel" \
         "$_FLOX_ACTIVATION_STATE_DIR" \
         "$_activate_d" \
-        "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" \
         "$FLOX_ENV" \
         "${_FLOX_ENV_CACHE:-}" \
         "${_FLOX_ENV_PROJECT:-}" \
@@ -68,7 +66,6 @@ case "$_flox_shell" in
         "$_flox_activate_tracelevel" \
         "$_FLOX_ACTIVATION_STATE_DIR" \
         "$_activate_d" \
-        "${_FLOX_ACTIVATION_PROFILE_ONLY:-false}" \
         "$FLOX_ENV" \
         "${_FLOX_ENV_CACHE:-}" \
         "${_FLOX_ENV_PROJECT:-}" \

@@ -289,26 +289,17 @@ export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
 # If the current shell is re-activating the same environment then we should only
 # re-run profile scripts, without start or attach, because the shell will
 # already be attached to an activation.
-if [ "${_FLOX_ACTIVATION_PROFILE_ONLY:-}" == true ]; then
-  # Except for when the environment has been modified and generated a new store
-  # path since the last activation, in which case we need to mark that new
-  # activation as ready.
-  if [ "$_FLOX_ATTACH" == false ]; then
-    start "$_FLOX_ACTIVATION_STATE_DIR"
-  fi
-else # This is the standard path when the current shell is NOT re-activating.
-  if [ "$_FLOX_ATTACH" == true ]; then
-    # shellcheck source-path=SCRIPTDIR/activate.d
-    source "${_activate_d}/attach.bash"
-  else
-    start "$_FLOX_ACTIVATION_STATE_DIR"
-  fi
+if [ "$_FLOX_ATTACH" == true ]; then
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/attach.bash"
+else
+  start "$_FLOX_ACTIVATION_STATE_DIR"
+fi
 
-  # Start services before the shell or command is invoked
-  if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
-    # shellcheck source-path=SCRIPTDIR/activate.d
-    source "${_activate_d}/start-services.bash"
-  fi
+# Start services before the shell or command is invoked
+if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/start-services.bash"
 fi
 
 # From this point on the activation process depends on the mode:
