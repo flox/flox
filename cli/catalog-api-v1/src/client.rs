@@ -5086,6 +5086,70 @@ Sends a `GET` request to `/api/v1/catalog/info/base-catalog`
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
+    /**Get a derivation for a NAR file
+
+Get the attr_path for a package based on its NAR file name.
+
+Sends a `GET` request to `/api/v1/catalog/info/nar/{nar_file}`
+
+*/
+    pub async fn derivation_for_nar_file_api_v1_catalog_info_nar_nar_file_get<'a>(
+        &'a self,
+        nar_file: &'a str,
+    ) -> Result<
+        ResponseValue<types::PackageDerivationOutput>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!(
+            "{}/api/v1/catalog/info/nar/{}", self.baseurl, encode_path(& nar_file
+            .to_string()),
+        );
+        let mut header_map = ::reqwest::header::HeaderMap::with_capacity(1usize);
+        header_map
+            .append(
+                ::reqwest::header::HeaderName::from_static("api-version"),
+                ::reqwest::header::HeaderValue::from_static(Self::api_version()),
+            );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                ::reqwest::header::ACCEPT,
+                ::reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .headers(header_map)
+            .build()?;
+        let info = OperationInfo {
+            operation_id: "derivation_for_nar_file_api_v1_catalog_info_nar_nar_file_get",
+        };
+        match (async |request: &mut ::reqwest::Request| {
+            if let Some(span) = ::sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    request
+                        .headers_mut()
+                        .append(k, ::reqwest::header::HeaderValue::from_str(&v)?);
+                }
+            }
+            Ok::<_, Box<dyn ::std::error::Error>>(())
+        })(&mut request)
+            .await
+        {
+            Ok(_) => {}
+            Err(e) => return Err(Error::Custom(e.to_string())),
+        }
+        self.pre(&mut request, &info).await?;
+        let result = self.exec(request, &info).await;
+        self.post(&result, &info).await?;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**List of valid pkg paths
 
 Get the list of valid pkg paths for base catalog packages.
