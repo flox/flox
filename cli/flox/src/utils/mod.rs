@@ -15,6 +15,7 @@ pub mod metrics;
 pub mod openers;
 pub mod search;
 pub mod tracing;
+pub mod update_notifications;
 
 pub static TERMINAL_STDERR: LazyLock<Mutex<Stderr>> =
     LazyLock::new(|| Mutex::new(std::io::stderr()));
