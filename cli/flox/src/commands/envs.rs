@@ -11,9 +11,9 @@ use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, ManagedPoi
 use serde_json::json;
 use tracing::instrument;
 
-use super::{ActiveEnvironments, UninitializedEnvironment};
-use crate::commands::activated_environments;
+use super::UninitializedEnvironment;
 use crate::subcommand_metric;
+use crate::utils::active_environments::{ActiveEnvironments, activated_environments};
 use crate::utils::message;
 
 #[derive(Bpaf, Debug, Clone)]

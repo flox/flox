@@ -4,6 +4,7 @@ use std::io::Stderr;
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
+pub mod active_environments;
 pub mod colors;
 pub mod dialog;
 pub mod didyoumean;
