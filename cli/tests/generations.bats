@@ -142,3 +142,36 @@ ${FLOXHUB_GIT_WARNING?}
 hello
 EOF
 }
+
+test_mutate_with_activate_generation() {
+  argv=("$@")
+  create_environment_with_generations
+
+  RUST_BACKTRACE=0 run "$FLOX_BIN" activate --generation 3 -- "$FLOX_BIN" "${argv[@]}"
+  assert_failure
+  assert_output - <<EOF
+${FLOXHUB_GIT_WARNING?}
+
+${FLOXHUB_GIT_WARNING?}
+
+❌ ERROR: failed to read from generation: Cannot modify environments that are activated with a specific generation.
+
+If you wish to modify the environment at this generation:
+- Exit the current activation of the environment
+- Active the environment without specifying a generation
+- Optionally switch the live generation: 'flox generation switch 3'
+EOF
+}
+
+@test "activate --generation: can't mutate with: install" {
+  test_mutate_with_activate_generation install foo
+}
+@test "activate --generation: can't mutate with: uninstall" {
+  test_mutate_with_activate_generation uninstall foo
+}
+@test "activate --generation: can't mutate with: edit" {
+  test_mutate_with_activate_generation edit -f /dev/null
+}
+@test "activate --generation: can't mutate with: upgrade" {
+  test_mutate_with_activate_generation upgrade
+}

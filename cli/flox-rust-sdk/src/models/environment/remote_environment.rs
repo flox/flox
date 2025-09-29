@@ -70,6 +70,9 @@ pub enum RemoteEnvironmentError {
 
     #[error("could not set a new install prefix")]
     WriteNewOutlink(#[source] std::io::Error),
+
+    #[error("generations error")]
+    Generations(#[source] GenerationsError),
 }
 
 #[derive(Debug)]

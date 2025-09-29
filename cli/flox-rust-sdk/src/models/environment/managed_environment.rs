@@ -274,6 +274,8 @@ impl Environment for ManagedEnvironment {
         packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError> {
+        self.guard_generation_immutable()?;
+
         let mut generations = self.generations();
         let mut generations = generations
             .writable(
@@ -332,6 +334,8 @@ impl Environment for ManagedEnvironment {
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
+        self.guard_generation_immutable()?;
+
         let mut generations = self.generations();
         let mut generations = generations
             .writable(
@@ -368,6 +372,8 @@ impl Environment for ManagedEnvironment {
 
     /// Atomically edit this environment, ensuring that it still builds
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
+        self.guard_generation_immutable()?;
+
         let mut generations = self.generations();
         let mut generations = generations
             .writable(
@@ -417,6 +423,8 @@ impl Environment for ManagedEnvironment {
         flox: &Flox,
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
+        self.guard_generation_immutable()?;
+
         let mut generations = self.generations();
         let mut generations = generations
             .writable(
@@ -460,6 +468,8 @@ impl Environment for ManagedEnvironment {
         flox: &Flox,
         to_upgrade: Vec<String>,
     ) -> Result<UpgradeResult, EnvironmentError> {
+        self.guard_generation_immutable()?;
+
         let mut generations = self.generations();
         let mut generations = generations
             .writable(
@@ -745,6 +755,21 @@ impl GenerationsExt for ManagedEnvironment {
 
 /// Constructors and related functions
 impl ManagedEnvironment {
+    /// Guard against modifying an environment that is activated at a specific
+    /// generation so that we don't create unecessary branches in the generation
+    /// history.
+    fn guard_generation_immutable(&self) -> Result<(), EnvironmentError> {
+        if let Some(generation) = self.generation {
+            return Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::Generations(
+                    GenerationsError::ActivatedGenerationImmutable(generation),
+                ),
+            ));
+        }
+
+        Ok(())
+    }
+
     /// If there's an out of sync local checkout, ensure it's locked.
     /// If the checkout is in sync, return it's lock contents.
     ///
