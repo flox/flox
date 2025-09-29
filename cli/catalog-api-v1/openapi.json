@@ -1981,13 +1981,6 @@
       },
       "CatalogStatus": {
         "properties": {
-          "catalogs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Catalogs"
-          },
           "systems": {
             "items": {
               "type": "string"
@@ -2049,7 +2042,6 @@
         },
         "type": "object",
         "required": [
-          "catalogs",
           "systems",
           "pages_ct",
           "latest_rev",

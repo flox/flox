@@ -304,7 +304,6 @@ pub mod types {
     ///  "type": "object",
     ///  "required": [
     ///    "attribute_path_ct",
-    ///    "catalogs",
     ///    "derivations_ct",
     ///    "latest_rev",
     ///    "pages_ct",
@@ -317,13 +316,6 @@ pub mod types {
     ///    "attribute_path_ct": {
     ///      "title": "Attribute Path Ct",
     ///      "type": "integer"
-    ///    },
-    ///    "catalogs": {
-    ///      "title": "Catalogs",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
     ///    },
     ///    "derivations_ct": {
     ///      "title": "Derivations Ct",
@@ -392,7 +384,6 @@ pub mod types {
     #[derive(::serde::Deserialize, ::serde::Serialize, Clone, Debug, PartialEq)]
     pub struct CatalogStatus {
         pub attribute_path_ct: i64,
-        pub catalogs: ::std::vec::Vec<::std::string::String>,
         pub derivations_ct: i64,
         pub latest_rev: ::chrono::DateTime<::chrono::offset::Utc>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
