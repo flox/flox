@@ -10,6 +10,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
+use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     Environment,
@@ -91,6 +92,11 @@ pub struct Activate {
     /// Overrides the "options.activate.mode" setting in the manifest.
     #[bpaf(short, long)]
     pub mode: Option<ActivateMode>,
+
+    /// Activate a FloxHub environment at a specific generation.
+    #[bpaf(long, short)]
+    #[allow(dead_code)] // TODO: implement
+    pub generation: Option<GenerationId>,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]

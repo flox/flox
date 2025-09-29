@@ -316,6 +316,8 @@ pub async fn start_services_with_new_process_compose(
         use_fallback_interpreter: false,
         // FIXME: This should match the current activation.
         mode: Some(ActivateMode::Dev),
+        // FIXME: This should match the current activation.
+        generation: None,
         run_args: vec!["true".to_string()],
     }
     .activate(

@@ -17,6 +17,7 @@ flox [<general-options>] activate
      [--print-script]
      [-s]
      [-m=(dev|run)]
+     [-g=<generation>]
      [-- <command> [<arguments>]]
 ```
 
@@ -109,6 +110,9 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
    Overrides the `options.activate.mode` setting in the manifest.
    See [`manifest.toml(5)`](./manifest.toml.md) for more details on activation
    modes.
+
+`-g <generation>`, `--generation <generation>`
+:  Activate a FloxHub environment at a specific generation.
 
 ```{.include}
 ./include/environment-options.md
