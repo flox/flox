@@ -79,6 +79,21 @@ pub struct RemoteEnvironment {
 }
 
 impl RemoteEnvironment {
+    /// Pull a remote environment into a flox-provided managed environment
+    /// in `<FLOX_CACHE_DIR>/remote/<owner>/<name>`
+    ///
+    /// This function provides the sensible default directory to [RemoteEnvironment::new_in].
+    /// The directory will be created by [RemoteEnvironment::new_in].
+    pub fn new(flox: &Flox, pointer: ManagedPointer) -> Result<Self, RemoteEnvironmentError> {
+        let path = flox
+            .cache_dir
+            .join(REMOTE_ENVIRONMENT_BASE_DIR)
+            .join(pointer.owner.as_ref())
+            .join(pointer.name.as_ref());
+
+        Self::new_in(flox, path, pointer)
+    }
+
     /// Pull a remote environment into a provided (temporary) managed environment.
     /// Constructing a [RemoteEnvironment] _does not_ create a gc-root
     /// or guarantee that the environment is valid.
@@ -178,21 +193,6 @@ impl RemoteEnvironment {
             inner,
             rendered_env_links,
         })
-    }
-
-    /// Pull a remote environment into a flox-provided managed environment
-    /// in `<FLOX_CACHE_DIR>/remote/<owner>/<name>`
-    ///
-    /// This function provides the sensible default directory to [RemoteEnvironment::new_in].
-    /// The directory will be created by [RemoteEnvironment::new_in].
-    pub fn new(flox: &Flox, pointer: ManagedPointer) -> Result<Self, RemoteEnvironmentError> {
-        let path = flox
-            .cache_dir
-            .join(REMOTE_ENVIRONMENT_BASE_DIR)
-            .join(pointer.owner.as_ref())
-            .join(pointer.name.as_ref());
-
-        Self::new_in(flox, path, pointer)
     }
 
     pub fn owner(&self) -> &EnvironmentOwner {
