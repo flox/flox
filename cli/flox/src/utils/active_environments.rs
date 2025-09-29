@@ -124,21 +124,20 @@ mod tests {
 
     use super::*;
 
+    fn path_env_fixture(name: &str) -> UninitializedEnvironment {
+        UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::new(),
+            pointer: EnvironmentPointer::Path(PathPointer::new(
+                EnvironmentName::from_str(name).unwrap(),
+            )),
+        })
+    }
+
     /// is_active() behaves as expected when using set_last_active()
     #[test]
     fn test_is_active() {
-        let env1 = UninitializedEnvironment::DotFlox(DotFlox {
-            path: PathBuf::new(),
-            pointer: EnvironmentPointer::Path(PathPointer::new(
-                EnvironmentName::from_str("env1").unwrap(),
-            )),
-        });
-        let env2 = UninitializedEnvironment::DotFlox(DotFlox {
-            path: PathBuf::new(),
-            pointer: EnvironmentPointer::Path(PathPointer::new(
-                EnvironmentName::from_str("env2").unwrap(),
-            )),
-        });
+        let env1 = path_env_fixture("env1");
+        let env2 = path_env_fixture("env2");
 
         let mut active = ActiveEnvironments::default();
         active.set_last_active(env1.clone());
@@ -151,12 +150,7 @@ mod tests {
     /// checking if it's active in a second.
     #[test]
     fn test_is_active_round_trip_from_env() {
-        let uninitialized = UninitializedEnvironment::DotFlox(DotFlox {
-            path: PathBuf::new(),
-            pointer: EnvironmentPointer::Path(PathPointer::new(
-                EnvironmentName::from_str("test").unwrap(),
-            )),
-        });
+        let uninitialized = path_env_fixture("test");
         let mut first_active = temp_env::with_var(
             FLOX_ACTIVE_ENVIRONMENTS_VAR,
             None::<&str>,
@@ -176,18 +170,8 @@ mod tests {
 
     #[test]
     fn test_last_activated() {
-        let env1 = UninitializedEnvironment::DotFlox(DotFlox {
-            path: PathBuf::new(),
-            pointer: EnvironmentPointer::Path(PathPointer::new(
-                EnvironmentName::from_str("env1").unwrap(),
-            )),
-        });
-        let env2 = UninitializedEnvironment::DotFlox(DotFlox {
-            path: PathBuf::new(),
-            pointer: EnvironmentPointer::Path(PathPointer::new(
-                EnvironmentName::from_str("env2").unwrap(),
-            )),
-        });
+        let env1 = path_env_fixture("env1");
+        let env2 = path_env_fixture("env2");
 
         let mut active = ActiveEnvironments::default();
         active.set_last_active(env1);
