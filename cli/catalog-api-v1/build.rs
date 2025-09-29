@@ -12,13 +12,13 @@ fn main() {
     let file = std::fs::File::open(&spec_src).unwrap();
     let mut spec_json: serde_json::Value =
         serde_json::from_reader(file).expect("Failed to parse openapi spec");
-    // This endpoint is causing the generated mock code to fail,
-    // and we're not using /metrics/ anyways, so drop it.
-    spec_json["paths"]
-        .as_object_mut()
-        .unwrap()
-        .remove("/metrics/")
-        .unwrap();
+    // Exclude some endpoints we aren't using
+    spec_json["paths"].as_object_mut().unwrap().retain(|k, _| {
+        *k != "/metrics/"
+            // We don't use any info except for base-catalog
+            && (*k == "/api/v1/catalog/info/base-catalog" || !k.starts_with("/api/v1/catalog/info"))
+            && !k.starts_with("/api/v1/catalog/status")
+    });
     let spec = serde_json::from_value(spec_json).expect("Failed to parse openapi spec");
 
     let client = generate_client(&spec);
