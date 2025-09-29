@@ -154,7 +154,7 @@ ${FLOXHUB_GIT_WARNING?}
 
 ${FLOXHUB_GIT_WARNING?}
 
-❌ ERROR: failed to read from generation: Cannot modify environments that are activated with a specific generation.
+❌ ERROR: generations error: Cannot modify environments that are activated with a specific generation.
 
 If you wish to modify the environment at this generation:
 - Exit the current activation of the environment

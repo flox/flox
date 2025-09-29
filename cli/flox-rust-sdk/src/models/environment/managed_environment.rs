@@ -124,8 +124,7 @@ pub enum ManagedEnvironmentError {
     #[error("failed to read local manifest")]
     ReadLocalManifest(#[source] CoreEnvironmentError),
 
-    /// Error reading the generation manifest
-    #[error("failed to read from generation")]
+    #[error("generations error")]
     Generations(#[source] GenerationsError),
 
     #[error("floxmeta branch name was malformed: {0}")]
