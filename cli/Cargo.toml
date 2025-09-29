@@ -82,7 +82,7 @@ sysinfo = "0.32.1"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
-tempfile = "3.22.0"
+tempfile = "3.23.0"
 textwrap = { version = "0.16.2", features = ["terminal_size"] }
 thiserror = "2"
 time = { version = "0.3", features = ["serde", "formatting"] }
