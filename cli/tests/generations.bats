@@ -27,6 +27,23 @@ project_teardown() {
   unset PROJECT_DIR
 }
 
+create_environment_with_generations() {
+  # Generation 1
+  "$FLOX_BIN" init --name "test"
+  "$FLOX_BIN" push --owner owner
+
+  # Generation 2
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  # Generation 3
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    "$FLOX_BIN" install hello
+}
+
 # ---------------------------------------------------------------------------- #
 
 setup() {
@@ -43,25 +60,9 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "commands are displayed for generations history" {
-  mkdir -p "machine_a"
-  mkdir -p "machine_b"
+  create_environment_with_generations
 
-  "$FLOX_BIN" init --name "test"
-  "$FLOX_BIN" push --owner owner
-
-  # Make a few modifications
-  # 1. an edit
-  MANIFEST_CONTENTS="$(cat << "EOF"
-    version = 1
-EOF
-  )"
-  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
-
-  # 2. an install
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
-    "$FLOX_BIN" install hello
-
-  # 3. switch generation, but set argv[0] to foo
+  # Generation 4: switch generation, but set argv[0] to foo
   (exec -a foo "$FLOX_BIN" generations switch 1)
 
   run "$FLOX_BIN" generations history
