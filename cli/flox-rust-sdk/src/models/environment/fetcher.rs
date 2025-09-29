@@ -55,7 +55,7 @@ impl IncludeFetcher {
         let path = self
             .expand_include_dir(dir)
             .map_err(EnvironmentError::Recoverable)?;
-        let environment = open_path(flox, &path)?;
+        let environment = open_path(flox, &path, None)?;
         let name = name
             .clone()
             .unwrap_or_else(|| environment.name().to_string());
@@ -111,7 +111,7 @@ impl IncludeFetcher {
         // Don't affect existing open remotes but still uses the same floxmeta.
         let tempdir =
             tempfile::tempdir_in(&flox.temp_dir).map_err(EnvironmentError::CreateTempDir)?;
-        let environment = RemoteEnvironment::new_in(flox, tempdir.path(), pointer)?;
+        let environment = RemoteEnvironment::new_in(flox, tempdir.path(), pointer, None)?;
 
         let lockfile = match generation {
             Some(generation) => {
@@ -366,6 +366,7 @@ mod test {
                 env_ref.name().clone(),
                 &flox.floxhub,
             ),
+            None,
         )
         .unwrap();
         let open_env_lockfile_previous = match open_env.lockfile(&flox).unwrap() {

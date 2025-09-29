@@ -44,6 +44,7 @@ use flox_rust_sdk::flox::{
     FloxhubTokenError,
 };
 use flox_rust_sdk::models::env_registry::{ENV_REGISTRY_FILENAME, EnvRegistry};
+use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
@@ -926,6 +927,7 @@ impl EnvironmentSelect {
     pub fn to_concrete_environment(
         &self,
         flox: &Flox,
+        generation: Option<GenerationId>,
     ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         match self {
             EnvironmentSelect::Dir(path) => {
@@ -933,17 +935,15 @@ impl EnvironmentSelect {
                     path = %path.display(),
                     "getting concrete environment from supplied path"
                 );
-                Ok(open_path(flox, path)?)
+                Ok(open_path(flox, path, generation)?)
             },
             EnvironmentSelect::Unspecified => {
                 debug!("getting concrete environment without explicit args");
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_found_environment = find_dot_flox(&current_dir)?;
                 match maybe_found_environment {
-                    Some(found) => {
-                        Ok(UninitializedEnvironment::DotFlox(found)
-                            .into_concrete_environment(flox)?)
-                    },
+                    Some(found) => Ok(UninitializedEnvironment::DotFlox(found)
+                        .into_concrete_environment(flox, generation)?),
                     None => Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory)?,
                 }
             },
@@ -958,7 +958,8 @@ impl EnvironmentSelect {
                     &flox.floxhub,
                 );
 
-                let env = RemoteEnvironment::new(flox, pointer).map_err(anyhow::Error::new)?;
+                let env = RemoteEnvironment::new(flox, pointer, generation)
+                    .map_err(anyhow::Error::new)?;
                 Ok(ConcreteEnvironment::Remote(env))
             },
         }
@@ -989,7 +990,12 @@ impl EnvironmentSelect {
                     &flox.floxhub,
                 );
 
-                let env = RemoteEnvironment::new(flox, pointer).map_err(anyhow::Error::new)?;
+                let generation = activated_environments()
+                    .is_active_with_generation(&UninitializedEnvironment::Remote(pointer.clone()));
+
+                let env = RemoteEnvironment::new(flox, pointer, generation)
+                    .map_err(anyhow::Error::new)?;
+
                 Ok(ConcreteEnvironment::Remote(env))
             },
         }
@@ -1003,12 +1009,15 @@ impl DirEnvironmentSelect {
         message: &str,
     ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         match self {
-            DirEnvironmentSelect::Dir(path) => Ok(open_path(flox, path)?),
+            DirEnvironmentSelect::Dir(path) => Ok(open_path(flox, path, None)?),
             // If the user doesn't specify an environment, check if there's an
             // already activated environment or an environment in the current
             // directory.
             DirEnvironmentSelect::Unspecified => match detect_environment(message)? {
-                Some(env) => Ok(env.into_concrete_environment(flox)?),
+                Some(env) => {
+                    let generation = activated_environments().is_active_with_generation(&env);
+                    Ok(env.into_concrete_environment(flox, generation)?)
+                },
                 None => Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory)?,
             },
         }

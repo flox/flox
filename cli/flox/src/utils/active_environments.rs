@@ -80,6 +80,17 @@ impl ActiveEnvironments {
         self.0.iter().any(|active| &active.environment == env)
     }
 
+    /// Check if the given environment is active with a generation.
+    pub fn is_active_with_generation(
+        &self,
+        env: &UninitializedEnvironment,
+    ) -> Option<GenerationId> {
+        self.0
+            .iter()
+            .find(|active| &active.environment == env)
+            .and_then(|active| active.generation)
+    }
+
     /// Iterate over the active environments
     pub fn iter(&self) -> impl Iterator<Item = &UninitializedEnvironment> {
         self.0.iter().map(|active| &active.environment)
@@ -176,6 +187,20 @@ mod tests {
 
         assert!(active.is_active(&env1));
         assert!(!active.is_active(&env2));
+    }
+
+    #[test]
+    fn test_is_active_with_generation() {
+        let env1 = path_env_fixture("env1");
+        let env2 = path_env_fixture("env2");
+
+        let generation = Some(GenerationId::from_str("42").unwrap());
+        let mut active = ActiveEnvironments::default();
+        active.set_last_active(env1.clone(), generation);
+        assert_eq!(active.is_active_with_generation(&env1), generation);
+
+        active.set_last_active(env2.clone(), None);
+        assert_eq!(active.is_active_with_generation(&env2), None);
     }
 
     /// Simulate setting an active environment in one flox invocation and then

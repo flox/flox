@@ -835,7 +835,7 @@ pub fn check_build_metadata(
         )
     })?;
 
-    let mut clean_build_env = open_path(flox, &project_path)
+    let mut clean_build_env = open_path(flox, &project_path, None)
         .map_err(|e| PublishError::UnsupportedEnvironmentState(e.to_string()))?;
     let base_dir = clean_build_env.parent_path()?;
     let expression_dir = nix_expression_dir(&clean_build_env);

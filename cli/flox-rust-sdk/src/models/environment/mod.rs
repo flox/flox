@@ -4,6 +4,7 @@ use std::{fs, io};
 
 use enum_dispatch::enum_dispatch;
 pub use flox_core::{Version, path_hash};
+use generations::{GenerationId, GenerationsError};
 use indoc::formatdoc;
 use managed_environment::ManagedEnvironment;
 use path_environment::PathEnvironment;
@@ -298,6 +299,19 @@ impl RenderedEnvironmentLinks {
         Self::new_unchecked(development_path, runtime_path)
     }
 
+    pub fn new_in_base_dir_with_name_system_and_generation(
+        base_dir: &CanonicalPath,
+        name: impl AsRef<str>,
+        system: &System,
+        generation: GenerationId,
+    ) -> Self {
+        let development_name = format!("{system}.{name}.gen{generation}.dev", name = name.as_ref());
+        let development_path = base_dir.join(development_name);
+        let runtime_name = format!("{system}.{name}.gen{generation}.run", name = name.as_ref());
+        let runtime_path = base_dir.join(runtime_name);
+        Self::new_unchecked(development_path, runtime_path)
+    }
+
     /// Returns the built environment path for an activation mode.
     pub fn for_mode(self, mode: &ActivateMode) -> RenderedEnvironmentLink {
         match mode {
@@ -506,6 +520,7 @@ impl UninitializedEnvironment {
     pub fn into_concrete_environment(
         self,
         flox: &Flox,
+        generation: Option<GenerationId>,
     ) -> Result<ConcreteEnvironment, EnvironmentError> {
         match self {
             UninitializedEnvironment::DotFlox(dot_flox) => {
@@ -514,6 +529,13 @@ impl UninitializedEnvironment {
 
                 let env = match dot_flox.pointer {
                     EnvironmentPointer::Path(path_pointer) => {
+                        if generation.is_some() {
+                            return Err(EnvironmentError::Generations(
+                                GenerationsError::UnsupportedEnvironment(
+                                    path_pointer.name.to_string(),
+                                ),
+                            ));
+                        }
                         debug!("detected concrete environment type: path");
                         ConcreteEnvironment::Path(PathEnvironment::open(
                             flox,
@@ -523,14 +545,19 @@ impl UninitializedEnvironment {
                     },
                     EnvironmentPointer::Managed(managed_pointer) => {
                         debug!("detected concrete environment type: managed");
-                        let env = ManagedEnvironment::open(flox, managed_pointer, dot_flox_path)?;
+                        let env = ManagedEnvironment::open(
+                            flox,
+                            managed_pointer,
+                            dot_flox_path,
+                            generation,
+                        )?;
                         ConcreteEnvironment::Managed(env)
                     },
                 };
                 Ok(env)
             },
             UninitializedEnvironment::Remote(pointer) => {
-                let env = RemoteEnvironment::new(flox, pointer)?;
+                let env = RemoteEnvironment::new(flox, pointer, generation)?;
                 Ok(ConcreteEnvironment::Remote(env))
             },
         }
@@ -697,6 +724,9 @@ pub enum EnvironmentError {
     #[error(transparent)]
     RemoteEnvironment(#[from] RemoteEnvironmentError),
 
+    #[error(transparent)]
+    Generations(#[from] GenerationsError),
+
     #[error("could not delete environment")]
     DeleteEnvironment(#[source] std::io::Error),
 
@@ -772,10 +802,11 @@ pub enum UninstallError {
 pub fn open_path(
     flox: &Flox,
     path: impl AsRef<Path>,
+    generation: Option<GenerationId>,
 ) -> Result<ConcreteEnvironment, EnvironmentError> {
     DotFlox::open_in(path)
         .map(UninitializedEnvironment::DotFlox)?
-        .into_concrete_environment(flox)
+        .into_concrete_environment(flox, generation)
 }
 
 /// Copy a whole directory recursively ignoring the original permissions

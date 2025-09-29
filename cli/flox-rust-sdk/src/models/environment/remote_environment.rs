@@ -76,6 +76,9 @@ pub enum RemoteEnvironmentError {
 pub struct RemoteEnvironment {
     inner: ManagedEnvironment,
     rendered_env_links: RenderedEnvironmentLinks,
+    /// Specific generation to use, i.e. from `flox activate`
+    /// This doesn't represent the live generation.
+    generation: Option<GenerationId>,
 }
 
 impl RemoteEnvironment {
@@ -84,14 +87,18 @@ impl RemoteEnvironment {
     ///
     /// This function provides the sensible default directory to [RemoteEnvironment::new_in].
     /// The directory will be created by [RemoteEnvironment::new_in].
-    pub fn new(flox: &Flox, pointer: ManagedPointer) -> Result<Self, RemoteEnvironmentError> {
+    pub fn new(
+        flox: &Flox,
+        pointer: ManagedPointer,
+        generation: Option<GenerationId>,
+    ) -> Result<Self, RemoteEnvironmentError> {
         let path = flox
             .cache_dir
             .join(REMOTE_ENVIRONMENT_BASE_DIR)
             .join(pointer.owner.as_ref())
             .join(pointer.name.as_ref());
 
-        Self::new_in(flox, path, pointer)
+        Self::new_in(flox, path, pointer, generation)
     }
 
     /// Pull a remote environment into a provided (temporary) managed environment.
@@ -102,6 +109,7 @@ impl RemoteEnvironment {
         flox: &Flox,
         path: impl AsRef<Path>,
         pointer: ManagedPointer,
+        generation: Option<GenerationId>,
     ) -> Result<Self, RemoteEnvironmentError> {
         let floxmeta = match FloxMeta::open(flox, &pointer) {
             Ok(floxmeta) => floxmeta,
@@ -164,6 +172,7 @@ impl RemoteEnvironment {
             IncludeFetcher {
                 base_directory: None,
             },
+            generation,
         )
         .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
 
@@ -192,6 +201,7 @@ impl RemoteEnvironment {
         Ok(Self {
             inner,
             rendered_env_links,
+            generation,
         })
     }
 
@@ -357,6 +367,10 @@ impl Environment for RemoteEnvironment {
         &mut self,
         flox: &Flox,
     ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
+        if let Some(generation) = self.generation {
+            return self.rendered_env_links_for_generation(flox, generation);
+        }
+
         Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
         Ok(self.rendered_env_links.clone())
     }
@@ -444,6 +458,17 @@ impl GenerationsExt for RemoteEnvironment {
     ) -> Result<String, GenerationsError> {
         self.inner.generations().lockfile_contents(generation)
     }
+
+    fn rendered_env_links_for_generation(
+        &self,
+        flox: &Flox,
+        generation: GenerationId,
+    ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
+        // These are rendered in the managed environment's run dir rather than
+        // `~/.flox/cache/run` because the environment is treated as immutable.
+        self.inner
+            .rendered_env_links_for_generation(flox, generation)
+    }
 }
 
 #[cfg(any(test, feature = "tests"))]
@@ -470,6 +495,7 @@ pub mod test_helpers {
             flox,
             managed_environment.parent_path().unwrap(),
             managed_environment.pointer().clone(),
+            None,
         )
         .unwrap()
     }
@@ -520,6 +546,7 @@ mod tests {
             &flox,
             environment.parent_path().unwrap(),
             environment.pointer().clone(),
+            None,
         )
         .unwrap();
 

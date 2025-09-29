@@ -565,6 +565,13 @@ pub trait GenerationsExt {
         &self,
         generation: usize,
     ) -> Result<String, GenerationsError>;
+
+    /// Get rendered environment links for a specific generation
+    fn rendered_env_links_for_generation(
+        &self,
+        flox: &Flox,
+        generation: GenerationId,
+    ) -> Result<super::RenderedEnvironmentLinks, EnvironmentError>;
 }
 
 /// Combined type for environments supporting generations,

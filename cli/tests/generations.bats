@@ -14,7 +14,8 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-${BATS_TEST_NUMBER?}"
+  export PROJECT_NAME="project-${BATS_TEST_NUMBER?}"
+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/${PROJECT_NAME?}"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
@@ -51,6 +52,14 @@ setup() {
   setup_isolated_flox
   project_setup
   floxhub_setup "owner"
+
+  FLOXHUB_GIT_WARNING=$(cat <<EOF
+⚠️  Using file://${FLOX_FLOXHUB_PATH} as FloxHub host
+'\$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
+alternative FloxHub hosts are not yet supported!
+EOF
+  )
+  export FLOXHUB_GIT_WARNING
 }
 teardown() {
   project_teardown
@@ -71,4 +80,65 @@ teardown() {
   assert_line "Command:    flox install hello"
   # Regardless of argv[0], we always print 'flox'
   assert_line "Command:    flox generations switch 1"
+}
+
+@test "activate --generation: works with managed and remote envs" {
+  create_environment_with_generations
+
+  # Guard against using 'hello' from the live generation.
+  "$FLOX_BIN" generations switch 1
+
+  RUST_BACKTRACE=0 run -127 "$FLOX_BIN" activate --generation 2 -- hello
+  assert_failure
+  assert_output --partial "hello: command not found"
+
+  run "$FLOX_BIN" activate --generation 3 -- hello
+  assert_success
+  assert_output - <<EOF
+${FLOXHUB_GIT_WARNING?}
+
+Hello, world!
+EOF
+}
+
+@test "activate --generation: errors for path envs" {
+  "$FLOX_BIN" init
+
+  RUST_BACKTRACE=0 run "$FLOX_BIN" activate --generation 3 -- hello
+  assert_failure
+  assert_output - << EOF
+${FLOXHUB_GIT_WARNING?}
+
+❌ ERROR: Generations are only available for environments pushed to floxhub.
+The environment ${PROJECT_NAME} is a local only environment.
+EOF
+}
+
+@test "activate --generation: flox list works with --generation flag" {
+  create_environment_with_generations
+
+  # Guard against using 'hello' from the live generation.
+  "$FLOX_BIN" generations switch 1
+
+  run "$FLOX_BIN" activate --generation 2 -- "$FLOX_BIN" list --name
+  assert_success
+  assert_output - <<EOF
+${FLOXHUB_GIT_WARNING?}
+
+${FLOXHUB_GIT_WARNING?}
+
+⚠️  No packages are installed for your current system ('${NIX_SYSTEM}').
+
+You can see the whole manifest with 'flox list --config'.
+EOF
+
+  run "$FLOX_BIN" activate --generation 3 -- "$FLOX_BIN" list --name
+  assert_success
+  assert_output - <<EOF
+${FLOXHUB_GIT_WARNING?}
+
+${FLOXHUB_GIT_WARNING?}
+
+hello
+EOF
 }

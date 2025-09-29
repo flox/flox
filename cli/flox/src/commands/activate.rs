@@ -104,7 +104,10 @@ pub struct Activate {
 
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
-        let mut concrete_environment = match self.environment.to_concrete_environment(&flox) {
+        let mut concrete_environment = match self
+            .environment
+            .to_concrete_environment(&flox, self.generation)
+        {
             Ok(concrete_environment) => concrete_environment,
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
                 bail!(formatdoc! {"
