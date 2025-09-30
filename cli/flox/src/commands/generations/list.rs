@@ -18,6 +18,7 @@ use tracing::instrument;
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
 use crate::utils::dialog::Dialog;
+use crate::utils::message::page_output;
 
 /// Arguments for the `flox generations list` command
 #[derive(Bpaf, Debug, Clone)]
@@ -28,6 +29,10 @@ pub struct List {
     /// Render generations as a tree
     #[bpaf(long, short)]
     tree: bool,
+
+    /// Disable interactive pager
+    #[bpaf(long)]
+    no_pager: bool,
 }
 
 impl List {
@@ -41,13 +46,18 @@ impl List {
         let env: GenerationsEnvironment = env.try_into()?;
         let metadata = env.generations_metadata()?;
 
-        if self.tree {
-            println!("{}", render_tree(&metadata));
+        let output = if self.tree {
+            render_tree(&metadata)
+        } else {
+            DisplayAllMetadata(&metadata).to_string()
+        };
+
+        if self.no_pager {
+            println!("{}", output);
             return Ok(());
         }
 
-        println!("{}", DisplayAllMetadata(&metadata));
-        Ok(())
+        page_output(output)
     }
 }
 
@@ -90,7 +100,7 @@ impl Display for DisplayMetadata<'_> {
 struct DisplayAllMetadata<'m>(&'m AllGenerationsMetadata);
 impl Display for DisplayAllMetadata<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut iter = self.0.generations().into_iter().peekable();
+        let mut iter = self.0.generations().into_iter().rev().peekable();
         while let (Some((id, metadata)), peek) = (iter.next(), iter.peek()) {
             let generation = format!("Generation:  {id}");
             let current = if Some(id) == self.0.current_gen() {
@@ -280,20 +290,20 @@ mod tests {
         let actual = DisplayAllMetadata(&metadata).to_string();
 
         let expected = indoc! {"
-            Generation:  1
+            Generation:  3
             Description: mock
-            Created:     1970-01-01 01:00:00 UTC
-            Last Live:   1970-01-01 02:00:00 UTC
+            Created:     1970-01-01 03:00:00 UTC
+            Last Live:   1970-01-01 04:00:00 UTC
 
             Generation:  2 (live)
             Description: mock
             Created:     1970-01-01 02:00:00 UTC
             Last Live:   Now
 
-            Generation:  3
+            Generation:  1
             Description: mock
-            Created:     1970-01-01 03:00:00 UTC
-            Last Live:   1970-01-01 04:00:00 UTC"
+            Created:     1970-01-01 01:00:00 UTC
+            Last Live:   1970-01-01 02:00:00 UTC"
         };
 
         assert_eq!(actual, expected);
