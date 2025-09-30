@@ -133,7 +133,8 @@ impl Pull {
 
                 if self.copy {
                     debug!("`--copy` provided. converting to path environment, skipping pull");
-                    let env = ManagedEnvironment::open(&flox, pointer.clone(), dir.join(DOT_FLOX))?;
+                    let env =
+                        ManagedEnvironment::open(&flox, pointer.clone(), dir.join(DOT_FLOX), None)?;
                     env.into_path_environment(&flox)?;
 
                     message::created(formatdoc! {"
@@ -164,7 +165,7 @@ impl Pull {
         pointer: ManagedPointer,
         force: bool,
     ) -> Result<(), EnvironmentError> {
-        let mut env = ManagedEnvironment::open(flox, pointer.clone(), dot_flox_path)?;
+        let mut env = ManagedEnvironment::open(flox, pointer.clone(), dot_flox_path, None)?;
 
         let state = env.pull(flox, force)?;
 
@@ -219,7 +220,7 @@ impl Pull {
         let dot_flox_path = env_path.join(DOT_FLOX);
         if dot_flox_path.exists() {
             if force {
-                match open_path(flox, &dot_flox_path) {
+                match open_path(flox, &dot_flox_path, None) {
                     Ok(concrete_env) => match concrete_env {
                         ConcreteEnvironment::Path(env) => {
                             env.delete(flox)
@@ -259,8 +260,8 @@ impl Pull {
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
         let mut env = {
-            let result =
-                ManagedEnvironment::open(flox, pointer, &dot_flox_path).map_err(Self::handle_error);
+            let result = ManagedEnvironment::open(flox, pointer, &dot_flox_path, None)
+                .map_err(Self::handle_error);
             match result {
                 Err(err) => {
                     fs::remove_dir_all(&dot_flox_path)

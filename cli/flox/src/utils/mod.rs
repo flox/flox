@@ -4,6 +4,7 @@ use std::io::Stderr;
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
+pub mod active_environments;
 pub mod colors;
 pub mod dialog;
 pub mod didyoumean;
@@ -14,6 +15,7 @@ pub mod metrics;
 pub mod openers;
 pub mod search;
 pub mod tracing;
+pub mod update_notifications;
 
 pub static TERMINAL_STDERR: LazyLock<Mutex<Stderr>> =
     LazyLock::new(|| Mutex::new(std::io::stderr()));

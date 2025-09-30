@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::{fs, io};
 
 use flox_core::Version;
@@ -70,6 +71,9 @@ pub struct ManagedEnvironment {
     pointer: ManagedPointer,
     floxmeta: FloxMeta,
     include_fetcher: IncludeFetcher,
+    /// Specific generation to use, i.e. from `flox activate`
+    /// This doesn't represent the live generation.
+    generation: Option<GenerationId>,
 }
 
 #[derive(Debug, Error)]
@@ -120,8 +124,7 @@ pub enum ManagedEnvironmentError {
     #[error("failed to read local manifest")]
     ReadLocalManifest(#[source] CoreEnvironmentError),
 
-    /// Error reading the generation manifest
-    #[error("failed to read from generation")]
+    #[error("generations error")]
     Generations(#[source] GenerationsError),
 
     #[error("floxmeta branch name was malformed: {0}")]
@@ -230,12 +233,35 @@ impl GenerationLock {
 impl Environment for ManagedEnvironment {
     /// This will lock if there is an out of sync local checkout
     fn lockfile(&mut self, flox: &Flox) -> Result<LockResult, EnvironmentError> {
+        if let Some(generation) = self.generation {
+            let lockfile_contents = self
+                .generations()
+                .lockfile_contents(*generation)
+                .map_err(ManagedEnvironmentError::Generations)?;
+
+            let lockfile: Lockfile =
+                Lockfile::from_str(&lockfile_contents).map_err(EnvironmentError::Core)?;
+
+            return Ok(LockResult::Unchanged(lockfile));
+        }
+
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
         self.ensure_locked(flox, &mut local_checkout)
     }
 
     /// Returns the lockfile if it already exists.
     fn existing_lockfile(&self, flox: &Flox) -> Result<Option<Lockfile>, EnvironmentError> {
+        if let Some(generation) = self.generation {
+            let lockfile_contents = self
+                .generations()
+                .lockfile_contents(*generation)
+                .map_err(ManagedEnvironmentError::Generations)?;
+
+            return Lockfile::from_str(&lockfile_contents)
+                .map_err(EnvironmentError::Core)
+                .map(Some);
+        }
+
         self.local_env_or_copy_current_generation(flox)?
             .existing_lockfile()
             .map_err(EnvironmentError::Core)
@@ -247,6 +273,8 @@ impl Environment for ManagedEnvironment {
         packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError> {
+        self.guard_generation_immutable()?;
+
         let mut generations = self.generations();
         let mut generations = generations
             .writable(
@@ -305,6 +333,8 @@ impl Environment for ManagedEnvironment {
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
+        self.guard_generation_immutable()?;
+
         let mut generations = self.generations();
         let mut generations = generations
             .writable(
@@ -341,6 +371,8 @@ impl Environment for ManagedEnvironment {
 
     /// Atomically edit this environment, ensuring that it still builds
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
+        self.guard_generation_immutable()?;
+
         let mut generations = self.generations();
         let mut generations = generations
             .writable(
@@ -390,6 +422,8 @@ impl Environment for ManagedEnvironment {
         flox: &Flox,
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
+        self.guard_generation_immutable()?;
+
         let mut generations = self.generations();
         let mut generations = generations
             .writable(
@@ -433,6 +467,8 @@ impl Environment for ManagedEnvironment {
         flox: &Flox,
         to_upgrade: Vec<String>,
     ) -> Result<UpgradeResult, EnvironmentError> {
+        self.guard_generation_immutable()?;
+
         let mut generations = self.generations();
         let mut generations = generations
             .writable(
@@ -477,6 +513,14 @@ impl Environment for ManagedEnvironment {
     /// - provide the latest editable contents to the user
     /// - avoid double-locking
     fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
+        if let Some(generation) = self.generation {
+            return self
+                .generations()
+                .manifest(*generation)
+                .map_err(ManagedEnvironmentError::Generations)
+                .map_err(EnvironmentError::ManagedEnvironment);
+        }
+
         let local_checkout = self.local_env_or_copy_current_generation(flox)?;
         let manifest = local_checkout.manifest_contents()?;
         Ok(manifest)
@@ -487,6 +531,10 @@ impl Environment for ManagedEnvironment {
         &mut self,
         flox: &Flox,
     ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
+        if let Some(generation) = self.generation {
+            return self.rendered_env_links_for_generation(flox, generation);
+        }
+
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
         self.ensure_locked(flox, &mut local_checkout)?;
 
@@ -660,10 +708,67 @@ impl GenerationsExt for ManagedEnvironment {
     ) -> Result<String, GenerationsError> {
         self.generations().lockfile_contents(generation)
     }
+
+    fn rendered_env_links_for_generation(
+        &self,
+        flox: &Flox,
+        generation: GenerationId,
+    ) -> Result<RenderedEnvironmentLinks, EnvironmentError> {
+        let mut generations = self.generations();
+        let generation_rw = generations
+            .writable(
+                &flox.temp_dir,
+                &flox.system_user_name,
+                &flox.system_hostname,
+                &flox.argv,
+            )
+            .map_err(ManagedEnvironmentError::Generations)?;
+
+        let mut core_environment = generation_rw
+            .get_generation(*generation, self.include_fetcher.clone())
+            .map_err(ManagedEnvironmentError::Generations)?;
+
+        let store_paths = core_environment.build(flox)?;
+
+        let run_dir = &self.path.join(GCROOTS_DIR_NAME);
+        if !run_dir.exists() {
+            std::fs::create_dir_all(run_dir).map_err(ManagedEnvironmentError::CreateLinksDir)?;
+        }
+
+        let base_dir = CanonicalPath::new(run_dir).expect("run dir is checked to exist");
+
+        let rendered_env_links =
+            RenderedEnvironmentLinks::new_in_base_dir_with_name_system_and_generation(
+                &base_dir,
+                self.name().as_ref(),
+                &flox.system,
+                generation,
+            );
+
+        CoreEnvironment::link(&rendered_env_links.development, &store_paths.develop)?;
+        CoreEnvironment::link(&rendered_env_links.runtime, &store_paths.runtime)?;
+
+        Ok(rendered_env_links)
+    }
 }
 
 /// Constructors and related functions
 impl ManagedEnvironment {
+    /// Guard against modifying an environment that is activated at a specific
+    /// generation so that we don't create unecessary branches in the generation
+    /// history.
+    fn guard_generation_immutable(&self) -> Result<(), EnvironmentError> {
+        if let Some(generation) = self.generation {
+            return Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::Generations(
+                    GenerationsError::ActivatedGenerationImmutable(generation),
+                ),
+            ));
+        }
+
+        Ok(())
+    }
+
     /// If there's an out of sync local checkout, ensure it's locked.
     /// If the checkout is in sync, return it's lock contents.
     ///
@@ -726,6 +831,7 @@ impl ManagedEnvironment {
         flox: &Flox,
         pointer: ManagedPointer,
         dot_flox_path: impl AsRef<Path>,
+        generation: Option<GenerationId>,
     ) -> Result<Self, EnvironmentError> {
         let floxmeta = match FloxMeta::open(flox, &pointer) {
             Ok(floxmeta) => floxmeta,
@@ -764,11 +870,20 @@ impl ManagedEnvironment {
 
             let base_dir = CanonicalPath::new(run_dir).expect("run dir is checked to exist");
 
-            RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
-                &base_dir,
-                pointer.name.as_ref(),
-                &flox.system,
-            )
+            if let Some(generation) = generation {
+                RenderedEnvironmentLinks::new_in_base_dir_with_name_system_and_generation(
+                    &base_dir,
+                    pointer.name.as_ref(),
+                    &flox.system,
+                    generation,
+                )
+            } else {
+                RenderedEnvironmentLinks::new_in_base_dir_with_name_and_system(
+                    &base_dir,
+                    pointer.name.as_ref(),
+                    &flox.system,
+                )
+            }
         };
 
         let parent_directory = dot_flox_path
@@ -784,6 +899,7 @@ impl ManagedEnvironment {
             dot_flox_path,
             rendered_env_links,
             include_fetcher,
+            generation,
         )
         .map_err(EnvironmentError::ManagedEnvironment)
     }
@@ -801,6 +917,7 @@ impl ManagedEnvironment {
         dot_flox_path: CanonicalPath,
         rendered_env_links: RenderedEnvironmentLinks,
         include_fetcher: IncludeFetcher,
+        generation: Option<GenerationId>,
     ) -> Result<Self, ManagedEnvironmentError> {
         let lock = Self::ensure_generation_locked(&pointer, &dot_flox_path, &floxmeta)?;
 
@@ -818,6 +935,7 @@ impl ManagedEnvironment {
             pointer,
             floxmeta,
             include_fetcher,
+            generation,
         };
 
         Ok(env)
@@ -1526,7 +1644,7 @@ impl ManagedEnvironment {
             None,
         )?;
 
-        let env = ManagedEnvironment::open(flox, pointer, dot_flox_path)?;
+        let env = ManagedEnvironment::open(flox, pointer, dot_flox_path, None)?;
 
         Ok(env)
     }
@@ -1798,6 +1916,7 @@ pub mod test_helpers {
             ),
             floxmeta: unusable_mock_floxmeta(),
             include_fetcher: mock_include_fetcher(),
+            generation: None,
         }
     }
 
@@ -2840,6 +2959,7 @@ mod test {
             IncludeFetcher {
                 base_directory: Some(dot_flox_path.parent().unwrap().to_path_buf()),
             },
+            None,
         )
         .unwrap();
         let reg_path = env_registry_path(&flox);
@@ -2881,6 +3001,7 @@ mod test {
             IncludeFetcher {
                 base_directory: Some(dot_flox_path.parent().unwrap().to_path_buf()),
             },
+            None,
         )
         .unwrap();
         let reg_path = env_registry_path(&flox);
@@ -2931,6 +3052,7 @@ mod test {
             IncludeFetcher {
                 base_directory: Some(env1_dir.parent().unwrap().to_path_buf()),
             },
+            None,
         )
         .unwrap();
         let env2 = ManagedEnvironment::open_with(
@@ -2942,6 +3064,7 @@ mod test {
             IncludeFetcher {
                 base_directory: Some(env2_dir.parent().unwrap().to_path_buf()),
             },
+            None,
         )
         .unwrap();
 

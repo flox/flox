@@ -404,6 +404,15 @@ pub enum GenerationsError {
         The environment {0} is a local only environment."
     )]
     UnsupportedEnvironment(String),
+    #[error(
+        "Cannot modify environments that are activated with a specific generation.\n\
+         \n\
+         If you wish to modify the environment at this generation:\n\
+         - Exit the current activation of the environment\n\
+         - Active the environment without specifying a generation\n\
+         - Optionally switch the live generation: 'flox generation switch {0}'"
+    )]
+    ActivatedGenerationImmutable(GenerationId),
 
     // region: initialization errors
     #[error("could not initialize generations repo")]
@@ -565,6 +574,13 @@ pub trait GenerationsExt {
         &self,
         generation: usize,
     ) -> Result<String, GenerationsError>;
+
+    /// Get rendered environment links for a specific generation
+    fn rendered_env_links_for_generation(
+        &self,
+        flox: &Flox,
+        generation: GenerationId,
+    ) -> Result<super::RenderedEnvironmentLinks, EnvironmentError>;
 }
 
 /// Combined type for environments supporting generations,

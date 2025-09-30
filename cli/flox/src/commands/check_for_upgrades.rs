@@ -74,7 +74,7 @@ impl CheckForUpgrades {
     }
 
     fn check_for_upgrades(self, flox: &Flox) -> Result<ExitBranch> {
-        let mut environment = self.environment.into_concrete_environment(flox)?;
+        let mut environment = self.environment.into_concrete_environment(flox, None)?;
 
         let upgrade_information = UpgradeInformationGuard::read_in(environment.cache_path()?)?;
 

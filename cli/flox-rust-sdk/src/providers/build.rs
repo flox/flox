@@ -956,7 +956,7 @@ pub mod test_helpers {
     ) {
         let path = path.as_ref();
         copy_dir_recursive(path, &tmpdir, true).unwrap();
-        let ConcreteEnvironment::Path(mut env) = open_path(flox, &tmpdir).unwrap() else {
+        let ConcreteEnvironment::Path(mut env) = open_path(flox, &tmpdir, None).unwrap() else {
             panic!("expected path environment")
         };
         assert_build_status(flox, &mut env, name, None, true);

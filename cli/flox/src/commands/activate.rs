@@ -10,6 +10,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
+use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::{
     ConcreteEnvironment,
     Environment,
@@ -92,6 +93,10 @@ pub struct Activate {
     #[bpaf(short, long)]
     pub mode: Option<ActivateMode>,
 
+    /// Activate a FloxHub environment at a specific generation.
+    #[bpaf(long, short)]
+    pub generation: Option<GenerationId>,
+
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
     pub run_args: Vec<String>,
@@ -99,7 +104,10 @@ pub struct Activate {
 
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
-        let mut concrete_environment = match self.environment.to_concrete_environment(&flox) {
+        let mut concrete_environment = match self
+            .environment
+            .to_concrete_environment(&flox, self.generation)
+        {
             Ok(concrete_environment) => concrete_environment,
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
                 bail!(formatdoc! {"
@@ -205,9 +213,7 @@ impl Activate {
         let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         let interactive = !in_place && self.run_args.is_empty();
 
-        // Don't spin in bashrcs and similar contexts
         let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
-
         let rendered_env_path = match rendered_env_path_result {
             Err(EnvironmentError::Core(err)) if err.is_incompatible_system_error() => {
                 let mut message = format!(
@@ -283,7 +289,7 @@ impl Activate {
             }
         } else {
             // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
-            flox_active_environments.set_last_active(now_active.clone());
+            flox_active_environments.set_last_active(now_active.clone(), self.generation);
         };
 
         // Determine values for `set_prompt` and `hide_default_prompt`, taking
@@ -825,7 +831,7 @@ mod tests {
     #[test]
     fn test_shell_prompt_default() {
         let mut active_environments = ActiveEnvironments::default();
-        active_environments.set_last_active(DEFAULT_ENV.clone());
+        active_environments.set_last_active(DEFAULT_ENV.clone(), None);
 
         // with `hide_default_prompt = false` we should see the default environment
         let prompt = Activate::make_prompt_environments(false, &active_environments);
@@ -839,8 +845,8 @@ mod tests {
     #[test]
     fn test_shell_prompt_mixed() {
         let mut active_environments = ActiveEnvironments::default();
-        active_environments.set_last_active(DEFAULT_ENV.clone());
-        active_environments.set_last_active(NON_DEFAULT_ENV.clone());
+        active_environments.set_last_active(DEFAULT_ENV.clone(), None);
+        active_environments.set_last_active(NON_DEFAULT_ENV.clone(), None);
 
         // with `hide_default_prompt = false` we should see the default environment
         let prompt = Activate::make_prompt_environments(false, &active_environments);
@@ -928,9 +934,10 @@ mod upgrade_notification_tests {
         let mut environment = ConcreteEnvironment::Path(environment);
 
         let mut active = ActiveEnvironments::default();
-        active.set_last_active(UninitializedEnvironment::from_concrete_environment(
-            &environment,
-        ));
+        active.set_last_active(
+            UninitializedEnvironment::from_concrete_environment(&environment),
+            None,
+        );
 
         write_upgrade_available(&flox, &mut environment);
 
