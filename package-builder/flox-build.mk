@@ -321,33 +321,9 @@ else
   endif
 endif
 
-# Define a template target for cleaning up result symlinks and their
-# associated storePaths, if they exist.
-define CLEAN_result_store_path_template =
-  # Note that this template is evaluated at Makefile compilation time,
-  # but is only called for the clean target, for which that's
-  # a fine time to test for the existence of symlinks and storepaths,
-  # so we can use GNU make functions to interrogate the filesystem
-  # and create nicely formatted targets customized for each result link.
-
-  # The builtin realpath function returns the empty string when the
-  # result is a dangling symlink.
-  $(eval _storePath = $(realpath $(1)))
-
-  .PHONY: clean_result_link/$(1)
-  clean_result_link/$(1):
-	-$(_V_) $(_rm) -f $(1)
-
-  .PHONY: clean_result_storepath/$(1)
-  clean_result_storepath/$(1): clean_result_link/$(1)
-	$(_V_) $(_daemonize) $(_nix) store delete $(_storePath)
-
-  clean/$(_pname): clean_result_link/$(1) \
-    $(if $(_storePath),clean_result_storepath/$(1))
-endef
-
 # Define a template target for cleaning up result symlinks
-# NOTE: this is a temporary fix for flox#3017 where daemonized
+# NOTE: the commented lines to delete the associated store paths
+#       are a temporary fix for flox#3017 where daemonized
 #       `nix store delete` calls trigger a Nix bug and cause the `flox build`
 #       command to fail.
 define CLEAN_result_link_template =
@@ -357,11 +333,20 @@ define CLEAN_result_link_template =
   # so we can use GNU make functions to interrogate the filesystem
   # and create nicely formatted targets customized for each result link.
 
+  # The builtin realpath function returns the empty string when the
+  # result is a dangling symlink.
+  # $(eval _storePath = $(realpath $(1)))
+
   .PHONY: clean_result_link/$(1)
   clean_result_link/$(1):
 	-$(_V_) $(_rm) -f $(1)
 
+  # .PHONY: clean_result_storepath/$(1)
+  # clean_result_storepath/$(1): clean_result_link/$(1)
+  #	$(_V_) $(_daemonize) $(_nix) store delete $(_storePath)
+
   clean/$(_pname): clean_result_link/$(1)
+    # $(if $(_storePath),clean_result_storepath/$(1))
 endef
 
 # The manifest build strives to achieve reproducibility by first redacting
@@ -539,7 +524,7 @@ define BUILD_nix_sandbox_template =
 	fi
 
   # Create a target for cleaning up the buildCache result symlink and store path.
-  $(eval $(call CLEAN_result_store_path_template,$($(_pvarname)_result)-buildCache))
+  $(eval $(call CLEAN_result_link_template,$($(_pvarname)_result)-buildCache))
 
   # Perform the build, creating the JSON output as a result.
   $($(_pvarname)_buildJSON): $($(_pvarname)_buildScript) $($(_pvarname)_src_tar) \
