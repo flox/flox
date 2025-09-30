@@ -1375,6 +1375,44 @@ EOF
   assert_output --partial "Service 'two' was defined after services were started."
 }
 
+@test "start: respects activation mode" {
+  skip "behavior not yet fixed"
+  # Run a service that checks if CPATH is set
+  # CPATH should be set in dev mode but not in run mode
+  MANIFEST_CONTENTS="$(cat << 'EOF'
+    version = 1
+
+    [services]
+    one.command = "[[ -n '$CPATH' ]]"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start
+    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
+    "$FLOX_BIN" services status --json
+EOF
+  )"
+
+  CPATH= \
+    run "$FLOX_BIN" activate --mode dev -- bash -c "$SCRIPT"
+
+  assert_success
+  assert_output --partial '"exit_code": 0'
+
+  wait_for_watchdogs "$PROJECT_DIR"
+
+  CPATH= \
+    run "$FLOX_BIN" activate --mode run -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial '"exit_code": 1'
+}
+
 
 @test "start: shuts down existing process-compose" {
 

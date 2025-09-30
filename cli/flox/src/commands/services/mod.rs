@@ -200,7 +200,7 @@ pub fn guard_service_commands_available(
 pub fn guard_is_within_activation(
     services_environment: &ServicesEnvironment,
     action: &str,
-) -> Result<Option<GenerationId>> {
+) -> Result<(ActivateMode, Option<GenerationId>)> {
     let activated_environments = activated_environments();
 
     let env =
@@ -213,7 +213,8 @@ pub fn guard_is_within_activation(
     }
     let generation = activated_environments.is_active_with_generation(&env);
 
-    Ok(generation)
+    // TODO: mode should come from the ActiveEnvironment
+    Ok((ActivateMode::Dev, generation))
 }
 
 /// Warn about manifest changes that may require services to be restarted, if
@@ -286,6 +287,7 @@ pub async fn start_services_with_new_process_compose(
     flox: Flox,
     environment_select: EnvironmentSelect,
     mut concrete_environment: ConcreteEnvironment,
+    activate_mode: ActivateMode,
     names: &[String],
     generation: Option<GenerationId>,
 ) -> Result<Vec<String>> {
@@ -318,8 +320,7 @@ pub async fn start_services_with_new_process_compose(
         print_script: false,
         start_services: true,
         use_fallback_interpreter: false,
-        // FIXME: This should match the current activation.
-        mode: Some(ActivateMode::Dev),
+        mode: Some(activate_mode),
         generation,
         run_args: vec!["true".to_string()],
     }
