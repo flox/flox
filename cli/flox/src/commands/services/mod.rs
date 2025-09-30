@@ -5,6 +5,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::typed::{ActivateMode, Inner, Manifest, Services};
 use flox_rust_sdk::providers::services::{ProcessState, ProcessStates, new_services_to_start};
@@ -199,18 +200,20 @@ pub fn guard_service_commands_available(
 pub fn guard_is_within_activation(
     services_environment: &ServicesEnvironment,
     action: &str,
-) -> Result<()> {
+) -> Result<Option<GenerationId>> {
     let activated_environments = activated_environments();
 
-    if !activated_environments.is_active(&UninitializedEnvironment::from_concrete_environment(
-        &services_environment.environment,
-    )) {
+    let env =
+        UninitializedEnvironment::from_concrete_environment(&services_environment.environment);
+    if !activated_environments.is_active(&env) {
         return Err(ServicesCommandsError::NotInActivation {
             action: action.to_string(),
         }
         .into());
     }
-    Ok(())
+    let generation = activated_environments.is_active_with_generation(&env);
+
+    Ok(generation)
 }
 
 /// Warn about manifest changes that may require services to be restarted, if
@@ -284,6 +287,7 @@ pub async fn start_services_with_new_process_compose(
     environment_select: EnvironmentSelect,
     mut concrete_environment: ConcreteEnvironment,
     names: &[String],
+    generation: Option<GenerationId>,
 ) -> Result<Vec<String>> {
     let lockfile: Lockfile = concrete_environment.lockfile(&flox)?.into();
     let system = flox.system.clone();
@@ -316,8 +320,7 @@ pub async fn start_services_with_new_process_compose(
         use_fallback_interpreter: false,
         // FIXME: This should match the current activation.
         mode: Some(ActivateMode::Dev),
-        // FIXME: This should match the current activation.
-        generation: None,
+        generation,
         run_args: vec!["true".to_string()],
     }
     .activate(

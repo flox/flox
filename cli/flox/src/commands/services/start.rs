@@ -39,7 +39,7 @@ impl Start {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
         environment_subcommand_metric!("services::start", env.environment);
-        guard_is_within_activation(&env, "start")?;
+        let generation = guard_is_within_activation(&env, "start")?;
         guard_service_commands_available(&env, &flox.system)?;
 
         let start_new_process_compose = if !env.expect_services_running() {
@@ -57,6 +57,7 @@ impl Start {
                 self.environment,
                 env.into_inner(),
                 &self.names,
+                generation,
             )
             .await?;
             for name in names {

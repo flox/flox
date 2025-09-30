@@ -40,7 +40,7 @@ impl Restart {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
         environment_subcommand_metric!("services::restart", env.environment);
-        guard_is_within_activation(&env, "restart")?;
+        let generation = guard_is_within_activation(&env, "restart")?;
         guard_service_commands_available(&env, &flox.system)?;
 
         let socket = env.socket();
@@ -72,6 +72,7 @@ impl Restart {
                 self.environment,
                 env.into_inner(),
                 &self.names,
+                generation,
             )
             .await?;
             for name in names {
