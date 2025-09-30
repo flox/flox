@@ -99,3 +99,78 @@ impl Display for DisplayHistory<'_> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::{DateTime, Duration};
+    use flox_rust_sdk::models::environment::generations::test_helpers::{
+        default_add_generation_options,
+        default_switch_generation_options,
+    };
+    use flox_rust_sdk::models::environment::generations::{
+        AddGenerationOptions,
+        AllGenerationsMetadata,
+        SwitchGenerationOptions,
+    };
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn test_fmt_generations() {
+        let mut metadata = AllGenerationsMetadata::default();
+        metadata.add_generation(AddGenerationOptions {
+            timestamp: DateTime::default() + Duration::hours(1),
+            ..default_add_generation_options()
+        });
+        let (id, ..) = metadata.add_generation(AddGenerationOptions {
+            timestamp: DateTime::default() + Duration::hours(2),
+            ..default_add_generation_options()
+        });
+        metadata.add_generation(AddGenerationOptions {
+            timestamp: DateTime::default() + Duration::hours(3),
+            ..default_add_generation_options()
+        });
+        metadata
+            .switch_generation(SwitchGenerationOptions {
+                timestamp: DateTime::default() + Duration::hours(4),
+                ..default_switch_generation_options(id)
+            })
+            .unwrap();
+
+        let actual = DisplayHistory(metadata.history()).to_string();
+
+        let expected = indoc! {"
+            Date:       1970-01-01 01:00:00 UTC
+            Author:     author
+            Host:       host
+            Generation: 1
+            Command:    flox subcommand
+            Summary:    mock
+
+            Date:       1970-01-01 02:00:00 UTC
+            Author:     author
+            Host:       host
+            Generation: 2
+            Command:    flox subcommand
+            Summary:    mock
+
+            Date:       1970-01-01 03:00:00 UTC
+            Author:     author
+            Host:       host
+            Generation: 3
+            Command:    flox subcommand
+            Summary:    mock
+
+            Date:       1970-01-01 04:00:00 UTC
+            Author:     author
+            Host:       host
+            Generation: 2
+            Command:    flox subcommand
+            Summary:    changed current generation 3 -> 2"
+        };
+
+        assert_eq!(actual, expected);
+    }
+}
