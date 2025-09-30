@@ -95,7 +95,6 @@ pub struct Activate {
 
     /// Activate a FloxHub environment at a specific generation.
     #[bpaf(long, short)]
-    #[allow(dead_code)] // TODO: implement
     pub generation: Option<GenerationId>,
 
     /// Command to run interactively in the context of the environment
@@ -287,7 +286,7 @@ impl Activate {
             }
         } else {
             // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
-            flox_active_environments.set_last_active(now_active.clone());
+            flox_active_environments.set_last_active(now_active.clone(), self.generation);
         };
 
         // Determine values for `set_prompt` and `hide_default_prompt`, taking
@@ -829,7 +828,7 @@ mod tests {
     #[test]
     fn test_shell_prompt_default() {
         let mut active_environments = ActiveEnvironments::default();
-        active_environments.set_last_active(DEFAULT_ENV.clone());
+        active_environments.set_last_active(DEFAULT_ENV.clone(), None);
 
         // with `hide_default_prompt = false` we should see the default environment
         let prompt = Activate::make_prompt_environments(false, &active_environments);
@@ -843,8 +842,8 @@ mod tests {
     #[test]
     fn test_shell_prompt_mixed() {
         let mut active_environments = ActiveEnvironments::default();
-        active_environments.set_last_active(DEFAULT_ENV.clone());
-        active_environments.set_last_active(NON_DEFAULT_ENV.clone());
+        active_environments.set_last_active(DEFAULT_ENV.clone(), None);
+        active_environments.set_last_active(NON_DEFAULT_ENV.clone(), None);
 
         // with `hide_default_prompt = false` we should see the default environment
         let prompt = Activate::make_prompt_environments(false, &active_environments);
@@ -932,9 +931,10 @@ mod upgrade_notification_tests {
         let mut environment = ConcreteEnvironment::Path(environment);
 
         let mut active = ActiveEnvironments::default();
-        active.set_last_active(UninitializedEnvironment::from_concrete_environment(
-            &environment,
-        ));
+        active.set_last_active(
+            UninitializedEnvironment::from_concrete_environment(&environment),
+            None,
+        );
 
         write_upgrade_available(&flox, &mut environment);
 

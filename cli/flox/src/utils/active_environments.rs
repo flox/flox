@@ -4,25 +4,34 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use anyhow::Result;
+use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::{FLOX_ACTIVE_ENVIRONMENTS_VAR, UninitializedEnvironment};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::utils::message;
 
+/// An environment that has been activated with `flox activate`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ActiveEnvironment {
+    /// Metadata to (re)open the activated environment.
+    pub environment: UninitializedEnvironment,
+
+    /// Specific generation that was activated, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generation: Option<GenerationId>,
+}
+
 /// A list of environments that are currently active
 /// (i.e. have been activated with `flox activate`)
-///
-/// When inside a `flox activate` shell,
-/// flox stores [UninitializedEnvironment] metadata to (re)open the activated environment
-/// in `$FLOX_ACTIVE_ENVIRONMENTS`.
 ///
 /// Environments which are activated while in a `flox activate` shell, are prepended
 /// -> the most recently activated environment is the _first_ in the list of environments.
 ///
-/// Internally this is implemented through a [VecDeque] which is serialized to JSON.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ActiveEnvironments(VecDeque<UninitializedEnvironment>);
+/// Internally this is implemented through a [VecDeque] which is serialized to JSON and stored
+/// in `$FLOX_ACTIVE_ENVIRONMENTS` by `flox activate`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ActiveEnvironments(VecDeque<ActiveEnvironment>);
 
 impl FromStr for ActiveEnvironments {
     type Err = serde_json::Error;
@@ -31,29 +40,49 @@ impl FromStr for ActiveEnvironments {
         if s.is_empty() {
             return Ok(Self(VecDeque::new()));
         }
-        serde_json::from_str(s).map(Self)
+
+        serde_json::from_str(s).map(Self).or_else(|_| {
+            // Fallback from the old flat UnitializedEnvironment format.
+            serde_json::from_str::<VecDeque<UninitializedEnvironment>>(s).map(|envs| {
+                Self(
+                    envs.into_iter()
+                        .map(|environment| ActiveEnvironment {
+                            environment,
+                            generation: None,
+                        })
+                        .collect(),
+                )
+            })
+        })
     }
 }
 
 impl ActiveEnvironments {
-    /// Read the last active environment
+    /// Read the last active environment.
     pub fn last_active(&self) -> Option<UninitializedEnvironment> {
-        self.0.front().cloned()
+        self.0.front().map(|active| &active.environment).cloned()
     }
 
-    /// Set the last active environment
-    pub fn set_last_active(&mut self, env: UninitializedEnvironment) {
-        self.0.push_front(env);
+    /// Set the last active environment.
+    pub fn set_last_active(
+        &mut self,
+        environment: UninitializedEnvironment,
+        generation: Option<GenerationId>,
+    ) {
+        self.0.push_front(ActiveEnvironment {
+            environment,
+            generation,
+        });
     }
 
     /// Check if the given environment is active
     pub fn is_active(&self, env: &UninitializedEnvironment) -> bool {
-        self.0.contains(env)
+        self.0.iter().any(|active| &active.environment == env)
     }
 
     /// Iterate over the active environments
     pub fn iter(&self) -> impl Iterator<Item = &UninitializedEnvironment> {
-        self.0.iter()
+        self.0.iter().map(|active| &active.environment)
     }
 }
 
@@ -77,15 +106,18 @@ impl Display for ActiveEnvironments {
 }
 
 impl IntoIterator for ActiveEnvironments {
-    type IntoIter = std::collections::vec_deque::IntoIter<Self::Item>;
+    type IntoIter = std::iter::Map<
+        std::collections::vec_deque::IntoIter<ActiveEnvironment>,
+        fn(ActiveEnvironment) -> UninitializedEnvironment,
+    >;
     type Item = UninitializedEnvironment;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+        self.0.into_iter().map(|active| active.environment)
     }
 }
 
-/// Determine the most recently activated environment [ActiveEnvironment].
+/// Determine the most recently activated environment.
 pub(crate) fn last_activated_environment() -> Option<UninitializedEnvironment> {
     let env = activated_environments().last_active();
     debug!(
@@ -140,7 +172,7 @@ mod tests {
         let env2 = path_env_fixture("env2");
 
         let mut active = ActiveEnvironments::default();
-        active.set_last_active(env1.clone());
+        active.set_last_active(env1.clone(), None);
 
         assert!(active.is_active(&env1));
         assert!(!active.is_active(&env2));
@@ -157,7 +189,7 @@ mod tests {
             activated_environments,
         );
 
-        first_active.set_last_active(uninitialized.clone());
+        first_active.set_last_active(uninitialized.clone(), None);
 
         let second_active = temp_env::with_var(
             FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -174,8 +206,8 @@ mod tests {
         let env2 = path_env_fixture("env2");
 
         let mut active = ActiveEnvironments::default();
-        active.set_last_active(env1);
-        active.set_last_active(env2.clone());
+        active.set_last_active(env1, None);
+        active.set_last_active(env2.clone(), None);
 
         let last_active = temp_env::with_var(
             FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -183,5 +215,32 @@ mod tests {
             last_activated_environment,
         );
         assert_eq!(last_active.unwrap(), env2)
+    }
+
+    #[test]
+    fn test_active_environments_forwards_compat_without_generation() {
+        let env1 = path_env_fixture("env1");
+        let env2 = path_env_fixture("env2");
+
+        let old_format = VecDeque::from(vec![env1.clone(), env2.clone()]);
+        let old_format_str = serde_json::to_string(&old_format).unwrap();
+        let active = temp_env::with_var(
+            FLOX_ACTIVE_ENVIRONMENTS_VAR,
+            Some(old_format_str),
+            activated_environments,
+        );
+        assert_eq!(
+            active,
+            ActiveEnvironments(VecDeque::from(vec![
+                ActiveEnvironment {
+                    environment: env1,
+                    generation: None
+                },
+                ActiveEnvironment {
+                    environment: env2,
+                    generation: None
+                },
+            ]))
+        );
     }
 }
