@@ -6,6 +6,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::{FLOX_ACTIVE_ENVIRONMENTS_VAR, UninitializedEnvironment};
+use flox_rust_sdk::models::manifest::typed::ActivateMode;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -20,6 +21,9 @@ pub struct ActiveEnvironment {
     /// Specific generation that was activated, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub generation: Option<GenerationId>,
+
+    /// --mode the environment was activated with
+    pub mode: ActivateMode,
 }
 
 /// A list of environments that are currently active
@@ -49,6 +53,9 @@ impl FromStr for ActiveEnvironments {
                         .map(|environment| ActiveEnvironment {
                             environment,
                             generation: None,
+                            // Dev mode was the default for restarting services
+                            // before we recorded the mode
+                            mode: ActivateMode::Dev,
                         })
                         .collect(),
                 )
@@ -68,16 +75,24 @@ impl ActiveEnvironments {
         &mut self,
         environment: UninitializedEnvironment,
         generation: Option<GenerationId>,
+        mode: ActivateMode,
     ) {
         self.0.push_front(ActiveEnvironment {
             environment,
             generation,
+            mode,
         });
     }
 
     /// Check if the given environment is active
     pub fn is_active(&self, env: &UninitializedEnvironment) -> bool {
         self.0.iter().any(|active| &active.environment == env)
+    }
+
+    /// Return the corresponding ActiveEnvironment if the given
+    /// UninitializedEnvironment is active
+    pub fn get_if_active(&self, env: &UninitializedEnvironment) -> Option<&ActiveEnvironment> {
+        self.0.iter().find(|active| &active.environment == env)
     }
 
     /// Check if the given environment is active with a generation.
@@ -183,7 +198,7 @@ mod tests {
         let env2 = path_env_fixture("env2");
 
         let mut active = ActiveEnvironments::default();
-        active.set_last_active(env1.clone(), None);
+        active.set_last_active(env1.clone(), None, ActivateMode::Dev);
 
         assert!(active.is_active(&env1));
         assert!(!active.is_active(&env2));
@@ -196,10 +211,10 @@ mod tests {
 
         let generation = Some(GenerationId::from_str("42").unwrap());
         let mut active = ActiveEnvironments::default();
-        active.set_last_active(env1.clone(), generation);
+        active.set_last_active(env1.clone(), generation, ActivateMode::Dev);
         assert_eq!(active.is_active_with_generation(&env1), generation);
 
-        active.set_last_active(env2.clone(), None);
+        active.set_last_active(env2.clone(), None, ActivateMode::Dev);
         assert_eq!(active.is_active_with_generation(&env2), None);
     }
 
@@ -214,7 +229,7 @@ mod tests {
             activated_environments,
         );
 
-        first_active.set_last_active(uninitialized.clone(), None);
+        first_active.set_last_active(uninitialized.clone(), None, ActivateMode::Dev);
 
         let second_active = temp_env::with_var(
             FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -231,8 +246,8 @@ mod tests {
         let env2 = path_env_fixture("env2");
 
         let mut active = ActiveEnvironments::default();
-        active.set_last_active(env1, None);
-        active.set_last_active(env2.clone(), None);
+        active.set_last_active(env1, None, ActivateMode::Dev);
+        active.set_last_active(env2.clone(), None, ActivateMode::Dev);
 
         let last_active = temp_env::with_var(
             FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -259,11 +274,13 @@ mod tests {
             ActiveEnvironments(VecDeque::from(vec![
                 ActiveEnvironment {
                     environment: env1,
-                    generation: None
+                    generation: None,
+                    mode: ActivateMode::Dev,
                 },
                 ActiveEnvironment {
                     environment: env2,
-                    generation: None
+                    generation: None,
+                    mode: ActivateMode::Dev,
                 },
             ]))
         );
