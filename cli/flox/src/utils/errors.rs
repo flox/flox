@@ -1,5 +1,9 @@
+use std::ops::Deref;
+
 use flox_rust_sdk::data::CanonicalizeError;
+use flox_rust_sdk::models::environment::generations::{HistorySpec, WithOtherFields};
 use flox_rust_sdk::models::environment::managed_environment::{
+    DivergedMetadata,
     GENERATION_LOCK_FILENAME,
     ManagedEnvironmentError,
 };
@@ -14,6 +18,7 @@ use flox_rust_sdk::models::floxmeta::FloxMetaError;
 use flox_rust_sdk::models::lockfile::ResolveError;
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use flox_rust_sdk::providers::services::{LoggedError, ServiceError};
+use indent::indent_by;
 use indoc::{formatdoc, indoc};
 use tracing::trace;
 
@@ -425,20 +430,23 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             * is not an IP address or 'localhost'
         "},
 
-        ManagedEnvironmentError::Diverged { .. } => formatdoc! {"
-            The environment has diverged from the remote.
+        ManagedEnvironmentError::Diverged(diverged_metadata) => formatdoc! {"
+                The environment has diverged from the remote:
 
-            This can happen if the environment is modified and pushed from another machine.
+                {formatted_metadata}
 
-            To resolve this issue, either
-             * run 'flox pull --force'
-               to discard local changes
-               and reset the environment to the latest upstream version.
-             * run 'flox push --force'
-               to overwrite the remote environment with the local changes.
-               Attention: this will discard any changes made on the remote machine
-               and cause conflicts when the remote machine tries to pull or push!
-        "},
+                This can happen if the environment is modified and pushed from another machine.
+                The full history can be inspected with 'flox generations [list|history]'.
+
+                To resolve this issue, either
+                 * run 'flox pull --force'
+                   to discard local changes and reset the environment to the upstream version.
+                 * run 'flox push --force'
+                   to overwrite the remote environment with the local changes.
+                   Attention: this will discard any changes made on the remote machine
+                   and cause conflicts when the remote machine tries to pull or push!
+            ",
+        formatted_metadata = format_diverged_metadata(diverged_metadata)},
         ManagedEnvironmentError::AccessDenied => formatdoc! {"
             Access denied to the remote environment.
 
@@ -544,6 +552,9 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
         RemoteEnvironmentError::ResetManagedEnvironment(ManagedEnvironmentError::FetchUpdates(
             GitRemoteCommandError::RefNotFound(_),
         ))
+        | RemoteEnvironmentError::GetLatestVersion(FloxMetaError::FetchBranch(
+            GitRemoteCommandError::RefNotFound(_),
+        ))
         | RemoteEnvironmentError::GetLatestVersion(FloxMetaError::CloneBranch(
             GitRemoteCommandError::AccessDenied,
         ))
@@ -558,18 +569,23 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
 
             {err}
             ", err = format_managed_error(err)},
+
         RemoteEnvironmentError::GetLatestVersion(err) => formatdoc! {"
             Failed to get latest version of remote environment: {err}
             ", err = display_chain(err)},
-        RemoteEnvironmentError::UpdateUpstream(ManagedEnvironmentError::Diverged { .. }) => {
-            formatdoc! {"
+        RemoteEnvironmentError::UpdateUpstream(ManagedEnvironmentError::Diverged(
+            diverged_metadata,
+        )) => formatdoc! {"
             The remote environment has diverged.
+
+            {formatted_metadata}
 
             This can happen if the environment is modified and pushed from another machine
             at the same time.
 
             Please try again after verifying the concurrent changes.
-        "}
+            ",
+            formatted_metadata = format_diverged_metadata(diverged_metadata)
         },
         RemoteEnvironmentError::UpdateUpstream(ManagedEnvironmentError::AccessDenied) => {
             formatdoc! {"
@@ -650,6 +666,50 @@ pub fn format_service_error(err: &ServiceError) -> String {
             or activate the environment with 'flox activate --start-services'.
         "},
         _ => display_chain(err),
+    }
+}
+
+pub fn format_diverged_metadata(diversion: &DivergedMetadata) -> String {
+    fn format_entry(entry: &HistorySpec) -> String {
+        formatdoc! {"
+            {author} {summary} on {host}
+            Generation:  {generation}
+            Timestamp: {timestamp}",
+            author = entry.author,
+            summary = entry.summary(),
+            host = entry.hostname,
+            timestamp = entry.timestamp,
+            generation = entry.current_generation
+        }
+    }
+
+    let local_last_entry = diversion
+        .local
+        .history()
+        .iter()
+        .next_back()
+        .map(WithOtherFields::deref)
+        .map(format_entry)
+        .unwrap_or("Empty history".into());
+    let remote_last_entry = diversion
+        .remote
+        .history()
+        .iter()
+        .next_back()
+        .map(WithOtherFields::deref)
+        .map(format_entry)
+        .unwrap_or("Empty history".into());
+
+    formatdoc! {"
+        Local:
+
+         * {local_last_entry}
+
+        Remote:
+
+         * {remote_last_entry}",
+        local_last_entry = indent_by(3, local_last_entry),
+        remote_last_entry = indent_by(3, remote_last_entry)
     }
 }
 
