@@ -214,6 +214,15 @@ if [ -n "$FLOX_CMD" ]; then
   set -- "$FLOX_CMD"
 fi
 
+# This is distinct from "_FLOX_ACTIVATION_MODE"
+if [ $# -gt 0 ]; then
+  _flox_shell_mode="command"
+elif [ -t 1 ] || [ -n "${_FLOX_FORCE_INTERACTIVE:-}" ]; then
+  _flox_shell_mode="interactive"
+else
+  _flox_shell_mode="inplace"
+fi
+
 # Propagate required variables that are documented as exposed.
 export FLOX_ENV="${_FLOX_ENV}"
 
@@ -290,11 +299,11 @@ export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
 if [ "$_FLOX_ATTACH" == true ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/attach.bash"
-  attach "$_FLOX_ACTIVATION_STATE_DIR"
+  attach "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
 else
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/start.bash"
-  start "$_FLOX_ACTIVATION_STATE_DIR"
+  start "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
 fi
 
 # Start services before the shell or command is invoked
@@ -303,16 +312,23 @@ if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
   source "${_activate_d}/start-services.bash"
 fi
 
-# From this point on the activation process depends on the mode:
-if [ $# -gt 0 ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/attach-command.bash"
-elif [ -t 1 ] || [ -n "${_FLOX_FORCE_INTERACTIVE:-}" ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/attach-interactive.bash"
-else
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/attach-inplace.bash"
-fi
+case "${_flox_shell_mode}" in
+  command)
+    # shellcheck source-path=SCRIPTDIR/activate.d
+    source "${_activate_d}/attach-command.bash"
+    ;;
+  interactive)
+    # shellcheck source-path=SCRIPTDIR/activate.d
+    source "${_activate_d}/attach-interactive.bash"
+    ;;
+  inplace)
+    # shellcheck source-path=SCRIPTDIR/activate.d
+    source "${_activate_d}/attach-inplace.bash"
+    ;;
+  *)
+    echo "Unsupported shell mode: ${_flox_shell_mode}" >&2
+    exit 1
+    ;;
+esac
 
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END
