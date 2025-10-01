@@ -839,7 +839,7 @@ pub struct SingleGenerationMetadata {
     pub created: DateTime<Utc>,
 
     /// unix timestamp of the time when this generation was last set as live
-    /// `None` if this generation has never been set as live
+    /// `None` if this generation is currently live
     pub last_live: Option<DateTime<Utc>>,
 
     /// log message(s) describing the change from the previous generation
