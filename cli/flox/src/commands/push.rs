@@ -149,7 +149,7 @@ impl Push {
             EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::AccessDenied) => formatdoc! {"
                 You do not have permission to write to {owner}/{name}
             "}.into(),
-            EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::Diverged) if create_remote => formatdoc! {"
+            EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::Diverged{..}) if create_remote => formatdoc! {"
                 An environment named {owner}/{name} already exists!
 
                 To rename your environment: 'flox edit --name <new name>'

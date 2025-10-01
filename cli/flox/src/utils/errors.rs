@@ -425,7 +425,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             * is not an IP address or 'localhost'
         "},
 
-        ManagedEnvironmentError::Diverged => formatdoc! {"
+        ManagedEnvironmentError::Diverged { .. } => formatdoc! {"
             The environment has diverged from the remote.
 
             This can happen if the environment is modified and pushed from another machine.
@@ -560,16 +560,17 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
             ", err = format_managed_error(err)},
         RemoteEnvironmentError::GetLatestVersion(err) => formatdoc! {"
             Failed to get latest version of remote environment: {err}
-
             ", err = display_chain(err)},
-        RemoteEnvironmentError::UpdateUpstream(ManagedEnvironmentError::Diverged) => formatdoc! {"
+        RemoteEnvironmentError::UpdateUpstream(ManagedEnvironmentError::Diverged { .. }) => {
+            formatdoc! {"
             The remote environment has diverged.
 
             This can happen if the environment is modified and pushed from another machine
             at the same time.
 
             Please try again after verifying the concurrent changes.
-        "},
+        "}
+        },
         RemoteEnvironmentError::UpdateUpstream(ManagedEnvironmentError::AccessDenied) => {
             formatdoc! {"
             Access denied to the remote environment.

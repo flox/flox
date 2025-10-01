@@ -132,7 +132,7 @@ pub enum ManagedEnvironmentError {
     #[error("project wasn't found at path {path}: {err}")]
     ProjectNotFound { path: PathBuf, err: std::io::Error },
     #[error("upstream floxmeta branch diverged from local branch")]
-    Diverged,
+    Diverged(DivergedMetadata),
     #[error("access to floxmeta repository was denied")]
     AccessDenied,
     #[error("environment '{env_ref}' does not exist at upstream '{upstream}'")]
@@ -197,6 +197,12 @@ pub enum ManagedEnvironmentError {
 
     #[error(transparent)]
     Core(#[from] CoreEnvironmentError),
+}
+
+#[derive(Debug)]
+pub struct DivergedMetadata {
+    pub local: AllGenerationsMetadata,
+    pub remote: AllGenerationsMetadata,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -1622,7 +1628,15 @@ impl ManagedEnvironment {
         // Push the branch for this environment to FloxHub
         match temp_floxmeta_git.push_ref("upstream", "HEAD", force) {
             Err(GitRemoteCommandError::AccessDenied) => Err(ManagedEnvironmentError::AccessDenied)?,
-            Err(GitRemoteCommandError::Diverged) => Err(ManagedEnvironmentError::Diverged)?,
+            Err(GitRemoteCommandError::Diverged) => {
+                Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
+                    local: generations
+                        .metadata()
+                        .map_err(ManagedEnvironmentError::Generations)?
+                        .into_inner(),
+                    remote: todo!(),
+                }))?
+            },
             Err(e) => Err(ManagedEnvironmentError::Push(e))?,
             _ => {},
         }
@@ -1664,9 +1678,8 @@ impl ManagedEnvironment {
         // That generation could have a divergent manifest and lock,
         // or it could fail to build.
         // So we have to verify we don't have a "broken" generation before pushing.
+        let generations = self.generations();
         {
-            let generations = self.generations();
-
             let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
             if !Self::validate_checkout(&local_checkout, &generations)? {
@@ -1710,7 +1723,20 @@ impl ManagedEnvironment {
                 .map_err(ManagedEnvironmentError::Git)?;
 
             if !consistent_history {
-                Err(ManagedEnvironmentError::Diverged)?;
+                let local = generations
+                    .metadata()
+                    .map_err(ManagedEnvironmentError::Generations)?
+                    .into_inner();
+
+                let remote = Generations::new(self.floxmeta.git.clone(), sync_branch.clone())
+                    .metadata()
+                    .map_err(ManagedEnvironmentError::Generations)?
+                    .into_inner();
+
+                Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
+                    local,
+                    remote,
+                }))?;
             }
         }
         self.floxmeta
@@ -1784,7 +1810,20 @@ impl ManagedEnvironment {
             .branch_contains_commit(&project_branch, &sync_branch)
             .map_err(ManagedEnvironmentError::Git)?;
         if !consistent_history && !force {
-            Err(ManagedEnvironmentError::Diverged)?;
+            let local = generations
+                .metadata()
+                .map_err(ManagedEnvironmentError::Generations)?
+                .into_inner();
+
+            let remote = Generations::new(self.floxmeta.git.clone(), sync_branch.clone())
+                .metadata()
+                .map_err(ManagedEnvironmentError::Generations)?
+                .into_inner();
+
+            Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
+                local,
+                remote,
+            }))?;
         }
 
         let sync_branch_commit = self.floxmeta.git.branch_hash(&sync_branch).ok();

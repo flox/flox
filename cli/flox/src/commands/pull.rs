@@ -523,7 +523,7 @@ impl Pull {
                     let message = "You do not have permission to pull this environment";
                     anyhow::Error::msg(message)
                 },
-                ManagedEnvironmentError::Diverged => {
+                ManagedEnvironmentError::Diverged { .. } => {
                     let message = "The environment has diverged from the remote version";
                     anyhow::Error::msg(message)
                 },
