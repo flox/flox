@@ -1377,7 +1377,6 @@ pub mod types {
     ///  ],
     ///  "type": "object",
     ///  "required": [
-    ///    "description",
     ///    "drv_path",
     ///    "name",
     ///    "outputs",
@@ -1393,7 +1392,10 @@ pub mod types {
     ///    },
     ///    "description": {
     ///      "title": "Description",
-    ///      "type": "string"
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    },
     ///    "drv_path": {
     ///      "title": "Drv Path",
@@ -1455,7 +1457,8 @@ pub mod types {
     pub struct PackageDerivationInput {
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub broken: ::std::option::Option<bool>,
-        pub description: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub description: ::std::option::Option<::std::string::String>,
         pub drv_path: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub license: ::std::option::Option<::std::string::String>,
@@ -1506,7 +1509,6 @@ pub mod types {
     ///  ],
     ///  "type": "object",
     ///  "required": [
-    ///    "description",
     ///    "drv_path",
     ///    "name",
     ///    "outputs",
@@ -1522,7 +1524,10 @@ pub mod types {
     ///    },
     ///    "description": {
     ///      "title": "Description",
-    ///      "type": "string"
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    },
     ///    "drv_path": {
     ///      "title": "Drv Path",
@@ -1584,7 +1589,8 @@ pub mod types {
     pub struct PackageDerivationOutput {
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub broken: ::std::option::Option<bool>,
-        pub description: ::std::string::String,
+        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        pub description: ::std::option::Option<::std::string::String>,
         pub drv_path: ::std::string::String,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         pub license: ::std::option::Option<::std::string::String>,
