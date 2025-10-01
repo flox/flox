@@ -601,7 +601,7 @@ where
 
         let build_info = UserBuildPublish {
             derivation: UserDerivationInfo {
-                description: build_metadata.description.clone().unwrap_or_default(),
+                description: build_metadata.description.clone(),
                 drv_path: build_metadata.drv_path.clone(),
                 license: build_metadata.license.clone(),
                 name: build_metadata.name.clone(),

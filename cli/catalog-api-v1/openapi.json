@@ -2641,10 +2641,6 @@
             "type": "string",
             "title": "Name"
           },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
           "outputs": {
             "$ref": "#/components/schemas/PackageOutputs"
           },
@@ -2655,6 +2651,11 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "nullable": true,
+            "type": "string"
           },
           "pname": {
             "title": "Pname",
@@ -2687,7 +2688,6 @@
           "drv_path",
           "system",
           "name",
-          "description",
           "outputs"
         ],
         "title": "PackageDerivation",
@@ -2722,10 +2722,6 @@
             "type": "string",
             "title": "Name"
           },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
           "outputs": {
             "$ref": "#/components/schemas/PackageOutputs"
           },
@@ -2736,6 +2732,11 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "nullable": true,
+            "type": "string"
           },
           "pname": {
             "title": "Pname",
@@ -2768,7 +2769,6 @@
           "drv_path",
           "system",
           "name",
-          "description",
           "outputs"
         ],
         "title": "PackageDerivation",
