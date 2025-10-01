@@ -1698,9 +1698,9 @@
         "tags": [
           "info"
         ],
-        "summary": "Get a derivation for a NAR file",
+        "summary": "Get related information for a NAR file",
         "description": "Get the attr_path for a package based on its NAR file name.",
-        "operationId": "derivation_for_nar_file_api_v1_catalog_info_nar__nar_file__get",
+        "operationId": "nar_file_lookup_api_v1_catalog_info_nar__nar_file__get",
         "security": [
           {
             "HTTPBearer": []
@@ -1722,11 +1722,114 @@
         ],
         "responses": {
           "200": {
-            "description": "One of (possibly many) derivations corresponding to the NAR file",
+            "description": "Information about the derivation(s) related to the NAR file",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PackageDerivation-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/info/dependencies/{storepath}/raw": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "Get a raw dependency report for a storepath (excluding /nix/store/ prefix)",
+        "description": "Get the attr_path for a package based on its NAR file name.",
+        "operationId": "raw_dependency_report_api_v1_catalog_info_dependencies__storepath__raw_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storepath",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Storepath"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A raw dependency report for the given storepath",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RawDependencyReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/info/dependencies/{storepath}/spdx": {
+      "get": {
+        "tags": [
+          "info"
+        ],
+        "summary": "Get a SPDX report for a storepath (excluding /nix/store/ prefix)",
+        "operationId": "spdx_report_api_v1_catalog_info_dependencies__storepath__spdx_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          },
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "storepath",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Storepath"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A SPDX report for the given storepath",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response 200 Spdx Report Api V1 Catalog Info Dependencies  Storepath  Spdx Get"
                 }
               }
             }
@@ -1981,13 +2084,6 @@
       },
       "CatalogStatus": {
         "properties": {
-          "catalogs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Catalogs"
-          },
           "systems": {
             "items": {
               "type": "string"
@@ -2049,7 +2145,6 @@
         },
         "type": "object",
         "required": [
-          "catalogs",
           "systems",
           "pages_ct",
           "latest_rev",
@@ -2241,6 +2336,27 @@
           "change_in_version_format"
         ],
         "title": "MessageType"
+      },
+      "NarFileLookup": {
+        "properties": {
+          "storepath": {
+            "type": "string",
+            "title": "Storepath"
+          },
+          "derivations": {
+            "items": {
+              "$ref": "#/components/schemas/PackageDerivation-Output"
+            },
+            "type": "array",
+            "title": "Derivations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "storepath",
+          "derivations"
+        ],
+        "title": "NarFileLookup"
       },
       "NarInfo": {
         "properties": {
@@ -3289,6 +3405,31 @@
           "catalogs"
         ],
         "title": "PublishedCatalogInfo"
+      },
+      "RawDependencyReport": {
+        "properties": {
+          "storepath": {
+            "type": "string",
+            "title": "Storepath"
+          },
+          "dependencies": {
+            "additionalProperties": {
+              "nullable": true,
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Dependencies"
+          }
+        },
+        "type": "object",
+        "required": [
+          "storepath",
+          "dependencies"
+        ],
+        "title": "RawDependencyReport"
       },
       "ResolutionMessageGeneral": {
         "properties": {
