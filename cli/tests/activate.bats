@@ -5312,3 +5312,14 @@ EOF
   project_setup_common
   profile_scripts_can_modify_path_with_default_environment zsh
 }
+
+@test "zsh: path modifications are preserved" {
+  project_setup
+  echo 'export PATH="/rc_extra_path:$PATH";' > "$HOME/.zshenv.extra"
+  echo "source <(\"$FLOX_BIN\" activate -d \"$PROJECT_DIR\");" >> "$HOME/.zshenv.extra"
+  tomlq --in-place --toml-output --arg hook 'export PATH="/project:$PATH";' '.hook."on-activate" = $hook' .flox/env/manifest.toml
+
+  FLOX_SHELL=zsh run zsh -c 'echo $PATH'
+  assert_output --partial "/project:"
+  assert_output --partial "/rc_extra_path:"
+}
