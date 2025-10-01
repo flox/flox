@@ -205,16 +205,15 @@ pub fn guard_is_within_activation(
 
     let env =
         UninitializedEnvironment::from_concrete_environment(&services_environment.environment);
-    if !activated_environments.is_active(&env) {
-        return Err(ServicesCommandsError::NotInActivation {
+
+    if let Some(active) = activated_environments.get_if_active(&env) {
+        Ok((active.mode.clone(), active.generation))
+    } else {
+        Err(ServicesCommandsError::NotInActivation {
             action: action.to_string(),
         }
-        .into());
+        .into())
     }
-    let generation = activated_environments.is_active_with_generation(&env);
-
-    // TODO: mode should come from the ActiveEnvironment
-    Ok((ActivateMode::Dev, generation))
 }
 
 /// Warn about manifest changes that may require services to be restarted, if

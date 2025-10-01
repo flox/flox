@@ -1376,14 +1376,13 @@ EOF
 }
 
 @test "start: respects activation mode" {
-  skip "behavior not yet fixed"
   # Run a service that checks if CPATH is set
   # CPATH should be set in dev mode but not in run mode
   MANIFEST_CONTENTS="$(cat << 'EOF'
     version = 1
 
     [services]
-    one.command = "[[ -n '$CPATH' ]]"
+    one.command = "[[ -n \"$CPATH\" ]]"
 EOF
   )"
 
