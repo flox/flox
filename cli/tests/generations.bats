@@ -62,6 +62,7 @@ EOF
   export FLOXHUB_GIT_WARNING
 }
 teardown() {
+  wait_for_watchdogs "$PROJECT_DIR" || return 1
   project_teardown
   common_test_teardown
 }
