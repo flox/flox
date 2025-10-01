@@ -261,7 +261,7 @@ impl Pull {
 
         let mut env = {
             let result = ManagedEnvironment::open(flox, pointer, &dot_flox_path, None)
-                .map_err(Self::handle_error);
+                .map_err(Self::handle_open_error_during_pull_new);
             match result {
                 Err(err) => {
                     fs::remove_dir_all(&dot_flox_path)
@@ -516,7 +516,13 @@ impl Pull {
         Ok(choice == 1)
     }
 
-    fn handle_error(err: EnvironmentError) -> anyhow::Error {
+    // TODO: consider removing this function.
+    // 1. Its only used by [Self::pull_new_environment]
+    // 2. The access denied variant is not handled much different than its generic counter part
+    //    in errors.rs.
+    // 3. [UpstreamNotFound] is slightly different but could be folded into a generic message as well,
+    //    inlined into the caller.
+    fn handle_open_error_during_pull_new(err: EnvironmentError) -> anyhow::Error {
         if let EnvironmentError::ManagedEnvironment(err) = err {
             match err {
                 ManagedEnvironmentError::AccessDenied => {
