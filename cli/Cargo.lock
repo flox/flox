@@ -1030,6 +1030,7 @@ dependencies = [
  "indoc",
  "inquire",
  "itertools",
+ "minus",
  "nix",
  "oauth2",
  "once_cell",
@@ -2157,6 +2158,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "minus"
+version = "5.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "093bd0520d2a37943566a73750e6d44094dac75d66a978d1f0d97ffc78686832"
+dependencies = [
+ "crossbeam-channel",
+ "crossterm 0.27.0",
+ "once_cell",
+ "parking_lot",
+ "regex",
+ "textwrap",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "mio"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2320,6 +2336,9 @@ name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
+dependencies = [
+ "parking_lot_core",
+]
 
 [[package]]
 name = "openapiv3"

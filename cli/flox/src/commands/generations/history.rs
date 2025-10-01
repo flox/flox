@@ -16,12 +16,17 @@ use tracing::instrument;
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
 use crate::utils::dialog::Dialog;
+use crate::utils::message::page_output;
 
 /// Arguments for the `flox generations history` command
 #[derive(Bpaf, Debug, Clone)]
 pub struct History {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
+
+    /// Disable interactive pager
+    #[bpaf(long)]
+    no_pager: bool,
 }
 
 impl History {
@@ -35,8 +40,13 @@ impl History {
         let env: GenerationsEnvironment = env.try_into()?;
         let metadata = env.generations_metadata()?;
 
-        println!("{}", DisplayHistory(metadata.history()));
-        Ok(())
+        let output = DisplayHistory(metadata.history());
+        if self.no_pager {
+            println!("{}", output);
+            return Ok(());
+        }
+
+        page_output(output.to_string())
     }
 }
 
@@ -87,7 +97,7 @@ impl Display for DisplayChange<'_> {
 struct DisplayHistory<'m>(&'m generations::History);
 impl Display for DisplayHistory<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut iter = self.0.into_iter().peekable();
+        let mut iter = self.0.into_iter().rev().peekable();
         while let (Some(change), peek) = (iter.next(), iter.peek()) {
             let next = DisplayChange { change };
             write!(f, "{}", next)?;
@@ -97,5 +107,80 @@ impl Display for DisplayHistory<'_> {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{DateTime, Duration};
+    use flox_rust_sdk::models::environment::generations::test_helpers::{
+        default_add_generation_options,
+        default_switch_generation_options,
+    };
+    use flox_rust_sdk::models::environment::generations::{
+        AddGenerationOptions,
+        AllGenerationsMetadata,
+        SwitchGenerationOptions,
+    };
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn test_fmt_generations() {
+        let mut metadata = AllGenerationsMetadata::default();
+        metadata.add_generation(AddGenerationOptions {
+            timestamp: DateTime::default() + Duration::hours(1),
+            ..default_add_generation_options()
+        });
+        let (id, ..) = metadata.add_generation(AddGenerationOptions {
+            timestamp: DateTime::default() + Duration::hours(2),
+            ..default_add_generation_options()
+        });
+        metadata.add_generation(AddGenerationOptions {
+            timestamp: DateTime::default() + Duration::hours(3),
+            ..default_add_generation_options()
+        });
+        metadata
+            .switch_generation(SwitchGenerationOptions {
+                timestamp: DateTime::default() + Duration::hours(4),
+                ..default_switch_generation_options(id)
+            })
+            .unwrap();
+
+        let actual = DisplayHistory(metadata.history()).to_string();
+
+        let expected = indoc! {"
+            Date:       1970-01-01 04:00:00 UTC
+            Author:     author
+            Host:       host
+            Generation: 2
+            Command:    flox subcommand
+            Summary:    changed current generation 3 -> 2
+
+            Date:       1970-01-01 03:00:00 UTC
+            Author:     author
+            Host:       host
+            Generation: 3
+            Command:    flox subcommand
+            Summary:    mock
+
+            Date:       1970-01-01 02:00:00 UTC
+            Author:     author
+            Host:       host
+            Generation: 2
+            Command:    flox subcommand
+            Summary:    mock
+
+            Date:       1970-01-01 01:00:00 UTC
+            Author:     author
+            Host:       host
+            Generation: 1
+            Command:    flox subcommand
+            Summary:    mock"
+        };
+
+        assert_eq!(actual, expected);
     }
 }

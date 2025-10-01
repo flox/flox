@@ -6,6 +6,7 @@ use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::models::manifest::composite::{COMPOSER_MANIFEST_ID, Warning};
 use flox_rust_sdk::models::manifest::raw::PackageToInstall;
 use indoc::formatdoc;
+use minus::{ExitStrategy, Pager, page_all};
 use tracing::info;
 
 /// Write a message to stderr.
@@ -56,6 +57,23 @@ pub(crate) fn package_installed(pkg: &PackageToInstall, environment_description:
         "'{}' installed to environment {environment_description}",
         pkg.id()
     ));
+}
+
+/// Page large output to the terminal.
+/// The output will be printed without a pager if it's not larger than the
+/// terminal window or the terminal is not interactive.
+pub(crate) fn page_output(s: impl Into<String>) -> anyhow::Result<()> {
+    let pager = Pager::new();
+
+    // Allow destructors to run.
+    pager.set_exit_strategy(ExitStrategy::PagerQuit)?;
+    // Don't use pager if output fits in terminal.
+    pager.set_run_no_overflow(false)?;
+
+    pager.set_text(s)?;
+    page_all(pager)?;
+
+    Ok(())
 }
 
 /// Display a message for packages that were successfully installed for all
