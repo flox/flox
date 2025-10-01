@@ -141,6 +141,14 @@ pub enum ManagedEnvironmentError {
         upstream: String,
         user: Option<String>,
     },
+    /// [ManagedEnvironment::push_new] may return this
+    /// if the pushed environmentname already exists
+    #[error("environment '{env_ref}' already exists at upstream '{upstream}'")]
+    UpstreamAlreadyExists {
+        env_ref: EnvironmentRef,
+        upstream: String,
+    },
+
     #[error("failed to push environment")]
     Push(#[source] GitRemoteCommandError),
     #[error("cannot push environment that includes local environments")]
@@ -1574,7 +1582,7 @@ impl ManagedEnvironment {
         dot_flox_path: CanonicalPath,
         mut core_environment: CoreEnvironment,
     ) -> Result<Self, EnvironmentError> {
-        let pointer = ManagedPointer::new(owner, name.clone(), &flox.floxhub);
+        let pointer = ManagedPointer::new(owner.clone(), name.clone(), &flox.floxhub);
 
         let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
         let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().keep();
@@ -1629,13 +1637,10 @@ impl ManagedEnvironment {
         match temp_floxmeta_git.push_ref("upstream", "HEAD", force) {
             Err(GitRemoteCommandError::AccessDenied) => Err(ManagedEnvironmentError::AccessDenied)?,
             Err(GitRemoteCommandError::Diverged) => {
-                Err(ManagedEnvironmentError::Diverged(DivergedMetadata {
-                    local: generations
-                        .metadata()
-                        .map_err(ManagedEnvironmentError::Generations)?
-                        .into_inner(),
-                    remote: todo!(),
-                }))?
+                Err(ManagedEnvironmentError::UpstreamAlreadyExists {
+                    env_ref: EnvironmentRef::new_from_parts(owner, name),
+                    upstream: flox.floxhub.base_url().to_string(),
+                })?
             },
             Err(e) => Err(ManagedEnvironmentError::Push(e))?,
             _ => {},
