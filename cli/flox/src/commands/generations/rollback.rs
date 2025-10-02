@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
@@ -43,8 +43,7 @@ impl Rollback {
         let Some((previously_active_generation_id, _meta)) =
             determine_previous_generation(&metadata)
         else {
-            message::warning("No previous generation to rollback to.");
-            return Ok(());
+            bail!("No previous generation to rollback to.");
         };
 
         debug!(%previously_active_generation_id, "target generation determined, attempting rollback");
