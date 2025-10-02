@@ -119,6 +119,27 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=managed,pull,managed:pull
+@test "managed environment can't be pushed to another owner" {
+  make_empty_managed_env
+
+  NEW_OWNER="another-owner"
+  RUST_BACKTRACE=0 run "$FLOX_BIN" push --owner "$NEW_OWNER"
+  assert_failure
+  assert_output - << EOF
+⚠️  Using file://${FLOX_FLOXHUB_PATH} as FloxHub host
+'\$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
+alternative FloxHub hosts are not yet supported!
+
+❌ ERROR: Cannot change the owner of an environment already pushed to FloxHub.
+
+To push this environment to another owner or org:
+* Push any outstanding changes with 'flox push'
+* Create copy of the environment with 'flox pull --copy -d <directory> ${OWNER}/${PROJECT_NAME}'
+* Push the copy to the new owner with 'flox push --owner ${NEW_OWNER}'
+EOF
+}
+
+# bats test_tags=managed,pull,managed:pull
 @test "m4: pushed environment can be pulled" {
   mkdir a a_data
   mkdir b b_data

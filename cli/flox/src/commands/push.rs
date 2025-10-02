@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::{EnvironmentOwner, Flox};
@@ -34,6 +34,7 @@ pub struct Push {
     dir: Option<PathBuf>,
 
     /// FloxHub account to push environment to (default: current FloxHub user).
+    /// Can only be specified when pushing an environment for the first time.
     /// Organizations may use either '--owner=<orgname>' or alias '--org=<orgname>'.
     #[bpaf(long("owner"), long("org"), short, argument("owner"))]
     owner: Option<EnvironmentOwner>,
@@ -65,14 +66,27 @@ impl Push {
             CanonicalPath::new(&dot_flox.path).expect("DotFlox path was just opened");
 
         match dot_flox.pointer {
+            // Update an existing managed environment
             EnvironmentPointer::Managed(managed_pointer) => {
+                if let Some(owner) = self.owner
+                    && owner != managed_pointer.owner
+                {
+                    bail!(formatdoc! {"
+                        Cannot change the owner of an environment already pushed to FloxHub.
+
+                        To push this environment to another owner or org:
+                        * Push any outstanding changes with 'flox push'
+                        * Create copy of the environment with 'flox pull --copy -d <directory> {existing_owner}/{existing_name}'
+                        * Push the copy to the new owner with 'flox push --owner {owner}'
+                    ", existing_owner = managed_pointer.owner, existing_name = managed_pointer.name});
+                }
+
                 let message = Self::push_message(&managed_pointer, self.force, true)?;
-
                 Self::push_managed_env(&flox, managed_pointer, &dot_flox.path, self.force)?;
-
                 message::updated(message);
             },
 
+            // Convert a path environment to a managed environment
             EnvironmentPointer::Path(path_pointer) => {
                 let owner = if let Some(owner) = self.owner {
                     owner
