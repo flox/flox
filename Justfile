@@ -160,6 +160,8 @@ gen-unit-data-no-publish force="":
         export _FLOX_UNIT_TEST_RECORD="missing"
     fi
 
+    echo "Disk usage before cargo invocation in gen-unit-data-no-publish"
+    df -h
     # Use remote services for non-publish tests
     {{cargo_test_invocation}} --filterset 'not (test(providers::build::tests) | test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog))'
 
@@ -199,6 +201,8 @@ gen-unit-data-for-publish floxhub_repo_path force="":
         export _FLOX_UNIT_TEST_RECORD="missing"
     fi
 
+    echo "Disk usage before cargo invocation in gen-unit-data-for-publish"
+    df -h
     # Run the tests that will regenerate the mocks
     {{cargo_test_invocation}} --no-fail-fast --filterset 'test(providers::publish) | test(commands::publish) | test(providers::catalog::tests::creates_new_catalog)'
 
