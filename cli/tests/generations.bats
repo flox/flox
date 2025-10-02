@@ -202,7 +202,7 @@ ${FLOXHUB_GIT_WARNING?}
 
 If you wish to modify the environment at this generation:
 - Exit the current activation of the environment
-- Active the environment without specifying a generation
+- Activate the environment without specifying a generation
 - Optionally switch the live generation: 'flox generation switch 3'
 EOF
 }

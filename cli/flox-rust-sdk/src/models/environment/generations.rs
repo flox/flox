@@ -409,7 +409,7 @@ pub enum GenerationsError {
          \n\
          If you wish to modify the environment at this generation:\n\
          - Exit the current activation of the environment\n\
-         - Active the environment without specifying a generation\n\
+         - Activate the environment without specifying a generation\n\
          - Optionally switch the live generation: 'flox generation switch {0}'"
     )]
     ActivatedGenerationImmutable(GenerationId),
