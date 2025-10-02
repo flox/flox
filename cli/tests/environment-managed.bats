@@ -49,7 +49,7 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 # init path environment and push to remote
-function make_empty_remote_env() {
+function make_empty_managed_env() {
   "$FLOX_BIN" init
   "$FLOX_BIN" push --owner "$OWNER"
 }
@@ -67,7 +67,7 @@ dot_flox_exists() {
 
 # bats test_tags=install,managed
 @test "m1: install a package to a managed environment" {
-  make_empty_remote_env
+  make_empty_managed_env
 
   run --separate-stderr "$FLOX_BIN" list --name
   assert_success
@@ -85,7 +85,7 @@ dot_flox_exists() {
 
 # bats test_tags=uninstall,managed
 @test "m2: uninstall a package from a managed environment" {
-  make_empty_remote_env
+  make_empty_managed_env
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello
 
@@ -99,7 +99,7 @@ dot_flox_exists() {
 
 # bats test_tags=edit,managed
 @test "m3: edit a package from a managed environment" {
-  make_empty_remote_env
+  make_empty_managed_env
 
   TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
 
@@ -279,7 +279,7 @@ Remote:
 
 # bats test_tags=managed,search,managed:search
 @test "m8: search works in managed environment" {
-  make_empty_remote_env
+  make_empty_managed_env
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/hello.yaml" \
     run "$FLOX_BIN" search hello
@@ -290,7 +290,7 @@ Remote:
 
 # bats test_tags=managed,activate,managed:activate
 @test "m9: activate works in managed environment" {
-  make_empty_remote_env
+  make_empty_managed_env
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello
 
@@ -312,7 +312,7 @@ Remote:
   # Note: this creates two envs in one entry in the registry:
   # 1. The initial env created by `flox init`
   # 2. The managed environment created by pushing the path environment
-  make_empty_remote_env
+  make_empty_managed_env
 
   run dot_flox_exists
   assert_success
@@ -333,7 +333,7 @@ Remote:
 
 # bats test_tags=managed,delete,managed:fresh-deleted
 @test "m11: uses fresh branch after delete" {
-  make_empty_remote_env
+  make_empty_managed_env
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.yaml" \
     "$FLOX_BIN" install vim
 
@@ -354,12 +354,11 @@ Remote:
   refute_output "vim"
 }
 
-
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=managed,managed:local-edits-block:install
 @test "changes to the local environment block 'flox install'" {
-  make_empty_remote_env
+  make_empty_managed_env
 
   tomlq -i -t '.vars.foo = "bar"' .flox/env/manifest.toml
 
@@ -376,8 +375,8 @@ Remote:
 }
 
 # bats test_tags=managed,managed:local-edits-block:uninstall
-@test "changes to the local environment block 'flox uninstall'"  {
-  make_empty_remote_env
+@test "changes to the local environment block 'flox uninstall'" {
+  make_empty_managed_env
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     "$FLOX_BIN" install hello
@@ -395,8 +394,8 @@ Remote:
 }
 
 # bats test_tags=managed,managed:local-edits-block:upgrade
-@test "changes to the local environment block 'flox upgrade'"  {
-  make_empty_remote_env
+@test "changes to the local environment block 'flox upgrade'" {
+  make_empty_managed_env
 
   tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
 
@@ -414,7 +413,7 @@ Remote:
 
 # bats test_tags=managed,managed:local-edits-block:edit
 @test "'flox edit' works despite local changes and commits them" {
-  make_empty_remote_env
+  make_empty_managed_env
 
   tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
 
@@ -422,13 +421,12 @@ Remote:
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run "$FLOX_BIN" edit -f .flox/env/manifest.toml
 
-
   assert_success
 }
 
 # bats test_tags=managed,managed:local-edits-block:push
-@test "changes to the local environment block 'flox push'"  {
-  make_empty_remote_env
+@test "changes to the local environment block 'flox push'" {
+  make_empty_managed_env
 
   tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
 
@@ -444,8 +442,8 @@ Remote:
 }
 
 # bats test_tags=managed,managed:local-edits-block:pull
-@test "changes to the local environment block 'flox pull'"  {
-  make_empty_remote_env
+@test "changes to the local environment block 'flox pull'" {
+  make_empty_managed_env
 
   tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
 
@@ -462,7 +460,7 @@ Remote:
 
 # bats test_tags=managed,managed:local-edits-block:pull-force
 @test "changes to the local environment are discarded with 'flox pull --force'" {
-  make_empty_remote_env
+  make_empty_managed_env
 
   tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
 
@@ -479,7 +477,7 @@ Remote:
 
 # bats test_tags=managed,managed:activates-local-edits
 @test "'flox activate' activates local edits" {
-  make_empty_remote_env
+  make_empty_managed_env
 
   tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
 
@@ -497,7 +495,7 @@ Remote:
 
 # bats test_tags=managed,managed:edit-reset
 @test "'flox edit --reset' resets local edits" {
-  make_empty_remote_env
+  make_empty_managed_env
 
   tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
 
@@ -515,7 +513,8 @@ Remote:
   floxhub_setup "$OWNER"
 
   "$FLOX_BIN" init
-  MANIFEST_CONTENTS="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(
+    cat << "EOF"
     version = 1
     [hook]
     on-activate = """
@@ -537,7 +536,6 @@ EOF
   assert_success
   assert_output --partial "sourcing hook.on-activate"
 
-
   run "$FLOX_BIN" activate -- true
   assert_success
   refute_output --partial "sourcing hook.on-activate"
@@ -550,7 +548,8 @@ EOF
   floxhub_setup "$OWNER"
 
   "$FLOX_BIN" init
-  MANIFEST_CONTENTS="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(
+    cat << "EOF"
     version = 1
 EOF
   )"
