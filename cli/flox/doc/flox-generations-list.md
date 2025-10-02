@@ -13,7 +13,7 @@ flox-generations-list - show all environment generations that you can switch to
 ```
 flox [<general-options>] generations list
      [-d=<path> | -r=<owner/name>]
-     [-t]
+     [-t | --json]
      [--no-pager]
 ```
 
@@ -31,6 +31,10 @@ which generation is currently live.
 
 `--tree`, `-t`
 :   Render generations as a tree
+
+`--json`
+:   Render generations as json (mutually exclusive with `-t`)
+    Attention: the output is not guaranteed to be stable.
 
 `--no-pager`
 :   Explicitly disable paged output
