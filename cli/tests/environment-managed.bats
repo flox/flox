@@ -214,8 +214,24 @@ EOF
   # assert that pulling fails
   run "$FLOX_BIN" pull
   assert_failure
-  # assert that the environment contains the installed package
-  assert_output --partial "diverged"
+  # assert that the error message includes infomration about the generations/history
+  assert_output --regexp "
+❌ ERROR: The environment has diverged from the remote:
+
+Local:
+
+ \* $USER installed package 'emacs \\(emacs\\)' on .+
+   Generation:  2
+   Timestamp: .*
+
+Remote:
+
+ \* $USER installed package 'vim \\(vim\\)' on .+
+   Generation:  2
+   Timestamp: .*
+"
+
+
 
   # assert that pulling with `--force` succeeds
   run "$FLOX_BIN" pull --force

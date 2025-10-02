@@ -939,6 +939,12 @@ pub struct WithOtherFields<T> {
     other: BTreeMap<String, Value>,
 }
 
+impl<T> WithOtherFields<T> {
+    pub fn into_inner(self) -> T {
+        self.inner
+    }
+}
+
 impl<T> From<T> for WithOtherFields<T> {
     fn from(value: T) -> Self {
         WithOtherFields {
