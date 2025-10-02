@@ -26,13 +26,25 @@ pub struct List {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// Render generations as a tree
-    #[bpaf(long, short)]
-    tree: bool,
+    #[bpaf(external(output_mode))]
+    output_mode: OutputMode,
 
     /// Disable interactive pager
     #[bpaf(long)]
     no_pager: bool,
+}
+
+#[derive(Bpaf, Debug, Clone, PartialEq)]
+#[bpaf(fallback(OutputMode::Pretty))]
+enum OutputMode {
+    #[bpaf(skip)]
+    Pretty,
+    /// Render generations as a tree
+    #[bpaf(long, short)]
+    Tree,
+    /// Render generations as json
+    #[bpaf(long)]
+    Json,
 }
 
 impl List {
@@ -41,19 +53,24 @@ impl List {
         let env = self
             .environment
             .detect_concrete_environment(&flox, "List using")?;
-        environment_subcommand_metric!("generations::list", env, request_tree = self.tree);
+        environment_subcommand_metric!(
+            "generations::list",
+            env,
+            request_tree = self.output_mode == OutputMode::Tree
+        );
 
         let env: GenerationsEnvironment = env.try_into()?;
         let metadata = env.generations_metadata()?;
 
-        let output = if self.tree {
-            render_tree(&metadata)
-        } else {
-            DisplayAllMetadata {
+        let output = match self.output_mode {
+            OutputMode::Pretty => DisplayAllMetadata {
                 metadata: &metadata,
                 pretty: Dialog::can_prompt(),
             }
-            .to_string()
+            .to_string(),
+            OutputMode::Tree => render_tree(&metadata),
+            OutputMode::Json => serde_json::to_string_pretty(&metadata.generations())
+                .expect("derived from valid json"),
         };
 
         if self.no_pager {

@@ -831,7 +831,7 @@ impl AllGenerationsMetadata {
 }
 
 /// Metadata for a single generation of an environment
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SingleGenerationMetadata {
     pub parent: Option<GenerationId>,
 
