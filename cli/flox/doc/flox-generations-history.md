@@ -13,6 +13,7 @@ flox-generations-history - Show the change log for the current environment
 ```
 flox [<general-options>] generations history
      [-d=<path> | -r=<owner/name>]
+     [--no-pager]
 ```
 
 # DESCRIPTION
@@ -26,6 +27,11 @@ It's also possible to change the current generation by using
 
 `flox generations history` prints what generation has been the current
 generation over time.
+
+# OPTIONS
+
+`--no-pager`
+:   Explicitly disable paged output
 
 ```{.include}
 ./include/environment-options.md

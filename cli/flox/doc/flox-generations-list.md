@@ -14,6 +14,7 @@ flox-generations-list - show all environment generations that you can switch to
 flox [<general-options>] generations list
      [-d=<path> | -r=<owner/name>]
      [-t]
+     [--no-pager]
 ```
 
 # DESCRIPTION
@@ -31,6 +32,8 @@ which generation is currently live.
 `--tree`, `-t`
 :   Render generations as a tree
 
+`--no-pager`
+:   Explicitly disable paged output
 
 ```{.include}
 ./include/environment-options.md
