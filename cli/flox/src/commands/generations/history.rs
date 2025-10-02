@@ -24,9 +24,22 @@ pub struct History {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
+    #[bpaf(external(output_mode))]
+    output_mode: OutputMode,
+
     /// Disable interactive pager
     #[bpaf(long)]
     no_pager: bool,
+}
+
+#[derive(Bpaf, Debug, Clone, PartialEq)]
+#[bpaf(fallback(OutputMode::Pretty))]
+enum OutputMode {
+    #[bpaf(skip)]
+    Pretty,
+    /// Render generations as json
+    #[bpaf(long)]
+    Json,
 }
 
 impl History {
@@ -40,16 +53,23 @@ impl History {
         let env: GenerationsEnvironment = env.try_into()?;
         let metadata = env.generations_metadata()?;
 
-        let output = DisplayHistory {
-            history: metadata.history(),
-            pretty: Dialog::can_prompt(),
+        let output = match self.output_mode {
+            OutputMode::Pretty => DisplayHistory {
+                history: metadata.history(),
+                pretty: Dialog::can_prompt(),
+            }
+            .to_string(),
+            OutputMode::Json => {
+                serde_json::to_string_pretty(metadata.history()).expect("derived from valid json")
+            },
         };
+
         if self.no_pager {
-            println!("{}", output);
+            println!("{output}");
             return Ok(());
         }
 
-        page_output(output.to_string())
+        page_output(output)
     }
 }
 
