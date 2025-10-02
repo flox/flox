@@ -1,7 +1,11 @@
 use std::ops::Deref;
 
 use flox_rust_sdk::data::CanonicalizeError;
-use flox_rust_sdk::models::environment::generations::{HistorySpec, WithOtherFields};
+use flox_rust_sdk::models::environment::generations::{
+    GenerationsError,
+    HistorySpec,
+    WithOtherFields,
+};
 use flox_rust_sdk::models::environment::managed_environment::{
     DivergedMetadata,
     GENERATION_LOCK_FILENAME,
@@ -501,6 +505,9 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         "},
         ManagedEnvironmentError::CreateFloxmetaDir(_) => display_chain(err),
         ManagedEnvironmentError::CreateGenerationFiles(_) => display_chain(err),
+        ManagedEnvironmentError::CommitGeneration(
+            err @ GenerationsError::SwitchToLiveGeneration,
+        ) => display_chain(err),
         ManagedEnvironmentError::CommitGeneration(err) => formatdoc! {"
             Failed to create a new generation: {err}
 

@@ -453,8 +453,8 @@ pub enum GenerationsError {
     GenerationNotFound(usize),
     #[error("no generations found in environment")]
     NoGenerations,
-    #[error("cannot rollback to current generation")]
-    RollbackToCurrentGeneration,
+    #[error("Cannot switch to live generation")]
+    SwitchToLiveGeneration,
     // endregion
 
     // region: repo/transaction
@@ -720,7 +720,7 @@ impl AllGenerationsMetadata {
         };
 
         if next_generation == previous_generation {
-            return Err(GenerationsError::RollbackToCurrentGeneration);
+            return Err(GenerationsError::SwitchToLiveGeneration);
         }
 
         // we assume to track generations consecutively, 1 ..= total_generations
@@ -839,7 +839,7 @@ pub struct SingleGenerationMetadata {
     pub created: DateTime<Utc>,
 
     /// unix timestamp of the time when this generation was last set as live
-    /// `None` if this generation has never been set as live
+    /// `None` if this generation is currently live
     pub last_live: Option<DateTime<Utc>>,
 
     /// log message(s) describing the change from the previous generation
@@ -1459,7 +1459,8 @@ mod tests {
                 metadata.switch_generation(default_switch_generation_options(generation_id));
 
             assert!(
-                matches!(result, Err(GenerationsError::RollbackToCurrentGeneration)),
+                // We match against this specific variant in errors.rs
+                matches!(result, Err(GenerationsError::SwitchToLiveGeneration)),
                 "unexpected result {:?}",
                 result
             )
@@ -2049,7 +2050,7 @@ mod tests {
         let current_gen = generations_rw.metadata().unwrap().current_gen().unwrap();
         let res = generations_rw.set_current_generation(current_gen);
         assert!(
-            matches!(res, Err(GenerationsError::RollbackToCurrentGeneration)),
+            matches!(res, Err(GenerationsError::SwitchToLiveGeneration)),
             "should error when setting current generation, got: {:?}",
             res
         );
