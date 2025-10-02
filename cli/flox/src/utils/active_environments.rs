@@ -182,7 +182,7 @@ mod tests {
 
     use super::*;
 
-    fn path_env_fixture(name: &str) -> UninitializedEnvironment {
+    fn new_uninitialized_environment(name: &str) -> UninitializedEnvironment {
         UninitializedEnvironment::DotFlox(DotFlox {
             path: PathBuf::new(),
             pointer: EnvironmentPointer::Path(PathPointer::new(
@@ -194,8 +194,8 @@ mod tests {
     /// is_active() behaves as expected when using set_last_active()
     #[test]
     fn test_is_active() {
-        let env1 = path_env_fixture("env1");
-        let env2 = path_env_fixture("env2");
+        let env1 = new_uninitialized_environment("env1");
+        let env2 = new_uninitialized_environment("env2");
 
         let mut active = ActiveEnvironments::default();
         active.set_last_active(env1.clone(), None, ActivateMode::Dev);
@@ -206,8 +206,8 @@ mod tests {
 
     #[test]
     fn test_is_active_with_generation() {
-        let env1 = path_env_fixture("env1");
-        let env2 = path_env_fixture("env2");
+        let env1 = new_uninitialized_environment("env1");
+        let env2 = new_uninitialized_environment("env2");
 
         let generation = Some(GenerationId::from_str("42").unwrap());
         let mut active = ActiveEnvironments::default();
@@ -222,7 +222,7 @@ mod tests {
     /// checking if it's active in a second.
     #[test]
     fn test_is_active_round_trip_from_env() {
-        let uninitialized = path_env_fixture("test");
+        let uninitialized = new_uninitialized_environment("test");
         let mut first_active = temp_env::with_var(
             FLOX_ACTIVE_ENVIRONMENTS_VAR,
             None::<&str>,
@@ -242,8 +242,8 @@ mod tests {
 
     #[test]
     fn test_last_activated() {
-        let env1 = path_env_fixture("env1");
-        let env2 = path_env_fixture("env2");
+        let env1 = new_uninitialized_environment("env1");
+        let env2 = new_uninitialized_environment("env2");
 
         let mut active = ActiveEnvironments::default();
         active.set_last_active(env1, None, ActivateMode::Dev);
@@ -259,8 +259,8 @@ mod tests {
 
     #[test]
     fn test_active_environments_forwards_compat_without_generation() {
-        let env1 = path_env_fixture("env1");
-        let env2 = path_env_fixture("env2");
+        let env1 = new_uninitialized_environment("env1");
+        let env2 = new_uninitialized_environment("env2");
 
         let old_format = VecDeque::from(vec![env1.clone(), env2.clone()]);
         let old_format_str = serde_json::to_string(&old_format).unwrap();

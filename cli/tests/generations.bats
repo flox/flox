@@ -62,6 +62,7 @@ EOF
   export FLOXHUB_GIT_WARNING
 }
 teardown() {
+  wait_for_watchdogs "$PROJECT_DIR" || return 1
   project_teardown
   common_test_teardown
 }
@@ -141,6 +142,49 @@ ${FLOXHUB_GIT_WARNING?}
 
 hello
 EOF
+}
+
+# 'flox services start' performs an "ephemeral" activation, which is more
+# cumbersome than 'flox activate -s' and should respect the generation of the
+# current activation.
+@test "activate --generation: flox services start respects generation" {
+  # Generation 1
+  "$FLOX_BIN" init --name "test"
+  "$FLOX_BIN" push --owner owner
+
+  # Generation 2
+  "$FLOX_BIN" edit -f - <<'EOF'
+    version = 1
+
+    [services.write_generation]
+    command = "echo 'generation 2' > generation"
+EOF
+
+  # Generation 3
+  "$FLOX_BIN" edit -f - <<'EOF'
+    version = 1
+
+    [services.write_generation]
+    command = "echo 'generation 3' > generation"
+EOF
+
+  SCRIPT="$(cat <<'EOF'
+    "$FLOX_BIN" services start
+    "${TESTS_DIR}"/services/wait_for_service_status.sh write_generation:Completed
+EOF
+  )"
+
+  run "$FLOX_BIN" activate --generation 2 -- bash -c "$SCRIPT"
+  assert_success
+  run cat generation
+  assert_success
+  assert_output "generation 2"
+
+  run "$FLOX_BIN" activate --generation 3 -- bash -c "$SCRIPT"
+  assert_success
+  run cat generation
+  assert_success
+  assert_output "generation 3"
 }
 
 test_mutate_with_activate_generation() {

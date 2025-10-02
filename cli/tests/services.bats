@@ -35,14 +35,14 @@ project_teardown() {
 # This can be used to prevent race conditions where we expect something to
 # happen _at least_ N times.
 wait_for_file_content() {
-  file="$1"
-  expected="$2"
+  file="${1?}"
+  expected="${2?}"
 
-  run timeout 1s bash -c '
-    while [ "$(cat '$file')" != "'$expected'" ]; do
+  run timeout 1s bash -c "
+    while [ \"\$(cat \"$file\")\" != \"$expected\" ]; do
       sleep 0.1s
     done
-  '
+  "
   assert_success
 }
 
@@ -51,12 +51,11 @@ wait_for_partial_file_content() {
   file="${1?}"
   expected="${2?}"
 
-  export file expected
-  timeout 1s bash -c '
-    while ! grep -q "$expected" "$file"; do
+  timeout 1s bash -c "
+    while ! grep -q \"$expected\" \"$file\"; do
       sleep 0.1s
     done
-  '
+  "
 }
 
 setup() {
