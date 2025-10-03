@@ -13,6 +13,7 @@ flox-generations-history - Show the change log for the current environment
 ```
 flox [<general-options>] generations history
      [-d=<path> | -r=<owner/name>]
+     [--json]
      [--no-pager]
 ```
 
@@ -29,6 +30,11 @@ It's also possible to change the current generation by using
 generation over time.
 
 # OPTIONS
+
+
+`--json`
+:   Render generations as json
+    Attention: the output is not guaranteed to be stable.
 
 `--no-pager`
 :   Explicitly disable paged output
