@@ -118,6 +118,7 @@
           flox-cli = callPackage ./pkgs/flox-cli { };
           flox-manpages = callPackage ./pkgs/flox-manpages { }; # Flox Command Line Interface Manpages
           flox = callPackage ./pkgs/flox { }; # Flox Command Line Interface ( production build ).
+          mk_data = callPackage ./pkgs/mk_data { };
 
           # Wrapper scripts for running test suites.
           flox-cli-tests = callPackage ./pkgs/flox-cli-tests { };
@@ -140,6 +141,7 @@
           flox-watchdog = prev.flox-watchdog.override {
             rust-internal-deps = self.rust-internal-deps;
           };
+          mk_data = prev.mk_data.override { };
           flox-activations = prev.flox-activations.override { };
           flox-interpreter = prev.flox-interpreter.override {
             flox-activations = null;
@@ -199,6 +201,7 @@
           rust-internal-deps
           floxDevelopmentPackages
           nix
+          mk_data
           ;
 
         default = pkgs.flox;
