@@ -52,6 +52,10 @@ FloxHub with local changes to the environment.
 `-o`, `--owner`, `--org`
 :   FloxHub owner to push environment to (default: current FloxHub user).
 
+    Can only be specified when pushing an environment for the first time.
+    Use 'flox pull --copy' to copy an existing environment and push it to a new
+    owner.
+
 `-f`, `--force`
 :   Forcibly overwrite the remote copy of the environment.
 
