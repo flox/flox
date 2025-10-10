@@ -20,7 +20,7 @@ function retrieve_report_from_remote() {
   scp \
     -6 \
     -o "UserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" \
-    "github@[$REMOTE_SERVER_ADDRESS]:$report_path_on_remote" \
+    "github@$REMOTE_SERVER_ADDRESS:$report_path_on_remote" \
     ./report.xml
 }
 
