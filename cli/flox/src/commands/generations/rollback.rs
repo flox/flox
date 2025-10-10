@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::generations::{
@@ -43,8 +43,7 @@ impl Rollback {
         let Some((previously_active_generation_id, _meta)) =
             determine_previous_generation(&metadata)
         else {
-            message::warning("No previous generation to rollback to.");
-            return Ok(());
+            bail!("No previous generation to rollback to.");
         };
 
         debug!(%previously_active_generation_id, "target generation determined, attempting rollback");
@@ -66,8 +65,14 @@ impl Rollback {
 fn determine_previous_generation(
     metadata: &AllGenerationsMetadata,
 ) -> Option<(GenerationId, SingleGenerationMetadata)> {
-    metadata
-        .generations()
+    let generations = metadata.generations();
+    // Can't rollback if there's only 1 generation
+    if generations.len() < 2 {
+        return None;
+    }
+    // The current live generation has last_live = None, so it will be at the
+    // front
+    generations
         .into_iter()
         .sorted_by_key(|(_id, meta)| meta.last_live)
         .next_back()
@@ -122,5 +127,12 @@ mod tests {
         };
 
         assert_eq!(previous_generation, third_generation)
+    }
+
+    #[test]
+    fn no_previous_generation_for_single_generation() {
+        let mut metadata = AllGenerationsMetadata::default();
+        metadata.add_generation(default_add_generation_options());
+        assert!(determine_previous_generation(&metadata).is_none());
     }
 }
