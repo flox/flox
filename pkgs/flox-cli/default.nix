@@ -37,9 +37,6 @@ let
       # rather than relying on or modifying the user's `PATH` variable
       GIT_PKG = gitMinimal;
 
-      # todo: remove
-      # FLOX_ZDOTDIR = flox-interpreter + "/activate.d/zdotdir";
-
       # [sic] nix handles `BASH_` variables specially,
       # so we need to use a different name.
       INTERACTIVE_BASH_BIN = "${bashInteractive}/bin/bash";
