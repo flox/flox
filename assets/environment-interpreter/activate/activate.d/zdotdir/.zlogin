@@ -34,10 +34,6 @@ restore_saved_vars() {
     export _flox_activate_tracer="$_save_flox_activate_tracer"
     export FLOX_ZSH_INIT_SCRIPT="$_save_FLOX_ZSH_INIT_SCRIPT"
     export _FLOX_ACTIVATION_STATE_DIR="$_save_FLOX_ACTIVATION_STATE_DIR"
-    # shellcheck disable=SC1090
-    source <("$_flox_activations" set-env-dirs --shell zsh --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
-    # shellcheck disable=SC1090
-    source <("$_flox_activations" fix-paths --shell zsh --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
 }
 
 if [ -f /etc/zlogin ]
