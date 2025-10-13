@@ -56,27 +56,28 @@ case "$_flox_shell" in
   # Any additions should probably be restored in zdotdir/* scripts
   *zsh)
     echo "$_flox_activations attach --runtime-dir \"$FLOX_RUNTIME_DIR\" --pid \$\$ --flox-env \"$FLOX_ENV\" --id \"$_FLOX_ACTIVATION_ID\" --remove-pid \"$expiring_pid\";"
-    echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
-    # Propagate required variables that are documented as exposed.
-    echo "export FLOX_ENV=\"$FLOX_ENV\";"
-    # Propagate optional variables that are documented as exposed.
-    for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
-      eval "var_val=\${_$var_key-}"
-      if [ -n "$var_val" ]; then
-        echo "export $var_key='$var_val';"
-      else
-        echo "unset $var_key;"
-      fi
-    done
     if [ -n "${ZDOTDIR:-}" ]; then
       echo "export FLOX_ORIG_ZDOTDIR=\"$ZDOTDIR\";"
     fi
     echo "export ZDOTDIR=\"$_zdotdir\";"
-    echo "export _FLOX_ACTIVATION_STATE_DIR=\"$_FLOX_ACTIVATION_STATE_DIR\";"
-    echo "export FLOX_ZSH_INIT_SCRIPT=\"$_activate_d/zsh\";"
-    echo "export _activate_d=\"$_activate_d\";"
+
+    FLOX_ZSH_INIT_SCRIPT="$(@coreutils@/bin/mktemp -p "$_FLOX_ACTIVATION_STATE_DIR")"
+    generate_zsh_startup_script \
+      "$_flox_activate_tracelevel" \
+      "$_FLOX_ACTIVATION_STATE_DIR" \
+      "$_activate_d" \
+      "$FLOX_ENV" \
+      "${_FLOX_ENV_CACHE:-}" \
+      "${_FLOX_ENV_PROJECT:-}" \
+      "${_FLOX_ENV_DESCRIPTION:-}" > "$FLOX_ZSH_INIT_SCRIPT"
+    # self destruct
+    if [ "$_flox_activate_tracelevel" -lt 2 ]; then
+      echo "@coreutils@/bin/rm '$FLOX_ZSH_INIT_SCRIPT'" >> "$FLOX_ZSH_INIT_SCRIPT"
+    fi
+
+    # TODO: I don't think we should export this but it's needed by set-prompt.zsh
     echo "export _flox_activate_tracer=\"$_flox_activate_tracer\";"
-    echo "source '$_activate_d/zsh';"
+    echo "source '$FLOX_ZSH_INIT_SCRIPT';"
     ;;
   *)
     echo "Unsupported shell: $_flox_shell" >&2
