@@ -86,7 +86,20 @@ case "$_flox_shell" in
         export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
       fi
       export ZDOTDIR="$_zdotdir"
-      export FLOX_ZSH_INIT_SCRIPT="$_activate_d/zsh"
+      FLOX_ZSH_INIT_SCRIPT="$(@coreutils@/bin/mktemp -p "$_FLOX_ACTIVATION_STATE_DIR")"
+      export FLOX_ZSH_INIT_SCRIPT
+      generate_zsh_startup_script \
+        "$_flox_activate_tracelevel" \
+        "$_FLOX_ACTIVATION_STATE_DIR" \
+        "$_activate_d" \
+        "$FLOX_ENV" \
+        "${_FLOX_ENV_CACHE:-}" \
+        "${_FLOX_ENV_PROJECT:-}" \
+        "${_FLOX_ENV_DESCRIPTION:-}" > "$FLOX_ZSH_INIT_SCRIPT"
+      # self destruct
+      if [ "$_flox_activate_tracelevel" -lt 2 ]; then
+        echo "@coreutils@/bin/rm '$FLOX_ZSH_INIT_SCRIPT'" >> "$FLOX_ZSH_INIT_SCRIPT"
+      fi
       # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
       # automatically sourcing /etc/zshrc et al.
       exec "$_flox_shell" -o NO_GLOBAL_RCS -c "$*"
