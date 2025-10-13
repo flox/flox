@@ -97,67 +97,68 @@ perl.overrideAttrs (oldAttrs: {
     "STRIPFLAGS=-s" # Run strip on installed binaries.
   ];
 
-  postInstall = ''
-    # The upstream hook depends upon $man being defined.
-    man="/no-such-path"
-  ''
-  + oldAttrs.postInstall
+  postInstall =
+    ''
+      # The upstream hook depends upon $man being defined.
+      man="/no-such-path"
+    ''
+    + oldAttrs.postInstall
 
-  # Can remove once https://github.com/NixOS/nixpkgs/pull/386700
-  # has flowed through to our build (hence the use of --replace-quiet).
-  + (lib.optionalString ((stdenv.cc.fallback_sdk or null) != null) ''
-    substituteInPlace "$out"/lib/perl5/*/*/Config_heavy.pl \
-      --replace-quiet "${stdenv.cc.fallback_sdk}" /no-such-path;
-  '')
+    # Can remove once https://github.com/NixOS/nixpkgs/pull/386700
+    # has flowed through to our build (hence the use of --replace-quiet).
+    + (lib.optionalString ((stdenv.cc.fallback_sdk or null) != null) ''
+      substituteInPlace "$out"/lib/perl5/*/*/Config_heavy.pl \
+        --replace-quiet "${stdenv.cc.fallback_sdk}" /no-such-path;
+    '')
 
-  + ''
-    (
-      set -x
+    + ''
+      (
+        set -x
 
-      # Remove dependencies in Config_heavy.pl.
-      sed -e '/incpth=/s/.nix.store.[^-]*-/\/no-such-path-/g' \
-        -e 's/\/nix\/store\/[^/]*-coreutils-[^/]*\/bin\///g' \
-        -i "$out"/lib/perl5/*/*/Config_heavy.pl
+        # Remove dependencies in Config_heavy.pl.
+        sed -e '/incpth=/s/.nix.store.[^-]*-/\/no-such-path-/g' \
+          -e 's/\/nix\/store\/[^/]*-coreutils-[^/]*\/bin\///g' \
+          -i "$out"/lib/perl5/*/*/Config_heavy.pl
 
-      # Remove dependency on coreutils in Cwd.pm.
-      sed -e 's/\/nix\/store\/[^/]*-coreutils-[^/]*//g' \
-        -i "$out"/lib/perl5/*/*/Cwd.pm
+        # Remove dependency on coreutils in Cwd.pm.
+        sed -e 's/\/nix\/store\/[^/]*-coreutils-[^/]*//g' \
+          -i "$out"/lib/perl5/*/*/Cwd.pm
 
-      # Move over all modules required by the build. The following command
-      # prints out all module files exercised by way of the command, which
-      # itself exercises all of the same inputs used by builder.pl.
-      keeplibs=$(mktemp)
-      $out/bin/perl -MConfig \
-        -e '${perlExerciseModulesCommands}; END {
-          foreach my $lib (keys %INC) {
-            next if $lib eq "${perlScript}";
-            if ( -e "$Config{archlib}/$lib" ) {
-              print "$Config{version}/$Config{archname}/$lib\n";
-              my $libBasename = $lib;
-              $libBasename =~ s/\.pm$//;
-              if ( -d "$Config{archlib}/auto/$libBasename" ) {
-                print "$Config{version}/$Config{archname}/auto/$libBasename\n";
+        # Move over all modules required by the build. The following command
+        # prints out all module files exercised by way of the command, which
+        # itself exercises all of the same inputs used by builder.pl.
+        keeplibs=$(mktemp)
+        $out/bin/perl -MConfig \
+          -e '${perlExerciseModulesCommands}; END {
+            foreach my $lib (keys %INC) {
+              next if $lib eq "${perlScript}";
+              if ( -e "$Config{archlib}/$lib" ) {
+                print "$Config{version}/$Config{archname}/$lib\n";
+                my $libBasename = $lib;
+                $libBasename =~ s/\.pm$//;
+                if ( -d "$Config{archlib}/auto/$libBasename" ) {
+                  print "$Config{version}/$Config{archname}/auto/$libBasename\n";
+                }
+              } else {
+                print "$Config{version}/$lib\n";
               }
-            } else {
-              print "$Config{version}/$lib\n";
-            }
-          };
-          print "$Config{version}/$Config{archname}/Config_heavy.pl\n";
-        }' > $keeplibs
+            };
+            print "$Config{version}/$Config{archname}/Config_heavy.pl\n";
+          }' > $keeplibs
 
-      # Create new lib directory.
-      mv $out/lib/perl5 $out/lib/perl5.orig
-      mkdir $out/lib/perl5
-      tar -C $out/lib/perl5.orig -cf - --files-from $keeplibs | tar -C $out/lib/perl5 -xvf -
-      rm -rf $out/lib/perl5.orig
+        # Create new lib directory.
+        mv $out/lib/perl5 $out/lib/perl5.orig
+        mkdir $out/lib/perl5
+        tar -C $out/lib/perl5.orig -cf - --files-from $keeplibs | tar -C $out/lib/perl5 -xvf -
+        rm -rf $out/lib/perl5.orig
 
-      # Create new bin directory.
-      mv $out/bin $out/bin.orig
-      mkdir $out/bin
-      mv $out/bin.orig/perl $out/bin
-      rm -rf $out/bin.orig
-    )
-  '';
+        # Create new bin directory.
+        mv $out/bin $out/bin.orig
+        mkdir $out/bin
+        mv $out/bin.orig/perl $out/bin
+        rm -rf $out/bin.orig
+      )
+    '';
 
   postFixup = ''
     (

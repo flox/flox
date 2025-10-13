@@ -95,13 +95,14 @@ pkgs.runCommandNoCC name
       ]
       ++ pkgs.stdenv.defaultNativeBuildInputs
       ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ darwin.autoSignDarwinBinariesHook ];
-    outputs = [
-      "out"
-    ]
-    ++ pkgs.lib.optionals (buildScript != null) [
-      "log"
-    ]
-    ++ pkgs.lib.optionals (buildCache != null) [ "buildCache" ];
+    outputs =
+      [
+        "out"
+      ]
+      ++ pkgs.lib.optionals (buildScript != null) [
+        "log"
+      ]
+      ++ pkgs.lib.optionals (buildCache != null) [ "buildCache" ];
     # We previously used `disallowedReferences` to prevent builds from referencing
     # the "develop" environment, but that was too strict and caused issues with
     # the "log" and "buildCache" outputs in particular. Now we instead inspect the

@@ -68,105 +68,105 @@ let
   environmentOutputs = [
     "runtime"
     "develop"
-  ]
-  ++ (builtins.map (buildId: "build-${buildId}") (builtins.attrNames buildSection));
+  ] ++ (builtins.map (buildId: "build-${buildId}") (builtins.attrNames buildSection));
 
-  createManifestChunks = [
-    # static chunks
-    ''
-      export PATH="${coreutils}/bin''${PATH:+:}''${PATH}"
-      "${coreutils}/bin/mkdir" -p $out/activate.d
-      "${coreutils}/bin/cp" --no-preserve=mode ${manifestLockFile} $out/manifest.lock
-      "${coreutils}/bin/cp" --no-preserve=mode ${defaultEnvrc} $out/activate.d/envrc
-    ''
-    # [vars] section
-    (
-      if vars == null then
-        ""
-      else
-        ''
-          "${coreutils}/bin/cat" ${vars} >> $out/activate.d/envrc
-        ''
-    )
-    # [hook] section
-    (
-      if
-        (builtins.hasAttr "on-activate" hookSection && (builtins.getAttr "on-activate" hookSection) != null)
-      then
-        let
-          contents = outdentScript (builtins.getAttr "on-activate" hookSection);
-          scriptFile = builtins.toFile "hook-on-activate" contents;
-        in
-        ''
-          "${coreutils}/bin/cp" ${scriptFile} $out/activate.d/hook-on-activate
-        ''
-      else
-        ""
-    )
-    # service-config.yaml section
-    (
-      if (serviceConfigYaml == null) then
-        ""
-      else
-        let
-          serviceConfigYamlStorePath = builtins.path {
-            path = serviceConfigYaml;
-            name = "service-config.yaml";
-          };
-        in
-        ''
-          "${coreutils}/bin/cp" ${serviceConfigYamlStorePath} $out/service-config.yaml
-        ''
-    )
-  ]
-  ++ (
-    # [profile] section
-    builtins.map
+  createManifestChunks =
+    [
+      # static chunks
+      ''
+        export PATH="${coreutils}/bin''${PATH:+:}''${PATH}"
+        "${coreutils}/bin/mkdir" -p $out/activate.d
+        "${coreutils}/bin/cp" --no-preserve=mode ${manifestLockFile} $out/manifest.lock
+        "${coreutils}/bin/cp" --no-preserve=mode ${defaultEnvrc} $out/activate.d/envrc
+      ''
+      # [vars] section
       (
-        shellType:
+        if vars == null then
+          ""
+        else
+          ''
+            "${coreutils}/bin/cat" ${vars} >> $out/activate.d/envrc
+          ''
+      )
+      # [hook] section
+      (
         if
-          (builtins.hasAttr shellType profileSection && (builtins.getAttr shellType profileSection) != null)
+          (builtins.hasAttr "on-activate" hookSection && (builtins.getAttr "on-activate" hookSection) != null)
         then
           let
-            contents = outdentScript (builtins.getAttr shellType profileSection);
-            scriptFile = builtins.toFile "profile-${shellType}" contents;
+            contents = outdentScript (builtins.getAttr "on-activate" hookSection);
+            scriptFile = builtins.toFile "hook-on-activate" contents;
           in
           ''
-            "${coreutils}/bin/cp" ${scriptFile} $out/activate.d/profile-${shellType}
+            "${coreutils}/bin/cp" ${scriptFile} $out/activate.d/hook-on-activate
           ''
         else
           ""
       )
-      [
-        "bash"
-        "common"
-        "fish"
-        "tcsh"
-        "zsh"
-      ]
-  )
-  ++ (
-    # [build] section
-    builtins.map (
-      buildId:
-      let
-        build = builtins.getAttr buildId buildSection;
-      in
+      # service-config.yaml section
       (
-        if (builtins.hasAttr "command" build && (builtins.getAttr "command" build) != null) then
+        if (serviceConfigYaml == null) then
+          ""
+        else
           let
-            contents = outdentScript (builtins.getAttr "command" build);
-            scriptFile = builtins.toFile "build-${buildId}" contents;
+            serviceConfigYamlStorePath = builtins.path {
+              path = serviceConfigYaml;
+              name = "service-config.yaml";
+            };
           in
           ''
-            "${coreutils}/bin/mkdir" -p $out/package-builds.d
-            "${coreutils}/bin/cp" ${scriptFile} $out/package-builds.d/${buildId}
+            "${coreutils}/bin/cp" ${serviceConfigYamlStorePath} $out/service-config.yaml
           ''
-        else
-          ""
       )
-    ) (builtins.attrNames buildSection)
-  );
+    ]
+    ++ (
+      # [profile] section
+      builtins.map
+        (
+          shellType:
+          if
+            (builtins.hasAttr shellType profileSection && (builtins.getAttr shellType profileSection) != null)
+          then
+            let
+              contents = outdentScript (builtins.getAttr shellType profileSection);
+              scriptFile = builtins.toFile "profile-${shellType}" contents;
+            in
+            ''
+              "${coreutils}/bin/cp" ${scriptFile} $out/activate.d/profile-${shellType}
+            ''
+          else
+            ""
+        )
+        [
+          "bash"
+          "common"
+          "fish"
+          "tcsh"
+          "zsh"
+        ]
+    )
+    ++ (
+      # [build] section
+      builtins.map (
+        buildId:
+        let
+          build = builtins.getAttr buildId buildSection;
+        in
+        (
+          if (builtins.hasAttr "command" build && (builtins.getAttr "command" build) != null) then
+            let
+              contents = outdentScript (builtins.getAttr "command" build);
+              scriptFile = builtins.toFile "build-${buildId}" contents;
+            in
+            ''
+              "${coreutils}/bin/mkdir" -p $out/package-builds.d
+              "${coreutils}/bin/cp" ${scriptFile} $out/package-builds.d/${buildId}
+            ''
+          else
+            ""
+        )
+      ) (builtins.attrNames buildSection)
+    );
 
   createManifestScript = builtins.toFile "create-manifest-script" (
     builtins.concatStringsSep "" createManifestChunks

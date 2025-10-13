@@ -92,78 +92,80 @@ mkShell (
 
     packages = ciPackages ++ lib.optionals (!ci) devPackages;
 
-    shellHook = pre-commit-check.shellHook + ''
-      # Find the project root.
-      REPO_ROOT="$( git rev-parse --show-toplevel; )";
+    shellHook =
+      pre-commit-check.shellHook
+      + ''
+        # Find the project root.
+        REPO_ROOT="$( git rev-parse --show-toplevel; )";
 
-      mkdir -p "$REPO_ROOT/build";
-      rm -f "$REPO_ROOT/build/.env"; # clear the .env file
-      rm -f "$REPO_ROOT/build/.PATH"; # clear the .PATH file
-      cp -f ${envWrapper} "$REPO_ROOT/build/wrapper";
+        mkdir -p "$REPO_ROOT/build";
+        rm -f "$REPO_ROOT/build/.env"; # clear the .env file
+        rm -f "$REPO_ROOT/build/.PATH"; # clear the .PATH file
+        cp -f ${envWrapper} "$REPO_ROOT/build/wrapper";
 
 
-      # Define a function to set an environment variable
-      # and add it to the .env file.
-      function define_dev_env_var() {
-        local USAGE="Usage: define_dev_env_var <name> <value>";
+        # Define a function to set an environment variable
+        # and add it to the .env file.
+        function define_dev_env_var() {
+          local USAGE="Usage: define_dev_env_var <name> <value>";
 
-        local name=''${1?$USAGE};
-        local value=''${2?$USAGE};
+          local name=''${1?$USAGE};
+          local value=''${2?$USAGE};
 
-        export $name="$value";
-        echo "$name=$value" >> "$REPO_ROOT/build/.env";
+          export $name="$value";
+          echo "$name=$value" >> "$REPO_ROOT/build/.env";
 
-        echo "$name => $(printenv "$name")";
+          echo "$name => $(printenv "$name")";
 
-      }
+        }
 
-      # Setup mutable paths to all internal subsystems,
-      # so that they can be changed and built without restarting the shell.
+        # Setup mutable paths to all internal subsystems,
+        # so that they can be changed and built without restarting the shell.
 
-      # cargo built binaries
-      define_dev_env_var FLOX_BIN "''${REPO_ROOT}/cli/target/debug/flox";
-      define_dev_env_var WATCHDOG_BIN "''${REPO_ROOT}/cli/target/debug/flox-watchdog";
-      define_dev_env_var FLOX_ACTIVATIONS_BIN "''${REPO_ROOT}/cli/target/debug/flox-activations";
+        # cargo built binaries
+        define_dev_env_var FLOX_BIN "''${REPO_ROOT}/cli/target/debug/flox";
+        define_dev_env_var WATCHDOG_BIN "''${REPO_ROOT}/cli/target/debug/flox-watchdog";
+        define_dev_env_var FLOX_ACTIVATIONS_BIN "''${REPO_ROOT}/cli/target/debug/flox-activations";
 
-      # make built binaries
-      define_dev_env_var BUILDENV_BIN "''${REPO_ROOT}/build/flox-buildenv/bin/buildenv";
-      define_dev_env_var NIX_PLUGINS "''${REPO_ROOT}/build/nix-plugins/lib/nix-plugins";
+        # make built binaries
+        define_dev_env_var BUILDENV_BIN "''${REPO_ROOT}/build/flox-buildenv/bin/buildenv";
+        define_dev_env_var NIX_PLUGINS "''${REPO_ROOT}/build/nix-plugins/lib/nix-plugins";
 
-      # static nix files
-      define_dev_env_var FLOX_MK_CONTAINER_NIX "''${REPO_ROOT}/mkContainer/mkContainer.nix";
+        # static nix files
+        define_dev_env_var FLOX_MK_CONTAINER_NIX "''${REPO_ROOT}/mkContainer/mkContainer.nix";
 
-      # Nix built subsystems
-      define_dev_env_var FLOX_INTERPRETER "''${REPO_ROOT}/build/flox-interpreter";
-      define_dev_env_var FLOX_BUILDENV "''${REPO_ROOT}/build/flox-buildenv";
-      define_dev_env_var FLOX_BUILDENV_NIX "''${FLOX_BUILDENV}/lib/buildenv.nix";
-      define_dev_env_var FLOX_PACKAGE_BUILDER "''${REPO_ROOT}/build/flox-package-builder";
-      define_dev_env_var FLOX_BUILD_MK "''${FLOX_PACKAGE_BUILDER}/libexec/flox-build.mk";
-      define_dev_env_var FLOX_EXPRESSION_BUILD_NIX  "''${FLOX_PACKAGE_BUILDER}/libexec/nef/default.nix"
-      define_dev_env_var FLOX_MANPAGES "''${REPO_ROOT}/build/flox-manpages";
+        # Nix built subsystems
+        define_dev_env_var FLOX_INTERPRETER "''${REPO_ROOT}/build/flox-interpreter";
+        define_dev_env_var FLOX_BUILDENV "''${REPO_ROOT}/build/flox-buildenv";
+        define_dev_env_var FLOX_BUILDENV_NIX "''${FLOX_BUILDENV}/lib/buildenv.nix";
+        define_dev_env_var FLOX_PACKAGE_BUILDER "''${REPO_ROOT}/build/flox-package-builder";
+        define_dev_env_var FLOX_BUILD_MK "''${FLOX_PACKAGE_BUILDER}/libexec/flox-build.mk";
+        define_dev_env_var FLOX_EXPRESSION_BUILD_NIX  "''${FLOX_PACKAGE_BUILDER}/libexec/nef/default.nix"
+        define_dev_env_var FLOX_MANPAGES "''${REPO_ROOT}/build/flox-manpages";
 
-      # test data
-      define_dev_env_var INPUT_DATA "''${REPO_ROOT}/test_data/input_data";
-      define_dev_env_var UNIT_TEST_GENERATED "''${REPO_ROOT}/test_data/unit_test_generated";
-      define_dev_env_var GENERATED_DATA "''${REPO_ROOT}/test_data/generated";
-      define_dev_env_var MANUALLY_GENERATED "''${REPO_ROOT}/test_data/manually_generated";
+        # test data
+        define_dev_env_var INPUT_DATA "''${REPO_ROOT}/test_data/input_data";
+        define_dev_env_var UNIT_TEST_GENERATED "''${REPO_ROOT}/test_data/unit_test_generated";
+        define_dev_env_var GENERATED_DATA "''${REPO_ROOT}/test_data/generated";
+        define_dev_env_var MANUALLY_GENERATED "''${REPO_ROOT}/test_data/manually_generated";
 
-      # Add all internal rust crates to the PATH.
-      # That's `flox` itself as well as the `flox-watchdog`
-      # and `flox-activations` subsystems.
-      export PATH="''${REPO_ROOT}/cli/target/debug":$PATH;
-      echo -n "''${REPO_ROOT}/cli/target/debug:" >> "$REPO_ROOT/build/.PATH";
+        # Add all internal rust crates to the PATH.
+        # That's `flox` itself as well as the `flox-watchdog`
+        # and `flox-activations` subsystems.
+        export PATH="''${REPO_ROOT}/cli/target/debug":$PATH;
+        echo -n "''${REPO_ROOT}/cli/target/debug:" >> "$REPO_ROOT/build/.PATH";
 
-      # Add the flox-manpages to the manpath
-      export MANPATH="''${FLOX_MANPAGES}/share/man:$MANPATH"
+        # Add the flox-manpages to the manpath
+        export MANPATH="''${FLOX_MANPAGES}/share/man:$MANPATH"
 
-      # configure the nix-plugin meson build
-      meson setup --reconfigure --wipe \
-      --prefix "''${REPO_ROOT}/build/nix-plugins" \
-      "''${REPO_ROOT}/nix-plugins" "''${REPO_ROOT}/nix-plugins/builddir";
+        # configure the nix-plugin meson build
+        meson setup --reconfigure --wipe \
+        --prefix "''${REPO_ROOT}/build/nix-plugins" \
+        "''${REPO_ROOT}/nix-plugins" "''${REPO_ROOT}/nix-plugins/builddir";
 
-      echo;
-      echo "run 'just build' to build flox and all its subsystems";
-    '';
+        echo;
+        echo "run 'just build' to build flox and all its subsystems";
+      '';
   }
   // flox-watchdog.devEnvs
   // flox-cli.devEnvs
