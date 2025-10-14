@@ -3,8 +3,10 @@ name = "catalog-api-v1"
 version = "0.0.0"
 edition = "2024"
 
+[package.metadata.cargo-machete]
+ignored = ["httpmock", "regex"]
+
 [dependencies]
-futures.workspace = true
 progenitor-client.workspace = true
 reqwest.workspace = true
 serde.workspace = true
@@ -23,8 +25,6 @@ syn.workspace = true
 openapiv3.workspace = true
 
 [dev-dependencies]
-httpmock.workspace = true
-regex.workspace = true
 
 [features]
 # allow exporting test helpers in dev mode only

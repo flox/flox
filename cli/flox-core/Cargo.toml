@@ -3,13 +3,15 @@ name = "flox-core"
 version = "0.0.0"
 edition = "2024"
 
+[package.metadata.cargo-machete]
+ignored = ["proptest"]
+
 [dependencies]
 anyhow.workspace = true
 blake3.workspace = true
 derive_more.workspace = true
 fslock.workspace = true
 log.workspace = true
-nix.workspace = true
 # should be a dev-dependency but test doesn't apply across crates
 proptest.workspace = true
 # should be a dev-dependency but test doesn't apply across crates
