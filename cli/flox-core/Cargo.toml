@@ -22,7 +22,7 @@ tracing.workspace = true
 tempfile.workspace = true
 time.workspace = true
 thiserror.workspace = true
-schemars = "1"
+schemars.workspace = true
 
 
 [features]
