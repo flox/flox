@@ -124,7 +124,10 @@ impl Search {
                 writeln!(&mut hints, "{suggestion}")?;
             };
 
-            message::plain(hints);
+            // We should use message::plain once bold formatting is fixed in
+            // tracing-subscriber
+            // https://github.com/tokio-rs/tracing/issues/3369
+            eprintln!("{hints}");
         }
         Ok(())
     }

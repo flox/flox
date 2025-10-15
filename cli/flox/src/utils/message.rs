@@ -11,8 +11,7 @@ use tracing::info;
 
 /// Write a message to stderr.
 ///
-/// This is a wrapper around `eprintln!` that can be further extended
-/// to include logging, word wrapping, ANSI filtereing etc.
+/// This is printed via the message_layer tracing subscriber
 fn print_message(v: impl Display) {
     info!("{v}");
 }
