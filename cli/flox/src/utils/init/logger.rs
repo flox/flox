@@ -9,6 +9,7 @@ use tracing_subscriber::{EnvFilter, Registry, filter};
 
 use crate::commands::Verbosity;
 use crate::utils::init::logger::indicatif::PROGRESS_TAG;
+use crate::utils::message::stderr_supports_color;
 use crate::utils::metrics::MetricsLayer;
 
 static LOGGER_HANDLE: OnceLock<Handle<EnvFilter, Registry>> = OnceLock::new();
@@ -72,7 +73,7 @@ pub fn create_registry_and_filter_reload_handle() -> (
     let filter = tracing_subscriber::filter::EnvFilter::try_new("trace").unwrap();
 
     let (filter, filter_reload_handle) = tracing_subscriber::reload::Layer::new(filter);
-    let use_colors = supports_color::on(supports_color::Stream::Stderr).is_some();
+    let use_colors = stderr_supports_color();
 
     // Tracing layer that handles user facing messages.
     // That is messages that are produced by the `crate::utils::message` module,

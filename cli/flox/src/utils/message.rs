@@ -58,7 +58,7 @@ pub(crate) fn package_installed(pkg: &PackageToInstall, environment_description:
     ));
 }
 
-/// Page large output to the terminal.
+/// Page large output to terminal stdout.
 /// The output will be printed without a pager if it's not larger than the
 /// terminal window or the terminal is not interactive.
 pub(crate) fn page_output(s: impl Into<String>) -> anyhow::Result<()> {
@@ -73,6 +73,14 @@ pub(crate) fn page_output(s: impl Into<String>) -> anyhow::Result<()> {
     page_all(pager)?;
 
     Ok(())
+}
+
+pub fn stdout_supports_color() -> bool {
+    supports_color::on(supports_color::Stream::Stdout).is_some()
+}
+
+pub fn stderr_supports_color() -> bool {
+    supports_color::on(supports_color::Stream::Stderr).is_some()
 }
 
 /// Display a message for packages that were successfully installed for all

@@ -56,7 +56,7 @@ use crate::commands::{
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::format_error;
-use crate::utils::message;
+use crate::utils::message::{self};
 use crate::utils::openers::Shell;
 use crate::utils::tracing::sentry_set_tag;
 use crate::{Exit, environment_subcommand_metric, subcommand_metric};

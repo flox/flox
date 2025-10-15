@@ -23,7 +23,7 @@ pub struct DidYouMean<'a, S> {
     searched_term: &'a str,
     curated: Option<&'static str>,
     search_results: SearchResults,
-    _suggestion: S,
+    suggestion: S,
 }
 
 #[derive(Debug)]
@@ -98,7 +98,7 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
             searched_term,
             curated,
             search_results,
-            _suggestion: InstallSuggestion,
+            suggestion: InstallSuggestion,
         }
     }
 }
@@ -139,7 +139,9 @@ impl Display for DidYouMean<'_, InstallSuggestion> {
     }
 }
 
-pub struct SearchSuggestion;
+pub struct SearchSuggestion {
+    use_bold_fmt: bool,
+}
 
 /// Suggestions for `search` subcommand
 impl<'a> DidYouMean<'a, SearchSuggestion> {
@@ -180,7 +182,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
     /// and then query for related search results.
     /// Either of these may fail, in which case we will return with empty [SearchResults]
     /// and log the error.
-    pub fn new(term: &'a str, catalog_client: &Client, system: String) -> Self {
+    pub fn new(term: &'a str, catalog_client: &Client, system: String, use_bold_fmt: bool) -> Self {
         let curated = Self::suggest_curated_package(term);
 
         let default_results = SearchResults {
@@ -206,7 +208,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
             searched_term: term,
             curated,
             search_results,
-            _suggestion: SearchSuggestion,
+            suggestion: SearchSuggestion { use_bold_fmt },
         }
     }
 }
@@ -218,14 +220,17 @@ impl Display for DidYouMean<'_, SearchSuggestion> {
             return Ok(());
         };
 
-        let search_results_rendered =
-            match DisplaySearchResults::from_search_results(curated, self.search_results.clone()) {
-                Ok(rendered) => rendered,
-                Err(err) => {
-                    debug!("failed to render search results: {}", err);
-                    return Ok(());
-                },
-            };
+        let search_results_rendered = match DisplaySearchResults::from_search_results(
+            curated,
+            self.search_results.clone(),
+            self.suggestion.use_bold_fmt,
+        ) {
+            Ok(rendered) => rendered,
+            Err(err) => {
+                debug!("failed to render search results: {}", err);
+                return Ok(());
+            },
+        };
 
         writeln!(f, "Related search results for '{curated}':")?;
         write!(f, "{search_results_rendered}")?;
