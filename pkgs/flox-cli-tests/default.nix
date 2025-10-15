@@ -53,62 +53,61 @@ let
     p.bats-support
   ]);
 
-  paths =
-    [
-      bashInteractive
-      fish
-      tcsh
-      zsh
-      dash
-      batsWith
-      coreutils
-      curl
-      diffutils
-      entr
-      expect
-      findutils
-      gawk
-      git
-      gnugrep
-      gnupg
-      gnused
-      gnutar
-      jq
-      man
-      ncurses
-      nix
-      openssh
-      parallel
-      pstree
-      unixtools.util-linux
-      util-linux # for setsid
-      which
-      yq
-      process-compose
-      procps
-      (podman.override (prev: {
-        extraPackages = [ "/run/wrappers" ];
-      }))
-      "/run/wrappers"
-    ]
-    # TODO: this hack is not going to be needed once we test against stuff on system
-    ++ lib.optional stdenv.isDarwin (
-      runCommandCC "locale"
-        {
-          source = ''
-            #include <stdio.h>
-            int main(){
-              printf("UTF-8");
-              return 0;
-            }
-          '';
-          buildInputs = [ gcc ];
-        }
-        ''
-          mkdir -p "$out/bin"
-          echo "$source" | gcc -Wall -o "$out/bin/$name" -xc -
-        ''
-    );
+  paths = [
+    bashInteractive
+    fish
+    tcsh
+    zsh
+    dash
+    batsWith
+    coreutils
+    curl
+    diffutils
+    entr
+    expect
+    findutils
+    gawk
+    git
+    gnugrep
+    gnupg
+    gnused
+    gnutar
+    jq
+    man
+    ncurses
+    nix
+    openssh
+    parallel
+    pstree
+    unixtools.util-linux
+    util-linux # for setsid
+    which
+    yq
+    process-compose
+    procps
+    (podman.override (prev: {
+      extraPackages = [ "/run/wrappers" ];
+    }))
+    "/run/wrappers"
+  ]
+  # TODO: this hack is not going to be needed once we test against stuff on system
+  ++ lib.optional stdenv.isDarwin (
+    runCommandCC "locale"
+      {
+        source = ''
+          #include <stdio.h>
+          int main(){
+            printf("UTF-8");
+            return 0;
+          }
+        '';
+        buildInputs = [ gcc ];
+      }
+      ''
+        mkdir -p "$out/bin"
+        echo "$source" | gcc -Wall -o "$out/bin/$name" -xc -
+      ''
+  );
 in
 # TODO: we should run tests against different shells
 writeShellScriptBin PROJECT_NAME ''
