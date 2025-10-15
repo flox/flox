@@ -782,7 +782,9 @@ impl Node {
             },
             // Treat the version in package.json strictly; if we can't find it, don't suggest something else.
             // get_action() returns NodeAction::Nothing for this case so it's unreachable
-            (Some(PackageJSONVersion::Unavailable), _) => unreachable!(),
+            (Some(PackageJSONVersion::Unavailable), _) => unreachable!(
+                "shouldn't run setup hook when package.json node version is unavailable"
+            ),
             (_, Some(NVMRCVersion::Found(result))) => {
                 let message = format!(
                     "Flox detected an .nvmrc{}",
@@ -829,10 +831,14 @@ impl Node {
                 // `package.json` and failed to locate a suitable package, we still
                 // return `Some(_)` for the `package.json` one, and don't even look at
                 // .nvmrc.
-                unreachable!()
+                unreachable!(
+                    "shouldn't run a setup hook that uses both package.json and .nvmrc version"
+                )
             },
             // get_action() returns NodeAction::Nothing for this case so it's unreachable
-            (None, None) => unreachable!(),
+            (None, None) => {
+                unreachable!("shouldn't run setup hook without something that needs node")
+            },
         };
         Ok((message, version, mentions_package_json))
     }
