@@ -8,7 +8,6 @@ edition = "2024"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-clap_derive.workspace = true
 fs_extra.workspace = true
 indicatif.workspace = true
 serde.workspace = true

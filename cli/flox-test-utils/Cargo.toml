@@ -5,14 +5,11 @@ edition = "2024"
 
 [dependencies]
 anyhow.workspace = true
-thiserror.workspace = true
 # rexpect.workspace = true
 tempfile.workspace = true
 nix.workspace = true
 indoc.workspace = true
-temp-env.workspace = true
 dirs.workspace = true
-serde_json.workspace = true
 proptest.workspace = true
 chrono.workspace = true
 

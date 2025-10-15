@@ -3,7 +3,8 @@ name = "flox"
 version = "0.0.0"
 edition = "2024"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[package.metadata.cargo-machete]
+ignored = ["sapling-renderdag"]
 
 [dependencies]
 anyhow.workspace = true
@@ -14,19 +15,16 @@ close_fds.workspace = true
 crossterm.workspace = true
 derive_more.workspace = true
 dirs.workspace = true
-enum_dispatch.workspace = true
 flox-rust-sdk.workspace = true
 fslock.workspace = true
 futures.workspace = true
 indent.workspace = true
-indexmap.workspace = true
 indicatif.workspace = true
 indoc.workspace = true
 inquire.workspace = true
 itertools.workspace = true
 nix.workspace = true
 oauth2.workspace = true
-once_cell.workspace = true
 path-dedot.workspace = true
 pollster.workspace = true
 reqwest.workspace = true
@@ -34,7 +32,6 @@ semver.workspace = true
 regex.workspace = true
 sentry.workspace = true
 serde_json.workspace = true
-serde_yaml.workspace = true
 serde.workspace = true
 shell-escape.workspace = true
 slug.workspace = true
@@ -50,7 +47,6 @@ toml.workspace = true
 toml_edit.workspace = true
 tracing.workspace = true
 tracing-indicatif.workspace = true
-tracing-log.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
 uuid.workspace = true

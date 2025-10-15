@@ -8,16 +8,13 @@ edition = "2024"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-clap_derive.workspace = true
 flox-core.workspace = true
 flox-rust-sdk.workspace = true
 fslock.workspace = true
 glob = "0.3.3"
 nix.workspace = true
 sentry.workspace = true
-serde.workspace = true
 signal-hook.workspace = true
-time.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true

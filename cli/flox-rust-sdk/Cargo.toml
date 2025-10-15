@@ -38,9 +38,7 @@ toml.workspace = true
 tracing.workspace = true
 url.workspace = true
 url-escape.workspace = true
-uuid.workspace = true
 walkdir.workspace = true
-xdg.workspace = true
 tracing-subscriber = { workspace = true, optional = true }
 pretty_assertions = { workspace = true, optional = true }
 proptest = { workspace = true, optional = true }

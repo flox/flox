@@ -481,7 +481,6 @@ name = "catalog-api-v1"
 version = "0.0.0"
 dependencies = [
  "chrono",
- "futures",
  "httpmock",
  "openapiv3",
  "prettyplease",
@@ -1018,14 +1017,12 @@ dependencies = [
  "crossterm 0.27.0",
  "derive_more",
  "dirs",
- "enum_dispatch",
  "flox-core",
  "flox-rust-sdk",
  "flox-test-utils",
  "fslock",
  "futures",
  "indent",
- "indexmap 2.11.4",
  "indicatif",
  "indoc",
  "inquire",
@@ -1033,7 +1030,6 @@ dependencies = [
  "minus",
  "nix",
  "oauth2",
- "once_cell",
  "path-dedot",
  "pollster",
  "pretty_assertions",
@@ -1047,7 +1043,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "serde_yaml",
  "serial_test",
  "shell-escape",
  "slug",
@@ -1064,7 +1059,6 @@ dependencies = [
  "toml_edit",
  "tracing",
  "tracing-indicatif",
- "tracing-log",
  "tracing-subscriber",
  "url",
  "uuid",
@@ -1076,9 +1070,7 @@ name = "flox-activations"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "blake3",
  "clap",
- "clap_derive",
  "env_logger",
  "flox-core",
  "fslock",
@@ -1086,13 +1078,9 @@ dependencies = [
  "log",
  "nix",
  "pretty_assertions",
- "serde",
- "serde_json",
  "temp-env",
  "tempfile",
  "time",
- "uuid",
- "xdg",
 ]
 
 [[package]]
@@ -1104,7 +1092,6 @@ dependencies = [
  "derive_more",
  "fslock",
  "log",
- "nix",
  "proptest",
  "proptest-derive",
  "schemars 1.0.4",
@@ -1162,9 +1149,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "url-escape",
- "uuid",
  "walkdir",
- "xdg",
 ]
 
 [[package]]
@@ -1177,10 +1162,7 @@ dependencies = [
  "indoc",
  "nix",
  "proptest",
- "serde_json",
- "temp-env",
  "tempfile",
- "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -1189,7 +1171,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
- "clap_derive",
  "filetime",
  "flox-activations",
  "flox-core",
@@ -1199,11 +1180,9 @@ dependencies = [
  "kqueue",
  "nix",
  "sentry",
- "serde",
  "serde_json",
  "signal-hook",
  "tempfile",
- "time",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -2201,7 +2180,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "clap_derive",
  "fs_extra",
  "indicatif",
  "serde",
