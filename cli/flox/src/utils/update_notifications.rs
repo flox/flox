@@ -113,6 +113,7 @@ impl UpdateNotification {
 
         Self::check_for_update_inner(
             notification_file,
+            &FLOX_VERSION,
             Self::get_latest_version(release_env),
             UPDATE_NOTIFICATION_EXPIRY,
         )
@@ -123,6 +124,7 @@ impl UpdateNotification {
     /// passed, check for an update.
     async fn check_for_update_inner(
         notification_file: PathBuf,
+        current_version: &FloxVersion,
         get_latest_version_future: impl Future<Output = Result<String, UpdateNotificationError>>,
         expiry: Duration,
     ) -> Result<UpdateCheckResult, UpdateNotificationError> {
@@ -150,7 +152,7 @@ impl UpdateNotification {
             )));
         };
 
-        match FLOX_VERSION.partial_cmp(&new_version) {
+        match current_version.partial_cmp(&new_version) {
             None => Ok(UpdateCheckResult::Skipped),
             Some(std::cmp::Ordering::Less) => {
                 Ok(UpdateCheckResult::UpdateAvailable(UpdateNotification {
@@ -419,6 +421,7 @@ mod tests {
 
         let result = UpdateNotification::check_for_update_inner(
             notification_file,
+            &FLOX_VERSION,
             async { panic!() },
             UPDATE_NOTIFICATION_EXPIRY,
         )
@@ -448,6 +451,7 @@ mod tests {
 
         let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
+            &FLOX_VERSION,
             async { Ok(latest_version.clone()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
@@ -471,6 +475,7 @@ mod tests {
 
         let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
+            &FLOX_VERSION,
             async { Ok("1000.0.0".to_string()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
@@ -494,6 +499,7 @@ mod tests {
 
         let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
+            &FLOX_VERSION,
             async { Ok("bad".to_string()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
@@ -516,6 +522,7 @@ mod tests {
 
         let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
+            &FLOX_VERSION,
             async { Ok("not-a-version".into()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
@@ -537,7 +544,10 @@ mod tests {
 
         let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
-            async { Ok((*FLOX_VERSION).to_string()) },
+            // In development FLOX_VERSION may be 0.0.0-dirty which can't be
+            // compared so the test fails
+            &"0.0.0".parse().unwrap(),
+            async { Ok("0.0.0".to_string()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await;
