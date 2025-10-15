@@ -246,7 +246,6 @@ impl FloxArgs {
             // update persistent config file
             Config::write_to_in(
                 config.flox.config_dir.join(FLOX_CONFIG_FILE),
-                &temp_dir,
                 &[Key::new("disable_metrics")],
                 Some(true),
             )?;
@@ -308,12 +307,9 @@ impl FloxArgs {
         let floxhub_token = match floxhub_token {
             Err(FloxhubTokenError::Expired) => {
                 message::warning("Your FloxHub token has expired. You may need to log in again.");
-                if let Err(e) = update_config(
-                    &config.flox.config_dir,
-                    temp_dir.path(),
-                    "floxhub_token",
-                    None::<String>,
-                ) {
+                if let Err(e) =
+                    update_config(&config.flox.config_dir, "floxhub_token", None::<String>)
+                {
                     debug!("Could not remove token from user config: {e}");
                 }
                 None
@@ -323,12 +319,9 @@ impl FloxArgs {
                     Your FloxHub token is invalid: {token_error}
                     You may need to log in again.
                 "});
-                if let Err(e) = update_config(
-                    &config.flox.config_dir,
-                    temp_dir.path(),
-                    "floxhub_token",
-                    None::<String>,
-                ) {
+                if let Err(e) =
+                    update_config(&config.flox.config_dir, "floxhub_token", None::<String>)
+                {
                     debug!("Could not remove token from user config: {e}");
                 }
                 None
@@ -1225,7 +1218,6 @@ pub(super) async fn ensure_environment_trust(
             Choices::Trust => {
                 update_config(
                     &flox.config_dir,
-                    &flox.temp_dir,
                     &env_config_key,
                     Some(EnvironmentTrust::Trust),
                 )
@@ -1237,7 +1229,6 @@ pub(super) async fn ensure_environment_trust(
             Choices::Deny => {
                 update_config(
                     &flox.config_dir,
-                    &flox.temp_dir,
                     &env_config_key,
                     Some(EnvironmentTrust::Deny),
                 )

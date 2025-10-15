@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use flox_core::{SerializeError, Version, serialize_atomically};
+use flox_core::{Version, WriteError, serialize_atomically};
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
@@ -28,7 +28,7 @@ pub enum EnvRegistryError {
     #[error("did not find environment in registry")]
     EnvNotRegistered,
     #[error("failed to write environment registry file")]
-    WriteEnvironmentRegistry(#[source] SerializeError),
+    WriteEnvironmentRegistry(#[source] WriteError),
     #[error("no registry found")]
     NoEnvRegistry,
     #[error(transparent)]

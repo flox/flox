@@ -5,11 +5,11 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
+use flox_core::{WriteError, write_atomically};
 use flox_rust_sdk::flox::{EnvironmentRef, Features};
 use flox_rust_sdk::models::search::SearchLimit;
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Serialize};
-use tempfile::PersistError;
 use thiserror::Error;
 use toml_edit::{DocumentMut, Item, Key, Table, TableLike};
 use tracing::{debug, trace};
@@ -175,21 +175,15 @@ pub enum ReadWriteError {
     #[error("Config key '{}' not in user configuration", _0.iter().map(|key| key.display_repr().into_owned()).collect_vec().join("."))]
     NotAUserValue(Vec<Key>),
     #[error(transparent)]
-    Json(#[from] serde_json::Error),
-    #[error(transparent)]
     TomlEdit(#[from] toml_edit::TomlError),
     #[error(transparent)]
     TomlSer(#[from] toml_edit::ser::Error),
     #[error(transparent)]
     TomlDe(#[from] toml_edit::de::Error),
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
     #[error("Could not read config file: {0}")]
     ReadConfig(std::io::Error),
-    #[error("Could not write config file: {0}")]
-    WriteConfig(std::io::Error),
-    #[error(transparent)]
-    Persist(#[from] PersistError),
+    #[error("Could not write config file")]
+    WriteConfig(#[source] WriteError),
 }
 
 /// Locates the system wide flox config dir.
@@ -446,7 +440,6 @@ impl Config {
 
     pub fn write_to_in<V: Serialize>(
         config_file_path: impl AsRef<Path>,
-        temp_dir: impl AsRef<Path>,
         query: &[Key],
         value: Option<V>,
     ) -> Result<(), ReadWriteError> {
@@ -465,9 +458,8 @@ impl Config {
 
         let config_file_contents = Self::write_to(config_file_contents, query, value)?;
 
-        let tempfile = tempfile::Builder::new().tempfile_in(temp_dir)?;
-        fs::write(&tempfile, config_file_contents).map_err(ReadWriteError::WriteConfig)?;
-        tempfile.persist(config_file_path)?;
+        write_atomically(&config_file_path, config_file_contents)
+            .map_err(ReadWriteError::WriteConfig)?;
 
         Ok(())
     }
