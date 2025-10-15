@@ -691,8 +691,8 @@ pub enum EnvironmentError {
     ParseEnvJson(#[source] serde_json::Error),
     #[error("Failed serializing contents of env.json file")]
     SerializeEnvJson(#[source] serde_json::Error),
-    #[error("Failed write env.json file")]
-    WriteEnvJson(#[source] std::io::Error),
+    #[error("Failed to write env.json file")]
+    WriteEnvJson(Box<dyn std::error::Error + Send + Sync>),
     // endregion
 
     // region: find_dot_flox
