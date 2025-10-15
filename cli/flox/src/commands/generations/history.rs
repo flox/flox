@@ -40,7 +40,10 @@ impl History {
         let env: GenerationsEnvironment = env.try_into()?;
         let metadata = env.generations_metadata()?;
 
-        let output = DisplayHistory(metadata.history());
+        let output = DisplayHistory {
+            history: metadata.history(),
+            pretty: Dialog::can_prompt(),
+        };
         if self.no_pager {
             println!("{}", output);
             return Ok(());
@@ -54,6 +57,8 @@ impl History {
 /// Implements CLI/command specific formatting.
 struct DisplayChange<'m> {
     change: &'m HistorySpec,
+    // Whether to use pretty formatting (bold text)
+    pretty: bool,
 }
 impl Display for DisplayChange<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -64,7 +69,7 @@ impl Display for DisplayChange<'_> {
         let generation = self.change.current_generation;
 
         let line = format!("Date:       {date}");
-        if Dialog::can_prompt() {
+        if self.pretty {
             writeln!(f, "{}", line.bold())?;
         } else {
             writeln!(f, "{}", line)?;
@@ -94,12 +99,18 @@ impl Display for DisplayChange<'_> {
 ///
 /// ...
 /// ```
-struct DisplayHistory<'m>(&'m generations::History);
+struct DisplayHistory<'m> {
+    history: &'m generations::History,
+    pretty: bool,
+}
 impl Display for DisplayHistory<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut iter = self.0.into_iter().rev().peekable();
+        let mut iter = self.history.into_iter().rev().peekable();
         while let (Some(change), peek) = (iter.next(), iter.peek()) {
-            let next = DisplayChange { change };
+            let next = DisplayChange {
+                change,
+                pretty: self.pretty,
+            };
             write!(f, "{}", next)?;
             if peek.is_some() {
                 writeln!(f)?;
@@ -149,7 +160,11 @@ mod tests {
             })
             .unwrap();
 
-        let actual = DisplayHistory(metadata.history()).to_string();
+        let actual = DisplayHistory {
+            history: metadata.history(),
+            pretty: false,
+        }
+        .to_string();
 
         let expected = indoc! {"
             Date:       1970-01-01 04:00:00 UTC

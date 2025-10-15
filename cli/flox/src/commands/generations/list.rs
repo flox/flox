@@ -49,7 +49,11 @@ impl List {
         let output = if self.tree {
             render_tree(&metadata)
         } else {
-            DisplayAllMetadata(&metadata).to_string()
+            DisplayAllMetadata {
+                metadata: &metadata,
+                pretty: Dialog::can_prompt(),
+            }
+            .to_string()
         };
 
         if self.no_pager {
@@ -97,18 +101,22 @@ impl Display for DisplayMetadata<'_> {
 /// Generation: <generation id>
 /// <generation metadata>
 /// ```
-struct DisplayAllMetadata<'m>(&'m AllGenerationsMetadata);
+struct DisplayAllMetadata<'m> {
+    metadata: &'m AllGenerationsMetadata,
+    // Whether to use pretty formatting (bold text and color)
+    pretty: bool,
+}
 impl Display for DisplayAllMetadata<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut iter = self.0.generations().into_iter().rev().peekable();
+        let mut iter = self.metadata.generations().into_iter().rev().peekable();
         while let (Some((id, metadata)), peek) = (iter.next(), iter.peek()) {
             let generation = format!("Generation:  {id}");
-            let current = if Some(id) == self.0.current_gen() {
+            let current = if Some(id) == self.metadata.current_gen() {
                 " (live)"
             } else {
                 ""
             };
-            if Dialog::can_prompt() {
+            if self.pretty {
                 write!(f, "{}{}", generation.bold(), current.bold().yellow())?;
             } else {
                 write!(f, "{}{}", generation, current)?;
@@ -287,7 +295,11 @@ mod tests {
             })
             .unwrap();
 
-        let actual = DisplayAllMetadata(&metadata).to_string();
+        let actual = DisplayAllMetadata {
+            metadata: &metadata,
+            pretty: false,
+        }
+        .to_string();
 
         let expected = indoc! {"
             Generation:  3
