@@ -1,9 +1,7 @@
 use std::fmt::Display;
-use std::io::stdout;
 
 use anyhow::Result;
 use crossterm::style::Stylize;
-use crossterm::tty::IsTty;
 use flox_rust_sdk::models::search::{SearchResult, SearchResults};
 
 pub const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
@@ -82,12 +80,11 @@ impl DisplaySearchResults {
     pub(crate) fn from_search_results(
         search_term: &str,
         search_results: SearchResults,
+        use_bold: bool,
     ) -> Result<DisplaySearchResults> {
         let n_results = search_results.results.len();
 
         let display_items: DisplayItems = search_results.results.into();
-
-        let use_bold = stdout().is_tty();
 
         Ok(DisplaySearchResults {
             search_term: search_term.to_string(),

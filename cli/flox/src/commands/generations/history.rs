@@ -15,8 +15,7 @@ use tracing::instrument;
 
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
-use crate::utils::dialog::Dialog;
-use crate::utils::message::page_output;
+use crate::utils::message::{page_output, stdout_supports_color};
 
 /// Arguments for the `flox generations history` command
 #[derive(Bpaf, Debug, Clone)]
@@ -56,7 +55,7 @@ impl History {
         let output = match self.output_mode {
             OutputMode::Pretty => DisplayHistory {
                 history: metadata.history(),
-                pretty: Dialog::can_prompt(),
+                pretty: stdout_supports_color(),
             }
             .to_string(),
             OutputMode::Json => {

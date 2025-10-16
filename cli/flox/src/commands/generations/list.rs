@@ -17,8 +17,7 @@ use tracing::instrument;
 
 use crate::commands::{EnvironmentSelect, environment_select};
 use crate::environment_subcommand_metric;
-use crate::utils::dialog::Dialog;
-use crate::utils::message::page_output;
+use crate::utils::message::{page_output, stdout_supports_color};
 
 /// Arguments for the `flox generations list` command
 #[derive(Bpaf, Debug, Clone)]
@@ -65,7 +64,7 @@ impl List {
         let output = match self.output_mode {
             OutputMode::Pretty => DisplayAllMetadata {
                 metadata: &metadata,
-                pretty: Dialog::can_prompt(),
+                pretty: stdout_supports_color(),
             }
             .to_string(),
             OutputMode::Tree => render_tree(&metadata),

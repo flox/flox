@@ -12,7 +12,7 @@ use tracing::{debug, instrument};
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
-use crate::utils::message;
+use crate::utils::message::{self, stderr_supports_color, stdout_supports_color};
 use crate::utils::search::DisplaySearchResults;
 use crate::utils::tracing::sentry_set_tag;
 
@@ -88,8 +88,12 @@ impl Search {
         } else {
             debug!("printing search results as user facing");
 
-            let suggestion =
-                DidYouMean::<SearchSuggestion>::new(search_term, &flox.catalog_client, flox.system);
+            let suggestion = DidYouMean::<SearchSuggestion>::new(
+                search_term,
+                &flox.catalog_client,
+                flox.system,
+                stderr_supports_color(),
+            );
 
             if results.results.is_empty() {
                 let mut message =
@@ -106,7 +110,11 @@ impl Search {
                 bail!(message);
             }
 
-            let results = DisplaySearchResults::from_search_results(search_term, results)?;
+            let results = DisplaySearchResults::from_search_results(
+                search_term,
+                results,
+                stdout_supports_color(),
+            )?;
             println!("{results}");
 
             let mut hints = String::new();
@@ -124,7 +132,10 @@ impl Search {
                 writeln!(&mut hints, "{suggestion}")?;
             };
 
-            message::plain(hints);
+            // We should use message::plain once bold formatting is fixed in
+            // tracing-subscriber
+            // https://github.com/tokio-rs/tracing/issues/3369
+            eprintln!("{hints}");
         }
         Ok(())
     }
