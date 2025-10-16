@@ -4289,6 +4289,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "systemd"
+version = "0.1.0"
+dependencies = [
+ "indoc",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "tabwriter"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

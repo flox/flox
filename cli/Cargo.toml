@@ -1,13 +1,14 @@
 [workspace]
 members = [
+    "catalog-api-v1",
     "flox",
     "flox-rust-sdk",
-    "catalog-api-v1",
-    "mk_data",
     "flox-watchdog",
     "flox-activations",
     "flox-core",
     "flox-test-utils",
+    "mk_data",
+    "systemd",
     "xtask",
 ]
 default-members = ["flox", "flox-watchdog", "flox-activations"]
