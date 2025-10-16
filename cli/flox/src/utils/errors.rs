@@ -121,11 +121,13 @@ pub fn format_error(err: &EnvironmentError) -> String {
         // todo: add a note to user to report this as a bug?
         // todo: enrich with path
         EnvironmentError::SerializeEnvJson(_) => display_chain(err),
-        EnvironmentError::WriteEnvJson(error) => formatdoc! {"
-            Failed to write environment metadata: {error}
+        EnvironmentError::WriteEnvJson(error) => {
+            formatdoc! {"
+            Failed to write environment metadata: {}
 
             Please ensure that you have write permissions to write '.flox/env.json'.
-        "},
+        ", display_chain(error.as_ref())}
+        },
 
         // todo: where in the control flow does this happen?
         //       do we want a separate error type for this (likely)
@@ -239,6 +241,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         CoreEnvironmentError::MakeSandbox(_) => display_chain(err),
         // within transaction, user should not see this and likely can't do anything about it
         CoreEnvironmentError::WriteLockfile(_) => display_chain(err),
+        CoreEnvironmentError::WriteLockfileAtomically(_) => display_chain(err),
         CoreEnvironmentError::MakeTemporaryEnv(_) => display_chain(err),
         CoreEnvironmentError::PriorTransaction(backup) => {
             let mut env_path = backup.clone();

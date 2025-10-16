@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use flox_core::{SerializeError, serialize_atomically, traceable_path};
+use flox_core::{WriteError, serialize_atomically, traceable_path};
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
@@ -18,7 +18,7 @@ pub enum UserStateError {
     #[error("couldn't parse user state file")]
     Parse(#[source] serde_json::Error),
     #[error("failed to write user state file")]
-    WriteFile(#[source] SerializeError),
+    WriteFile(#[source] WriteError),
     #[error("couldn't find parent for path: {0}")]
     BadFilePath(PathBuf),
 }

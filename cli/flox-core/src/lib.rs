@@ -5,7 +5,7 @@ pub mod proc_status;
 mod version;
 
 use std::fmt::Display;
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
@@ -23,7 +23,12 @@ pub fn path_hash(p: impl AsRef<Path>) -> String {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum SerializeError {
+pub enum WriteError {
+    /// This error is thrown in the unlikely scenario that the path being
+    /// written to is:
+    /// - An empty string
+    /// - `/`
+    /// - `.`
     #[error("file stored in an invalid location: {0}")]
     InvalidLocation(PathBuf),
     #[error("failed to open temporary file")]
@@ -31,7 +36,9 @@ pub enum SerializeError {
     #[error("failed to rename temporary file")]
     RenameTmpFile(#[source] tempfile::PersistError),
     #[error("failed to write temporary file")]
-    WriteTmpFile(#[source] serde_json::Error),
+    SerdeWriteTmpFile(#[source] serde_json::Error),
+    #[error("failed to write temporary file")]
+    WriteTmpFile(#[source] std::io::Error),
 }
 
 /// Serialize a value and write it to disk atomically.
@@ -47,24 +54,47 @@ pub fn serialize_atomically<T>(
     value: &T,
     path: &impl AsRef<Path>,
     _lock: LockFile,
-) -> Result<(), SerializeError>
+) -> Result<(), WriteError>
 where
     T: ?Sized + Serialize,
 {
-    let parent = path.as_ref().parent().ok_or(
-        // This error is thrown in the unlikely scenario that `path` is:
-        // - An empty string
-        // - `/`
-        // - `.`
-        SerializeError::InvalidLocation(path.as_ref().to_path_buf()),
-    )?;
-    let temp_file = tempfile::NamedTempFile::new_in(parent).map_err(SerializeError::OpenTmpFile)?;
+    let parent = path
+        .as_ref()
+        .parent()
+        .ok_or(WriteError::InvalidLocation(path.as_ref().to_path_buf()))?;
+    let temp_file = tempfile::NamedTempFile::new_in(parent).map_err(WriteError::OpenTmpFile)?;
 
     let writer = BufWriter::new(&temp_file);
-    serde_json::to_writer_pretty(writer, value).map_err(SerializeError::WriteTmpFile)?;
+    serde_json::to_writer_pretty(writer, value).map_err(WriteError::SerdeWriteTmpFile)?;
     temp_file
         .persist(path.as_ref())
-        .map_err(SerializeError::RenameTmpFile)?;
+        .map_err(WriteError::RenameTmpFile)?;
+    Ok(())
+}
+
+// At the moment this could be in flox-rust-sdk but I think it should be
+// co-located with serialize_atomically
+/// Write contents to a file atomically by renaming a tempfile
+pub fn write_atomically(
+    path: &impl AsRef<Path>,
+    contents: impl AsRef<[u8]>,
+) -> Result<(), WriteError> {
+    // Create the tempfile in the same directory as the file so persist()
+    // doesn't run into a cross device linking error
+    let parent = path
+        .as_ref()
+        .parent()
+        .ok_or(WriteError::InvalidLocation(path.as_ref().to_path_buf()))?;
+
+    let mut tempfile = tempfile::NamedTempFile::new_in(parent).map_err(WriteError::OpenTmpFile)?;
+
+    tempfile
+        .write_all(contents.as_ref())
+        .map_err(WriteError::WriteTmpFile)?;
+
+    tempfile
+        .persist(path.as_ref())
+        .map_err(WriteError::RenameTmpFile)?;
     Ok(())
 }
 

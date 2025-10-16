@@ -15,9 +15,9 @@
 
 use std::ffi::OsStr;
 use std::fs::{self};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use flox_core::write_atomically;
 use indoc::formatdoc;
 use itertools::Itertools;
 use tracing::debug;
@@ -169,17 +169,11 @@ impl PathEnvironment {
         let pointer_content = serde_json::to_string_pretty(&self.pointer)
             .map_err(EnvironmentError::SerializeEnvJson)?;
 
-        let mut tempfile =
-            tempfile::NamedTempFile::new_in(&self.path).map_err(EnvironmentError::WriteEnvJson)?;
-
-        tempfile
-            .write_all(pointer_content.as_bytes())
-            .map_err(EnvironmentError::WriteEnvJson)?;
-
-        tempfile
-            .persist(self.path.join(ENVIRONMENT_POINTER_FILENAME))
-            .map_err(|e| e.error)
-            .map_err(EnvironmentError::WriteEnvJson)?;
+        write_atomically(
+            &self.path.join(ENVIRONMENT_POINTER_FILENAME),
+            pointer_content,
+        )
+        .map_err(|e| EnvironmentError::WriteEnvJson(Box::new(e)))?;
 
         Ok(())
     }
@@ -541,7 +535,7 @@ impl PathEnvironment {
             pointer_content,
         ) {
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
-            Err(EnvironmentError::WriteEnvJson(e))?;
+            Err(EnvironmentError::WriteEnvJson(Box::new(e)))?;
         }
 
         // Write `manifest.toml`

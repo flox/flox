@@ -209,7 +209,7 @@ impl Auth {
                     return Ok(());
                 }
 
-                update_config::<String>(&flox.config_dir, &flox.temp_dir, "floxhub_token", None)
+                update_config::<String>(&flox.config_dir, "floxhub_token", None)
                     .context("Could not remove token from user config")?;
 
                 message::updated("Logout successful");
@@ -255,13 +255,8 @@ pub async fn login_flox(flox: &mut Flox) -> Result<&FloxhubToken> {
     let handle = token.handle();
 
     // write the token to the config file
-    update_config(
-        &flox.config_dir,
-        &flox.temp_dir,
-        "floxhub_token",
-        Some(token.clone()),
-    )
-    .context("Could not write token to config")?;
+    update_config(&flox.config_dir, "floxhub_token", Some(token.clone()))
+        .context("Could not write token to config")?;
 
     // If the catalog client is catalog (not a mock), update the token by
     // creating a new client based on the old config with the updated token

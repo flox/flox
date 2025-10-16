@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use flox_core::{WriteError, write_atomically};
 use itertools::Itertools;
 use pollster::FutureExt;
 use serde::{Deserialize, Serialize};
@@ -221,16 +222,8 @@ impl<State> CoreEnvironment<State> {
             "generated lockfile, writing to disk",
         );
 
-        let mut temp_lockfile = tempfile::NamedTempFile::new_in(&self.env_dir)
-            .map_err(CoreEnvironmentError::WriteLockfile)?;
-
-        temp_lockfile
-            .write_all(lockfile_contents.as_bytes())
-            .map_err(CoreEnvironmentError::WriteLockfile)?;
-
-        temp_lockfile
-            .persist(&environment_lockfile_path)
-            .map_err(|persist_error| CoreEnvironmentError::WriteLockfile(persist_error.error))?;
+        write_atomically(&environment_lockfile_path, lockfile_contents)
+            .map_err(CoreEnvironmentError::WriteLockfileAtomically)?;
 
         Ok(LockResult::Changed(lockfile))
     }
@@ -1030,6 +1023,8 @@ pub enum CoreEnvironmentError {
     #[error("could not make temporary directory for transaction")]
     MakeSandbox(#[source] std::io::Error),
 
+    #[error("couldn't write new lockfile contents")]
+    WriteLockfileAtomically(#[source] WriteError),
     #[error("couldn't write new lockfile contents")]
     WriteLockfile(#[source] std::io::Error),
 
