@@ -192,6 +192,15 @@ jobs:
           flags: "dev-unittests, ${{ matrix.test-tags }}, ${{ matrix.os }}"
           verbose: true
           use_oidc: true
+      - name: "Check schemas are up to date"
+        run: |
+          nix develop -L --no-update-lock-file --command just gen-schemas
+          if ! git diff --quiet cli/schemas; then
+            echo "::error::Schema files are not up to date. Please run 'just gen-schemas' and commit the changes."
+            git status
+            git diff
+            exit 1
+          fi
 
   nix-build:
     name: "Nix build"
