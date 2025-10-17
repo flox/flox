@@ -1370,48 +1370,37 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=activate,activate:inplace-prints
-@test "'flox activate' prints script to modify current shell (bash)" {
+sets_NIX_SSL_CERT_FILE() {
+  shell="${1?}"
+  shift
+  expected_line="${1?}"
+  shift
   project_setup
   # Flox detects that the output is not a tty and prints the script to stdout
-  FLOX_SHELL="bash" run "$FLOX_BIN" activate
+  FLOX_SHELL="$shell" run "$FLOX_BIN" activate
   assert_success
   # check that env vars are set for compatibility with nix built software
-  assert_line --partial "export NIX_SSL_CERT_FILE="
-  assert_line --partial "set-prompt.bash"
+  assert_line --partial "$expected_line"
 }
 
-# bats test_tags=activate,activate:inplace-prints
-@test "'flox activate' prints script to modify current shell (fish)" {
-  project_setup
-  # Flox detects that the output is not a tty and prints the script to stdout
-  FLOX_SHELL="fish" run "$FLOX_BIN" activate
-  assert_success
-  # check that env vars are set for compatibility with nix built software
-  assert_line --partial "set -gx NIX_SSL_CERT_FILE "
-  assert_line --partial "set-prompt.fish"
+# bats test_tags=activate
+@test "bash: sets NIX_SSL_CERT_FILE" {
+  sets_NIX_SSL_CERT_FILE "bash" "export NIX_SSL_CERT_FILE="
 }
 
-# bats test_tags=activate,activate:inplace-prints
-@test "'flox activate' prints script to modify current shell (tcsh)" {
-  project_setup
-  # Flox detects that the output is not a tty and prints the script to stdout
-  FLOX_SHELL="tcsh" run "$FLOX_BIN" activate
-  assert_success
-  # check that env vars are set for compatibility with nix built software
-  assert_line --partial "setenv NIX_SSL_CERT_FILE "
-  assert_line --partial "set-prompt.tcsh"
+# bats test_tags=activate
+@test "zsh: sets NIX_SSL_CERT_FILE" {
+  sets_NIX_SSL_CERT_FILE "zsh" "export NIX_SSL_CERT_FILE="
 }
 
-# bats test_tags=activate,activate:inplace-prints
-@test "'flox activate' prints script to modify current shell (zsh)" {
-  project_setup
-  # Flox detects that the output is not a tty and prints the script to stdout
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate
-  assert_success
-  # check that env vars are set for compatibility with nix built software
-  assert_line --partial "export NIX_SSL_CERT_FILE="
-  assert_line --partial "activate.d/zsh"
+# bats test_tags=activate
+@test "fish: sets NIX_SSL_CERT_FILE" {
+  sets_NIX_SSL_CERT_FILE "fish" "set -gx NIX_SSL_CERT_FILE"
+}
+
+# bats test_tags=activate
+@test "tcsh: sets NIX_SSL_CERT_FILE" {
+  sets_NIX_SSL_CERT_FILE "tcsh" "setenv NIX_SSL_CERT_FILE"
 }
 
 # ---------------------------------------------------------------------------- #
