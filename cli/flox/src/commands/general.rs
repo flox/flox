@@ -76,10 +76,6 @@ pub enum ConfigArgs {
     Reset,
     /// Set a config value
     Set(#[bpaf(external(config_set))] ConfigSet),
-    /// Set a numeric config value (deprecated)
-    SetNumber(#[bpaf(external(config_set_number))] ConfigSetNumber),
-    /// Set a boolean config value (deprecated)
-    SetBool(#[bpaf(external(config_set_bool))] ConfigSetBool),
     /// Delete a config value
     Delete(#[bpaf(external(config_delete))] ConfigDelete),
 }
@@ -117,20 +113,6 @@ impl ConfigArgs {
 
                 update_config(&flox.config_dir, key, Some(parsed_value))?
             },
-            ConfigArgs::SetNumber(ConfigSetNumber { key, value, .. }) => {
-                // TODO: delete deprecation notice later
-                message::warning(
-                    "'--set-number' is deprecated. Please use --set in the future instead.",
-                );
-                update_config(&flox.config_dir, key, Some(value))?
-            },
-            ConfigArgs::SetBool(ConfigSetBool { key, value, .. }) => {
-                // TODO: delete deprecation notice later
-                message::warning(
-                    "'--set-bool' is deprecated. Please use --set in the future instead.",
-                );
-                update_config(&flox.config_dir, key, Some(value))?
-            },
             ConfigArgs::Delete(ConfigDelete { key, .. }) => {
                 update_config::<()>(&flox.config_dir, key, None)?
             },
@@ -151,36 +133,6 @@ pub struct ConfigSet {
     /// Configuration value (string)
     #[bpaf(positional("string"))]
     value: String,
-}
-
-#[derive(Debug, Clone, Bpaf)]
-#[bpaf(adjacent, hide)]
-#[allow(unused)]
-pub struct ConfigSetNumber {
-    /// Set <key> to <number>
-    #[bpaf(long("set-number"))]
-    set_number: (),
-    /// Configuration key
-    #[bpaf(positional("key"))]
-    key: String,
-    /// Configuration value (i32)
-    #[bpaf(positional("number"))]
-    value: i32,
-}
-
-#[derive(Debug, Clone, Bpaf)]
-#[bpaf(adjacent, hide)]
-#[allow(unused)]
-pub struct ConfigSetBool {
-    /// Set <key> to <bool>
-    #[bpaf(long("set-bool"))]
-    set_bool: (),
-    /// Configuration key
-    #[bpaf(positional("key"))]
-    key: String,
-    /// Configuration value (bool)
-    #[bpaf(positional("bool"))]
-    value: bool,
 }
 
 #[derive(Debug, Clone, Bpaf)]
