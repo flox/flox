@@ -81,9 +81,31 @@ impl Push {
                     ", existing_owner = managed_pointer.owner, existing_name = managed_pointer.name});
                 }
 
-                let message = Self::push_message(&managed_pointer, self.force, true)?;
-                Self::push_managed_env(&flox, managed_pointer, &dot_flox.path, self.force)?;
-                message::updated(message);
+                match Self::push_managed_env(
+                    &flox,
+                    managed_pointer.clone(),
+                    &dot_flox.path,
+                    self.force,
+                ) {
+                    Ok(_) => {
+                        let message = Self::push_message(&managed_pointer, self.force, true)?;
+                        message::updated(message);
+                    },
+                    Err(err) => {
+                        // Check if this is a NothingToPush error
+                        if let Some(EnvironmentError::ManagedEnvironment(
+                            ManagedEnvironmentError::NothingToPush,
+                        )) = err.downcast_ref::<EnvironmentError>()
+                        {
+                            message::info(formatdoc! {"
+                                No changes to push for {name}.
+                                The environment on FloxHub is already up to date.
+                            ", name = managed_pointer.name});
+                        } else {
+                            return Err(err);
+                        }
+                    },
+                }
             },
 
             // Convert a path environment to a managed environment
@@ -178,6 +200,10 @@ impl Push {
                 Use 'flox edit' to resolve errors, test with 'flox activate', and 'flox push' again.",
                 err = format_core_error(err)
             }.into(),
+            EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::NothingToPush) => formatdoc! {"
+                No changes to push for {name}.
+                The environment on FloxHub is already up to date.
+            "}.into(),
             _ => None
         };
 

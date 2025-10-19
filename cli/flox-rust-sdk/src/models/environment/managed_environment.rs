@@ -153,6 +153,8 @@ pub enum ManagedEnvironmentError {
     Push(#[source] GitRemoteCommandError),
     #[error("cannot push environment that includes local environments")]
     PushWithLocalIncludes,
+    #[error("no changes to push")]
+    NothingToPush,
     #[error("failed to delete local environment branch")]
     DeleteBranch(#[source] GitCommandError),
     #[error("failed to delete environment directory {0:?}")]
@@ -1744,6 +1746,19 @@ impl ManagedEnvironment {
                 }))?;
             }
         }
+
+        // check if there are any changes to push by comparing branch hashes
+        let project_branch_commit = self
+            .floxmeta
+            .git
+            .branch_hash(&project_branch)
+            .map_err(ManagedEnvironmentError::GitBranchHash)?;
+        let sync_branch_commit = self.floxmeta.git.branch_hash(&sync_branch).ok();
+
+        if Some(project_branch_commit.clone()) == sync_branch_commit {
+            return Err(ManagedEnvironmentError::NothingToPush);
+        }
+
         self.floxmeta
             .git
             .push_ref(
