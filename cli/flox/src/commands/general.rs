@@ -234,7 +234,7 @@ mod tests {
               |
             1 | trusted_environments.foo'bar
               |                         ^
-
+            invalid unquoted key, expected letters, numbers, `-`, `_`
         "#});
     }
 
@@ -247,7 +247,7 @@ mod tests {
               |
             1 | trusted_environments.foo"bar
               |                         ^
-
+            invalid unquoted key, expected letters, numbers, `-`, `_`
         "#});
     }
 }
