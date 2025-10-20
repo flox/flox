@@ -62,9 +62,10 @@ impl ActivateArgs {
                 .arg(activation_state_dir.to_string_lossy().to_string());
             start_command.arg("--activation-id").arg(&activation_id);
             start_command
-                .stderr(Stdio::null())
-                .stdout(Stdio::null())
-                .stdin(Stdio::null())
+                // Hooks may use stdin, stdout, stderr
+                .stderr(Stdio::inherit())
+                .stdout(Stdio::inherit())
+                .stdin(Stdio::inherit())
                 .spawn()?;
 
             let attach_expiration = OffsetDateTime::now_utc() + Duration::seconds(10);
