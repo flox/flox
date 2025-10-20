@@ -1,4 +1,5 @@
 {
+  cacert,
   coreutils,
   flox-buildenv,
   flox-package-builder,
@@ -34,6 +35,8 @@ let
     GNUMAKE_BIN = "${gnumake}/bin/make";
     SLEEP_BIN = "${coreutils}/bin/sleep";
     PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
+    # used internally to ensure CA certificates are available
+    NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
     # Used by `flox build' to access `stdenv` at a known version
     # When utilities from nixpkgs are used by flox at runtime,
