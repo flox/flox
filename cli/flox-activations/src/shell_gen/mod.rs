@@ -1,3 +1,6 @@
+pub mod bash;
+pub mod capture;
+
 use std::fmt;
 use std::path::Path;
 
@@ -43,6 +46,13 @@ impl Shell {
             Self::Fish => format!("set -g {var} '{value}';"),
             Self::Tcsh => format!("set {var} = '{value}';"),
             Self::Zsh => format!("typeset -g {var}='{value}';"),
+        }
+    }
+
+    pub fn export_var(&self, var: &str, value: &str) -> String {
+        match self {
+            Self::Bash => format!("export {var}='{value}';"),
+            _ => unimplemented!(),
         }
     }
 }

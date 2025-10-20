@@ -1074,6 +1074,7 @@ dependencies = [
  "anyhow",
  "backtrace",
  "clap",
+ "dirs",
  "env_logger",
  "flox-core",
  "fslock",
