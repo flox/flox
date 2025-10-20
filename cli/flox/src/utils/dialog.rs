@@ -157,7 +157,7 @@ impl Dialog<'_, ()> {
     }
 }
 
-pub fn flox_theme() -> RenderConfig {
+pub fn flox_theme() -> RenderConfig<'static> {
     let mut render_config = RenderConfig::default_colored();
 
     if let (Some(dark_peach), Some(light_blue)) = (
