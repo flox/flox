@@ -1,6 +1,5 @@
 use std::fmt::Display;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
@@ -12,6 +11,12 @@ use log::debug;
 use time::{Duration, OffsetDateTime};
 
 use crate::Error;
+
+pub struct StartOrAttachResult {
+    pub attach: bool,
+    pub activation_state_dir: PathBuf,
+    pub activation_id: String,
+}
 
 #[derive(Debug, Args)]
 pub struct StartOrAttachArgs {
@@ -30,12 +35,29 @@ pub struct StartOrAttachArgs {
 }
 
 impl StartOrAttachArgs {
-    // Returns activation_id for use in tests
-    pub fn handle(self) -> Result<String, anyhow::Error> {
+    pub fn handle(self) -> Result<(), anyhow::Error> {
+        let StartOrAttachResult {
+            attach,
+            activation_state_dir,
+            activation_id,
+        } = self.handle_inner()?;
+        // TODO: this is only used for watchdog tests.
+        // We should drop this subcommand entirely
+        println!("_FLOX_ATTACH={attach}");
+        println!(
+            "_FLOX_ACTIVATION_STATE_DIR={}",
+            activation_state_dir.to_string_lossy()
+        );
+        println!("_FLOX_ACTIVATION_ID={activation_id}");
+        Ok(())
+    }
+
+    /// Same as handle but doesn't print to stdout
+    pub fn handle_inner(self) -> Result<StartOrAttachResult, anyhow::Error> {
         let mut retries = 3;
 
         loop {
-            let result = self.handle_inner(&self.runtime_dir, attach, start, std::io::stdout());
+            let result = self.try_start_or_attach(&self.runtime_dir, attach, start);
 
             let Err(err) = result else {
                 return result;
@@ -55,8 +77,7 @@ impl StartOrAttachArgs {
         }
     }
 
-    // Returns activation_id for use in tests
-    pub fn handle_inner(
+    pub fn try_start_or_attach(
         &self,
         runtime_dir: &Path,
         attach_fn: impl FnOnce(&Path, LockFile, &str, i32) -> Result<(), Error>,
@@ -69,8 +90,7 @@ impl StartOrAttachArgs {
             &str,
             i32,
         ) -> Result<String, Error>,
-        mut output: impl Write,
-    ) -> Result<String, Error> {
+    ) -> Result<StartOrAttachResult, Error> {
         let activations_json_path = activations::activations_json_path(runtime_dir, &self.flox_env);
 
         debug!("Reading activations from {:?}", activations_json_path);
@@ -100,16 +120,14 @@ impl StartOrAttachArgs {
                 },
             };
 
-        writeln!(&mut output, "_FLOX_ATTACH={attaching}")?;
-        writeln!(
-            &mut output,
-            "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(runtime_dir, &self.flox_env, &activation_id)?
-                .display()
-        )?;
-        writeln!(&mut output, "_FLOX_ACTIVATION_ID={activation_id}")?;
+        let activation_state_dir =
+            activations::activation_state_dir_path(runtime_dir, &self.flox_env, &activation_id)?;
 
-        Ok(activation_id)
+        Ok(StartOrAttachResult {
+            attach: attaching,
+            activation_state_dir,
+            activation_id,
+        })
     }
 }
 
@@ -279,26 +297,20 @@ mod tests {
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
 
-        let mut output = Vec::new();
+        let result = args
+            .try_start_or_attach(
+                runtime_dir.path(),
+                |_, _, _, _| Ok(()),
+                |_, _, _, _, _, _, _| panic!("start should not be called"),
+            )
+            .expect("handle_inner should succeed");
 
-        args.handle_inner(
-            runtime_dir.path(),
-            |_, _, _, _| Ok(()),
-            |_, _, _, _, _, _, _| panic!("start should not be called"),
-            &mut output,
-        )
-        .expect("handle_inner should succeed");
-
-        let output = String::from_utf8(output).unwrap();
-
-        assert!(output.contains("_FLOX_ATTACH=true"));
-        assert!(output.contains(&format!(
-            "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(&runtime_dir, flox_env, &id)
-                .unwrap()
-                .display()
-        )));
-        assert!(output.contains(&format!("_FLOX_ACTIVATION_ID={id}")));
+        assert!(result.attach);
+        assert_eq!(
+            result.activation_state_dir,
+            activations::activation_state_dir_path(&runtime_dir, flox_env, &id).unwrap()
+        );
+        assert_eq!(result.activation_id, id);
     }
 
     #[test]
@@ -319,26 +331,21 @@ mod tests {
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
 
-        let mut output = Vec::new();
-
         let id = "1".to_string();
-        args.handle_inner(
-            runtime_dir.path(),
-            |_, _, _, _| panic!("attach should not be called"),
-            |_, _, _, _, _, _, _| Ok(id.clone()),
-            &mut output,
-        )
-        .expect("handle_inner should succeed");
+        let result = args
+            .try_start_or_attach(
+                runtime_dir.path(),
+                |_, _, _, _| panic!("attach should not be called"),
+                |_, _, _, _, _, _, _| Ok(id.clone()),
+            )
+            .expect("handle_inner should succeed");
 
-        let output = String::from_utf8(output).unwrap();
-        assert!(output.contains("_FLOX_ATTACH=false"));
-        assert!(output.contains(&format!(
-            "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(&runtime_dir, flox_env, &id)
-                .unwrap()
-                .display()
-        )));
-        assert!(output.contains(&format!("_FLOX_ACTIVATION_ID={id}")));
+        assert!(!result.attach);
+        assert_eq!(
+            result.activation_state_dir,
+            activations::activation_state_dir_path(&runtime_dir, flox_env, &id).unwrap()
+        );
+        assert_eq!(result.activation_id, id);
     }
 
     #[test]
