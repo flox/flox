@@ -65,6 +65,7 @@ impl Dialog<'_, Checkpoint> {
             default: None,
             placeholder: None,
             help_message,
+            starting_input: None,
             formatter: &|()| "".to_string(),
             default_value_formatter: &|()| "".to_string(),
             parser: &|_| Ok(()),
