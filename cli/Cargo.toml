@@ -48,7 +48,7 @@ indoc = "2.0.6"
 inquire = "0.9.1"
 indicatif = "0.18"
 itertools = "0.14.0"
-jsonwebtoken = "10.1"
+jsonwebtoken = { version = "10.1", features = ["rust_crypto"] }
 log = { version = "0.4.28", features = ["kv"] }
 nix = { version = "0.30", features = ["signal", "process", "user"] }
 oauth2 = "5.0"
