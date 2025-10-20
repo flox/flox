@@ -23,6 +23,7 @@ tempfile.workspace = true
 time.workspace = true
 thiserror.workspace = true
 schemars.workspace = true
+sysinfo.workspace = true
 
 
 [features]
