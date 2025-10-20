@@ -334,6 +334,12 @@ export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
 source "${_activate_d}/attach.bash"
 attach "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
 
+# Start services before the shell or command is invoked
+if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/start-services.bash"
+fi
+
 case "${_flox_shell_mode}" in
   command)
     # shellcheck source-path=SCRIPTDIR/activate.d
