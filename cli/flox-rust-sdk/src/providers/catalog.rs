@@ -34,7 +34,7 @@ use super::publish::CheckedEnvironmentMetadata;
 use crate::data::System;
 use crate::flox::{FLOX_VERSION, Flox};
 use crate::models::search::{PackageDetails, ResultCount, SearchLimit, SearchResults};
-use crate::utils::IN_CI;
+use crate::utils::{IN_CI, IN_CONTAINERD};
 
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
@@ -376,6 +376,13 @@ impl CatalogClient {
         if *IN_CI {
             header_map.insert(
                 header::HeaderName::from_static("flox-ci"),
+                header::HeaderValue::from_static("true"),
+            );
+        };
+
+        if *IN_CONTAINERD {
+            header_map.insert(
+                header::HeaderName::from_static("flox-containerd"),
                 header::HeaderValue::from_static("true"),
             );
         };
