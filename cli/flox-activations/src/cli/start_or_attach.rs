@@ -31,14 +31,15 @@ pub struct StartOrAttachArgs {
 
 impl StartOrAttachArgs {
     // Returns activation_id for use in tests
-    pub fn handle(self) -> Result<String, anyhow::Error> {
+    pub fn handle(self) -> Result<(bool, PathBuf, String), anyhow::Error> {
         let mut retries = 3;
 
         loop {
-            let result = self.handle_inner(&self.runtime_dir, attach, start, std::io::stdout());
+            let result = self.handle_inner(&self.runtime_dir, attach, start);
 
             let Err(err) = result else {
-                return result;
+                let (attach, activation_state_dir, activation_id) = result?;
+                return Ok((attach, activation_state_dir, activation_id));
             };
 
             if let Some(restartable_failure) = err.downcast_ref::<RestartableFailure>() {
@@ -69,8 +70,7 @@ impl StartOrAttachArgs {
             &str,
             i32,
         ) -> Result<String, Error>,
-        mut output: impl Write,
-    ) -> Result<String, Error> {
+    ) -> Result<(bool, PathBuf, String), Error> {
         let activations_json_path = activations::activations_json_path(runtime_dir, &self.flox_env);
 
         debug!("Reading activations from {:?}", activations_json_path);
@@ -100,16 +100,10 @@ impl StartOrAttachArgs {
                 },
             };
 
-        writeln!(&mut output, "_FLOX_ATTACH={attaching}")?;
-        writeln!(
-            &mut output,
-            "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(runtime_dir, &self.flox_env, &activation_id)?
-                .display()
-        )?;
-        writeln!(&mut output, "_FLOX_ACTIVATION_ID={activation_id}")?;
+        let activation_state_dir =
+            activations::activation_state_dir_path(runtime_dir, &self.flox_env, &activation_id)?;
 
-        Ok(activation_id)
+        Ok((attaching, activation_state_dir, activation_id))
     }
 }
 
