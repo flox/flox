@@ -85,6 +85,13 @@ impl ActivateArgs {
             .arg(activation_state_dir.to_string_lossy().to_string());
         command.arg("--activation-id").arg(activation_id);
 
+        if attach {
+            // TODO: print message about attaching
+        }
+        if data.flox_activate_start_services {
+            Self::start_services();
+        }
+
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
         //
@@ -262,6 +269,14 @@ impl ActivateArgs {
                 }
             })
             .join(" ")
+    }
+
+    fn start_services() {
+        // required vars
+        // optional vars
+        // set-env-dirs
+        // fix-paths
+        // replay vars
     }
 }
 
