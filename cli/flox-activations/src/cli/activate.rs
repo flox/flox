@@ -13,6 +13,8 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
 
+use super::StartOrAttachArgs;
+
 #[derive(Debug, Args)]
 pub struct ActivateArgs {
     /// Path to JSON file containing activation data
@@ -50,12 +52,15 @@ impl ActivateArgs {
             // which may be ""
             (FLOX_PROMPT_ENVIRONMENTS_VAR, data.flox_prompt_environments),
             ("_FLOX_SET_PROMPT", data.set_prompt.to_string()),
-            ("_FLOX_ACTIVATE_STORE_PATH", data.flox_activate_store_path),
+            (
+                "_FLOX_ACTIVATE_STORE_PATH",
+                data.flox_activate_store_path.clone(),
+            ),
             (
                 // TODO: we should probably figure out a more consistent way to
                 // pass this since it's also passed for `flox build`
                 FLOX_RUNTIME_DIR_VAR,
-                data.flox_runtime_dir,
+                data.flox_runtime_dir.clone(),
             ),
             ("_FLOX_ENV_CUDA_DETECTION", data.flox_env_cuda_detection),
             (
@@ -75,7 +80,7 @@ impl ActivateArgs {
         let mut command = Command::new(activate_path);
         command.envs(exports);
 
-        command.arg("--env").arg(data.env);
+        command.arg("--env").arg(&data.env);
         command
             .arg("--env-project")
             .arg(data.env_project.to_string_lossy().to_string());
@@ -92,6 +97,21 @@ impl ActivateArgs {
             .arg(data.watchdog.to_string_lossy().to_string());
 
         command.arg("--shell").arg(data.shell.exe_path());
+
+        let (attach, activation_state_dir, activation_id) = StartOrAttachArgs {
+            pid: std::process::id() as i32,
+            flox_env: PathBuf::from(data.env),
+            store_path: data.flox_activate_store_path,
+            runtime_dir: PathBuf::from(data.flox_runtime_dir),
+        }
+        .handle()?;
+
+        command.arg("--attach").arg(attach.to_string());
+        command
+            .arg("--activation-state-dir")
+            .arg(activation_state_dir.to_string_lossy().to_string());
+        command.arg("--activation-id").arg(activation_id);
+
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
         //

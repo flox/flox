@@ -72,6 +72,9 @@ env-project:,\
 env-description:,\
 mode:,\
 watchdog:,\
+activation-state-dir:,\
+activation-id:,\
+attach:,\
 noprofile"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [--shell <shell>] \
@@ -103,6 +106,9 @@ _FLOX_SHELL="$SHELL"
 _FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
 _FLOX_ENV_ACTIVATION_MODE="dev"
 _FLOX_WATCHDOG_BIN=""
+_FLOX_ACTIVATION_STATE_DIR=""
+_FLOX_ACTIVATION_ID=""
+_FLOX_ATTACH=""
 while true; do
   case "$1" in
     -c | --command)
@@ -183,6 +189,36 @@ while true; do
         exit 1
       fi
       _FLOX_WATCHDOG_BIN="$1"
+      shift
+      ;;
+    --activation-state-dir)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --activation-state-dir requires a path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ACTIVATION_STATE_DIR="$1"
+      shift
+      ;;
+    --activation-id)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --activation-id requires an ID as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ACTIVATION_ID="$1"
+      shift
+      ;;
+    --attach)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --attach requires a boolean value as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ATTACH="$1"
       shift
       ;;
     --noprofile)
@@ -286,13 +322,20 @@ fi
 
 # TODO: we could restore _start_env from the prior activation when performing an ephemeral activation
 
-# sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
-# Don't eval on one line so that we exit if flox-activations fails
-to_eval="$($_flox_activations \
-  start-or-attach \
-  --runtime-dir "$FLOX_RUNTIME_DIR" \
-  --pid "$$" --flox-env "$FLOX_ENV" --store-path "$_FLOX_ACTIVATE_STORE_PATH")"
-eval "$to_eval"
+# Ensure required activation arguments are provided
+if [ -z "$_FLOX_ACTIVATION_STATE_DIR" ]; then
+  echo "Error: --activation-state-dir is required" >&2
+  exit 1
+fi
+if [ -z "$_FLOX_ACTIVATION_ID" ]; then
+  echo "Error: --activation-id is required" >&2
+  exit 1
+fi
+if [ -z "$_FLOX_ATTACH" ]; then
+  echo "Error: --attach is required" >&2
+  exit 1
+fi
+
 export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
 
 # If the current shell is re-activating the same environment then we should only
