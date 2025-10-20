@@ -187,6 +187,10 @@ pub enum Auth {
     /// Print your current login status
     #[bpaf(command)]
     Status,
+
+    /// Print your token to stdout
+    #[bpaf(command)]
+    Token,
 }
 
 impl Auth {
@@ -231,6 +235,18 @@ impl Auth {
                     flox.floxhub.base_url()
                 ));
 
+                Ok(())
+            },
+            Auth::Token => {
+                let span = tracing::info_span!("token");
+                let _guard = span.enter();
+
+                let Some(token) = flox.floxhub_token else {
+                    message::warning("You are not currently logged in to FloxHub.");
+                    return Err(Exit(1.into()).into());
+                };
+
+                println!("{}", token.secret());
                 Ok(())
             },
         }
