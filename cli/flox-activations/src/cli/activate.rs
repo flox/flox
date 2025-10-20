@@ -7,13 +7,16 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result, anyhow};
 use clap::Args;
 use flox_core::activate_data::ActivateData;
+use flox_core::activations::activations_json_path;
 use flox_core::shell::Shell;
 use flox_core::util::default_nix_env_vars;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
+use time::{Duration, OffsetDateTime};
 
 use super::StartOrAttachArgs;
+use super::start_or_attach::wait_for_activation_ready_and_optionally_attach_pid;
 
 #[derive(Debug, Args)]
 pub struct ActivateArgs {
@@ -43,6 +46,65 @@ impl ActivateArgs {
 
         fs::remove_file(&self.activate_data)?;
 
+        let (attach, activation_state_dir, activation_id) = StartOrAttachArgs {
+            pid: std::process::id() as i32,
+            flox_env: PathBuf::from(&data.env),
+            store_path: data.flox_activate_store_path.clone(),
+            runtime_dir: PathBuf::from(&data.flox_runtime_dir),
+        }
+        .handle()?;
+
+        if !attach {
+            let mut start_command = Self::assemble_command(data.clone());
+            start_command.arg("--mode").arg("start");
+            start_command
+                .arg("--activation-state-dir")
+                .arg(activation_state_dir.to_string_lossy().to_string());
+            start_command.arg("--activation-id").arg(&activation_id);
+            start_command
+                .stderr(Stdio::null())
+                .stdout(Stdio::null())
+                .stdin(Stdio::null())
+                .spawn()?;
+
+            let attach_expiration = OffsetDateTime::now_utc() + Duration::seconds(10);
+            wait_for_activation_ready_and_optionally_attach_pid(
+                &activations_json_path(&data.flox_runtime_dir, data.env.clone()),
+                &data.flox_activate_store_path,
+                attach_expiration,
+                None,
+            )?;
+        }
+        let mut command = Self::assemble_command(data.clone());
+        // Pass down the activation mode
+        command.arg("--mode").arg(data.mode);
+        command
+            .arg("--activation-state-dir")
+            .arg(activation_state_dir.to_string_lossy().to_string());
+        command.arg("--activation-id").arg(activation_id);
+
+        // when output is not a tty, and no command is provided
+        // we just print an activation script to stdout
+        //
+        // That script can then be `eval`ed in the current shell,
+        // e.g. in a .bashrc or .zshrc file:
+        //
+        //    eval "$(flox activate)"
+        if data.in_place {
+            Self::activate_in_place(command, data.shell)?;
+
+            return Ok(());
+        }
+
+        // These functions will only return if exec fails
+        if data.interactive {
+            Self::activate_interactive(command)
+        } else {
+            Self::activate_command(command, data.run_args, data.is_ephemeral)
+        }
+    }
+
+    fn assemble_command(data: ActivateData) -> Command {
         let mut exports = HashMap::from([
             (FLOX_ACTIVE_ENVIRONMENTS_VAR, data.flox_active_environments),
             (FLOX_ENV_LOG_DIR_VAR, data.flox_env_log_dir),
@@ -89,48 +151,13 @@ impl ActivateArgs {
             .arg(data.env_cache.to_string_lossy().to_string());
         command.arg("--env-description").arg(data.env_description);
 
-        // Pass down the activation mode
-        command.arg("--mode").arg(data.mode);
-
         command
             .arg("--watchdog")
             .arg(data.watchdog.to_string_lossy().to_string());
 
         command.arg("--shell").arg(data.shell.exe_path());
 
-        let (attach, activation_state_dir, activation_id) = StartOrAttachArgs {
-            pid: std::process::id() as i32,
-            flox_env: PathBuf::from(data.env),
-            store_path: data.flox_activate_store_path,
-            runtime_dir: PathBuf::from(data.flox_runtime_dir),
-        }
-        .handle()?;
-
-        command.arg("--attach").arg(attach.to_string());
         command
-            .arg("--activation-state-dir")
-            .arg(activation_state_dir.to_string_lossy().to_string());
-        command.arg("--activation-id").arg(activation_id);
-
-        // when output is not a tty, and no command is provided
-        // we just print an activation script to stdout
-        //
-        // That script can then be `eval`ed in the current shell,
-        // e.g. in a .bashrc or .zshrc file:
-        //
-        //    eval "$(flox activate)"
-        if data.in_place {
-            Self::activate_in_place(command, data.shell)?;
-
-            return Ok(());
-        }
-
-        // These functions will only return if exec fails
-        if data.interactive {
-            Self::activate_interactive(command)
-        } else {
-            Self::activate_command(command, data.run_args, data.is_ephemeral)
-        }
     }
 
     /// Used for `flox activate -- run_args`

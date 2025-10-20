@@ -123,11 +123,11 @@ fn attach(
     drop(lock);
 
     let attach_expiration = OffsetDateTime::now_utc() + Duration::seconds(10);
-    wait_for_activation_ready_and_attach_pid(
+    wait_for_activation_ready_and_optionally_attach_pid(
         activations_json_path,
         store_path,
         attach_expiration,
-        pid,
+        Some(pid),
     )?;
     Ok(())
 }
@@ -164,14 +164,14 @@ fn start(
 /// exit with an error.
 /// If the activation startup process fails, exit with an error.
 /// In either case, the activation can likely just be restarted.
-fn wait_for_activation_ready_and_attach_pid(
+pub fn wait_for_activation_ready_and_optionally_attach_pid(
     activations_json_path: &Path,
     store_path: &str,
     attach_expiration: OffsetDateTime,
-    attaching_pid: i32,
+    attaching_pid: Option<i32>,
 ) -> Result<(), anyhow::Error> {
     loop {
-        let ready = check_for_activation_ready_and_attach_pid(
+        let ready = check_for_activation_ready_and_optionally_attach_pid(
             activations_json_path,
             store_path,
             attaching_pid,
@@ -188,10 +188,10 @@ fn wait_for_activation_ready_and_attach_pid(
     Ok(())
 }
 
-fn check_for_activation_ready_and_attach_pid(
+fn check_for_activation_ready_and_optionally_attach_pid(
     activations_json_path: &Path,
     store_path: &str,
-    attaching_pid: i32,
+    attaching_pid: Option<i32>,
     attach_expiration: OffsetDateTime,
     now: OffsetDateTime,
 ) -> Result<bool, anyhow::Error> {
@@ -208,8 +208,10 @@ fn check_for_activation_ready_and_attach_pid(
         .map_err(RestartableFailure)?;
 
     if activation.ready() {
-        activation.attach_pid(attaching_pid, None);
-        activations::write_activations_json(&activations, activations_json_path, lock)?;
+        if let Some(attaching_pid) = attaching_pid {
+            activation.attach_pid(attaching_pid, None);
+            activations::write_activations_json(&activations, activations_json_path, lock)?;
+        };
         return Ok(true);
     }
 
@@ -354,7 +356,7 @@ mod tests {
 
         let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
 
-        let ready = check_for_activation_ready_and_attach_pid(
+        let ready = check_for_activation_ready_and_optionally_attach_pid(
             &activations_json_path,
             store_path,
             attaching_pid,
@@ -388,7 +390,7 @@ mod tests {
 
         let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
 
-        let ready = check_for_activation_ready_and_attach_pid(
+        let ready = check_for_activation_ready_and_optionally_attach_pid(
             &activations_json_path,
             store_path,
             attaching_pid,
@@ -433,7 +435,7 @@ mod tests {
 
         let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
 
-        let result = check_for_activation_ready_and_attach_pid(
+        let result = check_for_activation_ready_and_optionally_attach_pid(
             &activations_json_path,
             store_path,
             attaching_pid,
@@ -482,7 +484,7 @@ mod tests {
 
         let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
 
-        let result = check_for_activation_ready_and_attach_pid(
+        let result = check_for_activation_ready_and_optionally_attach_pid(
             &activations_json_path,
             store_path,
             attaching_pid,

@@ -74,7 +74,6 @@ mode:,\
 watchdog:,\
 activation-state-dir:,\
 activation-id:,\
-attach:,\
 noprofile"
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] \
 [--shell <shell>] \
@@ -108,7 +107,6 @@ _FLOX_ENV_ACTIVATION_MODE="dev"
 _FLOX_WATCHDOG_BIN=""
 _FLOX_ACTIVATION_STATE_DIR=""
 _FLOX_ACTIVATION_ID=""
-_FLOX_ATTACH=""
 while true; do
   case "$1" in
     -c | --command)
@@ -173,8 +171,8 @@ while true; do
       ;;
     -m | --mode)
       shift
-      if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ] || [ "$1" == "build" ]; }; then
-        echo "Option --mode requires 'dev', 'run', or 'build' as an argument." >&2
+      if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ] || [ "$1" == "build" ] || [ "$1" == "start" ]; }; then
+        echo "Option --mode requires 'dev', 'run', 'build', or 'start' as an argument." >&2
         echo "$USAGE" >&2
         exit 1
       fi
@@ -209,16 +207,6 @@ while true; do
         exit 1
       fi
       _FLOX_ACTIVATION_ID="$1"
-      shift
-      ;;
-    --attach)
-      shift
-      if [ -z "${1:-}" ]; then
-        echo "Option --attach requires a boolean value as an argument." >&2
-        echo "$USAGE" >&2
-        exit 1
-      fi
-      _FLOX_ATTACH="$1"
       shift
       ;;
     --noprofile)
@@ -317,6 +305,14 @@ if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
   exec "$@"
 fi
 
+if [ "$_FLOX_ENV_ACTIVATION_MODE" = "start" ]; then
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/start.bash"
+  start "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
+
+  exit 0
+fi
+
 # The CLI is responsible for erroring if the environment is already active.
 # We can start-or-attach no matter what
 
@@ -331,31 +327,12 @@ if [ -z "$_FLOX_ACTIVATION_ID" ]; then
   echo "Error: --activation-id is required" >&2
   exit 1
 fi
-if [ -z "$_FLOX_ATTACH" ]; then
-  echo "Error: --attach is required" >&2
-  exit 1
-fi
 
 export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
 
-# If the current shell is re-activating the same environment then we should only
-# re-run profile scripts, without start or attach, because the shell will
-# already be attached to an activation.
-if [ "$_FLOX_ATTACH" == true ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/attach.bash"
-  attach "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
-else
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/start.bash"
-  start "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
-fi
-
-# Start services before the shell or command is invoked
-if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/start-services.bash"
-fi
+# shellcheck source-path=SCRIPTDIR/activate.d
+source "${_activate_d}/attach.bash"
+attach "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
 
 case "${_flox_shell_mode}" in
   command)
