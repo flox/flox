@@ -671,7 +671,7 @@ impl PackageTargetName<'_> {
 /// Outside of tests this should only be created via [PackageTargets::select],
 /// or [PackageTargets::all] which validate (string) names and associate them with their origin.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-#[display(fmt = "{name}")]
+#[display("{name}")]
 pub struct PackageTarget {
     name: String,
     kind: PackageTargetKind,

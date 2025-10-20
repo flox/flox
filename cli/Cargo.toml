@@ -24,7 +24,7 @@ clap = { version = "4.5.49", features = ["derive"] }
 close_fds = "0.3"
 config = { version = "0.15", default-features = false, features = ["toml"] }
 crossterm = "0.29"
-derive_more = "2.0.1"
+derive_more = { version = "2.0.1", features= ["as_ref", "deref", "deref_mut", "display", "from", "from_str"]}
 dirs = "6.0.0"
 enum_dispatch = "0.3.13"
 flox-activations = { path = "flox-activations" }

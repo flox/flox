@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use derive_more::{AsRef, Deref};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -11,7 +12,7 @@ use thiserror::Error;
 /// This encoding is used to create a unique branch name in the floxmeta repository.
 /// Thus, rather than canonicalizing the path every time we need to encode it,
 /// we store the path as a [`CanonicalPath`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, derive_more::Deref, derive_more::AsRef)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deref, AsRef)]
 #[deref(forward)]
 #[as_ref(forward)]
 pub struct CanonicalPath(PathBuf);
