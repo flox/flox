@@ -1494,7 +1494,7 @@ impl Lockfile {
         //       we now compute this 3 times during a single lock operation
         let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
 
-        let by_id = installables.into_iter().group_by(|i| i.install_id.clone());
+        let by_id = installables.into_iter().chunk_by(|i| i.install_id.clone());
 
         let (already_locked, to_lock): (Vec<Vec<LockedPackage>>, Vec<Vec<FlakeInstallableToLock>>) =
             by_id.into_iter().partition_map(|(_, group)| {

@@ -1353,7 +1353,7 @@ mod tests {
             .map(|line| line.unwrap())
             .take(10);
 
-        let groups = stream.group_by(|line| line.process.clone());
+        let groups = stream.chunk_by(|line| line.process.clone());
         let groups = groups.into_iter().collect::<HashMap<_, _>>();
 
         assert_eq!(groups.len(), 2, "expected two processes");
