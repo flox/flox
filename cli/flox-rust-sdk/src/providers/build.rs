@@ -2683,7 +2683,7 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
 
-        let output = temp_env::with_var("_FLOX_PKGDB_VERBOSITY", Some("1"), || {
+        let output = temp_env::with_var("_FLOX_SUBSYSTEM_VERBOSITY", Some("1"), || {
             assert_build_status(&flox, &mut env, &package_name, None, false)
         });
 
@@ -2723,7 +2723,7 @@ mod tests {
 
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        let output = temp_env::with_var("_FLOX_PKGDB_VERBOSITY", Some("1"), || {
+        let output = temp_env::with_var("_FLOX_SUBSYSTEM_VERBOSITY", Some("1"), || {
             assert_build_status(&flox, &mut env, &package_name, None, succeed)
         });
 

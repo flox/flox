@@ -332,9 +332,7 @@ mod tests {
             id: "gonna_fail".to_string(),
             url: Url::parse(&format!("path:{}", flake_dir.display())).unwrap(),
         })];
-        let res = temp_env::with_var("_PKGDB_ALLOW_LOCAL_FLAKE", Some("1"), || {
-            env.install(&pkgs, &flox)
-        });
+        let res = env.install(&pkgs, &flox);
         if let Err(e) = res {
             eprintln!("Error: {:?}", e);
             let err_string = e.to_string();
