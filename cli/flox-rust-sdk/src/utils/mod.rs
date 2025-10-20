@@ -23,6 +23,9 @@ use self::errors::IoError;
 /// but for now just use the `CI` environment variable
 pub static IN_CI: LazyLock<bool> = LazyLock::new(|| env::var("CI").is_ok());
 
+/// Whether the CLI is being run in a flox containerd context
+pub static IN_CONTAINERD: LazyLock<bool> = LazyLock::new(|| env::var("FLOX_CONTAINERD").is_ok());
+
 #[derive(Error, Debug)]
 pub enum FindAndReplaceError {
     #[error("walkdir error: {0}")]
