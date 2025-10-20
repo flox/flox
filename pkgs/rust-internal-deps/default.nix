@@ -7,7 +7,9 @@
   flox-nix-plugins,
   flox-src,
   gitMinimal,
+  glibcLocalesUtf8,
   gnumake,
+  hostPlatform,
   inputs,
   lib,
   nixpkgsInputLockedURL,
@@ -49,6 +51,9 @@ let
 
     # Reexport of the platform flox is being built for
     NIX_TARGET_SYSTEM = targetPlatform.system;
+  }
+  // lib.optionalAttrs hostPlatform.isLinux {
+    LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
   }
   # Our own tools
   # In the dev shell these will be set dynamically

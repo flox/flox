@@ -1,5 +1,7 @@
 {
   cacert,
+  glibcLocalesUtf8,
+  hostPlatform,
   inputs,
   lib,
   pkgsFor,
@@ -80,4 +82,7 @@ craneLib.buildPackage ({
       fi
     '';
   };
+}
+// lib.optionalAttrs hostPlatform.isLinux {
+  LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
 })
