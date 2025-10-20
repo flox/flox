@@ -65,13 +65,6 @@ generate_bash_startup_commands() {
     fi
   done
 
-  # Propagate $_activate_d to the environment.
-  echo "export _activate_d='$_activate_d';"
-  # Propagate $_flox_activate_tracer to the environment.
-  echo "export _flox_activate_tracer='$_flox_activate_tracer';"
-  # Propagate $_flox_activations to the environment
-  echo "export _flox_activations='$_flox_activations';"
-
   # Set the prompt if we're in an interactive shell.
   echo "if [ -t 1 ]; then source '$_activate_d/set-prompt.bash'; fi;"
 
