@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::env::Vars;
+use std::ffi::OsStr;
 use std::fs;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -60,7 +61,7 @@ impl ActivateArgs {
 
         if !attach {
             debug!("No existing activation found");
-            let mut start_command = Self::assemble_command(data.clone());
+            let mut start_command = Self::assemble_command_for_activate_script(data.clone());
             start_command.arg("--mode").arg("start");
             start_command
                 .arg("--activation-state-dir")
@@ -81,7 +82,7 @@ impl ActivateArgs {
                 None,
             )?;
         }
-        let mut command = Self::assemble_command(data.clone());
+        let mut command = Self::assemble_command_for_activate_script(data.clone());
         // Pass down the activation mode
         command.arg("--mode").arg(data.mode);
         command
@@ -89,11 +90,26 @@ impl ActivateArgs {
             .arg(activation_state_dir.to_string_lossy().to_string());
         command.arg("--activation-id").arg(activation_id);
 
-        if attach {
-            // TODO: print message about attaching
-        }
-        if data.flox_activate_start_services {
-            Self::start_services();
+        if matches!(data.shell, Shell::Bash(_)) {
+            if attach {
+                // TODO: print message about attaching
+            }
+            if data.flox_activate_start_services {
+                Self::start_services();
+            }
+
+            if data.in_place {
+                Self::new_activate_in_place()?;
+            }
+
+            // These functions will only return if exec fails
+            if data.interactive {
+                Self::new_activate_interactive()?;
+            } else {
+                Self::new_activate_command()?;
+            }
+
+            return Ok(());
         }
 
         // when output is not a tty, and no command is provided
@@ -117,7 +133,7 @@ impl ActivateArgs {
         }
     }
 
-    fn assemble_command(data: ActivateData) -> Command {
+    fn assemble_command_for_activate_script(data: ActivateData) -> Command {
         let mut exports = HashMap::from([
             (FLOX_ACTIVE_ENVIRONMENTS_VAR, data.flox_active_environments),
             (FLOX_ENV_LOG_DIR_VAR, data.flox_env_log_dir),
@@ -266,6 +282,10 @@ impl ActivateArgs {
         }
     }
 
+    fn new_activate_command() -> Result<()> {
+        Ok(())
+    }
+
     /// Activate the environment interactively by spawning a new shell
     /// and running the respective activation scripts.
     ///
@@ -275,6 +295,10 @@ impl ActivateArgs {
 
         // exec should never return
         Err(command.exec().into())
+    }
+
+    fn new_activate_interactive() -> Result<()> {
+        Ok(())
     }
 
     /// Used for `eval "$(flox activate)"`
@@ -317,6 +341,10 @@ impl ActivateArgs {
         Ok(())
     }
 
+    fn new_activate_in_place() -> Result<()> {
+        Ok(())
+    }
+
     /// Quote run args so that words don't get split,
     /// but don't escape all characters.
     ///
@@ -337,11 +365,7 @@ impl ActivateArgs {
     }
 
     fn start_services() {
-        // required vars
-        // optional vars
-        // set-env-dirs
-        // fix-paths
-        // replay vars
+        todo!();
     }
 }
 
