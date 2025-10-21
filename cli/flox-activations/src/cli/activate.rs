@@ -414,10 +414,10 @@ impl ActivateArgs {
                 };
                 let startup_commands = generate_bash_startup_commands(&bash_startup_args)?;
 
-                formatdoc! {"
-                  {flox_activations} attach --runtime-dir {runtime_dir} --pid $$ --flox-env {flox_env} --id {id} --remove-pid {pid};
+                formatdoc! {r#"
+                  {flox_activations} attach --runtime-dir "{runtime_dir}" --pid $$ --flox-env "{flox_env}" --id {id} --remove-pid {pid};
                   {startup_commands}
-                ",
+                "#,
                 // TODO: this should probably be based on interpreter_path
                 flox_activations = data.path_to_self,
                 runtime_dir = data.flox_runtime_dir,
