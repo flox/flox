@@ -55,6 +55,7 @@ impl ActivateArgs {
         .handle()?;
 
         if !attach {
+            debug!("No existing activation found");
             let mut start_command = Self::assemble_command(data.clone());
             start_command.arg("--mode").arg("start");
             start_command

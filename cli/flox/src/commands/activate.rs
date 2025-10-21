@@ -428,6 +428,9 @@ impl Activate {
             .arg("activate")
             .arg("--activate-data")
             .arg(tempfile.path());
+        if flox.verbosity > 0 {
+            command.arg(format!("-{}", "v".repeat(flox.verbosity as usize)));
+        };
 
         // exec should never return
         // TODO: did this break in-place metrics?

@@ -29,6 +29,12 @@ const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 // #[command(version = Lazy::get(&FLOX_VERSION).map(|v| v.as_str()).unwrap_or("0.0.0"))]
 #[command(about = SHORT_HELP, long_about = LONG_HELP)]
 pub struct Cli {
+    /// Increase logging verbosity.
+    ///
+    /// Invoke multiple times for increasing detail.
+    #[arg(short = 'v', long = "verbose", action = clap::ArgAction::Count, global = true)]
+    pub verbose: u8,
+
     #[command(subcommand)]
     pub command: Command,
 }

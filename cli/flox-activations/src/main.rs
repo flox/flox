@@ -1,17 +1,15 @@
 use std::io::Write;
 
 use clap::Parser;
-use env_logger::Env;
-use env_logger::fmt::WriteStyle;
 use env_logger::fmt::style::{AnsiColor, Style};
 use flox_activations::cli::Cli;
 use flox_activations::{Error, cli};
-use log::debug;
+use log::{LevelFilter, debug};
 use time::OffsetDateTime;
 use time::macros::format_description;
 
 fn caller_fn(record: &log::Record) -> Option<String> {
-    use backtrace::{Backtrace, SymbolName};
+    use backtrace::Backtrace;
     let rec_file = record.file()?;
     let rec_line = record.line()?;
 
@@ -19,24 +17,33 @@ fn caller_fn(record: &log::Record) -> Option<String> {
     for frame in bt.frames() {
         for sym in frame.symbols() {
             // Heuristic: match the frame that points to the same file & line as the log call.
-            if let (Some(file), Some(line)) = (sym.filename(), sym.lineno()) {
-                if file.ends_with(rec_file) && line == rec_line {
-                    // Demangle (e.g. "flox::commands::activate")
-                    return Some(match sym.name() {
-                        Some(name) => format!("{name:#}()"), // pretty/demangled
-                        None => "<unknown>".to_string(),
-                    });
-                }
+            if let (Some(file), Some(line)) = (sym.filename(), sym.lineno())
+                && file.ends_with(rec_file)
+                && line == rec_line
+            {
+                // Demangle (e.g. "flox::commands::activate")
+                return Some(match sym.name() {
+                    Some(name) => format!("{name:#}()"), // pretty/demangled
+                    None => "<unknown>".to_string(),
+                });
             }
         }
     }
     None
 }
 
-fn init_logging() {
+fn init_logger(verbosity: u8) {
     // 13:07:42.123456 Use `digits:3` for ms, `digits:6` for µs, or `digits:9` for ns.
     let time_fmt = format_description!("[hour]:[minute]:[second].[subsecond digits:6]");
-    let mut builder = env_logger::Builder::from_env(Env::default().default_filter_or("info"));
+
+    let log_level = match verbosity {
+        0 => LevelFilter::Warn,
+        1 => LevelFilter::Info,
+        2 => LevelFilter::Debug,
+        _ => LevelFilter::Trace,
+    };
+    let mut builder = env_logger::Builder::new();
+    builder.filter_level(log_level);
 
     // Uncomment to force color always:
     builder.write_style(env_logger::fmt::WriteStyle::Always);
@@ -51,10 +58,10 @@ fn init_logging() {
             let lvl_style = buf.default_level_style(record.level());
             let target_style = Style::new().fg_color(Some(AnsiColor::Green.into()));
 
-            // Only pay the backtrace cost if explicitly enabled (or for DEBUG level).
-            let want_fn =
-                std::env::var_os("LOG_FN").is_some() || record.level() <= log::Level::Debug;
-            let who = if want_fn {
+            // // Only pay the backtrace cost if explicitly enabled (or for DEBUG level).
+            // let want_fn =
+            //     std::env::var_os("LOG_FN").is_some() || record.level() <= log::Level::Debug;
+            let who = if record.level() >= log::Level::Debug {
                 caller_fn(record).unwrap_or_else(|| record.target().to_string())
             } else {
                 record.target().to_string()
@@ -75,9 +82,8 @@ fn init_logging() {
 }
 
 fn main() -> Result<(), Error> {
-    init_logging();
-
     let args = Cli::parse();
+    init_logger(args.verbose);
     debug!("{args:?}");
 
     match args.command {
