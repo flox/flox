@@ -1072,6 +1072,7 @@ name = "flox-activations"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "backtrace",
  "clap",
  "env_logger",
  "flox-core",
