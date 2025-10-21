@@ -370,6 +370,7 @@ impl ActivateArgs {
 
         let mut command = Self::assemble_command_with_environment(user_command, &env_diff);
         command.args(args);
+        debug!("running command in environment: {:?}", command);
         if is_ephemeral {
             let output = command
                 .stderr(Stdio::piped())
@@ -484,7 +485,7 @@ impl ActivateArgs {
 
     /// Used for `eval "$(flox activate)"`
     fn activate_in_place(mut command: Command, shell: Shell) -> Result<()> {
-        debug!("running activation command: {:?}", command);
+        debug!("activating in place with command: {:?}", command);
 
         let output = command
             .output()
