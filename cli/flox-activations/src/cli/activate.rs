@@ -301,17 +301,9 @@ impl ActivateArgs {
         Ok(())
     }
 
-    /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(mut command: Command, shell: Shell) -> Result<()> {
-        debug!("running activation command: {:?}", command);
-
-        let output = command
-            .output()
-            .context("failed to run activation script")?;
-        eprint!("{}", String::from_utf8_lossy(&output.stderr));
-
+    fn render_legacy_exports(command: &Command, shell: &Shell) -> String {
         // Render the exports in the correct shell dialect.
-        let exports_rendered = command
+        command
             .get_envs()
             .filter_map(|(key, value)| {
                 value.map(|v| {
@@ -327,7 +319,19 @@ impl ActivateArgs {
                 Shell::Tcsh(_) => format!("setenv {key} {value};",),
                 Shell::Zsh(_) => format!("export {key}={value};",),
             })
-            .join("\n");
+            .join("\n")
+    }
+
+    /// Used for `eval "$(flox activate)"`
+    fn activate_in_place(mut command: Command, shell: Shell) -> Result<()> {
+        debug!("running activation command: {:?}", command);
+
+        let output = command
+            .output()
+            .context("failed to run activation script")?;
+        eprint!("{}", String::from_utf8_lossy(&output.stderr));
+
+        let exports_rendered = Self::render_legacy_exports(&command, &shell);
 
         let script = formatdoc! {"
             {exports_rendered}
