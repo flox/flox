@@ -190,7 +190,7 @@ impl FloxArgs {
         // ensure xdg dirs exist
         tokio::fs::create_dir_all(&config.flox.config_dir).await?;
         tokio::fs::create_dir_all(&config.flox.data_dir).await?;
-        let flox_dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
+        let flox_dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME);
         // runtime_dir is used for socket paths,
         // so we have to try to keep it short.
         // See comment on services_socket_path for more

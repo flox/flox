@@ -65,6 +65,7 @@ impl Dialog<'_, Checkpoint> {
             default: None,
             placeholder: None,
             help_message,
+            starting_input: None,
             formatter: &|()| "".to_string(),
             default_value_formatter: &|()| "".to_string(),
             parser: &|_| Ok(()),
@@ -157,7 +158,7 @@ impl Dialog<'_, ()> {
     }
 }
 
-pub fn flox_theme() -> RenderConfig {
+pub fn flox_theme() -> RenderConfig<'static> {
     let mut render_config = RenderConfig::default_colored();
 
     if let (Some(dark_peach), Some(light_blue)) = (

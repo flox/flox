@@ -20,12 +20,12 @@ blake3 = "1.8.2"
 bpaf = { version = "0.9.20", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.42", features = ["serde"] }
-clap = { version = "4.5.48", features = ["derive"] }
+clap = { version = "4.5.49", features = ["derive"] }
 close_fds = "0.3"
 config = { version = "0.15", default-features = false, features = ["toml"] }
-crossterm = "0.27"
-derive_more = "0.99.20"
-dirs = "5.0.0"
+crossterm = "0.29"
+derive_more = { version = "2.0.1", features= ["as_ref", "deref", "deref_mut", "display", "from", "from_str"]}
+dirs = "6.0.0"
 enum_dispatch = "0.3.13"
 flox-activations = { path = "flox-activations" }
 flox-core = { path = "flox-core" }
@@ -43,26 +43,26 @@ httpmock = { git = "https://github.com/flox/httpmock.git", default-features = fa
     "record",
 ] }
 indent = "0.1.1"
-indexmap = { version = "2.11.4", features = ["serde"] }
+indexmap = { version = "2.12.0", features = ["serde"] }
 indoc = "2.0.6"
-inquire = "0.6.0"
+inquire = "0.9.1"
 indicatif = "0.18"
-itertools = "0.12.1"
-jsonwebtoken = "9.3"
+itertools = "0.14.0"
+jsonwebtoken = { version = "10.1", features = ["rust_crypto"] }
 log = { version = "0.4.28", features = ["kv"] }
-nix = { version = "0.28", features = ["signal", "process", "user"] }
-oauth2 = "4.4"
+nix = { version = "0.30", features = ["signal", "process", "user"] }
+oauth2 = "5.0"
 path-dedot = "3.1.1"
-pollster = "0.3.0"
+pollster = "0.4.0"
 progenitor-client = "0.11.2"
 proptest = "1.8.0"
-proptest-derive = "0.5.1"
+proptest-derive = "0.6.0"
 regex = "1.12"
 regress = "0.10.4"
 reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
 schemars = "1"
 semver = "1.0.27"
-sentry = { version = "0.32.3", features = [
+sentry = { version = "0.38.1", features = [
     "test",
     "anyhow",
     "tracing",
@@ -76,7 +76,7 @@ shell-escape = "0.1.5"
 slug = "0.1"
 supports-color = "3.0.2"
 # provides process tools for shell detection
-sysinfo = "0.32.1"
+sysinfo = "0.37.2"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
@@ -86,7 +86,7 @@ thiserror = "2"
 time = { version = "0.3", features = ["serde", "formatting"] }
 tokio = { version = "1", features = ["full"] }
 toml = "0.9.8"
-toml_edit = { version = "0.22", features = ["serde"] }
+toml_edit = { version = "0.23", features = ["serde"] }
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-indicatif = "0.3.13"
@@ -95,7 +95,7 @@ url = { version = "2.5", features = ["serde"] }
 url-escape = "0.1.1"
 uuid = { version = "1.16", features = ["serde", "v4"] }
 walkdir = "2"
-xdg = "2.4"
+xdg = "3.0"
 
 
 # dev dependencies

@@ -160,9 +160,16 @@ impl FromStr for FloxhubToken {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut validation = Validation::default();
-        // we're neither creating or verifying the token on the client side
+        // Client side we don't need to verify the signature,
+        // as all priviledged access is guarded server side.
+        // It's still convenient to verify common claims e.g. expiration dates.
+
+        // Deprecated in <https://github.com/Keats/jsonwebtoken/pull/441> in favor of
+        // `jsonwebtoken::dangerous::insecure_decode` which doesn't do _any_ validation.
+        #[allow(deprecated)]
         validation.insecure_disable_signature_validation();
         validation.validate_aud = false;
+
         let token =
             jsonwebtoken::decode::<FloxTokenClaims>(s, &DecodingKey::from_secret(&[]), &validation)
                 .map_err(|e| match e.kind() {

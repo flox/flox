@@ -143,23 +143,23 @@ pub struct CatalogClientConfig {
 /// [1]: <https://blog.xoria.org/macos-tips-threading/>
 pub enum CatalogQoS {
     /// your app’s user interface will stutter if this work is preempted
-    #[display(fmt = "user_interactive")]
+    #[display("user_interactive")]
     UserInteractive,
     /// the user must wait for this work to finish before they can keep using your app, e.g. loading the contents of a document that was just opened
-    #[display(fmt = "user_initiated")]
+    #[display("user_initiated")]
     UserInitiated,
     /// used as a fallback for threads which don’t have a QoS class assigned
     #[default]
-    #[display(fmt = "default")]
+    #[display("default")]
     Default,
     /// the user knows this work is happening but doesn’t wait for it to finish because they can keep using your app while it’s in progress, e.g. exporting in a video editor, downloading a file in a web browser
-    #[display(fmt = "utility")]
+    #[display("utility")]
     Utility,
     /// the user doesn’t know this work is happening, e.g. search indexing
-    #[display(fmt = "background")]
+    #[display("background")]
     Background,
     /// the user doesn’t know this work is happening, e.g. garbage collection?
-    #[display(fmt = "maintenance")]
+    #[display("maintenance")]
     Maintenance,
 }
 
