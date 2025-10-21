@@ -16,6 +16,7 @@ use flox_rust_sdk::models::lockfile::LockResult;
 use flox_rust_sdk::models::manifest::typed::{ActivateMode, IncludeDescriptor, Inner};
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
+use flox_rust_sdk::utils::CommandExt as DisplayCommandExt;
 use flox_rust_sdk::utils::logging::traceable_path;
 use indoc::{formatdoc, indoc};
 use tracing::{debug, warn};
@@ -432,6 +433,8 @@ impl Activate {
         if flox.verbosity > 0 {
             command.arg(format!("-{}", "v".repeat(flox.verbosity as usize)));
         };
+
+        debug!(cmd=%command.display(), "running flox-activations");
 
         // exec should never return
         // TODO: did this break in-place metrics?

@@ -18,6 +18,7 @@ pub struct BashStartupArgs {
 
     pub flox_sourcing_rc: bool,
     pub flox_activations: PathBuf,
+    pub flox_activate_tracer: String,
 }
 
 pub fn generate_bash_startup_commands(
@@ -74,6 +75,9 @@ pub fn generate_bash_startup_commands(
     } else {
         commands.push("unset FLOX_ENV_DESCRIPTION;".to_string());
     }
+
+    // Export the value of $_flox_activate_tracer from the environment.
+    commands.push(Shell::Bash.export_var("_flox_activate_tracer", &args.flox_activate_tracer));
 
     // Set the prompt if we're in an interactive shell.
     let set_prompt_path = args.activate_d.join("set-prompt.bash");

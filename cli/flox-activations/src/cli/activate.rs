@@ -14,6 +14,7 @@ use flox_core::activations::activations_json_path;
 use flox_core::shell::Shell;
 use flox_core::util::default_nix_env_vars;
 use indoc::formatdoc;
+use is_executable::IsExecutable;
 use itertools::Itertools;
 use log::debug;
 use time::{Duration, OffsetDateTime};
@@ -74,6 +75,7 @@ impl ActivateArgs {
                 .arg("--activation-state-dir")
                 .arg(activation_state_dir.to_string_lossy().to_string());
             start_command.arg("--activation-id").arg(&activation_id);
+            debug!("starting activation: {:?}", start_command);
             start_command
                 // Hooks may use stdin, stdout, stderr
                 .stderr(Stdio::inherit())
@@ -113,6 +115,24 @@ impl ActivateArgs {
                 Self::start_services();
             }
 
+            // The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
+            // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
+            // If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
+            // Else activate_tracer is set to refer to {data.interpreter_path}/activate.d/trace.
+            let activate_tracer = if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
+                if !trace_path.is_empty() && std::path::Path::new(&trace_path).is_executable() {
+                    trace_path
+                } else {
+                    data.interpreter_path
+                        .join("activate.d")
+                        .join("trace")
+                        .to_string_lossy()
+                        .to_string()
+                }
+            } else {
+                "true".to_string()
+            };
+
             if data.in_place {
                 let flox_sourcing_rc = std::env::var("_flox_sourcing_rc")
                     .map(|v| v == "true")
@@ -126,6 +146,7 @@ impl ActivateArgs {
                     flox_sourcing_rc,
                     verbosity,
                     export_env_diff,
+                    activate_tracer,
                 )?;
                 return Ok(());
             }
@@ -141,6 +162,7 @@ impl ActivateArgs {
                         .unwrap_or(false),
                     export_env_diff,
                     &activation_state_dir,
+                    activate_tracer,
                 )?;
             } else {
                 Self::new_activate_command(
@@ -383,6 +405,7 @@ impl ActivateArgs {
         flox_sourcing_rc: bool,
         export_env_diff: ExportEnvDiff,
         activation_state_dir: &PathBuf,
+        activate_tracer: String,
     ) -> Result<()> {
         match data.shell {
             Shell::Bash(bash) => {
@@ -396,6 +419,7 @@ impl ActivateArgs {
                     is_in_place: data.in_place,
                     flox_sourcing_rc,
                     flox_activations: (&data.path_to_self).into(),
+                    flox_activate_tracer: activate_tracer,
                 };
                 let startup_commands =
                     generate_bash_startup_commands(&bash_startup_args, &export_env_diff)?;
@@ -489,6 +513,7 @@ impl ActivateArgs {
         flox_sourcing_rc: bool,
         verbosity: u8,
         export_env_diff: ExportEnvDiff,
+        activate_tracer: String,
     ) -> Result<()> {
         let attach_command = AttachArgs {
             pid: std::process::id() as i32,
@@ -500,6 +525,7 @@ impl ActivateArgs {
             },
             runtime_dir: (&data.flox_runtime_dir).into(),
         };
+
         // Put a 5 second timeout on the activation
         attach_command.handle()?;
         let startup_commands = match data.shell {
@@ -514,6 +540,7 @@ impl ActivateArgs {
                     is_in_place: data.in_place,
                     flox_sourcing_rc,
                     flox_activations: (&data.path_to_self).into(),
+                    flox_activate_tracer: activate_tracer,
                 };
                 let startup_commands =
                     generate_bash_startup_commands(&bash_startup_args, &export_env_diff)?;

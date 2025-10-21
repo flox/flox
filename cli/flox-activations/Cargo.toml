@@ -17,6 +17,7 @@ dirs.workspace = true
 env_logger = { version = "0.11.8", default-features = false, features = ["color"] }
 flox-core.workspace = true
 fslock.workspace = true
+is_executable.workspace = true
 log.workspace = true
 serde_json.workspace = true
 shell-escape.workspace = true
@@ -24,7 +25,6 @@ time.workspace = true
 indoc.workspace = true
 itertools.workspace = true
 tempfile.workspace = true
-
 
 [dev-dependencies]
 nix.workspace = true

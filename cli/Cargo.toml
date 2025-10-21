@@ -47,6 +47,7 @@ indexmap = { version = "2.11.4", features = ["serde"] }
 indoc = "2.0.6"
 inquire = "0.6.0"
 indicatif = "0.18"
+is_executable = "1.0.5"
 itertools = "0.12.1"
 jsonwebtoken = "9.3"
 log = { version = "0.4.28", features = ["kv"] }
