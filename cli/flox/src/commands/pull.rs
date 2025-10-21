@@ -252,8 +252,9 @@ impl Pull {
             env_ref.name().clone(),
             &flox.floxhub,
         );
-        let pointer_content =
+        let mut pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
+        pointer_content.push('\n');
 
         fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);

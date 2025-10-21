@@ -233,11 +233,11 @@ cmd = "flox install hello-unfree"
 
 [resolve.jupyterlabs_widgets]
 pre_cmd = "flox init"
-cmd = "flox install jupyter python312Packages.jupyterlab-widgets"
+cmd = "flox install jupyter python313Packages.jupyterlab-widgets"
 
 [resolve.jupyterlabs_git]
 pre_cmd = "flox init"
-cmd = "flox install jupyter python312Packages.jupyterlab-git"
+cmd = "flox install jupyter python313Packages.jupyterlab-git"
 
 [resolve.go]
 pre_cmd = "flox init"
