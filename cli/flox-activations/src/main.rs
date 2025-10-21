@@ -61,7 +61,7 @@ fn init_logger(verbosity: u8) {
             // // Only pay the backtrace cost if explicitly enabled (or for DEBUG level).
             // let want_fn =
             //     std::env::var_os("LOG_FN").is_some() || record.level() <= log::Level::Debug;
-            let who = if record.level() >= log::Level::Debug {
+            let who = if record.level() <= log::Level::Debug {
                 caller_fn(record).unwrap_or_else(|| record.target().to_string())
             } else {
                 record.target().to_string()
