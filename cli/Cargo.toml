@@ -83,7 +83,7 @@ sys-info = "0.9"
 tempfile = "3.23.0"
 textwrap = { version = "0.16.2", features = ["terminal_size"] }
 thiserror = "2"
-time = { version = "0.3", features = ["serde", "formatting"] }
+time = { version = "0.3", features = ["serde", "formatting", "macros", "local-offset"] }
 tokio = { version = "1", features = ["full"] }
 toml = "0.9.8"
 toml_edit = { version = "0.22", features = ["serde"] }
