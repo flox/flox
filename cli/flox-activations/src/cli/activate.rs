@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::env::Vars;
 use std::ffi::OsStr;
 use std::fs;
+use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -46,6 +47,9 @@ pub const FLOX_SERVICES_SOCKET_OVERRIDE_VAR: &str = "_FLOX_SERVICES_SOCKET_OVERR
 pub const FLOX_RUNTIME_DIR_VAR: &str = "FLOX_RUNTIME_DIR";
 pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
+
+// TODO
+pub const RM: &str = "rm";
 
 impl ActivateArgs {
     pub fn handle(self, verbosity: u8) -> Result<(), anyhow::Error> {
@@ -129,7 +133,15 @@ impl ActivateArgs {
             // These functions will only return if exec fails or for an
             // ephemeral activation
             if data.interactive {
-                Self::new_activate_interactive()?;
+                Self::new_activate_interactive(
+                    verbosity,
+                    data,
+                    std::env::var("_flox_sourcing_rc")
+                        .map(|v| v == "true")
+                        .unwrap_or(false),
+                    export_env_diff,
+                    &activation_state_dir,
+                )?;
             } else {
                 Self::new_activate_command(
                     data.run_args,
@@ -365,8 +377,64 @@ impl ActivateArgs {
         Err(command.exec().into())
     }
 
-    fn new_activate_interactive() -> Result<()> {
-        Ok(())
+    fn new_activate_interactive(
+        verbosity: u8,
+        data: ActivateData,
+        flox_sourcing_rc: bool,
+        export_env_diff: ExportEnvDiff,
+        activation_state_dir: &PathBuf,
+    ) -> Result<()> {
+        match data.shell {
+            Shell::Bash(bash) => {
+                let bash_startup_args = BashStartupArgs {
+                    flox_activate_tracelevel: verbosity as i32,
+                    activate_d: data.interpreter_path.join("activate.d"),
+                    flox_env: data.env.clone(),
+                    flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
+                    flox_env_project: Some(data.env_project.to_string_lossy().to_string()),
+                    flox_env_description: Some(data.env_description),
+                    is_in_place: data.in_place,
+                    flox_sourcing_rc,
+                    flox_activations: (&data.path_to_self).into(),
+                };
+                let startup_commands =
+                    generate_bash_startup_commands(&bash_startup_args, &export_env_diff)?;
+                let rcfile = Self::write_maybe_self_destructing_script(
+                    startup_commands,
+                    activation_state_dir,
+                    verbosity < 2,
+                )?;
+                let mut command = Command::new(bash);
+                command.args(["--noprofile", "--rcfile", &rcfile.to_string_lossy()]);
+
+                debug!("spawning interactive bash shell: {:?}", command);
+                // exec should never return
+                Err(command.exec().into())
+                // TODO: do we need to port this case?
+                // # The bash --rcfile option only works for interactive shells
+                // # so we need to cobble together our own means of sourcing our
+                // # startup script for non-interactive shells.
+                // # XXX Is this case even a thing? What's the point of activating with
+                // #     no command to be invoked and no controlling terminal from which
+                // #     to issue commands?!? A broken docker experience maybe?!?
+                // exec "$_flox_shell" --noprofile --norc -s <<< "source '$RCFILE'"
+            },
+            _ => unimplemented!(),
+        }
+    }
+
+    fn write_maybe_self_destructing_script(
+        mut script: String,
+        activation_state_dir: &PathBuf,
+        self_destruct: bool,
+    ) -> Result<PathBuf> {
+        let mut tempfile = tempfile::NamedTempFile::new_in(activation_state_dir)?;
+        if self_destruct {
+            script.push_str(&format!("\n{RM} {}", tempfile.path().to_string_lossy()));
+        }
+        tempfile.write_all(script.as_bytes())?;
+        let (_, path) = tempfile.keep()?;
+        Ok(path)
     }
 
     fn render_legacy_exports(command: &Command, shell: &Shell) -> String {
