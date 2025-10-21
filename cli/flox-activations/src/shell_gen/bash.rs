@@ -8,7 +8,7 @@ use crate::shell_gen::capture::ExportEnvDiff;
 
 /// Arguments for generating bash startup commands
 pub struct BashStartupArgs {
-    pub flox_activate_tracelevel: u32,
+    pub flox_activate_tracelevel: i32,
     pub flox_activation_state_dir: PathBuf,
     pub activate_d: PathBuf,
     pub flox_env: String,
@@ -82,7 +82,7 @@ pub fn generate_bash_startup_commands(args: &BashStartupArgs) -> Result<String> 
     // Set the prompt if we're in an interactive shell.
     let set_prompt_path = args.activate_d.join("set-prompt.bash");
     commands.push(format!(
-        "if [ -t 1 ]; then source '{}'; fi;",
+        "if [ -t 1 ]; then source '{}'; fi",
         set_prompt_path.display()
     ));
 
@@ -92,18 +92,18 @@ pub fn generate_bash_startup_commands(args: &BashStartupArgs) -> Result<String> 
     // environment we think we're activating. Use runtime FLOX_ENV_DIRS to allow
     // RC files to perform activations.
     commands.push(format!(
-        r#"eval "$('{}' set-env-dirs --shell bash --flox-env "{}" --env-dirs "${{FLOX_ENV_DIRS:-}}")";"#,
+        r#"eval "$('{}' set-env-dirs --shell bash --flox-env "{}" --env-dirs "${{FLOX_ENV_DIRS:-}}")""#,
         args.flox_activations.display(),
         args.flox_env
     ));
 
     commands.push(format!(
-        r#"eval "$('{}' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${{MANPATH:-}}")";"#,
+        r#"eval "$('{}' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${{MANPATH:-}}")""#,
         args.flox_activations.display()
     ));
 
     commands.push(format!(
-        r#"eval "$('{}' profile-scripts --shell bash --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "${{FLOX_ENV_DIRS:-}}")";"#,
+        r#"eval "$('{}' profile-scripts --shell bash --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "${{FLOX_ENV_DIRS:-}}")""#,
         args.flox_activations.display()
     ));
 
@@ -121,7 +121,9 @@ pub fn generate_bash_startup_commands(args: &BashStartupArgs) -> Result<String> 
     // N.B. the output of these scripts may be eval'd with backticks which have
     // the effect of removing newlines from the output, so we must ensure that
     // the output is a valid shell script fragment when represented on a single line.
-    Ok(commands.join(";\n"))
+    let mut joined = commands.join(";\n");
+    joined.push(';');
+    Ok(joined)
 }
 
 #[cfg(test)]

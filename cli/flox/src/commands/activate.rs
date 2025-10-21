@@ -381,6 +381,8 @@ impl Activate {
         };
         subcommand_metric!("activate", "shell" = shell.to_string());
 
+        let flox_activations = env!("FLOX_ACTIVATIONS_BIN");
+
         let activate_data = ActivateData {
             // Don't rely on FLOX_ENV in the environment when we explicitly know
             // what it should be. This is necessary for nested activations where an
@@ -414,14 +416,13 @@ impl Activate {
             interactive,
             is_ephemeral,
             run_args: self.run_args,
+            path_to_self: flox_activations.to_string(),
         };
 
         let tempfile = tempfile::NamedTempFile::new_in(flox.temp_dir)?;
 
         let writer = BufWriter::new(&tempfile);
         serde_json::to_writer_pretty(writer, &activate_data)?;
-
-        let flox_activations = env!("FLOX_ACTIVATIONS_BIN");
 
         let mut command = std::process::Command::new(flox_activations);
         command

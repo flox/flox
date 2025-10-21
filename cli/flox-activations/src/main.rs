@@ -92,7 +92,7 @@ fn main() -> Result<(), Error> {
         },
         cli::Command::SetReady(args) => args.handle()?,
         cli::Command::Attach(args) => args.handle()?,
-        cli::Command::Activate(args) => args.handle()?,
+        cli::Command::Activate(activate_args) => activate_args.handle(args.verbose)?,
         cli::Command::FixPaths(args) => args.handle()?,
         cli::Command::SetEnvDirs(args) => args.handle()?,
         cli::Command::ProfileScripts(args) => args.handle()?,

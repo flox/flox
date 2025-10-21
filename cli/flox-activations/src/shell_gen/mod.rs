@@ -40,6 +40,7 @@ impl fmt::Display for Shell {
 }
 impl Shell {
     /// Set a shell variable that is not exported
+    /// Include a trailing ;
     pub fn set_var_not_exported(&self, var: &str, value: &str) -> String {
         match self {
             Self::Bash => format!("{var}='{value}';"),
@@ -49,6 +50,7 @@ impl Shell {
         }
     }
 
+    /// Do not include a trailing ;
     pub fn export_var(&self, var: &str, value: &str) -> String {
         match self {
             Self::Bash => format!("export {var}='{value}';"),

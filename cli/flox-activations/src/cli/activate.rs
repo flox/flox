@@ -18,9 +18,12 @@ use log::debug;
 use time::{Duration, OffsetDateTime};
 
 use super::StartOrAttachArgs;
+use super::attach::AttachArgs;
 use super::fix_paths::{fix_manpath_var, fix_path_var};
 use super::set_env_dirs::fix_env_dirs_var;
 use super::start_or_attach::wait_for_activation_ready_and_optionally_attach_pid;
+use crate::cli::attach::AttachExclusiveArgs;
+use crate::shell_gen::bash::{BashStartupArgs, generate_bash_startup_commands};
 use crate::shell_gen::capture::{EnvDiff, ExportEnvDiff};
 
 #[derive(Debug, Args)]
@@ -45,7 +48,7 @@ pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 
 impl ActivateArgs {
-    pub fn handle(self) -> Result<(), anyhow::Error> {
+    pub fn handle(self, verbosity: u8) -> Result<(), anyhow::Error> {
         let contents = fs::read_to_string(&self.activate_data)?;
         let data: ActivateData = serde_json::from_str(&contents)?;
 
@@ -84,11 +87,11 @@ impl ActivateArgs {
         }
         let mut command = Self::assemble_command_for_activate_script(data.clone());
         // Pass down the activation mode
-        command.arg("--mode").arg(data.mode);
+        command.arg("--mode").arg(&data.mode);
         command
             .arg("--activation-state-dir")
             .arg(activation_state_dir.to_string_lossy().to_string());
-        command.arg("--activation-id").arg(activation_id);
+        command.arg("--activation-id").arg(&activation_id);
 
         if matches!(data.shell, Shell::Bash(_)) {
             if attach {
@@ -99,7 +102,19 @@ impl ActivateArgs {
             }
 
             if data.in_place {
-                Self::new_activate_in_place()?;
+                let flox_sourcing_rc = std::env::var("_flox_sourcing_rc")
+                    .map(|v| v == "true")
+                    .unwrap_or(false);
+                let legacy_exports = Self::render_legacy_exports(&command, &data.shell);
+                Self::new_activate_in_place(
+                    data,
+                    activation_id,
+                    activation_state_dir,
+                    legacy_exports,
+                    flox_sourcing_rc,
+                    verbosity,
+                )?;
+                return Ok(());
             }
 
             // These functions will only return if exec fails
@@ -187,6 +202,24 @@ impl ActivateArgs {
         command.arg("--shell").arg(data.shell.exe_path());
 
         command
+    }
+
+    fn assemble_command_with_environment(
+        bin: impl AsRef<OsStr>,
+        data: ActivateData,
+        vars_from_environment: VarsFromEnvironment,
+        env_diff: &ExportEnvDiff,
+    ) -> Result<Command> {
+        let env_diff = Self::assemble_environment(data.clone(), vars_from_environment, env_diff)?;
+
+        let mut command = Command::new(bin);
+
+        command.envs(env_diff.additions);
+        for key in env_diff.deletions {
+            command.env_remove(key);
+        }
+
+        Ok(command)
     }
 
     fn assemble_environment(
@@ -345,7 +378,60 @@ impl ActivateArgs {
         Ok(())
     }
 
-    fn new_activate_in_place() -> Result<()> {
+    fn new_activate_in_place(
+        data: ActivateData,
+        activation_id: String,
+        activation_state_dir: PathBuf,
+        legacy_exports: String,
+        flox_sourcing_rc: bool,
+        verbosity: u8,
+    ) -> Result<()> {
+        let attach_command = AttachArgs {
+            pid: std::process::id() as i32,
+            flox_env: (&data.env).into(),
+            id: activation_id.clone(),
+            exclusive: AttachExclusiveArgs {
+                timeout_ms: Some(5000),
+                remove_pid: None,
+            },
+            runtime_dir: (&data.flox_runtime_dir).into(),
+        };
+        // Put a 5 second timeout on the activation
+        attach_command.handle()?;
+        let startup_commands = match data.shell {
+            Shell::Bash(_) => {
+                let bash_startup_args = BashStartupArgs {
+                    flox_activate_tracelevel: verbosity as i32,
+                    flox_activation_state_dir: activation_state_dir,
+                    activate_d: data.interpreter_path.join("activate.d"),
+                    flox_env: data.env.clone(),
+                    flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
+                    flox_env_project: Some(data.env_project.to_string_lossy().to_string()),
+                    flox_env_description: Some(data.env_description),
+                    is_in_place: data.in_place,
+                    flox_sourcing_rc,
+                    flox_activations: (&data.path_to_self).into(),
+                };
+                let startup_commands = generate_bash_startup_commands(&bash_startup_args)?;
+
+                formatdoc! {"
+                  {flox_activations} attach --runtime-dir {runtime_dir} --pid $$ --flox-env {flox_env} --id {id} --remove-pid {pid};
+                  {startup_commands}
+                ",
+                // TODO: this should probably be based on interpreter_path
+                flox_activations = data.path_to_self,
+                runtime_dir = data.flox_runtime_dir,
+                flox_env = data.env,
+                id = activation_id,
+                pid = std::process::id() }
+            },
+            _ => unimplemented!(),
+        };
+        let script = formatdoc! {"
+            {legacy_exports}
+            {startup_commands}
+        "};
+        print!("{script}");
         Ok(())
     }
 
