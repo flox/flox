@@ -9,7 +9,6 @@ use crate::shell_gen::capture::ExportEnvDiff;
 /// Arguments for generating bash startup commands
 pub struct BashStartupArgs {
     pub flox_activate_tracelevel: i32,
-    pub flox_activation_state_dir: PathBuf,
     pub activate_d: PathBuf,
     pub flox_env: String,
     pub flox_env_cache: Option<String>,
@@ -21,7 +20,10 @@ pub struct BashStartupArgs {
     pub flox_activations: PathBuf,
 }
 
-pub fn generate_bash_startup_commands(args: &BashStartupArgs) -> Result<String> {
+pub fn generate_bash_startup_commands(
+    args: &BashStartupArgs,
+    export_env_diff: &ExportEnvDiff,
+) -> Result<String> {
     let mut commands = Vec::new();
 
     // Enable trace mode if requested
@@ -47,15 +49,9 @@ pub fn generate_bash_startup_commands(args: &BashStartupArgs) -> Result<String> 
         commands.push("unset _flox_sourcing_rc".to_string());
     }
 
-    let add_env_path = args.flox_activation_state_dir.join("add.env");
-    let del_env_path = args.flox_activation_state_dir.join("del.env");
-
     // Restore environment variables set in the previous bash initialization.
     // Read del.env and add.env files
-    commands.append(
-        &mut ExportEnvDiff::from_files(&add_env_path, &del_env_path)?
-            .generate_commands(Shell::Bash),
-    );
+    commands.append(&mut export_env_diff.generate_commands(Shell::Bash));
 
     // Propagate required variables that are documented as exposed.
     commands.push(Shell::Bash.export_var("FLOX_ENV", &args.flox_env));

@@ -94,6 +94,14 @@ impl ActivateArgs {
         command.arg("--activation-id").arg(&activation_id);
 
         if matches!(data.shell, Shell::Bash(_)) {
+            let export_env_diff = ExportEnvDiff::from_files(
+                activation_state_dir.join("add.env"),
+                activation_state_dir.join("del.env"),
+            )?;
+            let env_diff: EnvDiff = (&export_env_diff).try_into()?;
+            let vars_from_environment = VarsFromEnvironment::get()?;
+            let activation_environment =
+                Self::assemble_environment(data.clone(), vars_from_environment, env_diff)?;
             if attach {
                 // TODO: print message about attaching
             }
@@ -113,15 +121,21 @@ impl ActivateArgs {
                     legacy_exports,
                     flox_sourcing_rc,
                     verbosity,
+                    export_env_diff,
                 )?;
                 return Ok(());
             }
 
-            // These functions will only return if exec fails
+            // These functions will only return if exec fails or for an
+            // ephemeral activation
             if data.interactive {
                 Self::new_activate_interactive()?;
             } else {
-                Self::new_activate_command()?;
+                Self::new_activate_command(
+                    data.run_args,
+                    data.is_ephemeral,
+                    activation_environment,
+                )?;
             }
 
             return Ok(());
@@ -206,29 +220,23 @@ impl ActivateArgs {
 
     fn assemble_command_with_environment(
         bin: impl AsRef<OsStr>,
-        data: ActivateData,
-        vars_from_environment: VarsFromEnvironment,
-        env_diff: &ExportEnvDiff,
-    ) -> Result<Command> {
-        let env_diff = Self::assemble_environment(data.clone(), vars_from_environment, env_diff)?;
-
+        activate_environment: &EnvDiff,
+    ) -> Command {
         let mut command = Command::new(bin);
 
-        command.envs(env_diff.additions);
-        for key in env_diff.deletions {
+        command.envs(&activate_environment.additions);
+        for key in &activate_environment.deletions {
             command.env_remove(key);
         }
 
-        Ok(command)
+        command
     }
 
     fn assemble_environment(
         data: ActivateData,
         vars_from_environment: VarsFromEnvironment,
-        env_diff: &ExportEnvDiff,
+        mut env_diff: EnvDiff,
     ) -> Result<EnvDiff> {
-        let mut env_diff: EnvDiff = env_diff.try_into()?;
-
         let mut additions_static_str = HashMap::new();
 
         additions_static_str.extend(Self::assemble_fixed_vars(&data.env, vars_from_environment));
@@ -315,8 +323,35 @@ impl ActivateArgs {
         }
     }
 
-    fn new_activate_command() -> Result<()> {
-        Ok(())
+    fn new_activate_command(
+        run_args: Vec<String>,
+        is_ephemeral: bool,
+        env_diff: EnvDiff,
+    ) -> Result<()> {
+        if run_args.is_empty() {
+            return Err(anyhow!("empty command provided"));
+        }
+        let user_command = &run_args[0];
+        let args = &run_args[1..];
+
+        let mut command = Self::assemble_command_with_environment(user_command, &env_diff);
+        command.args(args);
+        if is_ephemeral {
+            let output = command
+                .stderr(Stdio::piped())
+                .stdout(Stdio::piped())
+                .output()?;
+            if !output.status.success() {
+                Err(anyhow!(
+                    "failed to run command: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                ))?;
+            }
+            Ok(())
+        } else {
+            // exec should never return
+            Err(command.exec().into())
+        }
     }
 
     /// Activate the environment interactively by spawning a new shell
@@ -385,6 +420,7 @@ impl ActivateArgs {
         legacy_exports: String,
         flox_sourcing_rc: bool,
         verbosity: u8,
+        export_env_diff: ExportEnvDiff,
     ) -> Result<()> {
         let attach_command = AttachArgs {
             pid: std::process::id() as i32,
@@ -402,7 +438,6 @@ impl ActivateArgs {
             Shell::Bash(_) => {
                 let bash_startup_args = BashStartupArgs {
                     flox_activate_tracelevel: verbosity as i32,
-                    flox_activation_state_dir: activation_state_dir,
                     activate_d: data.interpreter_path.join("activate.d"),
                     flox_env: data.env.clone(),
                     flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
@@ -412,7 +447,8 @@ impl ActivateArgs {
                     flox_sourcing_rc,
                     flox_activations: (&data.path_to_self).into(),
                 };
-                let startup_commands = generate_bash_startup_commands(&bash_startup_args)?;
+                let startup_commands =
+                    generate_bash_startup_commands(&bash_startup_args, &export_env_diff)?;
 
                 formatdoc! {r#"
                   {flox_activations} attach --runtime-dir "{runtime_dir}" --pid $$ --flox-env "{flox_env}" --id {id} --remove-pid {pid};
