@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env::Vars;
 use std::fs;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -16,7 +17,10 @@ use log::debug;
 use time::{Duration, OffsetDateTime};
 
 use super::StartOrAttachArgs;
+use super::fix_paths::{fix_manpath_var, fix_path_var};
+use super::set_env_dirs::fix_env_dirs_var;
 use super::start_or_attach::wait_for_activation_ready_and_optionally_attach_pid;
+use crate::shell_gen::capture::{EnvDiff, ExportEnvDiff};
 
 #[derive(Debug, Args)]
 pub struct ActivateArgs {
@@ -169,6 +173,67 @@ impl ActivateArgs {
         command
     }
 
+    fn assemble_environment(
+        data: ActivateData,
+        vars_from_environment: VarsFromEnvironment,
+        env_diff: &ExportEnvDiff,
+    ) -> Result<EnvDiff> {
+        let mut env_diff: EnvDiff = env_diff.try_into()?;
+
+        let mut additions_static_str = HashMap::new();
+
+        additions_static_str.extend(Self::assemble_fixed_vars(&data.env, vars_from_environment));
+
+        // TODO: dedup with shell_gen specific code
+        // Propagate required variables that are documented as exposed.
+        additions_static_str.insert("FLOX_ENV", data.env);
+        // Propagate optional variables that are documented as exposed.
+        additions_static_str.insert(
+            "FLOX_ENV_CACHE",
+            data.env_cache.to_string_lossy().to_string(),
+        );
+
+        additions_static_str.insert(
+            "FLOX_ENV_PROJECT",
+            data.env_project.to_string_lossy().to_string(),
+        );
+
+        additions_static_str.insert("FLOX_ENV_DESCRIPTION", data.env_description);
+
+        // Do we need this or will this already be inherited?
+        additions_static_str.extend(default_nix_env_vars());
+
+        env_diff.additions.extend(
+            additions_static_str
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v)),
+        );
+
+        Ok(env_diff)
+    }
+
+    fn assemble_fixed_vars(
+        flox_env: impl AsRef<str>,
+        vars_from_environment: VarsFromEnvironment,
+    ) -> HashMap<&'static str, String> {
+        let new_flox_env_dirs = fix_env_dirs_var(
+            flox_env.as_ref(),
+            vars_from_environment
+                .flox_env_dirs
+                .unwrap_or("".to_string()),
+        );
+        let new_path = fix_path_var(&new_flox_env_dirs, &vars_from_environment.path);
+        let new_manpath = fix_manpath_var(
+            &new_flox_env_dirs,
+            &vars_from_environment.manpath.unwrap_or("".to_string()),
+        );
+        HashMap::from([
+            ("FLOX_ENV_DIRS", new_flox_env_dirs),
+            ("PATH", new_path),
+            ("MANPATH", new_manpath),
+        ])
+    }
+
     /// Used for `flox activate -- run_args`
     fn activate_command(
         mut command: Command,
@@ -277,6 +342,31 @@ impl ActivateArgs {
         // set-env-dirs
         // fix-paths
         // replay vars
+    }
+}
+
+struct VarsFromEnvironment {
+    flox_env_dirs: Option<String>,
+    path: String,
+    manpath: Option<String>,
+}
+
+impl VarsFromEnvironment {
+    fn get() -> Result<Self> {
+        let flox_env_dirs = std::env::var("FLOX_ENV_DIRS").ok();
+        let path = match std::env::var("PATH") {
+            Ok(path) => path,
+            Err(e) => {
+                return Err(anyhow!("failed to get PATH from environment: {}", e));
+            },
+        };
+        let manpath = std::env::var("MANPATH").ok();
+
+        Ok(Self {
+            flox_env_dirs,
+            path,
+            manpath,
+        })
     }
 }
 

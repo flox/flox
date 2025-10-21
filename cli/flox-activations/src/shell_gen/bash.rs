@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
 
 use crate::shell_gen::Shell;
-use crate::shell_gen::capture::EnvDiff;
+use crate::shell_gen::capture::ExportEnvDiff;
 
 /// Arguments for generating bash startup commands
 pub struct BashStartupArgs {
@@ -53,7 +53,8 @@ pub fn generate_bash_startup_commands(args: &BashStartupArgs) -> Result<String> 
     // Restore environment variables set in the previous bash initialization.
     // Read del.env and add.env files
     commands.append(
-        &mut EnvDiff::from_files(&add_env_path, &del_env_path)?.generate_commands(Shell::Bash),
+        &mut ExportEnvDiff::from_files(&add_env_path, &del_env_path)?
+            .generate_commands(Shell::Bash),
     );
 
     // Propagate required variables that are documented as exposed.
