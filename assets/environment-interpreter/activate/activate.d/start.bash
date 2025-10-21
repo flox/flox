@@ -38,7 +38,7 @@ start() {
   # Process the flox environment customizations, which includes (amongst
   # other things) prepending this environment's bin directory to the PATH.
   # shellcheck disable=SC2154 # set in the main `activate` script
-  if [ "$_FLOX_ENV_ACTIVATION_MODE" = "dev" ]; then
+  if [ "$_FLOX_ENV_ACTIVATION_MODE" = "dev" ] || [ "$_FLOX_ENV_ACTIVATION_MODE" = "start" ]; then
     # shellcheck disable=SC1090 # from rendered environment
     source_profile_d "$_profile_d" "prepend" "$FLOX_ENV_DIRS"
   else
