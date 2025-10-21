@@ -121,7 +121,7 @@ pub fn prepend_dirs_to_pathlike_var(
 }
 
 /// Calculate the new PATH variable from FLOX_ENV_DIRS and the existing PATH.
-fn fix_path_var(flox_env_dirs_var: &str, path_var: &str) -> String {
+pub fn fix_path_var(flox_env_dirs_var: &str, path_var: &str) -> String {
     let path_dirs = separate_dir_list(path_var);
     let flox_env_dirs = separate_dir_list(flox_env_dirs_var);
     let suffixes = ["bin", "sbin"];
@@ -144,7 +144,7 @@ fn fix_path_var(flox_env_dirs_var: &str, path_var: &str) -> String {
 /// So, we always put a trailing ':' in MANPATH so that man pages from the
 /// active environments take precedence without *removing* the standard
 /// search path.
-fn fix_manpath_var(flox_env_dirs_var: &str, manpath_var: &str) -> String {
+pub fn fix_manpath_var(flox_env_dirs_var: &str, manpath_var: &str) -> String {
     let has_leading_colon = manpath_var.starts_with(':');
     let has_double_colon = manpath_var.contains("::");
     let has_trailing_colon = manpath_var.ends_with(':');
