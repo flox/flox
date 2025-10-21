@@ -53,7 +53,7 @@ impl Shell {
     /// Do not include a trailing ;
     pub fn export_var(&self, var: &str, value: &str) -> String {
         match self {
-            Self::Bash => format!("export {var}='{value}';"),
+            Self::Bash => format!("export {var}='{value}'"),
             _ => unimplemented!(),
         }
     }
