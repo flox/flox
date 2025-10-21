@@ -247,26 +247,9 @@
       },
       "type": "object"
     },
-    "EnvironmentName": {
-      "type": "string"
-    },
-    "EnvironmentOwner": {
-      "type": "string"
-    },
     "EnvironmentRef": {
-      "properties": {
-        "name": {
-          "$ref": "#/$defs/EnvironmentName"
-        },
-        "owner": {
-          "$ref": "#/$defs/EnvironmentOwner"
-        }
-      },
-      "required": [
-        "owner",
-        "name"
-      ],
-      "type": "object"
+      "description": "Environment Reference",
+      "type": "string"
     },
     "Hook": {
       "additionalProperties": false,
