@@ -32,30 +32,34 @@ impl SetEnvDirsArgs {
             self.flox_env.display(),
             self.env_dirs
         );
-        let existing_dirs = separate_dir_list(&self.env_dirs);
-        let new_dirs = populate_env_dirs(&self.flox_env, &existing_dirs);
-        let joined = join_dir_list(new_dirs);
+        let new_env_dirs = fix_env_dirs_var(&self.flox_env, &self.env_dirs);
         let sourceable_commands = match self.shell.as_ref() {
             "bash" => {
-                format!("export FLOX_ENV_DIRS=\"{joined}\";")
+                format!("export FLOX_ENV_DIRS=\"{new_env_dirs}\";")
             },
             "zsh" => {
-                format!("export FLOX_ENV_DIRS=\"{joined}\";")
+                format!("export FLOX_ENV_DIRS=\"{new_env_dirs}\";")
             },
             "fish" => {
-                format!("set -gx FLOX_ENV_DIRS \"{joined}\";")
+                format!("set -gx FLOX_ENV_DIRS \"{new_env_dirs}\";")
             },
             "tcsh" => {
-                format!("setenv FLOX_ENV_DIRS \"{joined}\";")
+                format!("setenv FLOX_ENV_DIRS \"{new_env_dirs}\";")
             },
             other => {
                 bail!("invalid shell: {other}")
             },
         };
         output.write_all(sourceable_commands.as_bytes())?;
-        debug!("Set FLOX_ENV_DIRS, FLOX_ENV_DIRS={}", joined);
+        debug!("Set FLOX_ENV_DIRS, FLOX_ENV_DIRS={}", new_env_dirs);
         Ok(())
     }
+}
+
+pub fn fix_env_dirs_var(flox_env: impl AsRef<Path>, env_dirs: impl AsRef<str>) -> String {
+    let existing_dirs = separate_dir_list(env_dirs.as_ref());
+    let new_dirs = populate_env_dirs(flox_env.as_ref(), &existing_dirs);
+    join_dir_list(new_dirs)
 }
 
 /// Adds a new environment to the list of active env dirs if its not already present.
