@@ -210,6 +210,9 @@ if [ -n "$FLOX_CMD" ]; then
     exit 1
   fi
   _flox_shell_mode="command"
+elif [ $# -gt 0 ]; then
+  # Used for container invocations and builds.
+  _flox_shell_mode="command"
 elif [ -t 1 ] || [ -n "${_FLOX_FORCE_INTERACTIVE:-}" ]; then
   _flox_shell_mode="interactive"
 else
