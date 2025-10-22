@@ -8,7 +8,7 @@
 case "$_flox_shell" in
   *bash)
     if [ -n "$FLOX_NOPROFILE" ]; then
-      exec "$_flox_shell" --noprofile --norc -c "$FLOX_CMD"
+      exec "$_flox_shell" --noprofile --norc -c "$*"
     else
       RCFILE="$(@coreutils@/bin/mktemp -p "$_FLOX_ACTIVATION_STATE_DIR")"
       generate_bash_startup_commands \
@@ -24,18 +24,18 @@ case "$_flox_shell" in
       # self destruct
       echo "@coreutils@/bin/rm '$RCFILE'" >> "$RCFILE"
       if [ -t 1 ]; then
-        exec "$_flox_shell" --noprofile --rcfile "$RCFILE" -c "$FLOX_CMD"
+        exec "$_flox_shell" --noprofile --rcfile "$RCFILE" -c "$*"
       else
         # The bash --rcfile option only works for interactive shells
         # so we need to cobble together our own means of sourcing our
         # startup script for non-interactive shells.
-        exec "$_flox_shell" --noprofile --norc -s <<< "source '$RCFILE' && $FLOX_CMD"
+        exec "$_flox_shell" --noprofile --norc -s <<< "source '$RCFILE' && $*"
       fi
     fi
     ;;
   *fish)
     if [ -n "$FLOX_NOPROFILE" ]; then
-      exec "$_flox_shell" -c "$FLOX_CMD"
+      exec "$_flox_shell" -c "$*"
     else
       RCFILE="$(@coreutils@/bin/mktemp -p "$_FLOX_ACTIVATION_STATE_DIR")"
       generate_fish_startup_commands \
@@ -49,12 +49,12 @@ case "$_flox_shell" in
         > "$RCFILE"
       # self destruct
       echo "@coreutils@/bin/rm '$RCFILE'" >> "$RCFILE"
-      exec "$_flox_shell" --init-command "source '$RCFILE'" -c "$FLOX_CMD"
+      exec "$_flox_shell" --init-command "source '$RCFILE'" -c "$*"
     fi
     ;;
   *tcsh)
     if [ -n "$FLOX_NOPROFILE" ]; then
-      exec "$_flox_shell" -c "$FLOX_CMD"
+      exec "$_flox_shell" -c "$*"
     else
       export FLOX_ORIG_HOME="$HOME"
       export HOME="$_tcsh_home"
@@ -75,12 +75,12 @@ case "$_flox_shell" in
       echo "@coreutils@/bin/rm '$FLOX_TCSH_INIT_SCRIPT'" >> "$FLOX_TCSH_INIT_SCRIPT"
       export FLOX_TCSH_INIT_SCRIPT
 
-      exec "$_flox_shell" -m -c "$FLOX_CMD"
+      exec "$_flox_shell" -m -c "$*"
     fi
     ;;
   *zsh)
     if [ -n "$FLOX_NOPROFILE" ]; then
-      exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS -c "$FLOX_CMD"
+      exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS -c "$*"
     else
       if [ -n "${ZDOTDIR:-}" ]; then
         export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
@@ -89,7 +89,7 @@ case "$_flox_shell" in
       export FLOX_ZSH_INIT_SCRIPT="$_activate_d/zsh"
       # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
       # automatically sourcing /etc/zshrc et al.
-      exec "$_flox_shell" -o NO_GLOBAL_RCS -c "$FLOX_CMD"
+      exec "$_flox_shell" -o NO_GLOBAL_RCS -c "$*"
     fi
     ;;
   *)

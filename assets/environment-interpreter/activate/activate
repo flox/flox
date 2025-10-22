@@ -24,7 +24,6 @@ else
 fi
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" START
 
-_bash="@bash@/bin/bash"
 _dirname="@coreutils@/bin/dirname"
 _getopt="@getopt@/bin/getopt"
 _readlink="@coreutils@/bin/readlink"
@@ -200,8 +199,9 @@ while true; do
   esac
 done
 
-# If provided, verify that $FLOX_CMD is the only argument, and set _flox_shell_mode
-# accordingly. Note that _flox_shell_mode is distinct from "_FLOX_ACTIVATION_MODE".
+# Convert the provided command string into an array of arguments in "$@".
+# Henceforth in the script it is assumed that these are the arguments to be
+# invoked either by this shell (when in build mode) or with the chosen userShell.
 if [ -n "$FLOX_CMD" ]; then
   # Throw an error if passed additional arguments along with the -c arg.
   if [ $# -gt 0 ]; then
@@ -209,9 +209,13 @@ if [ -n "$FLOX_CMD" ]; then
     echo "$USAGE" >&2
     exit 1
   fi
-  _flox_shell_mode="command"
-elif [ $# -gt 0 ]; then
-  # Used for container invocations and builds.
+
+  # Set $@ to reflect the command to be invoked.
+  set -- "$FLOX_CMD"
+fi
+
+# This is distinct from "_FLOX_ACTIVATION_MODE"
+if [ $# -gt 0 ]; then
   _flox_shell_mode="command"
 elif [ -t 1 ] || [ -n "${_FLOX_FORCE_INTERACTIVE:-}" ]; then
   _flox_shell_mode="interactive"
@@ -311,7 +315,8 @@ fi
 case "${_flox_shell_mode}" in
   command)
     if [ -n "${FLOX_CONTAINERD:-}" ]; then
-      exec $_bash --noprofile --norc -c "$FLOX_CMD"
+      # Temporary workaround while we await activate refactor.
+      FLOX_NOPROFILE="true"
     fi
     # shellcheck source-path=SCRIPTDIR/activate.d
     source "${_activate_d}/attach-command.bash"
