@@ -8,6 +8,7 @@ use flox_rust_sdk::flox::{EnvironmentOwner, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
+    PushResult,
 };
 use flox_rust_sdk::models::environment::{
     DotFlox,
@@ -81,9 +82,24 @@ impl Push {
                     ", existing_owner = managed_pointer.owner, existing_name = managed_pointer.name});
                 }
 
-                let message = Self::push_message(&managed_pointer, self.force, true)?;
-                Self::push_managed_env(&flox, managed_pointer, &dot_flox.path, self.force)?;
-                message::updated(message);
+                match Self::push_managed_env(
+                    &flox,
+                    managed_pointer.clone(),
+                    &dot_flox.path,
+                    self.force,
+                ) {
+                    Ok(PushResult::Updated) => {
+                        let message = Self::push_message(&managed_pointer, self.force, true)?;
+                        message::updated(message);
+                    },
+                    Ok(PushResult::UpToDate) => {
+                        message::info(formatdoc! {"
+                            No changes to push for {name}.
+                            The environment on FloxHub is already up to date.
+                        ", name = managed_pointer.name});
+                    },
+                    Err(err) => return Err(err),
+                }
             },
 
             // Convert a path environment to a managed environment
@@ -118,10 +134,10 @@ impl Push {
         managed_pointer: ManagedPointer,
         dot_flox_dir: &Path,
         force: bool,
-    ) -> Result<()> {
+    ) -> Result<PushResult> {
         let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dot_flox_dir, None)?;
 
-        env.push(flox, force).map_err(|err| {
+        let push_result = env.push(flox, force).map_err(|err| {
             Self::convert_error(
                 EnvironmentError::ManagedEnvironment(err),
                 managed_pointer,
@@ -129,7 +145,7 @@ impl Push {
             )
         })?;
 
-        Ok(())
+        Ok(push_result)
     }
 
     /// pushes a path environment in a directory to FloxHub and makes it a managed environment

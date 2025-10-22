@@ -4,6 +4,7 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::str::FromStr;
 use std::sync::LazyLock;
 
 use chrono::{DateTime, Utc};
@@ -144,6 +145,65 @@ pub enum GitCommandError {
     InvalidOutput(String),
     #[error("Remote URL was invalid")]
     InvalidUrl(#[source] url::ParseError),
+}
+
+/// Representation of the git push status.
+/// See: https://git-scm.com/docs/git-push#Documentation/git-push.txt-flag
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PushFlag {
+    /// `<space>`
+    /// for a successfully pushed fast-forward
+    /// https://git-scm.com/docs/git-push#Documentation/git-push.txt-space
+    FastForward,
+    /// `+`
+    /// for a successful forced update
+    /// https://git-scm.com/docs/git-push#Documentation/git-push.txt-
+    ForcedUpdate,
+    /// `-`
+    /// for a successful forced update
+    /// https://git-scm.com/docs/git-push#Documentation/git-push.txt--
+    Delete,
+    /// `*`
+    /// for a successful forced update
+    /// https://git-scm.com/docs/git-push#Documentation/git-push.txt--1
+    Create,
+    /// `!`
+    /// for a successful forced update
+    /// https://git-scm.com/docs/git-push#Documentation/git-push.txt--1-1
+    Rejected,
+    /// `=`
+    /// for a ref that was up to date and did not need pushing
+    /// https://git-scm.com/docs/git-push#Documentation/git-push.txt--1-1-1
+    UptoDate,
+}
+impl PushFlag {
+    fn from_stdout(stdout: &str) -> Result<Self, String> {
+        let Some(status_line) = stdout.lines().nth(1) else {
+            return Err(stdout.to_string());
+        };
+        let Some((status, _)) = status_line.split_once('\t') else {
+            return Err(stdout.to_string());
+        };
+        status.parse()
+    }
+}
+
+impl FromStr for PushFlag {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let flag = match s {
+            " " => Self::FastForward,
+            "+" => Self::ForcedUpdate,
+            "-" => Self::Delete,
+            "*" => Self::Create,
+            "!" => Self::Rejected,
+            "=" => Self::UptoDate,
+            _ => return Err(s.to_string()),
+        };
+
+        Ok(flag)
+    }
 }
 
 /// Configuration options for the git command
@@ -514,12 +574,14 @@ impl GitCommandProvider {
     }
 
     /// Like [GitCommandProvider::push] but allows to specify the refspec explicitly
+    /// and returns the (push status flag)[https://git-scm.com/docs/git-push#Documentation/git-push.txt-flag]
+    /// if successful.
     pub fn push_ref(
         &self,
         repository: impl AsRef<str>,
         push_spec: impl AsRef<str>,
         force: bool,
-    ) -> Result<(), GitRemoteCommandError> {
+    ) -> Result<PushFlag, GitRemoteCommandError> {
         let mut command = self.new_command();
         command
             .arg("push")
@@ -531,23 +593,25 @@ impl GitCommandProvider {
             command.arg("--force");
         }
 
-        match GitCommandProvider::run_command(&mut command) {
-            Ok(_) => Ok(()),
+        let flag = match GitCommandProvider::run_command(&mut command) {
+            Ok(out) => PushFlag::from_stdout(&out.to_string_lossy())
+                .expect("canonical git output should parse"),
             Err(ref err @ GitCommandError::BadExit(_, _, ref stderr))
                 if stderr.contains("DENIED") || stderr.contains("Authentication failed") =>
             {
                 debug!("Access denied: {err}");
-                Err(GitRemoteCommandError::AccessDenied)
+                return Err(GitRemoteCommandError::AccessDenied);
             },
             Err(ref err @ GitCommandError::BadExit(_, ref stdout, _))
-                if stdout.contains("[rejected] (fetch first)") =>
+                if PushFlag::from_stdout(stdout) == Ok(PushFlag::Rejected) =>
             {
                 debug!("Branches diverged: {err}");
-                Err(GitRemoteCommandError::Diverged)
+                return Err(GitRemoteCommandError::Diverged);
             },
-            Err(e) => Err(e.into()),
-        }?;
-        Ok(())
+            Err(e) => return Err(e.into()),
+        };
+
+        Ok(flag)
     }
 
     /// Deletes the specified branch

@@ -59,6 +59,7 @@ use crate::providers::git::{
     GitCommandError,
     GitProvider,
     GitRemoteCommandError,
+    PushFlag,
 };
 
 pub const GENERATION_LOCK_FILENAME: &str = "env.lock";
@@ -1525,6 +1526,14 @@ pub enum PullResult {
     Updated,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PushResult {
+    /// The environment was already up to date
+    UpToDate,
+    /// The environment was reset to the latest upstream version
+    Updated,
+}
+
 impl ManagedEnvironment {
     /// Create a new [ManagedEnvironment] from a [PathEnvironment]
     /// by pushing the contents of the original environment as a generation to floxhub.
@@ -1669,7 +1678,11 @@ impl ManagedEnvironment {
     }
 
     #[instrument(skip(self, flox), fields(progress = "Pushing updates to FloxHub"))]
-    pub fn push(&mut self, flox: &Flox, force: bool) -> Result<(), ManagedEnvironmentError> {
+    pub fn push(
+        &mut self,
+        flox: &Flox,
+        force: bool,
+    ) -> Result<PushResult, ManagedEnvironmentError> {
         let project_branch = branch_name(&self.pointer, &self.path);
         let sync_branch = remote_branch_name(&self.pointer);
 
@@ -1744,7 +1757,9 @@ impl ManagedEnvironment {
                 }))?;
             }
         }
-        self.floxmeta
+
+        let push_flag = self
+            .floxmeta
             .git
             .push_ref(
                 "dynamicorigin",
@@ -1756,10 +1771,14 @@ impl ManagedEnvironment {
                 _ => ManagedEnvironmentError::Push(err),
             })?;
 
+        if push_flag == PushFlag::UptoDate {
+            return Ok(PushResult::UpToDate);
+        }
+
         // update local environment branch, should be fast-forward and a noop if the branches didn't diverge
         self.pull(flox, force)?;
 
-        Ok(())
+        Ok(PushResult::Updated)
     }
 
     /// Pull new generation data from floxhub
