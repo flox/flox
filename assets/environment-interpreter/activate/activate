@@ -259,7 +259,7 @@ case "$_flox_shell" in
 esac
 
 if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
-  if [ -z "${FLOX_CMD:-}" ]; then
+  if [ $# -eq 0 ]; then
     echo "build mode is only supported for running a command" >&2
     exit 1
   fi
@@ -269,7 +269,7 @@ if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
   # Set static environment variables from the manifest
   set_manifest_vars "$FLOX_ENV"
 
-  exec $_bash --noprofile --norc -c "$FLOX_CMD"
+  exec "$@"
 fi
 
 # The CLI is responsible for erroring if the environment is already active.
