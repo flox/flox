@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::collections::{BTreeMap, HashSet};
 
 use anyhow::{Result, bail};
@@ -86,6 +87,20 @@ fn render_show_catalog(
         }
         map
     };
+    // calculating the maximum width needed for the version column
+    let version_column_width = {
+        let mut seen_versions = HashSet::new();
+        let mut max_width = 0;
+        for pkg in search_results {
+            if !seen_versions.contains(&pkg.version) {
+                let version_str = format!("    {pkg_path}@{}", pkg.version);
+                max_width = max(max_width, version_str.len());
+                seen_versions.insert(&pkg.version);
+            }
+        }
+        max_width
+    };
+
     let mut seen_versions = HashSet::new();
     // We iterate over the search results again instead of just the `version_to_systems` map since
     // although the keys (and therefore the versions) in the map are sorted (BTreeMap is a sorted map),
@@ -109,14 +124,17 @@ fn render_show_catalog(
             intersection.sort();
             intersection
         };
+
+        let version_str = format!("    {pkg_path}@{}", pkg.version);
+
         if available_systems.len() != expected_systems.len() {
             println!(
-                "    {pkg_path}@{} ({} only)",
-                pkg.version,
+                "{:<version_column_width$} ({} only)",
+                version_str,
                 available_systems.join(", ")
             );
         } else {
-            println!("    {pkg_path}@{}", pkg.version);
+            println!("{}", version_str);
         }
         seen_versions.insert(&pkg.version);
     }
