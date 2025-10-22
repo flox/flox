@@ -276,6 +276,8 @@ if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
   # Set static environment variables from the manifest
   set_manifest_vars "$FLOX_ENV"
 
+  # Convert single arg specified with "-c" into "$@" array.
+  eval set -- "$*"
   exec "$@"
 fi
 
@@ -314,6 +316,11 @@ fi
 
 case "${_flox_shell_mode}" in
   command)
+    if [ -n "${FLOX_CONTAINERD:-}" ]; then
+      # Convert single arg specified with "-c" into "$@" array.
+      eval set -- "$*"
+      exec "$@"
+    fi
     # shellcheck source-path=SCRIPTDIR/activate.d
     source "${_activate_d}/attach-command.bash"
     ;;
