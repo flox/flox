@@ -59,6 +59,7 @@ use crate::providers::git::{
     GitCommandError,
     GitProvider,
     GitRemoteCommandError,
+    PushFlag,
 };
 
 pub const GENERATION_LOCK_FILENAME: &str = "env.lock";
@@ -1757,7 +1758,7 @@ impl ManagedEnvironment {
             }
         }
 
-        let push_output = self
+        let push_flag = self
             .floxmeta
             .git
             .push_ref(
@@ -1770,9 +1771,7 @@ impl ManagedEnvironment {
                 _ => ManagedEnvironmentError::Push(err),
             })?;
 
-        let is_up_to_date = push_output.lines().any(|line| line.trim().starts_with('='));
-
-        if is_up_to_date {
+        if push_flag == PushFlag::UptoDate {
             return Ok(PushResult::UpToDate);
         }
 
