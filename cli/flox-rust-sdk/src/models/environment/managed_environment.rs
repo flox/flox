@@ -153,8 +153,6 @@ pub enum ManagedEnvironmentError {
     Push(#[source] GitRemoteCommandError),
     #[error("cannot push environment that includes local environments")]
     PushWithLocalIncludes,
-    #[error("no changes to push")]
-    NothingToPush,
     #[error("failed to delete local environment branch")]
     DeleteBranch(#[source] GitCommandError),
     #[error("failed to delete environment directory {0:?}")]
@@ -1527,6 +1525,14 @@ pub enum PullResult {
     Updated,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PushResult {
+    /// The environment was already up to date
+    UpToDate,
+    /// The environment was reset to the latest upstream version
+    Updated,
+}
+
 impl ManagedEnvironment {
     /// Create a new [ManagedEnvironment] from a [PathEnvironment]
     /// by pushing the contents of the original environment as a generation to floxhub.
@@ -1671,7 +1677,11 @@ impl ManagedEnvironment {
     }
 
     #[instrument(skip(self, flox), fields(progress = "Pushing updates to FloxHub"))]
-    pub fn push(&mut self, flox: &Flox, force: bool) -> Result<(), ManagedEnvironmentError> {
+    pub fn push(
+        &mut self,
+        flox: &Flox,
+        force: bool,
+    ) -> Result<PushResult, ManagedEnvironmentError> {
         let project_branch = branch_name(&self.pointer, &self.path);
         let sync_branch = remote_branch_name(&self.pointer);
 
@@ -1747,19 +1757,8 @@ impl ManagedEnvironment {
             }
         }
 
-        // check if there are any changes to push by comparing branch hashes
-        let project_branch_commit = self
+        let push_output = self
             .floxmeta
-            .git
-            .branch_hash(&project_branch)
-            .map_err(ManagedEnvironmentError::GitBranchHash)?;
-        let sync_branch_commit = self.floxmeta.git.branch_hash(&sync_branch).ok();
-
-        if Some(project_branch_commit.clone()) == sync_branch_commit {
-            return Err(ManagedEnvironmentError::NothingToPush);
-        }
-
-        self.floxmeta
             .git
             .push_ref(
                 "dynamicorigin",
@@ -1771,10 +1770,16 @@ impl ManagedEnvironment {
                 _ => ManagedEnvironmentError::Push(err),
             })?;
 
+        let is_up_to_date = push_output.lines().any(|line| line.trim().starts_with('='));
+
+        if is_up_to_date {
+            return Ok(PushResult::UpToDate);
+        }
+
         // update local environment branch, should be fast-forward and a noop if the branches didn't diverge
         self.pull(flox, force)?;
 
-        Ok(())
+        Ok(PushResult::Updated)
     }
 
     /// Pull new generation data from floxhub

@@ -519,7 +519,7 @@ impl GitCommandProvider {
         repository: impl AsRef<str>,
         push_spec: impl AsRef<str>,
         force: bool,
-    ) -> Result<(), GitRemoteCommandError> {
+    ) -> Result<String, GitRemoteCommandError> {
         let mut command = self.new_command();
         command
             .arg("push")
@@ -531,8 +531,8 @@ impl GitCommandProvider {
             command.arg("--force");
         }
 
-        match GitCommandProvider::run_command(&mut command) {
-            Ok(_) => Ok(()),
+        let output = match GitCommandProvider::run_command(&mut command) {
+            Ok(out) => Ok(out),
             Err(ref err @ GitCommandError::BadExit(_, _, ref stderr))
                 if stderr.contains("DENIED") || stderr.contains("Authentication failed") =>
             {
@@ -547,7 +547,7 @@ impl GitCommandProvider {
             },
             Err(e) => Err(e.into()),
         }?;
-        Ok(())
+        Ok(output.to_string_lossy().to_string())
     }
 
     /// Deletes the specified branch

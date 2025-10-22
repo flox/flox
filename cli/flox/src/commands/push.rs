@@ -8,6 +8,7 @@ use flox_rust_sdk::flox::{EnvironmentOwner, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
+    PushResult,
 };
 use flox_rust_sdk::models::environment::{
     DotFlox,
@@ -87,24 +88,17 @@ impl Push {
                     &dot_flox.path,
                     self.force,
                 ) {
-                    Ok(_) => {
+                    Ok(PushResult::Updated) => {
                         let message = Self::push_message(&managed_pointer, self.force, true)?;
                         message::updated(message);
                     },
-                    Err(err) => {
-                        // Check if this is a NothingToPush error
-                        if let Some(EnvironmentError::ManagedEnvironment(
-                            ManagedEnvironmentError::NothingToPush,
-                        )) = err.downcast_ref::<EnvironmentError>()
-                        {
-                            message::info(formatdoc! {"
-                                No changes to push for {name}.
-                                The environment on FloxHub is already up to date.
-                            ", name = managed_pointer.name});
-                        } else {
-                            return Err(err);
-                        }
+                    Ok(PushResult::UpToDate) => {
+                        message::info(formatdoc! {"
+                            No changes to push for {name}.
+                            The environment on FloxHub is already up to date.
+                        ", name = managed_pointer.name});
                     },
+                    Err(err) => return Err(err),
                 }
             },
 
@@ -140,10 +134,10 @@ impl Push {
         managed_pointer: ManagedPointer,
         dot_flox_dir: &Path,
         force: bool,
-    ) -> Result<()> {
+    ) -> Result<PushResult> {
         let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dot_flox_dir, None)?;
 
-        env.push(flox, force).map_err(|err| {
+        let push_result = env.push(flox, force).map_err(|err| {
             Self::convert_error(
                 EnvironmentError::ManagedEnvironment(err),
                 managed_pointer,
@@ -151,7 +145,7 @@ impl Push {
             )
         })?;
 
-        Ok(())
+        Ok(push_result)
     }
 
     /// pushes a path environment in a directory to FloxHub and makes it a managed environment
@@ -200,10 +194,6 @@ impl Push {
                 Use 'flox edit' to resolve errors, test with 'flox activate', and 'flox push' again.",
                 err = format_core_error(err)
             }.into(),
-            EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::NothingToPush) => formatdoc! {"
-                No changes to push for {name}.
-                The environment on FloxHub is already up to date.
-            "}.into(),
             _ => None
         };
 
