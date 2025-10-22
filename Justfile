@@ -206,6 +206,12 @@ gen-unit-data-for-publish floxhub_repo_path force="":
 
 # ---------------------------------------------------------------------------- #
 
+# Generate JSON schemas for Flox data structures
+@gen-schemas:
+  pushd cli; cargo xtask generate-schemas
+
+# ---------------------------------------------------------------------------- #
+
 # Run the nix-plugins tests
 @test-nix-plugins: build-nix-plugins
     meson test -C nix-plugins/builddir

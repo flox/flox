@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use derive_more::{AsRef, Deref, Display};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, json_schema};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
@@ -68,7 +68,7 @@ impl FromStr for EnvironmentName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct EnvironmentRef {
     owner: EnvironmentOwner,
@@ -101,6 +101,19 @@ impl From<ManagedPointer> for EnvironmentRef {
             owner: pointer.owner,
             name: pointer.name,
         }
+    }
+}
+
+impl JsonSchema for EnvironmentRef {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "EnvironmentRef".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        json_schema!({
+            "description": "Environment Reference",
+            "type": "string",
+        })
     }
 }
 
