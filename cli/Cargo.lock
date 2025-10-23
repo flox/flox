@@ -1309,6 +1309,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "bpaf",
+ "catalog-api-v1",
  "chrono",
  "close_fds",
  "config",

@@ -1,4 +1,6 @@
+use std::cmp::max;
 use std::collections::{BTreeMap, HashSet};
+use std::io::Write;
 
 use anyhow::{Result, bail};
 use bpaf::Bpaf;
@@ -52,13 +54,14 @@ impl Show {
         .iter()
         .map(|s| s.to_string())
         .collect::<HashSet<_>>();
-        render_show_catalog(&results.results, &expected_systems)?;
+        render_show_catalog(&mut std::io::stdout(), &results.results, &expected_systems)?;
 
         Ok(())
     }
 }
 
 fn render_show_catalog(
+    writer: &mut impl Write,
     search_results: &[PackageBuild],
     expected_systems: &HashSet<System>,
 ) -> Result<()> {
@@ -74,7 +77,7 @@ fn render_show_catalog(
         .map(|d| d.replace('\n', " "))
         .filter(|d| !d.trim().is_empty())
         .unwrap_or(DEFAULT_DESCRIPTION.into());
-    println!("{pkg_path} - {description}");
+    writeln!(writer, "{pkg_path} - {description}")?;
 
     // Organize the versions to be queried and printed
     let version_to_systems = {
@@ -86,6 +89,20 @@ fn render_show_catalog(
         }
         map
     };
+    // calculating the maximum width needed for the version column
+    let version_column_width = {
+        let mut seen_versions = HashSet::new();
+        let mut max_width = 0;
+        for pkg in search_results {
+            if !seen_versions.contains(&pkg.version) {
+                let version_str = format!("    {pkg_path}@{}", pkg.version);
+                max_width = max(max_width, version_str.len());
+                seen_versions.insert(&pkg.version);
+            }
+        }
+        max_width
+    };
+
     let mut seen_versions = HashSet::new();
     // We iterate over the search results again instead of just the `version_to_systems` map since
     // although the keys (and therefore the versions) in the map are sorted (BTreeMap is a sorted map),
@@ -109,14 +126,18 @@ fn render_show_catalog(
             intersection.sort();
             intersection
         };
+
+        let version_str = format!("    {pkg_path}@{}", pkg.version);
+
         if available_systems.len() != expected_systems.len() {
-            println!(
-                "    {pkg_path}@{} ({} only)",
-                pkg.version,
+            writeln!(
+                writer,
+                "{:<version_column_width$} ({} only)",
+                version_str,
                 available_systems.join(", ")
-            );
+            )?;
         } else {
-            println!("    {pkg_path}@{}", pkg.version);
+            writeln!(writer, "{version_str}")?;
         }
         seen_versions.insert(&pkg.version);
     }
@@ -125,8 +146,11 @@ fn render_show_catalog(
 
 #[cfg(test)]
 mod test {
+    use catalog_api_v1::types::{PackageOutputs, PackageSystem};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::providers::catalog::test_helpers::auto_recording_catalog_client;
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
 
     use super::*;
 
@@ -146,5 +170,60 @@ mod test {
             err.to_string(),
             format!("no packages matched this pkg-path: '{search_term}'")
         );
+    }
+
+    #[test]
+    fn test_column_alignment_for_system_restrictions() {
+        let mock_pkg = |version: &str, system: &str| PackageBuild {
+            pkg_path: "pkg".to_string(),
+            version: version.to_string(),
+            description: Some("test".to_string()),
+            system: system.parse::<PackageSystem>().unwrap(),
+            attr_path: String::new(),
+            broken: None,
+            cache_uri: None,
+            catalog: None,
+            derivation: String::new(),
+            insecure: None,
+            license: None,
+            locked_url: String::new(),
+            missing_builds: None,
+            name: String::new(),
+            outputs: PackageOutputs(vec![]),
+            outputs_to_install: None,
+            pname: String::new(),
+            rev: String::new(),
+            rev_count: 0,
+            rev_date: chrono::Utc::now(),
+            scrape_date: None,
+            stabilities: None,
+            unfree: None,
+        };
+
+        let packages = vec![
+            mock_pkg("1.0", "aarch64-darwin"),
+            mock_pkg("10.0.0", "aarch64-darwin"),
+        ];
+
+        let expected_systems = [
+            "aarch64-darwin",
+            "aarch64-linux",
+            "x86_64-darwin",
+            "x86_64-linux",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<HashSet<_>>();
+
+        let mut buf = vec![];
+        render_show_catalog(&mut buf, &packages, &expected_systems).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        // Verify that system restrictions are aligned despite different version lengths
+        assert_eq!(output, indoc! {"
+                pkg - test
+                    pkg@1.0    (aarch64-darwin only)
+                    pkg@10.0.0 (aarch64-darwin only)
+            "});
     }
 }
