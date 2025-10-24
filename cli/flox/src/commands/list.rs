@@ -174,11 +174,17 @@ impl List {
 
             match p {
                 PackageToList::Catalog(_, p) => {
+                    let path_to_display = if let Some(catalog) = &p.catalog {
+                        format!("{}/{}", catalog, p.attr_path)
+                    } else {
+                        p.attr_path.clone()
+                    };
+
                     writeln!(
                         &mut out,
                         "{id}: {path} ({version}{upgrade_available})",
                         id = p.install_id,
-                        path = p.attr_path,
+                        path = path_to_display,
                         version = p.version,
                     )?;
                 },
@@ -245,6 +251,13 @@ impl List {
                     } else {
                         format!("[ {} ]", sorted_outputs.join(", "))
                     };
+
+                    let path_to_display = if let Some(catalog) = &locked.catalog {
+                        format!("{}/{}", catalog, locked.attr_path)
+                    } else {
+                        locked.attr_path.clone()
+                    };
+
                     formatdoc! {"
                         {name}:{upgrade_available}
                           Description:  {description}
@@ -259,7 +272,7 @@ impl List {
                         ",
                         name = &locked.install_id,
                         pname = &locked.pname,
-                        attr_path = &locked.attr_path,
+                        attr_path = path_to_display,
                         priority = locked.priority,
                         version = &locked.version,
                         description = locked.description.as_deref().unwrap_or("N/A"),

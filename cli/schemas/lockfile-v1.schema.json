@@ -458,6 +458,12 @@
             "null"
           ]
         },
+        "catalog": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "pname": {
           "type": "string"
         },
