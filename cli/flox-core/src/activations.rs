@@ -362,8 +362,10 @@ pub fn read_activations_json(
         return Ok((None, lock_file));
     }
 
-    let contents = std::fs::read_to_string(path)?;
-    let parsed: Activations<UncheckedVersion> = serde_json::from_str(&contents)?;
+    let contents =
+        std::fs::read_to_string(path).context(format!("failed to read file {}", path.display()))?;
+    let parsed: Activations<UncheckedVersion> = serde_json::from_str(&contents)
+        .context(format!("failed to parse JSON from {}", path.display()))?;
     Ok((Some(parsed), lock_file))
 }
 
