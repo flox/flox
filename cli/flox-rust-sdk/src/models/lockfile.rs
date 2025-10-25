@@ -232,7 +232,6 @@ pub struct LockedPackageCatalog {
     pub unfree: Option<bool>,
     pub version: String,
     pub outputs_to_install: Option<Vec<String>>,
-    pub catalog: Option<String>,
     // endregion
 
     // region: converted fields
@@ -261,7 +260,7 @@ impl LockedPackageCatalog {
     ) -> Self {
         // unpack package to avoid missing new fields
         let catalog::PackageResolutionInfo {
-            catalog,
+            catalog: _,
             attr_path,
             broken,
             derivation,
@@ -311,7 +310,6 @@ impl LockedPackageCatalog {
             name,
             outputs,
             outputs_to_install,
-            catalog,
             pname,
             rev,
             rev_count,
@@ -1760,7 +1758,6 @@ pub mod test_helpers {
             name: name.to_string(),
             outputs: Default::default(),
             outputs_to_install: None,
-            catalog: None,
             pname: name.to_string(),
             rev: "".to_string(),
             rev_count: 0,
@@ -1989,7 +1986,6 @@ pub(crate) mod tests {
                     .collect(),
 
                 outputs_to_install: Some(vec!["name".to_string()]),
-                catalog: None,
                 pname: "pname".to_string(),
                 rev: "rev".to_string(),
                 rev_count: 1,

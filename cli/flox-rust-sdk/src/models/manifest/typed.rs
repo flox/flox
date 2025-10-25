@@ -509,15 +509,15 @@ impl From<PackageDescriptorStorePath> for ManifestPackageDescriptor {
 #[serde(deny_unknown_fields)]
 pub struct PackageDescriptorCatalog {
     #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
-    pub(crate) pkg_path: String,
+    pub pkg_path: String,
     #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
-    pub(crate) pkg_group: Option<String>,
+    pub pkg_group: Option<String>,
     #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
-    pub(crate) priority: Option<u64>,
+    pub priority: Option<u64>,
     #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
-    pub(crate) version: Option<String>,
+    pub version: Option<String>,
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
-    pub(crate) systems: Option<Vec<System>>,
+    pub systems: Option<Vec<System>>,
 }
 
 impl PackageDescriptorCatalog {
