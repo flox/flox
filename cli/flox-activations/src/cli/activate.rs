@@ -25,7 +25,11 @@ use super::fix_paths::{fix_manpath_var, fix_path_var};
 use super::set_env_dirs::fix_env_dirs_var;
 use super::start_or_attach::wait_for_activation_ready_and_optionally_attach_pid;
 use crate::cli::attach::AttachExclusiveArgs;
+use crate::shell_gen::Shell as ShellGen;
 use crate::shell_gen::bash::{BashStartupArgs, generate_bash_startup_commands};
+use crate::shell_gen::fish::{FishStartupArgs, generate_fish_startup_commands};
+use crate::shell_gen::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
+use crate::shell_gen::zsh::{ZshStartupArgs, generate_zsh_startup_script};
 use crate::shell_gen::capture::{EnvDiff, ExportEnvDiff};
 
 #[derive(Debug, Args)]
@@ -99,101 +103,79 @@ impl ActivateArgs {
             .arg(activation_state_dir.to_string_lossy().to_string());
         command.arg("--activation-id").arg(&activation_id);
 
-        if matches!(data.shell, Shell::Bash(_)) {
-            let export_env_diff = ExportEnvDiff::from_files(
-                activation_state_dir.join("add.env"),
-                activation_state_dir.join("del.env"),
-            )?;
-            let env_diff: EnvDiff = (&export_env_diff).try_into()?;
-            let vars_from_environment = VarsFromEnvironment::get()?;
-            let activation_environment =
-                Self::assemble_environment(data.clone(), vars_from_environment, env_diff)?;
-            if attach {
-                // TODO: print message about attaching
-            }
-            if data.flox_activate_start_services {
-                Self::start_services();
-            }
-
-            // The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
-            // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
-            // If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
-            // Else activate_tracer is set to refer to {data.interpreter_path}/activate.d/trace.
-            let activate_tracer = if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
-                if !trace_path.is_empty() && std::path::Path::new(&trace_path).is_executable() {
-                    trace_path
-                } else {
-                    data.interpreter_path
-                        .join("activate.d")
-                        .join("trace")
-                        .to_string_lossy()
-                        .to_string()
-                }
-            } else {
-                "true".to_string()
-            };
-
-            if data.in_place {
-                let flox_sourcing_rc = std::env::var("_flox_sourcing_rc")
-                    .map(|v| v == "true")
-                    .unwrap_or(false);
-                let legacy_exports = Self::render_legacy_exports(&command, &data.shell);
-                Self::new_activate_in_place(
-                    data,
-                    activation_id,
-                    activation_state_dir,
-                    legacy_exports,
-                    flox_sourcing_rc,
-                    verbosity,
-                    export_env_diff,
-                    activate_tracer,
-                )?;
-                return Ok(());
-            }
-
-            // These functions will only return if exec fails or for an
-            // ephemeral activation
-            if data.interactive {
-                Self::new_activate_interactive(
-                    verbosity,
-                    data,
-                    std::env::var("_flox_sourcing_rc")
-                        .map(|v| v == "true")
-                        .unwrap_or(false),
-                    export_env_diff,
-                    &activation_state_dir,
-                    activate_tracer,
-                )?;
-            } else {
-                Self::new_activate_command(
-                    data.run_args,
-                    data.is_ephemeral,
-                    activation_environment,
-                )?;
-            }
-
-            return Ok(());
+        let export_env_diff = ExportEnvDiff::from_files(
+            activation_state_dir.join("add.env"),
+            activation_state_dir.join("del.env"),
+        )?;
+        let env_diff: EnvDiff = (&export_env_diff).try_into()?;
+        let vars_from_environment = VarsFromEnvironment::get()?;
+        let activation_environment =
+            Self::assemble_environment(data.clone(), vars_from_environment, env_diff)?;
+        if attach {
+            // TODO: print message about attaching
+        }
+        if data.flox_activate_start_services {
+            Self::start_services();
         }
 
-        // when output is not a tty, and no command is provided
-        // we just print an activation script to stdout
-        //
-        // That script can then be `eval`ed in the current shell,
-        // e.g. in a .bashrc or .zshrc file:
-        //
-        //    eval "$(flox activate)"
-        if data.in_place {
-            Self::activate_in_place(command, data.shell)?;
-
-            return Ok(());
-        }
-
-        // These functions will only return if exec fails
-        if data.interactive {
-            Self::activate_interactive(command)
+        // The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
+        // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
+        // If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
+        // Else activate_tracer is set to refer to {data.interpreter_path}/activate.d/trace.
+        let activate_tracer = if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
+            if !trace_path.is_empty() && std::path::Path::new(&trace_path).is_executable() {
+                trace_path
+            } else {
+                data.interpreter_path
+                    .join("activate.d")
+                    .join("trace")
+                    .to_string_lossy()
+                    .to_string()
+            }
         } else {
-            Self::activate_command(command, data.run_args, data.is_ephemeral)
+            "true".to_string()
+        };
+
+        if data.in_place {
+            let flox_sourcing_rc = std::env::var("_flox_sourcing_rc")
+                .map(|v| v == "true")
+                .unwrap_or(false);
+            let legacy_exports = Self::render_legacy_exports(&command, &data.shell);
+            Self::new_activate_in_place(
+                data,
+                activation_id,
+                activation_state_dir,
+                legacy_exports,
+                flox_sourcing_rc,
+                verbosity,
+                export_env_diff,
+                activate_tracer,
+            )?;
+            return Ok(());
         }
+
+        // These functions will only return if exec fails or for an
+        // ephemeral activation
+        if data.interactive {
+            Self::new_activate_interactive(
+                verbosity,
+                data,
+                std::env::var("_flox_sourcing_rc")
+                    .map(|v| v == "true")
+                    .unwrap_or(false),
+                export_env_diff,
+                &activation_state_dir,
+                activate_tracer,
+            )?;
+        } else {
+            Self::new_activate_command(
+                data.run_args,
+                data.is_ephemeral,
+                activation_environment,
+            )?;
+        }
+
+        return Ok(());
     }
 
     fn assemble_command_for_activate_script(data: ActivateData) -> Command {
@@ -444,6 +426,138 @@ impl ActivateArgs {
                 // #     to issue commands?!? A broken docker experience maybe?!?
                 // exec "$_flox_shell" --noprofile --norc -s <<< "source '$RCFILE'"
             },
+            Shell::Fish(fish) => {
+                let fish_startup_args = FishStartupArgs {
+                    flox_activate_tracelevel: verbosity as i32,
+                    activate_d: data.interpreter_path.join("activate.d"),
+                    flox_env: data.env.clone(),
+                    flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
+                    flox_env_project: Some(data.env_project.to_string_lossy().to_string()),
+                    flox_env_description: Some(data.env_description),
+                    is_in_place: data.in_place,
+                    flox_sourcing_rc,
+                    flox_activations: (&data.path_to_self).into(),
+                    flox_activate_tracer: activate_tracer,
+                };
+                let startup_commands =
+                    generate_fish_startup_commands(&fish_startup_args, &export_env_diff)?;
+                let rcfile = Self::write_maybe_self_destructing_script(
+                    startup_commands,
+                    activation_state_dir,
+                    verbosity < 2,
+                )?;
+                let mut command = Command::new(fish);
+                command.args(["--init-command", format!("source '{}'", &rcfile.to_string_lossy()).as_str()]);
+
+                debug!("spawning interactive fish shell: {:?}", command);
+                // exec should never return
+                Err(command.exec().into())
+            },
+            Shell::Tcsh(tcsh) => {
+                let tcsh_startup_args = TcshStartupArgs {
+                    flox_activate_tracelevel: verbosity as i32,
+                    activate_d: data.interpreter_path.join("activate.d"),
+                    flox_env: data.env.clone(),
+                    flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
+                    flox_env_project: Some(data.env_project.to_string_lossy().to_string()),
+                    flox_env_description: Some(data.env_description),
+                    is_in_place: data.in_place,
+                    flox_sourcing_rc,
+                    flox_activations: (&data.path_to_self).into(),
+                    flox_activate_tracer: activate_tracer,
+                };
+
+                // Capture original value of $HOME in $FLOX_ORIG_HOME so that it can be restored later.
+                /// SAFETY: called once, prior to possible concurrent access to env
+                if let Ok(home) = std::env::var("HOME") {
+                    unsafe {
+                        std::env::set_var("FLOX_ORIG_HOME", home);
+                    }
+                }
+
+                // export HOME to point to activate.d/tcsh_home dir containing
+                // our custom .tcshrc.
+                /// SAFETY: called once, prior to possible concurrent access to env
+                unsafe {
+                    std::env::set_var("HOME", tcsh_startup_args.activate_d.join("tcsh_home").to_string_lossy().to_string());
+                }
+
+                let startup_commands =
+                    generate_tcsh_startup_commands(&tcsh_startup_args, &export_env_diff)?;
+                let flox_tcsh_init_script = Self::write_maybe_self_destructing_script(
+                    startup_commands,
+                    activation_state_dir,
+                    verbosity < 2,
+                )?;
+
+                /// SAFETY: called once, prior to possible concurrent access to env
+                unsafe {
+                    std::env::set_var(
+                        "FLOX_TCSH_INIT_SCRIPT",
+                        flox_tcsh_init_script.to_string_lossy().to_string(),
+                    );
+                }
+                let mut command = Command::new(tcsh);
+                command.args(["-m"]);
+
+                debug!("spawning interactive tcsh shell: {:?}", command);
+                // exec should never return
+                Err(command.exec().into())
+            },
+            Shell::Zsh(zsh) => {
+                let zsh_startup_args = ZshStartupArgs {
+                    flox_activate_tracelevel: verbosity as i32,
+                    activate_d: data.interpreter_path.join("activate.d"),
+                    flox_env: data.env.clone(),
+                    flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
+                    flox_env_project: Some(data.env_project.to_string_lossy().to_string()),
+                    flox_env_description: Some(data.env_description),
+                    is_in_place: data.in_place,
+                    flox_sourcing_rc,
+                    flox_activations: (&data.path_to_self).into(),
+                    flox_activate_tracer: activate_tracer,
+                };
+
+                // if the ZDOTDIR environment variable is set, export its value to the
+                // environment as FLOX_ORIG_ZDOTDIR so that it can be restored later.
+                /// SAFETY: called once, prior to possible concurrent access to env
+                if let Ok(zdotdir) = std::env::var("ZDOTDIR") {
+                    unsafe {
+                        std::env::set_var("FLOX_ORIG_ZDOTDIR", zdotdir);
+                    }
+                }
+
+                // export ZDOTDIR to point to the activation state dir so that
+                // .zshrc and .zshenv files are sourced from there.
+                /// SAFETY: called once, prior to possible concurrent access to env
+                unsafe {
+                    std::env::set_var("ZDOTDIR", zsh_startup_args.activate_d.join("zdotdir").to_string_lossy().to_string());
+                }
+
+                let startup_script =
+                    generate_zsh_startup_script(&zsh_startup_args, &export_env_diff)?;
+                let flox_zsh_init_script = Self::write_maybe_self_destructing_script(
+                    startup_script,
+                    activation_state_dir,
+                    verbosity < 2,
+                )?;
+
+                // export FLOX_ZSH_INIT_SCRIPT so that it can be sourced from ZDOTDIR.
+                /// SAFETY: called once, prior to possible concurrent access to env
+                unsafe {
+                    std::env::set_var(
+                        "FLOX_ZSH_INIT_SCRIPT",
+                        flox_zsh_init_script.to_string_lossy().to_string(),
+                    );
+                }
+
+                let mut command = Command::new(zsh);
+                command.args(["-o", "NO_GLOBAL_RCS"]);
+
+                debug!("spawning interactive zsh shell: {:?}", command);
+                // exec should never return
+                Err(command.exec().into())
+            },
             _ => unimplemented!(),
         }
     }
@@ -455,7 +569,7 @@ impl ActivateArgs {
     ) -> Result<PathBuf> {
         let mut tempfile = tempfile::NamedTempFile::new_in(activation_state_dir)?;
         if self_destruct {
-            script.push_str(&format!("\n{RM} {}", tempfile.path().to_string_lossy()));
+            script.push_str(&format!("\ntrue {RM} {}", tempfile.path().to_string_lossy()));
         }
         tempfile.write_all(script.as_bytes())?;
         let (_, path) = tempfile.keep()?;
@@ -529,6 +643,7 @@ impl ActivateArgs {
 
         // Put a 5 second timeout on the activation
         attach_command.handle()?;
+
         let startup_commands = match data.shell {
             Shell::Bash(_) => {
                 let bash_startup_args = BashStartupArgs {
@@ -547,7 +662,7 @@ impl ActivateArgs {
                     generate_bash_startup_commands(&bash_startup_args, &export_env_diff)?;
 
                 formatdoc! {r#"
-                  {flox_activations} attach --runtime-dir "{runtime_dir}" --pid $$ --flox-env "{flox_env}" --id {id} --remove-pid {pid};
+                  {flox_activations} attach --runtime-dir "{runtime_dir}" --pid $$ --flox-env "{flox_env}" --id "{id}" --remove-pid "{pid}";
                   {startup_commands}
                 "#,
                 // TODO: this should probably be based on interpreter_path
@@ -556,6 +671,128 @@ impl ActivateArgs {
                 flox_env = data.env,
                 id = activation_id,
                 pid = std::process::id() }
+            },
+            Shell::Fish(_) => {
+                let fish_startup_args = FishStartupArgs {
+                    flox_activate_tracelevel: verbosity as i32,
+                    activate_d: data.interpreter_path.join("activate.d"),
+                    flox_env: data.env.clone(),
+                    flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
+                    flox_env_project: Some(data.env_project.to_string_lossy().to_string()),
+                    flox_env_description: Some(data.env_description),
+                    is_in_place: data.in_place,
+                    flox_sourcing_rc,
+                    flox_activations: (&data.path_to_self).into(),
+                    flox_activate_tracer: activate_tracer,
+                };
+                let startup_commands =
+                    generate_fish_startup_commands(&fish_startup_args, &export_env_diff)?;
+
+                formatdoc! {r#"
+                  {flox_activations} attach --runtime-dir "{runtime_dir}" --pid $fish_pid --flox-env "{flox_env}" --id "{id}" --remove-pid "{pid}";
+                  {startup_commands}
+                "#,
+                // TODO: this should probably be based on interpreter_path
+                flox_activations = data.path_to_self,
+                runtime_dir = data.flox_runtime_dir,
+                flox_env = data.env,
+                id = activation_id,
+                pid = std::process::id() }
+            },
+            Shell::Tcsh(_) => {
+                let tcsh_startup_args = TcshStartupArgs {
+                    flox_activate_tracelevel: verbosity as i32,
+                    activate_d: data.interpreter_path.join("activate.d"),
+                    flox_env: data.env.clone(),
+                    flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
+                    flox_env_project: Some(data.env_project.to_string_lossy().to_string()),
+                    flox_env_description: Some(data.env_description),
+                    is_in_place: data.in_place,
+                    flox_sourcing_rc,
+                    flox_activations: (&data.path_to_self).into(),
+                    flox_activate_tracer: activate_tracer,
+                };
+                let startup_commands =
+                    generate_tcsh_startup_commands(&tcsh_startup_args, &export_env_diff)?;
+
+                formatdoc! {r#"
+                  {flox_activations} attach --runtime-dir "{runtime_dir}" --pid $$ --flox-env "{flox_env}" --id "{id}" --remove-pid "{pid}";
+                  {startup_commands}
+                "#,
+                // TODO: this should probably be based on interpreter_path
+                flox_activations = data.path_to_self,
+                runtime_dir = data.flox_runtime_dir,
+                flox_env = data.env,
+                id = activation_id,
+                pid = std::process::id() }
+            },
+            Shell::Zsh(_) => {
+                let zsh_startup_args = ZshStartupArgs {
+                    flox_activate_tracelevel: verbosity as i32,
+                    activate_d: data.interpreter_path.join("activate.d"),
+                    flox_env: data.env.clone(),
+                    flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
+                    flox_env_project: Some(data.env_project.to_string_lossy().to_string()),
+                    flox_env_description: Some(data.env_description),
+                    is_in_place: data.in_place,
+                    flox_sourcing_rc,
+                    flox_activations: (&data.path_to_self).into(),
+                    flox_activate_tracer: activate_tracer,
+                };
+
+                let mut commands = Vec::new();
+
+                commands.push(format!(
+                    r#"{} attach --runtime-dir "{}" --pid $$ --flox-env "{}" --id "{}" --remove-pid "${}""#,
+                    // TODO: this should probably be based on interpreter_path
+                    data.path_to_self,
+                    data.flox_runtime_dir,
+                    data.env,
+                    activation_id,
+                    std::process::id(),
+                ));
+
+                // if the ZDOTDIR environment variable is set, add a command to export
+                // the value of that variable to the environment so that it can be used
+                // to restore the value of ZDOTDIR when the activation ends.
+                if let Ok(zdotdir) = std::env::var("ZDOTDIR") {
+                    commands.push(format!(
+                        "export FLOX_ORIG_ZDOTDIR={}",
+                        shell_escape::escape(zdotdir.into())
+                    ));
+                };
+
+                commands.push(format!(
+                    r#"export ZDOTDIR="{}""#,
+                    data.interpreter_path
+                        .join("activate.d")
+                        .join("zdotdir")
+                        .to_string_lossy()
+                ));
+
+                let startup_script =
+                    generate_zsh_startup_script(&zsh_startup_args, &export_env_diff)?;
+                let flox_zsh_init_script = Self::write_maybe_self_destructing_script(
+                    startup_script,
+                    &activation_state_dir,
+                    false, // verbosity < 2,
+                )?;
+
+                // Export the value of $_flox_activate_tracer from the environment.
+                commands.push(ShellGen::Zsh.export_var("_flox_activate_tracer", &zsh_startup_args.flox_activate_tracer));
+
+                commands.push(format!(
+                    "source '{}'",
+                    flox_zsh_init_script.to_string_lossy(),
+                ));
+
+                // N.B. the output of these scripts may be eval'd with backticks which have
+                // the effect of removing newlines from the output, so we must ensure that
+                // the output is a valid shell script fragment when represented on a single line.
+                commands.push("".to_string()); // ensure there's a trailing newline
+                let mut joined = commands.join(";\n");
+
+                joined
             },
             _ => unimplemented!(),
         };

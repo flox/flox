@@ -37,14 +37,14 @@ impl SetEnvDirsArgs {
             "bash" => {
                 format!("export FLOX_ENV_DIRS=\"{new_env_dirs}\";")
             },
-            "zsh" => {
-                format!("export FLOX_ENV_DIRS=\"{new_env_dirs}\";")
-            },
             "fish" => {
                 format!("set -gx FLOX_ENV_DIRS \"{new_env_dirs}\";")
             },
             "tcsh" => {
                 format!("setenv FLOX_ENV_DIRS \"{new_env_dirs}\";")
+            },
+            "zsh" => {
+                format!("export FLOX_ENV_DIRS=\"{new_env_dirs}\";")
             },
             other => {
                 bail!("invalid shell: {other}")

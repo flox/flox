@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow.workspace = true
 backtrace = "0.3"
-clap = { version = "4.5.48", default-features = false, features = [
+clap = { version = "4.5.49", default-features = false, features = [
     "std",
     "usage",
     "help",
@@ -18,16 +18,16 @@ env_logger = { version = "0.11.8", default-features = false, features = ["color"
 flox-core.workspace = true
 fslock.workspace = true
 is_executable.workspace = true
+itertools.workspace = true
 log.workspace = true
 serde_json.workspace = true
 shell-escape.workspace = true
+tempfile.workspace = true
 time.workspace = true
 indoc.workspace = true
-itertools.workspace = true
-tempfile.workspace = true
+
 
 [dev-dependencies]
 nix.workspace = true
-tempfile.workspace = true
 temp-env.workspace = true
 pretty_assertions.workspace = true

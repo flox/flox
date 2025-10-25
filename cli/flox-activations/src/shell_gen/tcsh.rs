@@ -6,8 +6,8 @@ use anyhow::{Context, Result, anyhow};
 use crate::shell_gen::Shell;
 use crate::shell_gen::capture::ExportEnvDiff;
 
-/// Arguments for generating bash startup commands
-pub struct BashStartupArgs {
+/// Arguments for generating tcsh startup commands
+pub struct TcshStartupArgs {
     pub flox_activate_tracelevel: i32,
     pub activate_d: PathBuf,
     pub flox_env: String,
@@ -21,57 +21,45 @@ pub struct BashStartupArgs {
     pub flox_activate_tracer: String,
 }
 
-pub fn generate_bash_startup_commands(
-    args: &BashStartupArgs,
+pub fn generate_tcsh_startup_commands(
+    args: &TcshStartupArgs,
     export_env_diff: &ExportEnvDiff,
 ) -> Result<String> {
     let mut commands = Vec::new();
 
     // Enable trace mode if requested
     if args.flox_activate_tracelevel >= 2 {
-        commands.push("set -x".to_string());
+        commands.push("set verbose".to_string());
     }
 
-    // We need to source the .bashrc file exactly once. We skip it for in-place
-    // activations under the assumption that it has already been sourced by one
-    // of the shells in the chain of ancestors UNLESS none of them were bash
-    // and therefore .bashrc hasn't been sourced yet.
-    let bashrc_path = if let Some(home_dir) = dirs::home_dir() {
-        home_dir.join(".bashrc")
-    } else {
-        return Err(anyhow!("failed to get home directory"));
-    };
+    // The tcsh implementation will source our custom .tcshrc
+    // which will then source the result of this script as $FLOX_TCSH_INIT_SCRIPT
+    // after the normal configuration has been processed,
+    // so there is no requirement to go back and source the user's own config
+    // as we do in bash.
 
-    let should_source = bashrc_path.exists() && !args.is_in_place && !args.flox_sourcing_rc;
-
-    if should_source {
-        commands.push("export _flox_sourcing_rc=true".to_string());
-        commands.push(format!("source '{}'", bashrc_path.display()));
-        commands.push("unset _flox_sourcing_rc".to_string());
-    }
-
-    // Restore environment variables set in the previous bash initialization.
+    // Restore environment variables set in the previous tcsh initialization.
     // Read del.env and add.env files
-    commands.append(&mut export_env_diff.generate_commands(Shell::Bash));
+    commands.append(&mut export_env_diff.generate_commands(Shell::Tcsh));
 
     // Propagate required variables that are documented as exposed.
-    commands.push(Shell::Bash.export_var("FLOX_ENV", &args.flox_env));
+    commands.push(Shell::Tcsh.export_var("FLOX_ENV", &args.flox_env));
 
     // Propagate optional variables that are documented as exposed.
     if let Some(flox_env_cache) = &args.flox_env_cache {
-        commands.push(Shell::Bash.export_var("FLOX_ENV_CACHE", &flox_env_cache));
+        commands.push(Shell::Tcsh.export_var("FLOX_ENV_CACHE", &flox_env_cache));
     } else {
         commands.push("unset FLOX_ENV_CACHE".to_string());
     }
 
     if let Some(flox_env_project) = &args.flox_env_project {
-        commands.push(Shell::Bash.export_var("FLOX_ENV_PROJECT", flox_env_project));
+        commands.push(Shell::Tcsh.export_var("FLOX_ENV_PROJECT", flox_env_project));
     } else {
         commands.push("unset FLOX_ENV_PROJECT".to_string());
     }
 
     if let Some(description) = &args.flox_env_description {
-        commands.push(Shell::Bash.export_var("FLOX_ENV_DESCRIPTION", description));
+        commands.push(Shell::Tcsh.export_var("FLOX_ENV_DESCRIPTION", description));
     } else {
         commands.push("unset FLOX_ENV_DESCRIPTION".to_string());
     }
@@ -79,14 +67,14 @@ pub fn generate_bash_startup_commands(
     commands.push("true not setting _activate_d".to_string()); // DELETEME FOR DEBUGGING
 
     // Export the value of $_flox_activate_tracer from the environment.
-    commands.push(Shell::Bash.export_var("_flox_activate_tracer", &args.flox_activate_tracer));
+    commands.push(Shell::Tcsh.export_var("_flox_activate_tracer", &args.flox_activate_tracer));
 
     commands.push("true not setting _flox_activations".to_string()); // DELETEME FOR DEBUGGING
 
     // Set the prompt if we're in an interactive shell.
-    let set_prompt_path = args.activate_d.join("set-prompt.bash");
+    let set_prompt_path = args.activate_d.join("set-prompt.tcsh");
     commands.push(format!(
-        "if [ -t 1 ]; then source '{}'; fi",
+        "if ( $?tty ) then; source '{}'; endif",
         set_prompt_path.display()
     ));
 
@@ -95,19 +83,34 @@ pub fn generate_bash_startup_commands(
     // Use generation time _FLOX_ENV because we want to guarantee we activate the
     // environment we think we're activating. Use runtime FLOX_ENV_DIRS to allow
     // RC files to perform activations.
+    commands.push(r#"if (! $?FLOX_ENV_DIRS) setenv FLOX_ENV_DIRS "empty""#.to_string());
+
     commands.push(format!(
-        r#"eval "$('{}' set-env-dirs --shell bash --flox-env "{}" --env-dirs "${{FLOX_ENV_DIRS:-}}")""#,
+        r#"eval "`'{}' set-env-dirs --shell tcsh --flox-env '{}' --env-dirs $FLOX_ENV_DIRS:q`""#,
         args.flox_activations.display(),
         args.flox_env
     ));
 
+    commands.push(r#"if (! $?MANPATH) setenv MANPATH "empty""#.to_string());
+
     commands.push(format!(
-        r#"eval "$('{}' fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${{MANPATH:-}}")""#,
+        r#"eval "`'{}' fix-paths --shell tcsh --env-dirs $FLOX_ENV_DIRS:q --path $PATH:q --manpath $MANPATH:q`""#,
         args.flox_activations.display()
     ));
 
+    // Modern versions of tcsh support the ":Q" modifier for passing empty args
+    // on the command line, but versions prior to 6.23 do not have a way to do
+    // that, so to support these versions we will instead avoid passing the
+    // --already-sourced-env-dirs argument altogether when there is no default
+    // value to be passed.
+    commands.push("set _already_sourced_args = ()".to_string());
+
+    commands.push(
+        r#"if ($?_FLOX_SOURCED_PROFILE_SCRIPTS) set _already_sourced_args = ( --already-sourced-env-dirs `echo $_FLOX_SOURCED_PROFILE_SCRIPTS:q` )"#.to_string()
+    );
+
     commands.push(format!(
-        r#"eval "$('{}' profile-scripts --shell bash --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "${{FLOX_ENV_DIRS:-}}")""#,
+        r#"eval "`'{}' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`""#,
         args.flox_activations.display()
     ));
 
@@ -115,11 +118,11 @@ pub fn generate_bash_startup_commands(
     // to be found immediately. We do this as the very last thing because
     // python venv activations can otherwise return nonzero return codes
     // when attempting to invoke `hash -r`.
-    commands.push("set +h".to_string());
+    commands.push("unhash".to_string());
 
     // Disable trace mode if it was enabled
     if args.flox_activate_tracelevel >= 2 {
-        commands.push("set +x".to_string());
+        commands.push("unset verbose".to_string());
     }
 
     // N.B. the output of these scripts may be eval'd with backticks which have
@@ -135,5 +138,5 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_generate_bash_startup_commands_basic() {}
+    fn test_generate_tcsh_startup_commands_basic() {}
 }
