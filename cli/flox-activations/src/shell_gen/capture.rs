@@ -47,6 +47,34 @@ impl ExportEnvDiff {
                     commands.push(format!("export {line}"));
                 }
             },
+            Shell::Fish => {
+                for line in self.del.lines() {
+                    commands.push(format!("set -e {line}"));
+                }
+                for line in self.add.lines() {
+                    // First replace "=" with space in line.
+                    let line = line.replace('=', " ");
+                    commands.push(format!("set -gx {line}"));
+                }
+            },
+            Shell::Tcsh => {
+                for line in self.del.lines() {
+                    commands.push(format!("unsetenv {line}"));
+                }
+                for line in self.add.lines() {
+                    // First replace "=" with space in line.
+                    let line = line.replace('=', " ");
+                    commands.push(format!("setenv {line}"));
+                }
+            },
+            Shell::Zsh => {
+                for line in self.del.lines() {
+                    commands.push(format!("unset {line}"));
+                }
+                for line in self.add.lines() {
+                    commands.push(format!("export {line}"));
+                }
+            },
             _ => unimplemented!(),
         };
         commands

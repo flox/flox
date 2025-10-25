@@ -1,5 +1,8 @@
 pub mod bash;
 pub mod capture;
+pub mod fish;
+pub mod tcsh;
+pub mod zsh;
 
 use std::fmt;
 use std::path::Path;
@@ -54,6 +57,9 @@ impl Shell {
     pub fn export_var(&self, var: &str, value: &str) -> String {
         match self {
             Self::Bash => format!("export {var}='{value}'"),
+            Self::Fish => format!("set -gx {var} '{value}'"),
+            Self::Tcsh => format!("setenv {var} '{value}'"),
+            Self::Zsh => format!("export {var}='{value}'"),
             _ => unimplemented!(),
         }
     }
