@@ -173,12 +173,12 @@ impl List {
             };
 
             match p {
-                PackageToList::Catalog(_, p) => {
+                PackageToList::Catalog(descriptor, p) => {
                     writeln!(
                         &mut out,
                         "{id}: {path} ({version}{upgrade_available})",
                         id = p.install_id,
-                        path = p.attr_path,
+                        path = descriptor.pkg_path,
                         version = p.version,
                     )?;
                 },
@@ -233,7 +233,7 @@ impl List {
             };
 
             let message = match package {
-                PackageToList::Catalog(_, locked) => {
+                PackageToList::Catalog(descriptor, locked) => {
                     let mut sorted_outputs = locked
                         .outputs
                         .keys()
@@ -245,6 +245,7 @@ impl List {
                     } else {
                         format!("[ {} ]", sorted_outputs.join(", "))
                     };
+
                     formatdoc! {"
                         {name}:{upgrade_available}
                           Description:  {description}
@@ -259,7 +260,7 @@ impl List {
                         ",
                         name = &locked.install_id,
                         pname = &locked.pname,
-                        attr_path = &locked.attr_path,
+                        attr_path = &descriptor.pkg_path,
                         priority = locked.priority,
                         version = &locked.version,
                         description = locked.description.as_deref().unwrap_or("N/A"),
