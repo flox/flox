@@ -27,10 +27,10 @@ use super::start_or_attach::wait_for_activation_ready_and_optionally_attach_pid;
 use crate::cli::attach::AttachExclusiveArgs;
 use crate::shell_gen::Shell as ShellGen;
 use crate::shell_gen::bash::{BashStartupArgs, generate_bash_startup_commands};
+use crate::shell_gen::capture::{EnvDiff, ExportEnvDiff};
 use crate::shell_gen::fish::{FishStartupArgs, generate_fish_startup_commands};
 use crate::shell_gen::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
 use crate::shell_gen::zsh::{ZshStartupArgs, generate_zsh_startup_script};
-use crate::shell_gen::capture::{EnvDiff, ExportEnvDiff};
 
 #[derive(Debug, Args)]
 pub struct ActivateArgs {
@@ -168,11 +168,7 @@ impl ActivateArgs {
                 activate_tracer,
             )?;
         } else {
-            Self::new_activate_command(
-                data.run_args,
-                data.is_ephemeral,
-                activation_environment,
-            )?;
+            Self::new_activate_command(data.run_args, data.is_ephemeral, activation_environment)?;
         }
 
         return Ok(());
@@ -447,7 +443,10 @@ impl ActivateArgs {
                     verbosity < 2,
                 )?;
                 let mut command = Command::new(fish);
-                command.args(["--init-command", format!("source '{}'", &rcfile.to_string_lossy()).as_str()]);
+                command.args([
+                    "--init-command",
+                    format!("source '{}'", &rcfile.to_string_lossy()).as_str(),
+                ]);
 
                 debug!("spawning interactive fish shell: {:?}", command);
                 // exec should never return
@@ -479,7 +478,14 @@ impl ActivateArgs {
                 // our custom .tcshrc.
                 /// SAFETY: called once, prior to possible concurrent access to env
                 unsafe {
-                    std::env::set_var("HOME", tcsh_startup_args.activate_d.join("tcsh_home").to_string_lossy().to_string());
+                    std::env::set_var(
+                        "HOME",
+                        tcsh_startup_args
+                            .activate_d
+                            .join("tcsh_home")
+                            .to_string_lossy()
+                            .to_string(),
+                    );
                 }
 
                 let startup_commands =
@@ -531,7 +537,14 @@ impl ActivateArgs {
                 // .zshrc and .zshenv files are sourced from there.
                 /// SAFETY: called once, prior to possible concurrent access to env
                 unsafe {
-                    std::env::set_var("ZDOTDIR", zsh_startup_args.activate_d.join("zdotdir").to_string_lossy().to_string());
+                    std::env::set_var(
+                        "ZDOTDIR",
+                        zsh_startup_args
+                            .activate_d
+                            .join("zdotdir")
+                            .to_string_lossy()
+                            .to_string(),
+                    );
                 }
 
                 let startup_script =
@@ -569,7 +582,10 @@ impl ActivateArgs {
     ) -> Result<PathBuf> {
         let mut tempfile = tempfile::NamedTempFile::new_in(activation_state_dir)?;
         if self_destruct {
-            script.push_str(&format!("\ntrue {RM} {}", tempfile.path().to_string_lossy()));
+            script.push_str(&format!(
+                "\ntrue {RM} {}",
+                tempfile.path().to_string_lossy()
+            ));
         }
         tempfile.write_all(script.as_bytes())?;
         let (_, path) = tempfile.keep()?;
@@ -779,7 +795,10 @@ impl ActivateArgs {
                 )?;
 
                 // Export the value of $_flox_activate_tracer from the environment.
-                commands.push(ShellGen::Zsh.export_var("_flox_activate_tracer", &zsh_startup_args.flox_activate_tracer));
+                commands.push(ShellGen::Zsh.export_var(
+                    "_flox_activate_tracer",
+                    &zsh_startup_args.flox_activate_tracer,
+                ));
 
                 commands.push(format!(
                     "source '{}'",

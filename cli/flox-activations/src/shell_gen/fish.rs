@@ -94,7 +94,8 @@ pub fn generate_fish_startup_commands(
     ));
 
     commands.push(
-        r#"set -gx MANPATH (if set -q MANPATH; echo "$MANPATH"; else; echo empty; end)"#.to_string()
+        r#"set -gx MANPATH (if set -q MANPATH; echo "$MANPATH"; else; echo empty; end)"#
+            .to_string(),
     );
 
     commands.push(format!(

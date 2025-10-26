@@ -21,7 +21,7 @@ pub struct ZshStartupArgs {
     pub flox_activate_tracer: String,
 }
 
-pub fn generate_zsh_startup_script (
+pub fn generate_zsh_startup_script(
     args: &ZshStartupArgs,
     export_env_diff: &ExportEnvDiff,
 ) -> Result<String> {
