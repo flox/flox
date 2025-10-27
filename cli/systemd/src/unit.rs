@@ -25,7 +25,6 @@ pub enum Error {
 
 /// Represents a systemd service configuration
 #[derive(Debug, Clone, Default, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct ServiceUnit {
     pub unit: Option<Unit>,
     pub service: Option<Service>,
@@ -33,7 +32,6 @@ pub struct ServiceUnit {
 
 /// Unit section configuration
 #[derive(Debug, Clone, Default, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Unit {
     pub description: Option<String>,
     pub documentation: Option<Vec<String>>,
@@ -45,7 +43,6 @@ pub struct Unit {
 
 /// Service section configuration with resource limits
 #[derive(Debug, Clone, Default, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Service {
     // Basic service configuration
     pub type_: Option<ServiceType>,
@@ -98,14 +95,12 @@ pub struct Service {
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum ResourceLimit {
     Value(String),
     Range { soft: String, hard: String },
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum ServiceType {
     Simple,
     Exec,
@@ -117,7 +112,6 @@ pub enum ServiceType {
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum RestartPolicy {
     No,
     OnSuccess,
@@ -129,7 +123,6 @@ pub enum RestartPolicy {
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum ProtectSystem {
     No,
     Yes,
@@ -138,7 +131,6 @@ pub enum ProtectSystem {
 }
 
 #[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum ProtectHome {
     No,
     Yes,

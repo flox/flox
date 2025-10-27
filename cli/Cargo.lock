@@ -4294,8 +4294,6 @@ name = "systemd"
 version = "0.1.0"
 dependencies = [
  "indoc",
- "proptest",
- "proptest-derive",
  "schemars 1.0.4",
  "serde",
  "thiserror 2.0.17",

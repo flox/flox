@@ -54,7 +54,6 @@ httpmock.workspace = true
 pretty_assertions.workspace = true
 proptest.workspace = true
 proptest-derive.workspace = true
-systemd = { workspace = true, features = ["tests"] }
 tracing-subscriber.workspace = true
 flox-test-utils.workspace = true
 catalog-api-v1 = { workspace = true, features = ["tests"] }
@@ -68,7 +67,6 @@ tests = [
     "dep:proptest",
     "dep:proptest-derive",
     "dep:pretty_assertions",
-    "systemd/tests"
 ]
 extra-tests = ["impure-unit-tests"]
 impure-unit-tests = []

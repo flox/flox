@@ -800,6 +800,10 @@ pub struct ServiceDescriptor {
     pub shutdown: Option<ServiceShutdown>,
 
     /// Additional manual config of the systemd service generated for persistent services
+    // Generating more than 1(!) value with proptest,
+    // increases the runtime of `proptest!`s to the point that we exhausted our stack space in CI
+    // Since we don't actually test against properties of systemd config,
+    // exclude this value from proptest state space generation.
     #[cfg_attr(test, proptest(value = "None"))]
     pub systemd: Option<ServiceUnit>,
 
