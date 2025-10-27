@@ -1,4 +1,5 @@
 {
+  cacert,
   coreutils,
   flox-buildenv,
   flox-package-builder,
@@ -6,7 +7,9 @@
   flox-nix-plugins,
   flox-src,
   gitMinimal,
+  glibcLocalesUtf8,
   gnumake,
+  hostPlatform,
   inputs,
   lib,
   nixpkgsInputLockedURL,
@@ -34,6 +37,8 @@ let
     GNUMAKE_BIN = "${gnumake}/bin/make";
     SLEEP_BIN = "${coreutils}/bin/sleep";
     PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
+    # used internally to ensure CA certificates are available
+    NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
     # Used by `flox build' to access `stdenv` at a known version
     # When utilities from nixpkgs are used by flox at runtime,
@@ -46,6 +51,9 @@ let
 
     # Reexport of the platform flox is being built for
     NIX_TARGET_SYSTEM = targetPlatform.system;
+  }
+  // lib.optionalAttrs hostPlatform.isLinux {
+    LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
   }
   # Our own tools
   # In the dev shell these will be set dynamically

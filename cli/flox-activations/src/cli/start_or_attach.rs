@@ -31,14 +31,15 @@ pub struct StartOrAttachArgs {
 
 impl StartOrAttachArgs {
     // Returns activation_id for use in tests
-    pub fn handle(self) -> Result<String, anyhow::Error> {
+    pub fn handle(self) -> Result<(bool, PathBuf, String), anyhow::Error> {
         let mut retries = 3;
 
         loop {
-            let result = self.handle_inner(&self.runtime_dir, attach, start, std::io::stdout());
+            let result = self.handle_inner(&self.runtime_dir, attach, start);
 
             let Err(err) = result else {
-                return result;
+                let (attach, activation_state_dir, activation_id) = result?;
+                return Ok((attach, activation_state_dir, activation_id));
             };
 
             if let Some(restartable_failure) = err.downcast_ref::<RestartableFailure>() {
@@ -69,8 +70,7 @@ impl StartOrAttachArgs {
             &str,
             i32,
         ) -> Result<String, Error>,
-        mut output: impl Write,
-    ) -> Result<String, Error> {
+    ) -> Result<(bool, PathBuf, String), Error> {
         let activations_json_path = activations::activations_json_path(runtime_dir, &self.flox_env);
 
         debug!("Reading activations from {:?}", activations_json_path);
@@ -100,16 +100,10 @@ impl StartOrAttachArgs {
                 },
             };
 
-        writeln!(&mut output, "_FLOX_ATTACH={attaching}")?;
-        writeln!(
-            &mut output,
-            "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(runtime_dir, &self.flox_env, &activation_id)?
-                .display()
-        )?;
-        writeln!(&mut output, "_FLOX_ACTIVATION_ID={activation_id}")?;
+        let activation_state_dir =
+            activations::activation_state_dir_path(runtime_dir, &self.flox_env, &activation_id)?;
 
-        Ok(activation_id)
+        Ok((attaching, activation_state_dir, activation_id))
     }
 }
 
@@ -129,11 +123,11 @@ fn attach(
     drop(lock);
 
     let attach_expiration = OffsetDateTime::now_utc() + Duration::seconds(10);
-    wait_for_activation_ready_and_attach_pid(
+    wait_for_activation_ready_and_optionally_attach_pid(
         activations_json_path,
         store_path,
         attach_expiration,
-        pid,
+        Some(pid),
     )?;
     Ok(())
 }
@@ -170,14 +164,14 @@ fn start(
 /// exit with an error.
 /// If the activation startup process fails, exit with an error.
 /// In either case, the activation can likely just be restarted.
-fn wait_for_activation_ready_and_attach_pid(
+pub fn wait_for_activation_ready_and_optionally_attach_pid(
     activations_json_path: &Path,
     store_path: &str,
     attach_expiration: OffsetDateTime,
-    attaching_pid: i32,
+    attaching_pid: Option<i32>,
 ) -> Result<(), anyhow::Error> {
     loop {
-        let ready = check_for_activation_ready_and_attach_pid(
+        let ready = check_for_activation_ready_and_optionally_attach_pid(
             activations_json_path,
             store_path,
             attaching_pid,
@@ -194,10 +188,10 @@ fn wait_for_activation_ready_and_attach_pid(
     Ok(())
 }
 
-fn check_for_activation_ready_and_attach_pid(
+fn check_for_activation_ready_and_optionally_attach_pid(
     activations_json_path: &Path,
     store_path: &str,
-    attaching_pid: i32,
+    attaching_pid: Option<i32>,
     attach_expiration: OffsetDateTime,
     now: OffsetDateTime,
 ) -> Result<bool, anyhow::Error> {
@@ -214,8 +208,10 @@ fn check_for_activation_ready_and_attach_pid(
         .map_err(RestartableFailure)?;
 
     if activation.ready() {
-        activation.attach_pid(attaching_pid, None);
-        activations::write_activations_json(&activations, activations_json_path, lock)?;
+        if let Some(attaching_pid) = attaching_pid {
+            activation.attach_pid(attaching_pid, None);
+            activations::write_activations_json(&activations, activations_json_path, lock)?;
+        };
         return Ok(true);
     }
 
@@ -360,7 +356,7 @@ mod tests {
 
         let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
 
-        let ready = check_for_activation_ready_and_attach_pid(
+        let ready = check_for_activation_ready_and_optionally_attach_pid(
             &activations_json_path,
             store_path,
             attaching_pid,
@@ -394,7 +390,7 @@ mod tests {
 
         let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
 
-        let ready = check_for_activation_ready_and_attach_pid(
+        let ready = check_for_activation_ready_and_optionally_attach_pid(
             &activations_json_path,
             store_path,
             attaching_pid,
@@ -439,7 +435,7 @@ mod tests {
 
         let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
 
-        let result = check_for_activation_ready_and_attach_pid(
+        let result = check_for_activation_ready_and_optionally_attach_pid(
             &activations_json_path,
             store_path,
             attaching_pid,
@@ -488,7 +484,7 @@ mod tests {
 
         let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
 
-        let result = check_for_activation_ready_and_attach_pid(
+        let result = check_for_activation_ready_and_optionally_attach_pid(
             &activations_json_path,
             store_path,
             attaching_pid,

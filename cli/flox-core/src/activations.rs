@@ -237,6 +237,7 @@ impl Activation {
     /// Used to determine if the attaching processes need to continue to wait,
     /// for the activation to become ready.
     pub fn startup_process_running(&self) -> bool {
+        // TODO: we instead need to check if the executive is running
         self.attached_pids
             .first()
             .map(|attached_pid| pid_is_running(attached_pid.pid))

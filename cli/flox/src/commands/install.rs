@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_core::shell::Shell;
 use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{
@@ -57,7 +58,6 @@ use crate::utils::dialog::{Dialog, Select};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::format_error;
 use crate::utils::message::{self};
-use crate::utils::openers::Shell;
 use crate::utils::tracing::sentry_set_tag;
 use crate::{Exit, environment_subcommand_metric, subcommand_metric};
 

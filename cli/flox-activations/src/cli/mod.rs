@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use attach::AttachArgs;
 use clap::{Parser, Subcommand};
 
+mod activate;
 pub mod attach;
 mod fix_fpath;
 mod fix_paths;
@@ -12,6 +13,7 @@ mod set_env_dirs;
 mod set_ready;
 mod start_or_attach;
 
+use activate::ActivateArgs;
 use fix_fpath::FixFpathArgs;
 use fix_paths::FixPathsArgs;
 use prepend_and_dedup::PrependAndDedupArgs;
@@ -27,6 +29,12 @@ const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 // #[command(version = Lazy::get(&FLOX_VERSION).map(|v| v.as_str()).unwrap_or("0.0.0"))]
 #[command(about = SHORT_HELP, long_about = LONG_HELP)]
 pub struct Cli {
+    /// Increase logging verbosity.
+    ///
+    /// Invoke multiple times for increasing detail.
+    #[arg(short = 'v', long = "verbose", action = clap::ArgAction::Count, global = true)]
+    pub verbose: u8,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -39,6 +47,8 @@ pub enum Command {
     SetReady(SetReadyArgs),
     #[command(about = "Attach to an existing activation.")]
     Attach(AttachArgs),
+    #[command(about = "Activate a Flox environment.")]
+    Activate(ActivateArgs),
     #[command(about = "Print sourceable output fixing PATH and MANPATH for a shell.")]
     FixPaths(FixPathsArgs),
     #[command(about = "Print sourceable output setting FLOX_ENV_DIRS.")]

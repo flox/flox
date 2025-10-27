@@ -1,4 +1,7 @@
 {
+  cacert,
+  glibcLocalesUtf8,
+  hostPlatform,
   inputs,
   lib,
   pkgsFor,
@@ -31,6 +34,8 @@ craneLib.buildPackage ({
 
   CARGO_LOG = "cargo::core::compiler::fingerprint=info";
   CARGO_PROFILE = "small";
+  # used internally to ensure CA certificates are available
+  NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
   # runtime dependencies
   buildInputs = rust-external-deps.buildInputs ++ [ ];
@@ -77,4 +82,7 @@ craneLib.buildPackage ({
       fi
     '';
   };
+}
+// lib.optionalAttrs hostPlatform.isLinux {
+  LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
 })

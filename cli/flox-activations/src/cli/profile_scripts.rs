@@ -72,7 +72,7 @@ fn source_profile_scripts_cmds(
                 if path_predicate(&path) {
                     cmds.push(source_file(&path));
                 } else {
-                    debug!(path:display = path.display(); "script did not exist");
+                    debug!("script did not exist: {}", path.display());
                 }
             }
             new_sourced_dirs.insert(0, dir)

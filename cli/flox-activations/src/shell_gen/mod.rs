@@ -1,3 +1,9 @@
+pub mod bash;
+pub mod capture;
+pub mod fish;
+pub mod tcsh;
+pub mod zsh;
+
 use std::fmt;
 use std::path::Path;
 
@@ -37,12 +43,24 @@ impl fmt::Display for Shell {
 }
 impl Shell {
     /// Set a shell variable that is not exported
+    /// Include a trailing ;
     pub fn set_var_not_exported(&self, var: &str, value: &str) -> String {
         match self {
             Self::Bash => format!("{var}='{value}';"),
             Self::Fish => format!("set -g {var} '{value}';"),
             Self::Tcsh => format!("set {var} = '{value}';"),
             Self::Zsh => format!("typeset -g {var}='{value}';"),
+        }
+    }
+
+    /// Do not include a trailing ;
+    pub fn export_var(&self, var: &str, value: &str) -> String {
+        match self {
+            Self::Bash => format!("export {var}='{value}'"),
+            Self::Fish => format!("set -gx {var} '{value}'"),
+            Self::Tcsh => format!("setenv {var} '{value}'"),
+            Self::Zsh => format!("export {var}='{value}'"),
+            _ => unimplemented!(),
         }
     }
 }
