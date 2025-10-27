@@ -932,6 +932,76 @@
       },
       "type": "object"
     },
+    "ProtectHome": {
+      "enum": [
+        "No",
+        "Yes",
+        "ReadOnly",
+        "Tmpfs"
+      ],
+      "type": "string"
+    },
+    "ProtectSystem": {
+      "enum": [
+        "No",
+        "Yes",
+        "Full",
+        "Strict"
+      ],
+      "type": "string"
+    },
+    "ResourceLimit": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "Value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Range": {
+              "properties": {
+                "hard": {
+                  "type": "string"
+                },
+                "soft": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "soft",
+                "hard"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "Range"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "RestartPolicy": {
+      "enum": [
+        "No",
+        "OnSuccess",
+        "OnFailure",
+        "OnAbnormal",
+        "OnWatchdog",
+        "OnAbort",
+        "Always"
+      ],
+      "type": "string"
+    },
     "SemverOptions": {
       "additionalProperties": false,
       "properties": {
@@ -940,6 +1010,350 @@
           "type": [
             "boolean",
             "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Service": {
+      "description": "Service section configuration with resource limits",
+      "properties": {
+        "cpu_quota": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cpu_shares": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "cpu_weight": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "environment": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "environment_file": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "exec_start": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exec_start_post": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "exec_start_pre": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "exec_stop": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "io_weight": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "limit_as": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_core": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_cpu": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_fsize": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_locks": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_memlock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_msgqueue": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_nice": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_nofile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_nproc": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_rss": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_rtprio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_rttime": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_sigpending": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_stack": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "memory_high": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "memory_low": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "memory_max": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "no_new_privileges": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "private_tmp": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "protect_home": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProtectHome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "protect_system": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProtectSystem"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "restart": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RestartPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "restart_sec": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tasks_max": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_start_sec": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "timeout_stop_sec": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "type_": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServiceType"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       },
@@ -970,6 +1384,17 @@
             }
           ],
           "description": "How to shut down the service"
+        },
+        "systemd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServiceUnit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Additional manual config of the systemd service generated for persistent services"
         },
         "systems": {
           "description": "Systems to allow running the service on",
@@ -1011,11 +1436,106 @@
       ],
       "type": "object"
     },
+    "ServiceType": {
+      "enum": [
+        "Simple",
+        "Exec",
+        "Forking",
+        "Oneshot",
+        "Dbus",
+        "Notify",
+        "Idle"
+      ],
+      "type": "string"
+    },
+    "ServiceUnit": {
+      "description": "Represents a systemd service configuration",
+      "properties": {
+        "service": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Service"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
     "Services": {
       "additionalProperties": {
         "$ref": "#/$defs/ServiceDescriptor"
       },
       "description": "A map of service names to service definitions",
+      "type": "object"
+    },
+    "Unit": {
+      "description": "Unit section configuration",
+      "properties": {
+        "after": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "before": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "documentation": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "requires": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "wants": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "Vars": {
