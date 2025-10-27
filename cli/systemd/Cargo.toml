@@ -4,7 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
+schemars.workspace = true
+serde.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
+proptest-derive.workspace = true
 indoc.workspace = true
+
+[features]
+tests = [ "dep:proptest", "dep:proptest-derive"]

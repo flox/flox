@@ -82,6 +82,7 @@ sysinfo = "0.37.2"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
+systemd = { path = "systemd" }
 tempfile = "3.23.0"
 textwrap = { version = "0.16.2", features = ["terminal_size"] }
 thiserror = "2"

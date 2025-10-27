@@ -1437,6 +1437,7 @@ dependencies = [
  "serde_with",
  "serde_yaml",
  "shell-escape",
+ "systemd",
  "temp-env",
  "tempfile",
  "thiserror 2.0.17",
@@ -4293,6 +4294,10 @@ name = "systemd"
 version = "0.1.0"
 dependencies = [
  "indoc",
+ "proptest",
+ "proptest-derive",
+ "schemars 1.0.4",
+ "serde",
  "thiserror 2.0.17",
 ]
 

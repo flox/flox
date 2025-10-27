@@ -8,9 +8,12 @@
 //! - [systemd.exec(5)](https://www.freedesktop.org/software/systemd/man/systemd.exec.html)
 #![allow(clippy::writeln_empty_string)]
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::io;
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -21,14 +24,16 @@ pub enum Error {
 }
 
 /// Represents a systemd service configuration
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct ServiceUnit {
     pub unit: Option<Unit>,
     pub service: Option<Service>,
 }
 
 /// Unit section configuration
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Unit {
     pub description: Option<String>,
     pub documentation: Option<Vec<String>>,
@@ -39,7 +44,8 @@ pub struct Unit {
 }
 
 /// Service section configuration with resource limits
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub struct Service {
     // Basic service configuration
     pub type_: Option<ServiceType>,
@@ -87,17 +93,19 @@ pub struct Service {
     pub no_new_privileges: Option<bool>,
 
     // Environment
-    pub environment: Option<HashMap<String, String>>,
+    pub environment: Option<BTreeMap<String, String>>,
     pub environment_file: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum ResourceLimit {
     Value(String),
     Range { soft: String, hard: String },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum ServiceType {
     Simple,
     Exec,
@@ -108,7 +116,8 @@ pub enum ServiceType {
     Idle,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum RestartPolicy {
     No,
     OnSuccess,
@@ -119,7 +128,8 @@ pub enum RestartPolicy {
     Always,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum ProtectSystem {
     No,
     Yes,
@@ -127,7 +137,8 @@ pub enum ProtectSystem {
     Strict,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, JsonSchema, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(any(test, feature = "tests"), derive(proptest_derive::Arbitrary))]
 pub enum ProtectHome {
     No,
     Yes,
@@ -190,7 +201,7 @@ fn space_separated_list(items: &[String]) -> String {
     items.join(" ")
 }
 
-fn map_values(field_name: &str, items: &HashMap<String, String>) -> Result<String, Error> {
+fn map_values(field_name: &str, items: &BTreeMap<String, String>) -> Result<String, Error> {
     let mut buf = String::new();
     for (key, value) in items.iter() {
         writeln!(&mut buf, "{field_name}={key}={value}")?;
@@ -234,7 +245,7 @@ impl<T: io::Write> UnitFmt<T> for Option<Vec<String>> {
     }
 }
 
-impl<T: io::Write> UnitFmt<T> for Option<HashMap<String, String>> {
+impl<T: io::Write> UnitFmt<T> for Option<BTreeMap<String, String>> {
     fn unit_fmt(&self, name: &str, output: &mut T) -> Result<(), Error> {
         if let Some(values) = self {
             let joined = map_values(name, values)?;
