@@ -36,6 +36,14 @@ fn init_logger(verbosity: u8) {
     // 13:07:42.123456 Use `digits:3` for ms, `digits:6` for µs, or `digits:9` for ns.
     let time_fmt = format_description!("[hour]:[minute]:[second].[subsecond digits:6]");
 
+    // Set verbosity based on the greater of the verbosity flag or
+    // the _FLOX_PKGDB_VERBOSITY environment variable.
+    let verbosity = std::env::var_os("_FLOX_PKGDB_VERBOSITY")
+        .and_then(|s| s.into_string().ok())
+        .and_then(|s| s.parse::<u8>().ok())
+        .map(|env_verbosity| std::cmp::max(env_verbosity, verbosity))
+        .unwrap_or(verbosity);
+
     let log_level = match verbosity {
         0 => LevelFilter::Warn,
         1 => LevelFilter::Info,
