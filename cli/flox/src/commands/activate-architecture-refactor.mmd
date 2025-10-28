@@ -1,0 +1,189 @@
+---
+config:
+  theme: mc
+  layout: dagre
+---
+flowchart TB
+ subgraph cli["flox-activations with activate"]
+        s3["Registry Module"]
+        n34{"activation mode?"}
+        n37[["exec(userShell<br>&lt;RCFILE_options&gt;)"]]
+        n35[["echoInPlace(userShell)"]]
+        n83["activation attach --timeout X<br><br>echo $out/libexec/activation attach --remove $$<br><br>replayenv $userShell<br><br>cat $FLOX_ENV/activate.d/profile.common<br><br>cat $FLOX_ENV/activate.d/profile.$userShell<br>(_the latter replays the env again_)"]
+        n116["wait ready(child)"]
+        n115["do_attach()"]
+        n137["start services?"]
+        n140["replayEnv()"]
+        n145["exec(userShell<br>&lt;RCFILE_options&gt;<br>-c command_script)"]
+        n146["exec(cmd args)"]
+        invoke["userShell"]
+  end
+ subgraph s3["<br>"]
+        n111["exists?"]
+        n112["active and<br>env up to date?"]
+        n113["ready to<br>attach?"]
+        n114["do_start()<br>fork()"]
+  end
+ subgraph activate["Activate"]
+        n7[["env0=snapshotEnv()"]]
+        n6["source etc-profiles"]
+        n62[["env1=snapshotEnv()<br>"]]
+        nd["source [vars] (envrc)<br>source hook.on-activate<br>"]
+        n63[["env2=snapshotEnv()<br>"]]
+  end
+ subgraph colorkey["Color Key"]
+        node_aqepkktvr["rust"]
+        n0["bash"]
+        nz["userShell"]
+        n110["registry logic<br>(in rust)"]
+        n139(["untracked<br>activation"])
+  end
+ subgraph s2["process-compose"]
+        n96["process-compose"]
+        n98["flox-never-exit"]
+  end
+ subgraph watchdog["Executive"]
+        ns[["Await death of ppid()<br>_and_<br>registry_PIDs($_FLOX_UUID)"]]
+        ny[["Clean up state<br>(remove temp files, etc.)"]]
+        nv(["Rust Destructors<br>(Submit metrics, etc.)"])
+        n66[["stop_process-compose()"]]
+        n121["exec(bash $FLOX_ENV/activate)"]
+        n125["setsid()<br>register as subreaper"]
+        n126["fork()"]
+        n127["waitpid(child)"]
+        n130["activation env-ready<br>(Signals to ppid ready to continue)"]
+        n94[["initialise metrics, etc."]]
+        n100["submit spooled metrics<br>"]
+        n136["close(0,1,2)"]
+  end
+ subgraph invoke["userShell"]
+    direction TB
+        n82(["interactive or command"])
+        n141@{ label: "<span style=\"background-color:\">source $FLOX_ENV/activate.d/profile.common</span><br style=\"--tw-scale-x:\"><span style=\"background-color:\">source $FLOX_ENV/activate.d/profile.$userShell</span><br>" }
+        n142@{ label: "<span style=\"background-color:\">eval $(replayenv $userShell)</span>" }
+        n143["source user dotfiles"]
+        n144["fix paths"]
+  end
+ subgraph s4["Flox CLI w tokio"]
+        n88["parse args"]
+        n89{"activate()<br>services(start)"}
+        n36["Initialise state:<br>FLOX_ENV<br>FLOX_ENV_DESCRIPTION<br>FLOX_ENV_PROJECT<br>FLOX_PARENT_PID<br>write metrics spool files<br>... plus temp files, etc."]
+  end
+    ns --> n66
+    ny --> nv
+    n7 --> n6
+    nv ~~~ colorkey
+    node_aqepkktvr ~~~ n0
+    n0 ~~~ nz
+    n6 --> n62
+    n34 -- in place --> n35
+    n62 --> nd
+    n66 --> ny
+    nd --> n63
+    A(["Parent PID<br>flox activate<br>"]) -- fork() &amp;&amp; exec(flox) --> n88
+    n88 --> n89
+    n94 --> n100
+    n96 --> n98
+    n89 --> n36
+    n100 --> ns
+    nz ~~~ n110
+    n111 -- yes --> n112
+    n111 -- no --> n114
+    n112 -- yes --> n113
+    n112 -- no --> n114
+    n113 --> n115
+    n113 -- no --> n111
+    n114 -- child --> n125
+    n114 -- parent --> n116
+    n121 --> n7
+    n125 --> n126
+    n63 --> n127
+    n63 -.-> n138(["exec args"])
+    n126 -- parent --> n127
+    n126 -- child --> n121
+    n127 --> n136
+    n116 --> n115
+    n130 --> n94
+    n130 -.-> n116
+    n35 --> n83
+    n115 --> n140
+    n36 -- "exec(flox-activations)" --> n111
+    n135(["flox-build.mk"]) -. "exec(.../activate)" .-> activate
+    n137 -- continue if activating --> n34
+    n137 -- "yes: fork() &amp;&amp;<br>exec(process-compose)" --> n96
+    n136 --> n130
+    n66 -- "process-compose stop" --> n96
+    n110 ~~~ n139
+    n140 --> n137
+    n141 --> n82
+    n142 --> n141
+    n143 --> n144
+    n144 --> n142
+    n34 -- "flox activate -c 'command script'" --> n145
+    n34 -- "flox activate -- cmd args" --> n146
+    n34 -- interactive --> n37
+    n37 --> invoke
+    n145 --> invoke
+    n83@{ shape: doc}
+    n137@{ shape: diam}
+    n111@{ shape: diam}
+    n112@{ shape: diam}
+    n113@{ shape: diam}
+    n114@{ shape: rect}
+    n130@{ shape: subproc}
+    n141@{ shape: subproc}
+    n142@{ shape: rect}
+    style s3 fill:transparent
+    style n34 fill:#FFE0B2
+    style n37 fill:#FFE0B2
+    style n35 fill:#FFE0B2
+    style n83 fill:#BBDEFB
+    style n116 fill:#FFE0B2
+    style n115 fill:#C8E6C9
+    style n137 fill:#FFE0B2
+    style n140 fill:#FFE0B2
+    style n145 fill:#FFE0B2
+    style n146 fill:#FFE0B2
+    style n111 fill:#C8E6C9
+    style n112 fill:#C8E6C9
+    style n113 fill:#C8E6C9
+    style n114 fill:#C8E6C9
+    style n7 fill:#BBDEFB
+    style n6 fill:#BBDEFB
+    style n62 fill:#BBDEFB
+    style nd fill:#BBDEFB
+    style n63 fill:#BBDEFB
+    style node_aqepkktvr fill:#FFE0B2
+    style n0 fill:#BBDEFB
+    style nz fill:#E1BEE7
+    style n110 fill:#C8E6C9
+    style n139 fill:#FFF9C4,stroke-width:2px,stroke-dasharray: 2
+    style ns fill:#FFE0B2
+    style ny fill:#FFE0B2
+    style nv fill:#FFE0B2
+    style n66 fill:#FFE0B2
+    style n121 fill:#FFE0B2
+    style n125 fill:#FFE0B2
+    style n126 fill:#FFE0B2
+    style n127 fill:#FFE0B2
+    style n130 fill:#FFE0B2
+    style n94 fill:#FFE0B2
+    style n100 fill:#FFE0B2
+    style n136 fill:#FFE0B2
+    style n82 fill:#E1BEE7
+    style n141 fill:#E1BEE7
+    style n142 fill:#E1BEE7
+    style n143 fill:#E1BEE7
+    style n144 fill:#E1BEE7
+    style n88 fill:#FFE0B2
+    style n89 fill:#FFE0B2
+    style n36 fill:#FFE0B2
+    style A fill:#FFFFFF
+    style n138 fill:#FFF9C4,stroke-width:2px,stroke-dasharray: 2
+    style n135 fill:#FFF9C4,stroke-width:2px,stroke-dasharray: 2
+    style activate fill:#F8F8F8
+    style watchdog fill:#F8F8F8
+    style cli fill:#F8F8F8
+    style s2 fill:#F8F8F8
+    style s4 fill:transparent
+
