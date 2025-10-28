@@ -430,6 +430,7 @@ impl Activate {
             run_args: self.run_args,
             command_script: self.command_script,
             path_to_self: flox_activations.to_string(),
+            original_argv: std::env::args().collect(),
         };
 
         let tempfile = tempfile::NamedTempFile::new_in(flox.temp_dir)?;

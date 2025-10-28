@@ -1,9 +1,12 @@
 use clap::Parser;
 use flox_activations::cli::Cli;
-use flox_activations::{Error, cli, logging};
+use flox_activations::{Error, cli, logging, proctitle};
 use log::debug;
 
 fn main() -> Result<(), Error> {
+    // Initialize process title system before any forks
+    proctitle::init();
+
     let args = Cli::parse();
     logging::init_logger(args.verbose);
     debug!("{args:?}");

@@ -73,4 +73,8 @@ pub struct ActivateData {
     pub run_args: Vec<String>,
     pub command_script: Option<String>,
     pub path_to_self: String,
+
+    /// Original command-line arguments from the flox CLI invocation
+    /// Used by the executive to set a descriptive process title
+    pub original_argv: Vec<String>,
 }

@@ -71,6 +71,13 @@ pub fn executive(
             // The logger format is inherited from the parent, we just need to change the level
             log::set_max_level(log::LevelFilter::Debug);
 
+            // Set process title to show "executive: <original command>" in ps listings
+            let process_title = format!("executive: {}", data.original_argv.join(" "));
+            if let Err(e) = crate::proctitle::setproctitle(&process_title) {
+                debug!("Failed to set process title: {}", e);
+                // Continue execution even if this fails
+            }
+
             // n130: Signal the parent that activation is ready
             debug!("Sending SIGUSR1 to parent {}", parent_pid);
             unsafe {
