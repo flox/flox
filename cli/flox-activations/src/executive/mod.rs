@@ -67,6 +67,10 @@ pub fn executive(
             // Redirect stderr to a log file so we can continue logging
             redirect_stderr_to_logfile(&data.flox_env_log_dir, &activation_id)?;
 
+            // Set logging level to Debug for the executive, regardless of original verbosity
+            // The logger format is inherited from the parent, we just need to change the level
+            log::set_max_level(log::LevelFilter::Debug);
+
             // n130: Signal the parent that activation is ready
             debug!("Sending SIGUSR1 to parent {}", parent_pid);
             unsafe {
