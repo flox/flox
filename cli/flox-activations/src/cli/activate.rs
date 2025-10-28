@@ -1,3 +1,5 @@
+use signal_hook::{consts::SIGCHLD, consts::SIGUSR1, iterator::Signals};
+
 use std::collections::HashMap;
 use std::env::Vars;
 use std::ffi::OsStr;
@@ -6,6 +8,11 @@ use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+
+#[cfg(target_os = "linux")]
+use libc::{prctl, setsid, PR_SET_CHILD_SUBREAPER};
+use nix::sys::wait::waitpid;
+use nix::unistd::{fork, ForkResult, getpid, getppid, Pid};
 
 use anyhow::{Context, Result, anyhow};
 use clap::Args;
@@ -25,6 +32,7 @@ use super::fix_paths::{fix_manpath_var, fix_path_var};
 use super::set_env_dirs::fix_env_dirs_var;
 use super::start_or_attach::wait_for_activation_ready_and_optionally_attach_pid;
 use crate::cli::attach::AttachExclusiveArgs;
+use crate::executive::executive;
 use crate::shell_gen::Shell as ShellGen;
 use crate::shell_gen::bash::{BashStartupArgs, generate_bash_startup_commands};
 use crate::shell_gen::capture::{EnvDiff, ExportEnvDiff};
@@ -72,6 +80,50 @@ impl ActivateArgs {
         .handle()?;
 
         if !attach {
+            match unsafe { fork() } {
+                Ok(ForkResult::Child) => {
+                    unsafe {
+                        setsid();
+                        // register as subreaper on Linux only
+                        #[cfg(target_os = "linux")]
+                        prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0);
+                    }
+                    executive(); // never returns
+                }
+                Ok(ForkResult::Parent { child }) => {
+                    // Parent process
+                    debug!("Awaiting SIGUSR1 from child process with PID: {}", child);
+
+                    // Set up signal handler to await the death of the child.
+                    // If the child dies, then we should error out. We expect
+                    // to receive SIGUSR1 from the child when it's ready.
+                    let mut signals = Signals::new(&[SIGCHLD, SIGUSR1])?;
+                    for signal in signals.forever() {
+                        match signal {
+                            SIGUSR1 => {
+                                debug!("Received SIGUSR1 from child process {}", child);
+                                break; // Proceed after receiving SIGUSR1
+                            }
+                            SIGCHLD => {
+                                debug!("Received SIGCHLD from child process {}", child);
+                                // Child has exited, return an error
+                                return Err(anyhow!(
+                                    "Activation process {} terminated unexpectedly",
+                                    child
+                                ));
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+
+                }
+                Err(e) => {
+                    // Fork failed
+                    return Err(anyhow!("Fork failed: {}", e));
+                }
+            }
+
+/*
             debug!("No existing activation found");
             let mut start_command = Self::assemble_command_for_activate_script(data.clone());
             start_command.arg("--mode").arg("start");
@@ -94,6 +146,7 @@ impl ActivateArgs {
                 attach_expiration,
                 None,
             )?;
+*/
         }
         let mut command = Self::assemble_command_for_activate_script(data.clone());
         // Pass down the activation mode
