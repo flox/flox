@@ -80,6 +80,7 @@ impl ActivateArgs {
         .handle()?;
 
         if !attach {
+            let parent_pid = getpid();
             match unsafe { fork() } {
                 Ok(ForkResult::Child) => {
                     unsafe {
@@ -88,7 +89,17 @@ impl ActivateArgs {
                         #[cfg(target_os = "linux")]
                         prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0);
                     }
-                    executive(); // never returns
+                    // Never returns - executive either loops forever or exits the process
+                    if let Err(e) = executive(
+                        data.clone(),
+                        parent_pid,
+                        activation_state_dir.clone(),
+                        activation_id.clone(),
+                    ) {
+                        eprintln!("Executive failed: {}", e);
+                        std::process::exit(1);
+                    }
+                    unreachable!("executive should never return");
                 }
                 Ok(ForkResult::Parent { child }) => {
                     // Parent process

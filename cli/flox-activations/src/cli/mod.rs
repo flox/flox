@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use attach::AttachArgs;
 use clap::{Parser, Subcommand};
 
-mod activate;
+pub mod activate;
 pub mod attach;
 mod fix_fpath;
 mod fix_paths;
