@@ -459,7 +459,10 @@ fn print_welcome_message(envs: EnvRegistry, active_environments: ActiveEnvironme
             2,
             DisplayEnvironments::new(active_environments.iter(), true).to_string(),
         );
-        message::plain(envs);
+        // We should use message::plain once bold formatting is fixed in
+        // tracing-subscriber
+        // https://github.com/tokio-rs/tracing/issues/3369
+        eprintln!("{envs}");
     }
 }
 
