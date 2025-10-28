@@ -18,7 +18,7 @@ use crate::cli::activate::{
 
 /// The Executive process manages the lifecycle of an activation.
 /// It is responsible for:
-/// - Forking and execing the activation script
+/// - Forking and execing the activate script
 /// - Waiting for the activation to complete
 /// - Daemonizing (closing stdio)
 /// - Signaling the parent that activation is ready
@@ -34,9 +34,9 @@ pub fn executive(
     // Fork a second time to create the activation process
     match unsafe { fork() }.context("Failed to fork activation process")? {
         ForkResult::Child => {
-            // Child: exec the activation script
+            // Child: exec the activate script
             debug!("Executive child: executing activation script");
-            exec_activation_script(data, activation_state_dir, activation_id)?;
+            exec_activate_script(data, activation_state_dir, activation_id)?;
             unreachable!("exec should never return");
         },
         ForkResult::Parent { child } => {
@@ -74,9 +74,9 @@ pub fn executive(
     }
 }
 
-/// Exec the activation script (bash .../activate)
+/// Exec the activate script (bash .../activate)
 /// This function never returns on success
-fn exec_activation_script(
+fn exec_activate_script(
     data: ActivateData,
     activation_state_dir: PathBuf,
     activation_id: String,
@@ -133,7 +133,7 @@ fn exec_activation_script(
         .arg(activation_state_dir.to_string_lossy().to_string());
     command.arg("--activation-id").arg(&activation_id);
 
-    debug!("Execing activation script: {:?}", command);
+    debug!("Execing activate script: {:?}", command);
 
     // Hooks may use stdin, stdout, stderr, so inherit them
     command
