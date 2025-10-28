@@ -87,13 +87,22 @@ pub struct Activate {
     #[bpaf(long, short)]
     pub generation: Option<GenerationId>,
 
-    /// Command to run interactively in the context of the environment
-    #[bpaf(positional("cmd"), strict, many)]
+    /// Run a command script using the current shell in the context of the environment.
+    #[bpaf(long, short)]
+    pub command_script: Option<String>,
+
+    /// Command and args to invoke using exec() in the context of the environment.
+    #[bpaf(positional("command> <args"), strict, many)]
     pub run_args: Vec<String>,
 }
 
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        // Validate that -c and positional arguments are mutually exclusive
+        if self.command_script.is_some() && !self.run_args.is_empty() {
+            bail!("Cannot use both -c/--command-script and positional arguments");
+        }
+
         let mut concrete_environment = match self
             .environment
             .to_concrete_environment(&flox, self.generation)
@@ -200,8 +209,10 @@ impl Activate {
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
 
-        let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
-        let interactive = !in_place && self.run_args.is_empty();
+        let in_place = self.print_script
+            || (!stdout().is_tty() && self.run_args.is_empty() && self.command_script.is_none());
+        let interactive =
+            !in_place && self.run_args.is_empty() && self.command_script.is_none();
 
         let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
         let rendered_env_path = match rendered_env_path_result {
@@ -417,6 +428,7 @@ impl Activate {
             interactive,
             is_ephemeral,
             run_args: self.run_args,
+            command_script: self.command_script,
             path_to_self: flox_activations.to_string(),
         };
 

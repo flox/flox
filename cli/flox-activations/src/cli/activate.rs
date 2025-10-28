@@ -138,6 +138,7 @@ impl ActivateArgs {
             }
             debug!("Finished spawning activation - proceeding to attach");
         }
+
         let mut command = Self::assemble_command_for_activate_script(data.clone());
         // Pass down the activation mode
         command.arg("--mode").arg(&data.mode);
@@ -209,6 +210,13 @@ impl ActivateArgs {
                 export_env_diff,
                 &activation_state_dir,
                 activate_tracer,
+            )?;
+        } else if let Some(command_script) = data.command_script {
+            Self::new_activate_command_script(
+                command_script,
+                data.shell,
+                data.is_ephemeral,
+                activation_environment,
             )?;
         } else {
             Self::new_activate_command(data.run_args, data.is_ephemeral, activation_environment)?;
@@ -400,6 +408,34 @@ impl ActivateArgs {
             if !output.status.success() {
                 Err(anyhow!(
                     "failed to run command: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                ))?;
+            }
+            Ok(())
+        } else {
+            // exec should never return
+            Err(command.exec().into())
+        }
+    }
+
+    /// Used for `flox activate -c "command script"`
+    fn new_activate_command_script(
+        command_script: String,
+        shell: Shell,
+        is_ephemeral: bool,
+        env_diff: EnvDiff,
+    ) -> Result<()> {
+        let mut command = Self::assemble_command_with_environment(shell.exe_path(), &env_diff);
+        command.arg("-c").arg(command_script);
+        debug!("running command script in shell: {:?}", command);
+        if is_ephemeral {
+            let output = command
+                .stderr(Stdio::piped())
+                .stdout(Stdio::piped())
+                .output()?;
+            if !output.status.success() {
+                Err(anyhow!(
+                    "failed to run command script: {}",
                     String::from_utf8_lossy(&output.stderr)
                 ))?;
             }
