@@ -394,6 +394,13 @@ mod tests {
         let (_python_iid, python_descriptor, mut python_lock) =
             fake_catalog_package_lock("python", None);
 
+        // Update descriptors to have the full pkg_path
+        let mut pip_descriptor = pip_descriptor.unwrap_catalog_descriptor().unwrap();
+        pip_descriptor.pkg_path = "python3Packages.pip".to_string();
+
+        let mut python_descriptor = python_descriptor.unwrap_catalog_descriptor().unwrap();
+        python_descriptor.pkg_path = "python3Packages.python".to_string();
+
         // populate the locks
         // - pip
         pip_lock.attr_path = "python3Packages.pip".to_string();
@@ -415,29 +422,23 @@ mod tests {
         python_lock.broken = Some(false);
 
         [
-            PackageToList::Catalog(
-                pip_descriptor.unwrap_catalog_descriptor().unwrap(),
-                pip_lock,
-            ),
-            PackageToList::Catalog(
-                python_descriptor.unwrap_catalog_descriptor().unwrap(),
-                python_lock,
-            ),
+            PackageToList::Catalog(pip_descriptor, pip_lock),
+            PackageToList::Catalog(python_descriptor, python_lock),
         ]
     }
 
     fn uninformative_package() -> PackageToList {
         let (_pip_iid, pip_descriptor, mut pip_lock) = fake_catalog_package_lock("pip", None);
 
+        let mut pip_descriptor = pip_descriptor.unwrap_catalog_descriptor().unwrap();
+        pip_descriptor.pkg_path = "python3Packages.pip".to_string();
+
         // populate the lock
         pip_lock.attr_path = "python3Packages.pip".to_string();
         pip_lock.pname = "pip".to_string();
         pip_lock.version = "N/A".to_string();
 
-        PackageToList::Catalog(
-            pip_descriptor.unwrap_catalog_descriptor().unwrap(),
-            pip_lock,
-        )
+        PackageToList::Catalog(pip_descriptor, pip_lock)
     }
 
     fn test_flake_package() -> PackageToList {
@@ -767,6 +768,42 @@ mod tests {
               Broken:       false
               Outputs:      [ ]
         "});
+    }
+
+    /// Test catalog prefix displays in extended output (flox-cuda/python3Packages.torch case)
+    #[test]
+    fn test_catalog_prefix_in_extended_output() {
+        let (_iid, descriptor, mut lock) = fake_catalog_package_lock("torch", None);
+        let mut descriptor = descriptor.unwrap_catalog_descriptor().unwrap();
+        descriptor.pkg_path = "flox-cuda/python3Packages.torch".to_string();
+        lock.version = "2.7.1".to_string();
+
+        let mut out = Vec::new();
+        List::print_extended(&mut out, &[PackageToList::Catalog(descriptor, lock)], None).unwrap();
+
+        assert!(
+            String::from_utf8(out)
+                .unwrap()
+                .contains("flox-cuda/python3Packages.torch")
+        );
+    }
+
+    /// Test catalog prefix displays in detailed output (flox/catalog-util case)
+    #[test]
+    fn test_catalog_prefix_in_detail_output() {
+        let (_iid, descriptor, mut lock) = fake_catalog_package_lock("catalog-util", None);
+        let mut descriptor = descriptor.unwrap_catalog_descriptor().unwrap();
+        descriptor.pkg_path = "flox/catalog-util".to_string();
+        lock.version = "0.1.0".to_string();
+
+        let mut out = Vec::new();
+        List::print_detail(&mut out, &[PackageToList::Catalog(descriptor, lock)], None).unwrap();
+
+        assert!(
+            String::from_utf8(out)
+                .unwrap()
+                .contains("Package Path: flox/catalog-util")
+        );
     }
 
     /// manifest_contents_to_print puts items in the same table with dotted
