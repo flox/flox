@@ -91,7 +91,7 @@ impl ActivateArgs {
                         #[cfg(target_os = "linux")]
                         prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0);
                     }
-                    // Never returns - executive either loops forever or exits the process
+                    // Executive runs monitoring loop and exits when all PIDs are gone
                     if let Err(e) = executive(
                         data.clone(),
                         parent_pid,
@@ -101,7 +101,8 @@ impl ActivateArgs {
                         eprintln!("Executive failed: {}", e);
                         std::process::exit(1);
                     }
-                    unreachable!("executive should never return");
+                    // Executive completed successfully - exit cleanly
+                    std::process::exit(0);
                 }
                 Ok(ForkResult::Parent { child }) => {
                     // Parent process

@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::os::unix::io::AsRawFd;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -57,17 +59,19 @@ pub fn executive(
                 },
             }
 
-            // Signal the parent that activation is ready
+            // n136: Daemonize by closing stdin, stdout, and redirecting stderr to log file
+            debug!("Daemonizing: closing stdin/stdout and redirecting stderr to log");
+            close(0).context("Failed to close stdin")?;
+            close(1).context("Failed to close stdout")?;
+
+            // Redirect stderr to a log file so we can continue logging
+            redirect_stderr_to_logfile(&data.flox_env_log_dir, &activation_id)?;
+
+            // n130: Signal the parent that activation is ready
             debug!("Sending SIGUSR1 to parent {}", parent_pid);
             unsafe {
                 libc::kill(parent_pid.as_raw(), libc::SIGUSR1);
             }
-
-            // Daemonize by closing stdin, stdout, stderr
-            debug!("Daemonizing: closing stdio");
-            close(0).context("Failed to close stdin")?;
-            close(1).context("Failed to close stdout")?;
-            close(2).context("Failed to close stderr")?;
 
             // Main monitoring loop: await death of parent PID and all registry PIDs
             monitoring_loop(parent_pid, &data, &activation_state_dir, &activation_id)?;
@@ -76,6 +80,35 @@ pub fn executive(
             Ok(())
         },
     }
+}
+
+/// Redirects stderr to a log file for the executive process.
+/// This allows us to continue logging after daemonization.
+fn redirect_stderr_to_logfile(log_dir: &str, activation_id: &str) -> Result<()> {
+    // Create the log directory if it doesn't exist
+    std::fs::create_dir_all(log_dir)
+        .context("Failed to create log directory")?;
+
+    // Create the log file path
+    let log_file_path = PathBuf::from(log_dir).join(format!("executive-{}.log", activation_id));
+
+    // Open the log file for appending (create if it doesn't exist)
+    let log_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_file_path)
+        .context("Failed to open executive log file")?;
+
+    // Redirect stderr (fd 2) to the log file using libc::dup2
+    let result = unsafe { libc::dup2(log_file.as_raw_fd(), 2) };
+    if result == -1 {
+        return Err(anyhow!("Failed to redirect stderr to log file"));
+    }
+
+    // Log file will be closed when it goes out of scope, but the fd 2 will remain open
+    debug!("Executive stderr redirected to: {:?}", log_file_path);
+
+    Ok(())
 }
 
 /// Main monitoring loop for the Executive process.
@@ -95,14 +128,17 @@ fn monitoring_loop(
     activation_id: &str,
 ) -> Result<()> {
     // n94: Initialize metrics, etc. (placeholder)
-    debug!("Initializing executive monitoring loop");
+    debug!("Executive: Initializing monitoring loop for activation {}", activation_id);
 
     // n100: Submit spooled metrics (placeholder)
-    debug!("Submitting spooled metrics (placeholder)");
+    debug!("Executive: Submitting spooled metrics (placeholder)");
 
     // n ns: Main monitoring loop - await death of ppid AND registry PIDs
     let activations_json_path = activations::activations_json_path(&data.flox_runtime_dir, &data.env);
     let poll_interval = Duration::from_secs(1);
+
+    debug!("Executive: Starting monitoring loop - parent_pid={}, activation_id={}",
+           parent_pid, activation_id);
 
     loop {
         // Check if parent PID is still alive
@@ -113,7 +149,7 @@ fn monitoring_loop(
 
         if !parent_alive && !registry_pids_exist {
             debug!(
-                "Parent PID {} is dead and no registry PIDs remain for activation {}",
+                "Executive: Parent PID {} is dead and no registry PIDs remain for activation {}",
                 parent_pid, activation_id
             );
             break;
@@ -121,7 +157,7 @@ fn monitoring_loop(
 
         if !parent_alive {
             debug!(
-                "Parent PID {} is dead, but registry PIDs still exist for activation {}",
+                "Executive: Parent PID {} is dead, but registry PIDs still exist for activation {}",
                 parent_pid, activation_id
             );
         }
@@ -130,56 +166,75 @@ fn monitoring_loop(
         thread::sleep(poll_interval);
     }
 
-    debug!("Monitoring loop complete, proceeding with cleanup");
+    debug!("Executive: Monitoring loop complete, proceeding with cleanup");
 
     // n66: stop_process-compose() (placeholder)
-    debug!("Stopping process-compose (placeholder)");
+    debug!("Executive: Stopping process-compose (placeholder)");
 
     // ny: Clean up state (remove temp files, etc.)
     cleanup_activation_state(activation_state_dir)?;
 
     // nv: Rust Destructors will submit metrics, etc. (handled automatically)
-    debug!("Executive monitoring loop exiting");
+    debug!("Executive: Exiting");
 
     Ok(())
 }
 
 /// Check if there are any PIDs attached to our activation in the registry.
-/// This reads activations.json and checks if our activation has any living PIDs.
+/// This reads activations.json, prunes dead PIDs, and checks if any living PIDs remain.
+///
+/// IMPORTANT: This function prunes dead PIDs before checking, ensuring that the
+/// executive only waits for actually living processes.
 fn check_registry_pids(activations_json_path: &Path, activation_id: &str) -> Result<bool> {
-    // Read the activations file
-    let (activations, _lock) = activations::read_activations_json(activations_json_path)?;
+    // Read the activations file with lock
+    let (activations, lock) = activations::read_activations_json(activations_json_path)?;
 
     let Some(activations) = activations else {
         // No activations file means no PIDs
         return Ok(false);
     };
 
-    let activations = activations.check_version().map_err(|e| {
+    let mut activations = activations.check_version().map_err(|e| {
         anyhow!("Failed to check activations version: {}", e)
     })?;
 
     // Find our activation
-    let Some(activation) = activations.activation_for_id_ref(activation_id) else {
+    let Some(activation) = activations.activation_for_id_mut(activation_id) else {
         // Our activation is gone, so no PIDs
         return Ok(false);
     };
 
-    // Check if there are any attached PIDs
-    // The activation should have already been pruned by the registry logic,
-    // so if there are PIDs here, they should be alive
-    Ok(!activation.attached_pids().is_empty())
+    // Prune any dead PIDs from the registry using kill(0)
+    // This is critical - without this, we'll wait forever for dead PIDs
+    let pids_removed = activation.remove_terminated_pids();
+
+    if pids_removed {
+        debug!("Executive: Pruned dead PIDs from activation {}", activation_id);
+    }
+
+    // Check if there are any PIDs remaining after pruning
+    let pids_remain = !activation.attached_pids().is_empty();
+
+    // Write back the pruned activations if we removed any PIDs
+    if pids_removed {
+        activations::write_activations_json(&activations, activations_json_path, lock)?;
+        debug!("Executive: Updated activations.json after pruning dead PIDs");
+    }
+
+    Ok(pids_remain)
 }
 
 /// Clean up the activation state directory and any temporary files.
 fn cleanup_activation_state(activation_state_dir: &Path) -> Result<()> {
-    debug!("Cleaning up activation state: {:?}", activation_state_dir);
+    debug!("Executive: Cleaning up activation state: {:?}", activation_state_dir);
 
     // Remove the activation state directory
     if activation_state_dir.exists() {
         std::fs::remove_dir_all(activation_state_dir)
             .context("Failed to remove activation state directory")?;
-        debug!("Removed activation state directory: {:?}", activation_state_dir);
+        debug!("Executive: Removed activation state directory: {:?}", activation_state_dir);
+    } else {
+        debug!("Executive: Activation state directory already removed: {:?}", activation_state_dir);
     }
 
     Ok(())
