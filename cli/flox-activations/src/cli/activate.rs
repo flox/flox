@@ -70,6 +70,12 @@ impl ActivateArgs {
 
         fs::remove_file(&self.activate_data)?;
 
+        // Set FLOX_ENV_DIRS and fix PATH/MANPATH before forking the executive
+        // These were previously done by the bash activate script, but now we do them
+        // in Rust before forking so that all processes inherit the correct environment
+        crate::cli::set_env_dirs::set_env_dirs_in_process(&data.env)?;
+        crate::cli::fix_paths::fix_paths_in_process()?;
+
         let (attach, activation_state_dir, activation_id) = StartOrAttachArgs {
             pid: std::process::id() as i32,
             flox_env: PathBuf::from(&data.env),

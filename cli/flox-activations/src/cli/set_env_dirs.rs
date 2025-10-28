@@ -62,6 +62,26 @@ pub fn fix_env_dirs_var(flox_env: impl AsRef<Path>, env_dirs: impl AsRef<str>) -
     join_dir_list(new_dirs)
 }
 
+/// Set FLOX_ENV_DIRS environment variable directly in the current Rust process.
+///
+/// This prepends the current flox_env to FLOX_ENV_DIRS if it's not already there.
+///
+/// # Safety
+/// This function uses unsafe to modify the process environment.
+/// It should be called before any concurrent access to environment variables.
+pub fn set_env_dirs_in_process(flox_env: impl AsRef<Path>) -> Result<(), anyhow::Error> {
+    let env_dirs = std::env::var("FLOX_ENV_DIRS").unwrap_or_default();
+    let new_env_dirs = fix_env_dirs_var(flox_env, &env_dirs);
+
+    debug!("Setting FLOX_ENV_DIRS in process: {}", new_env_dirs);
+
+    unsafe {
+        std::env::set_var("FLOX_ENV_DIRS", new_env_dirs);
+    }
+
+    Ok(())
+}
+
 /// Adds a new environment to the list of active env dirs if its not already present.
 fn populate_env_dirs(flox_env: &Path, env_dirs: &[PathBuf]) -> Vec<PathBuf> {
     let mut new_dirs = vec![];

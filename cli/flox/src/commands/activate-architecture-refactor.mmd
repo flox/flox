@@ -9,7 +9,7 @@ flowchart TB
         n34{"activation mode?"}
         n37[["exec(userShell<br>&lt;RCFILE_options&gt;)"]]
         n35[["echoInPlace(userShell)"]]
-        n83["activation attach --timeout X<br><br>echo $out/libexec/activation attach --remove $$<br><br>replayenv $userShell<br><br>cat $FLOX_ENV/activate.d/profile.common<br><br>cat $FLOX_ENV/activate.d/profile.$userShell<br>(_the latter replays the env again_)"]
+        n83["print(flox-activations attach --timeout X)<br>print(flox-activation attach --remove $$)<br>replayenv($userShell)<br>cat($FLOX_ENV/activate.d/profile.common)<br>cat($FLOX_ENV/activate.d/profile.$userShell)<br>(_the latter replays the env again_)"]
         n116["wait ready(child)"]
         n115["do_attach()"]
         n137["start services?"]
@@ -17,6 +17,12 @@ flowchart TB
         n145["exec(userShell<br>&lt;RCFILE_options&gt;<br>-c command_script)"]
         n146["exec(cmd args)"]
         invoke["userShell"]
+        n147["set_env_dirs()<br>fix_paths()"]
+
+  end
+ subgraph s2["process-compose"]
+        n96["process-compose"]
+        n98["flox-never-exit"]
   end
  subgraph s3["<br>"]
         n111["exists?"]
@@ -38,10 +44,6 @@ flowchart TB
         n110["registry logic<br>(in rust)"]
         n139(["untracked<br>activation"])
   end
- subgraph s2["process-compose"]
-        n96["process-compose"]
-        n98["flox-never-exit"]
-  end
  subgraph watchdog["Executive"]
         ns[["Await death of ppid()<br>_and_<br>registry_PIDs($_FLOX_UUID)"]]
         ny[["Clean up state<br>(remove temp files, etc.)"]]
@@ -54,7 +56,7 @@ flowchart TB
         n130["activation env-ready<br>(Signals to ppid ready to continue)"]
         n94[["initialise metrics, etc."]]
         n100["submit spooled metrics<br>"]
-        n136["close(0,1,2)"]
+        n136["close(0,1,2)<br>open(2,logfile)"]
   end
  subgraph invoke["userShell"]
     direction TB
@@ -78,7 +80,6 @@ flowchart TB
     n6 --> n62
     n34 -- in place --> n35
     n62 --> nd
-    n66 --> ny
     nd --> n63
     A(["Parent PID<br>flox activate<br>"]) -- fork() &amp;&amp; exec(flox) --> n88
     n88 --> n89
@@ -101,17 +102,18 @@ flowchart TB
     n63 -.-> n138(["exec args"])
     n126 -- parent --> n127
     n126 -- child --> n121
-    n127 --> n130
+    n127 --> n136
     n116 --> n115
-    n130 --> n136
     n130 -.-> n116
+    n130 --> n94
     n35 --> n83
     n115 --> n140
-    n36 -- "exec(flox-activations)" --> n111
+    n36 -- "exec(flox-activations)" --> n147
     n135(["flox-build.mk"]) -. "exec(.../activate)" .-> activate
     n137 -- continue if activating --> n34
     n137 -- "yes: fork() &amp;&amp;<br>exec(process-compose)" --> n96
     n66 -- "process-compose stop" --> n96
+    n66 --> ny
     n110 ~~~ n139
     n140 --> n137
     n141 --> n82
@@ -123,7 +125,8 @@ flowchart TB
     n34 -- interactive --> n37
     n37 --> invoke
     n145 --> invoke
-    n136 --> n94
+    n136 --> n130
+    n147 --> n111
     n83@{ shape: doc}
     n137@{ shape: diam}
     n111@{ shape: diam}
@@ -137,7 +140,7 @@ flowchart TB
     style n34 fill:#FFE0B2
     style n37 fill:#FFE0B2
     style n35 fill:#FFE0B2
-    style n83 fill:#BBDEFB
+    style n83 fill:#FFE0B2
     style n116 fill:#FFE0B2
     style n115 fill:#C8E6C9
     style n137 fill:#FFE0B2
@@ -148,6 +151,7 @@ flowchart TB
     style n112 fill:#C8E6C9
     style n113 fill:#C8E6C9
     style n114 fill:#C8E6C9
+    style n147 fill:#FFE0B2
     style n7 fill:#BBDEFB
     style n6 fill:#BBDEFB
     style n62 fill:#BBDEFB
