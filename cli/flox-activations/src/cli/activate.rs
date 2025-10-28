@@ -226,7 +226,7 @@ impl ActivateArgs {
                 activation_environment,
             )?;
         } else {
-            Self::new_activate_command(data.run_args, data.is_ephemeral, activation_environment)?;
+            Self::new_activate_command(data.run_args, data.is_ephemeral)?;
         }
 
         return Ok(());
@@ -393,10 +393,13 @@ impl ActivateArgs {
         }
     }
 
+    /// Execute the user's command directly using exec().
+    ///
+    /// The environment has already been replayed via replay_env(), so the command
+    /// will inherit the properly modified environment from the current process.
     fn new_activate_command(
         run_args: Vec<String>,
         is_ephemeral: bool,
-        env_diff: EnvDiff,
     ) -> Result<()> {
         if run_args.is_empty() {
             return Err(anyhow!("empty command provided"));
@@ -404,9 +407,12 @@ impl ActivateArgs {
         let user_command = &run_args[0];
         let args = &run_args[1..];
 
-        let mut command = Self::assemble_command_with_environment(user_command, &env_diff);
+        // Create command directly - it will inherit the already-replayed environment
+        let mut command = Command::new(user_command);
         command.args(args);
-        debug!("running command in environment: {:?}", command);
+
+        debug!("executing command directly: {:?}", command);
+
         if is_ephemeral {
             let output = command
                 .stderr(Stdio::piped())
@@ -420,7 +426,7 @@ impl ActivateArgs {
             }
             Ok(())
         } else {
-            // exec should never return
+            // exec replaces the current process - should never return
             Err(command.exec().into())
         }
     }
