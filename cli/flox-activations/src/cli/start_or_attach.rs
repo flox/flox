@@ -75,18 +75,51 @@ impl StartOrAttachArgs {
 
         debug!("Reading activations from {:?}", activations_json_path);
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
-        let activations = activations
+        let mut activations = activations
             .map(|a| a.check_version())
             .transpose()?
             .unwrap_or_default();
 
-        let (activation_id, attaching) =
-            match activations.activation_for_store_path(&self.store_path) {
-                Some(activation) => {
-                    attach_fn(&activations_json_path, lock, &self.store_path, self.pid)?;
-                    (activation.id(), true)
-                },
-                None => {
+        // Registry logic following the 4-box pattern from activate-architecture-refactor.mmd:
+        // n111: exists? - Check if activation exists for store_path
+        // n112: active and env up to date? - Prune dead PIDs, check if still active
+        // n113: ready to attach? - Check if ready
+        // n114: do_start() - Start new activation
+
+        // n111: Check if activation exists for this store_path
+        let (activation_id, attaching) = match activations.activation_for_store_path(&self.store_path)
+        {
+            Some(activation) => {
+                let activation_id = activation.id();
+                debug!(
+                    "Activation {} exists for store_path {}",
+                    activation_id, self.store_path
+                );
+
+                // n112: Check if activation is "active and env up to date"
+                // This means: prune dead PIDs and check if any PIDs remain
+                let activation = activations
+                    .activation_for_store_path_mut(&self.store_path)
+                    .expect("activation disappeared");
+
+                let pids_removed = activation.remove_terminated_pids();
+                if pids_removed {
+                    debug!("Removed terminated PIDs from activation {}", activation_id);
+                }
+
+                // If no PIDs remain after pruning, the activation is not active
+                if activation.attached_pids().is_empty() {
+                    debug!(
+                        "Activation {} has no active PIDs, will start new activation",
+                        activation_id
+                    );
+                    // Remove the dead activation
+                    activations.remove_activation(&activation_id);
+                    // Write the pruned activations back
+                    activations::write_activations_json(&activations, &activations_json_path, lock)?;
+
+                    // n114: Start new activation (acquire new lock)
+                    let (_, lock) = activations::read_activations_json(&activations_json_path)?;
                     let id = start_fn(
                         activations,
                         activations_json_path,
@@ -97,8 +130,34 @@ impl StartOrAttachArgs {
                         self.pid,
                     )?;
                     (id, false)
-                },
-            };
+                } else {
+                    // Activation is active, write back the pruned activations
+                    // This consumes the lock, so we need to acquire a new one for attach_fn
+                    activations::write_activations_json(&activations, &activations_json_path, lock)?;
+
+                    // n113: Ready to attach? (handled in attach_fn)
+                    // Acquire new lock for attach operation (attach_fn will drop it immediately)
+                    let (_, lock) = activations::read_activations_json(&activations_json_path)?;
+                    attach_fn(&activations_json_path, lock, &self.store_path, self.pid)?;
+                    (activation_id, true)
+                }
+            },
+            // n111: No activation exists
+            None => {
+                debug!("No activation exists for store_path {}", self.store_path);
+                // n114: Start new activation
+                let id = start_fn(
+                    activations,
+                    activations_json_path,
+                    runtime_dir,
+                    &self.flox_env,
+                    lock,
+                    &self.store_path,
+                    self.pid,
+                )?;
+                (id, false)
+            },
+        };
 
         let activation_state_dir =
             activations::activation_state_dir_path(runtime_dir, &self.flox_env, &activation_id)?;
@@ -275,26 +334,20 @@ mod tests {
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
 
-        let mut output = Vec::new();
+        let (attaching, activation_state_dir, activation_id) = args
+            .handle_inner(
+                runtime_dir.path(),
+                |_, _, _, _| Ok(()),
+                |_, _, _, _, _, _, _| panic!("start should not be called"),
+            )
+            .expect("handle_inner should succeed");
 
-        args.handle_inner(
-            runtime_dir.path(),
-            |_, _, _, _| Ok(()),
-            |_, _, _, _, _, _, _| panic!("start should not be called"),
-            &mut output,
-        )
-        .expect("handle_inner should succeed");
-
-        let output = String::from_utf8(output).unwrap();
-
-        assert!(output.contains("_FLOX_ATTACH=true"));
-        assert!(output.contains(&format!(
-            "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(&runtime_dir, flox_env, &id)
-                .unwrap()
-                .display()
-        )));
-        assert!(output.contains(&format!("_FLOX_ACTIVATION_ID={id}")));
+        assert!(attaching, "should be attaching");
+        assert_eq!(
+            activation_state_dir,
+            activations::activation_state_dir_path(&runtime_dir, flox_env, &id).unwrap()
+        );
+        assert_eq!(activation_id, id);
     }
 
     #[test]
@@ -315,26 +368,21 @@ mod tests {
             runtime_dir: runtime_dir.path().to_path_buf(),
         };
 
-        let mut output = Vec::new();
-
         let id = "1".to_string();
-        args.handle_inner(
-            runtime_dir.path(),
-            |_, _, _, _| panic!("attach should not be called"),
-            |_, _, _, _, _, _, _| Ok(id.clone()),
-            &mut output,
-        )
-        .expect("handle_inner should succeed");
+        let (attaching, activation_state_dir, activation_id) = args
+            .handle_inner(
+                runtime_dir.path(),
+                |_, _, _, _| panic!("attach should not be called"),
+                |_, _, _, _, _, _, _| Ok(id.clone()),
+            )
+            .expect("handle_inner should succeed");
 
-        let output = String::from_utf8(output).unwrap();
-        assert!(output.contains("_FLOX_ATTACH=false"));
-        assert!(output.contains(&format!(
-            "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(&runtime_dir, flox_env, &id)
-                .unwrap()
-                .display()
-        )));
-        assert!(output.contains(&format!("_FLOX_ACTIVATION_ID={id}")));
+        assert!(!attaching, "should not be attaching");
+        assert_eq!(
+            activation_state_dir,
+            activations::activation_state_dir_path(&runtime_dir, flox_env, &id).unwrap()
+        );
+        assert_eq!(activation_id, id);
     }
 
     #[test]
@@ -359,7 +407,7 @@ mod tests {
         let ready = check_for_activation_ready_and_optionally_attach_pid(
             &activations_json_path,
             store_path,
-            attaching_pid,
+            Some(attaching_pid),
             attach_expiration,
             now,
         )
@@ -393,7 +441,7 @@ mod tests {
         let ready = check_for_activation_ready_and_optionally_attach_pid(
             &activations_json_path,
             store_path,
-            attaching_pid,
+            Some(attaching_pid),
             attach_expiration,
             now,
         )
@@ -438,7 +486,7 @@ mod tests {
         let result = check_for_activation_ready_and_optionally_attach_pid(
             &activations_json_path,
             store_path,
-            attaching_pid,
+            Some(attaching_pid),
             attach_expiration,
             now,
         );
@@ -487,7 +535,7 @@ mod tests {
         let result = check_for_activation_ready_and_optionally_attach_pid(
             &activations_json_path,
             store_path,
-            attaching_pid,
+            Some(attaching_pid),
             attach_expiration,
             now,
         );
