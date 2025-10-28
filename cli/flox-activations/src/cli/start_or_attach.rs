@@ -87,39 +87,73 @@ impl StartOrAttachArgs {
         // n114: do_start() - Start new activation
 
         // n111: Check if activation exists for this store_path
-        let (activation_id, attaching) = match activations.activation_for_store_path(&self.store_path)
-        {
-            Some(activation) => {
-                let activation_id = activation.id();
-                debug!(
-                    "Activation {} exists for store_path {}",
-                    activation_id, self.store_path
-                );
-
-                // n112: Check if activation is "active and env up to date"
-                // This means: prune dead PIDs and check if any PIDs remain
-                let activation = activations
-                    .activation_for_store_path_mut(&self.store_path)
-                    .expect("activation disappeared");
-
-                let pids_removed = activation.remove_terminated_pids();
-                if pids_removed {
-                    debug!("Removed terminated PIDs from activation {}", activation_id);
-                }
-
-                // If no PIDs remain after pruning, the activation is not active
-                if activation.attached_pids().is_empty() {
+        let (activation_id, attaching) =
+            match activations.activation_for_store_path(&self.store_path) {
+                Some(activation) => {
+                    let activation_id = activation.id();
                     debug!(
-                        "Activation {} has no active PIDs, will start new activation",
-                        activation_id
+                        "Activation {} exists for store_path {}",
+                        activation_id, self.store_path
                     );
-                    // Remove the dead activation
-                    activations.remove_activation(&activation_id);
-                    // Write the pruned activations back
-                    activations::write_activations_json(&activations, &activations_json_path, lock)?;
 
-                    // n114: Start new activation (acquire new lock)
-                    let (_, lock) = activations::read_activations_json(&activations_json_path)?;
+                    // n112: Check if activation is "active and env up to date"
+                    // This means: prune dead PIDs and check if any PIDs remain
+                    let activation = activations
+                        .activation_for_store_path_mut(&self.store_path)
+                        .expect("activation disappeared");
+
+                    let pids_removed = activation.remove_terminated_pids();
+                    if pids_removed {
+                        debug!("Removed terminated PIDs from activation {}", activation_id);
+                    }
+
+                    // If no PIDs remain after pruning, the activation is not active
+                    if activation.attached_pids().is_empty() {
+                        debug!(
+                            "Activation {} has no active PIDs, will start new activation",
+                            activation_id
+                        );
+                        // Remove the dead activation
+                        activations.remove_activation(&activation_id);
+                        // Write the pruned activations back
+                        activations::write_activations_json(
+                            &activations,
+                            &activations_json_path,
+                            lock,
+                        )?;
+
+                        // n114: Start new activation (acquire new lock)
+                        let (_, lock) = activations::read_activations_json(&activations_json_path)?;
+                        let id = start_fn(
+                            activations,
+                            activations_json_path,
+                            runtime_dir,
+                            &self.flox_env,
+                            lock,
+                            &self.store_path,
+                            self.pid,
+                        )?;
+                        (id, false)
+                    } else {
+                        // Activation is active, write back the pruned activations
+                        // This consumes the lock, so we need to acquire a new one for attach_fn
+                        activations::write_activations_json(
+                            &activations,
+                            &activations_json_path,
+                            lock,
+                        )?;
+
+                        // n113: Ready to attach? (handled in attach_fn)
+                        // Acquire new lock for attach operation (attach_fn will drop it immediately)
+                        let (_, lock) = activations::read_activations_json(&activations_json_path)?;
+                        attach_fn(&activations_json_path, lock, &self.store_path, self.pid)?;
+                        (activation_id, true)
+                    }
+                },
+                // n111: No activation exists
+                None => {
+                    debug!("No activation exists for store_path {}", self.store_path);
+                    // n114: Start new activation
                     let id = start_fn(
                         activations,
                         activations_json_path,
@@ -130,34 +164,8 @@ impl StartOrAttachArgs {
                         self.pid,
                     )?;
                     (id, false)
-                } else {
-                    // Activation is active, write back the pruned activations
-                    // This consumes the lock, so we need to acquire a new one for attach_fn
-                    activations::write_activations_json(&activations, &activations_json_path, lock)?;
-
-                    // n113: Ready to attach? (handled in attach_fn)
-                    // Acquire new lock for attach operation (attach_fn will drop it immediately)
-                    let (_, lock) = activations::read_activations_json(&activations_json_path)?;
-                    attach_fn(&activations_json_path, lock, &self.store_path, self.pid)?;
-                    (activation_id, true)
-                }
-            },
-            // n111: No activation exists
-            None => {
-                debug!("No activation exists for store_path {}", self.store_path);
-                // n114: Start new activation
-                let id = start_fn(
-                    activations,
-                    activations_json_path,
-                    runtime_dir,
-                    &self.flox_env,
-                    lock,
-                    &self.store_path,
-                    self.pid,
-                )?;
-                (id, false)
-            },
-        };
+                },
+            };
 
         let activation_state_dir =
             activations::activation_state_dir_path(runtime_dir, &self.flox_env, &activation_id)?;

@@ -1,5 +1,3 @@
-use signal_hook::{consts::SIGCHLD, consts::SIGUSR1, iterator::Signals};
-
 use std::collections::HashMap;
 use std::env::Vars;
 use std::ffi::OsStr;
@@ -9,12 +7,7 @@ use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-#[cfg(target_os = "linux")]
-use libc::{prctl, setsid, PR_SET_CHILD_SUBREAPER};
-use nix::sys::wait::waitpid;
-use nix::unistd::{fork, ForkResult, getpid, getppid, Pid};
-
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use clap::Args;
 use flox_core::activate_data::ActivateData;
 use flox_core::activations::activations_json_path;
@@ -23,21 +16,27 @@ use flox_core::util::default_nix_env_vars;
 use indoc::formatdoc;
 use is_executable::IsExecutable;
 use itertools::Itertools;
+#[cfg(target_os = "linux")]
+use libc::{prctl, setsid, PR_SET_CHILD_SUBREAPER};
 use log::debug;
+use nix::sys::wait::waitpid;
+use nix::unistd::{fork, getpid, getppid, ForkResult, Pid};
+use signal_hook::consts::{SIGCHLD, SIGUSR1};
+use signal_hook::iterator::Signals;
 use time::{Duration, OffsetDateTime};
 
-use super::StartOrAttachArgs;
 use super::attach::AttachArgs;
 use super::fix_paths::{fix_manpath_var, fix_path_var};
 use super::set_env_dirs::fix_env_dirs_var;
+use super::StartOrAttachArgs;
 use crate::cli::attach::AttachExclusiveArgs;
 use crate::executive::executive;
-use crate::shell_gen::Shell as ShellGen;
-use crate::shell_gen::bash::{BashStartupArgs, generate_bash_startup_commands};
+use crate::shell_gen::bash::{generate_bash_startup_commands, BashStartupArgs};
 use crate::shell_gen::capture::{EnvDiff, ExportEnvDiff};
-use crate::shell_gen::fish::{FishStartupArgs, generate_fish_startup_commands};
-use crate::shell_gen::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
-use crate::shell_gen::zsh::{ZshStartupArgs, generate_zsh_startup_script};
+use crate::shell_gen::fish::{generate_fish_startup_commands, FishStartupArgs};
+use crate::shell_gen::tcsh::{generate_tcsh_startup_commands, TcshStartupArgs};
+use crate::shell_gen::zsh::{generate_zsh_startup_script, ZshStartupArgs};
+use crate::shell_gen::Shell as ShellGen;
 
 #[derive(Debug, Args)]
 pub struct ActivateArgs {
@@ -85,8 +84,10 @@ impl ActivateArgs {
         .handle()?;
 
         if attach {
-            debug!("Attaching to existing activation in state dir {:?}, id {}",
-                activation_state_dir, activation_id);
+            debug!(
+                "Attaching to existing activation in state dir {:?}, id {}",
+                activation_state_dir, activation_id
+            );
         } else {
             let parent_pid = getpid();
             match unsafe { fork() } {
@@ -109,7 +110,7 @@ impl ActivateArgs {
                     }
                     // Executive completed successfully - exit cleanly
                     std::process::exit(0);
-                }
+                },
                 Ok(ForkResult::Parent { child }) => {
                     // Parent process
                     debug!("Awaiting SIGUSR1 from child process with PID: {}", child);
@@ -123,7 +124,7 @@ impl ActivateArgs {
                             SIGUSR1 => {
                                 debug!("Received SIGUSR1 from child process {}", child);
                                 break; // Proceed after receiving SIGUSR1
-                            }
+                            },
                             SIGCHLD => {
                                 debug!("Received SIGCHLD from child process {}", child);
                                 // Child has exited, return an error
@@ -131,16 +132,15 @@ impl ActivateArgs {
                                     "Activation process {} terminated unexpectedly",
                                     child
                                 ));
-                            }
+                            },
                             _ => unreachable!(),
                         }
                     }
-
-                }
+                },
                 Err(e) => {
                     // Fork failed
                     return Err(anyhow!("Fork failed: {}", e));
-                }
+                },
             }
             debug!("Finished spawning activation - proceeding to attach");
         }
@@ -403,10 +403,7 @@ impl ActivateArgs {
     ///
     /// The environment has already been replayed via replay_env(), so the command
     /// will inherit the properly modified environment from the current process.
-    fn new_activate_command(
-        run_args: Vec<String>,
-        is_ephemeral: bool,
-    ) -> Result<()> {
+    fn new_activate_command(run_args: Vec<String>, is_ephemeral: bool) -> Result<()> {
         if run_args.is_empty() {
             return Err(anyhow!("empty command provided"));
         }

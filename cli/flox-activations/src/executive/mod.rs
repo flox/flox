@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use flox_core::activate_data::ActivateData;
 use flox_core::activations;
 use flox_core::proc_status::pid_is_running;
@@ -17,8 +17,12 @@ use nix::sys::wait::waitpid;
 use nix::unistd::{close, fork, ForkResult, Pid};
 
 use crate::cli::activate::{
-    FLOX_ACTIVATE_START_SERVICES_VAR, FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_ENV_LOG_DIR_VAR,
-    FLOX_PROMPT_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR, FLOX_SERVICES_SOCKET_VAR,
+    FLOX_ACTIVATE_START_SERVICES_VAR,
+    FLOX_ACTIVE_ENVIRONMENTS_VAR,
+    FLOX_ENV_LOG_DIR_VAR,
+    FLOX_PROMPT_ENVIRONMENTS_VAR,
+    FLOX_RUNTIME_DIR_VAR,
+    FLOX_SERVICES_SOCKET_VAR,
     FLOX_SERVICES_TO_START_VAR,
 };
 
@@ -52,7 +56,10 @@ pub fn executive(
             // Wait for the activation child to complete
             match waitpid(child, None) {
                 Ok(status) => {
-                    debug!("Activation child {} exited with status: {:?}", child, status);
+                    debug!(
+                        "Activation child {} exited with status: {:?}",
+                        child, status
+                    );
                 },
                 Err(e) => {
                     return Err(anyhow!("Failed to wait for activation child: {}", e));
@@ -97,8 +104,7 @@ pub fn executive(
 /// This allows us to continue logging after daemonization.
 fn redirect_stderr_to_logfile(log_dir: &str, activation_id: &str) -> Result<()> {
     // Create the log directory if it doesn't exist
-    std::fs::create_dir_all(log_dir)
-        .context("Failed to create log directory")?;
+    std::fs::create_dir_all(log_dir).context("Failed to create log directory")?;
 
     // Create the log file path
     let log_file_path = PathBuf::from(log_dir).join(format!("executive-{}.log", activation_id));
@@ -139,17 +145,23 @@ fn monitoring_loop(
     activation_id: &str,
 ) -> Result<()> {
     // n94: Initialize metrics, etc. (placeholder)
-    debug!("Executive: Initializing monitoring loop for activation {}", activation_id);
+    debug!(
+        "Executive: Initializing monitoring loop for activation {}",
+        activation_id
+    );
 
     // n100: Submit spooled metrics (placeholder)
     debug!("Executive: Submitting spooled metrics (placeholder)");
 
     // n ns: Main monitoring loop - await death of ppid AND registry PIDs
-    let activations_json_path = activations::activations_json_path(&data.flox_runtime_dir, &data.env);
+    let activations_json_path =
+        activations::activations_json_path(&data.flox_runtime_dir, &data.env);
     let poll_interval = Duration::from_secs(1);
 
-    debug!("Executive: Starting monitoring loop - parent_pid={}, activation_id={}",
-           parent_pid, activation_id);
+    debug!(
+        "Executive: Starting monitoring loop - parent_pid={}, activation_id={}",
+        parent_pid, activation_id
+    );
 
     loop {
         // Check if parent PID is still alive
@@ -205,9 +217,9 @@ fn check_registry_pids(activations_json_path: &Path, activation_id: &str) -> Res
         return Ok(false);
     };
 
-    let mut activations = activations.check_version().map_err(|e| {
-        anyhow!("Failed to check activations version: {}", e)
-    })?;
+    let mut activations = activations
+        .check_version()
+        .map_err(|e| anyhow!("Failed to check activations version: {}", e))?;
 
     // Find our activation
     let Some(activation) = activations.activation_for_id_mut(activation_id) else {
@@ -220,7 +232,10 @@ fn check_registry_pids(activations_json_path: &Path, activation_id: &str) -> Res
     let pids_removed = activation.remove_terminated_pids();
 
     if pids_removed {
-        debug!("Executive: Pruned dead PIDs from activation {}", activation_id);
+        debug!(
+            "Executive: Pruned dead PIDs from activation {}",
+            activation_id
+        );
     }
 
     // Check if there are any PIDs remaining after pruning
@@ -237,15 +252,24 @@ fn check_registry_pids(activations_json_path: &Path, activation_id: &str) -> Res
 
 /// Clean up the activation state directory and any temporary files.
 fn cleanup_activation_state(activation_state_dir: &Path) -> Result<()> {
-    debug!("Executive: Cleaning up activation state: {:?}", activation_state_dir);
+    debug!(
+        "Executive: Cleaning up activation state: {:?}",
+        activation_state_dir
+    );
 
     // Remove the activation state directory
     if activation_state_dir.exists() {
         std::fs::remove_dir_all(activation_state_dir)
             .context("Failed to remove activation state directory")?;
-        debug!("Executive: Removed activation state directory: {:?}", activation_state_dir);
+        debug!(
+            "Executive: Removed activation state directory: {:?}",
+            activation_state_dir
+        );
     } else {
-        debug!("Executive: Activation state directory already removed: {:?}", activation_state_dir);
+        debug!(
+            "Executive: Activation state directory already removed: {:?}",
+            activation_state_dir
+        );
     }
 
     Ok(())

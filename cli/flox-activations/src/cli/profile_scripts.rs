@@ -4,7 +4,7 @@ use clap::Args;
 use log::debug;
 
 use super::{join_dir_list, separate_dir_list};
-use crate::shell_gen::{Shell, source_file};
+use crate::shell_gen::{source_file, Shell};
 
 #[derive(Debug, Args)]
 pub struct ProfileScriptsArgs {

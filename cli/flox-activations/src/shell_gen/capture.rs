@@ -213,8 +213,9 @@ fn unescape_bash_string(s: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::TempDir;
+
+    use super::*;
 
     #[test]
     fn test_unescape_bash_string_basic() {
@@ -224,17 +225,26 @@ mod tests {
 
     #[test]
     fn test_unescape_bash_string_quotes() {
-        assert_eq!(unescape_bash_string(r#"say \"hello\""#).unwrap(), r#"say "hello""#);
+        assert_eq!(
+            unescape_bash_string(r#"say \"hello\""#).unwrap(),
+            r#"say "hello""#
+        );
     }
 
     #[test]
     fn test_unescape_bash_string_backslash() {
-        assert_eq!(unescape_bash_string(r"path\\to\\file").unwrap(), r"path\to\file");
+        assert_eq!(
+            unescape_bash_string(r"path\\to\\file").unwrap(),
+            r"path\to\file"
+        );
     }
 
     #[test]
     fn test_unescape_bash_string_special_chars() {
-        assert_eq!(unescape_bash_string(r"line1\nline2").unwrap(), "line1\nline2");
+        assert_eq!(
+            unescape_bash_string(r"line1\nline2").unwrap(),
+            "line1\nline2"
+        );
         assert_eq!(unescape_bash_string(r"tab\there").unwrap(), "tab\there");
         assert_eq!(unescape_bash_string(r"\$dollar").unwrap(), "$dollar");
         assert_eq!(unescape_bash_string(r"\`backtick\`").unwrap(), "`backtick`");

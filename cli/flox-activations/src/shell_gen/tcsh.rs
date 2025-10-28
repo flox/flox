@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 
-use crate::shell_gen::Shell;
 use crate::shell_gen::capture::ExportEnvDiff;
+use crate::shell_gen::Shell;
 
 /// Arguments for generating tcsh startup commands
 pub struct TcshStartupArgs {

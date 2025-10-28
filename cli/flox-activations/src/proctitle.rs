@@ -2,7 +2,6 @@
 ///
 /// This module implements setproctitle-style functionality by modifying
 /// the process's argv memory region.
-
 use std::ffi::CString;
 use std::sync::OnceLock;
 
@@ -46,7 +45,7 @@ pub fn init() {
                 Err(e) => {
                     debug!("proctitle::init: failed to read cmdline: {}", e);
                     return None;
-                }
+                },
             };
 
             if cmdline.is_empty() {
@@ -112,8 +111,10 @@ pub fn init() {
                     let total_len = argv_end as usize - check_addr as usize;
 
                     if total_len > 0 && total_len < 1024 * 1024 {
-                        debug!("proctitle::init: found argv at {:p}, {} bytes available",
-                               check_addr, total_len);
+                        debug!(
+                            "proctitle::init: found argv at {:p}, {} bytes available",
+                            check_addr, total_len
+                        );
 
                         return Some(ArgvMemory {
                             start: check_addr as *mut u8,
@@ -160,15 +161,14 @@ fn set_comm_name(title: &str) -> Result<()> {
     };
 
     unsafe {
-        let c_title = CString::new(comm_title)
-            .context("Failed to create CString for prctl")?;
+        let c_title = CString::new(comm_title).context("Failed to create CString for prctl")?;
 
         let result = libc::prctl(
             libc::PR_SET_NAME,
             c_title.as_ptr() as libc::c_ulong,
             0,
             0,
-            0
+            0,
         );
 
         if result == 0 {
@@ -188,20 +188,19 @@ fn set_argv_memory(title: &str, argv_mem: &ArgvMemory) -> Result<()> {
         let copy_len = std::cmp::min(title_bytes.len(), argv_mem.len - 1);
 
         // Zero out the entire region
-        libc::memset(
-            argv_mem.start as *mut libc::c_void,
-            0,
-            argv_mem.len
-        );
+        libc::memset(argv_mem.start as *mut libc::c_void, 0, argv_mem.len);
 
         // Copy the new title
         libc::memcpy(
             argv_mem.start as *mut libc::c_void,
             title_bytes.as_ptr() as *const libc::c_void,
-            copy_len
+            copy_len,
         );
 
-        debug!("proctitle: set full process title ({} bytes): {}", copy_len, title);
+        debug!(
+            "proctitle: set full process title ({} bytes): {}",
+            copy_len, title
+        );
     }
 
     Ok(())
