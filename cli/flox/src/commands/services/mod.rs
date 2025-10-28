@@ -17,7 +17,7 @@ use super::{
     UninitializedEnvironment,
     activated_environments,
 };
-use crate::commands::activate::Activate;
+use crate::commands::activate::{Activate, InvocationType};
 use crate::commands::display_help;
 use crate::config::Config;
 use crate::utils::message;
@@ -331,9 +331,8 @@ pub async fn start_services_with_new_process_compose(
         config,
         flox,
         concrete_environment,
+        InvocationType::Command,
         true,
-        false,
-        false,
         &new_services_to_start(names),
     )
     .await?;
