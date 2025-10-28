@@ -101,9 +101,9 @@ flowchart TB
     n63 -.-> n138(["exec args"])
     n126 -- parent --> n127
     n126 -- child --> n121
-    n127 --> n136
+    n127 --> n130
     n116 --> n115
-    n130 --> n94
+    n130 --> n136
     n130 -.-> n116
     n35 --> n83
     n115 --> n140
@@ -111,7 +111,6 @@ flowchart TB
     n135(["flox-build.mk"]) -. "exec(.../activate)" .-> activate
     n137 -- continue if activating --> n34
     n137 -- "yes: fork() &amp;&amp;<br>exec(process-compose)" --> n96
-    n136 --> n130
     n66 -- "process-compose stop" --> n96
     n110 ~~~ n139
     n140 --> n137
@@ -124,6 +123,7 @@ flowchart TB
     n34 -- interactive --> n37
     n37 --> invoke
     n145 --> invoke
+    n136 --> n94
     n83@{ shape: doc}
     n137@{ shape: diam}
     n111@{ shape: diam}
