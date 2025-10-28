@@ -9,7 +9,7 @@ flowchart TB
         n34{"activation mode?"}
         n37[["exec(userShell<br>&lt;RCFILE_options&gt;)"]]
         n35[["echoInPlace(userShell)"]]
-        n83["print(flox-activations attach --timeout X)<br>print(flox-activation attach --remove $$)<br>replayenv($userShell)<br>cat($FLOX_ENV/activate.d/profile.common)<br>cat($FLOX_ENV/activate.d/profile.$userShell)<br>(_the latter replays the env again_)"]
+        n83["print(flox-activations attach --pid X --remove Y)<br>replayenv($userShell)<br>cat($FLOX_ENV/activate.d/profile.common)<br>cat($FLOX_ENV/activate.d/profile.$userShell)<br>(_the latter replays the env again_)"]
         n116["wait ready(child)"]
         n115["do_attach()"]
         n137["start services?"]
@@ -18,7 +18,7 @@ flowchart TB
         n146["exec(cmd args)"]
         invoke["userShell"]
         n147["set_env_dirs()<br>fix_paths()"]
-
+        n150["start-process-compose()"]
   end
  subgraph s2["process-compose"]
         n96["process-compose"]
@@ -48,7 +48,7 @@ flowchart TB
         ns[["Await death of ppid()<br>_and_<br>registry_PIDs($_FLOX_UUID)"]]
         ny[["Clean up state<br>(remove temp files, etc.)"]]
         nv(["Rust Destructors<br>(Submit metrics, etc.)"])
-        n66[["stop_process-compose()"]]
+        n66[["stop-process-compose()"]]
         n121["exec(bash $FLOX_ENV/activate)"]
         n125["setsid()<br>register as subreaper"]
         n126["fork()"]
@@ -57,6 +57,8 @@ flowchart TB
         n94[["initialise metrics, etc."]]
         n100["submit spooled metrics<br>"]
         n136["close(0,1,2)<br>open(2,logfile)"]
+        n148["start_process_compose()"]
+        n149["replayEnv()"]
   end
  subgraph invoke["userShell"]
     direction TB
@@ -102,7 +104,7 @@ flowchart TB
     n63 -.-> n138(["exec args"])
     n126 -- parent --> n127
     n126 -- child --> n121
-    n127 --> n136
+    n127 --> n149
     n116 --> n115
     n130 -.-> n116
     n130 --> n94
@@ -111,8 +113,6 @@ flowchart TB
     n36 -- "exec(flox-activations)" --> n147
     n135(["flox-build.mk"]) -. "exec(.../activate)" .-> activate
     n137 -- continue if activating --> n34
-    n137 -- "yes: fork() &amp;&amp;<br>exec(process-compose)" --> n96
-    n66 -- "process-compose stop" --> n96
     n66 --> ny
     n110 ~~~ n139
     n140 --> n137
@@ -127,8 +127,12 @@ flowchart TB
     n145 --> invoke
     n136 --> n130
     n147 --> n111
+    n148 --> n136 & n96
+    n149 --> n148
+    n137 -- yes --> n150
     n83@{ shape: doc}
     n137@{ shape: diam}
+    n150@{ shape: subproc}
     n111@{ shape: diam}
     n112@{ shape: diam}
     n113@{ shape: diam}
@@ -147,11 +151,12 @@ flowchart TB
     style n140 fill:#FFE0B2
     style n145 fill:#FFE0B2
     style n146 fill:#FFE0B2
+    style n147 fill:#FFE0B2
+    style n150 fill:#FFE0B2
     style n111 fill:#C8E6C9
     style n112 fill:#C8E6C9
     style n113 fill:#C8E6C9
     style n114 fill:#C8E6C9
-    style n147 fill:#FFE0B2
     style n7 fill:#BBDEFB
     style n6 fill:#BBDEFB
     style n62 fill:#BBDEFB
@@ -174,6 +179,8 @@ flowchart TB
     style n94 fill:#FFE0B2
     style n100 fill:#FFE0B2
     style n136 fill:#FFE0B2
+    style n148 fill:#FFE0B2
+    style n149 fill:#FFE0B2
     style n82 fill:#E1BEE7
     style n141 fill:#E1BEE7
     style n142 fill:#E1BEE7
