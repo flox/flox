@@ -59,7 +59,7 @@ pub enum ServicesCommands {
     #[bpaf(command, hide)]
     Help,
     /// Restart a service or services
-    #[bpaf(command)]
+    #[bpaf(command, short('r'))]
     Restart(#[bpaf(external(restart::restart))] restart::Restart),
 
     /// Ensure a service or services are running
@@ -75,7 +75,11 @@ pub enum ServicesCommands {
     Stop(#[bpaf(external(stop::stop))] stop::Stop),
 
     /// Print logs of services
-    #[bpaf(command, footer("Run 'man flox-services-logs' for more details."))]
+    #[bpaf(
+        command,
+        short('l'),
+        footer("Run 'man flox-services-logs' for more details.")
+    )]
     Logs(#[bpaf(external(logs::logs))] logs::Logs),
 }
 
