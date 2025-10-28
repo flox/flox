@@ -140,7 +140,11 @@ impl Activate {
             .await?;
         }
 
-        if config.flox.upgrade_notifications.unwrap_or(true) {
+        let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
+        let interactive = !in_place && self.run_args.is_empty();
+        let command_mode = !in_place && !interactive;
+
+        if !command_mode && config.flox.upgrade_notifications.unwrap_or(true) {
             // Read the results of a previous upgrade check
             // and print a message if an upgrade is available.
             notify_upgrade_if_available(&flox, &mut concrete_environment)?;
@@ -158,8 +162,16 @@ impl Activate {
             None,
         )?;
 
-        self.activate(config, flox, concrete_environment, false, &[])
-            .await
+        self.activate(
+            config,
+            flox,
+            concrete_environment,
+            false,
+            in_place,
+            interactive,
+            &[],
+        )
+        .await
     }
 
     /// This function contains the bulk of the implementation for
@@ -178,6 +190,8 @@ impl Activate {
         flox: Flox,
         mut concrete_environment: ConcreteEnvironment,
         is_ephemeral: bool,
+        in_place: bool,
+        interactive: bool,
         services_to_start: &[String],
     ) -> Result<()> {
         let now_active = UninitializedEnvironment::from_concrete_environment(&concrete_environment);
@@ -209,9 +223,6 @@ impl Activate {
         // breadcrumb metric to estimate use of composition
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
-
-        let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
-        let interactive = !in_place && self.run_args.is_empty();
 
         let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
         let rendered_env_path = match rendered_env_path_result {

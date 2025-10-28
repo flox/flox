@@ -332,6 +332,8 @@ pub async fn start_services_with_new_process_compose(
         flox,
         concrete_environment,
         true,
+        false,
+        false,
         &new_services_to_start(names),
     )
     .await?;
