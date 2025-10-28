@@ -9,3 +9,14 @@ options = []
 includes = [ "*.nix" ]
 # Glob patterns of files to exclude
 excludes = []
+
+
+[formatter.yaml]
+# Formatter to run
+command = "yamlfmt"
+# Command-line arguments for the command
+options = []
+# Glob pattern of files to include
+includes = [ "*.yml", "*.yaml" ]
+# Glob patterns of files to exclude
+excludes = [ "test_data/**" ]
