@@ -147,6 +147,13 @@ impl ActivateArgs {
             .arg(activation_state_dir.to_string_lossy().to_string());
         command.arg("--activation-id").arg(&activation_id);
 
+        // Replay environment variables directly in the Rust process
+        // This implements the replayEnv() step from the Mermaid diagram
+        crate::shell_gen::capture::replay_env(
+            activation_state_dir.join("add.env"),
+            activation_state_dir.join("del.env"),
+        )?;
+
         let export_env_diff = ExportEnvDiff::from_files(
             activation_state_dir.join("add.env"),
             activation_state_dir.join("del.env"),
