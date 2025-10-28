@@ -1,10 +1,14 @@
 use std::collections::HashMap;
 use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
 use flox_core::activate_data::ActivateData;
+use flox_core::activations;
+use flox_core::proc_status::pid_is_running;
 use flox_core::util::default_nix_env_vars;
 use log::debug;
 use nix::sys::wait::waitpid;
@@ -65,13 +69,120 @@ pub fn executive(
             close(1).context("Failed to close stdout")?;
             close(2).context("Failed to close stderr")?;
 
-            // sleep indefinitely to simulate running executive
-            // In a real scenario, this would be the main loop of the executive process
-            loop {
-                std::thread::sleep(std::time::Duration::from_secs(60));
-            }
+            // Main monitoring loop: await death of parent PID and all registry PIDs
+            monitoring_loop(parent_pid, &data, &activation_state_dir, &activation_id)?;
+
+            // If we reach here, all PIDs are dead - proceed with cleanup
+            Ok(())
         },
     }
+}
+
+/// Main monitoring loop for the Executive process.
+///
+/// Monitors both the parent PID and registry PIDs, and exits when both are dead.
+/// This implements the flow from the refactor diagram:
+/// - n94: Initialize metrics (placeholder)
+/// - n100: Submit spooled metrics (placeholder)
+/// - ns: Await death of ppid() AND registry_PIDs
+/// - n66: stop_process-compose() (placeholder)
+/// - ny: Clean up state
+/// - nv: Rust Destructors (handled automatically on function exit)
+fn monitoring_loop(
+    parent_pid: Pid,
+    data: &ActivateData,
+    activation_state_dir: &Path,
+    activation_id: &str,
+) -> Result<()> {
+    // n94: Initialize metrics, etc. (placeholder)
+    debug!("Initializing executive monitoring loop");
+
+    // n100: Submit spooled metrics (placeholder)
+    debug!("Submitting spooled metrics (placeholder)");
+
+    // n ns: Main monitoring loop - await death of ppid AND registry PIDs
+    let activations_json_path = activations::activations_json_path(&data.flox_runtime_dir, &data.env);
+    let poll_interval = Duration::from_secs(1);
+
+    loop {
+        // Check if parent PID is still alive
+        let parent_alive = pid_is_running(parent_pid.as_raw());
+
+        // Check if there are any PIDs attached to our activation in the registry
+        let registry_pids_exist = check_registry_pids(&activations_json_path, activation_id)?;
+
+        if !parent_alive && !registry_pids_exist {
+            debug!(
+                "Parent PID {} is dead and no registry PIDs remain for activation {}",
+                parent_pid, activation_id
+            );
+            break;
+        }
+
+        if !parent_alive {
+            debug!(
+                "Parent PID {} is dead, but registry PIDs still exist for activation {}",
+                parent_pid, activation_id
+            );
+        }
+
+        // Sleep before next poll
+        thread::sleep(poll_interval);
+    }
+
+    debug!("Monitoring loop complete, proceeding with cleanup");
+
+    // n66: stop_process-compose() (placeholder)
+    debug!("Stopping process-compose (placeholder)");
+
+    // ny: Clean up state (remove temp files, etc.)
+    cleanup_activation_state(activation_state_dir)?;
+
+    // nv: Rust Destructors will submit metrics, etc. (handled automatically)
+    debug!("Executive monitoring loop exiting");
+
+    Ok(())
+}
+
+/// Check if there are any PIDs attached to our activation in the registry.
+/// This reads activations.json and checks if our activation has any living PIDs.
+fn check_registry_pids(activations_json_path: &Path, activation_id: &str) -> Result<bool> {
+    // Read the activations file
+    let (activations, _lock) = activations::read_activations_json(activations_json_path)?;
+
+    let Some(activations) = activations else {
+        // No activations file means no PIDs
+        return Ok(false);
+    };
+
+    let activations = activations.check_version().map_err(|e| {
+        anyhow!("Failed to check activations version: {}", e)
+    })?;
+
+    // Find our activation
+    let Some(activation) = activations.activation_for_id_ref(activation_id) else {
+        // Our activation is gone, so no PIDs
+        return Ok(false);
+    };
+
+    // Check if there are any attached PIDs
+    // The activation should have already been pruned by the registry logic,
+    // so if there are PIDs here, they should be alive
+    Ok(!activation.attached_pids().is_empty())
+}
+
+/// Clean up the activation state directory and any temporary files.
+fn cleanup_activation_state(activation_state_dir: &Path) -> Result<()> {
+    debug!("Cleaning up activation state: {:?}", activation_state_dir);
+
+    // Remove the activation state directory
+    if activation_state_dir.exists() {
+        std::fs::remove_dir_all(activation_state_dir)
+            .context("Failed to remove activation state directory")?;
+        debug!("Removed activation state directory: {:?}", activation_state_dir);
+    }
+
+    Ok(())
 }
 
 /// Exec the activate script (bash .../activate)
