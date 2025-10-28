@@ -22,6 +22,7 @@
   stdenv,
   treefmt,
   writeShellScript,
+  yamlfmt,
   yq,
   ci ? false,
 }:
@@ -46,6 +47,7 @@ let
       pstree
       shfmt
       treefmt
+      yamlfmt
       yq
     ]
     ++ lib.optionals stdenv.isLinux [

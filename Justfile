@@ -316,13 +316,15 @@ test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
     clang-format -i nix-plugins/src/**/*.cc; \
     clang-format -i nix-plugins/include/**/*.hh
 
-
 @format-nix:
-    treefmt
+    treefmt -f nix
+
+# format yaml files (i.e.e github actions)
+@format-yaml:
+    treefmt -f yaml
 
 # Format all the code
-format: format-cli format-nix-plugins format-nix
-
+format: format-cli format-nix-plugins format-nix format-yaml
 # ---------------------------------------------------------------------------- #
 #
 #
