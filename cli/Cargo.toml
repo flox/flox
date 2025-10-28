@@ -4,12 +4,11 @@ members = [
     "flox-rust-sdk",
     "catalog-api-v1",
     "mk_data",
-    "flox-watchdog",
     "flox-activations",
     "flox-core",
     "flox-test-utils",
 ]
-default-members = ["flox", "flox-watchdog", "flox-activations"]
+default-members = ["flox", "flox-activations"]
 
 resolver = "2"
 
@@ -75,6 +74,7 @@ serde_json = "1"
 serde_with = "3.15.0"
 serde_yaml = "0.9"
 shell-escape = "0.1.5"
+signal-hook = "0.3.18"
 slug = "0.1"
 supports-color = "3.0.2"
 # provides process tools for shell detection
@@ -104,10 +104,6 @@ xdg = "2.4"
 pretty_assertions = "1.4"
 serial_test = "3.2.0"
 temp-env = "0.3.2"
-
-# watchdog dependencies
-kqueue = "1.1.1"
-signal-hook = "0.3.18"
 
 # build(.rs) dependencies
 openapiv3 = "2.2"

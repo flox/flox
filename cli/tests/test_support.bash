@@ -174,7 +174,7 @@ common_file_teardown() {
 
 teardown_file() { common_file_teardown; }
 
-# Wait for all watchdogs called with `project_dir` as part of one of their
+# Wait for all executives called with `project_dir` as part of one of their
 # arguments.
 #
 # This is primarily used in `teardown()` to prevent us leaving stray
@@ -187,11 +187,11 @@ teardown_file() { common_file_teardown; }
 # preserve other output, at the expense of aborting any other cleanup.
 #
 # NB2: It cannot be reliably used inlined of tests to wait for activations or
-# services to be cleaned up because it can exit before a watchdog has started.
-wait_for_watchdogs() {
+# services to be cleaned up because it can exit before a executive has started.
+wait_for_executives() {
   project_dir="${1?}"
   if [ -z "$project_dir" ]; then
-    echo "ERROR: cannot wait for watchdogs with empty project_dir" >&3
+    echo "ERROR: cannot wait for executives with empty project_dir" >&3
     return 1
   fi
   # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
@@ -204,16 +204,16 @@ wait_for_watchdogs() {
   local pids
   pids="$(
     ps -Ao pid,args \
-    | grep flox-watchdog \
+    | grep flox-executive \
     | grep "$project_dir" \
     | sed 's/^[[:blank:]]*//' \
     | cut -d' ' -f1)"
 
-  # Uncomment to debug which watchdogs are running.
+  # Uncomment to debug which executives are running.
   #
   # echo "project_dir => ${project_dir}" >&3
   # ps -Ao pid,args \
-  #  | grep flox-watchdog \
+  #  | grep flox-executive \
   #  >&3
 
   if [ -n "${pids?}" ]; then
@@ -224,12 +224,12 @@ wait_for_watchdogs() {
         break
       else
         if [[ $tries -gt 1000 ]]; then
-          echo "ERROR: flox-watchdog processes did not finish after 10 seconds" >&3
-          echo "Watchdog logs:" >&3
-          cat "${project_dir}"/.flox/log/watchdog.* >&3
+          echo "ERROR: flox-executive processes did not finish after 10 seconds" >&3
+          echo "executive logs:" >&3
+          cat "${project_dir}"/.flox/log/executive.* >&3
           echo "Bats processes:" >&3
           pstree -ws "$BATS_RUN_TMPDIR" >&3
-          # This will fail the test giving us a better idea of which watchdog
+          # This will fail the test giving us a better idea of which executive
           # didn't get cleaned up
           return 1
         fi

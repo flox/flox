@@ -48,9 +48,6 @@ pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
 });
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
-pub static WATCHDOG_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
-    PathBuf::from(env::var("WATCHDOG_BIN").unwrap_or(env!("WATCHDOG_BIN").to_string()))
-});
 pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
 });
@@ -404,7 +401,6 @@ impl Activate {
             env_cache: concrete_environment.cache_path()?.into_inner(),
             env_description: now_active.bare_description(),
             mode: mode.to_string(),
-            watchdog: (*WATCHDOG_BIN).clone(),
             shell,
             flox_active_environments: flox_active_environments.to_string(),
             flox_env_log_dir: concrete_environment

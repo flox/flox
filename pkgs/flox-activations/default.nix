@@ -22,7 +22,7 @@ craneLib.buildPackage ({
 
   # Note about incremental compilation:
   #
-  # Unlike the `flox` and `flox-watchdog` packages,
+  # Unlike the `flox` package,
   # we cannot reuse the `flox-*-deps` packages for incremental compilation
   # because this crate is built with the "small" profile,
   # which among othet things applies different compiler optimizations.
@@ -30,7 +30,7 @@ craneLib.buildPackage ({
   # Crane will still cache the dependencies of this package,
   # through its own automation, but will experience cache misses
   # if we add shared (internal) packages.
-  cargoExtraArgs = "--locked -p flox-activations";
+  cargoExtraArgs = "-p flox-activations";
 
   CARGO_LOG = "cargo::core::compiler::fingerprint=info";
   CARGO_PROFILE = "small";

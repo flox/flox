@@ -54,25 +54,6 @@ start() {
   # Set static environment variables from the manifest.
   set_manifest_vars "$FLOX_ENV"
 
-  # Start the watchdog if passed a watchdog binary
-  #
-  # hook.on-activate could call `exit`, can leave the activation in a non-ready state
-  # It runs in the same shell, and the activation is set to 'ready'
-  # only _after_ the hook is run.
-  # Start a watchdog to ensure the activation is cleaned up when the process dies.
-  if [ -n "${_FLOX_WATCHDOG_BIN:-}" ]; then
-    # TODO: Some of these args can be removed after https://github.com/flox/flox/issues/2206
-    "$_daemonize" \
-      -E _FLOX_WATCHDOG_LOG_LEVEL="${_FLOX_WATCHDOG_LOG_LEVEL:-debug}" \
-      "$_FLOX_WATCHDOG_BIN" \
-      ${FLOX_DISABLE_METRICS:+--disable-metrics} \
-      --log-dir "$_FLOX_ENV_LOG_DIR" \
-      --socket "$_FLOX_SERVICES_SOCKET" \
-      --flox-env "$FLOX_ENV" \
-      --activation-id "$_FLOX_ACTIVATION_ID" \
-      --runtime-dir "$FLOX_RUNTIME_DIR"
-  fi
-
   # Source the hook-on-activate script if it exists.
   if [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
     # Nothing good can come from output printed to stdout in the

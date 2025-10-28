@@ -44,7 +44,7 @@ flowchart TB
         n110["registry logic<br>(in rust)"]
         n139(["untracked<br>activation"])
   end
- subgraph watchdog["Executive"]
+ subgraph executive["Executive"]
         ns[["Await death of ppid()<br>_and_<br>registry_PIDs($_FLOX_UUID)"]]
         ny[["Clean up state<br>(remove temp files, etc.)"]]
         nv(["Rust Destructors<br>(Submit metrics, etc.)"])
@@ -186,7 +186,7 @@ flowchart TB
     style n138 fill:#FFF9C4,stroke-width:2px,stroke-dasharray: 2
     style n135 fill:#FFF9C4,stroke-width:2px,stroke-dasharray: 2
     style activate fill:#F8F8F8
-    style watchdog fill:#F8F8F8
+    style executive fill:#F8F8F8
     style cli fill:#F8F8F8
     style s2 fill:#F8F8F8
     style s4 fill:transparent

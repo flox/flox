@@ -285,10 +285,6 @@ impl ActivateArgs {
             .arg(data.env_cache.to_string_lossy().to_string());
         command.arg("--env-description").arg(data.env_description);
 
-        command
-            .arg("--watchdog")
-            .arg(data.watchdog.to_string_lossy().to_string());
-
         command.arg("--shell").arg(data.shell.exe_path());
 
         command

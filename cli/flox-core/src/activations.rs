@@ -14,7 +14,7 @@ type Error = anyhow::Error;
 
 /// Latest supported version for compatibility between:
 /// - `flox` and `flox-interpreter`
-/// - `flox-activations` and `flox-watchdog`
+/// - `flox-activations`
 ///
 /// Incrementing this will require existing activations to exit.
 const LATEST_VERSION: u8 = 1;
@@ -247,7 +247,7 @@ impl Activation {
     /// Attach a PID to an activation.
     ///
     /// Register another PID that runs the same activation of an environment.
-    /// Registered PIDs are used by the watchdog,
+    /// Registered PIDs are used by the executive,
     /// to determine when an activation can be cleaned up.
     pub fn attach_pid(&mut self, pid: i32, expiration: Option<OffsetDateTime>) {
         let attached_pid = AttachedPid { pid, expiration };

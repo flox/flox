@@ -22,9 +22,6 @@ pub struct ActivateData {
     /// The activation mode (dev or run)
     pub mode: String,
 
-    /// Path to the watchdog binary
-    pub watchdog: PathBuf,
-
     /// Path to the shell executable
     pub shell: Shell,
 

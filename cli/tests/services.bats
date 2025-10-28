@@ -68,10 +68,10 @@ setup() {
 
 teardown() {
   cat_teardown_fifo
-  # Wait for watchdogs before project teardown, otherwise some tests will hang
+  # Wait for executives before project teardown, otherwise some tests will hang
   # forever.
   #
-  # I'm guessing this is because the watchdog and process-compose have logfiles
+  # I'm guessing this is because the executive and process-compose have logfiles
   # in the project directory,
   # so maybe one of them tries to log something and hangs.
   # ps output is showing a process-compose down hanging forever,
@@ -80,14 +80,14 @@ teardown() {
   # I'd check the logs to confirm what's happening...
   # ...if only the reproducer wasn't to delete the logs.
   #
-  # When running in parallel `wait_for_watchdogs`
-  # may wait for watchdog processes of unrelated tests.
+  # When running in parallel `wait_for_executives`
+  # may wait for executive processes of unrelated tests.
   # It tries to avoid non-test processes by looking for the data dir argument,
-  # passed to the watchdog process.
+  # passed to the executive process.
   # Within the `services` tests, we call `setup_isolated_flox` during `setup()`,
   # which sets the data dir to a unique value for every test,
-  # thus avoiding waiting for unrelated watchdog processes.
-  wait_for_watchdogs "$PROJECT_DIR" || return 1
+  # thus avoiding waiting for unrelated executive processes.
+  wait_for_executives "$PROJECT_DIR" || return 1
   project_teardown
   common_test_teardown
 }
@@ -600,8 +600,8 @@ EOF
 )
     assert_success
 
-    # give the watchdog a chance to clean up the services before the next iteration
-    wait_for_watchdogs "$PROJECT_DIR"
+    # give the executive a chance to clean up the services before the next iteration
+    wait_for_executives "$PROJECT_DIR"
   done
 }
 
@@ -639,8 +639,8 @@ EOF
 Exit all activations of the environment and try again.
 PIDs of the running activations: ${ACTIVATION_PID}"
 
-    # give the watchdog a chance to clean up the services before the next iteration
-    wait_for_watchdogs "$PROJECT_DIR"
+    # give the executive a chance to clean up the services before the next iteration
+    wait_for_executives "$PROJECT_DIR"
     rm "$ACTIVATIONS_JSON"
   done
 }
@@ -985,9 +985,9 @@ EOF
   run grep "process=flox_never_exit" "${PROJECT_DIR}"/.flox/log/services.*.log
   assert_success
 
-  # Poll because watchdog may not have started by the time the activation finishes.
+  # Poll because executive may not have started by the time the activation finishes.
   run timeout 1s bash -c "
-    while ! grep 'flox_watchdog: starting' \"$PROJECT_DIR\"/.flox/log/watchdog.*.log*; do
+    while ! grep 'flox_executive: starting' \"$PROJECT_DIR\"/.flox/log/executive.*.log*; do
       sleep 0.1
     done
   "
@@ -1089,7 +1089,7 @@ EOF
 @test "activate: starts services for in-place activations" {
   setup_sleeping_services
 
-  # Run in a sub-shell so that `wait_for_watchdogs` in `teardown` can verify
+  # Run in a sub-shell so that `wait_for_executives` in `teardown` can verify
   # that the activation is cleaned up on exit and implicitly that services are
   # shutdown.
   run bash -c '
@@ -1403,7 +1403,7 @@ EOF
   assert_success
   assert_output --partial '"exit_code": 0'
 
-  wait_for_watchdogs "$PROJECT_DIR"
+  wait_for_executives "$PROJECT_DIR"
 
   CPATH= \
     run "$FLOX_BIN" activate --mode run -- bash -c "$SCRIPT"
@@ -1518,10 +1518,10 @@ EOF
   "$FLOX_BIN" activate --start-services -- bash -c "echo > started_1 && echo > $TEARDOWN_FIFO" &
   timeout 2 cat started_1
 
-  # Check that services and watchdog are both running
+  # Check that services and executive are both running
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
-  watchdog_1_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
-  run cat "$watchdog_1_log"
+  executive_1_log="$(echo $PROJECT_DIR/.flox/log/executive.*.log.*)"
+  run cat "$executive_1_log"
   assert_success
   assert_output --partial "woof"
 
@@ -1552,25 +1552,25 @@ EOF
   run cat output
   assert_output --partial "⚠️  Skipped starting services, services are already running"
 
-  # Check that watchdog 1 has finished cleanup
-  run cat "$watchdog_1_log"
+  # Check that executive 1 has finished cleanup
+  run cat "$executive_1_log"
   assert_output --partial "woof"
-  wait_for_partial_file_content "$watchdog_1_log" "finished cleanup"
-  rm "$watchdog_1_log"
+  wait_for_partial_file_content "$executive_1_log" "finished cleanup"
+  rm "$executive_1_log"
 
-  # Check that watchdog 2 is running
-  watchdog_2_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log.*)"
-  run cat "$watchdog_2_log"
+  # Check that executive 2 is running
+  executive_2_log="$(echo $PROJECT_DIR/.flox/log/executive.*.log.*)"
+  run cat "$executive_2_log"
   assert_output --partial "woof"
   refute_output "finished cleanup"
 
-  # Even though watchdog 1 cleaned up, services should still be running
+  # Even though executive 1 cleaned up, services should still be running
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
 
-  # Teardown 2nd activation and wait for watchdog to cleanup
+  # Teardown 2nd activation and wait for executive to cleanup
   cat finished_2
   unset TEARDOWN_FIFO
-  wait_for_partial_file_content "$watchdog_2_log" "finished cleanup"
+  wait_for_partial_file_content "$executive_2_log" "finished cleanup"
 
   # Make sure services have stopped
   timeout 1s bash -c '
