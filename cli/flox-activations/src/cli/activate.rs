@@ -30,7 +30,6 @@ use super::StartOrAttachArgs;
 use super::attach::AttachArgs;
 use super::fix_paths::{fix_manpath_var, fix_path_var};
 use super::set_env_dirs::fix_env_dirs_var;
-use super::start_or_attach::wait_for_activation_ready_and_optionally_attach_pid;
 use crate::cli::attach::AttachExclusiveArgs;
 use crate::executive::executive;
 use crate::shell_gen::Shell as ShellGen;
@@ -79,7 +78,10 @@ impl ActivateArgs {
         }
         .handle()?;
 
-        if !attach {
+        if attach {
+            debug!("Attaching to existing activation in state dir {:?}, id {}",
+                activation_state_dir, activation_id);
+        } else {
             let parent_pid = getpid();
             match unsafe { fork() } {
                 Ok(ForkResult::Child) => {
@@ -133,31 +135,7 @@ impl ActivateArgs {
                     return Err(anyhow!("Fork failed: {}", e));
                 }
             }
-
-/*
-            debug!("No existing activation found");
-            let mut start_command = Self::assemble_command_for_activate_script(data.clone());
-            start_command.arg("--mode").arg("start");
-            start_command
-                .arg("--activation-state-dir")
-                .arg(activation_state_dir.to_string_lossy().to_string());
-            start_command.arg("--activation-id").arg(&activation_id);
-            debug!("starting activation: {:?}", start_command);
-            start_command
-                // Hooks may use stdin, stdout, stderr
-                .stderr(Stdio::inherit())
-                .stdout(Stdio::inherit())
-                .stdin(Stdio::inherit())
-                .spawn()?;
-
-            let attach_expiration = OffsetDateTime::now_utc() + Duration::seconds(10);
-            wait_for_activation_ready_and_optionally_attach_pid(
-                &activations_json_path(&data.flox_runtime_dir, data.env.clone()),
-                &data.flox_activate_store_path,
-                attach_expiration,
-                None,
-            )?;
-*/
+            debug!("Finished spawning activation - proceeding to attach");
         }
         let mut command = Self::assemble_command_for_activate_script(data.clone());
         // Pass down the activation mode
