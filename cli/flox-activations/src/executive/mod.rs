@@ -66,6 +66,45 @@ pub fn executive(
                 },
             }
 
+            // Replay the environment from the activation script
+            // This ensures process-compose inherits the correct environment
+            debug!("Replaying environment from activation");
+            if let Err(e) = crate::shell_gen::capture::replay_env(
+                activation_state_dir.join("add.env"),
+                activation_state_dir.join("del.env"),
+            ) {
+                debug!("Failed to replay environment: {}", e);
+                // Continue anyway - this is not fatal
+            }
+
+            // n148: Start process-compose daemon
+            // This must happen BEFORE closing stdio so process-compose can start properly
+            // We always start the daemon (with flox_never_exit) so we can attach later to start services
+            debug!("Starting process-compose daemon");
+            let service_config_path = PathBuf::from(&data.env).join("service-config.yaml");
+            let socket_path = PathBuf::from(&data.flox_services_socket);
+
+            // Only pass services to start if flox_activate_start_services is true
+            // Otherwise start the daemon with just flox_never_exit (no user services initially)
+            let services_to_start: Option<Vec<String>> = if data.flox_activate_start_services {
+                data.flox_services_to_start.as_ref().and_then(|json| {
+                    serde_json::from_str(json)
+                        .inspect_err(|e| debug!("Failed to parse services JSON: {}", e))
+                        .ok()
+                })
+            } else {
+                None
+            };
+
+            if let Err(e) = crate::process_compose::start_process_compose(
+                &service_config_path,
+                &socket_path,
+                services_to_start.as_deref(),
+            ) {
+                debug!("Failed to start process-compose: {}", e);
+                // Continue anyway - services failure shouldn't break activation
+            }
+
             // n136: Daemonize by closing stdin, stdout, and redirecting stderr to log file
             debug!("Daemonizing: closing stdin/stdout and redirecting stderr to log");
             close(0).context("Failed to close stdin")?;
@@ -191,8 +230,14 @@ fn monitoring_loop(
 
     debug!("Executive: Monitoring loop complete, proceeding with cleanup");
 
-    // n66: stop_process-compose() (placeholder)
-    debug!("Executive: Stopping process-compose (placeholder)");
+    // n66: stop_process-compose()
+    // Always stop process-compose since we always start it
+    debug!("Executive: Stopping process-compose");
+    let socket_path = PathBuf::from(&data.flox_services_socket);
+    if let Err(e) = crate::process_compose::stop_process_compose(&socket_path) {
+        debug!("Failed to stop process-compose: {}", e);
+        // Continue with cleanup anyway
+    }
 
     // ny: Clean up state (remove temp files, etc.)
     cleanup_activation_state(activation_state_dir)?;

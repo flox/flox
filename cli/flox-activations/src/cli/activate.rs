@@ -934,7 +934,47 @@ impl ActivateArgs {
     }
 
     fn start_services() {
-        todo!();
+        // This function is called after attaching to an existing activation
+        // It starts services via the process-compose socket if needed
+
+        // Get the socket path from the environment
+        let socket_path = match std::env::var(FLOX_SERVICES_SOCKET_VAR) {
+            Ok(path) => path,
+            Err(_) => {
+                debug!("FLOX_SERVICES_SOCKET not set, skipping service start");
+                return;
+            },
+        };
+
+        // Get the services to start from the environment (JSON array)
+        let services_json = match std::env::var(FLOX_SERVICES_TO_START_VAR) {
+            Ok(json) => json,
+            Err(_) => {
+                debug!("No services specified to start");
+                return;
+            },
+        };
+
+        // Parse the JSON array of service names
+        let services: Vec<String> = match serde_json::from_str(&services_json) {
+            Ok(services) => services,
+            Err(e) => {
+                debug!("Failed to parse services JSON: {}", e);
+                return;
+            },
+        };
+
+        if services.is_empty() {
+            debug!("No services to start");
+            return;
+        }
+
+        // Start the services via the process-compose socket
+        debug!("Starting services: {:?}", services);
+        if let Err(e) = crate::process_compose::start_services(&socket_path, &services) {
+            debug!("Failed to start services: {}", e);
+            // Don't fail the activation - just log the error
+        }
     }
 }
 
