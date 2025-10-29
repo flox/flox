@@ -77,33 +77,39 @@ pub fn executive(
                 // Continue anyway - this is not fatal
             }
 
-            // n148: Start process-compose daemon
+            // n148: Start process-compose daemon (only if service-config.yaml exists)
             // This must happen BEFORE closing stdio so process-compose can start properly
-            // We always start the daemon (with flox_never_exit) so we can attach later to start services
-            debug!("Starting process-compose daemon");
             let service_config_path = PathBuf::from(&data.env).join("service-config.yaml");
             let socket_path = PathBuf::from(&data.flox_services_socket);
+            let process_compose_started = if service_config_path.exists() {
+                debug!("Starting process-compose daemon with config: {:?}", service_config_path);
 
-            // Only pass services to start if flox_activate_start_services is true
-            // Otherwise start the daemon with just flox_never_exit (no user services initially)
-            let services_to_start: Option<Vec<String>> = if data.flox_activate_start_services {
-                data.flox_services_to_start.as_ref().and_then(|json| {
-                    serde_json::from_str(json)
-                        .inspect_err(|e| debug!("Failed to parse services JSON: {}", e))
-                        .ok()
-                })
+                // Only pass services to start if flox_activate_start_services is true
+                let services_to_start: Option<Vec<String>> = if data.flox_activate_start_services {
+                    data.flox_services_to_start.as_ref().and_then(|json| {
+                        serde_json::from_str(json)
+                            .inspect_err(|e| debug!("Failed to parse services JSON: {}", e))
+                            .ok()
+                    })
+                } else {
+                    None
+                };
+
+                if let Err(e) = crate::process_compose::start_process_compose(
+                    &service_config_path,
+                    &socket_path,
+                    services_to_start.as_deref(),
+                ) {
+                    debug!("Failed to start process-compose: {}", e);
+                    // Continue anyway - services failure shouldn't break activation
+                    false
+                } else {
+                    true
+                }
             } else {
-                None
+                debug!("No service-config.yaml found, skipping process-compose startup");
+                false
             };
-
-            if let Err(e) = crate::process_compose::start_process_compose(
-                &service_config_path,
-                &socket_path,
-                services_to_start.as_deref(),
-            ) {
-                debug!("Failed to start process-compose: {}", e);
-                // Continue anyway - services failure shouldn't break activation
-            }
 
             // n136: Daemonize by closing stdin, stdout, and redirecting stderr to log file
             debug!("Daemonizing: closing stdin/stdout and redirecting stderr to log");
@@ -131,7 +137,7 @@ pub fn executive(
             }
 
             // Main monitoring loop: await death of parent PID and all registry PIDs
-            monitoring_loop(parent_pid, &data, &activation_state_dir, &activation_id)?;
+            monitoring_loop(parent_pid, &data, &activation_state_dir, &activation_id, process_compose_started)?;
 
             // If we reach here, all PIDs are dead - proceed with cleanup
             Ok(())
@@ -182,6 +188,7 @@ fn monitoring_loop(
     data: &ActivateData,
     activation_state_dir: &Path,
     activation_id: &str,
+    process_compose_started: bool,
 ) -> Result<()> {
     // n94: Initialize metrics, etc. (placeholder)
     debug!(
@@ -230,13 +237,14 @@ fn monitoring_loop(
 
     debug!("Executive: Monitoring loop complete, proceeding with cleanup");
 
-    // n66: stop_process-compose()
-    // Always stop process-compose since we always start it
-    debug!("Executive: Stopping process-compose");
-    let socket_path = PathBuf::from(&data.flox_services_socket);
-    if let Err(e) = crate::process_compose::stop_process_compose(&socket_path) {
-        debug!("Failed to stop process-compose: {}", e);
-        // Continue with cleanup anyway
+    // n66: stop_process-compose() (only if we started it)
+    if process_compose_started {
+        debug!("Executive: Stopping process-compose");
+        let socket_path = PathBuf::from(&data.flox_services_socket);
+        if let Err(e) = crate::process_compose::stop_process_compose(&socket_path) {
+            debug!("Failed to stop process-compose: {}", e);
+            // Continue with cleanup anyway
+        }
     }
 
     // ny: Clean up state (remove temp files, etc.)

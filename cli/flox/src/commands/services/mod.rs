@@ -232,6 +232,37 @@ pub fn warn_manifest_changes_for_services(flox: &Flox, env: &dyn Environment) {
     }
 }
 
+/// Warn when services are added to an active environment's manifest.
+/// This requires restarting the entire activation, not just restarting services.
+pub fn warn_services_added_to_active_environment(
+    old_lockfile: Option<&Lockfile>,
+    new_lockfile: &Lockfile,
+    env: &ConcreteEnvironment,
+) {
+    // Check if environment is currently active
+    let activated_environments = activated_environments();
+    let uninitialized_env = UninitializedEnvironment::from_concrete_environment(env);
+
+    if !activated_environments.is_active(&uninitialized_env) {
+        return;
+    }
+
+    // Check if services were added (old had no services, new has services)
+    let old_has_services = old_lockfile
+        .map(|lf| !lf.manifest.services.inner().is_empty())
+        .unwrap_or(false);
+
+    let new_has_services = !new_lockfile.manifest.services.inner().is_empty();
+
+    if !old_has_services && new_has_services {
+        message::warning(
+            "Services were added to the manifest for an active environment.\n\
+            \n\
+            To start services, exit and restart the activation with 'flox activate'.",
+        );
+    }
+}
+
 /// Try to find processes by name, typically provided by the user via arguments,
 /// or default to all `processes`.
 /// Typically `processes` will be the result of reading the processes

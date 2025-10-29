@@ -3,8 +3,7 @@
 /// This module handles starting and stopping the process-compose daemon,
 /// as well as communicating with it via the Unix socket to start services.
 
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 use std::thread;
@@ -18,49 +17,10 @@ static PROCESS_COMPOSE_BIN: LazyLock<String> = LazyLock::new(|| {
     std::env::var("PROCESS_COMPOSE_BIN").unwrap_or(env!("PROCESS_COMPOSE_BIN").to_string())
 });
 
-/// Path to the sleep binary for flox_never_exit service
-static SLEEP_BIN: LazyLock<String> = LazyLock::new(|| {
-    std::env::var("SLEEP_BIN").unwrap_or(env!("SLEEP_BIN").to_string())
-});
-
-/// Generate a minimal process-compose config with only flox_never_exit.
-///
-/// This is used when the service-config.yaml doesn't exist (no services defined).
-/// Returns the path to the generated config file in a temp location.
-fn generate_minimal_config() -> Result<PathBuf> {
-    // Create a minimal YAML config with just flox_never_exit
-    let config_content = format!(
-        r#"version: "0.5"
-log_level: error
-log_configuration:
-  no_metadata: true
-disable_env_expansion: true
-processes:
-  flox_never_exit:
-    command: "{sleep_bin} infinity"
-    is_daemon: false
-"#,
-        sleep_bin = *SLEEP_BIN
-    );
-
-    // Write to a temp file
-    let temp_dir = std::env::temp_dir();
-    let config_path = temp_dir.join(format!("flox-minimal-service-config-{}.yaml", std::process::id()));
-
-    fs::write(&config_path, config_content)
-        .context("Failed to write minimal service config")?;
-
-    debug!("Generated minimal service config at: {:?}", config_path);
-
-    Ok(config_path)
-}
-
 /// Start the process-compose daemon.
 ///
 /// This spawns process-compose in the background with the given config and socket.
 /// It waits for the socket file to appear before returning.
-///
-/// If the config file doesn't exist, a minimal config with just flox_never_exit is generated.
 ///
 /// # Arguments
 ///
@@ -79,18 +39,9 @@ pub fn start_process_compose(
     let config_path = config_path.as_ref();
     let socket_path = socket_path.as_ref();
 
-    // Check if config file exists, if not generate a minimal one
-    let actual_config_path: PathBuf = if config_path.exists() {
-        debug!("Using existing service config: {:?}", config_path);
-        config_path.to_path_buf()
-    } else {
-        debug!("Service config not found at {:?}, generating minimal config", config_path);
-        generate_minimal_config()?
-    };
-
     debug!(
         "Starting process-compose with config: {:?}, socket: {:?}",
-        actual_config_path, socket_path
+        config_path, socket_path
     );
 
     // Build the command
@@ -99,7 +50,7 @@ pub fn start_process_compose(
         .arg("--unix-socket")
         .arg(socket_path)
         .arg("--config")
-        .arg(&actual_config_path)
+        .arg(config_path)
         .arg("--tui=false")
         .arg("up");
 
