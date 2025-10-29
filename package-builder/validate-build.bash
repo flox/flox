@@ -8,6 +8,7 @@ set -euo pipefail
 
 _basename="@coreutils@/bin/basename"
 _env="@coreutils@/bin/env"
+_grep="@gnugrep@/bin/grep"
 _jq="@jq@/bin/jq"
 _nix="@nix@/bin/nix"
 _nix_store="@nix@/bin/nix-store"
@@ -386,7 +387,7 @@ function report_missing_files {
         fi
     # Note: we assume filenames and ref_paths contain no colons.
     done < <(
-        grep --binary-files=text -RHo -e "${build_env}[^:\"'[:cntrl:][:space:]]*" -- "$output_dir"
+        $_grep --binary-files=text -RHo -e "${build_env}[^:\"'[:cntrl:][:space:]]*" -- "$output_dir"
     )
 
     return $rc
