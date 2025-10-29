@@ -4,6 +4,7 @@
   hostPlatform,
   inputs,
   lib,
+  process-compose,
   pkgsFor,
   rust-toolchain,
   rustfmt ? rust-toolchain.rustfmt,
@@ -36,6 +37,9 @@ craneLib.buildPackage ({
   CARGO_PROFILE = "small";
   # used internally to ensure CA certificates are available
   NIXPKGS_CACERT_BUNDLE_CRT = cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
+
+  # Required in environment at build time.
+  PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
 
   # runtime dependencies
   buildInputs = rust-external-deps.buildInputs ++ [ ];
