@@ -193,13 +193,13 @@ impl ActivateArgs {
         // Replay environment variables directly in the Rust process
         // This implements the replayEnv() step from the Mermaid diagram
         crate::shell_gen::capture::replay_env(
-            activation_state_dir.join("add.env"),
-            activation_state_dir.join("del.env"),
+            activation_state_dir.join("start.env.json"),
+            activation_state_dir.join("end.env.json"),
         )?;
 
         let export_env_diff = ExportEnvDiff::from_files(
-            activation_state_dir.join("add.env"),
-            activation_state_dir.join("del.env"),
+            activation_state_dir.join("start.env.json"),
+            activation_state_dir.join("end.env.json"),
         )?;
         let env_diff: EnvDiff = (&export_env_diff).try_into()?;
         let vars_from_environment = VarsFromEnvironment::get()?;

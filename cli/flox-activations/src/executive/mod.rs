@@ -70,8 +70,8 @@ pub fn executive(
             // This ensures process-compose inherits the correct environment
             debug!("Replaying environment from activation");
             if let Err(e) = crate::shell_gen::capture::replay_env(
-                activation_state_dir.join("add.env"),
-                activation_state_dir.join("del.env"),
+                activation_state_dir.join("start.env.json"),
+                activation_state_dir.join("end.env.json"),
             ) {
                 debug!("Failed to replay environment: {}", e);
                 // Continue anyway - this is not fatal

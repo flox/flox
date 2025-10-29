@@ -94,7 +94,7 @@ start() {
     map(select(
       ($start[0][.key] // null) != .value
     )) |
-    map("\(.key)=\(.value)") |
+    map("\(.key)=\(.value | @sh)") |
     .[]
   ' "$_end_env" > "$_add_env"
 
