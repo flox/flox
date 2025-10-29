@@ -75,6 +75,7 @@ _sed := $(call __package_bin,$(__gnused),sed)
 _sha256sum := $(call __package_bin,$(__coreutils),sha256sum)
 _sort := $(call __package_bin,$(__coreutils),sort)
 _tar := $(call __package_bin,$(__gnutar),tar)
+_touch := $(call __package_bin,$(__coreutils),touch)
 _t3 := $(call __package_bin,$(__t3),t3) --relative $(if $(NO_COLOR),,--forcecolor)
 _tr := $(call __package_bin,$(__coreutils),tr)
 _uname := $(call __package_bin,$(__coreutils),uname)
@@ -193,8 +194,8 @@ $(PROJECT_TMPDIR)/check-build-prerequisites:
 	@# Check that the BUILDTIME_NIXPKGS_URL and EXPRESSION_BUILD_NIXPKGS_URL are defined.
 	$(if $(BUILDTIME_NIXPKGS_URL),,$(error BUILDTIME_NIXPKGS_URL not defined))
 	$(if $(EXPRESSION_BUILD_NIXPKGS_URL),,$(error EXPRESSION_BUILD_NIXPKGS_URL not defined))
-	@mkdir -p $(@D)
-	@touch $@
+	@$(_mkdir) -p $(@D)
+	@$(_touch) $@
 
 # The `nix build` command will attempt a rebuild in every instance,
 # and we will presumably want `flox build` to do the same. However,
