@@ -62,6 +62,55 @@ pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES
 // TODO
 pub const RM: &str = "rm";
 
+/// Build a HashMap of environment variables to set from ActivateData.
+/// This is the common logic used by both the CLI activation and executive processes.
+pub fn build_activation_env_vars(data: &ActivateData) -> HashMap<&'static str, String> {
+    let mut exports = HashMap::from([
+        (FLOX_ACTIVE_ENVIRONMENTS_VAR, data.flox_active_environments.clone()),
+        (FLOX_ENV_LOG_DIR_VAR, data.flox_env_log_dir.clone()),
+        ("FLOX_PROMPT_COLOR_1", data.prompt_color_1.clone()),
+        ("FLOX_PROMPT_COLOR_2", data.prompt_color_2.clone()),
+        (FLOX_PROMPT_ENVIRONMENTS_VAR, data.flox_prompt_environments.clone()),
+        ("_FLOX_SET_PROMPT", data.set_prompt.to_string()),
+        (
+            "_FLOX_ACTIVATE_STORE_PATH",
+            data.flox_activate_store_path.clone(),
+        ),
+        (FLOX_RUNTIME_DIR_VAR, data.flox_runtime_dir.clone()),
+        ("_FLOX_ENV_CUDA_DETECTION", data.flox_env_cuda_detection.clone()),
+        (
+            FLOX_ACTIVATE_START_SERVICES_VAR,
+            data.flox_activate_start_services.to_string(),
+        ),
+        (FLOX_SERVICES_SOCKET_VAR, data.flox_services_socket.clone()),
+    ]);
+
+    if let Some(services_to_start) = &data.flox_services_to_start {
+        exports.insert(FLOX_SERVICES_TO_START_VAR, services_to_start.clone());
+    }
+
+    exports.extend(default_nix_env_vars());
+
+    exports
+}
+
+/// Set activation environment variables directly in the current process.
+/// This should be called after replay_env() to ensure Rust-managed variables
+/// (like FLOX_PROMPT_ENVIRONMENTS) are set correctly, overriding any stale
+/// values from the activation script's environment capture.
+///
+/// # Safety
+/// This function uses unsafe operations to modify the process environment.
+pub fn set_activation_env_vars_in_process(data: &ActivateData) {
+    let env_vars = build_activation_env_vars(data);
+
+    for (key, value) in env_vars {
+        unsafe {
+            std::env::set_var(key, value);
+        }
+    }
+}
+
 impl ActivateArgs {
     pub fn handle(self, verbosity: u8) -> Result<(), anyhow::Error> {
         let contents = fs::read_to_string(&self.activate_data)?;
@@ -197,6 +246,11 @@ impl ActivateArgs {
             activation_state_dir.join("end.env.json"),
         )?;
 
+        // After replaying the environment from the activation script, explicitly set
+        // the Rust-managed variables (like FLOX_PROMPT_ENVIRONMENTS) to their correct values.
+        // This ensures they override any stale values captured by the activation script.
+        set_activation_env_vars_in_process(&data);
+
         let export_env_diff = ExportEnvDiff::from_files(
             activation_state_dir.join("start.env.json"),
             activation_state_dir.join("end.env.json"),
@@ -276,38 +330,7 @@ impl ActivateArgs {
     }
 
     fn assemble_command_for_activate_script(data: ActivateData) -> Command {
-        let mut exports = HashMap::from([
-            (FLOX_ACTIVE_ENVIRONMENTS_VAR, data.flox_active_environments),
-            (FLOX_ENV_LOG_DIR_VAR, data.flox_env_log_dir),
-            ("FLOX_PROMPT_COLOR_1", data.prompt_color_1),
-            ("FLOX_PROMPT_COLOR_2", data.prompt_color_2),
-            // Set `FLOX_PROMPT_ENVIRONMENTS` to the constructed prompt string,
-            // which may be ""
-            (FLOX_PROMPT_ENVIRONMENTS_VAR, data.flox_prompt_environments),
-            ("_FLOX_SET_PROMPT", data.set_prompt.to_string()),
-            (
-                "_FLOX_ACTIVATE_STORE_PATH",
-                data.flox_activate_store_path.clone(),
-            ),
-            (
-                // TODO: we should probably figure out a more consistent way to
-                // pass this since it's also passed for `flox build`
-                FLOX_RUNTIME_DIR_VAR,
-                data.flox_runtime_dir.clone(),
-            ),
-            ("_FLOX_ENV_CUDA_DETECTION", data.flox_env_cuda_detection),
-            (
-                FLOX_ACTIVATE_START_SERVICES_VAR,
-                data.flox_activate_start_services.to_string(),
-            ),
-            (FLOX_SERVICES_SOCKET_VAR, data.flox_services_socket),
-        ]);
-
-        if let Some(services_to_start) = data.flox_services_to_start {
-            exports.insert(FLOX_SERVICES_TO_START_VAR, services_to_start);
-        }
-
-        exports.extend(default_nix_env_vars());
+        let exports = build_activation_env_vars(&data);
 
         let activate_path = data.interpreter_path.join("activate");
         let mut command = Command::new(activate_path);

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::process::CommandExt;
@@ -11,12 +10,12 @@ use anyhow::{anyhow, Context, Result};
 use flox_core::activate_data::ActivateData;
 use flox_core::activations;
 use flox_core::proc_status::pid_is_running;
-use flox_core::util::default_nix_env_vars;
 use log::debug;
 use nix::sys::wait::waitpid;
 use nix::unistd::{close, fork, ForkResult, Pid};
 
 use crate::cli::activate::{
+    build_activation_env_vars,
     FLOX_ACTIVATE_START_SERVICES_VAR,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
     FLOX_ENV_LOG_DIR_VAR,
@@ -335,31 +334,7 @@ fn exec_activate_script(
     activation_state_dir: PathBuf,
     activation_id: String,
 ) -> Result<()> {
-    let mut exports = HashMap::from([
-        (FLOX_ACTIVE_ENVIRONMENTS_VAR, data.flox_active_environments),
-        (FLOX_ENV_LOG_DIR_VAR, data.flox_env_log_dir),
-        ("FLOX_PROMPT_COLOR_1", data.prompt_color_1),
-        ("FLOX_PROMPT_COLOR_2", data.prompt_color_2),
-        (FLOX_PROMPT_ENVIRONMENTS_VAR, data.flox_prompt_environments),
-        ("_FLOX_SET_PROMPT", data.set_prompt.to_string()),
-        (
-            "_FLOX_ACTIVATE_STORE_PATH",
-            data.flox_activate_store_path.clone(),
-        ),
-        (FLOX_RUNTIME_DIR_VAR, data.flox_runtime_dir.clone()),
-        ("_FLOX_ENV_CUDA_DETECTION", data.flox_env_cuda_detection),
-        (
-            FLOX_ACTIVATE_START_SERVICES_VAR,
-            data.flox_activate_start_services.to_string(),
-        ),
-        (FLOX_SERVICES_SOCKET_VAR, data.flox_services_socket),
-    ]);
-
-    if let Some(services_to_start) = data.flox_services_to_start {
-        exports.insert(FLOX_SERVICES_TO_START_VAR, services_to_start);
-    }
-
-    exports.extend(default_nix_env_vars());
+    let exports = build_activation_env_vars(&data);
 
     let activate_path = data.interpreter_path.join("activate");
     let mut command = Command::new(activate_path);
