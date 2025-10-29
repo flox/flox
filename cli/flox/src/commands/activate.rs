@@ -208,8 +208,7 @@ impl Activate {
 
         let in_place = self.print_script
             || (!stdout().is_tty() && self.run_args.is_empty() && self.command_script.is_none());
-        let interactive =
-            !in_place && self.run_args.is_empty() && self.command_script.is_none();
+        let interactive = !in_place && self.run_args.is_empty() && self.command_script.is_none();
 
         let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
         let rendered_env_path = match rendered_env_path_result {

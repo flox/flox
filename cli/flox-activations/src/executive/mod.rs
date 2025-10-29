@@ -6,16 +6,15 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use flox_core::activate_data::ActivateData;
 use flox_core::activations;
 use flox_core::proc_status::pid_is_running;
 use log::debug;
 use nix::sys::wait::waitpid;
-use nix::unistd::{close, fork, ForkResult, Pid};
+use nix::unistd::{ForkResult, Pid, close, fork};
 
 use crate::cli::activate::{
-    build_activation_env_vars,
     FLOX_ACTIVATE_START_SERVICES_VAR,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
     FLOX_ENV_LOG_DIR_VAR,
@@ -23,6 +22,7 @@ use crate::cli::activate::{
     FLOX_RUNTIME_DIR_VAR,
     FLOX_SERVICES_SOCKET_VAR,
     FLOX_SERVICES_TO_START_VAR,
+    build_activation_env_vars,
 };
 
 /// The Executive process manages the lifecycle of an activation.
@@ -81,7 +81,10 @@ pub fn executive(
             let service_config_path = PathBuf::from(&data.env).join("service-config.yaml");
             let socket_path = PathBuf::from(&data.flox_services_socket);
             let process_compose_started = if service_config_path.exists() {
-                debug!("Starting process-compose daemon with config: {:?}", service_config_path);
+                debug!(
+                    "Starting process-compose daemon with config: {:?}",
+                    service_config_path
+                );
 
                 // Only pass services to start if flox_activate_start_services is true
                 let services_to_start: Option<Vec<String>> = if data.flox_activate_start_services {
@@ -136,7 +139,13 @@ pub fn executive(
             }
 
             // Main monitoring loop: await death of parent PID and all registry PIDs
-            monitoring_loop(parent_pid, &data, &activation_state_dir, &activation_id, process_compose_started)?;
+            monitoring_loop(
+                parent_pid,
+                &data,
+                &activation_state_dir,
+                &activation_id,
+                process_compose_started,
+            )?;
 
             // If we reach here, all PIDs are dead - proceed with cleanup
             Ok(())

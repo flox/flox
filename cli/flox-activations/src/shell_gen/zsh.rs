@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 
-use crate::shell_gen::capture::ExportEnvDiff;
 use crate::shell_gen::Shell;
+use crate::shell_gen::capture::ExportEnvDiff;
 
 /// Arguments for generating zsh startup commands
 pub struct ZshStartupArgs {

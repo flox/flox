@@ -2,7 +2,6 @@
 ///
 /// This module handles starting and stopping the process-compose daemon,
 /// as well as communicating with it via the Unix socket to start services.
-
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::LazyLock;
@@ -65,9 +64,7 @@ pub fn start_process_compose(
         .stderr(Stdio::null());
 
     // Spawn the process
-    let child = cmd
-        .spawn()
-        .context("Failed to spawn process-compose")?;
+    let child = cmd.spawn().context("Failed to spawn process-compose")?;
 
     debug!("Process-compose spawned with PID: {}", child.id());
 
@@ -132,7 +129,9 @@ pub fn stop_process_compose(socket_path: impl AsRef<Path>) -> Result<()> {
         .arg("--unix-socket")
         .arg(socket_path);
 
-    let output = cmd.output().context("Failed to execute process-compose down")?;
+    let output = cmd
+        .output()
+        .context("Failed to execute process-compose down")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -151,10 +150,7 @@ pub fn stop_process_compose(socket_path: impl AsRef<Path>) -> Result<()> {
 ///
 /// * `socket_path` - Path to the Unix socket for process-compose
 /// * `service_names` - Names of services to start
-pub fn start_services(
-    socket_path: impl AsRef<Path>,
-    service_names: &[String],
-) -> Result<()> {
+pub fn start_services(socket_path: impl AsRef<Path>, service_names: &[String]) -> Result<()> {
     let socket_path = socket_path.as_ref();
 
     if service_names.is_empty() {

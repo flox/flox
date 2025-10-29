@@ -7,7 +7,7 @@ use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Args;
 use flox_core::activate_data::ActivateData;
 use flox_core::activations::activations_json_path;
@@ -17,26 +17,26 @@ use indoc::formatdoc;
 use is_executable::IsExecutable;
 use itertools::Itertools;
 #[cfg(target_os = "linux")]
-use libc::{prctl, setsid, PR_SET_CHILD_SUBREAPER};
+use libc::{PR_SET_CHILD_SUBREAPER, prctl, setsid};
 use log::debug;
-use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
-use nix::unistd::{fork, getpid, getppid, ForkResult, Pid};
+use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
+use nix::unistd::{ForkResult, Pid, fork, getpid, getppid};
 use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
 use time::{Duration, OffsetDateTime};
 
+use super::StartOrAttachArgs;
 use super::attach::AttachArgs;
 use super::fix_paths::{fix_manpath_var, fix_path_var};
 use super::set_env_dirs::fix_env_dirs_var;
-use super::StartOrAttachArgs;
 use crate::cli::attach::AttachExclusiveArgs;
 use crate::executive::executive;
-use crate::shell_gen::bash::{generate_bash_startup_commands, BashStartupArgs};
-use crate::shell_gen::capture::{EnvDiff, ExportEnvDiff};
-use crate::shell_gen::fish::{generate_fish_startup_commands, FishStartupArgs};
-use crate::shell_gen::tcsh::{generate_tcsh_startup_commands, TcshStartupArgs};
-use crate::shell_gen::zsh::{generate_zsh_startup_script, ZshStartupArgs};
 use crate::shell_gen::Shell as ShellGen;
+use crate::shell_gen::bash::{BashStartupArgs, generate_bash_startup_commands};
+use crate::shell_gen::capture::{EnvDiff, ExportEnvDiff};
+use crate::shell_gen::fish::{FishStartupArgs, generate_fish_startup_commands};
+use crate::shell_gen::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
+use crate::shell_gen::zsh::{ZshStartupArgs, generate_zsh_startup_script};
 
 #[derive(Debug, Args)]
 pub struct ActivateArgs {
@@ -66,18 +66,27 @@ pub const RM: &str = "rm";
 /// This is the common logic used by both the CLI activation and executive processes.
 pub fn build_activation_env_vars(data: &ActivateData) -> HashMap<&'static str, String> {
     let mut exports = HashMap::from([
-        (FLOX_ACTIVE_ENVIRONMENTS_VAR, data.flox_active_environments.clone()),
+        (
+            FLOX_ACTIVE_ENVIRONMENTS_VAR,
+            data.flox_active_environments.clone(),
+        ),
         (FLOX_ENV_LOG_DIR_VAR, data.flox_env_log_dir.clone()),
         ("FLOX_PROMPT_COLOR_1", data.prompt_color_1.clone()),
         ("FLOX_PROMPT_COLOR_2", data.prompt_color_2.clone()),
-        (FLOX_PROMPT_ENVIRONMENTS_VAR, data.flox_prompt_environments.clone()),
+        (
+            FLOX_PROMPT_ENVIRONMENTS_VAR,
+            data.flox_prompt_environments.clone(),
+        ),
         ("_FLOX_SET_PROMPT", data.set_prompt.to_string()),
         (
             "_FLOX_ACTIVATE_STORE_PATH",
             data.flox_activate_store_path.clone(),
         ),
         (FLOX_RUNTIME_DIR_VAR, data.flox_runtime_dir.clone()),
-        ("_FLOX_ENV_CUDA_DETECTION", data.flox_env_cuda_detection.clone()),
+        (
+            "_FLOX_ENV_CUDA_DETECTION",
+            data.flox_env_cuda_detection.clone(),
+        ),
         (
             FLOX_ACTIVATE_START_SERVICES_VAR,
             data.flox_activate_start_services.to_string(),
