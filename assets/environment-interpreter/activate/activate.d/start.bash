@@ -88,6 +88,7 @@ start() {
 
   # Capture environment variables to _set_ as "key=value" pairs with proper JSON escaping.
   # This finds keys that are new or changed in $_end_env compared to $_start_env.
+  # shellcheck disable=SC2016
   $_jq -rS --slurpfile start "$_start_env" '
     to_entries |
     map(select(
@@ -99,6 +100,7 @@ start() {
 
   # Capture environment variables to _unset_ as a list of keys.
   # This finds keys that exist in $_start_env but not in $_end_env.
+  # shellcheck disable=SC2016
   $_jq -rS --slurpfile end "$_end_env" '
     to_entries |
     map(select(
