@@ -19,7 +19,7 @@ use itertools::Itertools;
 #[cfg(target_os = "linux")]
 use libc::{prctl, setsid, PR_SET_CHILD_SUBREAPER};
 use log::debug;
-use nix::sys::wait::waitpid;
+use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 use nix::unistd::{fork, getpid, getppid, ForkResult, Pid};
 use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
@@ -126,12 +126,49 @@ impl ActivateArgs {
                                 break; // Proceed after receiving SIGUSR1
                             },
                             SIGCHLD => {
-                                debug!("Received SIGCHLD from child process {}", child);
-                                // Child has exited, return an error
-                                return Err(anyhow!(
-                                    "Activation process {} terminated unexpectedly",
-                                    child
-                                ));
+                                // SIGCHLD can come from any child process, not just ours.
+                                // Use waitpid with WNOHANG to check if OUR child has exited.
+                                match waitpid(child, Some(WaitPidFlag::WNOHANG)) {
+                                    Ok(WaitStatus::StillAlive) => {
+                                        // Our child is still alive, SIGCHLD was from a different process
+                                        debug!(
+                                            "Received SIGCHLD but child {} is still alive, continuing to wait",
+                                            child
+                                        );
+                                        continue;
+                                    },
+                                    Ok(status) => {
+                                        // Our child has exited
+                                        debug!(
+                                            "Child process {} exited unexpectedly with status: {:?}",
+                                            child, status
+                                        );
+                                        return Err(anyhow!(
+                                            "Activation process {} terminated unexpectedly with status: {:?}",
+                                            child,
+                                            status
+                                        ));
+                                    },
+                                    Err(nix::errno::Errno::ECHILD) => {
+                                        // Child already reaped, this shouldn't happen but handle gracefully
+                                        debug!(
+                                            "Received SIGCHLD but child {} already reaped",
+                                            child
+                                        );
+                                        return Err(anyhow!(
+                                            "Activation process {} terminated unexpectedly (already reaped)",
+                                            child
+                                        ));
+                                    },
+                                    Err(e) => {
+                                        // Unexpected error from waitpid
+                                        return Err(anyhow!(
+                                            "Failed to check status of activation process {}: {}",
+                                            child,
+                                            e
+                                        ));
+                                    },
+                                }
                             },
                             _ => unreachable!(),
                         }
