@@ -21,6 +21,7 @@ use proptest::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
+use systemd::unit::ServiceUnit;
 
 use super::raw::RawManifest;
 use crate::data::System;
@@ -797,6 +798,15 @@ pub struct ServiceDescriptor {
     pub is_daemon: Option<bool>,
     /// How to shut down the service
     pub shutdown: Option<ServiceShutdown>,
+
+    /// Additional manual config of the systemd service generated for persistent services
+    // Generating more than 1(!) value with proptest,
+    // increases the runtime of `proptest!`s to the point that we exhausted our stack space in CI
+    // Since we don't actually test against properties of systemd config,
+    // exclude this value from proptest state space generation.
+    #[cfg_attr(test, proptest(value = "None"))]
+    pub systemd: Option<ServiceUnit>,
+
     /// Systems to allow running the service on
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub systems: Option<Vec<System>>,

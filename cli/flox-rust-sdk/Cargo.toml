@@ -28,6 +28,7 @@ serde_yaml.workspace = true
 serde_with.workspace = true
 serde.workspace = true
 shell-escape.workspace = true
+systemd.workspace = true
 temp-env.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
@@ -62,10 +63,10 @@ sentry = { workspace = true, features = ["test"] }
 [features]
 # allow exporting test helpers in dev mode only
 tests = [
-    "tracing-subscriber",
-    "proptest",
-    "proptest-derive",
-    "pretty_assertions",
+    "dep:tracing-subscriber",
+    "dep:proptest",
+    "dep:proptest-derive",
+    "dep:pretty_assertions",
 ]
 extra-tests = ["impure-unit-tests"]
 impure-unit-tests = []
