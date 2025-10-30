@@ -199,25 +199,15 @@ case "$_flox_shell" in
     ;;
 esac
 
-# Convert the provided command string into an array of arguments in "$@".
-if [ -n "$FLOX_CMD" ]; then
+# Identify if exec()ing a command.
+if [ -n "$FLOX_CMD" ] || [ $# -gt 0 ]; then
   # Throw an error if passed additional arguments along with the -c arg.
-  if [ $# -gt 0 ]; then
+  if [ -n "$FLOX_CMD" ] && [ $# -gt 0 ]; then
     echo "Unexpected arguments provided with -c argument: $*" >&2
     echo "$USAGE" >&2
     exit 1
   fi
 
-  # Set $@ to reflect the command to be invoked.
-  set -- "$FLOX_CMD"
-fi
-
-# If defined, "$@" will command the command and args to be invoked.
-# Note that this can be a command like "echo foo" or a "command string"
-# to be evaluated by a shell like "true && echo foo". In both cases,
-# we exec with "bash -c" because bash can handle both forms AND is
-# smart enough to exec() into the final command provided.
-if [ $# -gt 0 ]; then
   # We don't ever need to attach,
   # and we don't want to run hook.on-activate, (?)
   # so just set the variables we need.
@@ -225,8 +215,11 @@ if [ $# -gt 0 ]; then
   # Set static environment variables from the manifest
   set_manifest_vars "$FLOX_ENV"
 
-  # exec $_bash --noprofile --norc -c "$@"
-  exec "$@"
+  if [ -n "$FLOX_CMD" ]; then
+    exec $_bash --noprofile --norc -c "$FLOX_CMD"
+  else
+    exec "$@"
+  fi
 fi
 
 # Confirm that $_flox_activation_state_dir is defined.

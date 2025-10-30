@@ -350,18 +350,14 @@ fn exec_activate_script(
     command.envs(exports);
 
     command.arg("--env").arg(&data.env);
-    command
-        .arg("--env-project")
-        .arg(data.env_project.to_string_lossy().to_string());
-    command
-        .arg("--env-cache")
-        .arg(data.env_cache.to_string_lossy().to_string());
-    command.arg("--env-description").arg(data.env_description);
 
     command.arg("--shell").arg(data.shell.exe_path());
 
     // Add activation-specific arguments
-    command.arg("--mode").arg("start");
+    command.arg("--mode").arg(data.mode);
+    command
+        .arg("--activation-state-dir")
+        .arg(activation_state_dir.to_string_lossy().to_string());
 
     debug!("Execing activate script: {:?}", command);
 
