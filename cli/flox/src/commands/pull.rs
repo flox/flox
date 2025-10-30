@@ -320,8 +320,9 @@ impl Pull {
                         .context("Could not clean up .flox/ directory")?;
                     bail!(e);
                 },
-                Ok(env) => {
+                Ok(mut env) => {
                     create_dot_flox_gitignore(env.dot_flox_path())?;
+                    env.rendered_env_links(flox)?;
                 },
             }
         }
