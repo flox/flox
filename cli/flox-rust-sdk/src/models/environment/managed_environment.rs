@@ -3,6 +3,7 @@ use std::str::FromStr;
 use std::{fs, io};
 
 use flox_core::Version;
+use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, instrument};
@@ -48,6 +49,7 @@ use crate::models::floxmeta::{
     BRANCH_NAME_PATH_SEPARATOR,
     FloxMeta,
     FloxMetaError,
+    floxmeta_dir,
     floxmeta_git_options,
 };
 use crate::models::lockfile::{LockResult, Lockfile};
@@ -79,6 +81,8 @@ pub struct ManagedEnvironment {
 
 #[derive(Debug, Error)]
 pub enum ManagedEnvironmentError {
+    #[error("failed to lock floxmeta git repo")]
+    LockFloxmeta(fslock::Error),
     #[error("failed to open floxmeta git repo: {0}")]
     OpenFloxmeta(FloxMetaError),
     #[error("failed to update floxmeta git repo: {0}")]
@@ -818,6 +822,34 @@ impl ManagedEnvironment {
         path_hash(&self.path)
     }
 
+    /// Ensure sequential writing access to the underlying floxmeta.
+    /// Currently used in [ManagedEnvironment::open] to avoid race conditions,
+    /// when multiple processes try to initialize a user's floxmeta.
+    ///
+    /// Git has limited safeguards for this situation,
+    /// most of which are to detect concurrent usage via file locks,
+    /// fail fast and clean up intermediate state if possible.
+    /// It is unclear to which extend flox should inherit or prevent this behavior.
+    /// Short term this is used during environment opening of environments only,
+    /// a broader solution (e.g. on a per environment/command level)
+    /// might follow later when requirements are clearer
+    #[instrument(fields(progress = "Waiting for lock to open or create Flox remote metadata"))]
+    fn require_floxmeta_lock(repo_path: &Path) -> Result<LockFile, ManagedEnvironmentError> {
+        let mut lock = LockFile::open(
+            &repo_path.with_file_name(
+                repo_path
+                    .file_name()
+                    .expect("path is non-empty")
+                    .to_string_lossy()
+                    .into_owned()
+                    + ".lock",
+            ),
+        )
+        .map_err(ManagedEnvironmentError::LockFloxmeta)?;
+        lock.lock().map_err(ManagedEnvironmentError::LockFloxmeta)?;
+        Ok(lock)
+    }
+
     /// Open a managed environment by reading its lockfile and ensuring there is
     /// a unique branch to track its state in floxmeta.
     ///
@@ -848,29 +880,51 @@ impl ManagedEnvironment {
         dot_flox_path: impl AsRef<Path>,
         generation: Option<GenerationId>,
     ) -> Result<Self, EnvironmentError> {
-        let floxmeta = match FloxMeta::open(flox, &pointer) {
-            Ok(floxmeta) => floxmeta,
-            Err(FloxMetaError::NotFound(_)) => {
-                debug!("cloning floxmeta for {}", pointer.owner);
-                FloxMeta::clone(flox, &pointer).map_err(ManagedEnvironmentError::OpenFloxmeta)?
-            },
-            Err(FloxMetaError::CloneBranch(GitRemoteCommandError::AccessDenied))
-            | Err(FloxMetaError::FetchBranch(GitRemoteCommandError::AccessDenied)) => {
+        let _lock = Self::require_floxmeta_lock(&floxmeta_dir(flox, &pointer.owner));
+
+        let existing_floxmeta = match FloxMeta::open(flox, &pointer) {
+            Ok(floxmeta) => Some(floxmeta),
+            Err(FloxMetaError::NotFound(_)) => None,
+            Err(FloxMetaError::FetchBranch(GitRemoteCommandError::AccessDenied)) => {
                 return Err(EnvironmentError::ManagedEnvironment(
                     ManagedEnvironmentError::AccessDenied,
-                ));
+                ))?;
             },
-            Err(FloxMetaError::CloneBranch(GitRemoteCommandError::RefNotFound(_)))
-            | Err(FloxMetaError::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
+            Err(FloxMetaError::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
                 return Err(EnvironmentError::ManagedEnvironment(
                     ManagedEnvironmentError::UpstreamNotFound {
                         env_ref: pointer.into(),
                         upstream: flox.floxhub.base_url().to_string(),
                         user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
                     },
-                ));
+                ))?;
             },
-            Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
+            Err(e) => return Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
+        };
+
+        let floxmeta = match existing_floxmeta {
+            Some(floxmeta) => floxmeta,
+            None => {
+                debug!("cloning floxmeta for {}", &pointer.owner);
+                match FloxMeta::clone(flox, &pointer) {
+                    Ok(floxmeta) => floxmeta,
+                    Err(FloxMetaError::CloneBranch(GitRemoteCommandError::AccessDenied)) => {
+                        return Err(EnvironmentError::ManagedEnvironment(
+                            ManagedEnvironmentError::AccessDenied,
+                        ))?;
+                    },
+                    Err(FloxMetaError::CloneBranch(GitRemoteCommandError::RefNotFound(_))) => {
+                        return Err(EnvironmentError::ManagedEnvironment(
+                            ManagedEnvironmentError::UpstreamNotFound {
+                                env_ref: pointer.into(),
+                                upstream: flox.floxhub.base_url().to_string(),
+                                user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
+                            },
+                        ))?;
+                    },
+                    Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
+                }
+            },
         };
 
         let dot_flox_path =
@@ -1534,6 +1588,23 @@ pub enum PushResult {
     Updated,
 }
 
+/// Ensure that the environment does not include local includes before pushing it to FloxHub
+fn check_for_local_includes(lockfile: &Lockfile) -> Result<(), ManagedEnvironmentError> {
+    let manifest = lockfile.user_manifest();
+    let has_local_include = manifest
+        .include
+        .environments
+        .iter()
+        .any(|include| matches!(include, IncludeDescriptor::Local { .. }));
+
+    if has_local_include {
+        Err(ManagedEnvironmentError::PushWithLocalIncludes)?;
+    }
+
+    Ok(())
+}
+
+/// FloxHub synchronization implementation (pull/push)
 impl ManagedEnvironment {
     /// Create a new [ManagedEnvironment] from a [PathEnvironment]
     /// by pushing the contents of the original environment as a generation to floxhub.
@@ -1927,22 +1998,6 @@ impl ManagedEnvironment {
 
         Ok(path_env)
     }
-}
-
-/// Ensure that the environment does not include local includes before pushing it to FloxHub
-fn check_for_local_includes(lockfile: &Lockfile) -> Result<(), ManagedEnvironmentError> {
-    let manifest = lockfile.user_manifest();
-    let has_local_include = manifest
-        .include
-        .environments
-        .iter()
-        .any(|include| matches!(include, IncludeDescriptor::Local { .. }));
-
-    if has_local_include {
-        Err(ManagedEnvironmentError::PushWithLocalIncludes)?;
-    }
-
-    Ok(())
 }
 
 pub mod test_helpers {
