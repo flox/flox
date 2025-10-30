@@ -362,10 +362,6 @@ fn exec_activate_script(
 
     // Add activation-specific arguments
     command.arg("--mode").arg("start");
-    command
-        .arg("--activation-state-dir")
-        .arg(activation_state_dir.to_string_lossy().to_string());
-    command.arg("--activation-id").arg(&activation_id);
 
     debug!("Execing activate script: {:?}", command);
 

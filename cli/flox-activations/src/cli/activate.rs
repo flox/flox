@@ -241,12 +241,6 @@ impl ActivateArgs {
         }
 
         let mut command = Self::assemble_command_for_activate_script(data.clone());
-        // Pass down the activation mode
-        command.arg("--mode").arg(&data.mode);
-        command
-            .arg("--activation-state-dir")
-            .arg(activation_state_dir.to_string_lossy().to_string());
-        command.arg("--activation-id").arg(&activation_id);
 
         // Replay environment variables directly in the Rust process
         // This implements the replayEnv() step from the Mermaid diagram
@@ -324,9 +318,9 @@ impl ActivateArgs {
                 &activation_state_dir,
                 activate_tracer,
             )?;
-        } else if let Some(command_script) = data.command_script {
-            Self::new_activate_command_script(
-                command_script,
+        } else if let Some(command_string) = data.command_string {
+            Self::new_activate_command_string(
+                command_string,
                 data.shell,
                 data.is_ephemeral,
                 activation_environment,
@@ -346,13 +340,6 @@ impl ActivateArgs {
         command.envs(exports);
 
         command.arg("--env").arg(&data.env);
-        command
-            .arg("--env-project")
-            .arg(data.env_project.to_string_lossy().to_string());
-        command
-            .arg("--env-cache")
-            .arg(data.env_cache.to_string_lossy().to_string());
-        command.arg("--env-description").arg(data.env_description);
 
         command.arg("--shell").arg(data.shell.exe_path());
 
@@ -499,16 +486,16 @@ impl ActivateArgs {
         }
     }
 
-    /// Used for `flox activate -c "command script"`
-    fn new_activate_command_script(
-        command_script: String,
+    /// Used for `flox activate -c "command string"`
+    fn new_activate_command_string(
+        command_string: String,
         shell: Shell,
         is_ephemeral: bool,
         env_diff: EnvDiff,
     ) -> Result<()> {
         let mut command = Self::assemble_command_with_environment(shell.exe_path(), &env_diff);
-        command.arg("-c").arg(command_script);
-        debug!("running command script in shell: {:?}", command);
+        command.arg("-c").arg(command_string);
+        debug!("running command string in shell: {:?}", command);
         if is_ephemeral {
             let output = command
                 .stderr(Stdio::piped())
@@ -516,7 +503,7 @@ impl ActivateArgs {
                 .output()?;
             if !output.status.success() {
                 Err(anyhow!(
-                    "failed to run command script: {}",
+                    "failed to run command string: {}",
                     String::from_utf8_lossy(&output.stderr)
                 ))?;
             }
@@ -546,6 +533,15 @@ impl ActivateArgs {
         activation_state_dir: &PathBuf,
         activate_tracer: String,
     ) -> Result<()> {
+        // Print greeting message to STDERR.
+        if data.interactive && !data.env_description.is_empty() {
+            eprintln!(
+                "✅ You are now using the environment '{}'.",
+                data.env_description
+            );
+            eprintln!("To stop using this environment, type 'exit'");
+            eprintln!();
+        }
         match data.shell {
             Shell::Bash(bash) => {
                 let bash_startup_args = BashStartupArgs {

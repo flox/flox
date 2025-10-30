@@ -195,9 +195,8 @@ pkgs.runCommandNoCC name
                 # N.B. not using t3 --forcecolor option because Nix sandbox
                 # strips color codes from output anyway.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
-                  ${develop-copy-env-package}/activate --env ${develop-copy-env-package} \
-                    --mode build --env-project $(pwd) -- \
-                      t3 --relative $log -- bash -e ${buildScript-contents}
+                  ${develop-copy-env-package}/activate --env ${develop-copy-env-package} -- \
+                    t3 --relative $log -- bash -e ${buildScript-contents}
               ''
             else
               ''
@@ -212,9 +211,8 @@ pkgs.runCommandNoCC name
                 # See flox-build.mk for a detailed explanation of why we use a nested
                 # activation when performing builds.
                 FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" \
-                  ${develop-copy-env-package}/activate --env ${develop-copy-env-package} \
-                    --mode build --env-project $(pwd) -- \
-                      t3 --relative $log -- bash -e ${buildScript-contents} || \
+                  ${develop-copy-env-package}/activate --env ${develop-copy-env-package} -- \
+                    t3 --relative $log -- bash -e ${buildScript-contents} || \
                 ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
           }

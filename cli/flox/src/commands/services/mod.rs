@@ -353,7 +353,7 @@ pub async fn start_services_with_new_process_compose(
         mode: Some(activate_mode),
         generation,
         run_args: vec!["true".to_string()],
-        command_script: None,
+        command_string: None,
     }
     .activate(
         config,

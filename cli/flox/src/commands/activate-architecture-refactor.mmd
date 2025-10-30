@@ -14,7 +14,7 @@ flowchart TB
         n115["do_attach()"]
         n137["start services?"]
         n140["replayEnv()"]
-        n145["exec(userShell<br>&lt;RCFILE_options&gt;<br>-c command_script)"]
+        n145["exec(userShell<br>&lt;RCFILE_options&gt;<br>-c command_string)"]
         n146["exec(cmd args)"]
         invoke["userShell"]
         n147["set_env_dirs()<br>fix_paths()"]
@@ -120,7 +120,7 @@ flowchart TB
     n142 --> n141
     n143 --> n144
     n144 --> n142
-    n34 -- "flox activate -c 'command script'" --> n145
+    n34 -- "flox activate -c 'command string'" --> n145
     n34 -- "flox activate -- cmd args" --> n146
     n34 -- interactive --> n37
     n37 --> invoke

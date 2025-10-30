@@ -358,7 +358,7 @@ endef
 
 # The following variables are used to track the set of variables to be redacted
 # from the environment prior to kicking off a manifest build.
-# TODO: move the clearing of variables to "activate --mode build"
+# TODO: move the clearing of variables to "activate"
 FLOX_MANAGED_ENV_VARS = \
   FLOX_ACTIVATE_TRACE FLOX_ENV_DIRS FLOX_RUNTIME_DIR \
   INFOPATH CPATH PKG_CONFIG_PATH ACLOCAL_PATH XDG_DATA_DIRS \
@@ -378,7 +378,7 @@ define BUILD_local_template =
 
   # Our aim in performing a manifest build is to replicate as closely as
   # possible the experience of running those same build script commands
-  # from within an interactive `flox activate -m dev` shell (i.e. using
+  # from within an interactive `flox activate --mode dev` shell (i.e. using
   # the "develop" environment), but we also need to provide a way to avoid
   # having to materialize compilers and tools not required at runtime, and
   # our approach for addressing this issue is the following:
@@ -423,8 +423,7 @@ define BUILD_local_template =
 	$(_VV_) $(_rm) -rf $($(_pvarname)_out)
 	$(_V_) $(_env) $$(QUOTED_ENV_DISALLOW_ARGS) out=$($(_pvarname)_out) \
 	  $(if $(_virtualSandbox),$(PRELOAD_VARS) FLOX_SRC_DIR=$(PWD) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
-	  $(FLOX_INTERPRETER)/activate --env $$($(_pvarname)_develop_copy_env) \
-	    --mode build --env-project $(PWD) -- \
+	  $(FLOX_INTERPRETER)/activate --env $$($(_pvarname)_develop_copy_env) -- \
 	    $(_t3) $($(_pvarname)_logfile) -- $(_bash) -e $$<
 	@#
 	@# Finally, rewrite references to temporary build wrapper in "out",
@@ -708,7 +707,7 @@ define JSON_VERSION_TO_COMMAND_jq =
       to_entries[] | \
       if .key == "file" then "$(_cat) \(.value)" else (
         if .key == "command" then (
-          "$(FLOX_ENV)/activate -m build -- \(.value)"
+          "$(FLOX_ENV)/activate -- \(.value)"
         ) else (
           "unknown version type: \(.key)" | halt_error(1)
         ) end
