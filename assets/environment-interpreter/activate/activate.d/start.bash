@@ -12,7 +12,7 @@ _sort="@coreutils@/bin/sort"
 start() {
   _flox_activation_state_dir="${1?}"
   shift
-  _flox_shell_mode="${1?}"
+  _flox_invocation_type="${1?}"
   shift
 
   if [ -z "$_flox_activation_state_dir" ]; then
@@ -25,7 +25,7 @@ start() {
   # Don't clobber STDERR or recommend 'exit' for non-interactive shells.
   # If inside a container, FLOX_ENV_DESCRIPTION won't be set, and we don't need to
   # print a message
-  if [ "${_flox_shell_mode}" = "interactive" ] && [ -n "${FLOX_ENV_DESCRIPTION:-}" ]; then
+  if [ "${_flox_invocation_type}" = "interactive" ] && [ -n "${FLOX_ENV_DESCRIPTION:-}" ]; then
     echo "✅ You are now using the environment '$FLOX_ENV_DESCRIPTION'." >&2
     echo "To stop using this environment, type 'exit'" >&2
     echo >&2
