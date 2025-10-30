@@ -63,19 +63,20 @@ source "${_activate_d}/helpers.bash"
 #   activation scripts
 
 # Parse command-line arguments.
-OPTIONS="c:e:m:ns:"
+OPTIONS="c:e:m:ns:v"
 LONGOPTS="activation-state-dir:,\
 command-string:,\
 env:,\
 mode:,\
 no-run-hook-on-activate,\
-shell:"
+shell:,\
+verbose"
 USAGE="Usage: $0 [(-c|--command-string) \"<cmd> <args>\"] \
 [(-e|--env) <env>] \
 [(-m|--mode) (dev|run)] \
 [(-n|--no-run-hook-on-activate)] \
-[(-s|--shell) <shell>]"
-
+[(-s|--shell) <shell>] \
+[(-v|--verbose)]"
 if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
   echo "Failed to parse options." >&2
   echo "$USAGE" >&2
@@ -151,6 +152,10 @@ while true; do
       fi
       _FLOX_SHELL="$1"
       shift
+      ;;
+    -v | --verbose)
+      shift
+      set -x
       ;;
     --)
       shift

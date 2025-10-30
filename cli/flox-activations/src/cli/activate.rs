@@ -630,7 +630,7 @@ impl ActivateArgs {
                     }
                 }
 
-                // export HOME to point to activate.d/tcsh_home dir containing
+                // Export HOME to point to activate.d/tcsh_home dir containing
                 // our custom .tcshrc.
                 /// SAFETY: called once, prior to possible concurrent access to env
                 unsafe {
@@ -641,6 +641,21 @@ impl ActivateArgs {
                             .join("tcsh_home")
                             .to_string_lossy()
                             .to_string(),
+                    );
+                }
+
+                // Set _flox_* variables in the environment prior to sourcing
+                // our custom .tcshrc that will otherwise fall over.
+                /// SAFETY: called once, prior to possible concurrent access to env
+                unsafe {
+                    std::env::set_var(
+                        "_activate_d", tcsh_startup_args
+			    .activate_d.to_string_lossy().to_string(),
+                    );
+                    std::env::set_var(
+                        "_flox_activate_tracelevel", tcsh_startup_args
+			    .flox_activate_tracelevel
+			    .to_string(),
                     );
                 }
 
