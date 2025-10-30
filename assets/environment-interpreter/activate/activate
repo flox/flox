@@ -63,16 +63,18 @@ source "${_activate_d}/helpers.bash"
 #   activation scripts
 
 # Parse command-line arguments.
-OPTIONS="c:e:m:s:"
+OPTIONS="c:e:m:ns:"
 LONGOPTS="activation-state-dir:,\
 command-string:,\
 env:,\
 mode:,\
+no-run-hook-on-activate,\
 shell:"
 USAGE="Usage: $0 [(-c|--command-string) \"<cmd> <args>\"] \
-[(-s|--shell) <shell>] \
 [(-e|--env) <env>] \
-[(-m|--mode) (dev|run)]"
+[(-m|--mode) (dev|run)] \
+[(-n|--no-run-hook-on-activate)] \
+[(-s|--shell) <shell>]"
 
 if ! PARSED=$("$_getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@"); then
   echo "Failed to parse options." >&2
@@ -91,8 +93,9 @@ FLOX_CMD=""
 # default.
 _FLOX_SHELL="$SHELL"
 _FLOX_ENV="$($_dirname -- "${BASH_SOURCE[0]}")"
-_FLOX_ENV_ACTIVATION_MODE="dev"
+_flox_env_activation_mode="dev"
 _flox_activation_state_dir=""
+_no_run_hook_on_activate=""
 while true; do
   case "$1" in
     --activation-state-dir)
@@ -132,8 +135,12 @@ while true; do
         echo "$USAGE" >&2
         exit 1
       fi
-      _FLOX_ENV_ACTIVATION_MODE="$1"
+      _flox_env_activation_mode="$1"
       shift
+      ;;
+    -n | --no-run-hook-on-activate)
+      shift
+      _no_run_hook_on_activate=true
       ;;
     -s | --shell)
       shift
@@ -199,114 +206,127 @@ case "$_flox_shell" in
     ;;
 esac
 
-# Identify if exec()ing a command.
+###
+### Main logic
+###
+
 if [ -n "$FLOX_CMD" ] || [ $# -gt 0 ]; then
-  # Throw an error if passed additional arguments along with the -c arg.
-  if [ -n "$FLOX_CMD" ] && [ $# -gt 0 ]; then
-    echo "Unexpected arguments provided with -c argument: $*" >&2
-    echo "$USAGE" >&2
+  # Command mode.
+
+  if [ -n "$FLOX_CMD" ]; then
+    # "command string" mode: invoke with `bash -c "$FLOX_CMD"`
+
+    # Throw an error if passed additional arguments along with the -c arg.
+    if [ $# -gt 0 ]; then
+      echo "Unexpected arguments provided with -c argument: $*" >&2
+      echo "$USAGE" >&2
+      exit 1
+    fi
+
+    # We don't ever need to attach,
+    # and we don't want to run hook.on-activate, (?)
+    # so just set the variables we need.
+    source_profile_d "$_profile_d" "set" "$FLOX_ENV_DIRS"
+    # Set static environment variables from the manifest
+    set_manifest_vars "$FLOX_ENV"
+
+    # Source the hook-on-activate script (if it exists).
+    if [ -z "${_no_run_hook_on_activate:-}" ]; then
+      set +euo pipefail
+      source_script "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
+      set -euo pipefail
+    fi
+
+    # Exec bash to run the command string. Note that bash will exec()
+    # the final command found in the string so there will be just one
+    # PID and no issues with signal handling.
+    exec $_bash --noprofile --norc -c "$FLOX_CMD"
+
+  else
+    # exec() mode: invoke with `exec "$@"`
+
+    # We don't ever need to attach,
+    # and we don't want to run hook.on-activate, (?)
+    # so just set the variables we need.
+    source_profile_d "$_profile_d" "set" "$FLOX_ENV_DIRS"
+    # Set static environment variables from the manifest
+    set_manifest_vars "$FLOX_ENV"
+
+    # Exec the provided command and args.
+    exec "$@"
+  fi
+
+else
+
+  # Executive activation mode.
+
+  # First confirm that $_flox_activation_state_dir is defined.
+  if [ -z "${_flox_activation_state_dir:-}" ]; then
+    echo "--activation-state-dir arg not provided; cannot proceed." >&2
     exit 1
   fi
 
-  # We don't ever need to attach,
-  # and we don't want to run hook.on-activate, (?)
-  # so just set the variables we need.
-  source_profile_d "$_profile_d" "set" "$FLOX_ENV_DIRS"
-  # Set static environment variables from the manifest
+  # Use jq to capture environment as properly-escaped JSON
+  _start_env="$_flox_activation_state_dir/start.env.json"
+  $_jq -nS env > "$_start_env"
+
+  # Process etc-profiles scripts differently based on activation mode.
+  if [ "$_flox_env_activation_mode" = "dev" ]; then
+    # shellcheck disable=SC1090 # from rendered environment
+    source_profile_d "$_profile_d" "prepend" "$FLOX_ENV_DIRS"
+  else
+    # shellcheck disable=SC1091 # from rendered environment
+    source "$_profile_d/0100_common-run-mode-paths.sh"
+  fi
+
+  # Set static environment variables from the manifest.
   set_manifest_vars "$FLOX_ENV"
 
-  if [ -n "$FLOX_CMD" ]; then
-    exec $_bash --noprofile --norc -c "$FLOX_CMD"
-  else
-    exec "$@"
+  # Source the hook-on-activate script (if it exists).
+  if [ -z "${_no_run_hook_on_activate:-}" ]; then
+    set +euo pipefail
+    source_script "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
+    set -euo pipefail
   fi
+
+  # Capture ending environment as JSON.
+  _end_env="$_flox_activation_state_dir/end.env.json"
+  $_jq -nS env > "$_end_env"
+
+  # XXX everything in the following block is no longer necessary; remove as final step in the refactor
+  {
+    # Generate _add_env and _del_env.
+    # The userShell initialization scripts that follow have the potential to undo
+    # the environment modifications performed above, so we must first calculate
+    # all changes made to the environment so far so that we can restore them after
+    # the userShell initialization scripts have run. We use jq to diff the two
+    # JSON environment snapshots.
+    _add_env="$_flox_activation_state_dir/add.env"
+    _del_env="$_flox_activation_state_dir/del.env"
+    # Capture environment variables to _set_ as "key=value" pairs with proper JSON escaping.
+    # This finds keys that are new or changed in $_end_env compared to $_start_env.
+    # shellcheck disable=SC2016
+    $_jq -rS --slurpfile start "$_start_env" '
+      to_entries |
+      map(select(
+        ($start[0][.key] // null) != .value
+      )) |
+      map("\(.key)=\(.value | @sh)") |
+      .[]
+    ' "$_end_env" > "$_add_env"
+    # Capture environment variables to _unset_ as a list of keys.
+    # This finds keys that exist in $_start_env but not in $_end_env.
+    # shellcheck disable=SC2016
+    $_jq -rS --slurpfile end "$_end_env" '
+      to_entries |
+      map(select(
+        ($end[0][.key] // null) == null
+      )) |
+      map(.key) |
+      .[]
+    ' "$_start_env" > "$_del_env"
+  }
+
 fi
-
-# Confirm that $_flox_activation_state_dir is defined.
-if [ -z "${_flox_activation_state_dir:-}" ]; then
-  echo "--activation-state-dir arg not provided; cannot proceed." >&2
-  exit 1
-fi
-
-# First activation of this environment. Snapshot environment to start.
-# Use jq to capture environment as properly-escaped JSON
-_start_env="$_flox_activation_state_dir/start.env.json"
-$_jq -nS env > "$_start_env"
-
-# Process the flox environment customizations, which includes (amongst
-# other things) prepending this environment's bin directory to the PATH.
-# shellcheck disable=SC2154 # set in the main `activate` script
-if [ "$_FLOX_ENV_ACTIVATION_MODE" = "dev" ]; then
-  # shellcheck disable=SC1090 # from rendered environment
-  source_profile_d "$_profile_d" "prepend" "$FLOX_ENV_DIRS"
-else
-  # shellcheck disable=SC1091 # from rendered environment
-  source "$_profile_d/0100_common-run-mode-paths.sh"
-fi
-
-# Capture post-etc-profiles.env.
-# This is currently unused but could be useful for runtime only environment in
-# the future.
-$_jq -nS env > "$_flox_activation_state_dir/post-etc-profiles.env.json"
-
-# Set static environment variables from the manifest.
-set_manifest_vars "$FLOX_ENV"
-
-# Source the hook-on-activate script if it exists.
-if [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
-  # Nothing good can come from output printed to stdout in the
-  # user-provided hook scripts because these can get interpreted
-  # as configuration statements by the "in-place" activation
-  # mode. So, we'll redirect stdout to stderr.
-  set +euo pipefail
-  "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" START
-  # shellcheck disable=SC1091 # from rendered environment
-  source "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
-  "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" END
-  set -euo pipefail
-else
-  "$_flox_activate_tracer" "$FLOX_ENV/activate.d/hook-on-activate" NOT FOUND
-fi
-
-# Capture _end_env and generate _add_env and _del_env.
-# Mark the environment as ready to use for attachments.
-# Capture ending environment as JSON.
-_end_env="$_flox_activation_state_dir/end.env.json"
-$_jq -nS env > "$_end_env"
-
-# XXX everything in the following block is no longer necessary; remove as final step in the refactor
-{
-  # The userShell initialization scripts that follow have the potential to undo
-  # the environment modifications performed above, so we must first calculate
-  # all changes made to the environment so far so that we can restore them after
-  # the userShell initialization scripts have run. We use jq to diff the two
-  # JSON environment snapshots.
-  _add_env="$_flox_activation_state_dir/add.env"
-  _del_env="$_flox_activation_state_dir/del.env"
-
-  # Capture environment variables to _set_ as "key=value" pairs with proper JSON escaping.
-  # This finds keys that are new or changed in $_end_env compared to $_start_env.
-  # shellcheck disable=SC2016
-  $_jq -rS --slurpfile start "$_start_env" '
-    to_entries |
-    map(select(
-      ($start[0][.key] // null) != .value
-    )) |
-    map("\(.key)=\(.value | @sh)") |
-    .[]
-  ' "$_end_env" > "$_add_env"
-
-  # Capture environment variables to _unset_ as a list of keys.
-  # This finds keys that exist in $_start_env but not in $_end_env.
-  # shellcheck disable=SC2016
-  $_jq -rS --slurpfile end "$_end_env" '
-    to_entries |
-    map(select(
-      ($end[0][.key] // null) == null
-    )) |
-    map(.key) |
-    .[]
-  ' "$_start_env" > "$_del_env"
-}
 
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END
