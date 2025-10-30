@@ -242,12 +242,10 @@ for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
   fi
 done
 
-# NOTE: These calls are no longer needed when invoked from the executive.
-# The Rust code now sets these environment variables directly before forking.
 # shellcheck disable=SC1090
-# source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
+source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
 # shellcheck disable=SC1090
-# source <("$_flox_activations" fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
+source <("$_flox_activations" fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
 
 # Set a default for _FLOX_ACTIVATE_STORE_PATH for container and build
 # invocations
@@ -272,72 +270,30 @@ case "$_flox_shell" in
     ;;
 esac
 
-if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
-  if [ $# -eq 0 ]; then
-    echo "build mode is only supported for running a command" >&2
-    exit 1
-  fi
-  # We don't ever need to attach, and we don't want to run hook.on-activate,
-  # so just run the parts of start.bash that we need
-  source_profile_d "$_profile_d" "set" "${FLOX_ENV_DIRS:-}"
-  # Set static environment variables from the manifest
-  set_manifest_vars "$FLOX_ENV"
+case "$_FLOX_ENV_ACTIVATION_MODE" in
+  build)
+    if [ $# -eq 0 ]; then
+      echo "build mode is only supported for running a command" >&2
+      exit 1
+    fi
+    # We don't ever need to attach, and we don't want to run hook.on-activate,
+    # so just run the parts of start.bash that we need
+    source_profile_d "$_profile_d" "set" "$FLOX_ENV_DIRS"
+    # Set static environment variables from the manifest
+    set_manifest_vars "$FLOX_ENV"
 
-  exec "$@"
-fi
-
-if [ "$_FLOX_ENV_ACTIVATION_MODE" = "start" ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/start.bash"
-  start "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
-
-  exit 0
-fi
-
-# The CLI is responsible for erroring if the environment is already active.
-# We can start-or-attach no matter what
-
-# TODO: we could restore _start_env from the prior activation when performing an ephemeral activation
-
-# Ensure required activation arguments are provided
-if [ -z "$_FLOX_ACTIVATION_STATE_DIR" ]; then
-  echo "Error: --activation-state-dir is required" >&2
-  exit 1
-fi
-if [ -z "$_FLOX_ACTIVATION_ID" ]; then
-  echo "Error: --activation-id is required" >&2
-  exit 1
-fi
-
-export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
-
-# shellcheck source-path=SCRIPTDIR/activate.d
-source "${_activate_d}/attach.bash"
-attach "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
-
-# Start services before the shell or command is invoked
-if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/start-services.bash"
-fi
-
-case "${_flox_shell_mode}" in
-  command)
-    # shellcheck source-path=SCRIPTDIR/activate.d
-    true source "${_activate_d}/attach-command.bash"
+    exec "$@"
     ;;
-  interactive)
+  start)
     # shellcheck source-path=SCRIPTDIR/activate.d
-    true source "${_activate_d}/attach-interactive.bash"
-    ;;
-  inplace)
-    # shellcheck source-path=SCRIPTDIR/activate.d
-    true source "${_activate_d}/attach-inplace.bash"
+    source "${_activate_d}/start.bash"
+    start "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
+
+    exit 0
     ;;
   *)
-    echo "Unsupported shell mode: ${_flox_shell_mode}" >&2
+    echo "Unsupported activation mode: $_FLOX_ENV_ACTIVATION_MODE" >&2
     exit 1
-    ;;
 esac
 
 "$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END
