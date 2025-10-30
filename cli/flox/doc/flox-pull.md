@@ -73,6 +73,10 @@ environments.
     When pulling a new environment this creates a new environment
     that can be used locally or pushed to FloxHub under a new user or name.
 
+`-g <generation>`, `--generation <generation>`
+:   Pull the specified generation instead of the live generation.
+    Must be used with `--copy`.
+
 ```{.include}
 ./include/general-options.md
 ```
