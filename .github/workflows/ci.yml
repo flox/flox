@@ -206,6 +206,9 @@ jobs:
     runs-on: "ubuntu-latest"
     timeout-minutes: 120
 
+    permissions:
+      id-token: write # Needed for AWS Creds
+
     outputs:
       closure-size-x86_64-linux: ${{ steps.closure.outputs.closure-size-x86_64-linux }}
       closure-size-aarch64-linux: ${{ steps.closure.outputs.closure-size-aarch64-linux }}
@@ -250,6 +253,15 @@ jobs:
           TAILSCALE_AUTH_KEY: "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
           REMOTE_BUILDERS: "${{ vars.MANAGED_REMOTE_BUILDERS }}"
           SYSTEM: "${{ matrix.system }}"
+
+      - name: "Configure AWS Credentials"
+        uses: "aws-actions/configure-aws-credentials@v5"
+        with:
+          role-to-assume: "arn:aws:iam::759020684799:role/github-oidc-role-flox-cache-public"
+          role-session-name: "${{ github.run_id }}"
+          aws-region: "us-east-1"
+          output-env-credentials: true
+          unset-current-credentials: true
 
       - name: "Build"
         id: "build"
