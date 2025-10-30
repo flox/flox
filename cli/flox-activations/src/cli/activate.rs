@@ -318,12 +318,16 @@ impl ActivateArgs {
                 &activation_state_dir,
                 activate_tracer,
             )?;
-        } else if let Some(command_string) = data.command_string {
+        } else if let Some(ref command_string) = data.command_string {
             Self::new_activate_command_string(
-                command_string,
-                data.shell,
-                data.is_ephemeral,
-                activation_environment,
+                verbosity,
+                data,
+                std::env::var("_flox_sourcing_rc")
+                    .map(|v| v == "true")
+                    .unwrap_or(false),
+                export_env_diff,
+                &activation_state_dir,
+                activate_tracer,
             )?;
         } else {
             Self::new_activate_command(data.run_args, data.is_ephemeral)?;
@@ -488,15 +492,120 @@ impl ActivateArgs {
 
     /// Used for `flox activate -c "command string"`
     fn new_activate_command_string(
-        command_string: String,
-        shell: Shell,
-        is_ephemeral: bool,
-        env_diff: EnvDiff,
+        verbosity: u8,
+        data: ActivateData,
+        flox_sourcing_rc: bool,
+        export_env_diff: ExportEnvDiff,
+        activation_state_dir: &PathBuf,
+        activate_tracer: String,
     ) -> Result<()> {
-        let mut command = Self::assemble_command_with_environment(shell.exe_path(), &env_diff);
-        command.arg("-c").arg(command_string);
+        // Set _flox_* variables in the environment prior to sourcing
+        // our custom .tcshrc and ZDOTDIR that will otherwise fall over.
+        /// SAFETY: called once, prior to possible concurrent access to env
+        unsafe {
+            std::env::set_var(
+                "_activate_d", data.interpreter_path.join("activate.d")
+              .to_string_lossy().to_string(),
+            );
+            std::env::set_var(
+                "_flox_activate_tracelevel", verbosity.to_string(),
+            );
+        }
+
+        let env_diff: EnvDiff = (&export_env_diff).try_into()?;
+        let mut command = Self::assemble_command_with_environment(data.shell.exe_path(), &env_diff);
+        command.arg("-c").arg(data.command_string.unwrap());
+
+        match data.shell {
+            Shell::Bash(bash) => {
+                debug!("no env customizations for bash");
+            },
+            Shell::Fish(fish) => {
+                debug!("no env customizations for fish");
+            },
+            Shell::Tcsh(tcsh) => {
+                let tcsh_startup_args = TcshStartupArgs {
+                    flox_activate_tracelevel: verbosity as i32,
+                    activate_d: data.interpreter_path.join("activate.d"),
+                    flox_env: data.env.clone(),
+                    flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
+                    flox_env_project: Some(data.env_project.to_string_lossy().to_string()),
+                    flox_env_description: Some(data.env_description),
+                    is_in_place: data.in_place,
+                    flox_sourcing_rc,
+                    flox_activations: (&data.path_to_self).into(),
+                    flox_activate_tracer: activate_tracer,
+                };
+
+                // Capture original value of $HOME in $FLOX_ORIG_HOME so that it can be restored later.
+                if let Ok(home) = std::env::var("HOME") {
+                    command.env("FLOX_ORIG_HOME", home);
+                }
+
+                // Export HOME to point to activate.d/tcsh_home dir containing
+                // our custom .tcshrc.
+                command.env("HOME", tcsh_startup_args
+                            .activate_d
+                            .join("tcsh_home")
+                            .to_string_lossy()
+                            .to_string(),
+                );
+
+                let startup_commands =
+                    generate_tcsh_startup_commands(&tcsh_startup_args, &export_env_diff)?;
+                let flox_tcsh_init_script = Self::write_maybe_self_destructing_script(
+                    startup_commands,
+                    activation_state_dir,
+                    verbosity < 2,
+                )?;
+
+                command.env("FLOX_TCSH_INIT_SCRIPT", flox_tcsh_init_script.to_string_lossy().to_string());
+            },
+            Shell::Zsh(zsh) => {
+                let zsh_startup_args = ZshStartupArgs {
+                    flox_activate_tracelevel: verbosity as i32,
+                    activate_d: data.interpreter_path.join("activate.d"),
+                    flox_env: data.env.clone(),
+                    flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
+                    flox_env_project: Some(data.env_project.to_string_lossy().to_string()),
+                    flox_env_description: Some(data.env_description),
+                    is_in_place: data.in_place,
+                    flox_sourcing_rc,
+                    flox_activations: (&data.path_to_self).into(),
+                    flox_activate_tracer: activate_tracer,
+                };
+
+                // if the ZDOTDIR environment variable is set, export its value to the
+                // environment as FLOX_ORIG_ZDOTDIR so that it can be restored later.
+                if let Ok(zdotdir) = std::env::var("ZDOTDIR") {
+                    command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
+                };
+
+                // export ZDOTDIR to point to the activation state dir so that
+                // .zshrc and .zshenv files are sourced from there.
+                command.env("ZDOTDIR", zsh_startup_args
+                    .activate_d
+                    .join("zdotdir")
+                    .to_string_lossy()
+                    .to_string(),
+                );
+
+                let startup_script =
+                    generate_zsh_startup_script(&zsh_startup_args, &export_env_diff)?;
+                let flox_zsh_init_script = Self::write_maybe_self_destructing_script(
+                    startup_script,
+                    activation_state_dir,
+                    verbosity < 2,
+                )?;
+
+                // export FLOX_ZSH_INIT_SCRIPT so that it can be sourced from ZDOTDIR.
+                command.env("FLOX_ZSH_INIT_SCRIPT", flox_zsh_init_script.to_string_lossy().to_string());
+            },
+            _ => unimplemented!(),
+        }
+
         debug!("running command string in shell: {:?}", command);
-        if is_ephemeral {
+        if data.is_ephemeral {
             let output = command
                 .stderr(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -542,6 +651,20 @@ impl ActivateArgs {
             eprintln!("To stop using this environment, type 'exit'");
             eprintln!();
         }
+
+        // Set _flox_* variables in the environment prior to sourcing
+        // our custom .tcshrc and ZDOTDIR that will otherwise fall over.
+        /// SAFETY: called once, prior to possible concurrent access to env
+        unsafe {
+            std::env::set_var(
+                "_activate_d", data.interpreter_path.join("activate.d")
+              .to_string_lossy().to_string(),
+            );
+            std::env::set_var(
+                "_flox_activate_tracelevel", verbosity.to_string(),
+            );
+        }
+
         match data.shell {
             Shell::Bash(bash) => {
                 let bash_startup_args = BashStartupArgs {
@@ -644,21 +767,6 @@ impl ActivateArgs {
                     );
                 }
 
-                // Set _flox_* variables in the environment prior to sourcing
-                // our custom .tcshrc that will otherwise fall over.
-                /// SAFETY: called once, prior to possible concurrent access to env
-                unsafe {
-                    std::env::set_var(
-                        "_activate_d", tcsh_startup_args
-			    .activate_d.to_string_lossy().to_string(),
-                    );
-                    std::env::set_var(
-                        "_flox_activate_tracelevel", tcsh_startup_args
-			    .flox_activate_tracelevel
-			    .to_string(),
-                    );
-                }
-
                 let startup_commands =
                     generate_tcsh_startup_commands(&tcsh_startup_args, &export_env_diff)?;
                 let flox_tcsh_init_script = Self::write_maybe_self_destructing_script(
@@ -744,6 +852,7 @@ impl ActivateArgs {
             },
             _ => unimplemented!(),
         }
+
     }
 
     fn write_maybe_self_destructing_script(

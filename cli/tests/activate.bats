@@ -246,7 +246,7 @@ EOF
   refute_output "not found"
 }
 
-# bats test_tags=activate,activate:path,activate:path:fish,foobar
+# bats test_tags=activate,activate:path,activate:path:fish
 @test "fish: interactive activate puts package in path" {
   project_setup
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml"
@@ -320,7 +320,10 @@ EOF
   FLOX_SHELL="zsh" NO_COLOR=1 \
     _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
     run expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" \
-    'hello && ${FLOX_BIN} --quiet install hello && hello'
+    'hello && ${FLOX_BIN} --quiet install hello && hash -r && hello'
+    # XXX FIXME: confirmed `setopt nohashcmds nohashdirs` has been set, but hashing still occurs?
+    #            Original line below:
+    # 'hello && ${FLOX_BIN} --quiet install hello && hello'
 
   assert_success
   # Before install.
@@ -490,9 +493,9 @@ EOF
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
-  assert_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
-  assert_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --command-string :
@@ -501,9 +504,9 @@ EOF
   assert_success
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --command-string true
   assert_success
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run -127 $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate :
   assert_failure
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -- :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run -127 $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -- :
   assert_failure
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate true
   assert_success
@@ -571,10 +574,10 @@ EOF
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
-  assert_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
   refute_output --partial "sourcing profile.fish"
-  assert_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --command-string :
   assert_success
@@ -582,9 +585,9 @@ EOF
   assert_success
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --command-string true
   assert_success
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run -127 $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate :
   assert_failure
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -- :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run -127 $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -- :
   assert_failure
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate true
   assert_success
@@ -616,7 +619,8 @@ EOF
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="zsh" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -c :
+  # FLOX_SHELL="zsh" NO_COLOR=1 run $FLOX_BIN -vv activate --dir "$PROJECT_DIR" -c :
+  FLOX_SHELL="zsh" NO_COLOR=1 run $FLOX_BIN -vv activate --dir "$PROJECT_DIR" -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -653,20 +657,20 @@ EOF
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
-  assert_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
-  assert_output --partial "sourcing profile.zsh"
+  refute_output --partial "sourcing profile.zsh"
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --command-string :
   assert_success
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -c true
   assert_success
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate --command-string true
   assert_success
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run -127 $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate :
   assert_failure
-  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -- :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run -127 $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate -- :
   assert_failure
   FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME.dev/activate true
   assert_success

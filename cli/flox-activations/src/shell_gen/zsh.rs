@@ -115,7 +115,8 @@ pub fn generate_zsh_startup_script(
     // to be found immediately. We do this as the very last thing because
     // python venv activations can otherwise return nonzero return codes
     // when attempting to invoke `hash -r`.
-    commands.push("set +h".to_string());
+    commands.push("setopt nohashcmds".to_string());
+    commands.push("setopt nohashdirs".to_string());
 
     // Disable trace mode if it was enabled
     if args.flox_activate_tracelevel >= 2 {
