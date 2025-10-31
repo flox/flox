@@ -3503,4 +3503,62 @@ mod test {
             "upgrade with no changes should not change the generation"
         );
     }
+
+    /// Test that multiple parallel attempts to initialize [FloxMeta]
+    /// for the same owner are possible.
+    #[test]
+    fn allow_parallel_open() {
+        let owner = "owner".parse().unwrap();
+        let (flox, temp_dir) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        // populate our local floxhub mock with an environment
+        let pointer = {
+            let mock = mock_managed_environment_unlocked(&flox, "version = 1", owner);
+            let pointer = mock.pointer.clone();
+            mock.delete(&flox).unwrap();
+            pointer
+        };
+
+        // remove the local floxmeta
+        let floxmeta_dir = {
+            let floxmeta_dir = floxmeta_dir(&flox, &pointer.owner);
+            assert!(floxmeta_dir.exists());
+            std::fs::remove_dir_all(&floxmeta_dir).unwrap();
+            assert!(!floxmeta_dir.exists());
+            floxmeta_dir
+        };
+
+        // create directories to pull into
+
+        let dot_flox_dir_1 = {
+            let dir = temp_dir.path().join("1");
+            std::fs::create_dir_all(&dir).unwrap();
+            dir
+        };
+        let dot_flox_dir_2 = {
+            let dir = temp_dir.path().join("2");
+            std::fs::create_dir_all(&dir).unwrap();
+            dir
+        };
+
+        // pull into the respective dot_flox_dir from two threads,
+        // that will concurrently try to open or create a FloxMeta for the owner.
+        std::thread::scope(|scope| {
+            let child_1 = scope
+                .spawn(|| ManagedEnvironment::open(&flox, pointer.clone(), &dot_flox_dir_1, None));
+            let child_2 = scope
+                .spawn(|| ManagedEnvironment::open(&flox, pointer.clone(), &dot_flox_dir_2, None));
+
+            child_1
+                .join()
+                .expect("parallel opening does not panic")
+                .expect("parallel opening returns successfully");
+            child_2
+                .join()
+                .expect("parallel opening does not panic")
+                .expect("parallel opening returns successfully");
+        });
+
+        assert!(floxmeta_dir.exists());
+    }
 }
