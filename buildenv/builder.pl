@@ -1,5 +1,7 @@
 #! @perl@ -w
 
+# oh boy..
+
 use strict;
 use Cwd 'abs_path';
 use IO::Handle;
