@@ -32,6 +32,17 @@ pub fn generate_zsh_startup_script(
         commands.push("set -x".to_string());
     }
 
+    // This is the final script to be called in the zsh startup sequence so start
+    // by restoring the original value of ZDOTDIR if it was set previously.
+    commands.push(r#"
+        if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]; then
+            export ZDOTDIR="$FLOX_ORIG_ZDOTDIR";
+            unset FLOX_ORIG_ZDOTDIR;
+        else
+            unset ZDOTDIR;
+        fi
+	"#.to_string());
+
     // We need to source the .zshrc file exactly once. We skip it for in-place
     // activations under the assumption that it has already been sourced by one
     // of the shells in the chain of ancestors UNLESS none of them were zsh
