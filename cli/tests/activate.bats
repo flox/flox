@@ -839,6 +839,33 @@ EOF
 }
 
 # bats test_tags=activate,activate:prompt
+@test "FLOX_PROMPT_ENVIRONMENTS shows layered environments correctly (tcsh)" {
+  project_setup_common
+  "$FLOX_BIN" init --name first
+
+  # Create a second environment
+  mkdir -p "$PROJECT_DIR/second_env"
+  pushd "$PROJECT_DIR/second_env"
+  "$FLOX_BIN" init --name second
+  popd
+
+  # Test nested activation
+  cat <<'EOF' | tcsh
+    eval "`$FLOX_BIN activate`"
+    echo "First: $FLOX_PROMPT_ENVIRONMENTS" > "$PROJECT_DIR/prompt1"
+
+    eval "`$FLOX_BIN activate -d $PROJECT_DIR/second_env`"
+    echo "Second: $FLOX_PROMPT_ENVIRONMENTS" > "$PROJECT_DIR/prompt2"
+EOF
+
+  run cat "$PROJECT_DIR/prompt1"
+  assert_output "First: first"
+
+  run cat "$PROJECT_DIR/prompt2"
+  assert_output "Second: second first"
+}
+
+# bats test_tags=activate,activate:prompt
 @test "FLOX_PROMPT_ENVIRONMENTS shows layered environments correctly (zsh)" {
   project_setup_common
   "$FLOX_BIN" init --name first
