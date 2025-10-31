@@ -37,35 +37,7 @@ use crate::shell_gen::capture::{EnvDiff, ExportEnvDiff};
 use crate::shell_gen::fish::{FishStartupArgs, generate_fish_startup_commands};
 use crate::shell_gen::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
 use crate::shell_gen::zsh::{ZshStartupArgs, generate_zsh_startup_script};
-
-/// Macro to set an environment variable in the current process with debug logging.
-/// Using a macro ensures the backtrace shows the actual call site, not a wrapper function.
-///
-/// # Safety
-/// This uses unsafe std::env::set_var internally. The caller must ensure proper synchronization.
-macro_rules! debug_set_var {
-    ($key:expr, $value:expr) => {{
-        let key = $key;
-        let value = $value;
-        debug!("Setting env var: {}={}", key, value);
-        unsafe {
-            std::env::set_var(key, value);
-        }
-    }};
-}
-
-/// Macro to set an environment variable on a Command object with debug logging.
-/// Using a macro ensures the backtrace shows the actual call site, not a wrapper function.
-///
-/// Returns the &mut Command to allow chaining.
-macro_rules! debug_command_env {
-    ($cmd:expr, $key:expr, $value:expr) => {{
-        let key = $key;
-        let value = $value;
-        debug!("Setting command env var: {}={}", key, value);
-        $cmd.env(key, value)
-    }};
-}
+use crate::{debug_command_env, debug_set_var};
 
 #[derive(Debug, Args)]
 pub struct ActivateArgs {

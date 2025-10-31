@@ -5,6 +5,7 @@ use clap::Args;
 use log::debug;
 
 use super::{join_dir_list, separate_dir_list};
+use crate::debug_set_var;
 
 #[derive(Debug, Args)]
 pub struct SetEnvDirsArgs {
@@ -73,11 +74,7 @@ pub fn set_env_dirs_in_process(flox_env: impl AsRef<Path>) -> Result<(), anyhow:
     let env_dirs = std::env::var("FLOX_ENV_DIRS").unwrap_or_default();
     let new_env_dirs = fix_env_dirs_var(flox_env, &env_dirs);
 
-    debug!("Setting FLOX_ENV_DIRS in process: {}", new_env_dirs);
-
-    unsafe {
-        std::env::set_var("FLOX_ENV_DIRS", new_env_dirs);
-    }
+    debug_set_var!("FLOX_ENV_DIRS", new_env_dirs);
 
     Ok(())
 }

@@ -7,6 +7,7 @@ use clap::Args;
 use log::debug;
 
 use super::{join_dir_list, separate_dir_list};
+use crate::debug_set_var;
 
 #[derive(Debug, Args)]
 pub struct FixPathsArgs {
@@ -175,13 +176,8 @@ pub fn fix_paths_in_process() -> Result<(), anyhow::Error> {
     let new_path = fix_path_var(&flox_env_dirs, &path);
     let new_manpath = fix_manpath_var(&flox_env_dirs, &manpath);
 
-    debug!("Setting PATH in process: {}", new_path);
-    debug!("Setting MANPATH in process: {}", new_manpath);
-
-    unsafe {
-        std::env::set_var("PATH", new_path);
-        std::env::set_var("MANPATH", new_manpath);
-    }
+    debug_set_var!("PATH", new_path);
+    debug_set_var!("MANPATH", new_manpath);
 
     Ok(())
 }

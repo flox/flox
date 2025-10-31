@@ -5,6 +5,7 @@ use anyhow::Result;
 use serde_json::Value;
 
 use super::Shell;
+use crate::debug_set_var;
 
 /// Shell-escape a value for safe use in shell commands.
 /// Wraps the value in single quotes and escapes any single quotes within.
@@ -213,9 +214,7 @@ pub fn replay_env(start_json: impl AsRef<Path>, end_json: impl AsRef<Path>) -> R
     // Set variables from end (either new or changed from start)
     for (key, value) in &end_env {
         if start_env.get(key) != Some(value) {
-            unsafe {
-                std::env::set_var(key, value);
-            }
+            debug_set_var!(key, value);
         }
     }
 
