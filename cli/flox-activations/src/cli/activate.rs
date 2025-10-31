@@ -38,6 +38,35 @@ use crate::shell_gen::fish::{FishStartupArgs, generate_fish_startup_commands};
 use crate::shell_gen::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
 use crate::shell_gen::zsh::{ZshStartupArgs, generate_zsh_startup_script};
 
+/// Macro to set an environment variable in the current process with debug logging.
+/// Using a macro ensures the backtrace shows the actual call site, not a wrapper function.
+///
+/// # Safety
+/// This uses unsafe std::env::set_var internally. The caller must ensure proper synchronization.
+macro_rules! debug_set_var {
+    ($key:expr, $value:expr) => {{
+        let key = $key;
+        let value = $value;
+        debug!("Setting env var: {}={}", key, value);
+        unsafe {
+            std::env::set_var(key, value);
+        }
+    }};
+}
+
+/// Macro to set an environment variable on a Command object with debug logging.
+/// Using a macro ensures the backtrace shows the actual call site, not a wrapper function.
+///
+/// Returns the &mut Command to allow chaining.
+macro_rules! debug_command_env {
+    ($cmd:expr, $key:expr, $value:expr) => {{
+        let key = $key;
+        let value = $value;
+        debug!("Setting command env var: {}={}", key, value);
+        $cmd.env(key, value)
+    }};
+}
+
 #[derive(Debug, Args)]
 pub struct ActivateArgs {
     /// Path to JSON file containing activation data
@@ -114,9 +143,7 @@ pub fn set_activation_env_vars_in_process(data: &ActivateData) {
     let env_vars = build_activation_env_vars(data);
 
     for (key, value) in env_vars {
-        unsafe {
-            std::env::set_var(key, value);
-        }
+        debug_set_var!(key, value);
     }
 }
 
@@ -233,21 +260,17 @@ fn apply_shell_specific_env(
             match setup_mode {
                 ShellEnvSetup::InProcess => {
                     if let Ok(home) = std::env::var("HOME") {
-                        unsafe {
-                            std::env::set_var("FLOX_ORIG_HOME", home);
-                        }
+                        debug_set_var!("FLOX_ORIG_HOME", home);
                     }
-                    unsafe {
-                        std::env::set_var("HOME", home_dir.to_string_lossy().to_string());
-                    }
+                    debug_set_var!("HOME", home_dir.to_string_lossy().to_string());
                     Ok(vec![])
                 },
                 ShellEnvSetup::OnCommand => {
                     if let Some(cmd) = command {
                         if let Ok(home) = std::env::var("HOME") {
-                            cmd.env("FLOX_ORIG_HOME", home);
+                            debug_command_env!(cmd, "FLOX_ORIG_HOME", home);
                         }
-                        cmd.env("HOME", home_dir.to_string_lossy().to_string());
+                        debug_command_env!(cmd, "HOME", home_dir.to_string_lossy().to_string());
                     }
                     Ok(vec![])
                 },
@@ -265,21 +288,17 @@ fn apply_shell_specific_env(
             match setup_mode {
                 ShellEnvSetup::InProcess => {
                     if let Ok(orig_zdotdir) = std::env::var("ZDOTDIR") {
-                        unsafe {
-                            std::env::set_var("FLOX_ORIG_ZDOTDIR", orig_zdotdir);
-                        }
+                        debug_set_var!("FLOX_ORIG_ZDOTDIR", orig_zdotdir);
                     }
-                    unsafe {
-                        std::env::set_var("ZDOTDIR", zdotdir.to_string_lossy().to_string());
-                    }
+                    debug_set_var!("ZDOTDIR", zdotdir.to_string_lossy().to_string());
                     Ok(vec![])
                 },
                 ShellEnvSetup::OnCommand => {
                     if let Some(cmd) = command {
                         if let Ok(orig_zdotdir) = std::env::var("ZDOTDIR") {
-                            cmd.env("FLOX_ORIG_ZDOTDIR", orig_zdotdir);
+                            debug_command_env!(cmd, "FLOX_ORIG_ZDOTDIR", orig_zdotdir);
                         }
-                        cmd.env("ZDOTDIR", zdotdir.to_string_lossy().to_string());
+                        debug_command_env!(cmd, "ZDOTDIR", zdotdir.to_string_lossy().to_string());
                     }
                     Ok(vec![])
                 },
@@ -774,15 +793,11 @@ impl ActivateArgs {
         // Set _flox_* variables in the environment prior to sourcing
         // our custom .tcshrc and ZDOTDIR that will otherwise fall over.
         /// SAFETY: called once, prior to possible concurrent access to env
-        unsafe {
-            std::env::set_var(
-                "_activate_d", data.interpreter_path.join("activate.d")
-              .to_string_lossy().to_string(),
-            );
-            std::env::set_var(
-                "_flox_activate_tracelevel", verbosity.to_string(),
-            );
-        }
+        debug_set_var!(
+            "_activate_d",
+            data.interpreter_path.join("activate.d").to_string_lossy().to_string()
+        );
+        debug_set_var!("_flox_activate_tracelevel", verbosity.to_string());
 
         // Build the startup args once for all shells
         let args_builder = StartupArgsBuilder::new(
@@ -815,7 +830,7 @@ impl ActivateArgs {
         // Configure shell-specific command arguments
         match data.shell {
             Shell::Bash(_) => {
-                command.env("FLOX_BASH_INIT_SCRIPT", script_gen.script_path.to_string_lossy().to_string());
+                debug_command_env!(&mut command, "FLOX_BASH_INIT_SCRIPT", script_gen.script_path.to_string_lossy().to_string());
                 command.args(["--noprofile", "--rcfile", &script_gen.script_path.to_string_lossy()]);
                 // Invoke bash -c "source $FLOX_BASH_INIT_SCRIPT; <command string>".
                 command.arg("-c").arg(formatdoc!(
@@ -830,7 +845,7 @@ impl ActivateArgs {
             Shell::Fish(_) => {
                 // Not strictly required, but good to have in the env for debugging
                 // and for parity with the tcsh/zsh shells that need it.
-                command.env("FLOX_FISH_INIT_SCRIPT", script_gen.script_path.to_string_lossy().to_string());
+                debug_command_env!(&mut command, "FLOX_FISH_INIT_SCRIPT", script_gen.script_path.to_string_lossy().to_string());
                 command.args([
                     "--init-command",
                     format!("source '{}'", &script_gen.script_path.to_string_lossy()).as_str(),
@@ -838,12 +853,12 @@ impl ActivateArgs {
                 command.arg("-c").arg(data.command_string.unwrap());
             },
             Shell::Tcsh(_) => {
-                command.env("FLOX_TCSH_INIT_SCRIPT", script_gen.script_path.to_string_lossy().to_string());
+                debug_command_env!(&mut command, "FLOX_TCSH_INIT_SCRIPT", script_gen.script_path.to_string_lossy().to_string());
                 command.arg("-c").arg(data.command_string.unwrap());
             },
             Shell::Zsh(_) => {
                 // export FLOX_ZSH_INIT_SCRIPT so that it can be sourced from ZDOTDIR.
-                command.env("FLOX_ZSH_INIT_SCRIPT", script_gen.script_path.to_string_lossy().to_string());
+                debug_command_env!(&mut command, "FLOX_ZSH_INIT_SCRIPT", script_gen.script_path.to_string_lossy().to_string());
                 command.arg("-c").arg(data.command_string.unwrap());
             },
             _ => unimplemented!(),
@@ -900,15 +915,11 @@ impl ActivateArgs {
         // Set _flox_* variables in the environment prior to sourcing
         // our custom .tcshrc and ZDOTDIR that will otherwise fall over.
         /// SAFETY: called once, prior to possible concurrent access to env
-        unsafe {
-            std::env::set_var(
-                "_activate_d", data.interpreter_path.join("activate.d")
-              .to_string_lossy().to_string(),
-            );
-            std::env::set_var(
-                "_flox_activate_tracelevel", verbosity.to_string(),
-            );
-        }
+        debug_set_var!(
+            "_activate_d",
+            data.interpreter_path.join("activate.d").to_string_lossy().to_string()
+        );
+        debug_set_var!("_flox_activate_tracelevel", verbosity.to_string());
 
         // Build the startup args once for all shells
         let args_builder = StartupArgsBuilder::new(
@@ -939,21 +950,17 @@ impl ActivateArgs {
         match &data.shell {
             Shell::Tcsh(_) => {
                 /// SAFETY: called once, prior to possible concurrent access to env
-                unsafe {
-                    std::env::set_var(
-                        "FLOX_TCSH_INIT_SCRIPT",
-                        script_gen.script_path.to_string_lossy().to_string(),
-                    );
-                }
+                debug_set_var!(
+                    "FLOX_TCSH_INIT_SCRIPT",
+                    script_gen.script_path.to_string_lossy().to_string()
+                );
             },
             Shell::Zsh(_) => {
                 /// SAFETY: called once, prior to possible concurrent access to env
-                unsafe {
-                    std::env::set_var(
-                        "FLOX_ZSH_INIT_SCRIPT",
-                        script_gen.script_path.to_string_lossy().to_string(),
-                    );
-                }
+                debug_set_var!(
+                    "FLOX_ZSH_INIT_SCRIPT",
+                    script_gen.script_path.to_string_lossy().to_string()
+                );
             },
             _ => {}
         }
