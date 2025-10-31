@@ -759,7 +759,7 @@ EOF
 EOF
 }
 
-# bats test_tags=activate,activate:hook,activate:hook:zsh,foobar
+# bats test_tags=activate,activate:hook,activate:hook:zsh
 @test "zsh: activate runs hook only once in nested activations" {
   project_setup
 
