@@ -253,6 +253,7 @@ jobs:
           TAILSCALE_AUTH_KEY: "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
           REMOTE_BUILDERS: "${{ vars.MANAGED_REMOTE_BUILDERS }}"
           SYSTEM: "${{ matrix.system }}"
+          SETUP_NIX: "false"
 
       - name: "Configure AWS Credentials"
         uses: "aws-actions/configure-aws-credentials@v5"
