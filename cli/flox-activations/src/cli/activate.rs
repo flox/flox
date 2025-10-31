@@ -1096,7 +1096,7 @@ impl ActivateArgs {
                 let mut commands = Vec::new();
 
                 commands.push(format!(
-                    r#"{} attach --runtime-dir "{}" --pid $$ --flox-env "{}" --id "{}" --remove-pid "${}""#,
+                    r#"{} attach --runtime-dir "{}" --pid $$ --flox-env "{}" --id "{}" --remove-pid {}"#,
                     // TODO: this should probably be based on interpreter_path
                     data.path_to_self,
                     data.flox_runtime_dir,
