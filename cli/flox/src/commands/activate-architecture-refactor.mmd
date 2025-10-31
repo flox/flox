@@ -13,11 +13,10 @@ flowchart TB
         n116["wait ready(child)"]
         n115["do_attach()"]
         n137["start services?"]
-        n140["replayEnv()"]
-        n145["exec(userShell<br>&lt;RCFILE_options&gt;<br>-c command_string)"]
+        n140@{ label: "replayEnv()<br>set_env_dirs()<br style=\"--tw-scale-x:\">fix_paths()" }
+        n145["exec(userShell<br>&lt;RCFILE_options&gt;<br>-c command_script)"]
         n146["exec(cmd args)"]
         invoke["userShell"]
-        n147["set_env_dirs()<br>fix_paths()"]
         n150["start-process-compose()"]
   end
  subgraph s2["process-compose"]
@@ -30,12 +29,13 @@ flowchart TB
         n113["ready to<br>attach?"]
         n114["do_start()<br>fork()"]
   end
- subgraph activate["Activate"]
-        n7[["env0=snapshotEnv()"]]
+ subgraph activate["activate"]
+        n7[["source &lt;(flox-activations set-env-dirs)<br>source &lt;(flox-activations fix-paths)"]]
         n6["source etc-profiles"]
         n62[["env1=snapshotEnv()<br>"]]
         nd["source [vars] (envrc)<br>source hook.on-activate<br>"]
         n63[["env2=snapshotEnv()<br>"]]
+        n152@{ label: "<span style=\"background-color:\">env0=snapshotEnv()</span>" }
   end
  subgraph colorkey["Color Key"]
         node_aqepkktvr["rust"]
@@ -58,7 +58,7 @@ flowchart TB
         n100["submit spooled metrics<br>"]
         n136["close(0,1,2)<br>open(2,logfile)"]
         n148["start_process_compose()"]
-        n149["replayEnv()"]
+        n149@{ label: "replayEnv()<br>set_env_dirs()<br style=\"--tw-scale-x:\">fix_paths()" }
   end
  subgraph invoke["userShell"]
     direction TB
@@ -75,11 +75,13 @@ flowchart TB
   end
     ns --> n66
     ny --> nv
-    n7 --> n6
+    n7 --> n152
+    n7 -. cmd<br>mode .-> n6
     nv ~~~ colorkey
     node_aqepkktvr ~~~ n0
     n0 ~~~ nz
     n6 --> n62
+    n6 -. cmd<br>mode .-> nd
     n34 -- in place --> n35
     n62 --> nd
     nd --> n63
@@ -101,17 +103,15 @@ flowchart TB
     n121 --> n7
     n125 --> n126
     n63 --> n127
-    n63 -.-> n138(["exec args"])
     n126 -- parent --> n127
-    n126 -- child --> n121
     n127 --> n149
     n116 --> n115
     n130 -.-> n116
     n130 --> n94
     n35 --> n83
     n115 --> n140
-    n36 -- "exec(flox-activations)" --> n147
-    n135(["flox-build.mk"]) -. "exec(.../activate)" .-> activate
+    n36 -- "exec(flox-activations)" --> n111
+    n135(["flox-build.mk"]) -. "activate -- cmd args<br>activate -c 'cmd &amp;&amp; cmd'" .-> activate
     n137 -- continue if activating --> n34
     n66 --> ny
     n110 ~~~ n139
@@ -120,24 +120,29 @@ flowchart TB
     n142 --> n141
     n143 --> n144
     n144 --> n142
-    n34 -- "flox activate -c 'command string'" --> n145
+    n34 -- "flox activate -c 'command script'" --> n145
     n34 -- "flox activate -- cmd args" --> n146
     n34 -- interactive --> n37
     n37 --> invoke
     n145 --> invoke
     n136 --> n130
-    n147 --> n111
     n148 --> n136 & n96
     n149 --> n148
     n137 -- yes --> n150
+    n152 --> n6
+    n126 -- child --> n121
+    nd -. cmd mode .-> n138(["exec args"])
     n83@{ shape: doc}
     n137@{ shape: diam}
+    n140@{ shape: rect}
     n150@{ shape: subproc}
     n111@{ shape: diam}
     n112@{ shape: diam}
     n113@{ shape: diam}
     n114@{ shape: rect}
+    n152@{ shape: rect}
     n130@{ shape: subproc}
+    n149@{ shape: rect}
     n141@{ shape: subproc}
     n142@{ shape: rect}
     style s3 fill:transparent
@@ -151,7 +156,6 @@ flowchart TB
     style n140 fill:#FFE0B2
     style n145 fill:#FFE0B2
     style n146 fill:#FFE0B2
-    style n147 fill:#FFE0B2
     style n150 fill:#FFE0B2
     style n111 fill:#C8E6C9
     style n112 fill:#C8E6C9
@@ -162,6 +166,7 @@ flowchart TB
     style n62 fill:#BBDEFB
     style nd fill:#BBDEFB
     style n63 fill:#BBDEFB
+    style n152 fill:#BBDEFB
     style node_aqepkktvr fill:#FFE0B2
     style n0 fill:#BBDEFB
     style nz fill:#E1BEE7
@@ -184,15 +189,15 @@ flowchart TB
     style n82 fill:#E1BEE7
     style n141 fill:#E1BEE7
     style n142 fill:#E1BEE7
-    style n143 fill:#E1BEE7
+    style n143 fill:#E1BEE7,stroke-width:4px,stroke-dasharray: 0
     style n144 fill:#E1BEE7
     style n88 fill:#FFE0B2
     style n89 fill:#FFE0B2
     style n36 fill:#FFE0B2
     style A fill:#FFFFFF
-    style n138 fill:#FFF9C4,stroke-width:2px,stroke-dasharray: 2
     style n135 fill:#FFF9C4,stroke-width:2px,stroke-dasharray: 2
     style activate fill:#F8F8F8
+    style n138 fill:#FFF9C4,stroke-width:2px,stroke-dasharray: 2
     style executive fill:#F8F8F8
     style cli fill:#F8F8F8
     style s2 fill:#F8F8F8
