@@ -110,7 +110,7 @@ pub fn generate_tcsh_startup_commands(
     );
 
     commands.push(format!(
-        r#"eval "`'{}' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`""#,
+        r#"if (! $?FLOX_NOPROFILE) eval "`'{}' profile-scripts --shell tcsh --env-dirs $FLOX_ENV_DIRS:q $_already_sourced_args:q`""#,
         args.flox_activations.display()
     ));
 

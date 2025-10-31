@@ -106,8 +106,11 @@ pub fn generate_zsh_startup_script(
         args.flox_activations.display()
     ));
 
-    commands.push(format!(
-        r#"eval "$('{}' profile-scripts --shell zsh --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "${{FLOX_ENV_DIRS:-}}")""#,
+    commands.push(format!(r#"
+        if [ -z "${{FLOX_NOPROFILE:0}}" ]; then
+            eval "$('{}' profile-scripts --shell zsh --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "${{FLOX_ENV_DIRS:-}}")";
+        fi
+        "#,
         args.flox_activations.display()
     ));
 

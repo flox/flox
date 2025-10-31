@@ -108,7 +108,7 @@ pub fn generate_fish_startup_commands(
     );
 
     commands.push(format!(
-        r#"{} profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS" | source"#,
+        r#"if set -q FLOX_NOPROFILE; true; else; {} profile-scripts --shell fish --already-sourced-env-dirs  "$_FLOX_SOURCED_PROFILE_SCRIPTS" --env-dirs "$FLOX_ENV_DIRS"; end | source"#,
         args.flox_activations.display()
     ));
 

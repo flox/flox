@@ -514,14 +514,69 @@ impl ActivateArgs {
 
         let env_diff: EnvDiff = (&export_env_diff).try_into()?;
         let mut command = Self::assemble_command_with_environment(data.shell.exe_path(), &env_diff);
-        command.arg("-c").arg(data.command_string.unwrap());
 
         match data.shell {
             Shell::Bash(bash) => {
-                debug!("no env customizations for bash");
+                let bash_startup_args = BashStartupArgs {
+                    flox_activate_tracelevel: verbosity as i32,
+                    activate_d: data.interpreter_path.join("activate.d"),
+                    flox_env: data.env.clone(),
+                    flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
+                    flox_env_project: Some(data.env_project.to_string_lossy().to_string()),
+                    flox_env_description: Some(data.env_description),
+                    is_in_place: data.in_place,
+                    flox_sourcing_rc,
+                    flox_activations: (&data.path_to_self).into(),
+                    flox_activate_tracer: activate_tracer,
+                };
+                let startup_commands =
+                    generate_bash_startup_commands(&bash_startup_args, &export_env_diff)?;
+                let rcfile = Self::write_maybe_self_destructing_script(
+                    startup_commands,
+                    activation_state_dir,
+                    verbosity < 2,
+                )?;
+                command.env("FLOX_BASH_INIT_SCRIPT", rcfile.to_string_lossy().to_string());
+                command.args(["--noprofile", "--rcfile", &rcfile.to_string_lossy()]);
+                // Invoke bash -c "source $FLOX_BASH_INIT_SCRIPT; <command string>".
+                command.arg("-c").arg(formatdoc!(
+                    r#"
+                    source '{}';
+                    {};
+                    "#,
+                    rcfile.to_string_lossy(),
+                    data.command_string.unwrap()
+                ));
             },
             Shell::Fish(fish) => {
-                debug!("no env customizations for fish");
+                let fish_startup_args = FishStartupArgs {
+                    flox_activate_tracelevel: verbosity as i32,
+                    activate_d: data.interpreter_path.join("activate.d"),
+                    flox_env: data.env.clone(),
+                    flox_env_cache: Some(data.env_cache.to_string_lossy().to_string()),
+                    flox_env_project: Some(data.env_project.to_string_lossy().to_string()),
+                    flox_env_description: Some(data.env_description),
+                    is_in_place: data.in_place,
+                    flox_sourcing_rc,
+                    flox_activations: (&data.path_to_self).into(),
+                    flox_activate_tracer: activate_tracer,
+                };
+                let startup_commands =
+                    generate_fish_startup_commands(&fish_startup_args, &export_env_diff)?;
+                let rcfile = Self::write_maybe_self_destructing_script(
+                    startup_commands,
+                    activation_state_dir,
+                    verbosity < 2,
+                )?;
+                // Not strictly required, but good to have in the env for debugging
+                // and for parity with the tcsh/zsh shells that need it.
+                command.env("FLOX_FISH_INIT_SCRIPT", rcfile.to_string_lossy().to_string());
+
+                command.args([
+                    "--init-command",
+                    format!("source '{}'", &rcfile.to_string_lossy()).as_str(),
+                ]);
+                command.arg("-c").arg(data.command_string.unwrap());
             },
             Shell::Tcsh(tcsh) => {
                 let tcsh_startup_args = TcshStartupArgs {
@@ -560,6 +615,7 @@ impl ActivateArgs {
                 )?;
 
                 command.env("FLOX_TCSH_INIT_SCRIPT", flox_tcsh_init_script.to_string_lossy().to_string());
+                command.arg("-c").arg(data.command_string.unwrap());
             },
             Shell::Zsh(zsh) => {
                 let zsh_startup_args = ZshStartupArgs {
@@ -600,6 +656,7 @@ impl ActivateArgs {
 
                 // export FLOX_ZSH_INIT_SCRIPT so that it can be sourced from ZDOTDIR.
                 command.env("FLOX_ZSH_INIT_SCRIPT", flox_zsh_init_script.to_string_lossy().to_string());
+                command.arg("-c").arg(data.command_string.unwrap());
             },
             _ => unimplemented!(),
         }

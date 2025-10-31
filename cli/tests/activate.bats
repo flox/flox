@@ -390,7 +390,7 @@ EOF
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_NOPROFILE=1 FLOX_SHELL="bash" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -c :
+  FLOX_NOPROFILE=1 FLOX_SHELL="bash" NO_COLOR=1 run $FLOX_BIN -vv activate --dir "$PROJECT_DIR" -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -759,7 +759,7 @@ EOF
 EOF
 }
 
-# bats test_tags=activate,activate:hook,activate:hook:zsh
+# bats test_tags=activate,activate:hook,activate:hook:zsh,foobar
 @test "zsh: activate runs hook only once in nested activations" {
   project_setup
 
