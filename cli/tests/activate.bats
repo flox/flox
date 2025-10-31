@@ -1195,24 +1195,24 @@ EOF
   refute_line --partial "SHELL_SESSION_DIR=/nix/store/"
 }
 
-# bats test_tags=activate,activate:rc:zsh
+# bats test_tags=activate,activate:rc:zsh,foobar
 @test "zsh: uses environment specific completion cache" {
   project_setup
 
   # First activation should generate the .zcompdump file.
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -- stat '${FLOX_ENV_CACHE}/.zcompdump'
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -c 'stat $FLOX_ENV_CACHE/.zcompdump'
   assert_success
   assert_output --partial "No existing compdump file found, regenerating"
 
   # Repeat activation should not regenerate the .zcompdump file.
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -- stat '${FLOX_ENV_CACHE}/.zcompdump'
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -c 'stat $FLOX_ENV_CACHE/.zcompdump'
   assert_success
   refute_output --partial "regenerating"
 
   # New packages that contain completions should regenerate the .zcompdump file.
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fd.yaml" \
     "$FLOX_BIN" install fd
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -- stat '${FLOX_ENV_CACHE}/.zcompdump'
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -v -c 'stat $FLOX_ENV_CACHE/.zcompdump'
   assert_success
   assert_output --partial "Loading dump file skipped, regenerating"
 }
