@@ -1195,7 +1195,7 @@ EOF
   refute_line --partial "SHELL_SESSION_DIR=/nix/store/"
 }
 
-# bats test_tags=activate,activate:rc:zsh,foobar
+# bats test_tags=activate,activate:rc:zsh
 @test "zsh: uses environment specific completion cache" {
   project_setup
 
