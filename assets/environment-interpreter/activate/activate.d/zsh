@@ -3,21 +3,6 @@
 _sed="@gnused@/bin/sed"
 _flox_activations="@flox_activations@"
 
-
-# Propagate required variables that are documented as exposed.
-export FLOX_ENV="${_FLOX_ENV}"
-
-# Propagate optional variables that are documented as exposed.
-# NB: `generate_*_start_commands()` performs the same logic except for zsh.
-for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
-  eval "var_val=\${_$var_key-}"
-  if [ -n "$var_val" ]; then
-    export $var_key="${var_val}"
-  else
-    unset $var_key
-  fi
-done
-
 # Confirm _flox_activate_tracelevel is defined before proceeding.
 if [ -z "${_flox_activate_tracelevel:=}" ]; then
   echo 'WARNING (zsh): _flox_activate_tracelevel not defined .. defaulting to 0' >&2
