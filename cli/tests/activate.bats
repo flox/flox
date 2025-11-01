@@ -1219,7 +1219,7 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=activate,activate:envVar:bash
+# bats test_tags=activate,activate:envVar:bash,foobar
 @test "bash: activate sets env var" {
   project_setup
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -1281,7 +1281,7 @@ EOF
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
 
-  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c exit
   assert_success
   assert_output --partial "baz"
 }
@@ -1292,7 +1292,7 @@ EOF
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="fish" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  FLOX_SHELL="fish" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c exit
   assert_success
   assert_output --partial "baz"
 }
@@ -1304,7 +1304,7 @@ EOF
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="tcsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  FLOX_SHELL="tcsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c exit
   assert_success
   assert_output --partial "baz"
 }
@@ -1316,7 +1316,7 @@ EOF
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -c exit
   assert_success
   assert_output --partial "baz"
 }

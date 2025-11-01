@@ -119,8 +119,10 @@ if [ -n "${_flox_sourcing_rc:-}" ]; then
 else
   profile_script_dirs="$FLOX_ENV_DIRS"
 fi
-# shellcheck disable=SC1090
-source <("$_flox_activations" profile-scripts --shell zsh --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "$profile_script_dirs")
+if [ -z "${FLOX_NOPROFILE:-}" ]; then
+  # shellcheck disable=SC1090
+  source <("$_flox_activations" profile-scripts --shell zsh --already-sourced-env-dirs "${_FLOX_SOURCED_PROFILE_SCRIPTS:-}" --env-dirs "$profile_script_dirs")
+fi
 
 # Disable command hashing to allow for newly installed flox packages
 # to be found immediately. We do this as the very last thing because
