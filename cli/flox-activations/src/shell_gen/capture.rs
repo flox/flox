@@ -62,6 +62,25 @@ impl TryFrom<&ExportEnvDiff> for EnvDiff {
     }
 }
 
+impl From<EnvDiff> for ExportEnvDiff {
+    fn from(env_diff: EnvDiff) -> Self {
+        let mut add_lines: Vec<String> = env_diff
+            .additions
+            .into_iter()
+            .map(|(key, value)| format!("{}={}", key, value))
+            .collect();
+        add_lines.sort();
+
+        let mut del_lines = env_diff.deletions;
+        del_lines.sort();
+
+        Self {
+            add: add_lines.join("\n"),
+            del: del_lines.join("\n"),
+        }
+    }
+}
+
 impl ExportEnvDiff {
     /// Create an ExportEnvDiff by comparing two JSON environment snapshots.
     ///

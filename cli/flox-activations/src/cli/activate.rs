@@ -525,6 +525,11 @@ impl ActivateArgs {
         let vars_from_environment = VarsFromEnvironment::get()?;
         let activation_environment =
             Self::assemble_environment(data.clone(), vars_from_environment, env_diff)?;
+
+        // Convert activation_environment (which includes FLOX_ENV_CACHE, FLOX_ENV_PROJECT, etc.)
+        // to ExportEnvDiff for use by activation functions
+        let activation_export_env_diff: ExportEnvDiff = activation_environment.into();
+
         if attach {
             // TODO: print message about attaching
         }
@@ -562,7 +567,7 @@ impl ActivateArgs {
                 legacy_exports,
                 flox_sourcing_rc,
                 verbosity,
-                export_env_diff,
+                activation_export_env_diff,
                 activate_tracer,
             )?;
             return Ok(());
@@ -577,7 +582,7 @@ impl ActivateArgs {
                 std::env::var("_flox_sourcing_rc")
                     .map(|v| v == "true")
                     .unwrap_or(false),
-                export_env_diff,
+                activation_export_env_diff,
                 &activation_state_dir,
                 activate_tracer,
             )?;
@@ -588,7 +593,7 @@ impl ActivateArgs {
                 std::env::var("_flox_sourcing_rc")
                     .map(|v| v == "true")
                     .unwrap_or(false),
-                export_env_diff,
+                activation_export_env_diff,
                 &activation_state_dir,
                 activate_tracer,
             )?;
