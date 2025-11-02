@@ -26,6 +26,7 @@ use signal_hook::iterator::Signals;
 use time::{Duration, OffsetDateTime};
 
 use super::StartOrAttachArgs;
+use super::SetReadyArgs;
 use super::attach::AttachArgs;
 use super::fix_paths::{fix_manpath_var, fix_path_var};
 use super::set_env_dirs::fix_env_dirs_var;
@@ -494,6 +495,16 @@ impl ActivateArgs {
                             _ => unreachable!(),
                         }
                     }
+
+                    // Mark the activation as ready now that we've received SIGUSR1 from the executive
+                    debug!("Marking activation {} as ready", activation_id);
+                    SetReadyArgs {
+                        flox_env: PathBuf::from(&data.env),
+                        id: activation_id.clone(),
+                        runtime_dir: PathBuf::from(&data.flox_runtime_dir),
+                    }
+                    .handle()
+                    .context("Failed to mark activation as ready")?;
                 },
                 Err(e) => {
                     // Fork failed
