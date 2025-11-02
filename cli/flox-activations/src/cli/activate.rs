@@ -120,6 +120,28 @@ pub fn set_activation_env_vars_in_process(data: &ActivateData) {
     }
 }
 
+/// Set early activation environment variables that don't depend on the activation script output.
+/// These need to be set before forking the Executive so they're inherited by all child processes.
+///
+/// This includes:
+/// - FLOX_ENV, FLOX_ENV_CACHE, FLOX_ENV_PROJECT, FLOX_ENV_DESCRIPTION
+/// - Default Nix environment variables
+///
+/// # Safety
+/// This function uses unsafe operations to modify the process environment.
+fn set_early_activation_env_in_process(data: &ActivateData) {
+    // Set the documented exposed variables
+    debug_set_var!("FLOX_ENV", &data.env);
+    debug_set_var!("FLOX_ENV_CACHE", data.env_cache.to_string_lossy().to_string());
+    debug_set_var!("FLOX_ENV_PROJECT", data.env_project.to_string_lossy().to_string());
+    debug_set_var!("FLOX_ENV_DESCRIPTION", &data.env_description);
+
+    // Set default Nix environment variables
+    for (key, value) in default_nix_env_vars() {
+        debug_set_var!(key, value);
+    }
+}
+
 /// Builder for creating shell-specific startup args structs.
 /// Consolidates the repeated pattern of building BashStartupArgs, FishStartupArgs, etc.
 struct StartupArgsBuilder<'a> {
@@ -396,6 +418,11 @@ impl ActivateArgs {
         // in Rust before forking so that all processes inherit the correct environment
         crate::cli::set_env_dirs::set_env_dirs_in_process(&data.env)?;
         crate::cli::fix_paths::fix_paths_in_process()?;
+
+        // Set additional activation environment variables before forking the executive
+        // This ensures FLOX_ENV, FLOX_ENV_CACHE, FLOX_ENV_PROJECT, etc. are inherited
+        // by the executive process and the activation script it executes
+        set_early_activation_env_in_process(&data);
 
         let (attach, activation_state_dir, activation_id) = StartOrAttachArgs {
             pid: std::process::id() as i32,
