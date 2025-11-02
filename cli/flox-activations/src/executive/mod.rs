@@ -255,6 +255,21 @@ fn monitoring_loop(
         }
     }
 
+    // Remove the activation entry from activations.json
+    debug!("Executive: Removing activation {} from registry", activation_id);
+    let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
+    if let Some(activations) = activations {
+        if let Ok(mut activations) = activations.check_version() {
+            activations.remove_activation(activation_id);
+            if let Err(e) = activations::write_activations_json(&activations, &activations_json_path, lock) {
+                debug!("Failed to remove activation from registry: {}", e);
+                // Continue with cleanup anyway
+            }
+        } else {
+            debug!("Invalid version in activations.json, skipping registry cleanup");
+        }
+    }
+
     // ny: Clean up state (remove temp files, etc.)
     cleanup_activation_state(activation_state_dir)?;
 
