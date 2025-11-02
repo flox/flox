@@ -18,6 +18,7 @@ flowchart TB
         n146["exec(cmd args)"]
         invoke["userShell"]
         n150["start-process-compose()"]
+        n153["set_ready()"]
   end
  subgraph s2["process-compose"]
         n96["process-compose"]
@@ -105,7 +106,7 @@ flowchart TB
     n63 --> n127
     n126 -- parent --> n127
     n127 --> n149
-    n116 --> n115
+    n116 --> n153
     n130 -.-> n116
     n130 --> n94
     n35 --> n83
@@ -132,6 +133,7 @@ flowchart TB
     n152 --> n6
     n126 -- child --> n121
     nd -. cmd mode .-> n138(["exec args"])
+    n153 --> n140
     n83@{ shape: doc}
     n137@{ shape: diam}
     n140@{ shape: rect}
@@ -157,6 +159,7 @@ flowchart TB
     style n145 fill:#FFE0B2
     style n146 fill:#FFE0B2
     style n150 fill:#FFE0B2
+    style n153 fill:#C8E6C9
     style n111 fill:#C8E6C9
     style n112 fill:#C8E6C9
     style n113 fill:#C8E6C9
