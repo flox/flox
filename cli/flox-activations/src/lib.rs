@@ -30,6 +30,28 @@ macro_rules! debug_set_var {
     }};
 }
 
+/// Macro to remove an environment variable from the current process with debug logging.
+/// Using a macro ensures the backtrace shows the actual call site, not a wrapper function.
+///
+/// # Safety
+/// This uses unsafe std::env::remove_var internally. The caller must ensure proper synchronization.
+///
+/// # Examples
+/// ```ignore
+/// debug_remove_var!("MY_VAR");
+/// debug_remove_var!("OBSOLETE_VAR");
+/// ```
+#[macro_export]
+macro_rules! debug_remove_var {
+    ($key:expr) => {{
+        let key = $key;
+        log::debug!("Removing env var: {}", key);
+        unsafe {
+            std::env::remove_var(key);
+        }
+    }};
+}
+
 /// Macro to set an environment variable on a Command object with debug logging.
 /// Using a macro ensures the backtrace shows the actual call site, not a wrapper function.
 ///
