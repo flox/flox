@@ -1548,25 +1548,11 @@ sets_NIX_SSL_CERT_FILE() {
   cp -r "$GENERATED_DATA"/envs/heredocs/* .flox/env/
 
   FLOX_SHELL="bash" NO_COLOR=1 \
-  run "$FLOX_BIN" activate -- true
+  run "$FLOX_BIN" activate -c true
 
   assert_success
   assert_line "running on-activate"
   assert_line "running profile-bash"
-}
-
-# bats test_tags=activate,activate:profile:heredocs
-@test "indented heredocs in the manifest are outdented (zsh)" {
-  project_setup
-
-  cp -r "$GENERATED_DATA"/envs/heredocs/* .flox/env/
-
-  FLOX_SHELL="zsh" NO_COLOR=1 \
-  run "$FLOX_BIN" activate -- true
-  assert_success
-
-  assert_line "running on-activate"
-  assert_line "running profile-zsh"
 }
 
 # fish does not support heredocs
@@ -1578,11 +1564,25 @@ sets_NIX_SSL_CERT_FILE() {
   cp -r "$GENERATED_DATA"/envs/heredocs/* .flox/env/
 
   FLOX_SHELL="tcsh" NO_COLOR=1 \
-  run "$FLOX_BIN" activate -- true
+  run "$FLOX_BIN" activate -c true
 
   assert_success
   assert_line "running on-activate"
   assert_line "running profile-tcsh"
+}
+
+# bats test_tags=activate,activate:profile:heredocs
+@test "indented heredocs in the manifest are outdented (zsh)" {
+  project_setup
+
+  cp -r "$GENERATED_DATA"/envs/heredocs/* .flox/env/
+
+  FLOX_SHELL="zsh" NO_COLOR=1 \
+  run "$FLOX_BIN" activate -c true
+  assert_success
+
+  assert_line "running on-activate"
+  assert_line "running profile-zsh"
 }
 
 # ---------------------------------------------------------------------------- #
