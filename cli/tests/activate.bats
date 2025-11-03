@@ -3058,7 +3058,8 @@ attach_runs_profile_twice() {
   mkfifo "$TEARDOWN_FIFO"
 
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" >> output 2>&1 &
+  # Remember to use `-c` command string mode to invoke profile hooks.
+  FLOX_SHELL="$shell" "$FLOX_BIN" -vv activate -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" >> output 2>&1 &
 
   cat activate_started_fifo
   run cat output
@@ -3070,7 +3071,7 @@ attach_runs_profile_twice() {
       FLOX_SHELL="$shell" run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
       ;;
     command)
-      FLOX_SHELL="$shell" run "$FLOX_BIN" activate -- true
+      FLOX_SHELL="$shell" run "$FLOX_BIN" activate -c true
       ;;
     in-place)
       if [ "$shell" == "tcsh" ]; then
@@ -4968,9 +4969,7 @@ nested_activation_prep_rc_file() {
 run_activation_check_command() {
   shell="${1:?}"
   flags="${2:?}"
-  # Quotes around PATH are needed with fish, otherwise it prints components
-  # separated by spaces instead of ':' (since all variables in fish are lists).
-  run "$shell" "$flags" "$FLOX_BIN activate -d outer -- $shell $flags 'echo PATH is \"\\\$PATH\"; echo MANPATH is \"\\\$MANPATH\"'"
+  run "$shell" "$flags" "$FLOX_BIN activate -d outer -c 'echo PATH is \$PATH; echo MANPATH is \$MANPATH'"
 }
 
 # Produces a script that when sourced will produce output from the nested
