@@ -261,9 +261,48 @@ fn monitoring_loop(
     if let Some(activations) = activations {
         if let Ok(mut activations) = activations.check_version() {
             activations.remove_activation(activation_id);
-            if let Err(e) = activations::write_activations_json(&activations, &activations_json_path, lock) {
-                debug!("Failed to remove activation from registry: {}", e);
-                // Continue with cleanup anyway
+            let is_empty = activations.is_empty();
+
+            if is_empty {
+                // Last activation removed - clean up the entire registry directory
+                debug!("Executive: Last activation removed, cleaning up registry directory");
+
+                // Get the parent directory (contains activations.json and activations.lock)
+                let registry_dir = activations_json_path.parent().expect("activations.json has parent");
+
+                // Rename directory to make it unique before removal
+                let pid = std::process::id();
+                let remove_dir = registry_dir.with_extension(format!("remove.{}", pid));
+
+                if let Err(e) = std::fs::rename(registry_dir, &remove_dir) {
+                    debug!("Failed to rename registry directory for removal: {}", e);
+                    // Continue with cleanup anyway
+                } else {
+                    // Explicitly remove the files
+                    let json_path = remove_dir.join("activations.json");
+                    let lock_path = remove_dir.join("activations.lock");
+
+                    if let Err(e) = std::fs::remove_file(&json_path) {
+                        debug!("Failed to remove activations.json: {}", e);
+                    }
+
+                    if let Err(e) = std::fs::remove_file(&lock_path) {
+                        debug!("Failed to remove activations.lock: {}", e);
+                    }
+
+                    // Remove the directory itself (non-recursively)
+                    if let Err(e) = std::fs::remove_dir(&remove_dir) {
+                        debug!("Failed to remove registry directory: {}", e);
+                    } else {
+                        debug!("Executive: Successfully removed registry directory");
+                    }
+                }
+            } else {
+                // Still have activations, just write back the updated registry
+                if let Err(e) = activations::write_activations_json(&activations, &activations_json_path, lock) {
+                    debug!("Failed to remove activation from registry: {}", e);
+                    // Continue with cleanup anyway
+                }
             }
         } else {
             debug!("Invalid version in activations.json, skipping registry cleanup");
