@@ -2997,7 +2997,7 @@ attach_runs_hooks_once() {
   TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
   mkfifo "$TEARDOWN_FIFO"
 
-  "$FLOX_BIN" activate -- bash -c "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 2> output &
+  "$FLOX_BIN" activate -c "echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" 2> output &
 
   cat activate_started_fifo
   run cat output
@@ -3187,7 +3187,7 @@ EOF
   mkfifo "$TEARDOWN_FIFO"
 
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" >> output 2>&1 &
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" >> output 2>&1 &
 
   cat activate_started_fifo
 
@@ -3303,7 +3303,7 @@ attach_sets_profile_vars() {
   mkfifo "$TEARDOWN_FIFO"
 
   # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
-  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
 
   cat activate_started_fifo
 
@@ -3490,7 +3490,7 @@ EOF
   # Start a first_activation which sets FOO=first_activation
   case "$mode" in
     command)
-      injected="first_activation" "$FLOX_BIN" activate -- bash -c "echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
+      injected="first_activation" "$FLOX_BIN" activate -c "echo \$FOO > output && echo > activate_started_fifo && echo > $TEARDOWN_FIFO" &
       ;;
     in-place)
       TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$("$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_started_fifo && echo > "$TEARDOWN_FIFO"' &
@@ -4297,7 +4297,7 @@ Setting PATH from ${rc_file}"
 
   # Pre-fetch without a timeout.
   # Skip the test if we're running a release
-  if ! OUTPUT=$(nix build "github:flox/flox/v${FLOX_LATEST_VERSION}" 2>&1); then
+  if ! OUTPUT="$(nix --extra-experimental-features "nix-command flakes" build "github:flox/flox/v${FLOX_LATEST_VERSION}" 2>&1)"; then
     if [[ "$OUTPUT" == *"No commit found for SHA: v${FLOX_LATEST_VERSION}"* ]]; then
       skip "skipping compatibility check for what is likely a release commit"
     else
@@ -4313,8 +4313,8 @@ Setting PATH from ${rc_file}"
   # TODO: Remove unsetting of mocks when `$FLOX_LATEST_VERSION` is using YAML
   #       instead of JSON mock files.
   env -u _FLOX_USE_CATALOG_MOCK \
-    setsid ./result/bin/flox activate -- \
-    "$shell_path" -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" > output 2>&1 &
+    setsid ./result/bin/flox activate \
+      -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" > output 2>&1 &
 
   # Longer timeout to allow for `nix run` locking.
   background_pid="$!"
@@ -4351,7 +4351,7 @@ exit
 EOF
       ;;
     command)
-      run "$FLOX_BIN" activate -- true
+      run "$FLOX_BIN" activate -c true
       assert_success
       assert_output "$expected_content"
       ;;
@@ -4829,7 +4829,7 @@ EOF
   )"
   echo "$MANIFEST_CONTENTS_HIGHEST_PRECEDENCE" | "$FLOX_BIN" edit -f -
 
-  run "$FLOX_BIN" activate -c 'echo foo: $foo; bar: $bar'
+  run "$FLOX_BIN" activate -c 'echo "foo: $foo; bar: $bar"'
   assert_success
   assert_output - <<EOF
 Sourcing .bashrc
@@ -4860,7 +4860,7 @@ environments = [
 ]
 EOF
 
-  run --separate-stderr "$FLOX_BIN" activate -d composer -- echo "locking"
+  run --separate-stderr "$FLOX_BIN" activate -d composer -c 'echo "locking"'
   assert_success
   assert_equal "$stderr" "ℹ️  The following manifest fields were overridden during merging:
 - This environment set:
@@ -4868,7 +4868,7 @@ EOF
 Sourcing .bashrc
 Setting PATH from .bashrc"
 
-  run --separate-stderr "$FLOX_BIN" activate -d composer -- echo "already locked"
+  run --separate-stderr "$FLOX_BIN" activate -d composer -c 'echo "already locked"'
   assert_success
   assert_equal "$stderr" "Sourcing .bashrc
 Setting PATH from .bashrc"
