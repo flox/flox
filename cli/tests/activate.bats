@@ -1643,7 +1643,7 @@ sets_NIX_SSL_CERT_FILE() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=activate,activate:python-detects-installed-python,foobar
+# bats test_tags=activate,activate:python-detects-installed-python
 @test "'flox activate' sets python vars if python is installed" {
   project_setup
   # unset python vars if any
@@ -2362,6 +2362,7 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# FIXME: enabling FLOX_ACTIVATE_TRACE breaks this test because it's expecting exactly 5 lines of output,
 # bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshenv
 @test "zsh: in-place activation with non-interactive non-login shell" {
   project_setup
@@ -2500,9 +2501,10 @@ sourcing hook.on-activate for first time
 sourcing profile.common for first time
 sourcing profile.zsh for first time
 EOF
-  # Inner interactive activation.
+  # Inner interactive activation. Note that the first and remaining lines
+  # are separated by the "You are now using the environment" message.
+  assert_output --partial "nested hook.on-activate"
   assert_output --partial - <<EOF
-nested hook.on-activate
 sourcing profile.common for first time
 sourcing profile.zsh for first time
 nested profile.common
