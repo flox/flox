@@ -5207,25 +5207,10 @@ EOF
   )"
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d project -f -
 
-  if [[ "$shell" == "bash" ]]; then
-    # Use a login shell instead of an interactive one because of the /dev/tty
-    # issue
-    _FLOX_SHELL_FORCE="$shell" \
-      run "$FLOX_BIN" activate -d project -- "$shell" -lc 'echo "$shell_var"'
-  elif [[ "$shell" == "tcsh" ]]; then
-    # tcsh does not parse the following:
-    #   % tcsh -m -c 'tcsh -ic "echo \"$shell_var\""'
-    #   Unmatched '"'.
-    # ... so we skip the quoting of $shell_var below.
-    _FLOX_SHELL_FORCE="$shell" \
-      run "$FLOX_BIN" activate -d project -- "$shell" -ic "echo \$shell_var"
-  else
-    _FLOX_SHELL_FORCE="$shell" \
-      run "$FLOX_BIN" activate -d project -- "$shell" -ic 'echo "$shell_var"'
-  fi
+  FLOX_SHELL="$shell" \
+    run "$FLOX_BIN" activate -d project -c 'echo $shell_var'
   assert_success
   assert_output - <<EOF
-project profile.$shell
 project profile.$shell
 hello from project
 EOF
