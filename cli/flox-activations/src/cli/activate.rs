@@ -457,6 +457,11 @@ impl ActivateArgs {
         .handle()?;
 
         if attach {
+            eprintln!(
+                "✅ Attached to existing activation of environment '{}'",
+                data.env_description
+            );
+            eprintln!("To stop using this environment, type 'exit'");
             debug!(
                 "Attaching to existing activation in state dir {:?}, id {}",
                 activation_state_dir, activation_id
