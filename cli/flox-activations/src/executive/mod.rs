@@ -222,7 +222,12 @@ fn monitoring_loop(
         let parent_alive = pid_is_running(parent_pid.as_raw());
 
         // Check if there are any PIDs attached to our activation in the registry
-        let registry_pids_exist = check_registry_pids(&activations_json_path, activation_id)?;
+        let registry_pids_exist = check_registry_pids(
+            &activations_json_path,
+            activation_id,
+            &data.flox_runtime_dir,
+            &data.env,
+        )?;
 
         if !parent_alive && !registry_pids_exist {
             debug!(
@@ -323,7 +328,14 @@ fn monitoring_loop(
 ///
 /// IMPORTANT: This function prunes dead PIDs before checking, ensuring that the
 /// executive only waits for actually living processes.
-fn check_registry_pids(activations_json_path: &Path, activation_id: &str) -> Result<bool> {
+///
+/// If the last PID is removed, this also cleans up the activation state directory.
+fn check_registry_pids(
+    activations_json_path: &Path,
+    activation_id: &str,
+    runtime_dir: impl AsRef<Path>,
+    flox_env: impl AsRef<Path>,
+) -> Result<bool> {
     // Read the activations file with lock
     let (activations, lock) = activations::read_activations_json(activations_json_path)?;
 
@@ -356,8 +368,63 @@ fn check_registry_pids(activations_json_path: &Path, activation_id: &str) -> Res
     // Check if there are any PIDs remaining after pruning
     let pids_remain = !activation.attached_pids().is_empty();
 
-    // Write back the pruned activations if we removed any PIDs
-    if pids_removed {
+    // If no PIDs remain after pruning, remove the activation and clean up its state directory
+    if pids_removed && !pids_remain {
+        debug!(
+            "Executive: Last PID removed from activation {}, cleaning up activation state",
+            activation_id
+        );
+
+        // Remove the activation from the registry
+        activations.remove_activation(activation_id);
+
+        // Write back the updated activations
+        activations::write_activations_json(&activations, activations_json_path, lock)?;
+        debug!("Executive: Removed activation {} from registry", activation_id);
+
+        // Clean up the activation state directory
+        let activation_state_dir =
+            activations::activation_state_dir_path(runtime_dir, flox_env, activation_id)?;
+
+        // Remove the specific files we know about
+        let add_env_path = activation_state_dir.join("add.env");
+        let del_env_path = activation_state_dir.join("del.env");
+        let start_json_path = activation_state_dir.join("start.env.json");
+        let end_json_path = activation_state_dir.join("end.env.json");
+
+        // Remove files if they exist (ignore errors)
+        if add_env_path.exists() {
+            if let Err(e) = std::fs::remove_file(&add_env_path) {
+                debug!("Failed to remove add.env: {}", e);
+            }
+        }
+        if del_env_path.exists() {
+            if let Err(e) = std::fs::remove_file(&del_env_path) {
+                debug!("Failed to remove del.env: {}", e);
+            }
+        }
+        if start_json_path.exists() {
+            if let Err(e) = std::fs::remove_file(&start_json_path) {
+                debug!("Failed to remove start.env.json: {}", e);
+            }
+        }
+        if end_json_path.exists() {
+            if let Err(e) = std::fs::remove_file(&end_json_path) {
+                debug!("Failed to remove end.env.json: {}", e);
+            }
+        }
+
+        // Remove the directory itself (non-recursively)
+        if let Err(e) = std::fs::remove_dir(&activation_state_dir) {
+            debug!(
+                "Failed to remove activation state directory: {} (may not be empty or may not exist)",
+                e
+            );
+        } else {
+            debug!("Executive: Successfully removed activation state directory");
+        }
+    } else if pids_removed {
+        // PIDs were removed but some remain, just write back the updated registry
         activations::write_activations_json(&activations, activations_json_path, lock)?;
         debug!("Executive: Updated activations.json after pruning dead PIDs");
     }
