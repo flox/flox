@@ -23,6 +23,7 @@ fn main() -> Result<(), Error> {
         cli::Command::ProfileScripts(args) => args.handle()?,
         cli::Command::PrependAndDedup(args) => args.handle(),
         cli::Command::FixFpath(args) => args.handle(),
+        cli::Command::ReplayEnv(args) => args.handle()?,
     }
     Ok(())
 }

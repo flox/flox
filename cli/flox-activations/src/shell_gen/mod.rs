@@ -63,6 +63,17 @@ impl Shell {
             _ => unimplemented!(),
         }
     }
+
+    /// Unset/remove an environment variable
+    /// Do not include a trailing ;
+    pub fn unset_var(&self, var: &str) -> String {
+        match self {
+            Self::Bash => format!("unset {var}"),
+            Self::Fish => format!("set -e {var}"),
+            Self::Tcsh => format!("unsetenv {var}"),
+            Self::Zsh => format!("unset {var}"),
+        }
+    }
 }
 
 pub fn source_file(path: &Path) -> String {

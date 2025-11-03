@@ -9,6 +9,7 @@ mod fix_fpath;
 mod fix_paths;
 mod prepend_and_dedup;
 mod profile_scripts;
+mod replay_env;
 mod set_env_dirs;
 mod set_ready;
 mod start_or_attach;
@@ -18,6 +19,7 @@ use fix_fpath::FixFpathArgs;
 use fix_paths::FixPathsArgs;
 use prepend_and_dedup::PrependAndDedupArgs;
 use profile_scripts::ProfileScriptsArgs;
+use replay_env::ReplayEnvArgs;
 use set_env_dirs::SetEnvDirsArgs;
 pub use set_ready::SetReadyArgs;
 pub use start_or_attach::StartOrAttachArgs;
@@ -61,6 +63,8 @@ pub enum Command {
     PrependAndDedup(PrependAndDedupArgs),
     #[command(about = "Print sourceable output fixing fpath/FPATH for zsh.")]
     FixFpath(FixFpathArgs),
+    #[command(about = "Print sourceable output to replay environment changes from JSON snapshots.")]
+    ReplayEnv(ReplayEnvArgs),
 }
 
 /// Splits PATH-like variables into individual paths, removing any empty strings.

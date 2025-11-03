@@ -19,7 +19,7 @@ fn shell_escape_value(value: &str) -> String {
 ///
 /// The JSON file should be an object with environment variable names as keys
 /// and their values as string values.
-fn parse_env_json(path: impl AsRef<Path>) -> Result<HashMap<String, String>> {
+pub fn parse_env_json(path: impl AsRef<Path>) -> Result<HashMap<String, String>> {
     let contents = std::fs::read_to_string(path.as_ref())?;
     let json: Value = serde_json::from_str(&contents)?;
 
