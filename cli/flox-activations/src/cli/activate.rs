@@ -102,6 +102,13 @@ pub fn build_activation_env_vars(data: &ActivateData) -> HashMap<&'static str, S
 
     exports.extend(default_nix_env_vars());
 
+    // Preserve _FLOX_SHELL_FORCE if set, so it survives for subshells
+    if let Ok(shell_override) = std::env::var("_FLOX_SHELL_FORCE") {
+        if !shell_override.is_empty() {
+            exports.insert("_FLOX_SHELL_FORCE", shell_override);
+        }
+    }
+
     exports
 }
 
@@ -409,9 +416,26 @@ fn write_maybe_self_destructing_script(
 impl ActivateArgs {
     pub fn handle(self, verbosity: u8) -> Result<(), anyhow::Error> {
         let contents = fs::read_to_string(&self.activate_data)?;
-        let data: ActivateData = serde_json::from_str(&contents)?;
+        let mut data: ActivateData = serde_json::from_str(&contents)?;
 
         fs::remove_file(&self.activate_data)?;
+
+        // Check for _FLOX_SHELL_FORCE and use it to override data.shell if set
+        // This allows users to specify the shell for activation and subshells
+        if let Ok(shell_override) = std::env::var("_FLOX_SHELL_FORCE") {
+            if !shell_override.is_empty() {
+                debug!("Overriding shell from _FLOX_SHELL_FORCE: {}", shell_override);
+                let shell_path = std::path::Path::new(&shell_override);
+                match Shell::try_from(shell_path) {
+                    Ok(shell) => {
+                        data.shell = shell;
+                    },
+                    Err(e) => {
+                        debug!("Failed to parse _FLOX_SHELL_FORCE value '{}': {}", shell_override, e);
+                    }
+                }
+            }
+        }
 
         // Set FLOX_ENV_DIRS and fix PATH/MANPATH before forking the executive
         // These were previously done by the bash activate script, but now we do them
@@ -715,6 +739,13 @@ impl ActivateArgs {
 
         // Do we need this or will this already be inherited?
         additions_static_str.extend(default_nix_env_vars());
+
+        // Preserve _FLOX_SHELL_FORCE if set, so it survives for subshells
+        if let Ok(shell_override) = std::env::var("_FLOX_SHELL_FORCE") {
+            if !shell_override.is_empty() {
+                additions_static_str.insert("_FLOX_SHELL_FORCE", shell_override);
+            }
+        }
 
         env_diff.additions.extend(
             additions_static_str

@@ -2456,7 +2456,7 @@ Setting PATH from .zlogout
 EOF
 }
 
-# bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshrc
+# bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshrc,foobar
 @test "zsh: activation after in-place activation from .zshrc" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
@@ -5125,7 +5125,7 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d project -f -
 
   _FLOX_SHELL_FORCE="$shell" \
-    run "$FLOX_BIN" activate -d project -- true
+    run "$FLOX_BIN" activate -d project -c true
   assert_success
   assert_output - <<EOF
 project profile.$shell
@@ -5147,6 +5147,7 @@ EOF
   profile_scripts_only_run_once tcsh
 }
 
+# bats test_tags=foobar
 @test "zsh: profile scripts only run once with activation in dotfiles" {
   project_setup_common
   profile_scripts_only_run_once zsh
@@ -5207,7 +5208,7 @@ EOF
   )"
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d project -f -
 
-  FLOX_SHELL="$shell" \
+  _FLOX_SHELL_FORCE="$shell" \
     run "$FLOX_BIN" activate -d project -c 'echo $shell_var'
   assert_success
   assert_output - <<EOF
