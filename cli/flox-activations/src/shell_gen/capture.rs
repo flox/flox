@@ -222,15 +222,17 @@ pub fn replay_env(start_json: impl AsRef<Path>, end_json: impl AsRef<Path>) -> R
     let end_env = parse_env_json(end_json)?;
 
     // Unset variables that exist in start but not in end
+    // Only remove if the variable currently exists in the environment
     for key in start_env.keys() {
-        if !end_env.contains_key(key) {
+        if !end_env.contains_key(key) && std::env::var(key).is_ok() {
             debug_remove_var!(key);
         }
     }
 
     // Set variables from end (either new or changed from start)
+    // Only set if the variable changed during activation AND the current value differs
     for (key, value) in &end_env {
-        if start_env.get(key) != Some(value) {
+        if start_env.get(key) != Some(value) && std::env::var(key).ok().as_deref() != Some(value.as_str()) {
             debug_set_var!(key, value);
         }
     }
