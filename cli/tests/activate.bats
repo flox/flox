@@ -2456,7 +2456,7 @@ Setting PATH from .zlogout
 EOF
 }
 
-# bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshrc,foobar
+# bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshrc
 @test "zsh: activation after in-place activation from .zshrc" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
@@ -2492,7 +2492,7 @@ EOF
   # profile scripts, and then no further.
   # Also need to strip carriage-returns from the `expect` output in order for
   # BATS to do multi-line assertions on the output.
-  FLOX_SHELL=zsh NO_COLOR=1 run zsh --interactive --login -c \
+  _FLOX_SHELL_FORCE=zsh NO_COLOR=1 run zsh --interactive --login -c \
     "unset _already_ran_profile_common _already_ran_profile_zsh && expect $TESTS_DIR/activate/activate.exp nested | tr -d '\r'"
   assert_success
   # Outer in-place activation.
@@ -5147,7 +5147,6 @@ EOF
   profile_scripts_only_run_once tcsh
 }
 
-# bats test_tags=foobar
 @test "zsh: profile scripts only run once with activation in dotfiles" {
   project_setup_common
   profile_scripts_only_run_once zsh
