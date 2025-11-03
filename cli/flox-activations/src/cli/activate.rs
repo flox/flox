@@ -641,7 +641,11 @@ impl ActivateArgs {
                 activate_tracer,
             )?;
         } else {
-            Self::new_activate_command(data.run_args, data.is_ephemeral)?;
+            Self::new_activate_command(
+                data.run_args,
+                data.is_ephemeral,
+                activation_export_env_diff,
+            )?;
         }
 
         return Ok(());
@@ -718,6 +722,12 @@ impl ActivateArgs {
                 .map(|(k, v)| (k.to_string(), v)),
         );
 
+        // Always unset the FLOX_SHELL variable as we attach to an activation.
+        env_diff.deletions.extend(vec!["FLOX_SHELL".to_string()]);
+
+        debug!("Final assembled environment diff additions: {:?}", env_diff.additions);
+        debug!("Final assembled environment diff deletions: {:?}", env_diff.deletions);
+
         Ok(env_diff)
     }
 
@@ -777,17 +787,22 @@ impl ActivateArgs {
 
     /// Execute the user's command directly using exec().
     ///
-    /// The environment has already been replayed via replay_env(), so the command
-    /// will inherit the properly modified environment from the current process.
-    fn new_activate_command(run_args: Vec<String>, is_ephemeral: bool) -> Result<()> {
+    /// The environment modifications from activation are applied to the command
+    /// before execution.
+    fn new_activate_command(
+        run_args: Vec<String>,
+        is_ephemeral: bool,
+        export_env_diff: ExportEnvDiff,
+    ) -> Result<()> {
         if run_args.is_empty() {
             return Err(anyhow!("empty command provided"));
         }
         let user_command = &run_args[0];
         let args = &run_args[1..];
 
-        // Create command directly - it will inherit the already-replayed environment
-        let mut command = Command::new(user_command);
+        // Convert export_env_diff to EnvDiff and apply it to the command
+        let env_diff: EnvDiff = (&export_env_diff).try_into()?;
+        let mut command = Self::assemble_command_with_environment(user_command, &env_diff);
         command.args(args);
 
         debug!("executing command directly: {:?}", command);
