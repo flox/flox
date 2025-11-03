@@ -561,8 +561,13 @@ impl ActivateArgs {
         )?;
         let env_diff: EnvDiff = (&export_env_diff).try_into()?;
         let vars_from_environment = VarsFromEnvironment::get()?;
-        let activation_environment =
-            Self::assemble_environment(data.clone(), vars_from_environment, env_diff)?;
+        let activation_environment = Self::assemble_environment(
+            data.clone(),
+            vars_from_environment,
+            env_diff,
+            &activation_state_dir,
+            &activation_id,
+        )?;
 
         // Convert activation_environment (which includes FLOX_ENV_CACHE, FLOX_ENV_PROJECT, etc.)
         // to ExportEnvDiff for use by activation functions
@@ -674,6 +679,8 @@ impl ActivateArgs {
         data: ActivateData,
         vars_from_environment: VarsFromEnvironment,
         mut env_diff: EnvDiff,
+        activation_state_dir: &PathBuf,
+        activation_id: &str,
     ) -> Result<EnvDiff> {
         let mut additions_static_str = HashMap::new();
 
@@ -694,6 +701,13 @@ impl ActivateArgs {
         );
 
         additions_static_str.insert("FLOX_ENV_DESCRIPTION", data.env_description);
+
+        // Propagate activation-specific variables
+        additions_static_str.insert(
+            "FLOX_ACTIVATION_STATE_DIR",
+            activation_state_dir.to_string_lossy().to_string(),
+        );
+        additions_static_str.insert("FLOX_ACTIVATION_ID", activation_id.to_string());
 
         // Do we need this or will this already be inherited?
         additions_static_str.extend(default_nix_env_vars());
