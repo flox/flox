@@ -1,6 +1,6 @@
 ---
 name: Install failure
-about: Sometimes things aren't working. Help us identify those things so we can fix them!
+about: One of the Flox installers (e.g. .pkg, .deb, .rpm) failed
 labels: bug
 
 ---
