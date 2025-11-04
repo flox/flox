@@ -22,7 +22,7 @@ blake3 = "1.8.2"
 bpaf = { version = "0.9.20", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.42", features = ["serde"] }
-clap = { version = "4.5.50", features = ["derive"] }
+clap = { version = "4.5.51", features = ["derive"] }
 close_fds = "0.3"
 config = { version = "0.15", default-features = false, features = ["toml"] }
 crossterm = "0.29"
@@ -60,7 +60,7 @@ progenitor-client = "0.11.2"
 proptest = "1.9.0"
 proptest-derive = "0.7.0"
 regex = "1.12"
-regress = "0.10.4"
+regress = "0.10.5"
 reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
 schemars = "1"
 semver = "1.0.27"
