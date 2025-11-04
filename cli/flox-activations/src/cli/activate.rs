@@ -914,10 +914,7 @@ impl ActivateArgs {
                 command.args(["--noprofile", "--rcfile", &script_gen.script_path.to_string_lossy()]);
                 // Invoke bash -c "source $FLOX_BASH_INIT_SCRIPT; <command string>".
                 command.arg("-c").arg(formatdoc!(
-                    r#"
-                    source '{}';
-                    {};
-                    "#,
+                    r#"source '{}';{}"#,
                     script_gen.script_path.to_string_lossy(),
                     data.command_string.unwrap()
                 ));
