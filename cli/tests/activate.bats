@@ -4742,6 +4742,7 @@ ${ECHO_COMMANDS}
 EOF
       ;;
     zsh)
+      echo > "${HOME}/.zshrc" # Silence echo statements coming out of .zshrc
       cat > "${HOME}/.zshenv" <<EOF
 eval "\$(${IN_PLACE_COMMAND})"
 ${ECHO_COMMANDS}
@@ -4753,8 +4754,6 @@ EOF
       ;;
   esac
 
-  # Pass commands unquoted and without `$shell -c` because we don't want to
-  # start an extra shell which also sources the RC file.
   run "$FLOX_BIN" activate -m "$MODE" -d "${PROJECT_USER}" -c "${ECHO_COMMANDS}"
   assert_success
 
