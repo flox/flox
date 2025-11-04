@@ -936,8 +936,7 @@ impl ActivateArgs {
             Shell::Zsh(_) => {
                 // export FLOX_ZSH_INIT_SCRIPT so that it can be sourced from ZDOTDIR.
                 debug_command_env!(&mut command, "FLOX_ZSH_INIT_SCRIPT",
-                    data.interpreter_path.join("activate.d").join("zsh").to_string_lossy().to_string());
-                    // script_gen.script_path.to_string_lossy().to_string());
+                    script_gen.script_path.to_string_lossy().to_string());
                 command.arg("-c").arg(data.command_string.unwrap());
             },
             _ => unimplemented!(),
