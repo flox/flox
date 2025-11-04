@@ -4755,7 +4755,7 @@ EOF
 
   # Pass commands unquoted and without `$shell -c` because we don't want to
   # start an extra shell which also sources the RC file.
-  run "$FLOX_BIN" activate -m "$MODE" -d "${PROJECT_USER}" -- ${ECHO_COMMANDS}
+  run "$FLOX_BIN" activate -m "$MODE" -d "${PROJECT_USER}" -c "${ECHO_COMMANDS}"
   assert_success
 
   # Assert on both activations to ensure that we really got an in-place activation first.
