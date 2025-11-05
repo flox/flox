@@ -322,7 +322,6 @@ pub async fn start_services_with_new_process_compose(
         trust: false,
         print_script: false,
         start_services: true,
-        use_fallback_interpreter: false,
         mode: Some(activate_mode),
         generation,
         run_args: vec!["true".to_string()],

@@ -83,11 +83,6 @@ pub struct Activate {
     #[bpaf(long, short)]
     pub start_services: bool,
 
-    /// Use the interpreter bundled with the environment instead of the
-    /// interpreter bundled with the CLI.
-    #[bpaf(long, hide)]
-    pub use_fallback_interpreter: bool,
-
     /// Activate the environment in either "dev" or "run" mode.
     /// Overrides the "options.activate.mode" setting in the manifest.
     #[bpaf(short, long)]
@@ -267,15 +262,7 @@ impl Activate {
             )
         })?;
 
-        let interpreter_path = if self.use_fallback_interpreter {
-            let path = rendered_env_path.development.to_path_buf();
-            tracing::debug!(
-                interpreter = "stored",
-                path = traceable_path(&path),
-                "setting interpreter"
-            );
-            path
-        } else {
+        let interpreter_path = {
             let path = FLOX_INTERPRETER.clone();
             tracing::debug!(
                 interpreter = "bundled",
