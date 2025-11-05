@@ -2,7 +2,7 @@ project(
   'flox-nix-plugins-root',
   'cpp',
   default_options: [
-    'cpp_std=c++2a',
+    'cpp_std=c++23',
     'warning_level=2',
     'debug=true',
     'optimization=2',
