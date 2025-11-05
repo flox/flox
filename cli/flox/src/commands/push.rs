@@ -69,6 +69,7 @@ impl Push {
         match dot_flox.pointer {
             // Update an existing managed environment
             EnvironmentPointer::Managed(managed_pointer) => {
+                let new = false;
                 if let Some(owner) = self.owner
                     && owner != managed_pointer.owner
                 {
@@ -89,7 +90,7 @@ impl Push {
                     self.force,
                 ) {
                     Ok(PushResult::Updated) => {
-                        let message = Self::push_message(&managed_pointer, self.force, true)?;
+                        let message = Self::push_message(&managed_pointer, self.force, new)?;
                         message::updated(message);
                     },
                     Ok(PushResult::UpToDate) => {
@@ -104,6 +105,7 @@ impl Push {
 
             // Convert a path environment to a managed environment
             EnvironmentPointer::Path(path_pointer) => {
+                let new = true;
                 let owner = if let Some(owner) = self.owner {
                     owner
                 } else {
@@ -123,7 +125,7 @@ impl Push {
                     self.force,
                 )?;
 
-                message::updated(Self::push_message(env.pointer(), self.force, false)?);
+                message::updated(Self::push_message(env.pointer(), self.force, new)?);
             },
         }
         Ok(())
@@ -226,5 +228,141 @@ impl Push {
             Use this environment from another machine: 'flox activate -r {owner}/{name}'
             Make a copy of this environment: 'flox pull {owner}/{name}'
         "})
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use flox_rust_sdk::flox::EnvironmentOwner;
+    use flox_rust_sdk::flox::test_helpers::{
+        create_test_token,
+        flox_instance_with_optional_floxhub,
+    };
+    use flox_rust_sdk::models::environment::Environment;
+    use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+    use tracing::instrument::WithSubscriber;
+
+    use super::Push;
+
+    const EMPTY_MANIFEST: &str = "version = 1";
+
+    #[tokio::test]
+    async fn push_new_environment() {
+        let name = "my-env";
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let token = create_test_token(owner.as_str());
+        flox.floxhub_token = Some(token);
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        let env = new_path_environment_in(&flox, EMPTY_MANIFEST, tempdir.path().join(name));
+        let push_cmd = Push {
+            dir: Some(env.parent_path().unwrap()),
+            owner: Some(owner),
+            force: false,
+        };
+
+        push_cmd
+            .handle(flox)
+            .with_subscriber(subscriber)
+            .await
+            .unwrap();
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ✅ my-env successfully pushed to FloxHub as public
+
+            View the environment at: https://hub.flox.dev/owner/my-env
+            Use this environment from another machine: 'flox activate -r owner/my-env'
+            Make a copy of this environment: 'flox pull owner/my-env'
+
+        "});
+    }
+
+    #[tokio::test]
+    async fn push_changes() {
+        let name = "my-env";
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let token = create_test_token(owner.as_str());
+        flox.floxhub_token = Some(token);
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        let mut env = mock_managed_environment_in(
+            &flox,
+            EMPTY_MANIFEST,
+            owner.clone(),
+            tempdir.path().join(name),
+            Some(name),
+        );
+        let push_cmd = Push {
+            dir: Some(env.parent_path().unwrap()),
+            owner: Some(owner),
+            force: false,
+        };
+
+        let updated_manifest = indoc! {"
+            # load bearing comment
+            version = 1
+        "};
+        env.edit(&flox, updated_manifest.to_string()).unwrap();
+
+        push_cmd
+            .handle(flox)
+            .with_subscriber(subscriber)
+            .await
+            .unwrap();
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ✅ Updates to my-env successfully pushed to FloxHub
+
+            View the environment at: https://hub.flox.dev/owner/my-env
+            Use this environment from another machine: 'flox activate -r owner/my-env'
+            Make a copy of this environment: 'flox pull owner/my-env'
+
+        "});
+    }
+
+    #[tokio::test]
+    async fn push_no_changes() {
+        let name = "my-env";
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let token = create_test_token(owner.as_str());
+        flox.floxhub_token = Some(token);
+        let (subscriber, writer) = test_subscriber_message_only();
+
+        let env = mock_managed_environment_in(
+            &flox,
+            EMPTY_MANIFEST,
+            owner.clone(),
+            tempdir.path().join(name),
+            Some(name),
+        );
+        let push_cmd = Push {
+            dir: Some(env.parent_path().unwrap()),
+            owner: Some(owner),
+            force: false,
+        };
+
+        push_cmd
+            .handle(flox)
+            .with_subscriber(subscriber)
+            .await
+            .unwrap();
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ℹ️  No changes to push for my-env.
+            The environment on FloxHub is already up to date.
+
+        "});
     }
 }
