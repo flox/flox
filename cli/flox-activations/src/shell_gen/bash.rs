@@ -107,7 +107,7 @@ pub fn generate_bash_startup_commands(
         args.flox_activations.display()
     ));
 
-    commands.push(format!(r#"if [ -z "${{FLOX_NOPROFILE:0}}" ]; then eval "$('{}' profile-scripts --shell bash --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "${{FLOX_ENV_DIRS:-}}")"; fi"#,
+    commands.push(format!(r#"if [ -z "${{FLOX_NOPROFILE:-}}" ]; then eval "$('{}' profile-scripts --shell bash --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "${{FLOX_ENV_DIRS:-}}")"; fi"#,
         args.flox_activations.display()
     ));
 
