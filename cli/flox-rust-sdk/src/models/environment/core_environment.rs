@@ -203,8 +203,9 @@ impl<State> CoreEnvironment<State> {
         )
         .block_on()?;
 
-        let lockfile_contents =
+        let mut lockfile_contents =
             serde_json::to_string_pretty(&lockfile).expect("lockfile structure is valid json");
+        lockfile_contents.push('\n');
 
         let environment_lockfile_path = self.lockfile_path();
 
@@ -826,7 +827,9 @@ impl CoreEnvironment<ReadWrite> {
     /// Updates the environment lockfile with the provided contents
     fn update_lockfile(&mut self, contents: impl AsRef<str>) -> Result<(), CoreEnvironmentError> {
         debug!("writing lockfile to {}", self.lockfile_path().display());
-        std::fs::write(self.lockfile_path(), contents.as_ref())
+        let mut contents_with_newline = contents.as_ref().to_string();
+        contents_with_newline.push('\n');
+        std::fs::write(self.lockfile_path(), contents_with_newline)
             .map_err(CoreEnvironmentError::WriteLockfile)?;
         Ok(())
     }

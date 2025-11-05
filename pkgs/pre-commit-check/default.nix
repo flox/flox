@@ -18,9 +18,6 @@ pre-commit-hooks.lib.${system}.run {
   ];
   excludes = [ "test_data" ];
   hooks = {
-    nixfmt-rfc-style = {
-      enable = true;
-    };
     clang-format = {
       enable = true;
       types_or = lib.mkForce [
@@ -68,6 +65,9 @@ pre-commit-hooks.lib.${system}.run {
     # NB: `flox-interpreter` implements these at build time.
     shfmt.enable = false;
     # shellcheck.enable = true; # disabled until we have time to fix all the warnings
+
+    # treefmt formats yaml and nix (github actions)
+    treefmt.enable = true;
   };
   imports = [
     (

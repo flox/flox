@@ -13,7 +13,7 @@ flox-auth - FloxHub authentication commands
 
 ```
 flox [<general-options>] auth
-     (login | logout | status)
+     (login | logout | status | token)
 ```
 
 # DESCRIPTION

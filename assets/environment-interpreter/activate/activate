@@ -5,7 +5,7 @@
 #   1. (-v) top-level activate script
 #   2. (-vv) language-specific profile scripts
 #   3. (-vvv) zsh `autoload -U compinit` (very verbose)
-export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
+export _flox_activate_tracelevel="${_FLOX_SUBSYSTEM_VERBOSITY:-0}"
 [ "$_flox_activate_tracelevel" -eq 0 ] || set -x
 
 # Ensure that $_flox_activate_tracer is defined as an executable.
@@ -216,13 +216,12 @@ if [ -n "$FLOX_CMD" ]; then
   set -- "$FLOX_CMD"
 fi
 
-# This is distinct from "_FLOX_ACTIVATION_MODE"
 if [ $# -gt 0 ]; then
-  _flox_shell_mode="command"
+  _flox_invocation_type="command"
 elif [ -t 1 ] || [ -n "${_FLOX_FORCE_INTERACTIVE:-}" ]; then
-  _flox_shell_mode="interactive"
+  _flox_invocation_type="interactive"
 else
-  _flox_shell_mode="inplace"
+  _flox_invocation_type="inplace"
 fi
 
 # Propagate required variables that are documented as exposed.
@@ -268,7 +267,7 @@ case "$_flox_shell" in
 esac
 
 if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
-  if [ $# -eq 0 ]; then
+  if [ "$_flox_invocation_type" != "command" ]; then
     echo "build mode is only supported for running a command" >&2
     exit 1
   fi
@@ -301,11 +300,11 @@ export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
 if [ "$_FLOX_ATTACH" == true ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/attach.bash"
-  attach "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
+  attach "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_invocation_type"
 else
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/start.bash"
-  start "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_shell_mode"
+  start "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_invocation_type"
 fi
 
 # Start services before the shell or command is invoked
@@ -314,7 +313,7 @@ if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
   source "${_activate_d}/start-services.bash"
 fi
 
-case "${_flox_shell_mode}" in
+case "${_flox_invocation_type}" in
   command)
     # shellcheck source-path=SCRIPTDIR/activate.d
     source "${_activate_d}/attach-command.bash"
@@ -328,7 +327,7 @@ case "${_flox_shell_mode}" in
     source "${_activate_d}/attach-inplace.bash"
     ;;
   *)
-    echo "Unsupported shell mode: ${_flox_shell_mode}" >&2
+    echo "Unsupported invocation type: ${_flox_invocation_type}" >&2
     exit 1
     ;;
 esac

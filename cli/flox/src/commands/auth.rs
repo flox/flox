@@ -8,15 +8,24 @@ use chrono::{DateTime, Duration};
 use flox_rust_sdk::flox::{Flox, FloxhubToken};
 use flox_rust_sdk::providers::catalog::Client;
 use indoc::formatdoc;
-use oauth2::basic::BasicClient;
+use oauth2::basic::{
+    BasicClient,
+    BasicErrorResponse,
+    BasicRevocationErrorResponse,
+    BasicTokenIntrospectionResponse,
+    BasicTokenResponse,
+};
 use oauth2::{
     AuthUrl,
     ClientId,
     DeviceAuthorizationUrl,
     DeviceCodeErrorResponseType,
+    EndpointNotSet,
+    EndpointSet,
     RequestTokenError,
     Scope,
     StandardDeviceAuthorizationResponse,
+    StandardRevocableToken,
     TokenResponse,
     TokenUrl,
 };
@@ -37,12 +46,31 @@ pub struct Credential {
     pub expiry: String,
 }
 
+type ConfiguredClient<
+    HasAuthUrl = EndpointSet,
+    HasDeviceAuthUrl = EndpointSet,
+    HasIntrospectionUrl = EndpointNotSet,
+    HasRevocationUrl = EndpointNotSet,
+    HasTokenUrl = EndpointSet,
+> = oauth2::Client<
+    BasicErrorResponse,
+    BasicTokenResponse,
+    BasicTokenIntrospectionResponse,
+    StandardRevocableToken,
+    BasicRevocationErrorResponse,
+    HasAuthUrl,
+    HasDeviceAuthUrl,
+    HasIntrospectionUrl,
+    HasRevocationUrl,
+    HasTokenUrl,
+>;
+
 /// construct an oauth client using compile time constants or environment variables
 ///
 /// Environment variables can be used to override the compile time constants during testing.
 /// For use in production, the compile time constants should be used.
 /// For multitenency, we will integrate with the config subsystem later.
-fn create_oauth_client() -> Result<BasicClient> {
+fn create_oauth_client() -> Result<ConfiguredClient> {
     let auth_url = AuthUrl::new(
         std::env::var("_FLOX_OAUTH_AUTH_URL").unwrap_or(env!("OAUTH_AUTH_URL").to_string()),
     )
@@ -59,26 +87,27 @@ fn create_oauth_client() -> Result<BasicClient> {
     let client_id = ClientId::new(
         std::env::var("_FLOX_OAUTH_CLIENT_ID").unwrap_or(env!("OAUTH_CLIENT_ID").to_string()),
     );
-    let client = BasicClient::new(client_id, None, auth_url, Some(token_url))
+    let client = BasicClient::new(client_id)
+        .set_auth_uri(auth_url)
+        .set_token_uri(token_url)
         .set_device_authorization_url(device_auth_url);
     Ok(client)
 }
 
-pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credential> {
+pub async fn authorize(client: ConfiguredClient, floxhub_url: &Url) -> Result<Credential> {
     if !Dialog::can_prompt() {
         bail!("Cannot prompt for user input")
     }
 
     let details: StandardDeviceAuthorizationResponse = client
         .exchange_device_code()
-        .unwrap()
         .add_scope(Scope::new("openid".to_string()))
         .add_scope(Scope::new("profile".to_string()))
         .add_extra_param(
             "audience".to_string(),
             "https://hub.flox.dev/api".to_string(),
         )
-        .request_async(oauth2::reqwest::async_http_client)
+        .request_async(&oauth2::reqwest::Client::new())
         .await
         .context("Could not request device code")?;
 
@@ -141,7 +170,7 @@ pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credent
     let token_result = client
         .exchange_device_access_token(&details)
         .request_async(
-            oauth2::reqwest::async_http_client,
+            &oauth2::reqwest::Client::new(),
             tokio::time::sleep,
             Some(details.expires_in()),
         )
@@ -187,6 +216,10 @@ pub enum Auth {
     /// Print your current login status
     #[bpaf(command)]
     Status,
+
+    /// Print your token to stdout
+    #[bpaf(command)]
+    Token,
 }
 
 impl Auth {
@@ -231,6 +264,18 @@ impl Auth {
                     flox.floxhub.base_url()
                 ));
 
+                Ok(())
+            },
+            Auth::Token => {
+                let span = tracing::info_span!("token");
+                let _guard = span.enter();
+
+                let Some(token) = flox.floxhub_token else {
+                    message::warning("You are not currently logged in to FloxHub.");
+                    return Err(Exit(1.into()).into());
+                };
+
+                println!("{}", token.secret());
                 Ok(())
             },
         }

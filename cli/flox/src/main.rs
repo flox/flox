@@ -100,11 +100,14 @@ fn main() -> ExitCode {
     let _sentry_guard = (!disable_metrics).then(init_sentry);
     let _metrics_guard = Hub::global().try_guard().ok();
 
-    // Pass down the verbosity level to all pkgdb calls
+    // Pass down the verbosity level to all sub-processes
     unsafe {
-        std::env::set_var("_FLOX_PKGDB_VERBOSITY", format!("{}", verbosity.to_i32()));
+        std::env::set_var(
+            "_FLOX_SUBSYSTEM_VERBOSITY",
+            format!("{}", verbosity.to_i32()),
+        );
     }
-    debug!("set _FLOX_PKGDB_VERBOSITY={}", verbosity.to_i32());
+    debug!("set _FLOX_SUBSYSTEM_VERBOSITY={}", verbosity.to_i32());
 
     // Run the argument parser
     //
