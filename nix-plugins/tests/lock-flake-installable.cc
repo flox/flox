@@ -6,7 +6,6 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include <fstream>
 #include <nix/expr/eval-gc.hh>
 #include <nix/expr/eval.hh>
 

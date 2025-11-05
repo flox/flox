@@ -19,8 +19,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <variant>
-#include <vector>
 
 #include <nix/cmd/command.hh>
 #include <nix/expr/eval.hh>
@@ -330,7 +328,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
        && ( std::find_if( version.begin() + 1,
                           version.end(),
                           []( unsigned char chr )
-                          { return std::isdigit( chr ) == 0; } )
+                            { return std::isdigit( chr ) == 0; } )
             == version.end() ) )
     {
       input.attrs.insert_or_assign(
@@ -402,12 +400,18 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
     {
       url.path = "v" + std::to_string( *version );
     }
-  else { throw nix::Error( "missing 'version' attribute in input" ); }
+  else
+    {
+      throw nix::Error( "missing 'version' attribute in input" );
+    }
   if ( auto owner = nix::fetchers::maybeGetStrAttr( input.attrs, "owner" ) )
     {
       url.path += "/" + *owner;
     }
-  else { throw nix::Error( "missing 'owner' attribute in input" ); }
+  else
+    {
+      throw nix::Error( "missing 'owner' attribute in input" );
+    }
   if ( auto rev = nix::fetchers::maybeGetStrAttr( input.attrs, "rev" ) )
     {
       url.path += "/" + *rev;
@@ -416,7 +420,10 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
     {
       url.path += "/" + *ref;
     }
-  else { throw nix::Error( "missing 'rev' or 'ref' attribute in input" ); }
+  else
+    {
+      throw nix::Error( "missing 'rev' or 'ref' attribute in input" );
+    }
 
   return url;
 }
@@ -475,7 +482,8 @@ WrappedNixpkgsInputScheme::applyOverrides( const nix::fetchers::Input & _input,
 /** @brief Clones the repository for analysis, but does not modify/patch it. */
 void
 WrappedNixpkgsInputScheme::clone( const nix::fetchers::Input & input,
-                                  const nix::Path &            destDir ) const
+
+                                  const nix::Path & destDir ) const
 {
   auto githubInput = nix::fetchers::Input::fromAttrs(
     *input.settings,
@@ -529,6 +537,7 @@ WrappedNixpkgsInputScheme::getAccessor(
 
   /* If we're already cached then we're done. */
   nix::fetchers::Cache::Key storeKey( "flox-nixpkgs", lockedAttrs );
+  nix::fetchers::Settings   fetchSettings;
 
   if ( auto res
        = fetchSettings.getCache()->lookupStorePath( storeKey, *store ) )

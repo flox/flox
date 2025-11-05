@@ -4,9 +4,6 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include <fstream>
-#include <iostream>
-
 #include <nix/cmd/command.hh>
 #include <nix/expr/eval-gc.hh>
 #include <nix/expr/eval.hh>
