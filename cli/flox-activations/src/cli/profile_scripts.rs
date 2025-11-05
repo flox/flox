@@ -43,7 +43,7 @@ impl ProfileScriptsArgs {
             &self.shell,
             Path::exists,
         );
-        let all_cmds = format!("{}\n", individual_cmds.join("\n"));
+        let all_cmds = individual_cmds.join(";\n");
         output.write_all(all_cmds.as_bytes())?;
         Ok(())
     }
@@ -63,14 +63,14 @@ fn source_profile_scripts_cmds(
     let dirs = separate_dir_list(env_dirs);
     let already_sourced_dirs = separate_dir_list(already_sourced_env_dirs);
     let mut new_sourced_dirs = already_sourced_dirs.clone();
-    let mut cmds = vec![];
+    let mut commands = Vec::new();
     for dir in dirs.into_iter().rev() {
         if !already_sourced_dirs.contains(&dir) {
             let common = dir.join("activate.d/profile-common");
             let shell_specific = dir.join(format!("activate.d/profile-{shell}"));
             for path in [common, shell_specific] {
                 if path_predicate(&path) {
-                    cmds.push(source_file(&path));
+                    commands.push(source_file(&path));
                 } else {
                     debug!("script did not exist: {}", path.display());
                 }
@@ -78,11 +78,12 @@ fn source_profile_scripts_cmds(
             new_sourced_dirs.insert(0, dir)
         }
     }
-    cmds.push(shell.set_var_not_exported(
+    commands.push(shell.set_var_not_exported(
         "_FLOX_SOURCED_PROFILE_SCRIPTS",
         &join_dir_list(new_sourced_dirs),
     ));
-    cmds
+    commands.push("".to_string()); // ensure there's a trailing newline when joining
+    commands
 }
 
 #[cfg(test)]
@@ -96,11 +97,11 @@ mod test {
         let dirs = "newer:older";
         let cmds = source_profile_scripts_cmds(dirs, "", &Shell::Bash, |_| true);
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-bash';".to_string(),
-            "source 'newer/activate.d/profile-common';".to_string(),
-            "source 'newer/activate.d/profile-bash';".to_string(),
-            "_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older';".to_string(),
+            "source 'older/activate.d/profile-common'".to_string(),
+            "source 'older/activate.d/profile-bash'".to_string(),
+            "source 'newer/activate.d/profile-common'".to_string(),
+            "source 'newer/activate.d/profile-bash'".to_string(),
+            "_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -110,11 +111,11 @@ mod test {
         let dirs = "newer:older";
         let cmds = source_profile_scripts_cmds(dirs, "", &Shell::Zsh, |_| true);
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-zsh';".to_string(),
-            "source 'newer/activate.d/profile-common';".to_string(),
-            "source 'newer/activate.d/profile-zsh';".to_string(),
-            "typeset -g _FLOX_SOURCED_PROFILE_SCRIPTS='newer:older';".to_string(),
+            "source 'older/activate.d/profile-common'".to_string(),
+            "source 'older/activate.d/profile-zsh'".to_string(),
+            "source 'newer/activate.d/profile-common'".to_string(),
+            "source 'newer/activate.d/profile-zsh'".to_string(),
+            "typeset -g _FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -124,11 +125,11 @@ mod test {
         let dirs = "newer:older";
         let cmds = source_profile_scripts_cmds(dirs, "", &Shell::Tcsh, |_| true);
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-tcsh';".to_string(),
-            "source 'newer/activate.d/profile-common';".to_string(),
-            "source 'newer/activate.d/profile-tcsh';".to_string(),
-            "set _FLOX_SOURCED_PROFILE_SCRIPTS = 'newer:older';".to_string(),
+            "source 'older/activate.d/profile-common'".to_string(),
+            "source 'older/activate.d/profile-tcsh'".to_string(),
+            "source 'newer/activate.d/profile-common'".to_string(),
+            "source 'newer/activate.d/profile-tcsh'".to_string(),
+            "set _FLOX_SOURCED_PROFILE_SCRIPTS = 'newer:older'".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -138,11 +139,11 @@ mod test {
         let dirs = "newer:older";
         let cmds = source_profile_scripts_cmds(dirs, "", &Shell::Fish, |_| true);
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-fish';".to_string(),
-            "source 'newer/activate.d/profile-common';".to_string(),
-            "source 'newer/activate.d/profile-fish';".to_string(),
-            "set -g _FLOX_SOURCED_PROFILE_SCRIPTS 'newer:older';".to_string(),
+            "source 'older/activate.d/profile-common'".to_string(),
+            "source 'older/activate.d/profile-fish'".to_string(),
+            "source 'newer/activate.d/profile-common'".to_string(),
+            "source 'newer/activate.d/profile-fish'".to_string(),
+            "set -g _FLOX_SOURCED_PROFILE_SCRIPTS 'newer:older'".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -154,10 +155,10 @@ mod test {
             p != Path::new("newer/activate.d/profile-common")
         });
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-bash';".to_string(),
-            "source 'newer/activate.d/profile-bash';".to_string(),
-            "_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older';".to_string(),
+            "source 'older/activate.d/profile-common'".to_string(),
+            "source 'older/activate.d/profile-bash'".to_string(),
+            "source 'newer/activate.d/profile-bash'".to_string(),
+            "_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -169,10 +170,10 @@ mod test {
             p != Path::new("newer/activate.d/profile-common")
         });
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-zsh';".to_string(),
-            "source 'newer/activate.d/profile-zsh';".to_string(),
-            "typeset -g _FLOX_SOURCED_PROFILE_SCRIPTS='newer:older';".to_string(),
+            "source 'older/activate.d/profile-common'".to_string(),
+            "source 'older/activate.d/profile-zsh'".to_string(),
+            "source 'newer/activate.d/profile-zsh'".to_string(),
+            "typeset -g _FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -184,10 +185,10 @@ mod test {
             p != Path::new("newer/activate.d/profile-common")
         });
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-tcsh';".to_string(),
-            "source 'newer/activate.d/profile-tcsh';".to_string(),
-            "set _FLOX_SOURCED_PROFILE_SCRIPTS = 'newer:older';".to_string(),
+            "source 'older/activate.d/profile-common'".to_string(),
+            "source 'older/activate.d/profile-tcsh'".to_string(),
+            "source 'newer/activate.d/profile-tcsh'".to_string(),
+            "set _FLOX_SOURCED_PROFILE_SCRIPTS = 'newer:older'".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -199,10 +200,10 @@ mod test {
             p != Path::new("newer/activate.d/profile-common")
         });
         let expected = vec![
-            "source 'older/activate.d/profile-common';".to_string(),
-            "source 'older/activate.d/profile-fish';".to_string(),
-            "source 'newer/activate.d/profile-fish';".to_string(),
-            "set -g _FLOX_SOURCED_PROFILE_SCRIPTS 'newer:older';".to_string(),
+            "source 'older/activate.d/profile-common'".to_string(),
+            "source 'older/activate.d/profile-fish'".to_string(),
+            "source 'newer/activate.d/profile-fish'".to_string(),
+            "set -g _FLOX_SOURCED_PROFILE_SCRIPTS 'newer:older'".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -213,9 +214,9 @@ mod test {
         let already_sourced = "older";
         let cmds = source_profile_scripts_cmds(dirs, already_sourced, &Shell::Bash, |_| true);
         let expected = vec![
-            "source 'newer/activate.d/profile-common';".to_string(),
-            "source 'newer/activate.d/profile-bash';".to_string(),
-            "_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older';".to_string(),
+            "source 'newer/activate.d/profile-common'".to_string(),
+            "source 'newer/activate.d/profile-bash'".to_string(),
+            "_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -225,7 +226,7 @@ mod test {
         let dirs = "newer:older";
         let already_sourced = "newer:older";
         let cmds = source_profile_scripts_cmds(dirs, already_sourced, &Shell::Bash, |_| true);
-        let expected = vec!["_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older';".to_string()];
+        let expected = vec!["_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string()];
         assert_eq!(expected, cmds);
     }
 
@@ -235,9 +236,9 @@ mod test {
         let already_sourced = "already:existing";
         let cmds = source_profile_scripts_cmds(dirs, already_sourced, &Shell::Bash, |_| true);
         let expected = vec![
-            "source 'standalone/activate.d/profile-common';".to_string(),
-            "source 'standalone/activate.d/profile-bash';".to_string(),
-            "_FLOX_SOURCED_PROFILE_SCRIPTS='standalone:already:existing';".to_string(),
+            "source 'standalone/activate.d/profile-common'".to_string(),
+            "source 'standalone/activate.d/profile-bash'".to_string(),
+            "_FLOX_SOURCED_PROFILE_SCRIPTS='standalone:already:existing'".to_string(),
         ];
         assert_eq!(expected, cmds);
     }

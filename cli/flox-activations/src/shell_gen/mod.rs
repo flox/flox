@@ -43,17 +43,16 @@ impl fmt::Display for Shell {
 }
 impl Shell {
     /// Set a shell variable that is not exported
-    /// Include a trailing ;
     pub fn set_var_not_exported(&self, var: &str, value: &str) -> String {
         match self {
-            Self::Bash => format!("{var}='{value}';"),
-            Self::Fish => format!("set -g {var} '{value}';"),
-            Self::Tcsh => format!("set {var} = '{value}';"),
-            Self::Zsh => format!("typeset -g {var}='{value}';"),
+            Self::Bash => format!("{var}='{value}'"),
+            Self::Fish => format!("set -g {var} '{value}'"),
+            Self::Tcsh => format!("set {var} = '{value}'"),
+            Self::Zsh => format!("typeset -g {var}='{value}'"),
         }
     }
 
-    /// Do not include a trailing ;
+    /// Set a shell variable that is exported
     pub fn export_var(&self, var: &str, value: &str) -> String {
         match self {
             Self::Bash => format!("export {var}='{value}'"),
@@ -65,7 +64,6 @@ impl Shell {
     }
 
     /// Unset/remove an environment variable
-    /// Do not include a trailing ;
     pub fn unset_var(&self, var: &str) -> String {
         match self {
             Self::Bash => format!("unset {var}"),
@@ -77,5 +75,5 @@ impl Shell {
 }
 
 pub fn source_file(path: &Path) -> String {
-    format!("source '{}';", path.display())
+    format!("source '{}'", path.display())
 }
