@@ -309,16 +309,14 @@ echo "Hello, from EXTERNAL_PATH"
 EOF
   chmod +x "${EXTERNAL_PATH}/hello"
 
-  # Set PATH here, rather than on the command, because `/etc/zshenv` can
-  # reintroduce the system path at the front which might already have `hello`.
-  cat > "${HOME}/.zshenv" <<EOF
-export PATH="${EXTERNAL_PATH}:${PATH}"
-EOF
-
   # Verify that `hello` shadows an existing PATH after being installed to the
-  # environment from the same shell session.
+  # environment from the same shell session. Note that the PATH must be set
+  # before the activation and not from a .zshenv file (as was previously done).
+  # The whole point of our activation logic is to undo the sorts of damage that
+  # occurs when modifying $PATH from within a dotfile(!).
   FLOX_SHELL="zsh" NO_COLOR=1 \
     _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.yaml" \
+    PATH="${EXTERNAL_PATH}:${PATH}" \
     run expect "$TESTS_DIR/activate/activate-command.exp" "$PROJECT_DIR" \
     'hello && ${FLOX_BIN} --quiet install hello && hash -r && hello'
     # XXX FIXME: confirmed `setopt nohashcmds nohashdirs` has been set, but hashing still occurs?
@@ -537,7 +535,7 @@ EOF
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="tcsh" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -c :
+  FLOX_SHELL="tcsh" NO_COLOR=1 run $FLOX_BIN -vv activate --dir "$PROJECT_DIR" -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -1002,6 +1000,10 @@ EOF
     eval "$($FLOX_BIN activate)" > "$PROJECT_DIR/output_1" 2>&1
     if ! grep -q "sourcing profile.zsh" "$PROJECT_DIR/output_1"; then
       echo "Profile script was not sourced, which is not expected."
+      exit 1
+    fi
+    if [ -z "$_FLOX_SOURCED_PROFILE_SCRIPTS" ]; then
+      echo "_FLOX_SOURCED_PROFILE_SCRIPTS is not set, which is not expected."
       exit 1
     fi
     eval "$($FLOX_BIN activate)" > "$PROJECT_DIR/output_2" 2>&1
@@ -3725,9 +3727,14 @@ EOF
 @test "attach doesn't break MANPATH" {
   project_setup
 
+  # If you run tests with a MANPATH that can find a man page
+  # for vim this test will fail. Or rather it _did_ until the
+  # following line was added.
+  export MANPATH=
+
   # Ensure that an empty MANPATH is replaced with something with a trailing
   # colon so that the default list is honoured as a fallback.
-  MANPATH= run "$FLOX_BIN" activate -- sh -c 'echo $MANPATH'
+  MANPATH= run "$FLOX_BIN" activate -c 'echo $MANPATH'
   assert_success
   assert_output --regexp ".*:$"
 
@@ -3759,15 +3766,15 @@ EOF
       refute_output "$EMACS_MAN"
 
       # vim gets added to MANPATH
-      _man=$_man "$FLOX_BIN" activate -d vim -- bash -c "$_man --path vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+      _man=$_man "$FLOX_BIN" activate -d vim -c "$_man --path vim > output; echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
       cat activate_started_fifo
       run cat output
       assert_success
       assert_output "$VIM_MAN"
 
       # emacs gets added to MANPATH, and then a nested attach also adds vim
-      _man=$_man "$FLOX_BIN" activate -d emacs -- \
-        bash -c '$_man --path emacs > output_emacs_1 && "$FLOX_BIN" activate -d vim -- bash -c "$_man --path vim > output_vim && $_man --path emacs > output_emacs_2"'
+      _man=$_man "$FLOX_BIN" activate -d emacs \
+        -c '$_man --path emacs > output_emacs_1 && "$FLOX_BIN" activate -d vim -- bash -c "$_man --path vim > output_vim && $_man --path emacs > output_emacs_2"'
       run cat output_emacs_1
       assert_output "$EMACS_MAN"
       run cat output_vim
@@ -3784,7 +3791,7 @@ EOF
       refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
 
       # vim gets added to MANPATH
-      "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output && echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
+      "$FLOX_BIN" activate -d vim -c "/usr/bin/manpath > output && echo > activate_started_fifo && echo > \"$TEARDOWN_FIFO\"" &
       cat activate_started_fifo
       run cat output
       assert_success
@@ -3792,8 +3799,8 @@ EOF
       refute_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
 
       # emacs gets added to MANPATH, and then a nested attach also adds vim
-      "$FLOX_BIN" activate -d emacs -- \
-        bash -c '/usr/bin/manpath > output_1 && "$FLOX_BIN" activate -d vim -- bash -c "/usr/bin/manpath > output_2"'
+      "$FLOX_BIN" activate -d emacs \
+        -c '/usr/bin/manpath > output_1 && "$FLOX_BIN" activate -d vim -c "/usr/bin/manpath > output_2"'
       run cat output_1
       refute_output --regexp ".*$PROJECT_DIR/vim/.flox/run/$NIX_SYSTEM.vim.dev/share/man.*"
       assert_output --regexp ".*$PROJECT_DIR/emacs/.flox/run/$NIX_SYSTEM.emacs.dev/share/man.*"
@@ -4312,9 +4319,11 @@ Setting PATH from ${rc_file}"
   # Use setsid so that wait_for_background_activation can kill the process group
   # TODO: Remove unsetting of mocks when `$FLOX_LATEST_VERSION` is using YAML
   #       instead of JSON mock files.
+  # TODO: keep "--" syntax for now but convert to "-c" after refactor
   env -u _FLOX_USE_CATALOG_MOCK \
-    setsid ./result/bin/flox activate \
-      -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" > output 2>&1 &
+    setsid ./result/bin/flox activate -- \
+    "$shell_path" -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" > output 2>&1 &
+    tail -f output &
 
   # Longer timeout to allow for `nix run` locking.
   background_pid="$!"
