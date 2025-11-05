@@ -24,13 +24,6 @@
   inputs.fenix.url = "github:nix-community/fenix";
   inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
 
-  # Include upstram nix-unit (with added flake support)
-  # until a new release is tagged and available in nixpkgs.
-  # Avoid management of 'nixpkgs' and other flake inputs
-  # since we will add nix-unit via an overlay to make use of our nix patches.
-  inputs.nix-unit.url = "github:nix-community/nix-unit";
-  inputs.nix-unit.inputs.nixpkgs.follows = "nixpkgs";
-
   # -------------------------------------------------------------------------- #
 
   outputs =
@@ -154,10 +147,6 @@
             PROJECT_TESTS_DIR = "/cli/tests";
             localDev = true;
           };
-          # TODO: we would prefer using nix-unit from nixpkgs, but it hasn't been updated.
-          # We can't currently use an overlay because nix-unit doesn't support
-          # as late of a version of Nix as we're using.
-          nix-unit = inputs.nix-unit.packages.${prev.system}.nix-unit;
         });
       };
       # Composes dependency overlays and the overlay defined here.
