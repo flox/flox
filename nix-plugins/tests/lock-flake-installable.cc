@@ -15,6 +15,7 @@
 #include <nix/flake/flake.hh>
 #include <nix/main/shared.hh>
 #include <nix/store/store-api.hh>
+#include <nix/store/store-open.hh>
 #include <nlohmann/json.hpp>
 
 #include "flox/lock-flake-installable.hh"

@@ -14,6 +14,7 @@
 #include <nix/fetchers/attrs.hh>
 #include <nix/main/shared.hh>
 #include <nix/store/store-api.hh>
+#include <nix/store/store-open.hh>
 #include <nix/util/url.hh>
 #include <nlohmann/json.hpp>
 
