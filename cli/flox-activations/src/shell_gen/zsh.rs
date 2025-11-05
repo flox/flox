@@ -21,7 +21,7 @@ pub struct ZshStartupArgs {
     pub flox_activate_tracer: String,
 }
 
-pub fn generate_zsh_startup_script(
+pub fn generate_zsh_startup_commands(
     args: &ZshStartupArgs,
     export_env_diff: &ExportEnvDiff,
 ) -> Result<String> {
@@ -32,36 +32,7 @@ pub fn generate_zsh_startup_script(
         commands.push("set -x".to_string());
     }
 
-    // This is the final script to be called in the zsh startup sequence so start
-    // by restoring the original value of ZDOTDIR if it was set previously.
-    commands.push(r#"
-        if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]; then
-            export ZDOTDIR="$FLOX_ORIG_ZDOTDIR";
-            unset FLOX_ORIG_ZDOTDIR;
-        else
-            unset ZDOTDIR;
-        fi
-	"#.to_string());
-
-    // We need to source the .zshrc file exactly once. We skip it for in-place
-    // activations under the assumption that it has already been sourced by one
-    // of the shells in the chain of ancestors UNLESS none of them were zsh
-    // and therefore .zshrc hasn't been sourced yet.
-    let zshrc_path = if let Some(home_dir) = dirs::home_dir() {
-        home_dir.join(".zshrc")
-    } else {
-        return Err(anyhow!("failed to get home directory"));
-    };
-
-    let should_source = zshrc_path.exists() && !args.is_in_place && !args.flox_sourcing_rc;
-
-    if should_source {
-        commands.push("export _flox_sourcing_rc=true".to_string());
-        commands.push(format!("source '{}'", zshrc_path.display()));
-        commands.push("unset _flox_sourcing_rc".to_string());
-    }
-
-    // Restore environment variables set in the previous zsh initialization.
+    // Restore environment variables set in the previous bash initialization.
     // Read del.env and add.env files
     commands.append(&mut export_env_diff.generate_commands(Shell::Zsh));
 
@@ -84,43 +55,43 @@ pub fn generate_zsh_startup_script(
     if let Some(description) = &args.flox_env_description {
         commands.push(Shell::Zsh.export_var("FLOX_ENV_DESCRIPTION", description));
     } else {
-        commands.push("unset FLOX_ENV_DESCRIPTION;".to_string());
+        commands.push("unset FLOX_ENV_DESCRIPTION".to_string());
     }
 
     // Export the value of $_activate_d to the environment.
     commands.push(Shell::Zsh.export_var("_activate_d", &args.activate_d.display().to_string()));
+
+    // Set _flox_activate_tracelevel for benefit of zsh script.
+    commands.push(Shell::Zsh.export_var("_flox_activate_tracelevel", &args.flox_activate_tracelevel.to_string()));
 
     // Export the value of $_flox_activate_tracer to the environment.
     commands.push(Shell::Zsh.export_var("_flox_activate_tracer", &args.flox_activate_tracer));
 
     commands.push("true not setting _flox_activations".to_string()); // DELETEME FOR DEBUGGING
 
-    // Set the prompt if we're in an interactive shell.
-    let set_prompt_path = args.activate_d.join("set-prompt.zsh");
-    commands.push(format!(
-        "if [ -t 1 ]; then source '{}'; fi",
-        set_prompt_path.display()
-    ));
+    // Zsh isn't like the other shells in that initialization happens in a set
+    // of scripts found in ZDOTDIR, so it's not quite so straightforward as to
+    // simply generate a single set of commands to be sourced. Most of the heavy
+    // lifting is done by the `zsh` script sourced by the following command.
+    commands.push(format!("source '{}/zsh'", &args.activate_d.display().to_string()));
 
-    // We already customized the PATH and MANPATH, but the user and system
-    // dotfiles may have changed them, so finish by doing this again.
-    // Use generation time _FLOX_ENV because we want to guarantee we activate the
-    // environment we think we're activating. Use runtime FLOX_ENV_DIRS to allow
-    // RC files to perform activations.
-    commands.push(format!(
-        r#"eval "$('{}' set-env-dirs --shell zsh --flox-env "{}" --env-dirs "${{FLOX_ENV_DIRS:-}}")""#,
-        args.flox_activations.display(),
-        args.flox_env
-    ));
-
-    commands.push(format!(
-        r#"eval "$('{}' fix-paths --shell zsh --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${{MANPATH:-}}")""#,
+/*
+    // Our ZDOTDIR startup files source user RC files that may modify FLOX_ENV_DIRS,
+    // and then _flox_env_helper may fix it up.
+    // If this happens, we want to respect those modifications,
+    // so we use FLOX_ENV_DIRS from the environment
+    // Only source profile scripts for the current environment when activating from
+    // an RC file because other environments will source their profile scripts
+    // later in the nesting chain.
+    commands.push(r#"if [ -n "${_flox_sourcing_rc:-}" ]; then profile_script_dirs="$FLOX_ENV"; else profile_script_dirs="$FLOX_ENV_DIRS"; fi"#.to_string());
+    commands.push(r#"echo HI DAD PID $$ _FLOX_SOURCED_PROFILE_SCRIPTS is $_FLOX_SOURCED_PROFILE_SCRIPTS"#.to_string()); // DELETEME FOR DEBUGGING
+    commands.push(format!(r#"if [ -z "${{FLOX_NOPROFILE:-}}" ]; then eval "$('{}' profile-scripts --shell zsh --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "$profile_script_dirs")"; fi"#,
         args.flox_activations.display()
     ));
-
-    commands.push(format!(r#"if [ -z "${{FLOX_NOPROFILE:0}}" ]; then eval "$('{}' profile-scripts --shell zsh --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "${{FLOX_ENV_DIRS:-}}")"; fi"#,
+    commands.push(format!(r#"eval "$('{}' profile-scripts --shell zsh --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "$profile_script_dirs")""#,
         args.flox_activations.display()
     ));
+*/
 
     // Disable command hashing to allow for newly installed flox packages
     // to be found immediately. We do this as the very last thing because

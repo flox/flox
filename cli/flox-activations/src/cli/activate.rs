@@ -37,7 +37,7 @@ use crate::shell_gen::bash::{BashStartupArgs, generate_bash_startup_commands};
 use crate::shell_gen::capture::{EnvDiff, ExportEnvDiff};
 use crate::shell_gen::fish::{FishStartupArgs, generate_fish_startup_commands};
 use crate::shell_gen::tcsh::{TcshStartupArgs, generate_tcsh_startup_commands};
-use crate::shell_gen::zsh::{ZshStartupArgs, generate_zsh_startup_script};
+use crate::shell_gen::zsh::{ZshStartupArgs, generate_zsh_startup_commands};
 use crate::{debug_command_env, debug_set_var};
 
 #[derive(Debug, Args)]
@@ -381,7 +381,7 @@ fn generate_activation_script(
         },
         Shell::Zsh(_) => {
             let args = args_builder.build_zsh_args();
-            let script = generate_zsh_startup_script(&args, export_env_diff)?;
+            let script = generate_zsh_startup_commands(&args, export_env_diff)?;
             let path = write_maybe_self_destructing_script(
                 script.clone(),
                 activation_state_dir,
@@ -1037,8 +1037,7 @@ impl ActivateArgs {
                 /// SAFETY: called once, prior to possible concurrent access to env
                 debug_set_var!(
                     "FLOX_ZSH_INIT_SCRIPT",
-                    // script_gen.script_path.to_string_lossy().to_string()
-                    data.interpreter_path.join("activate.d").join("zsh").to_string_lossy().to_string()
+                    script_gen.script_path.to_string_lossy().to_string()
                 );
             },
             _ => {}
@@ -1170,109 +1169,39 @@ impl ActivateArgs {
             activate_tracer.clone(),
         );
 
+        let mut self_pid_var = "$$";
         let startup_commands = match data.shell {
             Shell::Bash(_) => {
-                // For bash/fish/tcsh, we don't write a script file - just generate inline commands
                 let args = args_builder.build_bash_args();
-                let startup_commands = generate_bash_startup_commands(&args, &export_env_diff)?;
-
-                formatdoc! {r#"
-                  {flox_activations} attach --runtime-dir "{runtime_dir}" --pid $$ --flox-env "{flox_env}" --id "{id}" --remove-pid "{pid}";
-                  {startup_commands}
-                "#,
-                // TODO: this should probably be based on interpreter_path
-                flox_activations = data.path_to_self,
-                runtime_dir = data.flox_runtime_dir,
-                flox_env = data.env,
-                id = activation_id,
-                pid = std::process::id() }
+                generate_bash_startup_commands(&args, &export_env_diff)?
             },
             Shell::Fish(_) => {
+		self_pid_var = "$fish_pid";
                 let args = args_builder.build_fish_args();
-                let startup_commands = generate_fish_startup_commands(&args, &export_env_diff)?;
-
-                formatdoc! {r#"
-                  {flox_activations} attach --runtime-dir "{runtime_dir}" --pid $fish_pid --flox-env "{flox_env}" --id "{id}" --remove-pid "{pid}";
-                  {startup_commands}
-                "#,
-                // TODO: this should probably be based on interpreter_path
-                flox_activations = data.path_to_self,
-                runtime_dir = data.flox_runtime_dir,
-                flox_env = data.env,
-                id = activation_id,
-                pid = std::process::id() }
+                generate_fish_startup_commands(&args, &export_env_diff)?
             },
             Shell::Tcsh(_) => {
                 let args = args_builder.build_tcsh_args();
-                let startup_commands = generate_tcsh_startup_commands(&args, &export_env_diff)?;
-
-                formatdoc! {r#"
-                  {flox_activations} attach --runtime-dir "{runtime_dir}" --pid $$ --flox-env "{flox_env}" --id "{id}" --remove-pid "{pid}";
-                  {startup_commands}
-                "#,
-                // TODO: this should probably be based on interpreter_path
-                flox_activations = data.path_to_self,
-                runtime_dir = data.flox_runtime_dir,
-                flox_env = data.env,
-                id = activation_id,
-                pid = std::process::id() }
+                generate_tcsh_startup_commands(&args, &export_env_diff)?
             },
             Shell::Zsh(_) => {
-                // Zsh is special: it needs to write a script file and build commands manually
-                let script_gen = generate_activation_script(
-                    &data.shell,
-                    &args_builder,
-                    &export_env_diff,
-                    &activation_state_dir,
-                    false, // Don't self-destruct for in-place mode
-                )?;
-
-                // Get shell-specific environment exports as script text
-                let env_exports = apply_shell_specific_env(
-                    &data.shell,
-                    ShellEnvSetup::AsScript,
-                    None,
-                    &data.interpreter_path,
-                )?;
-
-                let mut commands = Vec::new();
-
-                commands.push(format!(
-                    r#"{} attach --runtime-dir "{}" --pid $$ --flox-env "{}" --id "{}" --remove-pid {}"#,
-                    // TODO: this should probably be based on interpreter_path
-                    data.path_to_self,
-                    data.flox_runtime_dir,
-                    data.env,
-                    activation_id,
-                    std::process::id(),
-                ));
-
-                // Add the environment-specific exports (ZDOTDIR, etc.)
-                commands.extend(env_exports);
-
-                // Export the value of $_flox_activate_tracer from the environment.
-                commands.push(ShellGen::Zsh.export_var(
-                    "_flox_activate_tracer",
-                    &activate_tracer,
-                ));
-
-                commands.push(format!(
-                    "source '{}'",
-                    script_gen.script_path.to_string_lossy(),
-                ));
-
-                // N.B. the output of these scripts may be eval'd with backticks which have
-                // the effect of removing newlines from the output, so we must ensure that
-                // the output is a valid shell script fragment when represented on a single line.
-                commands.push("".to_string()); // ensure there's a trailing newline
-                commands.join(";\n")
+                let args = args_builder.build_zsh_args();
+                generate_zsh_startup_commands(&args, &export_env_diff)?
             },
             _ => unimplemented!(),
         };
-        let script = formatdoc! {"
+        let script = formatdoc! {r#"
             {legacy_exports}
+            {flox_activations} attach --runtime-dir "{runtime_dir}" --pid {self_pid_var} --flox-env "{flox_env}" --id "{id}" --remove-pid "{pid}";
             {startup_commands}
-        "};
+        "#,
+            flox_activations = data.path_to_self,
+            runtime_dir = data.flox_runtime_dir,
+            flox_env = data.env,
+            id = activation_id,
+            pid = std::process::id()
+        };
+        debug!("activation in place script:\n{}", script);
         print!("{script}");
         Ok(())
     }

@@ -9,11 +9,6 @@ if [ -z "${_flox_activate_tracelevel:=}" ]; then
   export _flox_activate_tracelevel=0
 fi
 
-# Enable shell-specific profile script startup with verbosity 2.
-if [ "$_flox_activate_tracelevel" -ge 2 ]; then
-  set -x
-fi
-
 # This is the final script to be called in the zsh startup sequence so start
 # by restoring the original value of ZDOTDIR if it was set previously.
 if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
@@ -142,11 +137,5 @@ if [[ -o interactive ]]; then
   autoload -Uz add-zsh-hook
   add-zsh-hook precmd _flox_rehash
 fi
-
-# Disable tracing before potentially launching into user shell.
-if [ "$_flox_activate_tracelevel" -ge 2 ]; then
-  set +x
-fi
-unset _flox_activate_tracelevel
 
 "$_flox_activate_tracer" "$_activate_d/zsh" END
