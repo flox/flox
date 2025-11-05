@@ -28,6 +28,7 @@
 #include <nix/fetchers/attrs.hh>
 #include <nix/fetchers/cache.hh>
 #include <nix/fetchers/fetchers.hh>
+#include <nix/fetchers/git-utils.hh>
 #include <nix/fetchers/store-path-accessor.hh>
 #include <nix/flake/flake.hh>
 #include <nix/flake/flakeref.hh>
@@ -283,7 +284,7 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
   /* Check the ref field if present */
   if ( auto ref = nix::fetchers::maybeGetStrAttr( attrs, "ref" ) )
     {
-      if ( std::regex_search( *ref, nix::badGitRefRegex ) )
+      if ( ! nix::isLegalRefName( *ref ) )
         {
           throw nix::BadURL( "invalid Git branch/tag name '%s'", *ref );
         }
@@ -367,7 +368,7 @@ WrappedNixpkgsInputScheme::inputFromURL(
     }
   else if ( std::regex_match( ref_or_rev, nix::refRegex ) )
     {
-      if ( std::regex_match( ref_or_rev, nix::badGitRefRegex ) )
+      if ( ! nix::isLegalRefName( ref_or_rev ) )
         {
           throw nix::BadURL(
             "in URL '%s', '%s' is not a valid Git branch/tag name",
