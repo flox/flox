@@ -69,6 +69,7 @@ OPTIONS="c:e:m:ns:v"
 LONGOPTS="activation-state-dir:,\
 command-string:,\
 env:,\
+env-cache:,env-description:,env-project:,watchdog:,\
 mode:,\
 no-run-hook-on-activate,\
 shell:,\
@@ -163,6 +164,50 @@ while true; do
       shift
       break
       ;;
+
+    # <DEPRECATED OPTIONS>: keeping for a limited time for backwards compatibility only .. delete after 20260101
+    --env-cache)
+      shift
+      if [ -z "${1:-}" ] || [ ! -d "$1" ]; then
+        echo "Option --env-cache requires a valid path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ENV_CACHE="$1"
+      shift
+      ;;
+    --env-project)
+      shift
+      if [ -z "${1:-}" ] || [ ! -d "$1" ]; then
+        echo "Option --env-project requires a valid path as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ENV_PROJECT="$1"
+      shift
+      ;;
+    --env-description)
+      shift
+      if [ -z "${1:-}" ]; then
+        echo "Option --env-description requires a name as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_ENV_DESCRIPTION="$1"
+      shift
+      ;;
+    --watchdog)
+      shift
+      if [ -z "${1:-}" ] || [ ! -f "$1" ]; then
+        echo "Option --watchdog requires a path to the watchdog binary as an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
+      fi
+      _FLOX_WATCHDOG_BIN="$1"
+      shift
+      ;;
+    # </DEPRECATED>
+
     -*)
       echo "Invalid option: $1" >&2
       echo "$USAGE" >&2
