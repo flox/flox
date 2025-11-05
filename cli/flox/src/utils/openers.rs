@@ -1,9 +1,9 @@
 use std::env;
-use std::fmt::Display;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
+use flox_core::shell::ShellWithPath;
 use itertools::Itertools;
 use sysinfo::{Pid, ProcessesToUpdate, System};
 use tracing::debug;
@@ -96,47 +96,20 @@ impl Browser {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Shell {
-    Bash(PathBuf),
-    Fish(PathBuf),
-    Tcsh(PathBuf),
-    Zsh(PathBuf),
+pub trait CliShellExtensions {
+    fn detect_from_parent_process() -> Result<ShellWithPath>;
+
+    fn detect_from_env(var: &str) -> Result<ShellWithPath>;
 }
 
-impl TryFrom<&Path> for Shell {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &Path) -> std::prelude::v1::Result<Self, Self::Error> {
-        match value.file_name() {
-            Some(name) if name == "bash" => Ok(Shell::Bash(value.to_owned())),
-            Some(name) if name == "fish" => Ok(Shell::Fish(value.to_owned())),
-            Some(name) if name == "tcsh" => Ok(Shell::Tcsh(value.to_owned())),
-            Some(name) if name == "zsh" => Ok(Shell::Zsh(value.to_owned())),
-            _ => Err(anyhow!("Unsupported shell {value:?}")),
-        }
-    }
-}
-
-impl Display for Shell {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Shell::Bash(_) => write!(f, "bash"),
-            Shell::Fish(_) => write!(f, "fish"),
-            Shell::Tcsh(_) => write!(f, "tcsh"),
-            Shell::Zsh(_) => write!(f, "zsh"),
-        }
-    }
-}
-
-impl Shell {
+impl CliShellExtensions for ShellWithPath {
     /// Detect the current shell from the parent process
     ///
     /// This function tries to detect the shell from the parent process.
     /// If reading process information of the parent process fails,
     /// or the exe path of the parent process can not be parsed to a known shell,
     /// an error is returned.
-    pub fn detect_from_parent_process() -> Result<Self> {
+    fn detect_from_parent_process() -> Result<Self> {
         let parent_process_exe = get_parent_process_exe()?;
         debug!("Detected parent process exe: {parent_process_exe:?}");
 
@@ -144,23 +117,13 @@ impl Shell {
     }
 
     /// Detect the current shell from the {var} environment variable
-    pub fn detect_from_env(var: &str) -> Result<Self> {
+    fn detect_from_env(var: &str) -> Result<Self> {
         env::var(var)
             .with_context(|| format!("{var} environment variable not set"))
             .and_then(|shell| {
                 let path = PathBuf::from(shell);
                 Self::try_from(path.as_path())
             })
-    }
-
-    /// Get the path to the shell executable
-    pub fn exe_path(&self) -> &Path {
-        match self {
-            Shell::Bash(path) => path,
-            Shell::Fish(path) => path,
-            Shell::Tcsh(path) => path,
-            Shell::Zsh(path) => path,
-        }
     }
 }
 
@@ -284,11 +247,23 @@ mod tests {
         let tcsh = PathBuf::from("/bin/tcsh");
         let zsh = PathBuf::from("/bin/zsh");
 
-        assert_eq!(Shell::try_from(bash.as_path()).unwrap(), Shell::Bash(bash));
-        assert_eq!(Shell::try_from(fish.as_path()).unwrap(), Shell::Fish(fish));
-        assert_eq!(Shell::try_from(tcsh.as_path()).unwrap(), Shell::Tcsh(tcsh));
-        assert_eq!(Shell::try_from(zsh.as_path()).unwrap(), Shell::Zsh(zsh));
-        assert!(Shell::try_from(PathBuf::from("/bin/not_a_shell").as_path()).is_err())
+        assert_eq!(
+            ShellWithPath::try_from(bash.as_path()).unwrap(),
+            ShellWithPath::Bash(bash)
+        );
+        assert_eq!(
+            ShellWithPath::try_from(fish.as_path()).unwrap(),
+            ShellWithPath::Fish(fish)
+        );
+        assert_eq!(
+            ShellWithPath::try_from(tcsh.as_path()).unwrap(),
+            ShellWithPath::Tcsh(tcsh)
+        );
+        assert_eq!(
+            ShellWithPath::try_from(zsh.as_path()).unwrap(),
+            ShellWithPath::Zsh(zsh)
+        );
+        assert!(ShellWithPath::try_from(PathBuf::from("/bin/not_a_shell").as_path()).is_err())
     }
 
     /// Test the detection of the shell from the parent process
@@ -305,13 +280,13 @@ mod tests {
     fn test_detect_from_env_var() {
         temp_env::with_var("MYSHELL", Some("/bin/bash"), || {
             assert_eq!(
-                Shell::detect_from_env("MYSHELL").unwrap(),
-                Shell::Bash(PathBuf::from("/bin/bash"))
+                ShellWithPath::detect_from_env("MYSHELL").unwrap(),
+                ShellWithPath::Bash(PathBuf::from("/bin/bash"))
             );
         });
 
         temp_env::with_var_unset("MYSHELL", || {
-            assert!(Shell::detect_from_env("MYSHELL").is_err());
+            assert!(ShellWithPath::detect_from_env("MYSHELL").is_err());
         });
     }
 }

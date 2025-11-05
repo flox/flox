@@ -2,6 +2,7 @@ pub mod activations;
 pub mod canonical_path;
 #[cfg(feature = "proc_status")]
 pub mod proc_status;
+pub mod shell;
 mod version;
 
 use std::fmt::Display;

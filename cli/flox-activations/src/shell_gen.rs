@@ -1,6 +1,8 @@
 use std::fmt;
 use std::path::Path;
 
+use flox_core::shell::ShellWithPath;
+
 /// The shells that we support generating code for
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shell {
@@ -20,6 +22,17 @@ impl std::str::FromStr for Shell {
             "tcsh" => Ok(Self::Tcsh),
             "fish" => Ok(Self::Fish),
             _ => Err(anyhow::anyhow!("Invalid shell: '{s}'")),
+        }
+    }
+}
+
+impl From<ShellWithPath> for Shell {
+    fn from(value: ShellWithPath) -> Self {
+        match value {
+            ShellWithPath::Bash(_) => Shell::Bash,
+            ShellWithPath::Fish(_) => Shell::Fish,
+            ShellWithPath::Tcsh(_) => Shell::Tcsh,
+            ShellWithPath::Zsh(_) => Shell::Zsh,
         }
     }
 }
