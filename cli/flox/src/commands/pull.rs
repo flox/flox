@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentRef, Flox};
+use flox_rust_sdk::models::environment::generations::{GenerationId, GenerationsExt};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
@@ -75,6 +76,10 @@ pub struct Pull {
     #[bpaf(short, long)]
     copy: bool,
 
+    /// Pull the specified generation instead of the live generation. Must be used with --copy
+    #[bpaf(short, long)]
+    generation: Option<GenerationId>,
+
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
 }
@@ -103,6 +108,9 @@ impl Pull {
 
         match self.pull_select {
             PullSelect::New { remote } | PullSelect::NewAbbreviated { remote } => {
+                if self.generation.is_some() && !self.copy {
+                    bail!("The --generation option can only be used when pulling with --copy");
+                };
                 let start_message = format!(
                     "Pulling {env_ref} from {host} into {into_dir}",
                     env_ref = &remote,
@@ -118,7 +126,14 @@ impl Pull {
                         progress = start_message.as_str());
                 let _guard = span.entered();
 
-                Self::pull_new_environment(&flox, dir, remote, self.copy, self.force)?;
+                Self::pull_new_environment(
+                    &flox,
+                    dir,
+                    remote,
+                    self.copy,
+                    self.force,
+                    self.generation,
+                )?;
             },
             PullSelect::Existing {} => {
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
@@ -216,6 +231,7 @@ impl Pull {
         env_ref: EnvironmentRef,
         copy: bool,
         force: bool,
+        generation: Option<GenerationId>,
     ) -> Result<()> {
         let dot_flox_path = env_path.join(DOT_FLOX);
         if dot_flox_path.exists() {
@@ -252,8 +268,9 @@ impl Pull {
             env_ref.name().clone(),
             &flox.floxhub,
         );
-        let pointer_content =
+        let mut pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
+        pointer_content.push('\n');
 
         fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
@@ -273,11 +290,20 @@ impl Pull {
         };
         // endregion
 
-        // The pulled generation already has a lock,
-        // so we can skip locking.
-        let result = env
-            .build(flox)
-            .and_then(|store_paths| env.link(&store_paths));
+        let result = if let Some(generation) = generation
+            && env.generations_metadata()?.current_gen() != Some(generation)
+        {
+            debug!(%generation, "switching to generation");
+            // TODO: would be slightly faster to have
+            // into_path_environment(generation) rather than doing
+            // switch_generation and into_path_environment() below
+            env.switch_generation(flox, generation)
+        } else {
+            // The pulled generation already has a lock,
+            // so we can skip locking.
+            env.build(flox)
+                .and_then(|store_paths| env.link(&store_paths))
+        };
 
         let resolution = Self::handle_pull_result(
             flox,

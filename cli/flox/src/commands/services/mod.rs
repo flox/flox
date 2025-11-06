@@ -17,7 +17,7 @@ use super::{
     UninitializedEnvironment,
     activated_environments,
 };
-use crate::commands::activate::Activate;
+use crate::commands::activate::{Activate, InvocationType};
 use crate::commands::display_help;
 use crate::config::Config;
 use crate::utils::message;
@@ -59,7 +59,7 @@ pub enum ServicesCommands {
     #[bpaf(command, hide)]
     Help,
     /// Restart a service or services
-    #[bpaf(command)]
+    #[bpaf(command, short('r'))]
     Restart(#[bpaf(external(restart::restart))] restart::Restart),
 
     /// Ensure a service or services are running
@@ -75,7 +75,11 @@ pub enum ServicesCommands {
     Stop(#[bpaf(external(stop::stop))] stop::Stop),
 
     /// Print logs of services
-    #[bpaf(command, footer("Run 'man flox-services-logs' for more details."))]
+    #[bpaf(
+        command,
+        short('l'),
+        footer("Run 'man flox-services-logs' for more details.")
+    )]
     Logs(#[bpaf(external(logs::logs))] logs::Logs),
 }
 
@@ -327,6 +331,7 @@ pub async fn start_services_with_new_process_compose(
         config,
         flox,
         concrete_environment,
+        InvocationType::Command,
         true,
         &new_services_to_start(names),
     )
@@ -440,6 +445,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                systemd: None,
                 systems: Some(vec!["another-system".to_string()]),
             });
 
@@ -476,6 +482,7 @@ mod tests {
                 vars: None,
                 is_daemon: None,
                 shutdown: None,
+                systemd: None,
                 systems: Some(vec!["system".to_string()]),
             });
 

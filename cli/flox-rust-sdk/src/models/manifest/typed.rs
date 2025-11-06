@@ -21,6 +21,7 @@ use proptest::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
+use systemd::unit::ServiceUnit;
 
 use super::raw::RawManifest;
 use crate::data::System;
@@ -509,15 +510,15 @@ impl From<PackageDescriptorStorePath> for ManifestPackageDescriptor {
 #[serde(deny_unknown_fields)]
 pub struct PackageDescriptorCatalog {
     #[cfg_attr(test, proptest(strategy = "alphanum_string(5)"))]
-    pub(crate) pkg_path: String,
+    pub pkg_path: String,
     #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
-    pub(crate) pkg_group: Option<String>,
+    pub pkg_group: Option<String>,
     #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
-    pub(crate) priority: Option<u64>,
+    pub priority: Option<u64>,
     #[cfg_attr(test, proptest(strategy = "optional_string(5)"))]
-    pub(crate) version: Option<String>,
+    pub version: Option<String>,
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
-    pub(crate) systems: Option<Vec<System>>,
+    pub systems: Option<Vec<System>>,
 }
 
 impl PackageDescriptorCatalog {
@@ -797,6 +798,15 @@ pub struct ServiceDescriptor {
     pub is_daemon: Option<bool>,
     /// How to shut down the service
     pub shutdown: Option<ServiceShutdown>,
+
+    /// Additional manual config of the systemd service generated for persistent services
+    // Generating more than 1(!) value with proptest,
+    // increases the runtime of `proptest!`s to the point that we exhausted our stack space in CI
+    // Since we don't actually test against properties of systemd config,
+    // exclude this value from proptest state space generation.
+    #[cfg_attr(test, proptest(value = "None"))]
+    pub systemd: Option<ServiceUnit>,
+
     /// Systems to allow running the service on
     #[cfg_attr(test, proptest(strategy = "optional_vec_of_strings(3, 4)"))]
     pub systems: Option<Vec<System>>,
@@ -1524,27 +1534,4 @@ pub mod test {
         assert!(!create_flake_descriptor("github:owner/repo").is_from_custom_catalog());
         assert!(!create_store_path_descriptor("/nix/store/abc123-hello").is_from_custom_catalog());
     }
-}
-
-#[test]
-#[ignore = "only exporting schema"]
-fn export_schema() {
-    use std::fs::File;
-    use std::io::Write;
-    use std::path::Path;
-    let schema = schemars::schema_for!(Manifest);
-
-    // Slightly hacky since we cant read the target dir
-    // or even at least the workspace dir directly:
-    // <https://github.com/rust-lang/cargo/issues/3946>
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let schemars_basedir = manifest_dir.join("../target/schemars");
-    std::fs::create_dir_all(&schemars_basedir).unwrap();
-
-    let schema_path = schemars_basedir.join("manifest-v1.schema.json");
-    let mut schema_file = File::create(&schema_path).unwrap();
-
-    writeln!(&mut schema_file, "{:#}", schema.as_value()).unwrap();
-
-    println!("schema written to {schema_path:?}")
 }

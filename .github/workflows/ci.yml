@@ -28,7 +28,7 @@ on:
     branches:
       - "main"
     tags:
-      - '*'
+      - "*"
   pull_request:
   merge_group:
 
@@ -41,7 +41,6 @@ env:
   FLOX_DISABLE_METRICS: "true"
 
 jobs:
-
   nix-plugins-dev:
     name: "Nix Plugins"
     runs-on: ${{ matrix.os }}
@@ -75,12 +74,12 @@ jobs:
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
-          SUBSTITUTER:            "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
-          SUBSTITUTER_KEY:        "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID:      "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY:  "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
+          GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
+          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: "Build"
         run: nix develop -L --no-update-lock-file --command just build-nix-plugins
@@ -111,12 +110,12 @@ jobs:
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
-          SUBSTITUTER:            "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
-          SUBSTITUTER_KEY:        "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID:      "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY:  "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
+          GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
+          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: "Test NEF"
         run: nix develop -L --no-update-lock-file --command just test-nef
@@ -130,7 +129,7 @@ jobs:
     timeout-minutes: 60
 
     permissions:
-      id-token: write  # Needed for CodeCov
+      id-token: write # Needed for CodeCov
 
     strategy:
       fail-fast: false
@@ -154,12 +153,12 @@ jobs:
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
-          SUBSTITUTER:            "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
-          SUBSTITUTER_KEY:        "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID:      "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY:  "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
+          GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
+          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: "Cache Cargo"
         uses: "actions/cache@v4"
@@ -192,6 +191,15 @@ jobs:
           flags: "dev-unittests, ${{ matrix.test-tags }}, ${{ matrix.os }}"
           verbose: true
           use_oidc: true
+      - name: "Check schemas are up to date"
+        run: |
+          nix develop -L --no-update-lock-file --command just gen-schemas
+          if ! git diff --quiet cli/schemas; then
+            echo "::error::Schema files are not up to date. Please run 'just gen-schemas' and commit the changes."
+            git status
+            git diff
+            exit 1
+          fi
 
   nix-build:
     name: "Nix build"
@@ -199,11 +207,11 @@ jobs:
     timeout-minutes: 120
 
     outputs:
-      closure-size-x86_64-linux:   ${{ steps.closure.outputs.closure-size-x86_64-linux }}
-      closure-size-aarch64-linux:  ${{ steps.closure.outputs.closure-size-aarch64-linux }}
-      closure-size-x86_64-darwin:  ${{ steps.closure.outputs.closure-size-x86_64-darwin }}
+      closure-size-x86_64-linux: ${{ steps.closure.outputs.closure-size-x86_64-linux }}
+      closure-size-aarch64-linux: ${{ steps.closure.outputs.closure-size-aarch64-linux }}
+      closure-size-x86_64-darwin: ${{ steps.closure.outputs.closure-size-x86_64-darwin }}
       closure-size-aarch64-darwin: ${{ steps.closure.outputs.closure-size-aarch64-darwin }}
-      flox-version:                ${{ steps.version.outputs.flox-version }}
+      flox-version: ${{ steps.version.outputs.flox-version }}
 
     strategy:
       fail-fast: false
@@ -232,16 +240,16 @@ jobs:
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
-          SUBSTITUTER:            "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
-          SUBSTITUTER_KEY:        "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID:      "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY:  "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
-          TAILSCALE_URL:          "${{    vars.MANAGED_TAILSCALE_URL }}"
-          TAILSCALE_AUTH_KEY:     "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
-          REMOTE_BUILDERS:        "${{    vars.MANAGED_REMOTE_BUILDERS }}"
-          SYSTEM:                 "${{ matrix.system }}"
+          GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
+          SUBSTITUTER: "${{ vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
+          TAILSCALE_URL: "${{ vars.MANAGED_TAILSCALE_URL }}"
+          TAILSCALE_AUTH_KEY: "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
+          REMOTE_BUILDERS: "${{ vars.MANAGED_REMOTE_BUILDERS }}"
+          SYSTEM: "${{ matrix.system }}"
 
       - name: "Build"
         id: "build"
@@ -275,9 +283,9 @@ jobs:
       - name: "Get Flox version"
         id: "version"
         run: |
-            FLOX_VERSION="${FLOX_VERSION:=$(git describe)}"
-            FLOX_VERSION="${FLOX_VERSION:1}"
-            echo "flox-version=$FLOX_VERSION" >> $GITHUB_OUTPUT
+          FLOX_VERSION="${FLOX_VERSION:=$(git describe)}"
+          FLOX_VERSION="${FLOX_VERSION:1}"
+          echo "flox-version=$FLOX_VERSION" >> $GITHUB_OUTPUT
 
   trigger-flox-installers-workflow:
     name: "Build installers"
@@ -301,17 +309,17 @@ jobs:
         id: "trigger-workflow"
         uses: "convictional/trigger-workflow-and-wait@v1.6.5"
         with:
-          owner:              "flox"
-          repo:               "flox-installers"
-          github_token:       "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
-          github_user:        "floxbot"
+          owner: "flox"
+          repo: "flox-installers"
+          github_token: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
+          github_user: "floxbot"
           workflow_file_name: "ci.yml"
-          ref:                "${{ github.ref_name }}"
-          wait_interval:      10
-          client_payload:     '{"FLOX_SRC":"github:flox/flox/${{ github.event.pull_request.head.sha || github.sha }}"}'
-          propagate_failure:  true
-          trigger_workflow:   true
-          wait_workflow:      true
+          ref: "${{ github.ref_name }}"
+          wait_interval: 10
+          client_payload: '{"FLOX_SRC":"github:flox/flox/${{ github.event.pull_request.head.sha || github.sha }}"}'
+          propagate_failure: true
+          trigger_workflow: true
+          wait_workflow: true
 
       - name: "Create shipit artifact"
         if: ${{ success() || failure() }}
@@ -327,7 +335,7 @@ jobs:
           cat shipit.json | jq
 
       - name: "Upload artifact"
-        uses: "actions/upload-artifact@v4"
+        uses: "actions/upload-artifact@v5"
         if: ${{ success() || failure() }}
         with:
           name: "shipit"
@@ -358,12 +366,12 @@ jobs:
       - name: "Slack Notification"
         uses: "rtCamp/action-slack-notify@v2"
         env:
-          SLACK_TITLE:      "Something broke CI for flox/flox on ${{ github.ref_name }}"
-          SLACK_FOOTER:     "Thank you for caring"
-          SLACK_WEBHOOK:    "${{ secrets.MANAGED_SLACK_WEBHOOK }}"
-          SLACK_USERNAME:   "GitHub"
+          SLACK_TITLE: "Something broke CI for flox/flox on ${{ github.ref_name }}"
+          SLACK_FOOTER: "Thank you for caring"
+          SLACK_WEBHOOK: "${{ secrets.MANAGED_SLACK_WEBHOOK }}"
+          SLACK_USERNAME: "GitHub"
           SLACK_ICON_EMOJI: ":poop:"
-          SLACK_COLOR:      "#ff2800"  # ferrari red -> https://encycolorpedia.com/ff2800
+          SLACK_COLOR: "#ff2800" # ferrari red -> https://encycolorpedia.com/ff2800
           SLACK_LINK_NAMES: true
 
   nix-build-bats-tests:
@@ -372,7 +380,7 @@ jobs:
     timeout-minutes: 90
 
     permissions:
-      id-token: write  # Needed for CodeCov
+      id-token: write # Needed for CodeCov
 
     needs:
       - "nix-build"
@@ -389,9 +397,17 @@ jobs:
           - "containerize"
           - "!containerize"
         exclude:
-          # Skip containerize tests on this runner because it's actually Rosetta on aarch64-darwin
+          # Skip containerize tests on x86_64-darwin (except the ones enabled in the include section below)
           - system: "x86_64-darwin"
-            test-tags: "containerize"
+        include:
+          # Disable containerize and activation tests on x86_64-darwin
+          # Containerize tests are run through rosetta, and thius are slow and dont necessarily represent real usage.
+          # Activation tests are taking the largest part of test runtime (up to ~10 minutes)
+          # we disable these in an effort to speed up CI.
+          # We assume that activation is sufficiently testsd on macos through aarch64-darwin
+          # and on x86_64-darwin through the remaining integration tests
+          - system: "x86_64-darwin"
+            test-tags: "!containerize,!activate"
 
     steps:
       - name: "Checkout"
@@ -408,16 +424,16 @@ jobs:
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
-          SUBSTITUTER:            "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
-          SUBSTITUTER_KEY:        "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID:      "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY:  "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
-          TAILSCALE_URL:          "${{    vars.MANAGED_TAILSCALE_URL }}"
-          TAILSCALE_AUTH_KEY:     "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
-          REMOTE_BUILDERS:        "${{    vars.MANAGED_REMOTE_BUILDERS }}"
-          SYSTEM:                 "${{ matrix.system }}"
+          GITHUB_ACCESS_TOKEN: "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
+          SUBSTITUTER: "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY: "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
+          TAILSCALE_URL: "${{ vars.MANAGED_TAILSCALE_URL }}"
+          TAILSCALE_AUTH_KEY: "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
+          REMOTE_BUILDERS: "${{ vars.MANAGED_REMOTE_BUILDERS }}"
+          SYSTEM: "${{ matrix.system }}"
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30

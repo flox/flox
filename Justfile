@@ -206,6 +206,12 @@ gen-unit-data-for-publish floxhub_repo_path force="":
 
 # ---------------------------------------------------------------------------- #
 
+# Generate JSON schemas for Flox data structures
+@gen-schemas:
+  pushd cli; cargo xtask generate-schemas
+
+# ---------------------------------------------------------------------------- #
+
 # Run the nix-plugins tests
 @test-nix-plugins: build-nix-plugins
     meson test -C nix-plugins/builddir
@@ -310,13 +316,15 @@ test-all: test-nix-plugins impure-tests integ-tests nix-integ-tests
     clang-format -i nix-plugins/src/**/*.cc; \
     clang-format -i nix-plugins/include/**/*.hh
 
-
 @format-nix:
-    treefmt
+    treefmt -f nix
+
+# format yaml files (i.e.e github actions)
+@format-yaml:
+    treefmt -f yaml
 
 # Format all the code
-format: format-cli format-nix-plugins format-nix
-
+format: format-cli format-nix-plugins format-nix format-yaml
 # ---------------------------------------------------------------------------- #
 #
 #

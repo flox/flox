@@ -140,7 +140,18 @@ impl Activate {
             .await?;
         }
 
-        if config.flox.upgrade_notifications.unwrap_or(true) {
+        let invocation_type =
+            if self.print_script || (!stdout().is_tty() && self.run_args.is_empty()) {
+                InvocationType::InPlace
+            } else if self.run_args.is_empty() {
+                InvocationType::Interactive
+            } else {
+                InvocationType::Command
+            };
+
+        if invocation_type != InvocationType::Command
+            && config.flox.upgrade_notifications.unwrap_or(true)
+        {
             // Read the results of a previous upgrade check
             // and print a message if an upgrade is available.
             notify_upgrade_if_available(&flox, &mut concrete_environment)?;
@@ -158,8 +169,15 @@ impl Activate {
             None,
         )?;
 
-        self.activate(config, flox, concrete_environment, false, &[])
-            .await
+        self.activate(
+            config,
+            flox,
+            concrete_environment,
+            invocation_type,
+            false,
+            &[],
+        )
+        .await
     }
 
     /// This function contains the bulk of the implementation for
@@ -177,6 +195,7 @@ impl Activate {
         mut config: Config,
         flox: Flox,
         mut concrete_environment: ConcreteEnvironment,
+        invocation_type: InvocationType,
         is_ephemeral: bool,
         services_to_start: &[String],
     ) -> Result<()> {
@@ -209,9 +228,6 @@ impl Activate {
         // breadcrumb metric to estimate use of composition
         let has_includes = lockfile.compose.is_some();
         subcommand_metric!("activate", "has_includes" = has_includes);
-
-        let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
-        let interactive = !in_place && self.run_args.is_empty();
 
         let rendered_env_path_result = concrete_environment.rendered_env_links(&flox);
         let rendered_env_path = match rendered_env_path_result {
@@ -281,7 +297,7 @@ impl Activate {
                 "Environment is already active: environment={}. Not adding to active environments",
                 now_active.bare_description()
             );
-            if interactive {
+            if invocation_type == InvocationType::Interactive {
                 return Err(anyhow!(
                     "Environment {} is already active",
                     uninitialized_environment_description(&now_active)?
@@ -467,7 +483,7 @@ impl Activate {
         // e.g. in a .bashrc or .zshrc file:
         //
         //    eval "$(flox activate)"
-        if in_place {
+        if invocation_type == InvocationType::InPlace {
             let shell = Self::detect_shell_for_in_place()?;
             subcommand_metric!("activate", "shell" = shell.to_string());
             command.arg("--shell").arg(shell.exe_path());
@@ -480,7 +496,7 @@ impl Activate {
         subcommand_metric!("activate", "shell" = shell.to_string());
         command.arg("--shell").arg(shell.exe_path());
         // These functions will only return if exec fails
-        if interactive {
+        if invocation_type == InvocationType::Interactive {
             Self::activate_interactive(command)
         } else {
             Self::activate_command(command, self.run_args, is_ephemeral)
@@ -665,6 +681,13 @@ impl Activate {
 
         prompt_envs.join(" ")
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum InvocationType {
+    InPlace,
+    Interactive,
+    Command,
 }
 
 /// Notify the user of available upgrades

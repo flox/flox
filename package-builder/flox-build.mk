@@ -75,6 +75,7 @@ _sed := $(call __package_bin,$(__gnused),sed)
 _sha256sum := $(call __package_bin,$(__coreutils),sha256sum)
 _sort := $(call __package_bin,$(__coreutils),sort)
 _tar := $(call __package_bin,$(__gnutar),tar)
+_touch := $(call __package_bin,$(__coreutils),touch)
 _t3 := $(call __package_bin,$(__t3),t3) --relative $(if $(NO_COLOR),,--forcecolor)
 _tr := $(call __package_bin,$(__coreutils),tr)
 _uname := $(call __package_bin,$(__coreutils),uname)
@@ -88,17 +89,17 @@ endif
 # Path to Nix expession (NEF) library.
 _nef := $(_libexec_dir)/nef
 
-# Set makefile verbosity based on the value of _FLOX_PKGDB_VERBOSITY [sic]
+# Set makefile verbosity based on the value of _FLOX_SUBSYSTEM_VERBOSITY [sic]
 # as set in the environment by the flox CLI. First set it to 0 if not defined.
-ifeq (,$(_FLOX_PKGDB_VERBOSITY))
-  _FLOX_PKGDB_VERBOSITY = 0
+ifeq (,$(_FLOX_SUBSYSTEM_VERBOSITY))
+  _FLOX_SUBSYSTEM_VERBOSITY = 0
 endif
 
 # Invoke nix with the required experimental features enabled.
-_nix := $(_nix) --extra-experimental-features "flakes nix-command fetch-tree" $(intcmp 0,$(_FLOX_PKGDB_VERBOSITY),--trace-verbose)
+_nix := $(_nix) --extra-experimental-features "flakes nix-command fetch-tree" $(intcmp 0,$(_FLOX_SUBSYSTEM_VERBOSITY),--trace-verbose)
 
 # Ensure we use the Nix-provided SHELL.
-SHELL := $(_bash) $(intcmp 2,$(_FLOX_PKGDB_VERBOSITY),-x)
+SHELL := $(_bash) $(intcmp 2,$(_FLOX_SUBSYSTEM_VERBOSITY),-x)
 
 # Identify target O/S.
 OS := $(shell $(_uname) -s)
@@ -167,9 +168,9 @@ $(if $(MANIFEST_BUILDS),,\
     $(error no manifest or Nix expression builds found in $(FLOX_ENV))))
 
 # Then set them to empty string or "@" based on being greater than 0, 1, or 2.
-$(eval _V_ = $(intcmp 0,$(_FLOX_PKGDB_VERBOSITY),,@))
-$(eval _VV_ = $(intcmp 1,$(_FLOX_PKGDB_VERBOSITY),,@))
-$(eval _VVV_ = $(intcmp 2,$(_FLOX_PKGDB_VERBOSITY),,@))
+$(eval _V_ = $(intcmp 0,$(_FLOX_SUBSYSTEM_VERBOSITY),,@))
+$(eval _VV_ = $(intcmp 1,$(_FLOX_SUBSYSTEM_VERBOSITY),,@))
+$(eval _VVV_ = $(intcmp 2,$(_FLOX_SUBSYSTEM_VERBOSITY),,@))
 
 # Define a usage target to provide a helpful message when no target is specified.
 .PHONY: usage
@@ -193,8 +194,8 @@ $(PROJECT_TMPDIR)/check-build-prerequisites:
 	@# Check that the BUILDTIME_NIXPKGS_URL and EXPRESSION_BUILD_NIXPKGS_URL are defined.
 	$(if $(BUILDTIME_NIXPKGS_URL),,$(error BUILDTIME_NIXPKGS_URL not defined))
 	$(if $(EXPRESSION_BUILD_NIXPKGS_URL),,$(error EXPRESSION_BUILD_NIXPKGS_URL not defined))
-	@mkdir -p $(@D)
-	@touch $@
+	@$(_mkdir) -p $(@D)
+	@$(_touch) $@
 
 # The `nix build` command will attempt a rebuild in every instance,
 # and we will presumably want `flox build` to do the same. However,

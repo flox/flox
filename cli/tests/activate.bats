@@ -2775,8 +2775,8 @@ EOF
   # PROJECT_DIR to look for
   project_setup_common
 
-  PACKAGES_OUTER="jupyter python312Packages.jupyterlab-widgets"
-  PACKAGES_INNER="jupyter python312Packages.jupyterlab-git"
+  PACKAGES_OUTER="jupyter python313Packages.jupyterlab-widgets"
+  PACKAGES_INNER="jupyter python313Packages.jupyterlab-git"
 
   EXPECTED_NOTEBOOK="@jupyter-notebook/lab-extension"
   EXPECTED_WIDGETS="@jupyter-widgets/jupyterlab-manager"

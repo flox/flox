@@ -487,3 +487,28 @@ function add_incompatible_package() {
 }
 
 # ---------------------------------------------------------------------------- #
+
+@test "no build for an activate after a 'pull --copy" {
+  make_dummy_env "owner" "env"
+  update_dummy_env "owner" "env"
+
+  # No build if latest generation specified explicitly
+  "$FLOX_BIN" pull --remote owner/env --copy --generation 2
+
+  _FLOX_TESTING_NO_BUILD=true "$FLOX_BIN" activate -- true
+  wait_for_watchdogs "$PROJECT_DIR"
+  "$FLOX_BIN" delete -f
+
+  # No build if an earlier generation specified explicitly
+  "$FLOX_BIN" pull --remote owner/env --copy --generation 1
+
+  _FLOX_TESTING_NO_BUILD=true "$FLOX_BIN" activate -- true
+  wait_for_watchdogs "$PROJECT_DIR"
+  "$FLOX_BIN" delete -f
+
+  # No build if no generation specified
+  "$FLOX_BIN" pull --remote owner/env --copy
+
+  _FLOX_TESTING_NO_BUILD=true "$FLOX_BIN" activate -- true
+  wait_for_watchdogs "$PROJECT_DIR"
+}

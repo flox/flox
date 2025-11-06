@@ -1494,7 +1494,7 @@ impl Lockfile {
         //       we now compute this 3 times during a single lock operation
         let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
 
-        let by_id = installables.into_iter().group_by(|i| i.install_id.clone());
+        let by_id = installables.into_iter().chunk_by(|i| i.install_id.clone());
 
         let (already_locked, to_lock): (Vec<Vec<LockedPackage>>, Vec<Vec<FlakeInstallableToLock>>) =
             by_id.into_iter().partition_map(|(_, group)| {
@@ -4438,27 +4438,4 @@ pub(crate) mod tests {
             "composer should include fields from both indirect child includes"
         )
     }
-}
-
-#[test]
-#[ignore = "only exporting schema"]
-fn export_schema() {
-    use std::fs::File;
-    use std::io::Write;
-    use std::path::Path;
-    let schema = schemars::schema_for!(Manifest);
-
-    // Slightly hacky since we cant read the target dir
-    // or even at least the workspace dir directly:
-    // <https://github.com/rust-lang/cargo/issues/3946>
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let schemars_basedir = manifest_dir.join("../target/schemars");
-    std::fs::create_dir_all(&schemars_basedir).unwrap();
-
-    let schema_path = schemars_basedir.join("lockfile-v1.schema.json");
-    let mut schema_file = File::create(&schema_path).unwrap();
-
-    writeln!(&mut schema_file, "{:#}", schema.as_value()).unwrap();
-
-    println!("schema written to {schema_path:?}")
 }

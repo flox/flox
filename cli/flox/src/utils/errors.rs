@@ -334,6 +334,8 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
     trace!("formatting managed_environment_error: {err:?}");
 
     match err {
+        ManagedEnvironmentError::LockFloxmeta(_) => display_chain(err),
+
         // todo: communicate reasons for this error
         // git auth errors may be caught separately or reported
         ManagedEnvironmentError::OpenFloxmeta(err)

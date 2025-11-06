@@ -2,7 +2,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-use jsonwebtoken::{DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use serde_with::DeserializeFromStr;
 use thiserror::Error;
@@ -159,20 +158,40 @@ impl FromStr for FloxhubToken {
     type Err = FloxhubTokenError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut validation = Validation::default();
-        // we're neither creating or verifying the token on the client side
-        validation.insecure_disable_signature_validation();
-        validation.validate_aud = false;
+        // Client side we don't need to verify the signature,
+        // as all priviledged access is guarded server side.
+        // It's still convenient to verify common claims e.g. expiration dates.
+
+        #[derive(Clone, Debug, Deserialize)]
+        struct ClaimsWithValidation<T> {
+            exp: Option<usize>,
+            #[serde(flatten)]
+            claims: T,
+        }
+
         let token =
-            jsonwebtoken::decode::<FloxTokenClaims>(s, &DecodingKey::from_secret(&[]), &validation)
-                .map_err(|e| match e.kind() {
-                    jsonwebtoken::errors::ErrorKind::ExpiredSignature => FloxhubTokenError::Expired,
-                    _ => FloxhubTokenError::InvalidToken(e),
-                })?;
+            jsonwebtoken::dangerous::insecure_decode::<ClaimsWithValidation<FloxTokenClaims>>(s)
+                .map_err(FloxhubTokenError::InvalidToken)?;
+
+        let now = {
+            let start = std::time::SystemTime::now();
+            start
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs() as usize
+        };
+
+        match token.claims.exp {
+            None => Err(FloxhubTokenError::InvalidToken(
+                jsonwebtoken::errors::ErrorKind::InvalidToken.into(),
+            ))?,
+            Some(exp) if exp < now => Err(FloxhubTokenError::Expired)?,
+            Some(_) => {},
+        };
 
         Ok(FloxhubToken {
             token: s.to_string(),
-            token_data: token.claims,
+            token_data: token.claims.claims,
         })
     }
 }

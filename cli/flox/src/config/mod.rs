@@ -236,7 +236,7 @@ fn locate_user_config_dir(flox_dirs: &BaseDirectories) -> Result<PathBuf> {
             } else {
                 debug!("no user config file found");
                 // fall back to `XDG_CONFIG_HOME/flox`
-                flox_dirs.get_config_home()
+                flox_dirs.get_config_home().context("$HOME not set")?
             };
 
             fs::create_dir_all(&config_dir)
@@ -274,9 +274,9 @@ fn raw_config_from_parts(
 
     let mut builder = HierarchicalConfig::builder()
         .set_default("default_substituter", "https://cache.flox.dev/")?
-        .set_default("cache_dir", cache_dir.to_str().unwrap())?
-        .set_default("data_dir", data_dir.to_str().unwrap())?
-        .set_default("state_dir", state_dir.to_str().unwrap())?
+        .set_default("cache_dir", cache_dir.context("$HOME not set")?.to_str().unwrap())?
+        .set_default("data_dir", data_dir.context("$HOME not set")?.to_str().unwrap())?
+        .set_default("state_dir", state_dir.context("$HOME not set")?.to_str().unwrap())?
         // Config dir is added to the config for completeness;
         // the config file cannot change the config dir.
         .set_override("config_dir", config_dir.to_str().unwrap())?;
@@ -336,7 +336,7 @@ impl Config {
 
     /// Creates a [Config] from the environment and config files
     pub fn parse() -> Result<Config> {
-        let base_directories = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
+        let base_directories = BaseDirectories::with_prefix(FLOX_DIR_NAME);
         Self::parse_with(
             &base_directories,
             &locate_user_config_dir(&base_directories)?,
@@ -491,7 +491,7 @@ mod tests {
 
     // TODO: update the `xdg` crate and build `BaseDirectories` by hand with known (test) paths
     fn mock_flox_dirs() -> BaseDirectories {
-        BaseDirectories::new().unwrap()
+        BaseDirectories::new()
     }
 
     use super::*;

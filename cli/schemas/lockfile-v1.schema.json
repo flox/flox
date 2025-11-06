@@ -1,0 +1,1621 @@
+{
+  "$defs": {
+    "ActivateMode": {
+      "enum": [
+        "dev",
+        "run"
+      ],
+      "type": "string"
+    },
+    "ActivateOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ActivateMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Allows": {
+      "additionalProperties": false,
+      "properties": {
+        "broken": {
+          "description": "Whether to allow packages that are marked as `broken`",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "licenses": {
+          "description": "A list of license descriptors that are allowed",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "unfree": {
+          "description": "Whether to allow packages that are marked as `unfree`",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Build": {
+      "additionalProperties": {
+        "$ref": "#/$defs/BuildDescriptor"
+      },
+      "description": "A map of package ids to package build descriptors",
+      "type": "object"
+    },
+    "BuildDescriptor": {
+      "additionalProperties": false,
+      "description": "The definition of a package built from within the environment",
+      "properties": {
+        "command": {
+          "description": "The command to run to build a package.",
+          "type": "string"
+        },
+        "description": {
+          "description": "A short description of the package that will appear on FloxHub and in\nsearch results.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "license": {
+          "description": "A license to assign to the package in SPDX format.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "runtime-packages": {
+          "description": "Packages from the 'toplevel' group to include in the closure of the build result.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "sandbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BuildSandbox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Sandbox mode for the build."
+        },
+        "version": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BuildVersion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The version to assign the package."
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "BuildSandbox": {
+      "description": "The definition of a package built from within the environment",
+      "enum": [
+        "off",
+        "pure"
+      ],
+      "type": "string"
+    },
+    "BuildVersion": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "properties": {
+            "file": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "file"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "command": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "The definition of a package built from within the environment"
+    },
+    "Compose": {
+      "properties": {
+        "composer": {
+          "$ref": "#/$defs/Manifest",
+          "description": "The composing environment's manifest that was on disk at lock-time."
+        },
+        "include": {
+          "description": "Metadata and manifests for the included environments in the order\nthat they were specified in the composing environment's manifest.",
+          "items": {
+            "$ref": "#/$defs/LockedInclude"
+          },
+          "type": "array"
+        },
+        "warnings": {
+          "description": "Warnings generated during composition + locking.",
+          "items": {
+            "$ref": "#/$defs/WarningWithContext"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "composer",
+        "include",
+        "warnings"
+      ],
+      "type": "object"
+    },
+    "Containerize": {
+      "additionalProperties": false,
+      "properties": {
+        "config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContainerizeConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ContainerizeConfig": {
+      "additionalProperties": false,
+      "description": "Container config derived from\nhttps://github.com/opencontainers/image-spec/blob/main/config.md\n\nEnv and Entrypoint are left out since they interfere with our activation implementation\nDeprecated and reserved keys are also left out",
+      "properties": {
+        "cmd": {
+          "description": "Default arguments to the entrypoint of the container.\nThese values act as defaults and may be replaced by any specified when creating a container.\nFlox sets an entrypoint to activate the containerized environment,\nand `cmd` is then run inside the activation, similar to\n`flox activate -- cmd`.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "exposed-ports": {
+          "description": "A set of ports to expose from a container running this image.\nIts keys can be in the format of:\n`port/tcp`, `port/udp`, `port` with the default protocol being `tcp` if not specified.\nThese values act as defaults and are merged with any specified when creating a container.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ],
+          "uniqueItems": true
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "This field contains arbitrary metadata for the container.\nThis property MUST use the [annotation rules](https://github.com/opencontainers/image-spec/blob/main/annotations.md#rules).",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "stop-signal": {
+          "description": "This field contains the system call signal that will be sent to the container to exit. The signal can be a signal name in the format `SIGNAME`, for instance `SIGKILL` or `SIGRTMIN+3`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "user": {
+          "description": "The username or UID which is a platform-specific structure that allows specific control over which user the process run as.\nThis acts as a default value to use when the value is not specified when creating a container.\nFor Linux based systems, all of the following are valid: `user`, `uid`, `user:group`, `uid:gid`, `uid:group`, `user:gid`.\nIf `group`/`gid` is not specified, the default group and supplementary groups of the given `user`/`uid` in `/etc/passwd` and `/etc/group` from the container are applied.\nIf `group`/`gid` is specified, supplementary groups from the container are ignored.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "volumes": {
+          "description": "A set of directories describing where the process is\nlikely to write data specific to a container instance.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ],
+          "uniqueItems": true
+        },
+        "working-dir": {
+          "description": "Sets the current working directory of the entrypoint process in the container.\nThis value acts as a default and may be replaced by a working directory specified when creating a container.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "EnvironmentRef": {
+      "description": "Environment Reference",
+      "type": "string"
+    },
+    "Hook": {
+      "additionalProperties": false,
+      "properties": {
+        "on-activate": {
+          "description": "A script that is run at activation time,\nin a flox provided bash shell",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Include": {
+      "additionalProperties": false,
+      "description": "The section where users can declare dependencies on other environments.",
+      "properties": {
+        "environments": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/IncludeDescriptor"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "IncludeDescriptor": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "dir": {
+              "description": "The directory where the environment is located.",
+              "type": "string"
+            },
+            "name": {
+              "description": "A name similar to an install ID that a user could use to specify\nthe environment on the command line e.g. for upgrades, or in an\nerror message.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "dir"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "generation": {
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "name": {
+              "description": "A name similar to an install ID that a user could use to specify\nthe environment on the command line e.g. for upgrades, or in an\nerror message.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "remote": {
+              "$ref": "#/$defs/EnvironmentRef",
+              "description": "The remote environment reference in the form `owner/name`."
+            }
+          },
+          "required": [
+            "remote"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "The structure for how a user is able to declare a dependency on an environment."
+    },
+    "Install": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ManifestPackageDescriptor"
+      },
+      "type": "object"
+    },
+    "KeyPath": {
+      "description": "A key path to a value in a manifest.\nThis is used to provide the location for warnings.\n\nThe `KeyPath` behaves like an immutable stack of keys,\nwhere [`KeyPath::push`] and [`KeyPath::extend`] return a new `KeyPath`\nwith the new key(s) added to the top of the stack,\nleaving the original `KeyPath` unchanged.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "LockedInclude": {
+      "properties": {
+        "descriptor": {
+          "$ref": "#/$defs/IncludeDescriptor"
+        },
+        "manifest": {
+          "$ref": "#/$defs/Manifest"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifest",
+        "name",
+        "descriptor"
+      ],
+      "type": "object"
+    },
+    "LockedPackage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LockedPackageCatalog"
+        },
+        {
+          "$ref": "#/$defs/LockedPackageFlake"
+        },
+        {
+          "$ref": "#/$defs/LockedPackageStorePath"
+        }
+      ]
+    },
+    "LockedPackageCatalog": {
+      "properties": {
+        "attr_path": {
+          "type": "string"
+        },
+        "broken": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "derivation": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group": {
+          "type": "string"
+        },
+        "install_id": {
+          "type": "string"
+        },
+        "license": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "locked_url": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "A map of output name to store path",
+          "type": "object"
+        },
+        "outputs_to_install": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "pname": {
+          "type": "string"
+        },
+        "priority": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rev": {
+          "type": "string"
+        },
+        "rev_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "rev_date": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "scrape_date": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "stabilities": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "system": {
+          "type": "string"
+        },
+        "unfree": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attr_path",
+        "derivation",
+        "install_id",
+        "locked_url",
+        "name",
+        "pname",
+        "rev",
+        "rev_count",
+        "rev_date",
+        "scrape_date",
+        "version",
+        "outputs",
+        "system",
+        "group",
+        "priority"
+      ],
+      "type": "object"
+    },
+    "LockedPackageFlake": {
+      "description": "Rust representation of the output of `buitins.lockFlakeInstallable`\nThis is a direct translation of the definition in\n`<flox>/nix-plugins/include/flox/lock-flake-installable.hh`",
+      "properties": {
+        "broken": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "derivation": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "flake-description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "install_id": {
+          "type": "string"
+        },
+        "licenses": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "locked-flake-attr-path": {
+          "type": "string"
+        },
+        "locked-url": {
+          "description": "locked url of the flakeref component of the installable",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "output-names": {
+          "description": "List of output names in the original order",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Map of output names to their paths\nThe values are expected to be nix store paths",
+          "type": "object"
+        },
+        "outputs-to-install": {
+          "description": "List of output names to install as defined by the package",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "package-system": {
+          "description": "System as defined by the package",
+          "type": "string"
+        },
+        "pname": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "default": 5,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "requested-outputs-to-install": {
+          "description": "List of output names to install as requested by the user",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "system": {
+          "description": "System as specified by the manifest and used to set default attribute\npaths when locking the installable",
+          "type": "string"
+        },
+        "unfree": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "install_id",
+        "locked-url",
+        "locked-flake-attr-path",
+        "derivation",
+        "outputs",
+        "output-names",
+        "package-system",
+        "system",
+        "name"
+      ],
+      "type": "object"
+    },
+    "LockedPackageStorePath": {
+      "properties": {
+        "install_id": {
+          "description": "The install_id of the descriptor in the manifest",
+          "type": "string"
+        },
+        "priority": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "store_path": {
+          "description": "Store path to add to the environment",
+          "type": "string"
+        },
+        "system": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "install_id",
+        "store_path",
+        "system",
+        "priority"
+      ],
+      "type": "object"
+    },
+    "Manifest": {
+      "additionalProperties": false,
+      "description": "Not meant for writing manifest files, only for reading them.\nModifications should be made using `manifest::raw`.",
+      "properties": {
+        "build": {
+          "$ref": "#/$defs/Build",
+          "description": "Package build definitions"
+        },
+        "containerize": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Containerize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hook": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Hook"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Hooks that are run at various times during the lifecycle of the manifest\nin a known shell environment."
+        },
+        "include": {
+          "$ref": "#/$defs/Include"
+        },
+        "install": {
+          "$ref": "#/$defs/Install",
+          "description": "The packages to install in the form of a map from install_id\nto package descriptor."
+        },
+        "options": {
+          "$ref": "#/$defs/Options",
+          "default": {},
+          "description": "Options that control the behavior of the manifest."
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Profile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Profile scripts that are run in the user's shell upon activation."
+        },
+        "services": {
+          "$ref": "#/$defs/Services",
+          "description": "Service definitions"
+        },
+        "vars": {
+          "$ref": "#/$defs/Vars",
+          "description": "Variables that are exported to the shell environment upon activation."
+        },
+        "version": {
+          "$ref": "#/$defs/version"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "ManifestPackageDescriptor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PackageDescriptorCatalog"
+        },
+        {
+          "$ref": "#/$defs/PackageDescriptorFlake"
+        },
+        {
+          "$ref": "#/$defs/PackageDescriptorStorePath"
+        }
+      ]
+    },
+    "Options": {
+      "additionalProperties": false,
+      "properties": {
+        "activate": {
+          "$ref": "#/$defs/ActivateOptions",
+          "description": "Options that control the behavior of activations."
+        },
+        "allow": {
+          "$ref": "#/$defs/Allows",
+          "description": "Options that control what types of packages are allowed."
+        },
+        "cuda-detection": {
+          "description": "Whether to detect CUDA devices and libs during activation.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "semver": {
+          "$ref": "#/$defs/SemverOptions",
+          "description": "Options that control how semver versions are resolved."
+        },
+        "systems": {
+          "description": "A list of systems that each package is resolved for.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PackageDescriptorCatalog": {
+      "additionalProperties": false,
+      "properties": {
+        "pkg-group": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pkg-path": {
+          "type": "string"
+        },
+        "priority": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "systems": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "pkg-path"
+      ],
+      "type": "object"
+    },
+    "PackageDescriptorFlake": {
+      "additionalProperties": false,
+      "properties": {
+        "flake": {
+          "type": "string"
+        },
+        "priority": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "systems": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "flake"
+      ],
+      "type": "object"
+    },
+    "PackageDescriptorStorePath": {
+      "additionalProperties": false,
+      "properties": {
+        "priority": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "store-path": {
+          "type": "string"
+        },
+        "systems": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "store-path"
+      ],
+      "type": "object"
+    },
+    "Profile": {
+      "additionalProperties": false,
+      "properties": {
+        "bash": {
+          "description": "When defined, this hook is run upon activation in a bash shell",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "common": {
+          "description": "When defined, this hook is run by _all_ shells upon activation",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fish": {
+          "description": "When defined, this hook is run upon activation in a fish shell",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tcsh": {
+          "description": "When defined, this hook is run upon activation in a tcsh shell",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "zsh": {
+          "description": "When defined, this hook is run upon activation in a zsh shell",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ProtectHome": {
+      "enum": [
+        "No",
+        "Yes",
+        "ReadOnly",
+        "Tmpfs"
+      ],
+      "type": "string"
+    },
+    "ProtectSystem": {
+      "enum": [
+        "No",
+        "Yes",
+        "Full",
+        "Strict"
+      ],
+      "type": "string"
+    },
+    "ResourceLimit": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "Value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Range": {
+              "properties": {
+                "hard": {
+                  "type": "string"
+                },
+                "soft": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "soft",
+                "hard"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "Range"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "RestartPolicy": {
+      "enum": [
+        "No",
+        "OnSuccess",
+        "OnFailure",
+        "OnAbnormal",
+        "OnWatchdog",
+        "OnAbort",
+        "Always"
+      ],
+      "type": "string"
+    },
+    "SemverOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "allow-pre-releases": {
+          "description": "Whether to allow pre-release versions when resolving",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Service": {
+      "description": "Service section configuration with resource limits",
+      "properties": {
+        "cpu_quota": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cpu_shares": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "cpu_weight": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "environment": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "environment_file": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "exec_start": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exec_start_post": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "exec_start_pre": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "exec_stop": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "io_weight": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "limit_as": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_core": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_cpu": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_fsize": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_locks": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_memlock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_msgqueue": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_nice": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_nofile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_nproc": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_rss": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_rtprio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_rttime": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_sigpending": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit_stack": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceLimit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "memory_high": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "memory_low": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "memory_max": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "no_new_privileges": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "private_tmp": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "protect_home": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProtectHome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "protect_system": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProtectSystem"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "restart": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RestartPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "restart_sec": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tasks_max": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_start_sec": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "timeout_stop_sec": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "type_": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServiceType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ServiceDescriptor": {
+      "additionalProperties": false,
+      "description": "The definition of a service in a manifest",
+      "properties": {
+        "command": {
+          "description": "The command to run to start the service",
+          "type": "string"
+        },
+        "is-daemon": {
+          "description": "Whether the service spawns a background process (daemon)",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "shutdown": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServiceShutdown"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How to shut down the service"
+        },
+        "systemd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServiceUnit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Additional manual config of the systemd service generated for persistent services"
+        },
+        "systems": {
+          "description": "Systems to allow running the service on",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "vars": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Vars"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Service-specific environment variables"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "ServiceShutdown": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "description": "What command to run to shut down the service",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "ServiceType": {
+      "enum": [
+        "Simple",
+        "Exec",
+        "Forking",
+        "Oneshot",
+        "Dbus",
+        "Notify",
+        "Idle"
+      ],
+      "type": "string"
+    },
+    "ServiceUnit": {
+      "description": "Represents a systemd service configuration",
+      "properties": {
+        "service": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Service"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Services": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ServiceDescriptor"
+      },
+      "description": "A map of service names to service definitions",
+      "type": "object"
+    },
+    "Unit": {
+      "description": "Unit section configuration",
+      "properties": {
+        "after": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "before": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "documentation": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "requires": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "wants": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Vars": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "Warning": {
+      "description": "A warning that occurred during the merge of two manifests.\nThis is used to provide feedback to the user about potential issues.\n\nWarnings are not errors, but they may indicate\nthat the user should review the merged manifest or its dependencies.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "Overriding": {
+              "$ref": "#/$defs/KeyPath"
+            }
+          },
+          "required": [
+            "Overriding"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "WarningWithContext": {
+      "description": "A warning that occurred during the merge of two manifests,\nalong with the names of the overriding manifest.",
+      "properties": {
+        "higher_priority_name": {
+          "description": "The name of the manifest that did the overriding.",
+          "type": "string"
+        },
+        "warning": {
+          "$ref": "#/$defs/Warning"
+        }
+      },
+      "required": [
+        "warning",
+        "higher_priority_name"
+      ],
+      "type": "object"
+    },
+    "version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "compose": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Compose"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Composition information. This will be `None` when there are no includes."
+    },
+    "lockfile-version": {
+      "$ref": "#/$defs/version"
+    },
+    "manifest": {
+      "$ref": "#/$defs/Manifest",
+      "description": "The manifest that was locked.\n\nFor an environment that doesn't include any others, this is the `manifest.toml`\non disk at lock-time. For an environment that *does* include others, this is\nthe merged manifest that was locked."
+    },
+    "packages": {
+      "description": "Locked packages",
+      "items": {
+        "$ref": "#/$defs/LockedPackage"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "lockfile-version",
+    "manifest",
+    "packages"
+  ],
+  "title": "Lockfile",
+  "type": "object"
+}

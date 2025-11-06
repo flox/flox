@@ -6,13 +6,20 @@ then:
   status: 200
   header:
     - name: date
-      value: Tue, 03 Jun 2025 17:26:08 GMT
+      value: Mon, 20 Oct 2025 14:41:38 GMT
     - name: content-type
       value: application/json
     - name: server
       value: uvicorn
     - name: apigw-requestid
-      value: LmR3pgrGIAMEScg=
-  body: '{"items":[{"name":"toplevel","page":null,"messages":[{"level":"error","type":"general","message":"general
+      value: SwCFZhi0oAMEYqQ=
+  body: '{"items":[{"name":"toplevel","page":null,"candidate_pages":null,"messages":[{"level":"error","type":"general","message":"general
     message","context":{"attr_path":"darwin.ps","install_id":"ps","system_groupings":"(aarch64-darwin,x86_64-darwin),
-    (x86_64-darwin)"}}]}]}'
+    (x86_64-darwin)"}},{"level":"trace","type":"general","message":"general message","context":{"install_id":"GROUP","message":"Group
+    ''toplevel'' could not be resolved with strategy: Stage 1: Only allow missing
+    builds for packages without current locked derivations."}},{"level":"trace","type":"general","message":"general
+    message","context":{"install_id":"GROUP","message":"Group ''toplevel'' could not
+    be resolved with strategy: Stage 2: Unlock existing derivations but require known
+    builds."}},{"level":"trace","type":"general","message":"general message","context":{"install_id":"GROUP","message":"Group
+    ''toplevel'' could not be resolved with strategy: Stage 3: Unlock existing derivations
+    and allow missing builds."}}]}]}'

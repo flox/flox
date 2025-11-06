@@ -166,8 +166,9 @@ impl PathEnvironment {
 
     pub fn rename(&mut self, new_name: EnvironmentName) -> Result<(), EnvironmentError> {
         self.pointer.name = new_name;
-        let pointer_content = serde_json::to_string_pretty(&self.pointer)
+        let mut pointer_content = serde_json::to_string_pretty(&self.pointer)
             .map_err(EnvironmentError::SerializeEnvJson)?;
+        pointer_content.push('\n');
 
         write_atomically(
             &self.path.join(ENVIRONMENT_POINTER_FILENAME),
@@ -528,8 +529,9 @@ impl PathEnvironment {
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
 
         // Write the `env.json` file
-        let pointer_content =
+        let mut pointer_content =
             serde_json::to_string_pretty(&pointer).map_err(EnvironmentError::SerializeEnvJson)?;
+        pointer_content.push('\n');
         if let Err(e) = fs::write(
             dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
             pointer_content,

@@ -2,7 +2,7 @@
 ##
 ##   _Everything_ you need to know about the _manifest_ is here:
 ##
-##               https://flox.dev/docs/concepts/manifest
+##   https://flox.dev/docs/reference/command-reference/manifest.toml/
 ##
 ## -------------------------------------------------------------------
 # Flox manifest version managed by Flox CLI
@@ -58,11 +58,11 @@ hello.pkg-path = "hello"
 # fish = ...
 
 
-## Services ----------------------------------------------------------
+## Services ---------------------------------------------------------
 ##  $ flox services start             <- Starts all services
 ##  $ flox services status            <- Status of running services
 ##  $ flox activate --start-services  <- Activates & starts all
-## -------------------------------------------------------------------
+## ------------------------------------------------------------------
 [services]
 # myservice.command = "python3 -m http.server"
 
@@ -76,14 +76,29 @@ hello.pkg-path = "hello"
 # ]
 
 
+## Build and publish your own packages ------------------------------
+##  $ flox build
+##  $ flox publish
+## ------------------------------------------------------------------
+[build]
+# [build.myproject]
+# description = "The coolest project ever"
+# version = "0.0.1"
+# command = """
+#   mkdir -p $out/bin
+#   cargo build --release
+#   cp target/release/myproject $out/bin/myproject
+# """
+
+
 ## Other Environment Options -----------------------------------------
 [options]
 # Systems that environment is compatible with
-systems = [
-  "aarch64-darwin",
-  "aarch64-linux",
-  "x86_64-darwin",
-  "x86_64-linux",
-]
+# systems = [
+#   "aarch64-darwin",
+#   "aarch64-linux",
+#   "x86_64-darwin",
+#   "x86_64-linux",
+# ]
 # Uncomment to disable CUDA detection.
 # cuda-detection = false

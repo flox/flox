@@ -671,7 +671,7 @@ impl PackageTargetName<'_> {
 /// Outside of tests this should only be created via [PackageTargets::select],
 /// or [PackageTargets::all] which validate (string) names and associate them with their origin.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-#[display(fmt = "{name}")]
+#[display("{name}")]
 pub struct PackageTarget {
     name: String,
     kind: PackageTargetKind,
@@ -2683,7 +2683,7 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env = new_path_environment(&flox, &manifest);
 
-        let output = temp_env::with_var("_FLOX_PKGDB_VERBOSITY", Some("1"), || {
+        let output = temp_env::with_var("_FLOX_SUBSYSTEM_VERBOSITY", Some("1"), || {
             assert_build_status(&flox, &mut env, &package_name, None, false)
         });
 
@@ -2723,7 +2723,7 @@ mod tests {
 
         let _git = GitCommandProvider::init(&env_path, false).unwrap();
 
-        let output = temp_env::with_var("_FLOX_PKGDB_VERBOSITY", Some("1"), || {
+        let output = temp_env::with_var("_FLOX_SUBSYSTEM_VERBOSITY", Some("1"), || {
             assert_build_status(&flox, &mut env, &package_name, None, succeed)
         });
 

@@ -1,0 +1,258 @@
+{
+  "$defs": {
+    "GenerationId": {
+      "type": "string"
+    },
+    "History": {
+      "items": {
+        "$ref": "#/$defs/HistorySpec"
+      },
+      "type": "array"
+    },
+    "HistorySpec": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "import",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "title": "Import",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "migrate_v1",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "description"
+          ],
+          "title": "MigrateV1",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "install",
+              "type": "string"
+            },
+            "targets": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "targets"
+          ],
+          "title": "Install",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "edit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "title": "Edit",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "uninstall",
+              "type": "string"
+            },
+            "targets": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "targets"
+          ],
+          "title": "Uninstall",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "upgrade",
+              "type": "string"
+            },
+            "targets": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "targets"
+          ],
+          "title": "Upgrade",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "include_upgrade",
+              "type": "string"
+            },
+            "targets": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "targets"
+          ],
+          "title": "IncludeUpgrade",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "switch_generation",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "title": "SwitchGeneration",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "other",
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "summary"
+          ],
+          "title": "Other",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "title": "Unknown",
+          "type": "object"
+        }
+      ],
+      "description": "The structure of a single change, tying together\n_who_ performed _what_ change, where and when.",
+      "properties": {
+        "author": {
+          "description": "Local username of the user performing the change",
+          "type": "string"
+        },
+        "command": {
+          "description": "Command line args to the command that performed the change\nThis can be `None` if the change was invoked by a unit test or FloxHub.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "current_generation": {
+          "$ref": "#/$defs/GenerationId",
+          "description": "Currently live generation, e.g. created by the change\nor switched to."
+        },
+        "hostname": {
+          "description": "Hostname of the machine, on which the change was made",
+          "type": "string"
+        },
+        "previous_generation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GenerationId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Previous generation before a new generation was created,\nor the generation live before a generation switch."
+        },
+        "timestamp": {
+          "description": "Timestamp associated with the change",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "author",
+        "hostname",
+        "timestamp",
+        "current_generation"
+      ],
+      "type": "object"
+    },
+    "version": {
+      "const": 2,
+      "type": "integer"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "flox environment metadata for managed environments\n\nManaged environments support rolling back to previous generations.\nGenerations are defined as immutable copy-on-write folders.\nRollbacks and associated [SingleGenerationMetadata] are tracked per environment\nin a metadata file at the root of the environment branch.",
+  "properties": {
+    "history": {
+      "$ref": "#/$defs/History"
+    },
+    "total_generations": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "version": {
+      "$ref": "#/$defs/version",
+      "description": "Schema version of the metadata file"
+    }
+  },
+  "required": [
+    "version",
+    "history",
+    "total_generations"
+  ],
+  "title": "AllGenerationsMetadata",
+  "type": "object"
+}
