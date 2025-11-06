@@ -68,7 +68,6 @@ pub struct ActivateData {
     // Info needed to run the activate script
     pub interpreter_path: PathBuf,
     pub invocation_type: InvocationType,
-    pub is_ephemeral: bool,
     pub run_args: Vec<String>,
 }
 

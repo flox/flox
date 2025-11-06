@@ -1,6 +1,7 @@
 use std::io::{BufWriter, stdout};
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
+use std::process::Stdio;
 use std::sync::LazyLock;
 use std::{env, fs};
 
@@ -413,7 +414,6 @@ impl Activate {
             flox_services_socket,
             interpreter_path,
             invocation_type,
-            is_ephemeral,
             run_args: self.run_args,
         };
 
@@ -430,9 +430,25 @@ impl Activate {
             .arg("--activate-data")
             .arg(tempfile.path());
 
-        // exec should never return
-        // TODO: did this break in-place metrics?
-        Err(command.exec().into())
+        if is_ephemeral {
+            debug!("running ephemeral activation command: {:?}", command);
+            let output = command
+                .stderr(Stdio::piped())
+                .stdout(Stdio::piped())
+                .output()?;
+            if !output.status.success() {
+                Err(anyhow!(
+                    "failed to run activation script: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                ))?;
+            }
+            Ok(())
+        } else {
+            debug!("running activation command: {:?}", command);
+            // exec should never return
+            // TODO: did this break in-place metrics?
+            Err(command.exec().into())
+        }
     }
 
     /// Detect the shell to use for activation

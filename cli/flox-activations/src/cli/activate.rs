@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Command;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use clap::Args;
 use flox_core::activate::data::{ActivateData, InvocationType};
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
@@ -55,40 +55,20 @@ impl ActivateArgs {
         if data.invocation_type == InvocationType::Interactive {
             Self::activate_interactive(command)
         } else {
-            Self::activate_command(command, data.run_args, data.is_ephemeral)
+            Self::activate_command(command, data.run_args)
         }
     }
 
     /// Used for `flox activate -- run_args`
-    fn activate_command(
-        mut command: Command,
-        run_args: Vec<String>,
-        is_ephemeral: bool,
-    ) -> Result<()> {
+    fn activate_command(mut command: Command, run_args: Vec<String>) -> Result<()> {
         // The activation script works like a shell in that it accepts the "-c"
         // flag which takes exactly one argument to be passed verbatim to the
         // userShell invocation. Take this opportunity to combine these args
         // safely, and *exactly* as the user provided them in argv.
         command.arg("-c").arg(Self::quote_run_args(&run_args));
 
-        debug!("running activation command: {:?}", command);
-
-        if is_ephemeral {
-            let output = command
-                .stderr(Stdio::piped())
-                .stdout(Stdio::piped())
-                .output()?;
-            if !output.status.success() {
-                Err(anyhow!(
-                    "failed to run activation script: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                ))?;
-            }
-            Ok(())
-        } else {
-            // exec should never return
-            Err(command.exec().into())
-        }
+        // exec should never return
+        Err(command.exec().into())
     }
 
     /// Activate the environment interactively by spawning a new shell
