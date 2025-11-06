@@ -102,6 +102,7 @@ mod test {
             "source 'newer/activate.d/profile-common'".to_string(),
             "source 'newer/activate.d/profile-bash'".to_string(),
             "_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string(),
+	    "".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -116,6 +117,7 @@ mod test {
             "source 'newer/activate.d/profile-common'".to_string(),
             "source 'newer/activate.d/profile-zsh'".to_string(),
             "typeset -g _FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string(),
+	    "".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -130,6 +132,7 @@ mod test {
             "source 'newer/activate.d/profile-common'".to_string(),
             "source 'newer/activate.d/profile-tcsh'".to_string(),
             "set _FLOX_SOURCED_PROFILE_SCRIPTS = 'newer:older'".to_string(),
+	    "".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -144,6 +147,7 @@ mod test {
             "source 'newer/activate.d/profile-common'".to_string(),
             "source 'newer/activate.d/profile-fish'".to_string(),
             "set -g _FLOX_SOURCED_PROFILE_SCRIPTS 'newer:older'".to_string(),
+	    "".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -159,6 +163,7 @@ mod test {
             "source 'older/activate.d/profile-bash'".to_string(),
             "source 'newer/activate.d/profile-bash'".to_string(),
             "_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string(),
+	    "".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -174,6 +179,7 @@ mod test {
             "source 'older/activate.d/profile-zsh'".to_string(),
             "source 'newer/activate.d/profile-zsh'".to_string(),
             "typeset -g _FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string(),
+	    "".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -189,6 +195,7 @@ mod test {
             "source 'older/activate.d/profile-tcsh'".to_string(),
             "source 'newer/activate.d/profile-tcsh'".to_string(),
             "set _FLOX_SOURCED_PROFILE_SCRIPTS = 'newer:older'".to_string(),
+	    "".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -204,6 +211,7 @@ mod test {
             "source 'older/activate.d/profile-fish'".to_string(),
             "source 'newer/activate.d/profile-fish'".to_string(),
             "set -g _FLOX_SOURCED_PROFILE_SCRIPTS 'newer:older'".to_string(),
+	    "".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -217,6 +225,7 @@ mod test {
             "source 'newer/activate.d/profile-common'".to_string(),
             "source 'newer/activate.d/profile-bash'".to_string(),
             "_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string(),
+	    "".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
@@ -226,7 +235,7 @@ mod test {
         let dirs = "newer:older";
         let already_sourced = "newer:older";
         let cmds = source_profile_scripts_cmds(dirs, already_sourced, &Shell::Bash, |_| true);
-        let expected = vec!["_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string()];
+        let expected = vec!["_FLOX_SOURCED_PROFILE_SCRIPTS='newer:older'".to_string(), "".to_string()];
         assert_eq!(expected, cmds);
     }
 
@@ -239,6 +248,7 @@ mod test {
             "source 'standalone/activate.d/profile-common'".to_string(),
             "source 'standalone/activate.d/profile-bash'".to_string(),
             "_FLOX_SOURCED_PROFILE_SCRIPTS='standalone:already:existing'".to_string(),
+	    "".to_string(),
         ];
         assert_eq!(expected, cmds);
     }
