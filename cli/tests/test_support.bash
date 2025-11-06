@@ -186,47 +186,37 @@ teardown_file() { common_file_teardown; }
 # NB1: It must be appended with `|| return 1` to fail the offending test and
 # preserve other output, at the expense of aborting any other cleanup.
 #
-# NB2: It cannot be reliably used inlined of tests to wait for activations or
-# services to be cleaned up because it can exit before a executive has started.
 wait_for_executives() {
   project_dir="${1?}"
   if [ -z "$project_dir" ]; then
     echo "ERROR: cannot wait for executives with empty project_dir" >&3
     return 1
   fi
-  # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
-  # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
-  # grep command itself doesn't get listed when we search for the data dir.
-  # The `sed` removes any leading whitespace,
-  # that is present in the output of `ps` on linux apparently?!.
-  # The `cut` just extracts the PID.
 
-  local pids
-  pids="$(
-    ps -Ao pid,args \
-    | grep flox-executive \
-    | grep "$project_dir" \
-    | sed 's/^[[:blank:]]*//' \
-    | cut -d' ' -f1)"
+  local -a pids
+  for log in ${project_dir}/.flox/log/executive-*.log; do
+    # Executive log entries include the executive pid on each line, e.g.
+    # 21:19:54.527643 pid=1407552 DEBUG flox_activations::executive: Executive: Exiting
+    # Extract the pid from the final line of the log.
+    pid="$(tail -n 1 "$log" | sed -n 's/.* pid=\([0-9]*\) .*/\1/p')"
 
-  # Uncomment to debug which executives are running.
-  #
-  # echo "project_dir => ${project_dir}" >&3
-  # ps -Ao pid,args \
-  #  | grep flox-executive \
-  #  >&3
+    # Add to the list of pids.
+    if [ -n "$pid" ]; then
+      pids+=("$pid")
+    fi
+  done
 
-  if [ -n "${pids?}" ]; then
+  if [ ${#pids[@]} -gt 0 ]; then
     tries=0
     while true; do
       tries=$((tries + 1))
-      if ! kill -0 $pids > /dev/null 2>&1; then
+      if ! kill -0 ${pids[*]} > /dev/null 2>&1; then
         break
       else
         if [[ $tries -gt 1000 ]]; then
           echo "ERROR: flox-executive processes did not finish after 10 seconds" >&3
           echo "executive logs:" >&3
-          cat "${project_dir}"/.flox/log/executive.* >&3
+          cat "${project_dir}"/.flox/log/executive-*.log >&3
           echo "Bats processes:" >&3
           pstree -ws "$BATS_RUN_TMPDIR" >&3
           # This will fail the test giving us a better idea of which executive

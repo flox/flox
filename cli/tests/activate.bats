@@ -3505,23 +3505,9 @@ EOF
   assert_success
   assert_output "first_activation"
 
-  # Wait for the executive to poll at least once so the test doesn't pass just
-  # because the 2nd activate beats the executive to poll
-
-  # First wait for the logfile to appear
-  timeout 1s bash -c '
-    while ! ls $PROJECT_DIR/.flox/log/executive.*.log.*; do
-      sleep .1
-    done
-  '
-  executive_1_log="$(echo $PROJECT_DIR/.flox/log/executive.*.log.*)"
-  initial_number_of_polls="$(cat "$executive_1_log" | grep "still watching PIDs" | wc -l)"
-  executive_1_log="$executive_1_log" initial_number_of_polls="$initial_number_of_polls" \
-    timeout 1s bash -c '
-      while [ "$(cat "$executive_1_log" | grep "still watching PIDs" | wc -l)" == "$initial_number_of_polls" ]; do
-        sleep .1
-      done
-    '
+  # Following the refactor the executive log is created before the
+  # activation is signalled to attach so no need to wait or poll.
+  executive_1_log="$(echo $PROJECT_DIR/.flox/log/executive-*.log)"
 
   # Run a second activation which should attach to the first,
   # so FOO should still be first_activation
