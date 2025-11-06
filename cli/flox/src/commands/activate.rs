@@ -8,7 +8,7 @@ use std::{env, fs};
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_core::activate::data::{ActivateData, InvocationType};
+use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::shell::ShellWithPath;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::generations::GenerationId;
@@ -384,7 +384,7 @@ impl Activate {
         };
         subcommand_metric!("activate", "shell" = shell.to_string());
 
-        let activate_data = ActivateData {
+        let activate_data = ActivateCtx {
             // Don't rely on FLOX_ENV in the environment when we explicitly know
             // what it should be. This is necessary for nested activations where an
             // outer export of FLOX_ENV would be inherited by the inner activation.
@@ -393,7 +393,7 @@ impl Activate {
             env_cache: concrete_environment.cache_path()?.into_inner(),
             env_description: now_active.bare_description(),
             mode: mode.to_string(),
-            watchdog: (*WATCHDOG_BIN).clone(),
+            watchdog_bin: (*WATCHDOG_BIN).clone(),
             shell,
             flox_active_environments: flox_active_environments.to_string(),
             flox_env_log_dir: concrete_environment

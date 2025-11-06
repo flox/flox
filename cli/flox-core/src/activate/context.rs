@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::shell::ShellWithPath;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ActivateData {
+pub struct ActivateCtx {
     // Command arguments (from command.arg() calls in cli/flox/src/commands/activate.rs:437-462)
     /// The path to the environment symlink
     pub env: String,
@@ -23,7 +23,7 @@ pub struct ActivateData {
     pub mode: String,
 
     /// Path to the watchdog binary
-    pub watchdog: PathBuf,
+    pub watchdog_bin: PathBuf,
 
     /// Path to the shell executable
     pub shell: ShellWithPath,

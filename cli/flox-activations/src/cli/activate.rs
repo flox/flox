@@ -6,7 +6,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 use clap::Args;
-use flox_core::activate::data::{ActivateData, InvocationType};
+use flox_core::activate::context::{ActivateCtx, InvocationType};
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
 use flox_core::shell::ShellWithPath;
 use flox_core::util::default_nix_env_vars;
@@ -35,11 +35,11 @@ pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES
 impl ActivateArgs {
     pub fn handle(self) -> Result<(), anyhow::Error> {
         let contents = fs::read_to_string(&self.activate_data)?;
-        let data: ActivateData = serde_json::from_str(&contents)?;
+        let data: ActivateCtx = serde_json::from_str(&contents)?;
 
         fs::remove_file(&self.activate_data)?;
 
-        let command = Self::assemble_command_for_activate_script(data.clone());
+        let activate_script_command = Self::assemble_command_for_activate_script(data.clone());
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
         //
@@ -48,47 +48,49 @@ impl ActivateArgs {
         //
         //    eval "$(flox activate)"
         if data.invocation_type == InvocationType::InPlace {
-            Self::activate_in_place(command, data.shell)?;
+            Self::activate_in_place(activate_script_command, data.shell)?;
 
             return Ok(());
         }
 
         // These functions will only return if exec fails
         if data.invocation_type == InvocationType::Interactive {
-            Self::activate_interactive(command)
+            Self::activate_interactive(activate_script_command)
         } else {
-            Self::activate_command(command, data.run_args)
+            Self::activate_command(activate_script_command, data.run_args)
         }
     }
 
     /// Used for `flox activate -- run_args`
-    fn activate_command(mut command: Command, run_args: Vec<String>) -> Result<()> {
+    fn activate_command(mut activate_script_command: Command, run_args: Vec<String>) -> Result<()> {
         // The activation script works like a shell in that it accepts the "-c"
         // flag which takes exactly one argument to be passed verbatim to the
         // userShell invocation. Take this opportunity to combine these args
         // safely, and *exactly* as the user provided them in argv.
-        command.arg("-c").arg(Self::quote_run_args(&run_args));
+        activate_script_command
+            .arg("-c")
+            .arg(Self::quote_run_args(&run_args));
 
         // exec should never return
-        Err(command.exec().into())
+        Err(activate_script_command.exec().into())
     }
 
     /// Activate the environment interactively by spawning a new shell
     /// and running the respective activation scripts.
     ///
     /// This function should never return as it replaces the current process
-    fn activate_interactive(mut command: Command) -> Result<()> {
-        debug!("running activation command: {:?}", command);
+    fn activate_interactive(mut activate_script_command: Command) -> Result<()> {
+        debug!("running activation command: {:?}", activate_script_command);
 
         // exec should never return
-        Err(command.exec().into())
+        Err(activate_script_command.exec().into())
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(mut command: Command, shell: ShellWithPath) -> Result<()> {
-        debug!("running activation command: {:?}", command);
+    fn activate_in_place(mut activate_script_command: Command, shell: ShellWithPath) -> Result<()> {
+        debug!("running activation command: {:?}", activate_script_command);
 
-        let output = command
+        let output = activate_script_command
             .output()
             .context("failed to run activation script")?;
         eprint!("{}", String::from_utf8_lossy(&output.stderr));
@@ -121,7 +123,7 @@ impl ActivateArgs {
         Ok(())
     }
 
-    fn assemble_command_for_activate_script(data: ActivateData) -> Command {
+    fn assemble_command_for_activate_script(data: ActivateCtx) -> Command {
         let mut exports = HashMap::from([
             (FLOX_ACTIVE_ENVIRONMENTS_VAR, data.flox_active_environments),
             (FLOX_ENV_LOG_DIR_VAR, data.flox_env_log_dir),
@@ -170,7 +172,7 @@ impl ActivateArgs {
 
         command
             .arg("--watchdog")
-            .arg(data.watchdog.to_string_lossy().to_string());
+            .arg(data.watchdog_bin.to_string_lossy().to_string());
 
         command.arg("--shell").arg(data.shell.exe_path());
 
