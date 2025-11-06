@@ -14,6 +14,8 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
 
+use crate::shell_gen::Shell;
+
 #[derive(Debug, Args)]
 pub struct ActivateArgs {
     /// Path to JSON file containing activation data
@@ -91,8 +93,9 @@ impl ActivateArgs {
             .context("failed to run activation script")?;
         eprint!("{}", String::from_utf8_lossy(&output.stderr));
 
+        let shell: Shell = shell.into();
         // Render the exports in the correct shell dialect.
-        let exports_rendered = command
+        let mut exports_rendered = activate_script_command
             .get_envs()
             .filter_map(|(key, value)| {
                 value.map(|v| {
@@ -102,13 +105,9 @@ impl ActivateArgs {
                     )
                 })
             })
-            .map(|(key, value)| match shell {
-                ShellWithPath::Bash(_) => format!("export {key}={value};",),
-                ShellWithPath::Fish(_) => format!("set -gx {key} {value};",),
-                ShellWithPath::Tcsh(_) => format!("setenv {key} {value};",),
-                ShellWithPath::Zsh(_) => format!("export {key}={value};",),
-            })
-            .join("\n");
+            .map(|(key, value)| shell.export_var(key, value))
+            .join(";\n");
+        exports_rendered.push(';');
 
         let script = formatdoc! {"
             {exports_rendered}
