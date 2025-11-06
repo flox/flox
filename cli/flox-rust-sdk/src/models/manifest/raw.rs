@@ -857,7 +857,10 @@ impl StorePath {
     }
 }
 
-/// Extracts an install ID from a dot-separated attribute path that potentially contains quotes.
+/// Infers an install ID from the last component of a slash or dot separated
+/// attribute path, so that we get a user-friendly name without any catalog or
+/// package hierachy.
+/// Components within quotes are treated as a single component.
 fn install_id_from_attr_path(
     attr_path: &str,
     descriptor: &str,
@@ -869,15 +872,13 @@ fn install_id_from_attr_path(
 
     for (n, c) in attr_path.chars().enumerate() {
         match c {
-            '.' if start_quote.is_none() => {
+            '.' | '/' if start_quote.is_none() => {
                 let _ = install_id.insert(std::mem::take(&mut cur));
             },
-            // '"' if start_quote.is_some() => start_quote = None,
             '"' if start_quote.is_some() => {
                 start_quote = None;
                 cur.push('"');
             },
-            // '"' if start_quote.is_none() => start_quote = Some(n),
             '"' if start_quote.is_none() => {
                 start_quote = Some(n);
                 cur.push('"');
@@ -1920,7 +1921,7 @@ pub(super) mod test {
         // First part contains a dot (should be treated as attr-path)
         let parsed: CatalogPackage = "nodePackages.@angular/cli".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
-            id: "@angular/cli".to_string(),
+            id: "cli".to_string(),
             pkg_path: "nodePackages.@angular/cli".to_string(),
             version: None,
             systems: None,
@@ -1978,7 +1979,7 @@ pub(super) mod test {
         // Package from custom catalog
         let parsed: CatalogPackage = "mycatalog/foo".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
-            id: "mycatalog/foo".to_string(),
+            id: "foo".to_string(),
             pkg_path: "mycatalog/foo".to_string(),
             version: None,
             systems: None,
@@ -1998,7 +1999,7 @@ pub(super) mod test {
         // Package with nested path and custom catalog
         let parsed: CatalogPackage = "mycatalog/category/package".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
-            id: "mycatalog/category/package".to_string(),
+            id: "package".to_string(),
             pkg_path: "mycatalog/category/package".to_string(),
             version: None,
             systems: None,
