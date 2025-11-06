@@ -34,7 +34,7 @@ pub struct Cli {
         long = "verbosity",
         help = "What level of output to display."
     )]
-    pub verbosity: u32,
+    pub verbosity: Option<u32>,
     #[command(subcommand)]
     pub command: Command,
 }

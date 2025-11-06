@@ -7,10 +7,11 @@ use log::debug;
 fn main() -> Result<(), Error> {
     let args = Cli::parse();
 
-    let verbosity = Verbosity::from(args.verbosity);
-    env_logger::Builder::default()
-        .parse_filters(verbosity.env_filter())
-        .init();
+    let mut builder = env_logger::Builder::default();
+    if let Some(filter) = Verbosity::filter_from_env_and_arg(args.verbosity) {
+        builder.parse_filters(&filter);
+    }
+    builder.init();
     debug!("{args:?}");
 
     match args.command {
