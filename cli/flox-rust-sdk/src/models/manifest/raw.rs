@@ -656,6 +656,17 @@ pub fn catalog_packages_to_install(packages: &[PackageToInstall]) -> Vec<Catalog
         .collect()
 }
 
+/// Custom packages are of the form "<prefix>/<suffix>" where the prefix is not
+/// allowed to contain a '.' character. This is a quick and dirty way of
+/// identifying custom packages using that logic.
+///
+/// Favour using CatalogPackage::is_custom_catalog if you already have a CatalogPackage
+pub(super) fn is_custom_package(pkg_path: &str) -> bool {
+    let parts: Vec<&str> = pkg_path.split('/').collect();
+    let is_base_catalog_pkg = parts.len() == 1 || parts.first().is_some_and(|p| p.contains('.'));
+    !is_base_catalog_pkg
+}
+
 /// A package to install from the catalog.
 ///
 /// Users may specify a different install ID than the package name,
@@ -675,6 +686,13 @@ pub struct CatalogPackage {
     ///
     /// [Environment::install]: crate::models::environment::Environment::install
     pub systems: Option<Vec<System>>,
+}
+
+impl CatalogPackage {
+    /// Returns true if the package is from a custom catalog.
+    pub fn is_custom_catalog(&self) -> bool {
+        is_custom_package(&self.pkg_path)
+    }
 }
 
 impl FromStr for CatalogPackage {
@@ -945,7 +963,7 @@ pub fn insert_packages(
             match pkg {
                 PackageToInstall::Catalog(pkg) => {
                     descriptor_table = InlineTable::from(pkg);
-                    if is_custom_package(&pkg.id) {
+                    if pkg.is_custom_catalog() {
                         descriptor_table.insert("pkg-group", pkg.id.as_str().into());
                     }
                     debug!(
@@ -997,21 +1015,6 @@ pub fn insert_packages(
         },
         already_installed,
     })
-}
-
-// Custom packages are of the form "<prefix>/<suffix>" where the prefix is not
-// allowed to contain a '.' character. This is a quick and dirty way of
-// identifying custom packages using that logic.
-fn is_custom_package(install_id: &str) -> bool {
-    let parts = install_id.split('/').collect::<Vec<_>>();
-    if parts.len() < 2 {
-        return false;
-    }
-    if let Some(maybe_catalog_name) = parts.first() {
-        !maybe_catalog_name.contains('.')
-    } else {
-        false
-    }
 }
 
 /// Remove package names from the `[install]` table of a manifest based on their install IDs.
@@ -1885,6 +1888,8 @@ pub(super) mod test {
             version: None,
             systems: None,
         });
+        assert_eq!(parsed.is_custom_catalog(), false);
+
         let parsed: CatalogPackage = "foo.bar@=1.2.3".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
             id: "bar".to_string(),
@@ -1892,6 +1897,8 @@ pub(super) mod test {
             version: Some("=1.2.3".to_string()),
             systems: None,
         });
+        assert_eq!(parsed.is_custom_catalog(), false);
+
         let parsed: CatalogPackage = "foo.bar@23.11".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
             id: "bar".to_string(),
@@ -1899,6 +1906,8 @@ pub(super) mod test {
             version: Some("23.11".to_string()),
             systems: None,
         });
+        assert_eq!(parsed.is_custom_catalog(), false);
+
         let parsed: CatalogPackage = "rubyPackages.\"http_parser.rb\"".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
             id: "\"http_parser.rb\"".to_string(),
@@ -1906,6 +1915,32 @@ pub(super) mod test {
             version: None,
             systems: None,
         });
+        assert_eq!(parsed.is_custom_catalog(), false);
+
+        // First part contains a dot (should be treated as attr-path)
+        let parsed: CatalogPackage = "nodePackages.@angular/cli".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "@angular/cli".to_string(),
+            pkg_path: "nodePackages.@angular/cli".to_string(),
+            version: None,
+            systems: None,
+        });
+        assert_eq!(parsed.is_custom_catalog(), false);
+
+        // Complex package name with dots and special characters, ugly but valid
+        let parsed: CatalogPackage =
+            "nodePackages.tedicross-git+https://github.com/TediCross/TediCross.git#v0.8.7"
+                .parse()
+                .unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "7".to_string(),
+            pkg_path:
+                "nodePackages.tedicross-git+https://github.com/TediCross/TediCross.git#v0.8.7"
+                    .to_string(),
+            version: None,
+            systems: None,
+        });
+        assert_eq!(parsed.is_custom_catalog(), false);
 
         // Attributes starting with `@` are allowed, the @ is not delimting the version if following a '.'
         let parsed: CatalogPackage = "nodePackages.@angular@1.2.3".parse().unwrap();
@@ -1915,6 +1950,7 @@ pub(super) mod test {
             version: Some("1.2.3".to_string()),
             systems: None,
         });
+        assert_eq!(parsed.is_custom_catalog(), false);
 
         // Attributes starting with `@` are allowed, the @ is not delimting the version
         // if its the first character
@@ -1925,6 +1961,7 @@ pub(super) mod test {
             version: None,
             systems: None,
         });
+        assert_eq!(parsed.is_custom_catalog(), false);
 
         // Attributes starting with `@` are allowed, the @ is not delimting the version
         // if its the first character.
@@ -1936,6 +1973,37 @@ pub(super) mod test {
             version: Some("version".to_string()),
             systems: None,
         });
+        assert_eq!(parsed.is_custom_catalog(), false);
+
+        // Package from custom catalog
+        let parsed: CatalogPackage = "mycatalog/foo".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "mycatalog/foo".to_string(),
+            pkg_path: "mycatalog/foo".to_string(),
+            version: None,
+            systems: None,
+        });
+        assert_eq!(parsed.is_custom_catalog(), true);
+
+        // Package with dotted path and custom catalog
+        let parsed: CatalogPackage = "mycatalog/foo.bar".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "bar".to_string(),
+            pkg_path: "mycatalog/foo.bar".to_string(),
+            version: None,
+            systems: None,
+        });
+        assert_eq!(parsed.is_custom_catalog(), true);
+
+        // Package with nested path and custom catalog
+        let parsed: CatalogPackage = "mycatalog/category/package".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "mycatalog/category/package".to_string(),
+            pkg_path: "mycatalog/category/package".to_string(),
+            version: None,
+            systems: None,
+        });
+        assert_eq!(parsed.is_custom_catalog(), true);
 
         CatalogPackage::from_str("foo.\"bar.baz.qux@1.2.3")
             .expect_err("missing closing quote should cause failure");
@@ -2143,12 +2211,5 @@ pub(super) mod test {
             "apache-httpd",
             dummy_system,
         );
-    }
-
-    #[test]
-    fn detects_custom_packages() {
-        assert!(is_custom_package("zmitchell/hello"));
-        assert!(!is_custom_package("hello"));
-        assert!(!is_custom_package("foo.bar/hello"));
     }
 }
