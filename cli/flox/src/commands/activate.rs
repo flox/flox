@@ -12,10 +12,10 @@ use flox_core::shell::Shell;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::generations::GenerationId;
 use flox_rust_sdk::models::environment::{
-    FLOX_ACTIVE_ENVIRONMENTS_VAR,
     ConcreteEnvironment,
     Environment,
     EnvironmentError,
+    FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::lockfile::LockResult;
 use flox_rust_sdk::models::manifest::typed::{ActivateMode, IncludeDescriptor, Inner};

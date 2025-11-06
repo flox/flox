@@ -114,12 +114,18 @@ pub fn executive(
             let log = LogWriter::new(&data.flox_env_log_dir, &activation_id, &data.env)
                 .context("Failed to create executive log writer")?;
 
-            log.log(&format!("executive parent: waiting for activation child {}", child));
+            log.log(&format!(
+                "executive parent: waiting for activation child {}",
+                child
+            ));
 
             // Wait for the activation child to complete
             match waitpid(child, None) {
                 Ok(status) => {
-                    log.log(&format!("activation child {} exited with status: {:?}", child, status));
+                    log.log(&format!(
+                        "activation child {} exited with status: {:?}",
+                        child, status
+                    ));
                 },
                 Err(e) => {
                     log.log(&format!("failed to wait for activation child: {}", e));
@@ -143,13 +149,18 @@ pub fn executive(
             let service_config_path = PathBuf::from(&data.env).join("service-config.yaml");
             let socket_path = PathBuf::from(&data.flox_services_socket);
             let process_compose_started = if service_config_path.exists() {
-                log.log(&format!("starting process-compose daemon with config: {:?}", service_config_path));
+                log.log(&format!(
+                    "starting process-compose daemon with config: {:?}",
+                    service_config_path
+                ));
 
                 // Only pass services to start if flox_activate_start_services is true
                 let services_to_start: Option<Vec<String>> = if data.flox_activate_start_services {
                     data.flox_services_to_start.as_ref().and_then(|json| {
                         serde_json::from_str(json)
-                            .inspect_err(|e| log.log(&format!("failed to parse services JSON: {}", e)))
+                            .inspect_err(|e| {
+                                log.log(&format!("failed to parse services JSON: {}", e))
+                            })
                             .ok()
                     })
                 } else {
@@ -228,7 +239,10 @@ fn monitoring_loop(
     log: &LogWriter,
 ) -> Result<()> {
     // n94: Initialize metrics, etc. (placeholder)
-    log.log(&format!("initializing monitoring loop for activation {}", activation_id));
+    log.log(&format!(
+        "initializing monitoring loop for activation {}",
+        activation_id
+    ));
 
     // n100: Submit spooled metrics (placeholder)
     log.log("submitting spooled metrics (placeholder)");
@@ -238,7 +252,10 @@ fn monitoring_loop(
         activations::activations_json_path(&data.flox_runtime_dir, &data.env);
     let poll_interval = Duration::from_secs(1);
 
-    log.log(&format!("starting monitoring loop - parent_pid={}, activation_id={}", parent_pid, activation_id));
+    log.log(&format!(
+        "starting monitoring loop - parent_pid={}, activation_id={}",
+        parent_pid, activation_id
+    ));
 
     loop {
         // Check if parent PID is still alive
@@ -285,7 +302,10 @@ fn monitoring_loop(
     }
 
     // Remove the activation entry from activations.json
-    log.log(&format!("removing activation {} from registry", activation_id));
+    log.log(&format!(
+        "removing activation {} from registry",
+        activation_id
+    ));
     let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
     if let Some(activations) = activations {
         if let Ok(mut activations) = activations.check_version() {
@@ -297,14 +317,19 @@ fn monitoring_loop(
                 log.log("last activation removed, cleaning up registry directory");
 
                 // Get the parent directory (contains activations.json and activations.lock)
-                let registry_dir = activations_json_path.parent().expect("activations.json has parent");
+                let registry_dir = activations_json_path
+                    .parent()
+                    .expect("activations.json has parent");
 
                 // Rename directory to make it unique before removal
                 let pid = std::process::id();
                 let remove_dir = registry_dir.with_extension(format!("remove.{}", pid));
 
                 if let Err(e) = std::fs::rename(registry_dir, &remove_dir) {
-                    log.log(&format!("failed to rename registry directory for removal: {}", e));
+                    log.log(&format!(
+                        "failed to rename registry directory for removal: {}",
+                        e
+                    ));
                     // Continue with cleanup anyway
                 } else {
                     // Explicitly remove the files
@@ -328,7 +353,9 @@ fn monitoring_loop(
                 }
             } else {
                 // Still have activations, just write back the updated registry
-                if let Err(e) = activations::write_activations_json(&activations, &activations_json_path, lock) {
+                if let Err(e) =
+                    activations::write_activations_json(&activations, &activations_json_path, lock)
+                {
                     log.log(&format!("failed to remove activation from registry: {}", e));
                     // Continue with cleanup anyway
                 }
@@ -381,7 +408,10 @@ fn check_registry_pids(
     let pids_removed = activation.remove_terminated_pids();
 
     if pids_removed {
-        log.log(&format!("pruned dead PIDs from activation {}", activation_id));
+        log.log(&format!(
+            "pruned dead PIDs from activation {}",
+            activation_id
+        ));
     }
 
     // Check if there are any PIDs remaining after pruning
@@ -389,14 +419,20 @@ fn check_registry_pids(
 
     // If no PIDs remain after pruning, remove the activation and clean up its state directory
     if pids_removed && !pids_remain {
-        log.log(&format!("last PID removed from activation {}, cleaning up activation state", activation_id));
+        log.log(&format!(
+            "last PID removed from activation {}, cleaning up activation state",
+            activation_id
+        ));
 
         // Remove the activation from the registry
         activations.remove_activation(activation_id);
 
         // Write back the updated activations
         activations::write_activations_json(&activations, activations_json_path, lock)?;
-        log.log(&format!("removed activation {} from registry", activation_id));
+        log.log(&format!(
+            "removed activation {} from registry",
+            activation_id
+        ));
 
         // Clean up the activation state directory
         let activation_state_dir =
@@ -447,15 +483,24 @@ fn check_registry_pids(
 
 /// Clean up the activation state directory and any temporary files.
 fn cleanup_activation_state(activation_state_dir: &Path, log: &LogWriter) -> Result<()> {
-    log.log(&format!("cleaning up activation state: {:?}", activation_state_dir));
+    log.log(&format!(
+        "cleaning up activation state: {:?}",
+        activation_state_dir
+    ));
 
     // Remove the activation state directory
     if activation_state_dir.exists() {
         std::fs::remove_dir_all(activation_state_dir)
             .context("Failed to remove activation state directory")?;
-        log.log(&format!("removed activation state directory: {:?}", activation_state_dir));
+        log.log(&format!(
+            "removed activation state directory: {:?}",
+            activation_state_dir
+        ));
     } else {
-        log.log(&format!("activation state directory already removed: {:?}", activation_state_dir));
+        log.log(&format!(
+            "activation state directory already removed: {:?}",
+            activation_state_dir
+        ));
     }
 
     Ok(())

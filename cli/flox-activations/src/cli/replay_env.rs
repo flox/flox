@@ -6,15 +6,17 @@ use anyhow::Result;
 use clap::Args;
 use log::debug;
 
-use crate::shell_gen::capture::parse_env_json;
 use crate::shell_gen::Shell;
+use crate::shell_gen::capture::parse_env_json;
 
 #[derive(Debug, Args)]
 pub struct ReplayEnvArgs {
     #[arg(help = "Which shell syntax to return.")]
     #[arg(short, long, value_name = "SHELL")]
     pub shell: String,
-    #[arg(help = "Path to the activation state directory containing start.env.json and end.env.json.")]
+    #[arg(
+        help = "Path to the activation state directory containing start.env.json and end.env.json."
+    )]
     #[arg(long, value_name = "PATH")]
     pub activation_state_dir: PathBuf,
 }
@@ -71,6 +73,7 @@ mod tests {
     use std::collections::HashMap;
     use std::fs::File;
     use std::io::Write as IoWrite;
+
     use tempfile::TempDir;
 
     use super::*;
@@ -84,7 +87,12 @@ mod tests {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         let mut start_file = File::create(dir.path().join("start.env.json")).unwrap();
-        writeln!(start_file, "{}", serde_json::to_string(&start_json).unwrap()).unwrap();
+        writeln!(
+            start_file,
+            "{}",
+            serde_json::to_string(&start_json).unwrap()
+        )
+        .unwrap();
 
         // Create end.env.json
         let end_json: HashMap<String, String> = end_vars

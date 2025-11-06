@@ -25,11 +25,10 @@ use signal_hook::consts::{SIGCHLD, SIGUSR1};
 use signal_hook::iterator::Signals;
 use time::{Duration, OffsetDateTime};
 
-use super::StartOrAttachArgs;
-use super::SetReadyArgs;
 use super::attach::AttachArgs;
 use super::fix_paths::{fix_manpath_var, fix_path_var};
 use super::set_env_dirs::fix_env_dirs_var;
+use super::{SetReadyArgs, StartOrAttachArgs};
 use crate::cli::attach::AttachExclusiveArgs;
 use crate::executive::executive;
 use crate::shell_gen::Shell as ShellGen;
@@ -139,8 +138,14 @@ pub fn set_activation_env_vars_in_process(data: &ActivateData) {
 fn set_early_activation_env_in_process(data: &ActivateData) {
     // Set the documented exposed variables
     debug_set_var!("FLOX_ENV", &data.env);
-    debug_set_var!("FLOX_ENV_CACHE", data.env_cache.to_string_lossy().to_string());
-    debug_set_var!("FLOX_ENV_PROJECT", data.env_project.to_string_lossy().to_string());
+    debug_set_var!(
+        "FLOX_ENV_CACHE",
+        data.env_cache.to_string_lossy().to_string()
+    );
+    debug_set_var!(
+        "FLOX_ENV_PROJECT",
+        data.env_project.to_string_lossy().to_string()
+    );
     debug_set_var!("FLOX_ENV_DESCRIPTION", &data.env_description);
 
     // Set default Nix environment variables
@@ -256,9 +261,7 @@ fn apply_shell_specific_env(
     use std::path::Path;
     match shell {
         Shell::Tcsh(_) => {
-            let home_dir = interpreter_path
-                .join("activate.d")
-                .join("tcsh_home");
+            let home_dir = interpreter_path.join("activate.d").join("tcsh_home");
             match setup_mode {
                 ShellEnvSetup::InProcess => {
                     if let Ok(home) = std::env::var("HOME") {
@@ -280,13 +283,11 @@ fn apply_shell_specific_env(
                     // For in_place mode, tcsh doesn't need exports returned
                     // because it relies on environment inheritance
                     Ok(vec![])
-                }
+                },
             }
         },
         Shell::Zsh(_) => {
-            let zdotdir = interpreter_path
-                .join("activate.d")
-                .join("zdotdir");
+            let zdotdir = interpreter_path.join("activate.d").join("zdotdir");
             match setup_mode {
                 ShellEnvSetup::InProcess => {
                     if let Ok(orig_zdotdir) = std::env::var("ZDOTDIR") {
@@ -312,15 +313,12 @@ fn apply_shell_specific_env(
                             shell_escape::escape(orig_zdotdir.into())
                         ));
                     }
-                    exports.push(format!(
-                        r#"export ZDOTDIR="{}""#,
-                        zdotdir.to_string_lossy()
-                    ));
+                    exports.push(format!(r#"export ZDOTDIR="{}""#, zdotdir.to_string_lossy()));
                     Ok(exports)
-                }
+                },
             }
         },
-        _ => Ok(vec![])
+        _ => Ok(vec![]),
     }
 }
 
@@ -424,15 +422,21 @@ impl ActivateArgs {
         // This allows users to specify the shell for activation and subshells
         if let Ok(shell_override) = std::env::var("_FLOX_SHELL_FORCE") {
             if !shell_override.is_empty() {
-                debug!("Overriding shell from _FLOX_SHELL_FORCE: {}", shell_override);
+                debug!(
+                    "Overriding shell from _FLOX_SHELL_FORCE: {}",
+                    shell_override
+                );
                 let shell_path = std::path::Path::new(&shell_override);
                 match Shell::try_from(shell_path) {
                     Ok(shell) => {
                         data.shell = shell;
                     },
                     Err(e) => {
-                        debug!("Failed to parse _FLOX_SHELL_FORCE value '{}': {}", shell_override, e);
-                    }
+                        debug!(
+                            "Failed to parse _FLOX_SHELL_FORCE value '{}': {}",
+                            shell_override, e
+                        );
+                    },
                 }
             }
         }
@@ -761,8 +765,14 @@ impl ActivateArgs {
         // Always unset the FLOX_SHELL variable as we attach to an activation.
         env_diff.deletions.extend(vec!["FLOX_SHELL".to_string()]);
 
-        debug!("Final assembled environment diff additions: {:?}", env_diff.additions);
-        debug!("Final assembled environment diff deletions: {:?}", env_diff.deletions);
+        debug!(
+            "Final assembled environment diff additions: {:?}",
+            env_diff.additions
+        );
+        debug!(
+            "Final assembled environment diff deletions: {:?}",
+            env_diff.deletions
+        );
 
         Ok(env_diff)
     }
@@ -875,17 +885,16 @@ impl ActivateArgs {
         /// SAFETY: called once, prior to possible concurrent access to env
         debug_set_var!(
             "_activate_d",
-            data.interpreter_path.join("activate.d").to_string_lossy().to_string()
+            data.interpreter_path
+                .join("activate.d")
+                .to_string_lossy()
+                .to_string()
         );
         debug_set_var!("_flox_activate_tracelevel", verbosity.to_string());
 
         // Build the startup args once for all shells
-        let args_builder = StartupArgsBuilder::new(
-            verbosity,
-            &data,
-            flox_sourcing_rc,
-            activate_tracer,
-        );
+        let args_builder =
+            StartupArgsBuilder::new(verbosity, &data, flox_sourcing_rc, activate_tracer);
 
         // Generate the activation script
         let script_gen = generate_activation_script(
@@ -910,8 +919,16 @@ impl ActivateArgs {
         // Configure shell-specific command arguments
         match data.shell {
             Shell::Bash(_) => {
-                debug_command_env!(&mut command, "FLOX_BASH_INIT_SCRIPT", script_gen.script_path.to_string_lossy().to_string());
-                command.args(["--noprofile", "--rcfile", &script_gen.script_path.to_string_lossy()]);
+                debug_command_env!(
+                    &mut command,
+                    "FLOX_BASH_INIT_SCRIPT",
+                    script_gen.script_path.to_string_lossy().to_string()
+                );
+                command.args([
+                    "--noprofile",
+                    "--rcfile",
+                    &script_gen.script_path.to_string_lossy(),
+                ]);
                 // Invoke bash -c "source $FLOX_BASH_INIT_SCRIPT; <command string>".
                 command.arg("-c").arg(formatdoc!(
                     r#"source '{}';{}"#,
@@ -922,7 +939,11 @@ impl ActivateArgs {
             Shell::Fish(_) => {
                 // Not strictly required, but good to have in the env for debugging
                 // and for parity with the tcsh/zsh shells that need it.
-                debug_command_env!(&mut command, "FLOX_FISH_INIT_SCRIPT", script_gen.script_path.to_string_lossy().to_string());
+                debug_command_env!(
+                    &mut command,
+                    "FLOX_FISH_INIT_SCRIPT",
+                    script_gen.script_path.to_string_lossy().to_string()
+                );
                 command.args([
                     "--init-command",
                     format!("source '{}'", &script_gen.script_path.to_string_lossy()).as_str(),
@@ -930,13 +951,20 @@ impl ActivateArgs {
                 command.arg("-c").arg(data.command_string.unwrap());
             },
             Shell::Tcsh(_) => {
-                debug_command_env!(&mut command, "FLOX_TCSH_INIT_SCRIPT", script_gen.script_path.to_string_lossy().to_string());
+                debug_command_env!(
+                    &mut command,
+                    "FLOX_TCSH_INIT_SCRIPT",
+                    script_gen.script_path.to_string_lossy().to_string()
+                );
                 command.arg("-c").arg(data.command_string.unwrap());
             },
             Shell::Zsh(_) => {
                 // export FLOX_ZSH_INIT_SCRIPT so that it can be sourced from ZDOTDIR.
-                debug_command_env!(&mut command, "FLOX_ZSH_INIT_SCRIPT",
-                    script_gen.script_path.to_string_lossy().to_string());
+                debug_command_env!(
+                    &mut command,
+                    "FLOX_ZSH_INIT_SCRIPT",
+                    script_gen.script_path.to_string_lossy().to_string()
+                );
                 command.arg("-c").arg(data.command_string.unwrap());
             },
             _ => unimplemented!(),
@@ -995,17 +1023,16 @@ impl ActivateArgs {
         /// SAFETY: called once, prior to possible concurrent access to env
         debug_set_var!(
             "_activate_d",
-            data.interpreter_path.join("activate.d").to_string_lossy().to_string()
+            data.interpreter_path
+                .join("activate.d")
+                .to_string_lossy()
+                .to_string()
         );
         debug_set_var!("_flox_activate_tracelevel", verbosity.to_string());
 
         // Build the startup args once for all shells
-        let args_builder = StartupArgsBuilder::new(
-            verbosity,
-            &data,
-            flox_sourcing_rc,
-            activate_tracer,
-        );
+        let args_builder =
+            StartupArgsBuilder::new(verbosity, &data, flox_sourcing_rc, activate_tracer);
 
         // Generate the activation script
         let script_gen = generate_activation_script(
@@ -1040,14 +1067,18 @@ impl ActivateArgs {
                     script_gen.script_path.to_string_lossy().to_string()
                 );
             },
-            _ => {}
+            _ => {},
         }
 
         // Create and configure the command for each shell
         match data.shell {
             Shell::Bash(bash) => {
                 let mut command = Command::new(bash);
-                command.args(["--noprofile", "--rcfile", &script_gen.script_path.to_string_lossy()]);
+                command.args([
+                    "--noprofile",
+                    "--rcfile",
+                    &script_gen.script_path.to_string_lossy(),
+                ]);
 
                 debug!("spawning interactive bash shell: {:?}", command);
                 // exec should never return
@@ -1090,7 +1121,6 @@ impl ActivateArgs {
             },
             _ => unimplemented!(),
         }
-
     }
 
     fn render_legacy_exports(command: &Command, shell: &Shell) -> String {
@@ -1162,12 +1192,8 @@ impl ActivateArgs {
         attach_command.handle()?;
 
         // Build the startup args once for all shells
-        let args_builder = StartupArgsBuilder::new(
-            verbosity,
-            &data,
-            flox_sourcing_rc,
-            activate_tracer.clone(),
-        );
+        let args_builder =
+            StartupArgsBuilder::new(verbosity, &data, flox_sourcing_rc, activate_tracer.clone());
 
         let mut self_pid_var = "$$";
         let startup_commands = match data.shell {
@@ -1176,7 +1202,7 @@ impl ActivateArgs {
                 generate_bash_startup_commands(&args, &export_env_diff)?
             },
             Shell::Fish(_) => {
-		self_pid_var = "$fish_pid";
+                self_pid_var = "$fish_pid";
                 let args = args_builder.build_fish_args();
                 generate_fish_startup_commands(&args, &export_env_diff)?
             },

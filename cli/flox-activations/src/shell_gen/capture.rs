@@ -232,7 +232,9 @@ pub fn replay_env(start_json: impl AsRef<Path>, end_json: impl AsRef<Path>) -> R
     // Set variables from end (either new or changed from start)
     // Only set if the variable changed during activation AND the current value differs
     for (key, value) in &end_env {
-        if start_env.get(key) != Some(value) && std::env::var(key).ok().as_deref() != Some(value.as_str()) {
+        if start_env.get(key) != Some(value)
+            && std::env::var(key).ok().as_deref() != Some(value.as_str())
+        {
             debug_set_var!(key, value);
         }
     }

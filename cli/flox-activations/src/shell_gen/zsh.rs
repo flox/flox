@@ -62,7 +62,10 @@ pub fn generate_zsh_startup_commands(
     commands.push(Shell::Zsh.export_var("_activate_d", &args.activate_d.display().to_string()));
 
     // Set _flox_activate_tracelevel for benefit of zsh script.
-    commands.push(Shell::Zsh.export_var("_flox_activate_tracelevel", &args.flox_activate_tracelevel.to_string()));
+    commands.push(Shell::Zsh.export_var(
+        "_flox_activate_tracelevel",
+        &args.flox_activate_tracelevel.to_string(),
+    ));
 
     // Export the value of $_flox_activate_tracer to the environment.
     commands.push(Shell::Zsh.export_var("_flox_activate_tracer", &args.flox_activate_tracer));
@@ -73,25 +76,28 @@ pub fn generate_zsh_startup_commands(
     // of scripts found in ZDOTDIR, so it's not quite so straightforward as to
     // simply generate a single set of commands to be sourced. Most of the heavy
     // lifting is done by the `zsh` script sourced by the following command.
-    commands.push(format!("source '{}/zsh'", &args.activate_d.display().to_string()));
+    commands.push(format!(
+        "source '{}/zsh'",
+        &args.activate_d.display().to_string()
+    ));
 
-/*
-    // Our ZDOTDIR startup files source user RC files that may modify FLOX_ENV_DIRS,
-    // and then _flox_env_helper may fix it up.
-    // If this happens, we want to respect those modifications,
-    // so we use FLOX_ENV_DIRS from the environment
-    // Only source profile scripts for the current environment when activating from
-    // an RC file because other environments will source their profile scripts
-    // later in the nesting chain.
-    commands.push(r#"if [ -n "${_flox_sourcing_rc:-}" ]; then profile_script_dirs="$FLOX_ENV"; else profile_script_dirs="$FLOX_ENV_DIRS"; fi"#.to_string());
-    commands.push(r#"echo HI DAD PID $$ _FLOX_SOURCED_PROFILE_SCRIPTS is $_FLOX_SOURCED_PROFILE_SCRIPTS"#.to_string()); // DELETEME FOR DEBUGGING
-    commands.push(format!(r#"if [ -z "${{FLOX_NOPROFILE:-}}" ]; then eval "$('{}' profile-scripts --shell zsh --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "$profile_script_dirs")"; fi"#,
-        args.flox_activations.display()
-    ));
-    commands.push(format!(r#"eval "$('{}' profile-scripts --shell zsh --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "$profile_script_dirs")""#,
-        args.flox_activations.display()
-    ));
-*/
+    /*
+        // Our ZDOTDIR startup files source user RC files that may modify FLOX_ENV_DIRS,
+        // and then _flox_env_helper may fix it up.
+        // If this happens, we want to respect those modifications,
+        // so we use FLOX_ENV_DIRS from the environment
+        // Only source profile scripts for the current environment when activating from
+        // an RC file because other environments will source their profile scripts
+        // later in the nesting chain.
+        commands.push(r#"if [ -n "${_flox_sourcing_rc:-}" ]; then profile_script_dirs="$FLOX_ENV"; else profile_script_dirs="$FLOX_ENV_DIRS"; fi"#.to_string());
+        commands.push(r#"echo HI DAD PID $$ _FLOX_SOURCED_PROFILE_SCRIPTS is $_FLOX_SOURCED_PROFILE_SCRIPTS"#.to_string()); // DELETEME FOR DEBUGGING
+        commands.push(format!(r#"if [ -z "${{FLOX_NOPROFILE:-}}" ]; then eval "$('{}' profile-scripts --shell zsh --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "$profile_script_dirs")"; fi"#,
+            args.flox_activations.display()
+        ));
+        commands.push(format!(r#"eval "$('{}' profile-scripts --shell zsh --already-sourced-env-dirs "${{_FLOX_SOURCED_PROFILE_SCRIPTS:-}}" --env-dirs "$profile_script_dirs")""#,
+            args.flox_activations.display()
+        ));
+    */
 
     // Disable command hashing to allow for newly installed flox packages
     // to be found immediately. We do this as the very last thing because
