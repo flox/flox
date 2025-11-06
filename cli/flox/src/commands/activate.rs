@@ -430,7 +430,7 @@ impl Activate {
         let verbosity_num = 0.max(flox.verbosity - 1);
         let mut command = std::process::Command::new(flox_activations);
         command
-            .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, verbosity_num)
+            .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
             .arg("activate")
             .arg("--activate-data")
             .arg(tempfile.path());

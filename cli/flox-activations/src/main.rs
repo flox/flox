@@ -1,17 +1,13 @@
+use anyhow::Context;
 use clap::Parser;
 use flox_activations::cli::Cli;
-use flox_activations::logger::Verbosity;
-use flox_activations::{Error, cli};
+use flox_activations::{Error, cli, logger};
 use log::debug;
 
 fn main() -> Result<(), Error> {
     let args = Cli::parse();
 
-    let mut builder = env_logger::Builder::default();
-    if let Some(filter) = Verbosity::filter_from_env_and_arg(args.verbosity) {
-        builder.parse_filters(&filter);
-    }
-    builder.init();
+    logger::init_logger(args.verbosity).context("failed to initialize logger")?;
     debug!("{args:?}");
 
     match args.command {
