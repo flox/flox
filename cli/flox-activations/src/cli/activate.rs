@@ -71,6 +71,8 @@ impl ActivateArgs {
             .arg("-c")
             .arg(Self::quote_run_args(&run_args));
 
+        debug!("running activation command: {:?}", activate_script_command);
+
         // exec should never return
         Err(activate_script_command.exec().into())
     }
