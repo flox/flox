@@ -1,12 +1,16 @@
 use clap::Parser;
 use flox_activations::cli::Cli;
+use flox_activations::logger::Verbosity;
 use flox_activations::{Error, cli};
 use log::debug;
 
 fn main() -> Result<(), Error> {
-    env_logger::init();
-
     let args = Cli::parse();
+
+    let verbosity = Verbosity::from(args.verbosity);
+    env_logger::Builder::default()
+        .parse_filters(verbosity.env_filter())
+        .init();
     debug!("{args:?}");
 
     match args.command {

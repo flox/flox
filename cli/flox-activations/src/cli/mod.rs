@@ -29,6 +29,12 @@ const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 // #[command(version = Lazy::get(&FLOX_VERSION).map(|v| v.as_str()).unwrap_or("0.0.0"))]
 #[command(about = SHORT_HELP, long_about = LONG_HELP)]
 pub struct Cli {
+    #[arg(
+        short = 'v',
+        long = "verbosity",
+        help = "What level of output to display."
+    )]
+    pub verbosity: u32,
     #[command(subcommand)]
     pub command: Command,
 }

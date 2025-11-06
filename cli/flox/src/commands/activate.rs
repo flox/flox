@@ -424,8 +424,13 @@ impl Activate {
 
         let flox_activations = env!("FLOX_ACTIVATIONS_BIN");
 
+        // `flox-activations` doesn't really have a "quiet" mode, so it makes
+        // more sense for 0 to be the default rather than 1.
+        let verbosity_num = 0.max(flox.verbosity - 1);
         let mut command = std::process::Command::new(flox_activations);
         command
+            .arg("--verbosity")
+            .arg(format!("{verbosity_num}"))
             .arg("activate")
             .arg("--activate-data")
             .arg(tempfile.path());
