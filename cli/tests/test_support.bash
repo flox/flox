@@ -195,10 +195,15 @@ wait_for_executives() {
 
   local -a pids
   for log in ${project_dir}/.flox/log/executive-*.log; do
-    # Executive log entries include the executive pid on each line, e.g.
-    # 21:19:54.527643 pid=1407552 DEBUG flox_activations::executive: Executive: Exiting
-    # Extract the pid from the final line of the log.
-    pid="$(tail -n 1 "$log" | sed -n 's/.* pid=\([0-9]*\) .*/\1/p')"
+    # Executive log entries include the executive pid on each line with format:
+    # [2025-11-06 10:20:30.123] pid=1234 message here
+    # Extract the pid from the shutdown line (last line) of the log.
+    pid="$(tail -n 1 "$log" | sed -n 's/.*pid=\([0-9]*\) shutting down executive.*/\1/p')"
+
+    # If no shutdown line found yet (executive still running), try to get pid from start line
+    if [ -z "$pid" ]; then
+      pid="$(grep "starting executive" "$log" | tail -n 1 | sed -n 's/.*pid=\([0-9]*\) starting executive.*/\1/p')"
+    fi
 
     # Add to the list of pids.
     if [ -n "$pid" ]; then

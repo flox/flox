@@ -1062,6 +1062,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "backtrace",
+ "chrono",
  "clap",
  "dirs",
  "env_logger",

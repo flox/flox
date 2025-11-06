@@ -1,8 +1,9 @@
-use std::fs::OpenOptions;
-use std::os::unix::io::AsRawFd;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -14,16 +15,75 @@ use log::debug;
 use nix::sys::wait::waitpid;
 use nix::unistd::{ForkResult, Pid, close, fork};
 
-use crate::cli::activate::{
-    FLOX_ACTIVATE_START_SERVICES_VAR,
-    FLOX_ACTIVE_ENVIRONMENTS_VAR,
-    FLOX_ENV_LOG_DIR_VAR,
-    FLOX_PROMPT_ENVIRONMENTS_VAR,
-    FLOX_RUNTIME_DIR_VAR,
-    FLOX_SERVICES_SOCKET_VAR,
-    FLOX_SERVICES_TO_START_VAR,
-    build_activation_env_vars,
-};
+use crate::cli::activate::build_activation_env_vars;
+
+/// A writer for the Executive log file that writes explicitly and immediately to disk.
+/// This ensures logging works regardless of the logging subsystem configuration.
+struct LogWriter {
+    file: Arc<Mutex<File>>,
+}
+
+impl LogWriter {
+    /// Opens the executive log file and writes the startup message.
+    fn new(log_dir: &str, activation_id: &str, project_dir: &str) -> Result<Self> {
+        // Create the log directory if it doesn't exist
+        std::fs::create_dir_all(log_dir).context("Failed to create log directory")?;
+
+        // Create the log file path
+        let log_file_path = PathBuf::from(log_dir).join(format!("executive-{}.log", activation_id));
+
+        // Open the log file for appending (create if it doesn't exist)
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file_path)
+            .context("Failed to open executive log file")?;
+
+        // Get current PID
+        let pid = std::process::id();
+
+        // Write startup message immediately with pid prefix for consistency
+        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+        let msg = format!(
+            "[{}] pid={} starting executive project_dir {} activation_id {}\n",
+            timestamp, pid, project_dir, activation_id
+        );
+        file.write_all(msg.as_bytes())
+            .context("Failed to write startup message to log")?;
+        file.flush().context("Failed to flush log file")?;
+
+        Ok(LogWriter {
+            file: Arc::new(Mutex::new(file)),
+        })
+    }
+
+    /// Writes a log message to the file with timestamp and PID.
+    /// The PID is included on every line to help diagnose issues where multiple
+    /// executives might write to the same log file.
+    fn log(&self, msg: &str) {
+        if let Ok(mut file) = self.file.lock() {
+            let pid = std::process::id();
+            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+            let formatted = format!("[{}] pid={} {}\n", timestamp, pid, msg);
+            let _ = file.write_all(formatted.as_bytes());
+            let _ = file.flush();
+        }
+    }
+
+    /// Writes the shutdown message to the log.
+    fn shutdown(&self, activation_id: &str) {
+        let msg = format!("shutting down executive activation_id {}", activation_id);
+        self.log(&msg);
+    }
+}
+
+impl Clone for LogWriter {
+    fn clone(&self) -> Self {
+        LogWriter {
+            file: Arc::clone(&self.file),
+        }
+    }
+}
 
 /// The Executive process manages the lifecycle of an activation.
 /// It is responsible for:
@@ -49,30 +109,32 @@ pub fn executive(
             unreachable!("exec should never return");
         },
         ForkResult::Parent { child } => {
-            // Parent: wait for activation to complete, then daemonize and signal parent
-            debug!("Executive parent: waiting for activation child {}", child);
+            // Parent: This is the Executive process
+            // Create the log writer immediately to ensure all logs are captured
+            let log = LogWriter::new(&data.flox_env_log_dir, &activation_id, &data.env)
+                .context("Failed to create executive log writer")?;
+
+            log.log(&format!("executive parent: waiting for activation child {}", child));
 
             // Wait for the activation child to complete
             match waitpid(child, None) {
                 Ok(status) => {
-                    debug!(
-                        "Activation child {} exited with status: {:?}",
-                        child, status
-                    );
+                    log.log(&format!("activation child {} exited with status: {:?}", child, status));
                 },
                 Err(e) => {
+                    log.log(&format!("failed to wait for activation child: {}", e));
                     return Err(anyhow!("Failed to wait for activation child: {}", e));
                 },
             }
 
             // Replay the environment from the activation script
             // This ensures process-compose inherits the correct environment
-            debug!("Replaying environment from activation");
+            log.log("replaying environment from activation");
             if let Err(e) = crate::shell_gen::capture::replay_env(
                 activation_state_dir.join("start.env.json"),
                 activation_state_dir.join("end.env.json"),
             ) {
-                debug!("Failed to replay environment: {}", e);
+                log.log(&format!("failed to replay environment: {}", e));
                 // Continue anyway - this is not fatal
             }
 
@@ -81,16 +143,13 @@ pub fn executive(
             let service_config_path = PathBuf::from(&data.env).join("service-config.yaml");
             let socket_path = PathBuf::from(&data.flox_services_socket);
             let process_compose_started = if service_config_path.exists() {
-                debug!(
-                    "Starting process-compose daemon with config: {:?}",
-                    service_config_path
-                );
+                log.log(&format!("starting process-compose daemon with config: {:?}", service_config_path));
 
                 // Only pass services to start if flox_activate_start_services is true
                 let services_to_start: Option<Vec<String>> = if data.flox_activate_start_services {
                     data.flox_services_to_start.as_ref().and_then(|json| {
                         serde_json::from_str(json)
-                            .inspect_err(|e| debug!("Failed to parse services JSON: {}", e))
+                            .inspect_err(|e| log.log(&format!("failed to parse services JSON: {}", e)))
                             .ok()
                     })
                 } else {
@@ -102,38 +161,32 @@ pub fn executive(
                     &socket_path,
                     services_to_start.as_deref(),
                 ) {
-                    debug!("Failed to start process-compose: {}", e);
+                    log.log(&format!("failed to start process-compose: {}", e));
                     // Continue anyway - services failure shouldn't break activation
                     false
                 } else {
                     true
                 }
             } else {
-                debug!("No service-config.yaml found, skipping process-compose startup");
+                log.log("no service-config.yaml found, skipping process-compose startup");
                 false
             };
 
-            // n136: Daemonize by closing stdin, stdout, and redirecting stderr to log file
-            debug!("Daemonizing: closing stdin/stdout and redirecting stderr to log");
+            // n136: Daemonize by closing stdin, stdout, stderr
+            log.log("daemonizing: closing stdin/stdout/stderr");
             close(0).context("Failed to close stdin")?;
             close(1).context("Failed to close stdout")?;
-
-            // Redirect stderr to a log file so we can continue logging
-            redirect_stderr_to_logfile(&data.flox_env_log_dir, &activation_id)?;
-
-            // Set logging level to Debug for the executive, regardless of original verbosity
-            // The logger format is inherited from the parent, we just need to change the level
-            log::set_max_level(log::LevelFilter::Debug);
+            close(2).context("Failed to close stderr")?;
 
             // Set process title to show "executive: <original command>" in ps listings
             let process_title = format!("executive: {}", data.original_argv.join(" "));
             if let Err(e) = crate::proctitle::setproctitle(&process_title) {
-                debug!("Failed to set process title: {}", e);
+                log.log(&format!("failed to set process title: {}", e));
                 // Continue execution even if this fails
             }
 
             // n130: Signal the parent that activation is ready
-            debug!("Sending SIGUSR1 to parent {}", parent_pid);
+            log.log(&format!("sending SIGUSR1 to parent {}", parent_pid));
             unsafe {
                 libc::kill(parent_pid.as_raw(), libc::SIGUSR1);
             }
@@ -145,40 +198,15 @@ pub fn executive(
                 &activation_state_dir,
                 &activation_id,
                 process_compose_started,
+                &log,
             )?;
 
-            // If we reach here, all PIDs are dead - proceed with cleanup
+            // If we reach here, all PIDs are dead - write shutdown message
+            log.shutdown(&activation_id);
+
             Ok(())
         },
     }
-}
-
-/// Redirects stderr to a log file for the executive process.
-/// This allows us to continue logging after daemonization.
-fn redirect_stderr_to_logfile(log_dir: &str, activation_id: &str) -> Result<()> {
-    // Create the log directory if it doesn't exist
-    std::fs::create_dir_all(log_dir).context("Failed to create log directory")?;
-
-    // Create the log file path
-    let log_file_path = PathBuf::from(log_dir).join(format!("executive-{}.log", activation_id));
-
-    // Open the log file for appending (create if it doesn't exist)
-    let log_file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_file_path)
-        .context("Failed to open executive log file")?;
-
-    // Redirect stderr (fd 2) to the log file using libc::dup2
-    let result = unsafe { libc::dup2(log_file.as_raw_fd(), 2) };
-    if result == -1 {
-        return Err(anyhow!("Failed to redirect stderr to log file"));
-    }
-
-    // Log file will be closed when it goes out of scope, but the fd 2 will remain open
-    debug!("Executive stderr redirected to: {:?}", log_file_path);
-
-    Ok(())
 }
 
 /// Main monitoring loop for the Executive process.
@@ -197,25 +225,20 @@ fn monitoring_loop(
     activation_state_dir: &Path,
     activation_id: &str,
     process_compose_started: bool,
+    log: &LogWriter,
 ) -> Result<()> {
     // n94: Initialize metrics, etc. (placeholder)
-    debug!(
-        "Executive: Initializing monitoring loop for activation {}",
-        activation_id
-    );
+    log.log(&format!("initializing monitoring loop for activation {}", activation_id));
 
     // n100: Submit spooled metrics (placeholder)
-    debug!("Executive: Submitting spooled metrics (placeholder)");
+    log.log("submitting spooled metrics (placeholder)");
 
     // n ns: Main monitoring loop - await death of ppid AND registry PIDs
     let activations_json_path =
         activations::activations_json_path(&data.flox_runtime_dir, &data.env);
     let poll_interval = Duration::from_secs(1);
 
-    debug!(
-        "Executive: Starting monitoring loop - parent_pid={}, activation_id={}",
-        parent_pid, activation_id
-    );
+    log.log(&format!("starting monitoring loop - parent_pid={}, activation_id={}", parent_pid, activation_id));
 
     loop {
         // Check if parent PID is still alive
@@ -227,41 +250,42 @@ fn monitoring_loop(
             activation_id,
             &data.flox_runtime_dir,
             &data.env,
+            log,
         )?;
 
         if !parent_alive && !registry_pids_exist {
-            debug!(
-                "Executive: Parent PID {} is dead and no registry PIDs remain for activation {}",
+            log.log(&format!(
+                "parent PID {} is dead and no registry PIDs remain for activation {}",
                 parent_pid, activation_id
-            );
+            ));
             break;
         }
 
         if !parent_alive {
-            debug!(
-                "Executive: Parent PID {} is dead, but registry PIDs still exist for activation {}",
+            log.log(&format!(
+                "parent PID {} is dead, but registry PIDs still exist for activation {}",
                 parent_pid, activation_id
-            );
+            ));
         }
 
         // Sleep before next poll
         thread::sleep(poll_interval);
     }
 
-    debug!("Executive: Monitoring loop complete, proceeding with cleanup");
+    log.log("monitoring loop complete, proceeding with cleanup");
 
     // n66: stop_process-compose() (only if we started it)
     if process_compose_started {
-        debug!("Executive: Stopping process-compose");
+        log.log("stopping process-compose");
         let socket_path = PathBuf::from(&data.flox_services_socket);
         if let Err(e) = crate::process_compose::stop_process_compose(&socket_path) {
-            debug!("Failed to stop process-compose: {}", e);
+            log.log(&format!("failed to stop process-compose: {}", e));
             // Continue with cleanup anyway
         }
     }
 
     // Remove the activation entry from activations.json
-    debug!("Executive: Removing activation {} from registry", activation_id);
+    log.log(&format!("removing activation {} from registry", activation_id));
     let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
     if let Some(activations) = activations {
         if let Ok(mut activations) = activations.check_version() {
@@ -270,7 +294,7 @@ fn monitoring_loop(
 
             if is_empty {
                 // Last activation removed - clean up the entire registry directory
-                debug!("Executive: Last activation removed, cleaning up registry directory");
+                log.log("last activation removed, cleaning up registry directory");
 
                 // Get the parent directory (contains activations.json and activations.lock)
                 let registry_dir = activations_json_path.parent().expect("activations.json has parent");
@@ -280,7 +304,7 @@ fn monitoring_loop(
                 let remove_dir = registry_dir.with_extension(format!("remove.{}", pid));
 
                 if let Err(e) = std::fs::rename(registry_dir, &remove_dir) {
-                    debug!("Failed to rename registry directory for removal: {}", e);
+                    log.log(&format!("failed to rename registry directory for removal: {}", e));
                     // Continue with cleanup anyway
                 } else {
                     // Explicitly remove the files
@@ -288,37 +312,34 @@ fn monitoring_loop(
                     let lock_path = remove_dir.join("activations.lock");
 
                     if let Err(e) = std::fs::remove_file(&json_path) {
-                        debug!("Failed to remove activations.json: {}", e);
+                        log.log(&format!("failed to remove activations.json: {}", e));
                     }
 
                     if let Err(e) = std::fs::remove_file(&lock_path) {
-                        debug!("Failed to remove activations.lock: {}", e);
+                        log.log(&format!("failed to remove activations.lock: {}", e));
                     }
 
                     // Remove the directory itself (non-recursively)
                     if let Err(e) = std::fs::remove_dir(&remove_dir) {
-                        debug!("Failed to remove registry directory: {}", e);
+                        log.log(&format!("failed to remove registry directory: {}", e));
                     } else {
-                        debug!("Executive: Successfully removed registry directory");
+                        log.log("successfully removed registry directory");
                     }
                 }
             } else {
                 // Still have activations, just write back the updated registry
                 if let Err(e) = activations::write_activations_json(&activations, &activations_json_path, lock) {
-                    debug!("Failed to remove activation from registry: {}", e);
+                    log.log(&format!("failed to remove activation from registry: {}", e));
                     // Continue with cleanup anyway
                 }
             }
         } else {
-            debug!("Invalid version in activations.json, skipping registry cleanup");
+            log.log("invalid version in activations.json, skipping registry cleanup");
         }
     }
 
     // ny: Clean up state (remove temp files, etc.)
-    cleanup_activation_state(activation_state_dir)?;
-
-    // nv: Rust Destructors will submit metrics, etc. (handled automatically)
-    debug!("Executive: Exiting");
+    cleanup_activation_state(activation_state_dir, log)?;
 
     Ok(())
 }
@@ -335,6 +356,7 @@ fn check_registry_pids(
     activation_id: &str,
     runtime_dir: impl AsRef<Path>,
     flox_env: impl AsRef<Path>,
+    log: &LogWriter,
 ) -> Result<bool> {
     // Read the activations file with lock
     let (activations, lock) = activations::read_activations_json(activations_json_path)?;
@@ -359,10 +381,7 @@ fn check_registry_pids(
     let pids_removed = activation.remove_terminated_pids();
 
     if pids_removed {
-        debug!(
-            "Executive: Pruned dead PIDs from activation {}",
-            activation_id
-        );
+        log.log(&format!("pruned dead PIDs from activation {}", activation_id));
     }
 
     // Check if there are any PIDs remaining after pruning
@@ -370,17 +389,14 @@ fn check_registry_pids(
 
     // If no PIDs remain after pruning, remove the activation and clean up its state directory
     if pids_removed && !pids_remain {
-        debug!(
-            "Executive: Last PID removed from activation {}, cleaning up activation state",
-            activation_id
-        );
+        log.log(&format!("last PID removed from activation {}, cleaning up activation state", activation_id));
 
         // Remove the activation from the registry
         activations.remove_activation(activation_id);
 
         // Write back the updated activations
         activations::write_activations_json(&activations, activations_json_path, lock)?;
-        debug!("Executive: Removed activation {} from registry", activation_id);
+        log.log(&format!("removed activation {} from registry", activation_id));
 
         // Clean up the activation state directory
         let activation_state_dir =
@@ -395,63 +411,51 @@ fn check_registry_pids(
         // Remove files if they exist (ignore errors)
         if add_env_path.exists() {
             if let Err(e) = std::fs::remove_file(&add_env_path) {
-                debug!("Failed to remove add.env: {}", e);
+                log.log(&format!("failed to remove add.env: {}", e));
             }
         }
         if del_env_path.exists() {
             if let Err(e) = std::fs::remove_file(&del_env_path) {
-                debug!("Failed to remove del.env: {}", e);
+                log.log(&format!("failed to remove del.env: {}", e));
             }
         }
         if start_json_path.exists() {
             if let Err(e) = std::fs::remove_file(&start_json_path) {
-                debug!("Failed to remove start.env.json: {}", e);
+                log.log(&format!("failed to remove start.env.json: {}", e));
             }
         }
         if end_json_path.exists() {
             if let Err(e) = std::fs::remove_file(&end_json_path) {
-                debug!("Failed to remove end.env.json: {}", e);
+                log.log(&format!("failed to remove end.env.json: {}", e));
             }
         }
 
         // Remove the directory itself (non-recursively)
         if let Err(e) = std::fs::remove_dir(&activation_state_dir) {
-            debug!(
-                "Failed to remove activation state directory: {} (may not be empty or may not exist)",
-                e
-            );
+            log.log(&format!("failed to remove activation state directory: {} (may not be empty or may not exist)", e));
         } else {
-            debug!("Executive: Successfully removed activation state directory");
+            log.log("successfully removed activation state directory");
         }
     } else if pids_removed {
         // PIDs were removed but some remain, just write back the updated registry
         activations::write_activations_json(&activations, activations_json_path, lock)?;
-        debug!("Executive: Updated activations.json after pruning dead PIDs");
+        log.log("updated activations.json after pruning dead PIDs");
     }
 
     Ok(pids_remain)
 }
 
 /// Clean up the activation state directory and any temporary files.
-fn cleanup_activation_state(activation_state_dir: &Path) -> Result<()> {
-    debug!(
-        "Executive: Cleaning up activation state: {:?}",
-        activation_state_dir
-    );
+fn cleanup_activation_state(activation_state_dir: &Path, log: &LogWriter) -> Result<()> {
+    log.log(&format!("cleaning up activation state: {:?}", activation_state_dir));
 
     // Remove the activation state directory
     if activation_state_dir.exists() {
         std::fs::remove_dir_all(activation_state_dir)
             .context("Failed to remove activation state directory")?;
-        debug!(
-            "Executive: Removed activation state directory: {:?}",
-            activation_state_dir
-        );
+        log.log(&format!("removed activation state directory: {:?}", activation_state_dir));
     } else {
-        debug!(
-            "Executive: Activation state directory already removed: {:?}",
-            activation_state_dir
-        );
+        log.log(&format!("activation state directory already removed: {:?}", activation_state_dir));
     }
 
     Ok(())
