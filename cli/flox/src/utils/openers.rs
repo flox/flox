@@ -96,13 +96,13 @@ impl Browser {
     }
 }
 
-pub trait CliShellExtensions {
+pub trait CliShellExt {
     fn detect_from_parent_process() -> Result<ShellWithPath>;
 
     fn detect_from_env(var: &str) -> Result<ShellWithPath>;
 }
 
-impl CliShellExtensions for ShellWithPath {
+impl CliShellExt for ShellWithPath {
     /// Detect the current shell from the parent process
     ///
     /// This function tries to detect the shell from the parent process.

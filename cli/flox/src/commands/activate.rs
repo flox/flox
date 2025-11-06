@@ -39,7 +39,7 @@ use crate::commands::{
 };
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::message;
-use crate::utils::openers::CliShellExtensions;
+use crate::utils::openers::CliShellExt;
 use crate::{environment_subcommand_metric, subcommand_metric, utils};
 
 pub static INTERACTIVE_BASH_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
