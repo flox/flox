@@ -63,6 +63,7 @@ craneLib.buildPackage (
       for target in "$(basename ${rust-toolchain.rust.outPath} | cut -f1 -d- )" ; do
         sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/flox-activations
       done
+      mv $out/bin $out/libexec
     '';
 
     passthru = {

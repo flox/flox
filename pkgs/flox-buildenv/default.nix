@@ -3,6 +3,7 @@
   callPackage,
   coreutils,
   darwin,
+  flox-activations,
   flox-interpreter,
   glibcLocalesUtf8,
   lib,
@@ -29,6 +30,7 @@ let
       flox-interpreter.build_executable_wrapper
     else
       "${activationScripts_fallback}-build_executable_wrapper";
+  flox_activations_out = flox-activations.out;
 
   defaultEnvrc = writeText "default.envrc" (
     ''
@@ -59,6 +61,7 @@ runCommandNoCC "${pname}-${version}"
       pname
       version
       interpreter_out
+      flox_activations_out
       interpreter_wrapper
       defaultEnvrc
       ;

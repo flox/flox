@@ -124,41 +124,58 @@
         };
 
       overlays.development = final: prev: {
-        floxDevelopmentPackages = prev.lib.makeScope prev.newScope (self: {
-          rust-internal-deps = prev.rust-internal-deps.override {
-            flox-buildenv = null;
-            flox-package-builder = null;
-            flox-nix-plugins = null;
-            flox-mk-container = null;
-          };
+        floxDevelopmentPackages =
+          let
+            # Create a flox-activations package that just copies the Cargo built
+            # development binary into $out/libexec/flox-activations
+            floxActivationsBin = "${builtins.path { path = builtins.getEnv "FLOX_ACTIVATIONS_BIN"; }}";
+            cargoBuiltFloxActivations =
+              prev.runCommandNoCC "flox-activations"
+                {
+                  name = "flox-activations";
+                  path = floxActivationsBin;
+                }
+                ''
+                  mkdir -p $out/libexec
+                  ln -s ${floxActivationsBin} $out/libexec/flox-activations
+                '';
+          in
+          prev.lib.makeScope prev.newScope (self: {
+            rust-internal-deps = prev.rust-internal-deps.override {
+              flox-buildenv = null;
+              flox-package-builder = null;
+              flox-nix-plugins = null;
+              flox-mk-container = null;
+            };
 
-          flox-cli = prev.flox-cli.override {
-            flox-interpreter = null;
-            flox-watchdog = null;
-            rust-internal-deps = self.rust-internal-deps;
-          };
-          flox-watchdog = prev.flox-watchdog.override {
-            rust-internal-deps = self.rust-internal-deps;
-          };
-          flox-activations = prev.flox-activations.override { };
-          flox-interpreter = prev.flox-interpreter.override {
-            flox-activations = null;
-          };
-          flox-package-builder = prev.flox-package-builder.override { };
-          flox-buildenv = prev.flox-buildenv.override {
-            flox-interpreter = null;
-          };
-          checksFor = checks.${prev.system};
+            flox-cli = prev.flox-cli.override {
+              flox-interpreter = null;
+              flox-watchdog = null;
+              rust-internal-deps = self.rust-internal-deps;
+            };
+            flox-watchdog = prev.flox-watchdog.override {
+              rust-internal-deps = self.rust-internal-deps;
+            };
+            flox-activations = prev.flox-activations.override { };
+            flox-interpreter = prev.flox-interpreter.override {
+              flox-activations = cargoBuiltFloxActivations;
+            };
+            flox-package-builder = prev.flox-package-builder.override { };
+            flox-buildenv = prev.flox-buildenv.override {
+              flox-interpreter = null;
+              flox-activations = cargoBuiltFloxActivations;
+            };
+            checksFor = checks.${prev.system};
 
-          flox-cli-tests = prev.flox-cli-tests.override {
-            PROJECT_TESTS_DIR = "/cli/tests";
-            localDev = true;
-          };
-          # TODO: we would prefer using nix-unit from nixpkgs, but it hasn't been updated.
-          # We can't currently use an overlay because nix-unit doesn't support
-          # as late of a version of Nix as we're using.
-          nix-unit = inputs.nix-unit.packages.${prev.system}.nix-unit;
-        });
+            flox-cli-tests = prev.flox-cli-tests.override {
+              PROJECT_TESTS_DIR = "/cli/tests";
+              localDev = true;
+            };
+            # TODO: we would prefer using nix-unit from nixpkgs, but it hasn't been updated.
+            # We can't currently use an overlay because nix-unit doesn't support
+            # as late of a version of Nix as we're using.
+            nix-unit = inputs.nix-unit.packages.${prev.system}.nix-unit;
+          });
       };
       # Composes dependency overlays and the overlay defined here.
       overlays.default = nixpkgs.lib.composeManyExtensions [

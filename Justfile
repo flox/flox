@@ -78,8 +78,8 @@ version:
         -o "$FLOX_PACKAGE_BUILDER"
 
 # Build the flox buildenv
-# `pure-eval` is disabled because `FLOX_INTERPRETER`
-# is read from the environment.
+# `pure-eval` is disabled because `FLOX_INTERPRETER` and `FLOX_ACTIVATIONS_BIN`
+# are read from the environment.
 @build-buildenv:
     nix {{nix_options}} build \
         --option pure-eval false \
