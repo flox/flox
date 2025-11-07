@@ -208,7 +208,7 @@ impl InstallableLocker for Nix {
     ) -> Result<LockedInstallable, FlakeInstallableError> {
         let mut command = nix_base_command();
         command.args(["--option", "extra-plugin-files", &*NIX_PLUGINS]);
-
+        command.arg("--refresh");
         command.args(["--option", "pure-eval", "false"]);
         command.arg("eval");
         command.arg("--no-update-lock-file");
@@ -481,10 +481,10 @@ mod tests {
             .expect("Second lock should succeed");
 
         let second_description = second_lock.description.clone();
-        assert_ne!(second_description, Some(updated_description.to_string()));
+        assert_eq!(second_description, Some(updated_description.to_string()));
 
         // Verify that the descriptions are different, proving fresh fetch occurred
-        assert_eq!(
+        assert_ne!(
             first_description, second_description,
             "Locking should always fetch a fresh copy and reflect updated description.txt content",
         );
