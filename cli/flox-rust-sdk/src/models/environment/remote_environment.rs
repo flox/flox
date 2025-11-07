@@ -283,6 +283,19 @@ impl RemoteEnvironment {
             .push(flox, force)
             .map_err(EnvironmentError::ManagedEnvironment)
     }
+
+    /// Pull updates from FloxHub for this remote environment
+    ///
+    /// This updates the cached remote environment with the latest changes from FloxHub.
+    pub fn pull(
+        &mut self,
+        flox: &Flox,
+        force: bool,
+    ) -> Result<super::managed_environment::PullResult, EnvironmentError> {
+        let result = self.inner.pull(flox, force)?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
+        Ok(result)
+    }
 }
 
 impl Environment for RemoteEnvironment {
