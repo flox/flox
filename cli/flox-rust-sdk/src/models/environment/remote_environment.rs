@@ -279,10 +279,7 @@ impl Environment for RemoteEnvironment {
         flox: &Flox,
     ) -> Result<InstallationAttempt, EnvironmentError> {
         let result = self.inner.install(packages, flox)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
         // TODO: clean up git branch for temporary environment
         Ok(result)
     }
@@ -294,10 +291,7 @@ impl Environment for RemoteEnvironment {
         flox: &Flox,
     ) -> Result<UninstallationAttempt, EnvironmentError> {
         let result = self.inner.uninstall(packages, flox)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -308,10 +302,7 @@ impl Environment for RemoteEnvironment {
         if result == EditResult::Unchanged {
             return Ok(result);
         }
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -331,10 +322,7 @@ impl Environment for RemoteEnvironment {
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
         let result = self.inner.upgrade(flox, groups_or_iids)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -346,10 +334,7 @@ impl Environment for RemoteEnvironment {
         to_upgrade: Vec<String>,
     ) -> Result<UpgradeResult, EnvironmentError> {
         let result = self.inner.include_upgrade(flox, to_upgrade)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
 
         Ok(result)
     }
@@ -445,10 +430,7 @@ impl GenerationsExt for RemoteEnvironment {
         generation: GenerationId,
     ) -> Result<(), EnvironmentError> {
         self.inner.switch_generation(flox, generation)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner))?;
+        Self::update_out_link(flox, &self.rendered_env_links, &mut self.inner)?;
         Ok(())
     }
 
