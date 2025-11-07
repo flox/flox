@@ -140,7 +140,6 @@ impl ContainerBuilder for MkContainerNix {
         tag: impl AsRef<str>,
     ) -> Result<ContainerSource, Self::Error> {
         let mut command = nix_base_command();
-        command.args(["--option", "pure-eval", "true"]);
         command.arg("build");
         command.arg("--json");
         command.arg("--no-link");

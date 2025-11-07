@@ -4,9 +4,6 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include <fstream>
-#include <iostream>
-
 #include <nix/cmd/command.hh>
 #include <nix/expr/eval-gc.hh>
 #include <nix/expr/eval.hh>
@@ -14,6 +11,7 @@
 #include <nix/fetchers/attrs.hh>
 #include <nix/main/shared.hh>
 #include <nix/store/store-api.hh>
+#include <nix/store/store-open.hh>
 #include <nix/util/url.hh>
 #include <nlohmann/json.hpp>
 
