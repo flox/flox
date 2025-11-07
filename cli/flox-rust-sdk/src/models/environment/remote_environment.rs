@@ -164,7 +164,7 @@ impl RemoteEnvironment {
             )
         };
 
-        let mut inner = ManagedEnvironment::open_with(
+        let inner = ManagedEnvironment::open_with(
             floxmeta,
             flox,
             pointer.clone(),
@@ -179,11 +179,8 @@ impl RemoteEnvironment {
         )
         .map_err(RemoteEnvironmentError::OpenManagedEnvironment)?;
 
-        // (force) Pull latest changes of the environment from upstream.
-        // remote environments stay in sync with upstream without providing a local staging state.
-        inner
-            .pull(flox, true)
-            .map_err(RemoteEnvironmentError::ResetManagedEnvironment)?;
+        // Note: Remote environments used to get reset to the latest upstream here.
+        // Now they require explicit `pull`s to refresh upstream state.
 
         let rendered_env_links = {
             let gcroots_dir = gcroots_dir(flox, &pointer.owner);
