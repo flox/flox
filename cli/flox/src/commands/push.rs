@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result, bail};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
-use flox_rust_sdk::flox::{EnvironmentOwner, EnvironmentRef, Flox};
+use flox_rust_sdk::flox::{EnvironmentOwner, Flox, RemoteEnvironmentRef};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
@@ -69,7 +69,7 @@ enum PushMode {
     Remote {
         /// Push a remote environment by reference (e.g., owner/name)
         #[bpaf(long("remote"), short('r'), argument("owner>/<name"))]
-        env_ref: EnvironmentRef,
+        env_ref: RemoteEnvironmentRef,
     },
 }
 
@@ -98,7 +98,7 @@ impl Push {
     }
 
     /// Handle pushing a cached remote environment
-    fn handle_remote_push(&self, flox: &Flox, env_ref: EnvironmentRef) -> Result<()> {
+    fn handle_remote_push(&self, flox: &Flox, env_ref: RemoteEnvironmentRef) -> Result<()> {
         let pointer = ManagedPointer::new(
             env_ref.owner().clone(),
             env_ref.name().clone(),
