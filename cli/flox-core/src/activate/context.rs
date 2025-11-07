@@ -11,7 +11,7 @@ pub struct ActivateCtx {
     pub env: String,
 
     /// The project path for the environment
-    pub env_project: PathBuf,
+    pub env_project: Option<PathBuf>,
 
     /// The cache path for the environment
     pub env_cache: PathBuf,
@@ -23,7 +23,7 @@ pub struct ActivateCtx {
     pub mode: String,
 
     /// Path to the watchdog binary
-    pub watchdog_bin: PathBuf,
+    pub watchdog_bin: Option<PathBuf>,
 
     /// Path to the shell executable
     pub shell: ShellWithPath,
@@ -67,8 +67,11 @@ pub struct ActivateCtx {
 
     // Info needed to run the activate script
     pub interpreter_path: PathBuf,
-    pub invocation_type: InvocationType,
+    pub invocation_type: Option<InvocationType>,
     pub run_args: Vec<String>,
+
+    /// Whether to clean up the context file after reading it.
+    pub remove_after_reading: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

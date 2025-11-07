@@ -19,6 +19,11 @@ pub struct ActivateArgs {
     /// Path to JSON file containing activation data
     #[arg(long)]
     pub activate_data: PathBuf,
+
+    /// Additional arguments used to provide a command to run.
+    /// NOTE: this is only relevant for containerize activations.
+    #[arg(allow_hyphen_values = true)]
+    pub cmd: Option<Vec<String>>,
 }
 
 pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
@@ -33,11 +38,43 @@ pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES
 impl ActivateArgs {
     pub fn handle(self) -> Result<(), anyhow::Error> {
         let contents = fs::read_to_string(&self.activate_data)?;
-        let data: ActivateCtx = serde_json::from_str(&contents)?;
+        let mut data: ActivateCtx = serde_json::from_str(&contents)?;
 
-        fs::remove_file(&self.activate_data)?;
+        if data.remove_after_reading {
+            fs::remove_file(&self.activate_data)?;
+        }
+
+        // In the case of containerize, you can't bake-in the invocation type or the
+        // `run_args`, so you need to do that detection at runtime. Here we do that
+        // by modifying the `ActivateCtx` passed to us in the container's
+        // EntryPoint.
+        let run_args = self
+            .cmd
+            .as_ref()
+            .or(Some(&data.run_args))
+            .and_then(|args| if args.is_empty() { None } else { Some(args) });
+
+        match (data.invocation_type.as_ref(), run_args) {
+            // This is a container invocation, and we need to set the invocation type
+            // based on the presence of command arguments.
+            (None, None) => data.invocation_type = Some(InvocationType::Interactive),
+            // This is a container invocation, and we need to set the invocation type
+            // based on the presence of command arguments.
+            (None, Some(args)) => {
+                data.invocation_type = Some(InvocationType::Command);
+                data.run_args = args.clone();
+            },
+            // The following two cases are normal shell activations, and don't need
+            // to modify the activation context.
+            (Some(_), None) => {},
+            (Some(_), Some(_)) => {},
+        }
+        // For any case where `invocation_type` is None, we should have detected that above
+        // and set it to Some.
+        debug_assert!(data.invocation_type.is_some());
 
         let activate_script_command = Self::assemble_command_for_activate_script(data.clone());
+
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
         //
@@ -45,14 +82,24 @@ impl ActivateArgs {
         // e.g. in a .bashrc or .zshrc file:
         //
         //    eval "$(flox activate)"
-        if data.invocation_type == InvocationType::InPlace {
+        if data
+            .invocation_type
+            .as_ref()
+            .expect("already checked invocation type was some")
+            == &InvocationType::InPlace
+        {
             Self::activate_in_place(activate_script_command, data.shell)?;
 
             return Ok(());
         }
 
         // These functions will only return if exec fails
-        if data.invocation_type == InvocationType::Interactive {
+        if data
+            .invocation_type
+            .as_ref()
+            .expect("already checked invocation type was some")
+            == &InvocationType::Interactive
+        {
             Self::activate_interactive(activate_script_command)
         } else {
             Self::activate_command(activate_script_command, data.run_args)
@@ -165,9 +212,11 @@ impl ActivateArgs {
         command.envs(exports);
 
         command.arg("--env").arg(&data.env);
-        command
-            .arg("--env-project")
-            .arg(data.env_project.to_string_lossy().to_string());
+        if let Some(env_project) = data.env_project.as_ref() {
+            command
+                .arg("--env-project")
+                .arg(env_project.to_string_lossy().to_string());
+        }
         command
             .arg("--env-cache")
             .arg(data.env_cache.to_string_lossy().to_string());
@@ -176,9 +225,11 @@ impl ActivateArgs {
         // Pass down the activation mode
         command.arg("--mode").arg(data.mode);
 
-        command
-            .arg("--watchdog")
-            .arg(data.watchdog_bin.to_string_lossy().to_string());
+        if let Some(watchdog_bin) = data.watchdog_bin.as_ref() {
+            command
+                .arg("--watchdog")
+                .arg(watchdog_bin.to_string_lossy().to_string());
+        }
 
         command.arg("--shell").arg(data.shell.exe_path());
 
