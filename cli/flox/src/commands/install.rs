@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
+use flox_core::shell::ShellWithPath;
 use flox_rust_sdk::flox::{DEFAULT_NAME, EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{
@@ -57,7 +58,6 @@ use crate::utils::dialog::{Dialog, Select};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::format_error;
 use crate::utils::message::{self};
-use crate::utils::openers::Shell;
 use crate::utils::tracing::sentry_set_tag;
 use crate::{Exit, environment_subcommand_metric, subcommand_metric};
 
@@ -610,15 +610,15 @@ fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
         // There are unicode quoting issues with the current form
         // We can't use <() for zsh because it blocks input which can make it
         // impossible to Ctrl-C
-        Shell::Bash(_) | Shell::Zsh(_) => r#"eval "$(flox activate -d ~ -m run)""#,
-        Shell::Tcsh(_) => r#"eval "`flox activate -d ~ -m run`""#,
-        Shell::Fish(_) => "flox activate -d ~ -m run | source",
+        ShellWithPath::Bash(_) | ShellWithPath::Zsh(_) => r#"eval "$(flox activate -d ~ -m run)""#,
+        ShellWithPath::Tcsh(_) => r#"eval "`flox activate -d ~ -m run`""#,
+        ShellWithPath::Fish(_) => "flox activate -d ~ -m run | source",
     };
     let rc_file_names = match shell {
-        Shell::Bash(_) => vec![".bashrc", ".profile"],
-        Shell::Zsh(_) => vec![".zshrc", ".zprofile"],
-        Shell::Tcsh(_) => vec![".tcshrc"],
-        Shell::Fish(_) => vec!["config.fish"],
+        ShellWithPath::Bash(_) => vec![".bashrc", ".profile"],
+        ShellWithPath::Zsh(_) => vec![".zshrc", ".zprofile"],
+        ShellWithPath::Tcsh(_) => vec![".tcshrc"],
+        ShellWithPath::Fish(_) => vec!["config.fish"],
     };
     let joined = rc_file_names.join(" and ");
     let msg = |files: &[&str]| {
@@ -664,8 +664,8 @@ fn prompt_to_modify_rc_file() -> Result<bool, anyhow::Error> {
     Ok(true)
 }
 
-fn locate_rc_file(shell: &Shell, name: impl AsRef<str>) -> Result<PathBuf, anyhow::Error> {
-    use Shell::*;
+fn locate_rc_file(shell: &ShellWithPath, name: impl AsRef<str>) -> Result<PathBuf, anyhow::Error> {
+    use ShellWithPath::*;
     let home = dirs::home_dir().context("failed to locate home directory")?;
     let rc_file = match shell {
         Bash(_) => home.join(name.as_ref()),

@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use bpaf::Bpaf;
+use flox_core::activate::context::InvocationType;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
@@ -17,7 +18,7 @@ use super::{
     UninitializedEnvironment,
     activated_environments,
 };
-use crate::commands::activate::{Activate, InvocationType};
+use crate::commands::activate::Activate;
 use crate::commands::display_help;
 use crate::config::Config;
 use crate::utils::message;
@@ -322,7 +323,6 @@ pub async fn start_services_with_new_process_compose(
         trust: false,
         print_script: false,
         start_services: true,
-        use_fallback_interpreter: false,
         mode: Some(activate_mode),
         generation,
         run_args: vec!["true".to_string()],

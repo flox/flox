@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use attach::AttachArgs;
 use clap::{Parser, Subcommand};
 
+mod activate;
 pub mod attach;
 mod fix_fpath;
 mod fix_paths;
@@ -12,6 +13,7 @@ mod set_env_dirs;
 mod set_ready;
 mod start_or_attach;
 
+use activate::ActivateArgs;
 use fix_fpath::FixFpathArgs;
 use fix_paths::FixPathsArgs;
 use prepend_and_dedup::PrependAndDedupArgs;
@@ -39,6 +41,8 @@ pub enum Command {
     SetReady(SetReadyArgs),
     #[command(about = "Attach to an existing activation.")]
     Attach(AttachArgs),
+    #[command(about = "Activate a Flox environment.")]
+    Activate(ActivateArgs),
     #[command(about = "Print sourceable output fixing PATH and MANPATH for a shell.")]
     FixPaths(FixPathsArgs),
     #[command(about = "Print sourceable output setting FLOX_ENV_DIRS.")]
