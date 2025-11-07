@@ -325,9 +325,10 @@ mod tests {
         create_test_token,
         flox_instance_with_optional_floxhub,
     };
-    use flox_rust_sdk::models::environment::Environment;
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment_in;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment_in;
+    use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
+    use flox_rust_sdk::models::environment::{Environment, ManagedPointer};
     use flox_rust_sdk::utils::logging::test_helpers::test_subscriber_message_only;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -476,5 +477,105 @@ mod tests {
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("not found in local cache"));
         assert!(err_msg.contains("flox activate -r"));
+    }
+
+    #[tokio::test]
+    async fn push_remote_changes() {
+        let name = "my-env";
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let token = create_test_token(owner.as_str());
+        flox.floxhub_token = Some(token);
+
+        // Create and push a managed environment to mock FloxHub
+        let mut env = mock_managed_environment_in(
+            &flox,
+            EMPTY_MANIFEST,
+            owner.clone(),
+            tempdir.path().join(name),
+            Some(name),
+        );
+        // Use the internal push method directly
+        env.push(&flox, false).unwrap();
+
+        // Now open it as a remote environment (this will cache it)
+        let pointer = ManagedPointer::new(owner.clone(), name.parse().unwrap(), &flox.floxhub);
+        let mut remote_env = RemoteEnvironment::new(&flox, pointer, None).unwrap();
+
+        // Make changes to the cached remote environment
+        let updated_manifest = indoc! {"
+            # load bearing comment
+            version = 1
+        "};
+        remote_env
+            .edit(&flox, updated_manifest.to_string())
+            .unwrap();
+
+        // Push the remote environment changes using -r
+        let (subscriber, writer) = test_subscriber_message_only();
+        let env_ref = format!("{}/{}", owner, name).parse().unwrap();
+        let push_remote_cmd = Push {
+            mode: PushMode::Remote { env_ref },
+            force: false,
+        };
+
+        push_remote_cmd
+            .handle(flox)
+            .with_subscriber(subscriber)
+            .await
+            .unwrap();
+
+        assert!(
+            writer
+                .to_string()
+                .contains("Updates to my-env successfully pushed to FloxHub")
+        );
+        assert!(writer.to_string().contains("flox activate -r owner/my-env"));
+    }
+
+    #[tokio::test]
+    async fn push_remote_no_changes() {
+        let name = "my-env";
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let token = create_test_token(owner.as_str());
+        flox.floxhub_token = Some(token);
+
+        // Create and push a managed environment to mock FloxHub
+        let mut env = mock_managed_environment_in(
+            &flox,
+            EMPTY_MANIFEST,
+            owner.clone(),
+            tempdir.path().join(name),
+            Some(name),
+        );
+        // Use the internal push method directly
+        env.push(&flox, false).unwrap();
+
+        // Now open it as a remote environment (this will cache it)
+        let pointer = ManagedPointer::new(owner.clone(), name.parse().unwrap(), &flox.floxhub);
+        let _remote_env = RemoteEnvironment::new(&flox, pointer, None).unwrap();
+
+        // Push the remote environment without making changes using -r
+        let (subscriber, writer) = test_subscriber_message_only();
+        let env_ref = format!("{}/{}", owner, name).parse().unwrap();
+        let push_remote_cmd = Push {
+            mode: PushMode::Remote { env_ref },
+            force: false,
+        };
+
+        push_remote_cmd
+            .handle(flox)
+            .with_subscriber(subscriber)
+            .await
+            .unwrap();
+
+        assert_eq!(writer.to_string(), indoc! {"
+            ℹ️  No changes to push for my-env.
+            The environment on FloxHub is already up to date.
+
+        "});
     }
 }
