@@ -270,6 +270,19 @@ impl RemoteEnvironment {
 
         Ok(())
     }
+
+    /// Push local changes to FloxHub for this remote environment
+    ///
+    /// This pushes any local changes made to the cached remote environment back to FloxHub.
+    pub fn push(
+        &mut self,
+        flox: &Flox,
+        force: bool,
+    ) -> Result<super::managed_environment::PushResult, EnvironmentError> {
+        self.inner
+            .push(flox, force)
+            .map_err(EnvironmentError::ManagedEnvironment)
+    }
 }
 
 impl Environment for RemoteEnvironment {
