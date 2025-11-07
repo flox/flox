@@ -456,4 +456,25 @@ mod tests {
 
         "});
     }
+
+    #[tokio::test]
+    async fn push_remote_not_cached_fails() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+
+        let (mut flox, _tempdir) = flox_instance_with_optional_floxhub(Some(&owner));
+        let token = create_test_token(owner.as_str());
+        flox.floxhub_token = Some(token);
+
+        let env_ref = format!("{}/my-env", owner).parse().unwrap();
+        let push_cmd = Push {
+            mode: PushMode::Remote { env_ref },
+            force: false,
+        };
+
+        let result = push_cmd.handle(flox).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("not found in local cache"));
+        assert!(err_msg.contains("flox activate -r"));
+    }
 }
