@@ -28,7 +28,6 @@ let
     ;
   inherit (pkgs.lib)
     mapAttrsToList
-    optionalString
     optionalAttrs
     optionals
     toIntBase10
@@ -96,6 +95,41 @@ let
     ];
   };
 
+  # For field definitions, see `ActivateCtx` in `flox-core`
+  activateCtx = {
+    mode = "${activationMode}";
+    shell = {
+      Bash = "${containerPkgs.bashInteractive}/bin/bash";
+    };
+    env = "${environment}";
+    run_args = [ ];
+    invocation_type = null;
+    remove_after_reading = false;
+    env_description = "${containerName}";
+    env_cache = "/tmp";
+    flox_env_log_dir = null;
+    flox_runtime_dir = "/run/flox";
+    prompt_color_1 = "99";
+    prompt_color_2 = "141";
+    flox_activate_store_path = "${environment}";
+    interpreter_path = "${environment}";
+    flox_prompt_environments = "floxenv";
+    set_prompt = true;
+    flox_activate_start_services = false;
+    flox_services_socket = null;
+    flox_env_cuda_detection = "0";
+    flox_active_environments = "[]";
+    flox_services_to_start = null;
+    env_project = null;
+    watchdog_bin = null;
+  };
+
+  activateCtxJson = builtins.toJSON activateCtx;
+  activateCtxStorePath = pkgs.writeTextFile {
+    name = "activations-context";
+    text = activateCtxJson;
+  };
+
   buildLayeredImageArgs =
     optionalAttrs (isNixStoreUserOwned) {
       inherit (nixStoreUserGroup)
@@ -152,28 +186,11 @@ let
         #     -> launches crippled interactive shell with no controlling
         #        terminal .. kinda useless
         Entrypoint = [
-          "${environment}/activate"
-          "--env"
-          environment
-          "--mode"
-          activationMode
-          "--env-cache"
-          "/tmp"
-          "--env-description"
-          containerName
-          "--shell"
-          "${containerPkgs.bashInteractive}/bin/bash"
+          "${environment}/libexec/flox-activations"
+          "activate"
+          "--activate-data"
+          "${activateCtxStorePath}"
         ];
-
-        Env = mapAttrsToList (name: value: "${name}=${value}") {
-          "FLOX_PROMPT_ENVIRONMENTS" = "floxenv";
-          "FLOX_PROMPT_COLOR_1" = "99";
-          "FLOX_PROMPT_COLOR_2" = "141";
-          "_FLOX_ACTIVE_ENVIRONMENTS" = "[]";
-          "FLOX_SOURCED_FROM_SHELL_RC" = "1"; # don't source from shell rc (again)
-          "_FLOX_FORCE_INTERACTIVE" = "1"; # Required when running podman without "-t"
-          "FLOX_RUNTIME_DIR" = "/run/flox";
-        };
       };
 
       passthru = {
