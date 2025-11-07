@@ -85,6 +85,18 @@ pub struct RemoteEnvironment {
 }
 
 impl RemoteEnvironment {
+    /// Check if a remote environment is already cached locally.
+    /// I.e. whether there is a backing managed environment in the cache.
+    pub fn is_cached(flox: &Flox, pointer: &ManagedPointer) -> bool {
+        let path = flox
+            .cache_dir
+            .join(REMOTE_ENVIRONMENT_BASE_DIR)
+            .join(pointer.owner.as_ref())
+            .join(pointer.name.as_ref())
+            .join(DOT_FLOX);
+        path.exists()
+    }
+
     /// Pull a remote environment into a flox-provided managed environment
     /// in `<FLOX_CACHE_DIR>/remote/<owner>/<name>`
     ///
