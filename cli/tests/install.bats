@@ -301,7 +301,7 @@ EOF
   assert_success
 
   run tomlq -e \
-    '.install.bpftrace.systems | debug(.) == ["aarch64-linux","x86_64-linux"]' \
+    '.install.bpftrace.systems | debug(.) == ["x86_64-linux","aarch64-linux"]' \
     "$MANIFEST_PATH"
   assert_success
 }
@@ -316,12 +316,12 @@ EOF
   assert_success
 
   run tomlq -e \
-    '.install.bpftrace.systems | debug(.) == ["aarch64-linux","x86_64-linux"]' \
+    '.install.bpftrace.systems | debug(.) == ["x86_64-linux","aarch64-linux"]' \
     "$MANIFEST_PATH"
   assert_success
 
   run tomlq -e \
-    '.install.systemd.systems | debug(.) == ["aarch64-linux","x86_64-linux"]' \
+    '.install.systemd.systems | debug(.) == ["x86_64-linux","aarch64-linux"]' \
     "$MANIFEST_PATH"
   assert_success
 }
@@ -354,7 +354,7 @@ EOF
   )"
 }
 
-@test "resolution message: constraints too tight" {
+@test "resolution message: version not found" {
   "$FLOX_BIN" init
 
   # disable backtrace; we expect this to fail and assert output
@@ -365,10 +365,8 @@ EOF
   assert_failure
   assert_output "$(
     cat << EOF
-❌ ERROR: resolution failed: constraints for group 'toplevel' are too tight
-
-   Use 'flox edit' to adjust version constraints in the [install] section,
-   or isolate dependencies in a new group with '<pkg>.pkg-group = "newgroup"'
+❌ ERROR: resolution failed:
+No version compatible with '14.16.1' found for 'nodejs' on 'aarch64-darwin'.
 EOF
   )"
 }
@@ -385,7 +383,7 @@ EOF
   assert_output "$(
     cat << EOF
 ❌ ERROR: resolution failed: 
-The attr_path python311Packages.torchvision-bin is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,aarch64-linux,x86_64-linux), (aarch64-darwin,aarch64-linux), (aarch64-linux,x86_64-linux), (aarch64-darwin,x86_64-darwin,x86_64-linux), (aarch64-darwin,x86_64-linux), (x86_64-linux).
+The package 'python311Packages.torchvision-bin' is not found for all requested systems on the same page, consider package groups with the following system groupings: (x86_64-darwin), (aarch64-linux), (x86_64-darwin,x86_64-linux), (aarch64-darwin,x86_64-darwin), (aarch64-linux,x86_64-darwin), (aarch64-darwin,aarch64-linux,x86_64-darwin).
 EOF
   )"
 }
