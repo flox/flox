@@ -9,6 +9,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
+use flox_core::activate::vars::FLOX_ACTIVATIONS_VERBOSITY_VAR;
 use flox_core::shell::ShellWithPath;
 use flox_rust_sdk::flox::{DEFAULT_NAME, Flox};
 use flox_rust_sdk::models::environment::generations::GenerationId;
@@ -424,8 +425,12 @@ impl Activate {
 
         let flox_activations = env!("FLOX_ACTIVATIONS_BIN");
 
+        // `flox-activations` doesn't really have a "quiet" mode, so it makes
+        // more sense for 0 to be the default rather than 1.
+        let verbosity_num = 0.max(flox.verbosity - 1);
         let mut command = std::process::Command::new(flox_activations);
         command
+            .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
             .arg("activate")
             .arg("--activate-data")
             .arg(tempfile.path());
