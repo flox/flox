@@ -14,6 +14,13 @@ pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 
 pub(super) fn assemble_command_for_activate_script(data: ActivateCtx) -> Command {
+    let activate_path = data.interpreter_path.join("activate_temporary");
+    let mut command = Command::new(activate_path);
+    add_old_cli_options(&mut command, data);
+    command
+}
+
+fn add_old_cli_options(command: &mut Command, data: ActivateCtx) {
     let mut exports = HashMap::from([
         (FLOX_ACTIVE_ENVIRONMENTS_VAR, data.flox_active_environments),
         ("FLOX_PROMPT_COLOR_1", data.prompt_color_1),
@@ -47,8 +54,6 @@ pub(super) fn assemble_command_for_activate_script(data: ActivateCtx) -> Command
 
     exports.extend(default_nix_env_vars());
 
-    let activate_path = data.interpreter_path.join("activate_temporary");
-    let mut command = Command::new(activate_path);
     command.envs(exports);
 
     command.arg("--env").arg(&data.env);
@@ -72,6 +77,4 @@ pub(super) fn assemble_command_for_activate_script(data: ActivateCtx) -> Command
     }
 
     command.arg("--shell").arg(data.shell.exe_path());
-
-    command
 }
