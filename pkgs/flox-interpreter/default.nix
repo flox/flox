@@ -104,6 +104,8 @@ runCommandNoCC "flox-interpreter"
 
     chmod +x $out/activate
     patchShebangs $out/activate
+    chmod +x $out/activate_temporary
+    patchShebangs $out/activate_temporary
 
     mv $out/activate.d/trace.bash $out/activate.d/trace
     chmod +x $out/activate.d/trace
@@ -111,6 +113,7 @@ runCommandNoCC "flox-interpreter"
 
     # Replace __OUT__ with the output path for both outputs.
     substituteInPlace $out/activate --replace-fail "__OUT__" "$out"
+    substituteInPlace $out/activate_temporary --replace-fail "__OUT__" "$out"
 
     # That's the build done, now shellcheck the results.
     ${shellcheck}/bin/shellcheck --external-sources --check-sourced \

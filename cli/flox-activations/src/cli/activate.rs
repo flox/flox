@@ -202,7 +202,7 @@ impl ActivateArgs {
 
         exports.extend(default_nix_env_vars());
 
-        let activate_path = data.interpreter_path.join("activate");
+        let activate_path = data.interpreter_path.join("activate_temporary");
         let mut command = Command::new(activate_path);
         command.envs(exports);
 

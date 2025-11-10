@@ -41,9 +41,26 @@ export _tcsh_home="__OUT__/activate.d/tcsh_home"
 export _zdotdir="__OUT__/activate.d/zdotdir"
 
 # shellcheck source-path=SCRIPTDIR/activate.d
+source "${_activate_d}/generate-bash-startup-commands.bash"
+# shellcheck source-path=SCRIPTDIR/activate.d
+source "${_activate_d}/generate-zsh-startup-script.bash"
+# shellcheck source-path=SCRIPTDIR/activate.d
+source "${_activate_d}/generate-fish-startup-commands.bash"
+# shellcheck source-path=SCRIPTDIR/activate.d
+source "${_activate_d}/generate-tcsh-startup-commands.bash"
+# shellcheck source-path=SCRIPTDIR/activate.d
 source "${_activate_d}/helpers.bash"
 
 # Top-level Flox environment activation script.
+
+# Ensure mandatory environment variables are defined as required by
+# other scripts. For example, we provide defaults for the following
+# variables as required by the various set-prompt scripts, and tcsh
+# in particular does not tolerate references to undefined variables.
+export FLOX_PROMPT_ENVIRONMENTS="${FLOX_PROMPT_ENVIRONMENTS:-}"
+export _FLOX_SET_PROMPT="${_FLOX_SET_PROMPT:-true}"
+export FLOX_PROMPT_COLOR_1="${FLOX_PROMPT_COLOR_1:-99}"
+export FLOX_PROMPT_COLOR_2="${FLOX_PROMPT_COLOR_2:-141}"
 
 # Parse command-line arguments.
 OPTIONS="e:c:m:"
@@ -150,8 +167,8 @@ while true; do
       ;;
     -m | --mode)
       shift
-      if [ "$1" != "build" ]; then
-        echo "Option --mode requires 'build' as an argument." >&2
+      if [ -z "${1:-}" ] || ! { [ "$1" == "run" ] || [ "$1" == "dev" ]; }; then
+        echo "Option --mode requires 'dev' or 'run' as an argument." >&2
         echo "$USAGE" >&2
         exit 1
       fi
@@ -249,16 +266,56 @@ case "$_flox_shell" in
     ;;
 esac
 
-if [ "$_FLOX_ENV_ACTIVATION_MODE" = "build" ]; then
-  if [ "$_flox_invocation_type" != "command" ]; then
-    echo "build mode is only supported for running a command" >&2
-    exit 1
-  fi
-  # We don't ever need to attach, and we don't want to run hook.on-activate,
-  # so just run the parts of start.bash that we need
-  source_profile_d "$_profile_d" "set" "$FLOX_ENV_DIRS"
-  # Set static environment variables from the manifest
-  set_manifest_vars "$FLOX_ENV"
+# The CLI is responsible for erroring if the environment is already active.
+# We can start-or-attach no matter what
 
-  exec "$@"
+# TODO: we could restore _start_env from the prior activation when performing an ephemeral activation
+
+# sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
+# Don't eval on one line so that we exit if flox-activations fails
+to_eval="$($_flox_activations \
+  start-or-attach \
+  --runtime-dir "$FLOX_RUNTIME_DIR" \
+  --pid "$$" --flox-env "$FLOX_ENV" --store-path "$_FLOX_ACTIVATE_STORE_PATH")"
+eval "$to_eval"
+export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
+
+# If the current shell is re-activating the same environment then we should only
+# re-run profile scripts, without start or attach, because the shell will
+# already be attached to an activation.
+if [ "$_FLOX_ATTACH" == true ]; then
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/attach.bash"
+  attach "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_invocation_type"
+else
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/start.bash"
+  start "$_FLOX_ACTIVATION_STATE_DIR" "$_flox_invocation_type"
 fi
+
+# Start services before the shell or command is invoked
+if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/start-services.bash"
+fi
+
+case "${_flox_invocation_type}" in
+  command)
+    # shellcheck source-path=SCRIPTDIR/activate.d
+    source "${_activate_d}/attach-command.bash"
+    ;;
+  interactive)
+    # shellcheck source-path=SCRIPTDIR/activate.d
+    source "${_activate_d}/attach-interactive.bash"
+    ;;
+  inplace)
+    # shellcheck source-path=SCRIPTDIR/activate.d
+    source "${_activate_d}/attach-inplace.bash"
+    ;;
+  *)
+    echo "Unsupported invocation type: ${_flox_invocation_type}" >&2
+    exit 1
+    ;;
+esac
+
+"$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" END
