@@ -28,9 +28,9 @@ pub struct ActivateArgs {
 impl ActivateArgs {
     pub fn handle(self, subsystem_verbosity: u32) -> Result<(), anyhow::Error> {
         let contents = fs::read_to_string(&self.activate_data)?;
-        let mut data: ActivateCtx = serde_json::from_str(&contents)?;
+        let mut context: ActivateCtx = serde_json::from_str(&contents)?;
 
-        if data.remove_after_reading {
+        if context.remove_after_reading {
             fs::remove_file(&self.activate_data)?;
         }
 
@@ -41,18 +41,18 @@ impl ActivateArgs {
         let run_args = self
             .cmd
             .as_ref()
-            .or(Some(&data.run_args))
+            .or(Some(&context.run_args))
             .and_then(|args| if args.is_empty() { None } else { Some(args) });
 
-        match (data.invocation_type.as_ref(), run_args) {
+        match (context.invocation_type.as_ref(), run_args) {
             // This is a container invocation, and we need to set the invocation type
             // based on the presence of command arguments.
-            (None, None) => data.invocation_type = Some(InvocationType::Interactive),
+            (None, None) => context.invocation_type = Some(InvocationType::Interactive),
             // This is a container invocation, and we need to set the invocation type
             // based on the presence of command arguments.
             (None, Some(args)) => {
-                data.invocation_type = Some(InvocationType::Command);
-                data.run_args = args.clone();
+                context.invocation_type = Some(InvocationType::Command);
+                context.run_args = args.clone();
             },
             // The following two cases are normal shell activations, and don't need
             // to modify the activation context.
@@ -61,12 +61,12 @@ impl ActivateArgs {
         }
         // For any case where `invocation_type` is None, we should have detected that above
         // and set it to Some.
-        let invocation_type = data
+        let invocation_type = context
             .invocation_type
             .expect("invocation type should have been some");
 
         let activate_script_command =
-            assemble_command_for_activate_script(data.clone(), subsystem_verbosity);
+            assemble_command_for_activate_script(context.clone(), subsystem_verbosity);
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
@@ -76,7 +76,7 @@ impl ActivateArgs {
         //
         //    eval "$(flox activate)"
         if invocation_type == InvocationType::InPlace {
-            Self::activate_in_place(activate_script_command, data.shell)?;
+            Self::activate_in_place(activate_script_command, context.shell)?;
 
             return Ok(());
         }
@@ -85,7 +85,7 @@ impl ActivateArgs {
         if invocation_type == InvocationType::Interactive {
             Self::activate_interactive(activate_script_command)
         } else {
-            Self::activate_command(activate_script_command, data.run_args)
+            Self::activate_command(activate_script_command, context.run_args)
         }
     }
 
