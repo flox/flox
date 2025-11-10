@@ -4221,6 +4221,7 @@ Setting PATH from ${rc_file}"
   env -u _FLOX_USE_CATALOG_MOCK \
     setsid ./result/bin/flox activate -- \
     "$shell_path" -c "echo > activate_started_fifo && echo > $TEARDOWN_FIFO" > output 2>&1 &
+  timeout 15s tail -f output &
 
   # Longer timeout to allow for `nix run` locking.
   background_pid="$!"
