@@ -19,10 +19,6 @@ priority = 6
 pkg-path = "libcxx"
 systems = ["aarch64-darwin", "x86_64-darwin"]
 
-[install.libcxxabi]
-pkg-path = "libcxxabi"
-systems = ["aarch64-darwin", "x86_64-darwin"]
-
 # Linux only
 [install.gcc]
 pkg-path = "gcc"
