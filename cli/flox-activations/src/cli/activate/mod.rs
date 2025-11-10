@@ -4,8 +4,8 @@ use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 
-use activate_script_builder::assemble_command_for_activate_script;
-use anyhow::{Context, Result};
+use activate_script_builder::{FLOX_ENV_DIRS_VAR, assemble_command_for_activate_script};
+use anyhow::{Context, Result, anyhow};
 use clap::Args;
 use flox_core::activate::context::{ActivateCtx, InvocationType};
 use indoc::formatdoc;
@@ -65,8 +65,11 @@ impl ActivateArgs {
             .invocation_type
             .expect("invocation type should have been some");
 
-        let activate_script_command =
-            assemble_command_for_activate_script(context.clone(), subsystem_verbosity);
+        let activate_script_command = assemble_command_for_activate_script(
+            context.clone(),
+            subsystem_verbosity,
+            VarsFromEnvironment::get()?,
+        );
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
@@ -176,6 +179,32 @@ impl ActivateArgs {
                 }
             })
             .join(" ")
+    }
+}
+
+#[derive(Clone, Debug)]
+struct VarsFromEnvironment {
+    flox_env_dirs: Option<String>,
+    path: String,
+    manpath: Option<String>,
+}
+
+impl VarsFromEnvironment {
+    fn get() -> Result<Self> {
+        let flox_env_dirs = std::env::var(FLOX_ENV_DIRS_VAR).ok();
+        let path = match std::env::var("PATH") {
+            Ok(path) => path,
+            Err(e) => {
+                return Err(anyhow!("failed to get PATH from environment: {}", e));
+            },
+        };
+        let manpath = std::env::var("MANPATH").ok();
+
+        Ok(Self {
+            flox_env_dirs,
+            path,
+            manpath,
+        })
     }
 }
 

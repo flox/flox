@@ -6,6 +6,10 @@ use flox_core::activate::context::ActivateCtx;
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
 use flox_core::util::default_nix_env_vars;
 use is_executable::IsExecutable;
+
+use super::VarsFromEnvironment;
+use crate::cli::fix_paths::{fix_manpath_var, fix_path_var};
+use crate::cli::set_env_dirs::fix_env_dirs_var;
 pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 /// This variable is used to communicate what socket to use to the activate
@@ -14,15 +18,17 @@ pub const FLOX_SERVICES_SOCKET_VAR: &str = "_FLOX_SERVICES_SOCKET";
 
 pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
+pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 
 pub(super) fn assemble_command_for_activate_script(
     context: ActivateCtx,
     subsystem_verbosity: u32,
+    vars_from_env: VarsFromEnvironment,
 ) -> Command {
     let activate_path = context.interpreter_path.join("activate_temporary");
     let mut command = Command::new(activate_path);
     add_old_cli_options(&mut command, context.clone());
-    add_old_activate_script_exports(&mut command, &context, subsystem_verbosity);
+    add_old_activate_script_exports(&mut command, &context, subsystem_verbosity, vars_from_env);
     command
 }
 
@@ -98,10 +104,14 @@ fn add_old_cli_options(command: &mut Command, context: ActivateCtx) {
 }
 
 /// Prior to the refactor, these variables were exported in the activate script
+// TODO: we still use std::env::var in this function,
+// so we should either drop those uses and get those vars in VarsFromEnvironment,
+// or we should completely drop VarsFromEnvironment .
 fn add_old_activate_script_exports(
     command: &mut Command,
     context: &ActivateCtx,
     subsystem_verbosity: u32,
+    vars_from_environment: VarsFromEnvironment,
 ) {
     let mut exports = HashMap::from([
         ("_flox_activate_tracelevel", subsystem_verbosity.to_string()),
@@ -130,5 +140,30 @@ fn add_old_activate_script_exports(
 
     exports.insert("_flox_activate_tracer", activate_tracer);
 
+    exports.extend(fixed_vars_to_export(&context.env, vars_from_environment));
+
     command.envs(&exports);
+}
+
+/// Calculate values for FLOX_ENV_DIRS, PATH, and MANPATH
+fn fixed_vars_to_export(
+    flox_env: impl AsRef<str>,
+    vars_from_environment: VarsFromEnvironment,
+) -> HashMap<&'static str, String> {
+    let new_flox_env_dirs = fix_env_dirs_var(
+        flox_env.as_ref(),
+        vars_from_environment
+            .flox_env_dirs
+            .unwrap_or("".to_string()),
+    );
+    let new_path = fix_path_var(&new_flox_env_dirs, &vars_from_environment.path);
+    let new_manpath = fix_manpath_var(
+        &new_flox_env_dirs,
+        &vars_from_environment.manpath.unwrap_or("".to_string()),
+    );
+    HashMap::from([
+        (FLOX_ENV_DIRS_VAR, new_flox_env_dirs),
+        ("PATH", new_path),
+        ("MANPATH", new_manpath),
+    ])
 }

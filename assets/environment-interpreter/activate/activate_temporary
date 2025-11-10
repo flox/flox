@@ -208,11 +208,6 @@ for var_key in FLOX_ENV_CACHE FLOX_ENV_PROJECT FLOX_ENV_DESCRIPTION; do
   fi
 done
 
-# shellcheck disable=SC1090
-source <("$_flox_activations" set-env-dirs --shell bash --flox-env "$FLOX_ENV" --env-dirs "${FLOX_ENV_DIRS:-}")
-# shellcheck disable=SC1090
-source <("$_flox_activations" fix-paths --shell bash --env-dirs "$FLOX_ENV_DIRS" --path "$PATH" --manpath "${MANPATH:-}")
-
 # Set a default for _FLOX_ACTIVATE_STORE_PATH for container and build
 # invocations
 if [ -z "${_FLOX_ACTIVATE_STORE_PATH:-}" ]; then
