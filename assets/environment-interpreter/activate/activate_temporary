@@ -5,8 +5,7 @@
 #   1. (-v) top-level activate script
 #   2. (-vv) language-specific profile scripts
 #   3. (-vvv) zsh `autoload -U compinit` (very verbose)
-export _flox_activate_tracelevel="${_FLOX_SUBSYSTEM_VERBOSITY:-0}"
-[ "$_flox_activate_tracelevel" -eq 0 ] || set -x
+[ "${_flox_activate_tracelevel:?}" -eq 0 ] || set -x
 
 # Ensure that $_flox_activate_tracer is defined as an executable.
 if [ -z "${FLOX_ACTIVATE_TRACE-}" ]; then

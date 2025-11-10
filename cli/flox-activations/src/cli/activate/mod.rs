@@ -26,7 +26,7 @@ pub struct ActivateArgs {
 }
 
 impl ActivateArgs {
-    pub fn handle(self) -> Result<(), anyhow::Error> {
+    pub fn handle(self, subsystem_verbosity: u32) -> Result<(), anyhow::Error> {
         let contents = fs::read_to_string(&self.activate_data)?;
         let mut data: ActivateCtx = serde_json::from_str(&contents)?;
 
@@ -65,7 +65,8 @@ impl ActivateArgs {
             .invocation_type
             .expect("invocation type should have been some");
 
-        let activate_script_command = assemble_command_for_activate_script(data.clone());
+        let activate_script_command =
+            assemble_command_for_activate_script(data.clone(), subsystem_verbosity);
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout

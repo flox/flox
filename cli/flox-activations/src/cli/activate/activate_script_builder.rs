@@ -13,13 +13,19 @@ pub const FLOX_SERVICES_SOCKET_VAR: &str = "_FLOX_SERVICES_SOCKET";
 pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 
-pub(super) fn assemble_command_for_activate_script(data: ActivateCtx) -> Command {
+pub(super) fn assemble_command_for_activate_script(
+    data: ActivateCtx,
+    subsystem_verbosity: u32,
+) -> Command {
     let activate_path = data.interpreter_path.join("activate_temporary");
     let mut command = Command::new(activate_path);
     add_old_cli_options(&mut command, data);
+    add_old_activate_script_exports(&mut command, subsystem_verbosity);
     command
 }
 
+/// Prior to the refactor, these options were passed by the CLI to the activate
+/// script
 fn add_old_cli_options(command: &mut Command, data: ActivateCtx) {
     let mut exports = HashMap::from([
         (FLOX_ACTIVE_ENVIRONMENTS_VAR, data.flox_active_environments),
@@ -77,4 +83,10 @@ fn add_old_cli_options(command: &mut Command, data: ActivateCtx) {
     }
 
     command.arg("--shell").arg(data.shell.exe_path());
+}
+
+/// Prior to the refactor, these variables were exported in the activate script
+fn add_old_activate_script_exports(command: &mut Command, subsystem_verbosity: u32) {
+    let exports = HashMap::from([("_flox_activate_tracelevel", subsystem_verbosity.to_string())]);
+    command.envs(&exports);
 }
