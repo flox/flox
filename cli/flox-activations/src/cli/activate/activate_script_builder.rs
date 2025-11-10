@@ -73,7 +73,6 @@ fn add_old_cli_options(command: &mut Command, context: ActivateCtx) {
 
     command.envs(exports);
 
-    command.arg("--env").arg(&context.env);
     if let Some(env_project) = context.env_project.as_ref() {
         command
             .arg("--env-project")
@@ -104,8 +103,11 @@ fn add_old_activate_script_exports(
     context: &ActivateCtx,
     subsystem_verbosity: u32,
 ) {
-    let mut exports =
-        HashMap::from([("_flox_activate_tracelevel", subsystem_verbosity.to_string())]);
+    let mut exports = HashMap::from([
+        ("_flox_activate_tracelevel", subsystem_verbosity.to_string()),
+        // Propagate required variables that are documented as exposed.
+        ("FLOX_ENV", context.env.clone()),
+    ]);
 
     // The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
     // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
