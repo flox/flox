@@ -1,9 +1,11 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::process::Command;
 
 use flox_core::activate::context::ActivateCtx;
 use flox_core::activate::vars::{FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_RUNTIME_DIR_VAR};
 use flox_core::util::default_nix_env_vars;
+use is_executable::IsExecutable;
 pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 /// This variable is used to communicate what socket to use to the activate
@@ -19,8 +21,8 @@ pub(super) fn assemble_command_for_activate_script(
 ) -> Command {
     let activate_path = context.interpreter_path.join("activate_temporary");
     let mut command = Command::new(activate_path);
-    add_old_cli_options(&mut command, context);
-    add_old_activate_script_exports(&mut command, subsystem_verbosity);
+    add_old_cli_options(&mut command, context.clone());
+    add_old_activate_script_exports(&mut command, &context, subsystem_verbosity);
     command
 }
 
@@ -97,7 +99,34 @@ fn add_old_cli_options(command: &mut Command, context: ActivateCtx) {
 }
 
 /// Prior to the refactor, these variables were exported in the activate script
-fn add_old_activate_script_exports(command: &mut Command, subsystem_verbosity: u32) {
-    let exports = HashMap::from([("_flox_activate_tracelevel", subsystem_verbosity.to_string())]);
+fn add_old_activate_script_exports(
+    command: &mut Command,
+    context: &ActivateCtx,
+    subsystem_verbosity: u32,
+) {
+    let mut exports =
+        HashMap::from([("_flox_activate_tracelevel", subsystem_verbosity.to_string())]);
+
+    // The activate_tracer is set from the FLOX_ACTIVATE_TRACE env var.
+    // If that env var is empty then activate_tracer is set to the full path of the `true` command in the PATH.
+    // If that env var is not empty and refers to an executable then then activate_tracer is set to that value.
+    // Else activate_tracer is set to refer to {interpreter_path}/activate.d/trace.
+    let activate_tracer = if let Ok(trace_path) = std::env::var("FLOX_ACTIVATE_TRACE") {
+        if Path::new(&trace_path).is_executable() {
+            trace_path
+        } else {
+            context
+                .interpreter_path
+                .join("activate.d")
+                .join("trace")
+                .to_string_lossy()
+                .to_string()
+        }
+    } else {
+        "true".to_string()
+    };
+
+    exports.insert("_flox_activate_tracer", activate_tracer);
+
     command.envs(&exports);
 }

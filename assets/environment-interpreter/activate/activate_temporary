@@ -7,21 +7,7 @@
 #   3. (-vvv) zsh `autoload -U compinit` (very verbose)
 [ "${_flox_activate_tracelevel:?}" -eq 0 ] || set -x
 
-# Ensure that $_flox_activate_tracer is defined as an executable.
-if [ -z "${FLOX_ACTIVATE_TRACE-}" ]; then
-  # If FLOX_ACTIVATE_TRACE is empty or not set, set _flox_activate_tracer to
-  # `true` which can always be invoked with any arguments without error.
-  export _flox_activate_tracer=true
-else
-  # If FLOX_ACTIVATE_TRACE is set but does not refer to an executable, then
-  # set _flox_activate_tracer to the default trace script.
-  if [ -x "${FLOX_ACTIVATE_TRACE:-}" ]; then
-    export _flox_activate_tracer="$FLOX_ACTIVATE_TRACE"
-  else
-    export _flox_activate_tracer="__OUT__/activate.d/trace"
-  fi
-fi
-"$_flox_activate_tracer" "${BASH_SOURCE[0]}" "$@" START
+"${_flox_activate_tracer:?}" "${BASH_SOURCE[0]}" "$@" START
 
 _dirname="@coreutils@/bin/dirname"
 _getopt="@getopt@/bin/getopt"
