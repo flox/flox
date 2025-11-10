@@ -72,11 +72,7 @@ let
     # If the flox-activations package is available, use it,
     # otherwise copy the binary from the environment into the store,
     # so that sandboxed builds and flox built containers can access it.
-    flox_activations =
-      if flox-activations != null then
-        "${flox-activations}/bin/flox-activations"
-      else
-        "${builtins.path { path = builtins.getEnv "FLOX_ACTIVATIONS_BIN"; }}";
+    flox_activations = "${flox-activations}/libexec/flox-activations";
     util_linux = util-linuxMinimal;
     # Make clear when packages are not available on Darwin.
     ld_floxlib = if stdenv.isLinux then ld-floxlib else "__LINUX_ONLY__";

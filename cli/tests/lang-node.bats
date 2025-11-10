@@ -121,6 +121,7 @@ teardown() {
 
 # bats test_tags=catalog
 @test "install krb5 with node" {
+  skip "stuck on old catalog page"
   "$FLOX_BIN" init
 
   cat "$GENERATED_DATA/envs/krb5_prereqs/manifest.toml" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/krb5_prereqs/krb5_prereqs.yaml" "$FLOX_BIN" edit -f -

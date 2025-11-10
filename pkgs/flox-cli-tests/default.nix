@@ -203,7 +203,7 @@ writeShellScriptBin PROJECT_NAME ''
     export BUILDENV_BIN="${flox-buildenv}/bin/buildenv"
     export NIX_PLUGINS="${flox-nix-plugins}/lib/nix-plugins"
     export WATCHDOG_BIN="${flox-watchdog}/libexec/flox-watchdog"
-    export FLOX_ACTIVATIONS_BIN="${flox-activations}/bin/flox-activations"
+    export FLOX_ACTIVATIONS_BIN="${flox-activations}/libexec/flox-activations"
     export PROCESS_COMPOSE_BIN='${process-compose}/bin/process-compose'
     export FLOX_INTERPRETER='${flox-interpreter}'
   ''}

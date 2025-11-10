@@ -54,6 +54,11 @@ pub static WATCHDOG_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
 pub static FLOX_INTERPRETER: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
 });
+pub static FLOX_ACTIVATIONS_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
+    PathBuf::from(
+        env::var("FLOX_ACTIVATIONS_BIN").unwrap_or(env!("FLOX_ACTIVATIONS_BIN").to_string()),
+    )
+});
 
 #[derive(Bpaf, Clone)]
 pub struct Activate {
@@ -423,12 +428,10 @@ impl Activate {
         let writer = BufWriter::new(&tempfile);
         serde_json::to_writer_pretty(writer, &activate_data)?;
 
-        let flox_activations = env!("FLOX_ACTIVATIONS_BIN");
-
         // `flox-activations` doesn't really have a "quiet" mode, so it makes
         // more sense for 0 to be the default rather than 1.
         let verbosity_num = 0.max(flox.verbosity - 1);
-        let mut command = std::process::Command::new(flox_activations);
+        let mut command = std::process::Command::new(&*FLOX_ACTIVATIONS_BIN);
         command
             .env(FLOX_ACTIVATIONS_VERBOSITY_VAR, format!("{verbosity_num}"))
             .arg("activate")
