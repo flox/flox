@@ -23,7 +23,7 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::lockfile::LockResult;
 use flox_rust_sdk::models::manifest::typed::{ActivateMode, IncludeDescriptor, Inner};
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
-use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
+use flox_rust_sdk::providers::services::process_compose::shutdown_process_compose_if_all_processes_stopped;
 use flox_rust_sdk::providers::upgrade_checks::UpgradeInformationGuard;
 use flox_rust_sdk::utils::logging::traceable_path;
 use indoc::{formatdoc, indoc};
