@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 schemars.workspace = true
 serde.workspace = true
+serde_with.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
