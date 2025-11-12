@@ -3,9 +3,34 @@
 use std::io;
 use std::path::Path;
 
+use shell_escape::escape;
 use systemd::unit::ServiceUnit;
 
 use crate::models::manifest::typed::{Inner, ServiceDescriptor};
+
+/// Wrap a command with Flox activation.
+//
+// TODO: set or allow configuration of activation mode?
+// TODO: use store path for bash?
+fn wrap_command(env_dir: &Path, command: &str) -> String {
+    // Replace newline characters with literal `\n` sequences so that multi-line
+    // commands can be quoted and fit in a single systemd directive line.
+    let command = command.replace('\n', r"\n");
+
+    format!(
+        r#"flox activate -d {} -- bash -c {}"#,
+        escape(env_dir.to_string_lossy()),
+        escape(command.into()),
+    )
+}
+
+/// Wrap multiple commands with Flox activation.
+fn wrap_commands(env_dir: &Path, commands: Vec<String>) -> Vec<String> {
+    commands
+        .iter()
+        .map(|cmd| wrap_command(env_dir, cmd))
+        .collect()
+}
 
 /// Context for converting a ServiceDescriptor to a ServiceUnit.
 pub struct ServiceUnitContext<'a> {
@@ -14,24 +39,6 @@ pub struct ServiceUnitContext<'a> {
 }
 
 impl<'a> ServiceUnitContext<'a> {
-    /// Wrap a command with Flox activation.
-    //
-    // TODO: set or allow configuration of activation mode?
-    // TODO: use store path for bash?
-    // TODO: handle multi-line commands
-    fn wrap_command(&self, command: &str) -> String {
-        format!(
-            r#"flox activate -d '{}' -- bash -c '{}'"#,
-            self.env_dir.to_string_lossy(),
-            command
-        )
-    }
-
-    /// Wrap multiple commands with Flox activation.
-    fn wrap_commands(&self, commands: Vec<String>) -> Vec<String> {
-        commands.iter().map(|cmd| self.wrap_command(cmd)).collect()
-    }
-
     /// Merge environment variables from descriptor and systemd service.
     /// Descriptor vars are set first, then systemd vars take precedence.
     fn merge_env_vars(
@@ -74,18 +81,18 @@ impl<'a> From<ServiceUnitContext<'a>> for ServiceUnit {
         let exec_start = base_service
             .exec_start
             .or_else(|| Some(descriptor.command.clone()))
-            .map(|cmd| ctx.wrap_command(&cmd));
+            .map(|cmd| wrap_command(ctx.env_dir, &cmd));
         let exec_stop = base_service
             .exec_stop
             .or_else(|| descriptor.shutdown.as_ref().map(|s| s.command.clone()))
-            .map(|cmd| ctx.wrap_command(&cmd));
+            .map(|cmd| wrap_command(ctx.env_dir, &cmd));
 
         let exec_start_pre = base_service
             .exec_start_pre
-            .map(|cmds| ctx.wrap_commands(cmds));
+            .map(|cmds| wrap_commands(ctx.env_dir, cmds));
         let exec_start_post = base_service
             .exec_start_post
-            .map(|cmds| ctx.wrap_commands(cmds));
+            .map(|cmds| wrap_commands(ctx.env_dir, cmds));
 
         let environment = ctx.merge_env_vars(base_service.environment);
 
@@ -124,6 +131,7 @@ pub fn render_systemd_unit_file(
 mod tests {
     use std::collections::BTreeMap;
 
+    use indoc::indoc;
     use pretty_assertions::assert_eq;
     use systemd::unit::{Service, ServiceType, ServiceUnit, Unit};
 
@@ -132,6 +140,54 @@ mod tests {
 
     const TEST_ENV_DIR: &str = "/test/env";
 
+    #[test]
+    fn wrap_command_simple() {
+        let env_dir = Path::new(TEST_ENV_DIR);
+        let input = "true";
+
+        assert_eq!(
+            wrap_command(env_dir, input),
+            r#"flox activate -d /test/env -- bash -c true"#
+        );
+    }
+
+    #[test]
+    fn wrap_command_with_spaces() {
+        let env_dir = Path::new("/dir with/spaces in");
+        let input = "echo command with spaces in";
+
+        assert_eq!(
+            wrap_command(env_dir, input),
+            r#"flox activate -d '/dir with/spaces in' -- bash -c 'echo command with spaces in'"#
+        );
+    }
+
+    #[test]
+    fn wrap_command_quoted() {
+        let env_dir = Path::new(TEST_ENV_DIR);
+        let input = "echo 'this is quoted'";
+
+        assert_eq!(
+            wrap_command(env_dir, input),
+            r#"flox activate -d /test/env -- bash -c 'echo '\''this is quoted'\'''"#
+        );
+    }
+
+    #[test]
+    fn wrap_command_multiline() {
+        let env_dir = Path::new(TEST_ENV_DIR);
+        let input = indoc! {"
+            while true; do
+              echo hello
+              sleep 2
+            done
+        "};
+
+        assert_eq!(
+            wrap_command(env_dir, input),
+            r#"flox activate -d /test/env -- bash -c 'while true; do\n  echo hello\n  sleep 2\ndone\n'"#
+        );
+    }
     // Minimal descriptor fields set and no systemd fields set.
     #[test]
     fn from_service_descriptor_minimal() {
@@ -153,7 +209,7 @@ mod tests {
             unit: None,
             service: Some(Service {
                 exec_start: Some(
-                    r#"flox activate -d '/test/env' -- bash -c 'echo hello'"#.to_string()
+                    r#"flox activate -d /test/env -- bash -c 'echo hello'"#.to_string()
                 ),
                 ..Default::default()
             }),
@@ -189,10 +245,10 @@ mod tests {
             service: Some(Service {
                 type_: Some(ServiceType::Forking),
                 exec_start: Some(
-                    r#"flox activate -d '/test/env' -- bash -c 'start-command'"#.to_string()
+                    r#"flox activate -d /test/env -- bash -c start-command"#.to_string()
                 ),
                 exec_stop: Some(
-                    r#"flox activate -d '/test/env' -- bash -c 'stop-command'"#.to_string()
+                    r#"flox activate -d /test/env -- bash -c stop-command"#.to_string()
                 ),
                 environment: Some(vars),
                 ..Default::default()
@@ -251,16 +307,16 @@ mod tests {
             service: Some(Service {
                 type_: Some(ServiceType::Notify),
                 exec_start: Some(
-                    r#"flox activate -d '/test/env' -- bash -c 'start-command'"#.to_string()
+                    r#"flox activate -d /test/env -- bash -c start-command"#.to_string()
                 ),
                 exec_start_pre: Some(vec![
-                    r#"flox activate -d '/test/env' -- bash -c 'pre-command'"#.to_string()
+                    r#"flox activate -d /test/env -- bash -c pre-command"#.to_string()
                 ]),
                 exec_start_post: Some(vec![
-                    r#"flox activate -d '/test/env' -- bash -c 'post-command'"#.to_string()
+                    r#"flox activate -d /test/env -- bash -c post-command"#.to_string()
                 ]),
                 exec_stop: Some(
-                    r#"flox activate -d '/test/env' -- bash -c 'stop-command'"#.to_string()
+                    r#"flox activate -d /test/env -- bash -c stop-command"#.to_string()
                 ),
                 environment: Some(BTreeMap::from_iter(vec![
                     ("SHARED_KEY".to_string(), "from-systemd".to_string()),
