@@ -3379,7 +3379,7 @@ PIDs of the running activations: ${ACTIVATION_PID}"
   project_setup
 
   # This has to be updated with [flox_core::activations::LATEST_VERSION].
-  LATEST_VERSION=1
+  LATEST_VERSION=2
 
   run "$FLOX_BIN" activate -- bash <(
     cat << 'EOF'
@@ -3973,6 +3973,8 @@ attach_previous_release() {
   shell="${1?}"
   mode="${2?}"
 
+  incrementing_version_this_release="true"
+
   echo "$HOOK_ONLY_ONCE" | "$FLOX_BIN" edit -f -
 
   shell_path="$(which "$shell")"
@@ -3993,7 +3995,7 @@ attach_previous_release() {
       ;;
   esac
 
-  expected_content="Sourcing ${rc_file}
+  output_from_rc_files="Sourcing ${rc_file}
 Setting PATH from ${rc_file}"
 
   mkfifo activate_started_fifo
@@ -4031,46 +4033,103 @@ Setting PATH from ${rc_file}"
   # intial activation started.
   assert_output --partial - << EOF
 sourcing hook.on-activate for first time
-${expected_content}
+${output_from_rc_files}
 EOF
+
+  # All modes unset RUST_BACKTRACE so we don't get the backtrace
+  error_text="$(cat << EOF
+Error: This environment has already been activated with an incompatible version of 'flox'.
+
+Exit all activations of the environment and try again.
+EOF
+)"
 
   # Attach to the activation with the current version. All assertions are on
   # complete output (no partial) so that we can detect errors.
   case "$mode" in
     interactive)
+      if [ "$incrementing_version_this_release" == true ]; then
+        expected_message="$(cat << EOF
+spawn ${FLOX_BIN} activate --dir ${PROJECT_DIR}
+${error_text}
+EOF
+)"
+        unset RUST_BACKTRACE
+      else
+        expected_message=="$(cat << EOF
+spawn ${FLOX_BIN} activate --dir ${PROJECT_DIR}
+✅ Attached to existing activation of environment '${PROJECT_NAME}'
+To stop using this environment, type 'exit'
+
+${output_from_rc_files}
+flox [${PROJECT_NAME}] myprompt> true && exit
+exit
+EOF
+)"
+      fi
       run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
-      assert_success
+      if [ "$incrementing_version_this_release" == true ]; then
+        assert_failure
+      else
+        assert_success
+      fi
 
       # This is only output on failure and helps debugging non-printable characters.
       echo "=== BEGIN DEBUG OUTPUT ==="
       cat -ev expect.log
       echo "=== END   DEBUG OUTPUT ==="
 
-      run tr -d '\r' < expect.log
-      assert_output - << EOF
-spawn ${FLOX_BIN} activate --dir ${PROJECT_DIR}
-✅ Attached to existing activation of environment '${PROJECT_NAME}'
-To stop using this environment, type 'exit'
+      if [ "$incrementing_version_this_release" == true ]; then
+        run bash -c "sed 's/PIDs of the running activations:.*//' expect.log | tr -d '\r'"
+      else
+        run tr -d '\r' < expect.log
+      fi
 
-${expected_content}
-flox [${PROJECT_NAME}] myprompt> true && exit
-exit
-EOF
+      assert_output "$expected_message"
       ;;
     command)
-      run "$FLOX_BIN" activate -- true
-      assert_success
-      assert_output "$expected_content"
+      if [ "$incrementing_version_this_release" == true ]; then
+        unset RUST_BACKTRACE
+        run env -u RUST_BACKTRACE "$FLOX_BIN" activate -- true
+        assert_failure
+        # Remove the PIDs line that appears after the error message
+        filtered_output="$(echo "$output" | sed '/PIDs of the running activations:/d')"
+        run echo "$filtered_output"
+        assert_output "$error_text"
+      else
+        run "$FLOX_BIN" activate -- true
+        assert_success
+        assert_output "$output_from_rc_files"
+      fi
       ;;
     in-place)
       if [ "$shell" == "tcsh" ]; then
         eval_command='eval "`$FLOX_BIN activate`" && true'
+      elif [ "$shell" == "fish" ]; then
+        eval_command='set to_eval ("$FLOX_BIN" activate) && eval "$to_eval" && true'
       else
-        eval_command='eval "$("$FLOX_BIN" activate)" && true'
+        # Use to_eval to propagate return code for POSIX-like shells
+        eval_command='to_eval="$("$FLOX_BIN" activate)" && eval "$to_eval" && true'
       fi
-      run "$shell_path" -c "$eval_command"
-      assert_success
-      assert_output "$expected_content"
+      if [ "$incrementing_version_this_release" == true ]; then
+        run env -u RUST_BACKTRACE "$shell_path" -c "$eval_command"
+        assert_failure
+        filtered_output="$(echo "$output" | sed '/PIDs of the running activations:/d')"
+        run echo "$filtered_output"
+        # Bash doesn't run RC files with -c
+        if [ "$shell" == "bash" ]; then
+          assert_output "$error_text"
+        else
+          assert_output --partial - << EOF
+${output_from_rc_files}
+${error_text}
+EOF
+        fi
+      else
+        run "$shell_path" -c "$eval_command"
+        assert_success
+        assert_output "$output_from_rc_files"
+      fi
       ;;
     *)
       echo "Unsupported mode: $mode"
@@ -4123,7 +4182,6 @@ EOF
 
 # bats test_tags=activate,activate:attach,activate:attach:previous-release
 @test "in-place: bash attaches to an activation from the previous release" {
-  skip "FIXME: enable this test after a release containing #3631"
   project_setup
   attach_previous_release bash in-place
 }
