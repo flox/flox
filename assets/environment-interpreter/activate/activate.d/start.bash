@@ -48,11 +48,6 @@ start() {
     source "$_profile_d/0100_common-run-mode-paths.sh"
   fi
 
-  # Capture post-etc-profiles.env.
-  # This is currently unused but could be useful for runtime only environment in
-  # the future.
-  export | LC_ALL=C $_sort > "$_flox_activation_state_dir/post-etc-profiles.env"
-
   # Set static environment variables from the manifest.
   set_manifest_vars "$FLOX_ENV"
 
